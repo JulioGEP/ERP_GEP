@@ -1,5 +1,6 @@
 // netlify/functions/api.ts
-// Function única para /api/*
+// Ruteo para /api/* y /.netlify/functions/api/*
+// - GET  /api/health
 // - POST /api/deals/import  { federalNumber: string }
 
 type HandlerEvent = {
@@ -37,6 +38,7 @@ function methodNotAllowed(): HandlerResponse {
 }
 
 async function fetchPipedrive(path: string, init?: RequestInit) {
+  if (!PIPEDRIVE_API_TOKEN) throw new Error("PIPEDRIVE_API_TOKEN no definido");
   const url = new URL(path, PIPEDRIVE_BASE_URL);
   url.searchParams.set("api_token", PIPEDRIVE_API_TOKEN);
   const res = await fetch(url.toString(), {
@@ -50,7 +52,7 @@ async function fetchPipedrive(path: string, init?: RequestInit) {
   return res.json();
 }
 
-// --- DB (Neon) ------------------------------------------------------------------
+// ---------- DB (Neon) ----------
 import { neon } from "@neondatabase/serverless";
 
 async function withDb<T>(fn: (sql: ReturnType<typeof neon>) => Promise<T>): Promise<T> {
@@ -159,8 +161,6 @@ async function upsertOrgAndDeal(normal: DealNormalized, extra: Record<string, an
 }
 
 async function importDealByFederal(federalNumber: string): Promise<DealNormalized> {
-  if (!PIPEDRIVE_API_TOKEN) throw new Error("PIPEDRIVE_API_TOKEN no definido");
-
   const deal = await fetchPipedrive(`/deals/${encodeURIComponent(federalNumber)}`);
   const d = deal?.data;
   if (!d) throw new Error("Deal no encontrado");
@@ -222,33 +222,43 @@ async function importDealByFederal(federalNumber: string): Promise<DealNormalize
   return normal;
 }
 
-// ---------------- Router ----------------
+function isPath(pathname: string, segment: string) {
+  return pathname.endsWith(segment) && (pathname.includes("/api/") || pathname.includes("/.netlify/functions/api/"));
+}
+
 export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   try {
     if (event.httpMethod === "OPTIONS") {
       return { statusCode: 200, headers: JSON_HEADERS, body: "" };
     }
 
-    // Path robusto: soporta /api/... y /.netlify/functions/api/...
-    const raw = event.rawUrl || "";
-    const url = new URL(raw);
+    const url = new URL(event.rawUrl || "");
     const pathname = url.pathname || "";
 
-    const isImport =
-      pathname.endsWith("/deals/import") &&
-      (pathname.includes("/api/") || pathname.includes("/.netlify/functions/api/"));
+    // Health
+    if (isPath(pathname, "/health")) {
+      if (event.httpMethod !== "GET") return methodNotAllowed();
+      return json(200, {
+        ok: true,
+        env: {
+          pipedrive_base_url: !!PIPEDRIVE_BASE_URL,
+          pipedrive_api_token: PIPEDRIVE_API_TOKEN ? "present" : "missing",
+          database_url: DATABASE_URL ? "present" : "missing",
+        },
+        path: pathname,
+      });
+    }
 
-    if (isImport) {
+    // Import
+    if (isPath(pathname, "/deals/import")) {
       if (event.httpMethod !== "POST") return methodNotAllowed();
       if (!event.body) return badRequest("Body vacío");
-
       let payload: any;
       try {
         payload = JSON.parse(event.body);
       } catch {
         return badRequest("JSON inválido");
       }
-
       const federalNumber = String(payload?.federalNumber || "").trim();
       if (!federalNumber) return badRequest("federalNumber requerido");
 
