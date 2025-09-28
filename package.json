@@ -11,5 +11,8 @@
     "dev:frontend": "npm --workspace frontend run dev",
     "dev:backend": "npm --workspace backend run dev",
     "lint": "npm --workspaces run lint"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.1"
   }
 }

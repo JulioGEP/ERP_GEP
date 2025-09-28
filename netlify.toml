@@ -4,7 +4,19 @@
   publish = "dist"
   command = "npm ci && npm run build"
 
-# Redirecciones de SPA (por si no recogiera /public/_redirects en algún flujo)
+# Directorio de funciones (serverless)
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  included_files = []
+
+# Proxy de API: /api/* -> Netlify Function "api"
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+# Redirección SPA (dejar SIEMPRE al final)
 [[redirects]]
   from = "/*"
   to   = "/index.html"
