@@ -45,7 +45,7 @@ export default function App() {
       <Navbar bg="white" expand="lg" className="shadow-sm py-3">
         <Container fluid="xl" className="d-flex align-items-center gap-4">
           <Navbar.Brand href="#" className="d-flex align-items-center gap-3">
-            <img src={logo} height={32} alt="GEP Group" />
+            <img src={logo} height={64} alt="GEP Group" />
             <div>
               <span className="d-block fw-semibold text-uppercase small text-muted">GEP Group</span>
               <span className="d-block fw-bold" style={{ color: 'var(--color-red)' }}>
