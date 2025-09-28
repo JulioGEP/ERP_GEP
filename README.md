@@ -95,3 +95,15 @@ Este documento servirá como referencia viva para las decisiones técnicas y pla
 - **Frontend**: layout inicial con cabecera corporativa, pestañas de navegación y módulo de Presupuestos con modal de importación, tabla responsive y modal de detalle.
 - **Backend**: servidor Express con endpoint `POST /api/deals/import` preparado para sincronizar un presupuesto desde Pipedrive, normalizar datos y guardarlos en Neon mediante Prisma.
 - **Base de datos**: esquema Prisma que refleja las tablas y relaciones solicitadas (organizaciones, personas, deals, notas, documentos, sesiones, formadores y unidades móviles).
+## Despliegue en Netlify
+
+- El frontend se publica desde `frontend/dist`.
+- Netlify está configurado con `netlify.toml` en la raíz:
+  - `base = "frontend"`
+  - `publish = "dist"`
+  - `command = "npm ci && npm run build"`
+- Redirecciones SPA:
+  - `frontend/public/_redirects`
+  - Reglas espejo en `netlify.toml`
+- Variables de entorno recomendadas (Netlify → Site settings → Environment variables):
+  - `VITE_API_BASE=https://<TU_BACKEND>/api` (si el backend vive en otro host)

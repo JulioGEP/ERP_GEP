@@ -1,0 +1,11 @@
+# netlify.toml (raíz)
+[build]
+  base    = "frontend"
+  publish = "dist"
+  command = "npm ci && npm run build"
+
+# Redirecciones de SPA (por si no recogiera /public/_redirects en algún flujo)
+[[redirects]]
+  from = "/*"
+  to   = "/index.html"
+  status = 200
