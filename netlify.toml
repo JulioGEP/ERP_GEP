@@ -1,4 +1,4 @@
-# netlify.toml (raíz)
+# netlify.toml (en la RAÍZ del repo)
 [build]
   publish = "frontend/dist"
   command = "npm ci && cd frontend && npm ci && npm run build"
@@ -6,17 +6,18 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# ⬇️ ESTA ES LA SECCIÓN QUE FALTABA
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-# Proxy API -> Function
+# Proxy: /api/* -> Function "api"
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/api/:splat"
   status = 200
 
-# SPA fallback (siempre al final)
+# SPA fallback (déjalo al final)
 [[redirects]]
   from = "/*"
   to   = "/index.html"
