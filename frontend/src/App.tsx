@@ -6,7 +6,7 @@ import { BudgetTable } from './features/presupuestos/BudgetTable';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
 import { importDeal } from './features/presupuestos/api';
 import type { DealSummary } from './types/deal';
-import logo from './assets/logo.svg';
+import logo from './assets/gep-group-logo.png';
 
 const NAVIGATION_ITEMS = ['Presupuestos', 'Calendario', 'Recursos'];
 
