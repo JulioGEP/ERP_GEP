@@ -49,7 +49,7 @@ export default function App() {
             <div>
               <span className="d-block fw-semibold text-uppercase small text-muted">GEP Group</span>
               <span className="d-block fw-bold" style={{ color: 'var(--color-red)' }}>
-                Planificación de formaciones
+                Planificador
               </span>
             </div>
           </Navbar.Brand>
@@ -76,9 +76,7 @@ export default function App() {
               <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
                 <div>
                   <h1 className="h3 fw-bold mb-1">Presupuestos</h1>
-                  <p className="text-muted mb-0">
-                    Importa presupuestos desde Pipedrive y centraliza toda la información clave para planificar.
-                  </p>
+                  <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
                 </div>
                 <div className="d-flex align-items-center gap-3">
                   {importMutation.isPending && <Spinner animation="border" role="status" size="sm" />}
