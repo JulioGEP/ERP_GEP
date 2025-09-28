@@ -1,6 +1,6 @@
 // netlify/functions/api.ts
-// Netlify Function única que atiende /api/*
-// - POST /deals/import  { federalNumber: string }
+// Function única para /api/*
+// - POST /api/deals/import  { federalNumber: string }
 
 type HandlerEvent = {
   httpMethod: string;
@@ -9,12 +9,7 @@ type HandlerEvent = {
   rawUrl: string;
   body: string | null;
 };
-
-type HandlerResponse = {
-  statusCode: number;
-  headers?: Record<string, string>;
-  body: string;
-};
+type HandlerResponse = { statusCode: number; headers?: Record<string, string>; body: string };
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -26,20 +21,17 @@ const JSON_HEADERS = {
 const PIPEDRIVE_BASE_URL =
   process.env.PIPEDRIVE_BASE_URL?.trim() || "https://api.pipedrive.com/v1";
 const PIPEDRIVE_API_TOKEN = process.env.PIPEDRIVE_API_TOKEN?.trim() || "";
-const DATABASE_URL = process.env.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
+const DATABASE_URL = process.env.DATABASE_URL?.trim() || "";
 
 function json(statusCode: number, data: unknown): HandlerResponse {
   return { statusCode, headers: JSON_HEADERS, body: JSON.stringify(data) };
 }
-
 function badRequest(msg: string): HandlerResponse {
   return json(400, { error: msg });
 }
-
 function notFound(msg: string): HandlerResponse {
   return json(404, { error: msg });
 }
-
 function methodNotAllowed(): HandlerResponse {
   return { statusCode: 405, headers: JSON_HEADERS, body: "" };
 }
@@ -58,7 +50,7 @@ async function fetchPipedrive(path: string, init?: RequestInit) {
   return res.json();
 }
 
-// --- DB (Neon) -----------------------------------------------------------------------------------
+// --- DB (Neon) ------------------------------------------------------------------
 import { neon } from "@neondatabase/serverless";
 
 async function withDb<T>(fn: (sql: ReturnType<typeof neon>) => Promise<T>): Promise<T> {
@@ -67,7 +59,6 @@ async function withDb<T>(fn: (sql: ReturnType<typeof neon>) => Promise<T>): Prom
   return fn(sql);
 }
 
-// Crea tablas mínimas si no existen (puedes perfeccionarlas con tus migraciones)
 async function ensureSchema() {
   return withDb(async (sql) => {
     await sql`
@@ -92,8 +83,8 @@ async function ensureSchema() {
         fundae TEXT,
         hotel_night TEXT,
         alumnos INTEGER,
-        training TEXT,         -- nombres de productos form- concatenados
-        prod_extra TEXT,       -- otros productos
+        training TEXT,
+        prod_extra TEXT,
         seassons_num INTEGER,
         seassons_id TEXT,
         documents_num INTEGER,
@@ -106,9 +97,9 @@ async function ensureSchema() {
 type DealNormalized = {
   deal_id: number;
   title: string;
-  org: { org_id: number; name?: string | null };
+  org: { org_id: number; name?: string | null } | null;
   sede?: string | null;
-  training: string[]; // sólo productos form-
+  training: string[];
 };
 
 function onlyStrings(a: any[]): string[] {
@@ -117,7 +108,6 @@ function onlyStrings(a: any[]): string[] {
 
 async function upsertOrgAndDeal(normal: DealNormalized, extra: Record<string, any>) {
   await withDb(async (sql) => {
-    // Org
     if (normal.org?.org_id) {
       await sql`
         INSERT INTO organizations (org_id, name)
@@ -125,7 +115,6 @@ async function upsertOrgAndDeal(normal: DealNormalized, extra: Record<string, an
         ON CONFLICT (org_id) DO UPDATE SET name = EXCLUDED.name;
       `;
     }
-    // Deal
     await sql`
       INSERT INTO deals (deal_id, deal_org_id, title, training_type, hours, deal_direction, sede, caes, fundae, hotel_night,
                          alumnos, training, prod_extra, seassons_num, seassons_id, documents_num, documents_id)
@@ -169,28 +158,23 @@ async function upsertOrgAndDeal(normal: DealNormalized, extra: Record<string, an
   });
 }
 
-// --- Normalización mínima desde Pipedrive ---------------------------------------------------------
 async function importDealByFederal(federalNumber: string): Promise<DealNormalized> {
-  if (!PIPEDRIVE_API_TOKEN) {
-    throw new Error("PIPEDRIVE_API_TOKEN no definido");
-  }
-  // 1) Deal base
+  if (!PIPEDRIVE_API_TOKEN) throw new Error("PIPEDRIVE_API_TOKEN no definido");
+
   const deal = await fetchPipedrive(`/deals/${encodeURIComponent(federalNumber)}`);
   const d = deal?.data;
   if (!d) throw new Error("Deal no encontrado");
 
-  // 2) Org
-  let org: { org_id: number; name?: string | null } | null = null;
+  let org: DealNormalized["org"] = null;
   if (d.org_id) {
-    // org_id puede venir como objeto {value, name} o número según SDK/respuesta
     const oid = typeof d.org_id === "object" ? d.org_id.value : d.org_id;
     const oname = typeof d.org_id === "object" ? d.org_id.name : undefined;
     org = { org_id: Number(oid), name: oname ?? null };
   }
 
-  // 3) Productos del deal (para training y prod_extra)
   const prodsRes = await fetchPipedrive(`/deals/${encodeURIComponent(federalNumber)}/products`);
   const products: any[] = prodsRes?.data || [];
+
   const training = products
     .filter((p) => {
       const code = p?.code || p?.product?.code;
@@ -199,8 +183,8 @@ async function importDealByFederal(federalNumber: string): Promise<DealNormalize
     .map((p) => p?.name || p?.product?.name)
     .filter(Boolean);
 
-  // 4) Campos personalizados
-  const sede = d["676d6bd51e52999c582c01f67c99a35ed30bf6ae"] || null; // Sede (texto)
+  const sede = d["676d6bd51e52999c582c01f67c99a35ed30bf6ae"] || null;
+
   const extra = {
     pipeline_id: d?.pipeline_id ?? null,
     hours: d["38f11c8876ecde803a027fbf3c9041fda2ae7eb7"] ?? null,
@@ -208,8 +192,7 @@ async function importDealByFederal(federalNumber: string): Promise<DealNormalize
     caes: d["e1971bf3a21d48737b682bf8d864ddc5eb15a351"] ?? null,
     fundae: d["245d60d4d18aec40ba888998ef92e5d00e494583"] ?? null,
     hotel_night: d["c3a6daf8eb5b4e59c3c07cda8e01f43439101269"] ?? null,
-    alumnos: null, // editable desde front
-    // prod_extra: productos cuyo code NO empieza por form-
+    alumnos: null,
     prod_extra: onlyStrings(
       products
         .filter((p) => {
@@ -219,7 +202,6 @@ async function importDealByFederal(federalNumber: string): Promise<DealNormalize
         .map((p) => p?.name || p?.product?.name)
         .filter(Boolean)
     ).join(", "),
-    // placeholders de sesiones y docs: puedes calcularlos desde productos/cantidades y /files si quieres
     seassons_num: null,
     seassons_id: null,
     documents_num: null,
@@ -229,37 +211,44 @@ async function importDealByFederal(federalNumber: string): Promise<DealNormalize
   const normal: DealNormalized = {
     deal_id: Number(d.id),
     title: d.title || "",
-    org: org || { org_id: 0 },
+    org,
     sede,
     training: training as string[],
   };
 
-  // 5) Upsert en DB
   await ensureSchema();
   await upsertOrgAndDeal(normal, extra);
 
   return normal;
 }
 
-// --- Router ---------------------------------------------------------------------------------------
+// ---------------- Router ----------------
 export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   try {
-    // CORS preflight
     if (event.httpMethod === "OPTIONS") {
       return { statusCode: 200, headers: JSON_HEADERS, body: "" };
     }
 
-    const path = event.path || "";
+    // Path robusto: soporta /api/... y /.netlify/functions/api/...
+    const raw = event.rawUrl || "";
+    const url = new URL(raw);
+    const pathname = url.pathname || "";
 
-    if (path.endsWith("/api/deals/import")) {
+    const isImport =
+      pathname.endsWith("/deals/import") &&
+      (pathname.includes("/api/") || pathname.includes("/.netlify/functions/api/"));
+
+    if (isImport) {
       if (event.httpMethod !== "POST") return methodNotAllowed();
       if (!event.body) return badRequest("Body vacío");
+
       let payload: any;
       try {
         payload = JSON.parse(event.body);
       } catch {
         return badRequest("JSON inválido");
       }
+
       const federalNumber = String(payload?.federalNumber || "").trim();
       if (!federalNumber) return badRequest("federalNumber requerido");
 

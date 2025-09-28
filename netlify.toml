@@ -1,22 +1,25 @@
 # netlify.toml (raíz)
 [build]
-  base    = "frontend"
-  publish = "dist"
-  command = "npm ci && npm run build"
+  # ❌ NO usamos "base" para no romper la resolución de Functions
+  publish = "frontend/dist"
+  command = "cd frontend && npm ci && npm run build"
 
-# Directorio de funciones (serverless)
+# Recomendado: Node 20 para Functions
+[build.environment]
+  NODE_VERSION = "20"
+
 [functions]
+  # Ruta de las serverless functions relativa a la RAÍZ del repo
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  included_files = []
 
-# Proxy de API: /api/* -> Netlify Function "api"
+# Proxy: /api/* -> Netlify Function "api"
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
+  to   = "/.netlify/functions/api/:splat"
   status = 200
 
-# Redirección SPA (dejar SIEMPRE al final)
+# SPA fallback (al final)
 [[redirects]]
   from = "/*"
   to   = "/index.html"
