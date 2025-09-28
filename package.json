@@ -1,0 +1,15 @@
+{
+  "name": "erp_gep",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo para el ERP interno de planificación de formaciones de GEP Group.",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev:backend": "npm --workspace backend run dev",
+    "lint": "npm --workspaces run lint"
+  }
+}

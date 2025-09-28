@@ -1,0 +1,52 @@
+:root {
+  --color-red: #e8474d;
+  --color-red-soft: #f7c6c8;
+  --color-gray-dark: #2a2a2a;
+  --color-gray-medium: #565656;
+  --color-gray-light: #f2f2f2;
+  --color-background: #fafafa;
+  --font-family-base: 'Poppins', sans-serif;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family-base);
+  background-color: var(--color-background);
+  color: var(--color-gray-dark);
+}
+
+.btn-primary {
+  background-color: var(--color-red);
+  border-color: var(--color-red);
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: #d93b41;
+  border-color: #d93b41;
+}
+
+.nav-link {
+  font-weight: 500;
+  color: var(--color-gray-medium);
+}
+
+.nav-link.active {
+  color: var(--color-red);
+}
+
+.table thead {
+  background-color: var(--color-gray-light);
+}
+
+.table tbody tr {
+  transition: background-color 0.2s ease-in-out;
+}
+
+.table tbody tr:hover {
+  background-color: rgba(232, 71, 77, 0.08);
+}
+
+.modal-content {
+  border-radius: 18px;
+}

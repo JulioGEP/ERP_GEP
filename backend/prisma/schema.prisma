@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        Int       @id
+  name      String
+  cif       String?   @db.VarChar(255)
+  phone     String?   @db.VarChar(255)
+  address   String?   @db.Text
+  persons   Person[]
+  deals     Deal[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Person {
+  id             Int             @id
+  organizationId Int
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  firstName      String?         @db.VarChar(255)
+  lastName       String?         @db.VarChar(255)
+  email          String?         @db.VarChar(255)
+  phone          String?         @db.VarChar(255)
+  participants   DealParticipant[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Deal {
+  id              Int               @id
+  organizationId  Int
+  organization    Organization      @relation(fields: [organizationId], references: [id])
+  title           String
+  trainingType    String?           @db.VarChar(255)
+  hours           Int?
+  direction       String?           @db.VarChar(255)
+  sede            String?           @db.VarChar(255)
+  caes            String?           @db.VarChar(255)
+  fundae          String?           @db.VarChar(255)
+  hotelNight      String?           @db.VarChar(255)
+  alumnos         Int?              @default(0)
+  training        Json?
+  prodExtra       Json?
+  documentsNum    Int?              @default(0)
+  documentsIds    String?           @db.Text
+  sessionsNum     Int?              @default(0)
+  sessionsIds     String?           @db.Text
+  notesNum        Int?              @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  notes           Note[]
+  documents       Document[]
+  sessions        Session[]
+  participants    DealParticipant[]
+}
+
+model Note {
+  id        Int      @id
+  dealId    Int
+  deal      Deal     @relation(fields: [dealId], references: [id])
+  comment   String
+  createdAt DateTime @default(now())
+}
+
+model Document {
+  id        Int      @id
+  dealId    Int
+  deal      Deal     @relation(fields: [dealId], references: [id])
+  title     String
+  url       String?  @db.Text
+  createdAt DateTime @default(now())
+}
+
+model Session {
+  id                String             @id
+  dealId            Int
+  deal              Deal               @relation(fields: [dealId], references: [id])
+  status            String?            @db.VarChar(255)
+  dateStart         DateTime?
+  dateEnd           DateTime?
+  sede              String?            @db.VarChar(255)
+  address           String?            @db.Text
+  firemanId         String?            @db.VarChar(255)
+  vehicleId         String?            @db.VarChar(255)
+  comment           String?            @db.Text
+  trainers          SessionTrainer[]
+  mobileUnits       SessionMobileUnit[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model Trainer {
+  id        String            @id
+  name      String
+  sessions  SessionTrainer[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model MobileUnit {
+  id        String              @id
+  name      String
+  sessions  SessionMobileUnit[]
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+}
+
+model SessionTrainer {
+  sessionId String
+  trainerId String
+  session   Session @relation(fields: [sessionId], references: [id])
+  trainer   Trainer @relation(fields: [trainerId], references: [id])
+
+  @@id([sessionId, trainerId])
+}
+
+model SessionMobileUnit {
+  sessionId String
+  mobileId  String
+  session   Session    @relation(fields: [sessionId], references: [id])
+  mobile    MobileUnit @relation(fields: [mobileId], references: [id])
+
+  @@id([sessionId, mobileId])
+}
+
+model DealParticipant {
+  dealId   Int
+  personId Int
+  role     String? @db.VarChar(255)
+  deal     Deal    @relation(fields: [dealId], references: [id])
+  person   Person  @relation(fields: [personId], references: [id])
+
+  @@id([dealId, personId])
+}

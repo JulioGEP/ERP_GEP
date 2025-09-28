@@ -47,3 +47,51 @@ ERP interno colaborativo para planificar, visualizar y gestionar formaciones pro
 - Definir primer esquema Prisma y migración inicial que refleje las tablas descritas.
 
 Este documento servirá como referencia viva para las decisiones técnicas y planificación del ERP.
+
+## Estructura del repositorio
+
+```
+.
+├── backend/        # API Express + Prisma conectada a Neon
+├── frontend/       # Aplicación React (Vite + TypeScript + Bootstrap)
+├── .env.example    # Plantilla de variables de entorno
+├── package.json    # Configuración de workspaces y scripts compartidos
+└── README.md
+```
+
+## Cómo empezar
+
+1. **Instalar dependencias**
+
+   ```bash
+   npm install
+   npm --workspace backend install
+   npm --workspace frontend install
+   ```
+
+2. **Configurar variables de entorno**
+
+   Copia `.env.example` a `.env` y rellena los valores proporcionados por Netlify/Neon.
+
+3. **Lanzar los entornos de desarrollo**
+
+   ```bash
+   npm run dev:backend   # http://localhost:4000
+   npm run dev:frontend  # http://localhost:5173
+   ```
+
+## Convenciones de diseño UI
+
+- Tipografía principal: Poppins (variantes 300/400/600/700).
+- Colores corporativos suavizados:
+  - Rojo principal: `#e8474d`
+  - Gris oscuro: `#2a2a2a`
+  - Gris medio: `#565656`
+  - Gris claro: `#f2f2f2`
+- Componentes clave personalizados: botones, navegación superior, tablas y modales Bootstrap adaptados a la línea visual.
+
+## Estado actual
+
+- **Frontend**: layout inicial con cabecera corporativa, pestañas de navegación y módulo de Presupuestos con modal de importación, tabla responsive y modal de detalle.
+- **Backend**: servidor Express con endpoint `POST /api/deals/import` preparado para sincronizar un presupuesto desde Pipedrive, normalizar datos y guardarlos en Neon mediante Prisma.
+- **Base de datos**: esquema Prisma que refleja las tablas y relaciones solicitadas (organizaciones, personas, deals, notas, documentos, sesiones, formadores y unidades móviles).
