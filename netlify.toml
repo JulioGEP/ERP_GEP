@@ -10,13 +10,13 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-# Proxy: /api/* -> Function
+# Reescritura de API a la Function
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/api/:splat"
   status = 200
 
-# SPA fallback
+# SPA fallback (siempre al final)
 [[redirects]]
   from = "/*"
   to   = "/index.html"

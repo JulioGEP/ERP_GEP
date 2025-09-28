@@ -1,5 +1,4 @@
 // netlify/functions/api.ts
-// Ruteo para /api/* y /.netlify/functions/api/*
 // - GET  /api/health
 // - POST /api/deals/import  { federalNumber: string }
 
