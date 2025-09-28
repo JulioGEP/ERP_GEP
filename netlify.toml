@@ -1,6 +1,7 @@
+# netlify.toml (raíz)
 [build]
   publish = "frontend/dist"
-  command = "cd frontend && npm ci && npm run build"
+  command = "npm ci && cd frontend && npm ci && npm run build"
 
 [build.environment]
   NODE_VERSION = "20"
@@ -9,11 +10,13 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# Proxy API -> Function
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/api/:splat"
   status = 200
 
+# SPA fallback (siempre al final)
 [[redirects]]
   from = "/*"
   to   = "/index.html"
