@@ -38,15 +38,12 @@ export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: Budget
           <Modal.Title className="fw-semibold text-uppercase">Importar presupuesto</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p className="text-muted small mb-3">
-            Introduce el número federal asociado al presupuesto para traer los datos desde Pipedrive.
-          </p>
           <Form.Group controlId="federalNumber">
-            <Form.Label className="fw-semibold">Número federal</Form.Label>
+            <Form.Label className="fw-semibold">Presupuesto</Form.Label>
             <Form.Control
               ref={inputRef}
               type="text"
-              placeholder="Ej. FED-00123"
+              placeholder="Ej. 0123"
               value={federalNumber}
               onChange={(event) => setFederalNumber(event.target.value)}
               disabled={isLoading}
