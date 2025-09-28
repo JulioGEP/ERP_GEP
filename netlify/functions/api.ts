@@ -18,8 +18,28 @@ const JSON_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-const PIPEDRIVE_BASE_URL =
-  process.env.PIPEDRIVE_BASE_URL?.trim() || "https://api.pipedrive.com/v1";
+function normalizePipedriveBaseUrl(rawUrl: string | undefined | null): string {
+  const fallback = "https://api.pipedrive.com/v1";
+  if (!rawUrl) return fallback;
+
+  const trimmed = rawUrl.trim().replace(/\/+$/, "");
+
+  if (!trimmed) {
+    return fallback;
+  }
+
+  if (/\/api\/v\d+$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/\/api$/i.test(trimmed)) {
+    return `${trimmed}/v1`;
+  }
+
+  return `${trimmed}/api/v1`;
+}
+
+const PIPEDRIVE_BASE_URL = normalizePipedriveBaseUrl(process.env.PIPEDRIVE_BASE_URL);
 const PIPEDRIVE_API_TOKEN = process.env.PIPEDRIVE_API_TOKEN?.trim() || "";
 const DATABASE_URL = process.env.DATABASE_URL?.trim() || "";
 
