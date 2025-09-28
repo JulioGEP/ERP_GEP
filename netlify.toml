@@ -1,7 +1,7 @@
 # netlify.toml (en la RAÍZ del repo)
 [build]
   publish = "frontend/dist"
-  command = "npm ci && cd frontend && npm ci && npm run build"
+  command = "npm ci && npm --prefix netlify/functions install && cd frontend && npm ci && npm run build"
 
 [build.environment]
   NODE_VERSION = "20"
@@ -10,7 +10,10 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  included_files = ["node_modules/@neondatabase/serverless/**"]
+  included_files = [
+    "node_modules/@neondatabase/serverless/**",
+    "netlify/functions/node_modules/@neondatabase/serverless/**"
+  ]
 
 # Proxy: /api/* -> Function "api"
 [[redirects]]
