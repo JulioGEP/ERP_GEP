@@ -11,3 +11,12 @@ coverage
 /dist
 /frontend/dist
 /backend/dist
+
+# Env y builds
+.env
+backend/.env
+frontend/.env
+*.log
+dist/
+build/
+

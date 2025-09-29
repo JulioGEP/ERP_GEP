@@ -1,23 +1,15 @@
-import { config } from 'dotenv';
-import { z } from 'zod';
+import 'dotenv/config';
 
-config();
+const required = (name: string): string => {
+  const v = process.env[name];
+  if (!v) throw new Error(`Falta la variable de entorno ${name}`);
+  return v;
+};
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().default(4000),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatorio'),
-  PIPEDRIVE_BASE_URL: z.string().url(),
-  PIPEDRIVE_API_TOKEN: z.string().min(1, 'PIPEDRIVE_API_TOKEN es obligatorio')
-});
-
-type EnvSchema = z.infer<typeof envSchema>;
-
-const parsed = envSchema.safeParse(process.env);
-
-if (!parsed.success) {
-  console.error('❌ Configuración de entorno inválida', parsed.error.flatten().fieldErrors);
-  throw new Error('Variables de entorno inválidas');
-}
-
-export const env: EnvSchema = parsed.data;
+export const env = {
+  NODE_ENV: process.env.NODE_ENV ?? 'development',
+  PORT: Number(process.env.PORT ?? 4000),
+  DATABASE_URL: required('DATABASE_URL'),
+  PIPEDRIVE_BASE_URL: process.env.PIPEDRIVE_BASE_URL ?? 'https://api.pipedrive.com/v1',
+  PIPEDRIVE_API_TOKEN: required('PIPEDRIVE_API_TOKEN')
+};
