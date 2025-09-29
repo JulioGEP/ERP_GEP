@@ -8,9 +8,6 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  included_files = [
-    "node_modules/@neondatabase/serverless/**"
-  ]
 
 [[redirects]]
   from = "/api/*"
