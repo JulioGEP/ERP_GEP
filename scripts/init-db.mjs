@@ -1,4 +1,3 @@
-// scripts/init-db.mjs
 import { neon } from "@neondatabase/serverless";
 
 const { DATABASE_URL } = process.env;
