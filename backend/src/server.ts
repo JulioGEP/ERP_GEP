@@ -3,40 +3,67 @@ import cors from 'cors';
 import helmet from 'helmet';
 import pino from 'pino';
 import pinoHttp from 'pino-http';
-import { env } from './config/env';
 import { dealsRouter } from './routes/deals';
 
+const NODE_ENV = process.env.NODE_ENV ?? 'development';
+const PORT = Number(process.env.PORT ?? 4000);
+
+// Admite varios orígenes separados por coma (Netlify + localhost)
+const rawOrigins = process.env.CORS_ORIGIN?.split(',').map(s => s.trim()).filter(Boolean);
+
+// Config CORS estricta en prod; permisiva en dev si no hay CORS_ORIGIN
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, cb) => {
+    // Requests sin origin (curl, healthchecks) se permiten
+    if (!origin) return cb(null, true);
+
+    // En dev, si no especificaste CORS_ORIGIN, permite todo
+    if (NODE_ENV === 'development' && (!rawOrigins || rawOrigins.length === 0)) {
+      return cb(null, true);
+    }
+
+    // En prod (o si configuraste CORS_ORIGIN), exige coincidencia exacta
+    if (rawOrigins && rawOrigins.includes(origin)) {
+      return cb(null, true);
+    }
+
+    return cb(new Error(`CORS: Origin no permitido: ${origin}`));
+  },
+  credentials: true
+};
+
 const logger = pino({
-  transport: env.NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
-  level: env.NODE_ENV === 'development' ? 'debug' : 'info'
+  transport: NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
+  level: NODE_ENV === 'development' ? 'debug' : 'info'
 });
 
 const app = express();
-app.use(express.json());
-app.use(cors({ origin: true, credentials: true }));
-app.use(helmet());
-app.use(
-  pinoHttp({
-    logger,
-    serializers: {
-      req(request) {
-        return { method: request.method, url: request.url };
-      }
-    }
-  })
-);
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
-});
+app.use(helmet());
+app.use(cors(corsOptions));
+app.use(express.json());
+app.use(pinoHttp({ logger }));
+
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 app.use('/api/deals', dealsRouter);
 
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  logger.error(err, 'Unhandled error');
+// Error handler con detalle en dev
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error({ err }, 'Unhandled error');
+  if (NODE_ENV === 'development') {
+    const status = err?.statusCode || err?.status || 500;
+    return res.status(status).json({
+      message: 'Error interno del servidor',
+      error: String(err?.message || err),
+      details: err?.response?.data || undefined,
+      stack: err?.stack || undefined
+    });
+  }
   res.status(500).json({ message: 'Error interno del servidor' });
 });
 
-app.listen(env.PORT, () => {
-  logger.info(`Servidor escuchando en http://localhost:${env.PORT}`);
+app.listen(PORT, () => {
+  logger.info(`Servidor escuchando en http://localhost:${PORT}`);
 });
