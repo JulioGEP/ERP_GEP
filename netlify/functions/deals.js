@@ -1,12 +1,8 @@
 const crypto = require('crypto');
 const { neon } = require('@neondatabase/serverless');
-
-const COMMON_HEADERS = {
-  'Content-Type': 'application/json; charset=utf-8',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-};
+const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
+const { buildDealPayloadFromRecord } = require('./_shared/dealPayload');
+const { getPrisma } = require('./_shared/prisma');
 
 let sqlClient;
 
@@ -21,62 +17,41 @@ function getSqlClient() {
   return sqlClient;
 }
 
-function jsonResponse(statusCode, body) {
-  return { statusCode, headers: COMMON_HEADERS, body: JSON.stringify(body) };
-}
+function mapDealRecord(row) {
+  const organization =
+    row.organization_name || row.organization_cif || row.organization_phone || row.organization_address
+      ? {
+          name: row.organization_name ?? 'Organización sin nombre',
+          cif: row.organization_cif ?? null,
+          phone: row.organization_phone ?? null,
+          address: row.organization_address ?? null
+        }
+      : row.organization_name
+        ? { name: row.organization_name }
+        : null;
 
-function sanitizeHtml(html) {
-  if (!html) return null;
-  const text = String(html)
-    .replace(/<br\s*\/?>(\r?\n)?/gi, '\n')
-    .replace(/<li[^>]*>/gi, '• ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return text || null;
-}
-
-function normalizeJsonArray(value) {
-  if (!value) return [];
-  return Array.isArray(value) ? value : [];
-}
-
-function mapDealRecord(record) {
-  const training = normalizeJsonArray(record.training);
-  const prodExtra = normalizeJsonArray(record.prodExtra);
-  const documents = Array.isArray(record.documents) ? record.documents : [];
-  const notes = Array.isArray(record.notes) ? record.notes : [];
-  const trainingNames = training
-    .map((product) => (product && typeof product.name === 'string' ? product.name : null))
-    .filter(Boolean);
-  const extraNames = prodExtra
-    .map((product) => (product && typeof product.name === 'string' ? product.name : null))
-    .filter(Boolean);
-
-  return {
-    deal_id: record.id,
-    deal_org_id: record.organizationId,
-    organization_name: record.organization?.name ?? 'Organización sin nombre',
-    title: record.title,
-    training_type: record.trainingType ?? null,
-    training,
-    training_names: trainingNames,
-    hours: record.hours,
-    deal_direction: record.direction ?? null,
-    sede: record.sede ?? null,
-    caes: record.caes ?? null,
-    fundae: record.fundae ?? null,
-    hotel_night: record.hotelNight ?? null,
-    prod_extra: prodExtra,
-    prod_extra_names: extraNames,
-    documents_num: record.documentsNum ?? documents.length,
-    documents_id: documents.map((doc) => doc.id),
-    documents: documents.map((doc) => doc.title),
-    notes_count: record.notesNum ?? notes.length,
-    notes: notes.map((note) => sanitizeHtml(note.comment) ?? note.comment),
-    created_at: record.createdAt?.toISOString?.() ?? record.createdAt,
-    updated_at: record.updatedAt?.toISOString?.() ?? record.updatedAt
-  };
+  return buildDealPayloadFromRecord({
+    id: row.id,
+    organizationId: row.organization_id ?? null,
+    organization,
+    title: row.title,
+    trainingType: row.training_type ?? null,
+    hours: row.hours ?? null,
+    direction: row.direction ?? null,
+    sede: row.sede ?? null,
+    caes: row.caes ?? null,
+    fundae: row.fundae ?? null,
+    hotelNight: row.hotel_night ?? null,
+    training: row.training ?? [],
+    prodExtra: row.prod_extra ?? [],
+    documentsNum: row.documents_num ?? 0,
+    notesNum: row.notes_num ?? 0,
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+    documents: [],
+    notes: [],
+    participants: []
+  });
 }
 
 async function fetchDeals({ noSessions, requestId }) {
@@ -92,10 +67,13 @@ async function fetchDeals({ noSessions, requestId }) {
         d.id,
         d."organizationId"          AS organization_id,
         o.name                       AS organization_name,
+        o.cif                        AS organization_cif,
+        o.phone                      AS organization_phone,
+        o.address                    AS organization_address,
         d.title,
         d."trainingType"            AS training_type,
         d.hours,
-        d.direction,
+        d.direction                  AS direction,
         d.sede,
         d.caes,
         d.fundae,
@@ -112,27 +90,7 @@ async function fetchDeals({ noSessions, requestId }) {
       ORDER BY d."createdAt" DESC NULLS LAST
     `;
 
-    return rows.map((row) => ({
-      id: row.id,
-      organizationId: row.organization_id ?? null,
-      organization: row.organization_name ? { name: row.organization_name } : null,
-      title: row.title,
-      trainingType: row.training_type ?? null,
-      hours: row.hours ?? null,
-      direction: row.direction ?? null,
-      sede: row.sede ?? null,
-      caes: row.caes ?? null,
-      fundae: row.fundae ?? null,
-      hotelNight: row.hotel_night ?? null,
-      training: row.training ?? [],
-      prodExtra: row.prod_extra ?? [],
-      documentsNum: row.documents_num ?? 0,
-      notesNum: row.notes_num ?? 0,
-      createdAt: row.created_at ?? null,
-      updatedAt: row.updated_at ?? null,
-      documents: [],
-      notes: []
-    }));
+    return rows.map(mapDealRecord);
   } catch (error) {
     console.warn(`[${requestId}] falling back to legacy deals query`, error);
   }
@@ -151,31 +109,61 @@ async function fetchDeals({ noSessions, requestId }) {
       ORDER BY d.deal_id DESC
     `;
 
-    return rows.map((row) => ({
-      id: row.id,
-      organizationId: row.organization_id ?? null,
-      organization: row.organization_name ? { name: row.organization_name } : null,
-      title: row.title,
-      trainingType: null,
-      hours: null,
-      direction: null,
-      sede: null,
-      caes: null,
-      fundae: null,
-      hotelNight: null,
-      training: [],
-      prodExtra: [],
-      documentsNum: 0,
-      notesNum: 0,
-      createdAt: null,
-      updatedAt: null,
-      documents: [],
-      notes: []
-    }));
+    return rows.map((row) =>
+      buildDealPayloadFromRecord({
+        id: row.id,
+        organizationId: row.organization_id ?? null,
+        organization: row.organization_name ? { name: row.organization_name } : null,
+        title: row.title,
+        trainingType: null,
+        hours: null,
+        direction: null,
+        sede: null,
+        caes: null,
+        fundae: null,
+        hotelNight: null,
+        training: [],
+        prodExtra: [],
+        documentsNum: 0,
+        notesNum: 0,
+        createdAt: null,
+        updatedAt: null,
+        documents: [],
+        notes: [],
+        participants: []
+      })
+    );
   } catch (error) {
     console.error(`[${requestId}] legacy deals query failed`, error);
     throw error;
   }
+}
+
+function extractDealIdFromPath(path) {
+  if (!path) return null;
+  const normalized = path.split('?')[0].replace(/\/$/, '');
+  const match = normalized.match(/\/deals\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function fetchDealDetail(dealId, requestId) {
+  const prisma = getPrisma();
+
+  const record = await prisma.deal.findUnique({
+    where: { id: dealId },
+    include: {
+      organization: true,
+      notes: true,
+      documents: true,
+      participants: { include: { person: true } }
+    }
+  });
+
+  if (!record) {
+    return null;
+  }
+
+  return buildDealPayloadFromRecord(record);
 }
 
 exports.handler = async (event) => {
@@ -187,7 +175,41 @@ exports.handler = async (event) => {
 
   try {
     if (event.httpMethod !== 'GET') {
-      return jsonResponse(405, { error: 'method_not_allowed', message: 'Método no permitido' });
+      return errorResponse({
+        statusCode: 405,
+        errorCode: 'METHOD_NOT_ALLOWED',
+        message: 'Método no permitido',
+        requestId
+      });
+    }
+
+    const dealIdFromPath = extractDealIdFromPath(event.path);
+    if (dealIdFromPath) {
+      const dealId = Number(dealIdFromPath);
+      if (!Number.isFinite(dealId)) {
+        return errorResponse({
+          statusCode: 400,
+          errorCode: 'VALIDATION_ERROR',
+          message: 'dealId debe ser numérico',
+          requestId
+        });
+      }
+
+      const detail = await fetchDealDetail(dealId, requestId);
+      if (!detail) {
+        return errorResponse({
+          statusCode: 404,
+          errorCode: 'DEAL_NOT_FOUND',
+          message: 'No se ha encontrado el presupuesto solicitado.',
+          requestId
+        });
+      }
+
+      return successResponse({
+        requestId,
+        deal_id: String(dealId),
+        deal: detail
+      });
     }
 
     const noSessionsRaw = event.queryStringParameters?.noSessions ?? event.queryStringParameters?.no_sessions;
@@ -195,18 +217,16 @@ exports.handler = async (event) => {
 
     const deals = await fetchDeals({ noSessions, requestId });
 
-    const payload = deals.map(mapDealRecord);
-
-    return jsonResponse(200, {
-      ok: true,
+    return successResponse({
       requestId,
-      count: payload.length,
-      deals: payload
+      count: deals.length,
+      deals
     });
   } catch (error) {
-    console.error(`[${requestId}] deals list error`, error);
-    return jsonResponse(500, {
-      error: 'unexpected_error',
+    console.error(`[${requestId}] deals handler error`, error);
+    return errorResponse({
+      statusCode: 500,
+      errorCode: 'UNEXPECTED_ERROR',
       message: error instanceof Error ? error.message : 'Error inesperado',
       requestId
     });

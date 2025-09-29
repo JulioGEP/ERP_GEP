@@ -1,8 +1,6 @@
-import type { DealSummary, TrainingProduct } from '../../types/deal';
+import type { DealParticipant, DealSummary, TrainingProduct } from '../../types/deal';
 
 type Json = any;
-
-type Attempt = { url: string; error: string };
 
 const rawApiBase = (import.meta as any)?.env?.VITE_API_BASE?.toString()?.trim() || '';
 
@@ -11,24 +9,11 @@ function normalizeBase(base: string): string {
   return base.endsWith('/') ? base.replace(/\/+$/, '') : base;
 }
 
-function isNetlifyFunctionsBase(base: string): boolean {
-  return base.includes('.netlify/functions');
-}
+const API_BASE = normalizeBase(rawApiBase) || '/.netlify/functions';
 
-function getApiBases(): string[] {
-  const base = normalizeBase(rawApiBase);
-  if (base) {
-    return [base];
-  }
-  return ['/api', '/.netlify/functions'];
-}
-
-const API_BASES = getApiBases();
-
-function joinUrl(base: string, path: string): string {
-  const normalizedBase = normalizeBase(base) || '';
+function joinUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${normalizedBase}${normalizedPath}`;
+  return `${API_BASE}${normalizedPath}`;
 }
 
 function withQuery(url: string, query: Record<string, string | number | boolean | undefined>): string {
@@ -40,6 +25,21 @@ function withQuery(url: string, query: Record<string, string | number | boolean 
   const queryString = params.toString();
   if (!queryString) return url;
   return `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
+}
+
+export class ApiError extends Error {
+  code: string;
+  status: number;
+  requestId?: string;
+  details?: unknown;
+
+  constructor({ message, code, status, requestId, details }: { message: string; code: string; status: number; requestId?: string; details?: unknown }) {
+    super(message);
+    this.code = code;
+    this.status = status;
+    this.requestId = requestId;
+    this.details = details;
+  }
 }
 
 function toNumber(value: unknown): number | null {
@@ -71,6 +71,70 @@ function toStringArray(value: unknown): string[] | undefined {
   return list.length ? list : undefined;
 }
 
+function toNullableStringArray(value: unknown): (string | null)[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const list = value.map((entry) => {
+    if (entry === null || entry === undefined) return null;
+    return typeof entry === 'string' ? entry : String(entry);
+  });
+  return list.length ? list : undefined;
+}
+
+function parseParticipants(value: unknown): DealParticipant[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const participants = value
+    .map((item) => {
+      const participant = item as Record<string, unknown>;
+      const personId = toNumber(participant.person_id ?? participant.id);
+      const firstName =
+        typeof participant.first_name === 'string'
+          ? participant.first_name
+          : typeof participant.firstName === 'string'
+            ? participant.firstName
+            : null;
+      const lastName =
+        typeof participant.last_name === 'string'
+          ? participant.last_name
+          : typeof participant.lastName === 'string'
+            ? participant.lastName
+            : null;
+      const email =
+        typeof participant.email === 'string'
+          ? participant.email
+          : typeof participant.person_email === 'string'
+            ? participant.person_email
+            : null;
+      const phone =
+        typeof participant.phone === 'string'
+          ? participant.phone
+          : typeof participant.person_phone === 'string'
+            ? participant.person_phone
+            : null;
+      const role =
+        typeof participant.role === 'string'
+          ? participant.role
+          : typeof participant.position === 'string'
+            ? participant.position
+            : null;
+
+      if (personId || firstName || lastName || email || phone || role) {
+        return {
+          personId: personId ?? null,
+          firstName,
+          lastName,
+          email,
+          phone,
+          role
+        } satisfies DealParticipant;
+      }
+      return null;
+    })
+    .filter((participant): participant is DealParticipant => participant !== null);
+
+  return participants.length ? participants : undefined;
+}
+
 function parseDealPayload(data: Json): DealSummary {
   const deal = data?.deal ?? data;
   if (!deal || typeof deal !== 'object') {
@@ -95,6 +159,27 @@ function parseDealPayload(data: Json): DealSummary {
           : typeof deal.client_name === 'string'
             ? deal.client_name
             : 'Organización sin nombre';
+
+  const organizationCif =
+    typeof deal.organizationCif === 'string'
+      ? deal.organizationCif
+      : typeof deal.organization_cif === 'string'
+        ? deal.organization_cif
+        : undefined;
+
+  const organizationPhone =
+    typeof deal.organizationPhone === 'string'
+      ? deal.organizationPhone
+      : typeof deal.organization_phone === 'string'
+        ? deal.organization_phone
+        : undefined;
+
+  const organizationAddress =
+    typeof deal.organizationAddress === 'string'
+      ? deal.organizationAddress
+      : typeof deal.organization_address === 'string'
+        ? deal.organization_address
+        : undefined;
 
   const trainingProducts = parseTrainingProducts(deal.training ?? deal.training_products);
   const trainingNames =
@@ -129,6 +214,10 @@ function parseDealPayload(data: Json): DealSummary {
     : undefined;
 
   const notes = toStringArray(deal.notes);
+
+  const documentsUrls = toNullableStringArray(deal.documentsUrls ?? deal.documents_urls);
+
+  const participants = parseParticipants(deal.persons ?? deal.participants);
 
   const trainingType =
     typeof deal.trainingType === 'string'
@@ -183,6 +272,9 @@ function parseDealPayload(data: Json): DealSummary {
     dealId,
     dealOrgId,
     organizationName,
+    organizationCif,
+    organizationPhone,
+    organizationAddress,
     title: typeof deal.title === 'string' ? deal.title : `Presupuesto ${dealId}`,
     clientName:
       typeof deal.clientName === 'string'
@@ -204,8 +296,10 @@ function parseDealPayload(data: Json): DealSummary {
     documentsNum,
     documentsId,
     documents,
+    documentsUrls,
     notesCount,
     notes,
+    participants,
     createdAt:
       typeof deal.created_at === 'string'
         ? deal.created_at
@@ -231,73 +325,49 @@ async function parseJsonResponse(response: Response): Promise<Json> {
   }
 }
 
-function buildImportUrl(base: string): string {
-  const path = isNetlifyFunctionsBase(base) ? '/deals_import' : '/deals/import';
-  return joinUrl(base, path);
-}
+async function request(path: string, init?: RequestInit): Promise<Json> {
+  const response = await fetch(joinUrl(path), init);
+  const data = await parseJsonResponse(response);
+  const apiBody = data && typeof data === 'object' ? data : null;
 
-function buildDealsUrl(base: string): string {
-  const path = isNetlifyFunctionsBase(base) ? '/deals' : '/deals';
-  return withQuery(joinUrl(base, path), { noSessions: true });
-}
+  const isError = !response.ok || apiBody?.ok === false;
+  if (isError) {
+    const code = typeof apiBody?.error_code === 'string' ? apiBody.error_code : `HTTP_${response.status}`;
+    const message = typeof apiBody?.message === 'string' ? apiBody.message : `HTTP ${response.status}`;
+    const status = !response.ok ? response.status : 400;
+    throw new ApiError({
+      message,
+      code,
+      status,
+      requestId: typeof apiBody?.requestId === 'string' ? apiBody.requestId : undefined,
+      details: apiBody ?? data
+    });
+  }
 
-function formatAttempts(attempts: Attempt[]): string {
-  return attempts.map((attempt) => `${attempt.url} → ${attempt.error}`).join(' | ');
+  return data;
 }
 
 export async function importPresupuesto(dealId: string): Promise<DealSummary> {
-  const attempts: Attempt[] = [];
+  const data = await request('/deals_import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dealId })
+  });
 
-  for (const base of API_BASES) {
-    const url = buildImportUrl(base);
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dealId })
-      });
-
-      const data = await parseJsonResponse(response);
-
-      if (!response.ok) {
-        const reason = (data && (data.error || data.message)) || `HTTP ${response.status}`;
-        throw new Error(reason);
-      }
-
-      return parseDealPayload(data);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      attempts.push({ url, error: message });
-    }
-  }
-
-  throw new Error(`No se pudo importar el presupuesto. Intentos fallidos: ${formatAttempts(attempts)}`);
+  const payload = data?.deal ?? data;
+  return parseDealPayload(payload);
 }
 
 export async function fetchDealsWithoutSessions(): Promise<DealSummary[]> {
-  const attempts: Attempt[] = [];
+  const data = await request(withQuery('/deals', { noSessions: true }), { method: 'GET' });
+  const deals = Array.isArray(data?.deals) ? data.deals : Array.isArray(data) ? data : [];
+  return deals.map((deal: Json) => parseDealPayload(deal));
+}
 
-  for (const base of API_BASES) {
-    const url = buildDealsUrl(base);
-    try {
-      const response = await fetch(url, { method: 'GET' });
-      const data = await parseJsonResponse(response);
-
-      if (!response.ok) {
-        const reason = (data && (data.error || data.message)) || `HTTP ${response.status}`;
-        throw new Error(reason);
-      }
-
-      const deals = Array.isArray(data?.deals) ? data.deals : Array.isArray(data) ? data : [];
-      return deals.map((deal: Json) => parseDealPayload(deal));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      attempts.push({ url, error: message });
-    }
-  }
-
-  throw new Error(`No se pudo obtener el listado de presupuestos. Intentos fallidos: ${formatAttempts(attempts)}`);
+export async function fetchDealDetail(dealId: number): Promise<DealSummary> {
+  const data = await request(`/deals/${encodeURIComponent(dealId)}`, { method: 'GET' });
+  const payload = data?.deal ?? data;
+  return parseDealPayload(payload);
 }
 
 export const importDeal = importPresupuesto;

@@ -1,12 +1,8 @@
-const { PrismaClient } = require('@prisma/client');
+const { Prisma } = require('@prisma/client');
 const crypto = require('crypto');
-
-const COMMON_HEADERS = {
-  'Content-Type': 'application/json; charset=utf-8',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-};
+const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
+const { buildDealPayloadFromRecord } = require('./_shared/dealPayload');
+const { getPrisma } = require('./_shared/prisma');
 
 const PIPEDRIVE_API_TOKEN = (process.env.PIPEDRIVE_API_TOKEN || '').trim();
 const PIPEDRIVE_HOSTS = ['https://api.pipedrive.com/v1', 'https://api-eu.pipedrive.com/v1'];
@@ -25,18 +21,6 @@ const ORGANIZATION_CUSTOM_FIELDS = {
   cif: '6d39d015a33921753410c1bab0b067ca93b8cf2c',
   phone: 'b4379db06dfbe0758d84c2c2dd45ef04fa093b6d'
 };
-
-let prisma;
-function getPrisma() {
-  if (!prisma) {
-    prisma = new PrismaClient();
-  }
-  return prisma;
-}
-
-function jsonResponse(statusCode, body) {
-  return { statusCode, headers: COMMON_HEADERS, body: JSON.stringify(body) };
-}
 
 function maskToken(url) {
   return url.replace(/(api_token=)[^&]+/gi, '$1***');
@@ -166,17 +150,6 @@ function parseNumberLike(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function sanitizeHtml(html) {
-  if (!html) return null;
-  const text = String(html)
-    .replace(/<br\s*\/?>(\r?\n)?/gi, '\n')
-    .replace(/<li[^>]*>/gi, '• ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return text || null;
-}
-
 function extractPrimaryField(field) {
   if (!field) return null;
   if (typeof field === 'string') return field;
@@ -264,52 +237,6 @@ function normalizeParticipants(rawParticipants) {
   return participants;
 }
 
-function buildDealPayloadFromRecord(record) {
-  const training = Array.isArray(record.training) ? record.training : [];
-  const prodExtra = Array.isArray(record.prodExtra) ? record.prodExtra : [];
-  const documents = Array.isArray(record.documents) ? record.documents : [];
-  const notes = Array.isArray(record.notes) ? record.notes : [];
-  const trainingNames = training
-    .map((product) => (product && typeof product.name === 'string' ? product.name : null))
-    .filter(Boolean);
-  const extraNames = prodExtra
-    .map((product) => (product && typeof product.name === 'string' ? product.name : null))
-    .filter(Boolean);
-
-  return {
-    deal_id: record.id,
-    deal_org_id: record.organizationId,
-    organization_name: record.organization?.name ?? 'Organización sin nombre',
-    title: record.title,
-    training_type: record.trainingType ?? null,
-    training,
-    training_names: trainingNames,
-    hours: record.hours,
-    deal_direction: record.direction ?? null,
-    sede: record.sede ?? null,
-    caes: record.caes ?? null,
-    fundae: record.fundae ?? null,
-    hotel_night: record.hotelNight ?? null,
-    prod_extra: prodExtra,
-    prod_extra_names: extraNames,
-    documents_num: record.documentsNum ?? documents.length,
-    documents_id: documents.map((doc) => doc.id),
-    documents: documents.map((doc) => doc.title),
-    notes_count: record.notesNum ?? notes.length,
-    notes: notes.map((note) => sanitizeHtml(note.comment) ?? note.comment),
-    created_at: record.createdAt?.toISOString?.() ?? record.createdAt,
-    updated_at: record.updatedAt?.toISOString?.() ?? record.updatedAt,
-    persons: (record.participants || []).map((participant) => ({
-      person_id: participant.personId,
-      role: participant.role ?? null,
-      first_name: participant.person?.firstName ?? null,
-      last_name: participant.person?.lastName ?? null,
-      email: participant.person?.email ?? null,
-      phone: participant.person?.phone ?? null
-    }))
-  };
-}
-
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
@@ -319,17 +246,28 @@ exports.handler = async (event) => {
 
   try {
     if (event.httpMethod !== 'POST') {
-      return jsonResponse(405, { error: 'method_not_allowed', message: 'Método no permitido' });
+      return errorResponse({
+        statusCode: 405,
+        errorCode: 'METHOD_NOT_ALLOWED',
+        message: 'Método no permitido',
+        requestId
+      });
     }
 
     const dealIdInput = parseDealId(event);
     if (!dealIdInput) {
-      return jsonResponse(400, { error: 'deal_id_required', message: 'dealId es obligatorio' });
+      return errorResponse({
+        statusCode: 400,
+        errorCode: 'VALIDATION_ERROR',
+        message: 'dealId is required',
+        requestId
+      });
     }
 
     if (!PIPEDRIVE_API_TOKEN) {
-      return jsonResponse(500, {
-        error: 'pipedrive_token_missing',
+      return errorResponse({
+        statusCode: 500,
+        errorCode: 'CONFIGURATION_ERROR',
         message: 'PIPEDRIVE_API_TOKEN no configurado',
         requestId
       });
@@ -342,18 +280,21 @@ exports.handler = async (event) => {
     });
 
     if (!dealResponse.ok) {
-      return jsonResponse(502, {
-        error: 'pipedrive_upstream_failed',
-        message: 'No se pudo obtener el deal en Pipedrive',
-        attempts: dealResponse.attempts,
-        requestId
+      console.error(`[${requestId}] Pipedrive deal fetch failed`, dealResponse.attempts);
+      return errorResponse({
+        statusCode: 502,
+        errorCode: 'UPSTREAM_PIPEDRIVE_ERROR',
+        message: 'No se pudo obtener el presupuesto en Pipedrive.',
+        requestId,
+        details: { attempts: dealResponse.attempts }
       });
     }
 
     const dealData = dealResponse.data?.data;
     if (!dealData || typeof dealData !== 'object') {
-      return jsonResponse(404, {
-        error: 'deal_not_found',
+      return errorResponse({
+        statusCode: 404,
+        errorCode: 'DEAL_NOT_FOUND',
         message: 'No se ha encontrado el presupuesto solicitado en Pipedrive.',
         requestId
       });
@@ -361,9 +302,10 @@ exports.handler = async (event) => {
 
     const dealId = parseNumberLike(dealData.id);
     if (!dealId) {
-      return jsonResponse(500, {
-        error: 'deal_id_invalid',
-        message: 'Respuesta de Pipedrive inválida: falta id del deal',
+      return errorResponse({
+        statusCode: 500,
+        errorCode: 'DEAL_ID_INVALID',
+        message: 'Respuesta de Pipedrive inválida: falta id del presupuesto.',
         requestId
       });
     }
@@ -371,8 +313,9 @@ exports.handler = async (event) => {
     const orgRaw = dealData.org_id;
     const orgId = orgRaw == null ? null : typeof orgRaw === 'object' ? parseNumberLike(orgRaw.value) : parseNumberLike(orgRaw);
     if (!orgId) {
-      return jsonResponse(400, {
-        error: 'organization_missing',
+      return errorResponse({
+        statusCode: 400,
+        errorCode: 'ORGANIZATION_MISSING',
         message: 'El presupuesto no tiene una organización asociada en Pipedrive.',
         requestId
       });
@@ -584,24 +527,53 @@ exports.handler = async (event) => {
     });
 
     if (!persisted) {
-      return jsonResponse(500, {
-        error: 'deal_persisted_not_found',
-        message: 'El deal se importó pero no se pudo recuperar de la base de datos.',
+      return errorResponse({
+        statusCode: 500,
+        errorCode: 'DEAL_PERSISTENCE_ERROR',
+        message: 'El presupuesto se importó pero no se pudo recuperar de la base de datos.',
         requestId
       });
     }
 
     const payload = buildDealPayloadFromRecord(persisted);
 
-    return jsonResponse(200, {
-      ok: true,
+    return successResponse({
       requestId,
+      deal_id: String(dealId),
       deal: payload
     });
   } catch (error) {
     console.error(`[${requestId}] deals_import error`, error);
-    return jsonResponse(500, {
-      error: 'unexpected_error',
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      const target = Array.isArray(error.meta?.target)
+        ? error.meta.target.join(', ')
+        : error.meta?.target ?? undefined;
+
+      let statusCode = 500;
+      let errorCode = `PRISMA_${error.code}`;
+      let message = error.message;
+
+      if (error.code === 'P2002') {
+        statusCode = 409;
+        errorCode = 'PRISMA_CONSTRAINT_VIOLATION';
+        message = `Unique constraint failed${target ? ` on ${target}` : ''}`;
+      } else if (error.code === 'P2003') {
+        statusCode = 409;
+        errorCode = 'PRISMA_FOREIGN_KEY_VIOLATION';
+        message = `Foreign key constraint failed${target ? ` on ${target}` : ''}`;
+      } else if (error.code === 'P2025') {
+        statusCode = 404;
+        errorCode = 'PRISMA_RECORD_NOT_FOUND';
+        message = 'Registro solicitado no encontrado durante la importación.';
+      }
+
+      return errorResponse({ statusCode, errorCode, message, requestId });
+    }
+
+    return errorResponse({
+      statusCode: 500,
+      errorCode: 'UNEXPECTED_ERROR',
       message: error instanceof Error ? error.message : 'Error inesperado',
       requestId
     });

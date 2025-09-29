@@ -1,43 +1,66 @@
-import { useMemo, useState } from 'react';
-import { Container, Nav, Navbar, Button, Alert, Spinner } from 'react-bootstrap';
+import { useCallback, useMemo, useState } from 'react';
+import { Container, Nav, Navbar, Button, Spinner, Toast, ToastContainer } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetTable } from './features/presupuestos/BudgetTable';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
-import { fetchDealsWithoutSessions, importDeal } from './features/presupuestos/api';
+import { ApiError, fetchDealsWithoutSessions, importDeal } from './features/presupuestos/api';
 import type { DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
 
 const NAVIGATION_ITEMS = ['Presupuestos', 'Calendario', 'Recursos'];
 
+type ToastMessage = {
+  id: string;
+  variant: 'success' | 'danger';
+  message: string;
+};
+
 export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
-  const [selectedBudget, setSelectedBudget] = useState<DealSummary | null>(null);
+  const [selectedBudgetId, setSelectedBudgetId] = useState<number | null>(null);
+  const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
   const [activeTab, setActiveTab] = useState('Presupuestos');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const queryClient = useQueryClient();
 
   const budgetsQuery = useQuery({
     queryKey: ['deals', 'noSessions'],
     queryFn: fetchDealsWithoutSessions,
-    staleTime: 0
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
+    retry: 0,
+    staleTime: Infinity
   });
+
+  const pushToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
+    const id =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { ...toast, id }]);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
 
   const importMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
     onSuccess: (budget) => {
-      setSelectedBudget(budget);
-      setErrorMessage(null);
+      setSelectedBudgetSummary(budget);
+      setSelectedBudgetId(budget.dealId);
+      pushToast({ variant: 'success', message: 'Presupuesto importado' });
       setShowImportModal(false);
       queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
     },
     onError: (error: unknown) => {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.'
-      );
+      const apiError = error instanceof ApiError ? error : null;
+      const code = apiError?.code ?? 'UNKNOWN_ERROR';
+      const message = apiError?.message ?? 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
+      pushToast({ variant: 'danger', message: `No se pudo importar. [${code}] ${message}` });
     }
   });
 
@@ -46,6 +69,16 @@ export default function App() {
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
   const refreshDisabled = budgetsQuery.isLoading || isRefreshing;
+
+  const handleSelectBudget = useCallback((budget: DealSummary) => {
+    setSelectedBudgetSummary(budget);
+    setSelectedBudgetId(budget.dealId);
+  }, []);
+
+  const handleCloseDetail = useCallback(() => {
+    setSelectedBudgetSummary(null);
+    setSelectedBudgetId(null);
+  }, []);
 
   return (
     <div className="min-vh-100 d-flex flex-column">
@@ -102,25 +135,13 @@ export default function App() {
                   </Button>
                 </div>
               </section>
-
-              {errorMessage && (
-                <Alert
-                  variant="danger"
-                  className="rounded-4 shadow-sm"
-                  onClose={() => setErrorMessage(null)}
-                  dismissible
-                >
-                  {errorMessage}
-                </Alert>
-              )}
-
               <BudgetTable
                 budgets={budgets}
                 isLoading={budgetsQuery.isLoading}
                 isFetching={isRefreshing}
                 error={budgetsQuery.error ?? null}
                 onRetry={() => budgetsQuery.refetch()}
-                onSelect={setSelectedBudget}
+                onSelect={handleSelectBudget}
               />
             </div>
           ) : (
@@ -155,7 +176,20 @@ export default function App() {
         onClose={() => setShowImportModal(false)}
         onSubmit={(dealId) => importMutation.mutate(dealId)}
       />
-      <BudgetDetailModal budget={selectedBudget} onClose={() => setSelectedBudget(null)} />
+      <BudgetDetailModal dealId={selectedBudgetId} summary={selectedBudgetSummary} onClose={handleCloseDetail} />
+      <ToastContainer position="bottom-end" className="p-3">
+        {toasts.map((toast) => (
+          <Toast
+            key={toast.id}
+            bg={toast.variant}
+            onClose={() => removeToast(toast.id)}
+            delay={5000}
+            autohide
+          >
+            <Toast.Body className="text-white">{toast.message}</Toast.Body>
+          </Toast>
+        ))}
+      </ToastContainer>
     </div>
   );
 }
