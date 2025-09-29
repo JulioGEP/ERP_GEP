@@ -1,15 +1,11 @@
-// /.netlify/functions/health
-type Event = { httpMethod: string; rawUrl: string };
-type Resp  = { statusCode: number; headers: Record<string,string>; body: string };
-
 const headers = {
   "Content-Type": "application/json; charset=utf-8",
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization",
+  "Access-Control-Allow-Headers": "Content-Type,Authorization"
 };
 
-export const handler = async (event: Event): Promise<Resp> => {
+exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers, body: "" };
   return {
     statusCode: 200,

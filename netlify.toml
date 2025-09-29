@@ -8,9 +8,14 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  VITE_API_BASE = "/.netlify/functions" # opcional; el front puede seguir pegando a /api/* con los redirects de abajo
+  VITE_API_BASE = "/.netlify/functions"
 
 # Endpoints explícitos
+[[redirects]]
+  from = "/api/diag"
+  to   = "/.netlify/functions/diag"
+  status = 200
+
 [[redirects]]
   from = "/api/health"
   to   = "/.netlify/functions/health"
@@ -21,13 +26,13 @@
   to   = "/.netlify/functions/deals-import"
   status = 200
 
-# Fallback general por si queda algo en /api/*
+# Fallback general por si se usa /api/* antiguo
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
 
-# SPA
+# SPA fallback
 [[redirects]]
   from = "/*"
   to   = "/index.html"
