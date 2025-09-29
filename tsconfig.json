@@ -7,8 +7,22 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": false
   },
-  "include": ["netlify/functions/**/*.ts"],
-  "exclude": ["node_modules", "backend/**", "frontend/**/node_modules", "dist", "build"]
+  "include": [
+    "frontend/**/*.ts",
+    "frontend/**/*.tsx",
+    "backend/**/*.ts",
+    "backend/**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "frontend/node_modules",
+    "backend/node_modules",
+    "dist",
+    "build",
+    "netlify/functions",
+    "**/*.js"
+  ]
 }
