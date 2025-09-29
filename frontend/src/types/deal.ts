@@ -5,10 +5,22 @@ export interface TrainingProduct {
   quantity: number;
 }
 
+export interface DealParticipant {
+  personId: number | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  role: string | null;
+}
+
 export interface DealSummary {
   dealId: number;
   dealOrgId: number;
   organizationName: string;
+  organizationCif?: string | null;
+  organizationPhone?: string | null;
+  organizationAddress?: string | null;
   title: string;
   clientName: string;
   sede: string;
@@ -25,8 +37,10 @@ export interface DealSummary {
   documentsNum?: number;
   documentsId?: number[];
   documents?: string[];
+  documentsUrls?: (string | null)[];
   notesCount?: number;
   notes?: string[];
+  participants?: DealParticipant[];
   createdAt?: string;
   updatedAt?: string;
 }

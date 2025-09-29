@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Spinner, Table } from 'react-bootstrap';
+import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
 
 interface BudgetTableProps {
@@ -10,29 +10,35 @@ interface BudgetTableProps {
   onSelect: (budget: DealSummary) => void;
 }
 
-function formatDate(value?: string): string {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  return new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(date);
+function getProductNames(budget: DealSummary): string[] {
+  if (Array.isArray(budget.trainingNames) && budget.trainingNames.length) {
+    return budget.trainingNames;
+  }
+
+  if (Array.isArray(budget.training) && budget.training.length) {
+    return budget.training
+      .map((product) => (product.name ?? product.code ?? '')?.toString().trim())
+      .filter((value): value is string => Boolean(value));
+  }
+
+  return [];
 }
 
-function formatList(values?: string[]): JSX.Element | string {
-  if (!values?.length) {
-    return <span className="text-muted">Sin datos</span>;
+function getProductLabel(budget: DealSummary): { label: string; title?: string } {
+  const names = getProductNames(budget);
+
+  if (!names.length) {
+    return { label: '—' };
   }
 
-  if (values.length === 1) {
-    return values[0];
+  if (names.length === 1) {
+    return { label: names[0] };
   }
 
-  return (
-    <ul className="list-unstyled mb-0 small">
-      {values.map((value) => (
-        <li key={value}>{value}</li>
-      ))}
-    </ul>
-  );
+  return {
+    label: `${names[0]} (+${names.length - 1})`,
+    title: names.join(', ')
+  };
 }
 
 export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, onSelect }: BudgetTableProps) {
@@ -85,53 +91,21 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
             <th scope="col">Presupuesto</th>
             <th scope="col">Cliente</th>
             <th scope="col">Sede</th>
-            <th scope="col">Formación</th>
-            <th scope="col">Horas</th>
-            <th scope="col">Dirección</th>
-            <th scope="col">CAES</th>
-            <th scope="col">FUNDAE</th>
-            <th scope="col">Hotel</th>
-            <th scope="col">Docs</th>
-            <th scope="col">Actualizado</th>
+            <th scope="col">Producto</th>
           </tr>
         </thead>
         <tbody>
           {budgets.map((budget) => {
-            const trainingNames = Array.isArray(budget.trainingNames) ? budget.trainingNames : undefined;
-            const prodExtraNames = Array.isArray(budget.prodExtraNames) ? budget.prodExtraNames : undefined;
-            const documentsNum = budget.documentsNum ?? budget.documents?.length ?? 0;
-            const notesCount = budget.notesCount ?? budget.notes?.length ?? 0;
+            const productInfo = getProductLabel(budget);
+            const presupuestoLabel = budget.title || `Presupuesto #${budget.dealId}`;
+            const sedeLabel = budget.sede && budget.sede.trim() ? budget.sede : '—';
 
             return (
               <tr key={budget.dealId} role="button" onClick={() => onSelect(budget)}>
-                <td className="fw-semibold">#{budget.dealId}</td>
-                <td>
-                  <div className="fw-semibold">{budget.clientName}</div>
-                  <div className="text-muted small">ID Org: {budget.dealOrgId}</div>
-                </td>
-                <td>{budget.sede}</td>
-                <td className="small">
-                  {formatList(trainingNames)}
-                  {prodExtraNames && prodExtraNames.length ? (
-                    <div className="mt-2 d-flex flex-wrap gap-1">
-                      {prodExtraNames.map((extra) => (
-                        <Badge bg="light" text="dark" key={extra} className="border">
-                          Extra: {extra}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </td>
-                <td>{budget.hours ?? '—'}</td>
-                <td>{budget.dealDirection ?? '—'}</td>
-                <td>{budget.caes ?? '—'}</td>
-                <td>{budget.fundae ?? '—'}</td>
-                <td>{budget.hotelNight ?? '—'}</td>
-                <td>
-                  <div>{documentsNum}</div>
-                  <div className="text-muted small">Notas: {notesCount}</div>
-                </td>
-                <td>{formatDate(budget.updatedAt)}</td>
+                <td className="fw-semibold">{presupuestoLabel}</td>
+                <td>{budget.organizationName}</td>
+                <td>{sedeLabel}</td>
+                <td title={productInfo.title}>{productInfo.label}</td>
               </tr>
             );
           })}
