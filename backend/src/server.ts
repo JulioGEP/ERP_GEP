@@ -12,28 +12,31 @@ const logger = pino({
 });
 
 const app = express();
-app.use(express.json());
-app.use(cors({ origin: true, credentials: true }));
-app.use(helmet());
-app.use(
-  pinoHttp({
-    logger,
-    serializers: {
-      req(request) {
-        return { method: request.method, url: request.url };
-      }
-    }
-  })
-);
 
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
-});
+app.use(helmet());
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
+app.use(pinoHttp({ logger }));
+
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 app.use('/api/deals', dealsRouter);
 
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  logger.error(err, 'Unhandled error');
+// Error handler con detalle en dev
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error({ err }, 'Unhandled error');
+
+  if (env.NODE_ENV === 'development') {
+    const status = err?.statusCode || err?.status || 500;
+    return res.status(status).json({
+      message: 'Error interno del servidor',
+      error: String(err?.message || err),
+      details: err?.response?.data || undefined,
+      stack: err?.stack || undefined
+    });
+  }
+
   res.status(500).json({ message: 'Error interno del servidor' });
 });
 
