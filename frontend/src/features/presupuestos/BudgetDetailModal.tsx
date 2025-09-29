@@ -28,7 +28,7 @@ export function BudgetDetailModal({ budget, onClose }: BudgetDetailModalProps) {
             </section>
             <section>
               <h6 className="text-uppercase text-muted fw-semibold small">Formación</h6>
-              {budget.trainingNames.length ? (
+              {Array.isArray(budget.trainingNames) && budget.trainingNames.length ? (
                 <div className="d-flex flex-wrap gap-2">
                   {budget.trainingNames.map((training) => (
                     <Badge bg="light" text="dark" key={training} className="px-3 py-2 rounded-pill">
