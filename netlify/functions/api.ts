@@ -25,6 +25,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
   }
 
   try {
+    // Soporta invocación directa a la Function y vía redirect /api/*
     const url = new URL(event.rawUrl);
     const pathname = url.pathname
       .replace(/^\/\.netlify\/functions\/api/, "")
@@ -34,6 +35,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       return json(200, {
         ok: true,
         env: {
+          pipedrive_base_url_used: PIPEDRIVE_BASE_URL,
           pipedrive_api_token: PIPEDRIVE_API_TOKEN ? "present" : "missing",
           database_url: DB.SAFE ? "present" : "missing",
           database_url_sanitized: DB.MASKED || null
@@ -45,6 +47,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
     if (isPath(pathname, "/deals/import")) {
       if (event.httpMethod !== "POST") return methodNotAllowed();
       if (!event.body) return badRequest("Body vacío");
+
       let payload: any;
       try { payload = JSON.parse(event.body); } catch { return badRequest("JSON inválido"); }
 
@@ -73,49 +76,52 @@ function isPath(pathname: string, expected: string): boolean {
   const a = pathname.replace(/\/+$/, ""); const b = expected.replace(/\/+$/, ""); return a === b;
 }
 
-// ---------- Pipedrive (forzamos host oficial) ----------
+// ---------- Pipedrive (host fijo + parseo robusto) ----------
 const PIPEDRIVE_API_TOKEN = process.env.PIPEDRIVE_API_TOKEN?.trim() || "";
 const PIPEDRIVE_BASE_URL = "https://api.pipedrive.com/v1";
 
 async function fetchPipedrive(path: string, init?: RequestInit) {
   if (!PIPEDRIVE_API_TOKEN) throw new Error("PIPEDRIVE_API_TOKEN no definido");
+
   const sep = path.includes("?") ? "&" : "?";
   const fullUrl = `${PIPEDRIVE_BASE_URL}${path}${sep}api_token=${encodeURIComponent(PIPEDRIVE_API_TOKEN)}`;
+
   const res = await fetch(fullUrl, {
     ...init,
     headers: { Accept: "application/json", "Content-Type": "application/json", ...(init?.headers || {}) }
   });
-  const text = await res.text().catch(() => "");
-  if (!res.ok) throw new Error(`Pipedrive ${res.status} ${res.statusText} -> ${snippet(text)} :: url=${mask(fullUrl)}`);
-  try { return JSON.parse(text); }
-  catch { throw new Error(`Respuesta no-JSON de Pipedrive. url=${mask(fullUrl)} :: body=${snippet(text)}`); }
-}
-function mask(u: string): string { return u.replace(/(api_token=)[^&]+/i, "$1***"); }
-function snippet(s: string): string { const t = (s||"").replace(/\s+/g," ").trim(); return t.slice(0, 180); }
 
-// ---------- DB (Neon) con NORMALIZACIÓN ----------
+  const text = await res.text().catch(() => "");
+  const urlMasked = fullUrl.replace(/(api_token=)[^&]+/i, "$1***");
+  const bodySnippet = (text || "").replace(/\s+/g, " ").trim().slice(0, 180);
+
+  if (!res.ok) {
+    throw new Error(`Pipedrive ${res.status} ${res.statusText} -> ${bodySnippet} :: url=${urlMasked}`);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Respuesta no-JSON de Pipedrive. url=${urlMasked} :: body=${bodySnippet}`);
+  }
+}
+
+// ---------- DB (Neon) con normalización de URL ----------
 function sanitizeDbUrl(raw?: string) {
   if (!raw) return { url: "", masked: "", safe: false };
   let fixed = raw.trim();
+  fixed = fixed.replace(/^postgres:\/\//i, "postgresql://"); // admite postgres://
 
-  // Acepta postgres:// y lo eleva a postgresql://
-  fixed = fixed.replace(/^postgres:\/\//i, "postgresql://");
-
-  // Intenta parsear como URL y limpiar query
   try {
     const u = new URL(fixed);
-    // Quita channel_binding si viene (innecesario aquí)
-    u.searchParams.delete("channel_binding");
-    // Fuerza sslmode=require si no estaba
-    if (!u.searchParams.get("sslmode")) u.searchParams.set("sslmode", "require");
-    // Reconstruye
+    // Limpieza de query
+    u.searchParams.delete("channel_binding");          // no necesario aquí
+    if (!u.searchParams.get("sslmode")) u.searchParams.set("sslmode", "require"); // forzar SSL
     fixed = u.toString();
-    // oculta password
-    const masked =
-      u.password ? fixed.replace(u.password, "***") : fixed;
+    const masked = u.password ? fixed.replace(u.password, "***") : fixed;
     return { url: fixed, masked, safe: true };
   } catch {
-    // Si falla el parse, intenta al menos forzar sslmode=require al final
+    // fallback burdo: añade sslmode si no existe
     if (!/[?&]sslmode=/.test(fixed)) {
       fixed = fixed + (fixed.includes("?") ? "&" : "?") + "sslmode=require";
     }
@@ -131,7 +137,7 @@ const DB = (() => {
 import { neon } from "@neondatabase/serverless";
 async function withDb<T>(fn: (sql: any) => Promise<T>): Promise<T> {
   if (!DB.SAFE || !DB.URL) throw new Error("DATABASE_URL no definido o inválido");
-  const sql: any = neon(DB.URL);
+  const sql: any = neon(DB.URL); // tipado relajado evita conflicto de genéricos
   return fn(sql);
 }
 
