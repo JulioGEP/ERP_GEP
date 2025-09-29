@@ -29,16 +29,19 @@ export function BudgetTable({ budgets, onSelect }: BudgetTableProps) {
           </tr>
         </thead>
         <tbody>
-          {budgets.map((budget) => (
-            <tr key={budget.dealId} role="button" onClick={() => onSelect(budget)}>
+          {budgets.map((budget) => {
+            const trainingNames = Array.isArray(budget.trainingNames) ? budget.trainingNames : [];
+
+            return (
+              <tr key={budget.dealId} role="button" onClick={() => onSelect(budget)}>
               <td className="fw-semibold">#{budget.dealId}</td>
               <td>{budget.title}</td>
               <td>{budget.clientName}</td>
               <td>{budget.sede}</td>
               <td>
-                {budget.trainingNames.length ? (
+                {trainingNames.length ? (
                   <ul className="list-unstyled mb-0 small">
-                    {budget.trainingNames.map((training) => (
+                    {trainingNames.map((training) => (
                       <li key={training}>{training}</li>
                     ))}
                   </ul>
@@ -46,8 +49,9 @@ export function BudgetTable({ budgets, onSelect }: BudgetTableProps) {
                   <span className="text-muted">Sin productos formativos</span>
                 )}
               </td>
-            </tr>
-          ))}
+              </tr>
+            );
+          })}
         </tbody>
       </Table>
     </div>

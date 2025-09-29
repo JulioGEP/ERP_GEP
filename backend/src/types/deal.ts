@@ -3,7 +3,7 @@ export interface DealSummary {
   title: string;
   clientName: string;
   sede: string;
-  trainingNames: string[];
+  trainingNames?: string[];
   trainingType?: string | null;
   hours?: number | null;
   caes?: string | null;
