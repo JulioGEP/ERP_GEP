@@ -1,2 +1,5 @@
-/api/*   /.netlify/functions/api/:splat   200
-/*        /index.html                     200
+/api/diag           /.netlify/functions/diag           200
+/api/health         /.netlify/functions/health         200
+/api/deals/import   /.netlify/functions/deals_import   200
+/api/*              /.netlify/functions/:splat         200
+/*                  /index.html                        200
