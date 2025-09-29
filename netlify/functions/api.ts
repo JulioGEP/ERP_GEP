@@ -115,13 +115,12 @@ function sanitizeDbUrl(raw?: string) {
   try {
     const u = new URL(fixed);
     // Limpieza de query
-    u.searchParams.delete("channel_binding");          // no necesario aquí
-    if (!u.searchParams.get("sslmode")) u.searchParams.set("sslmode", "require"); // forzar SSL
+    u.searchParams.delete("channel_binding");
+    if (!u.searchParams.get("sslmode")) u.searchParams.set("sslmode", "require");
     fixed = u.toString();
     const masked = u.password ? fixed.replace(u.password, "***") : fixed;
     return { url: fixed, masked, safe: true };
   } catch {
-    // fallback burdo: añade sslmode si no existe
     if (!/[?&]sslmode=/.test(fixed)) {
       fixed = fixed + (fixed.includes("?") ? "&" : "?") + "sslmode=require";
     }
@@ -137,7 +136,7 @@ const DB = (() => {
 import { neon } from "@neondatabase/serverless";
 async function withDb<T>(fn: (sql: any) => Promise<T>): Promise<T> {
   if (!DB.SAFE || !DB.URL) throw new Error("DATABASE_URL no definido o inválido");
-  const sql: any = neon(DB.URL); // tipado relajado evita conflicto de genéricos
+  const sql: any = neon(DB.URL);
   return fn(sql);
 }
 
