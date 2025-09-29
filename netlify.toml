@@ -9,7 +9,6 @@
 [build.environment]
   NODE_VERSION = "20"
   VITE_API_BASE = "/.netlify/functions/api"
-  PIPEDRIVE_BASE_URL = "https://api.pipedrive.com/v1"
 
 [[redirects]]
   from = "/api/*"
