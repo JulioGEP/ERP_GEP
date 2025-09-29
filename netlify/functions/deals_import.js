@@ -1,74 +1,129 @@
+const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
+
 const COMMON_HEADERS = {
-  "Content-Type": "application/json; charset=utf-8",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization"
+  'Content-Type': 'application/json; charset=utf-8',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization'
 };
 
-const PIPEDRIVE_API_TOKEN = (process.env.PIPEDRIVE_API_TOKEN || "").trim();
-const PIPEDRIVE_HOSTS = ["https://api.pipedrive.com/v1", "https://api-eu.pipedrive.com/v1"];
+const PIPEDRIVE_API_TOKEN = (process.env.PIPEDRIVE_API_TOKEN || '').trim();
+const PIPEDRIVE_HOSTS = ['https://api.pipedrive.com/v1', 'https://api-eu.pipedrive.com/v1'];
 
 const DEAL_CUSTOM_FIELDS = {
-  hours: "38f11c8876ecde803a027fbf3c9041fda2ae7eb7",
-  sede: "676d6bd51e52999c582c01f67c99a35ed30bf6ae",
-  caes: "e1971bf3a21d48737b682bf8d864ddc5eb15a351",
-  fundae: "245d60d4d18aec40ba888998ef92e5d00e494583",
-  hotelNight: "c3a6daf8eb5b4e59c3c07cda8e01f43439101269",
-  trainingType: "pipeline_id"
+  hours: '38f11c8876ecde803a027fbf3c9041fda2ae7eb7',
+  direction: '8b2a7570f5ba8aa4754f061cd9dc92fd778376a7',
+  sede: '676d6bd51e52999c582c01f67c99a35ed30bf6ae',
+  caes: 'e1971bf3a21d48737b682bf8d864ddc5eb15a351',
+  fundae: '245d60d4d18aec40ba888998ef92e5d00e494583',
+  hotelNight: 'c3a6daf8eb5b4e59c3c07cda8e01f43439101269',
+  pipeline: 'pipeline_id'
 };
+
+const ORGANIZATION_CUSTOM_FIELDS = {
+  cif: '6d39d015a33921753410c1bab0b067ca93b8cf2c',
+  phone: 'b4379db06dfbe0758d84c2c2dd45ef04fa093b6d'
+};
+
+let prisma;
+function getPrisma() {
+  if (!prisma) {
+    prisma = new PrismaClient();
+  }
+  return prisma;
+}
 
 function jsonResponse(statusCode, body) {
   return { statusCode, headers: COMMON_HEADERS, body: JSON.stringify(body) };
 }
 
 function maskToken(url) {
-  return url.replace(/(api_token=)[^&]+/gi, "$1***");
+  return url.replace(/(api_token=)[^&]+/gi, '$1***');
 }
 
-async function callPipedrive(path) {
+function decodeBody(event) {
+  if (!event.body) return '';
+  if (event.isBase64Encoded) {
+    return Buffer.from(event.body, 'base64').toString('utf8');
+  }
+  return event.body;
+}
+
+function parseDealId(event) {
+  const query = event.queryStringParameters || {};
+  const queryDealId = query.dealId || query.federalNumber;
+  if (queryDealId && String(queryDealId).trim()) {
+    return String(queryDealId).trim();
+  }
+
+  if (!event.body) return null;
+  const rawBody = decodeBody(event);
+  if (!rawBody) return null;
+
+  const contentType = (event.headers?.['content-type'] || event.headers?.['Content-Type'] || '').toLowerCase();
+
+  if (contentType.includes('application/json')) {
+    try {
+      const data = JSON.parse(rawBody);
+      const id = data?.dealId ?? data?.federalNumber;
+      return id ? String(id).trim() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    const params = new URLSearchParams(rawBody);
+    const id = params.get('dealId') || params.get('federalNumber');
+    return id ? String(id).trim() : null;
+  }
+
+  try {
+    const data = JSON.parse(rawBody);
+    const id = data?.dealId ?? data?.federalNumber;
+    return id ? String(id).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function callPipedrive(path, requestId, context) {
   const attempts = [];
 
   for (const host of PIPEDRIVE_HOSTS) {
-    const separator = path.includes("?") ? "&" : "?";
+    const separator = path.includes('?') ? '&' : '?';
     const url = `${host}${path}${separator}api_token=${encodeURIComponent(PIPEDRIVE_API_TOKEN)}`;
+    const start = Date.now();
 
     try {
       const response = await fetch(url, {
-        headers: { Accept: "application/json" },
-        redirect: "follow"
+        headers: { Accept: 'application/json' },
+        redirect: 'follow'
       });
-
-      const text = await response.text().catch(() => "");
-      const contentType = response.headers.get("content-type");
+      const duration = Date.now() - start;
+      const text = await response.text().catch(() => '');
+      const contentType = response.headers.get('content-type');
       const maskedUrl = maskToken(url);
-      const bodySnippet = (text || "").replace(/\s+/g, " ").trim().slice(0, 800);
-
-      attempts.push({
+      const attempt = {
         host,
         status: response.status,
         statusText: response.statusText,
+        durationMs: duration,
         url: maskedUrl,
         contentType,
-        bodySnippet
-      });
-
-      if (response.ok && typeof contentType === "string" && contentType.toLowerCase().includes("application/json")) {
+        bodySnippet: (text || '').replace(/\s+/g, ' ').trim().slice(0, 800)
+      };
+      attempts.push(attempt);
+      if (context?.label) {
+        console.debug(`[${requestId}] Pipedrive ${context.label} via ${host} → ${response.status} (${duration}ms)`);
+      }
+      if (response.ok && typeof contentType === 'string' && contentType.toLowerCase().includes('application/json')) {
         try {
-          return {
-            ok: true,
-            hostUsed: host,
-            json: text ? JSON.parse(text) : null,
-            attempts
-          };
+          const json = text ? JSON.parse(text) : null;
+          return { ok: true, hostUsed: host, data: json, attempts };
         } catch (error) {
-          attempts.push({
-            host,
-            status: response.status,
-            statusText: `JSON parse error: ${error instanceof Error ? error.message : String(error)}`,
-            url: maskedUrl,
-            contentType,
-            bodySnippet
-          });
+          attempt.statusText = `JSON parse error: ${error instanceof Error ? error.message : String(error)}`;
         }
       }
     } catch (error) {
@@ -76,9 +131,10 @@ async function callPipedrive(path) {
         host,
         status: 0,
         statusText: error instanceof Error ? error.message : String(error),
+        durationMs: Date.now() - start,
         url: maskToken(url),
         contentType: null,
-        bodySnippet: ""
+        bodySnippet: ''
       });
     }
   }
@@ -87,22 +143,13 @@ async function callPipedrive(path) {
 }
 
 function extractField(entity, key) {
-  if (!entity) return null;
+  if (!entity || typeof entity !== 'object') return null;
   const value = entity[key];
   if (value === null || value === undefined) return null;
-  if (typeof value === "object" && value !== null && "value" in value) {
+  if (typeof value === 'object' && value !== null && 'value' in value) {
     return value.value ?? null;
   }
   return value;
-}
-
-function parseNumberLike(value) {
-  if (value === null || value === undefined || value === "") return null;
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-  const parsed = Number(String(value));
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function ensureArray(value) {
@@ -110,145 +157,453 @@ function ensureArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+function parseNumberLike(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  const parsed = Number(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function sanitizeHtml(html) {
   if (!html) return null;
   const text = String(html)
-    .replace(/<br\s*\/?>(\r?\n)?/gi, "\n")
-    .replace(/<li[^>]*>/gi, "• ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/<br\s*\/?>(\r?\n)?/gi, '\n')
+    .replace(/<li[^>]*>/gi, '• ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
   return text || null;
 }
 
-function buildDealSummary({ deal, notes, files }) {
-  if (!deal || typeof deal !== "object") {
-    throw new Error("Respuesta de Pipedrive inválida: deal vacío");
+function extractPrimaryField(field) {
+  if (!field) return null;
+  if (typeof field === 'string') return field;
+  if (Array.isArray(field)) {
+    if (!field.length) return null;
+    const primary = field.find((item) => item && item.primary);
+    return (primary ?? field[0])?.value ?? null;
   }
+  return null;
+}
 
-  const dealId = parseNumberLike(deal.id);
-  if (!dealId) {
-    throw new Error("Respuesta de Pipedrive inválida: falta id del deal");
-  }
+function parseQuantity(quantity) {
+  if (quantity === null || quantity === undefined) return 0;
+  if (typeof quantity === 'number') return Number.isFinite(quantity) ? quantity : 0;
+  const parsed = parseInt(String(quantity), 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
 
-  const organization = deal.org_id;
-  const clientName =
-    (organization && typeof organization === "object" && organization !== null && organization.name) ||
-    (typeof deal.org_name === "string" ? deal.org_name : "");
+const fieldOptionsCache = new Map();
 
-  const trainingProducts = ensureArray(deal.products).filter((product) => {
-    const code = (product && typeof product.code === "string" ? product.code : "").toLowerCase();
-    return code.startsWith("form-");
+async function fetchFieldOptions(fieldKey, requestId) {
+  const cached = fieldOptionsCache.get(fieldKey);
+  if (cached) return cached;
+
+  const response = await callPipedrive(`/dealFields/${encodeURIComponent(fieldKey)}`, requestId, {
+    label: `dealFields/${fieldKey}`
   });
 
-  const trainingNames = trainingProducts
-    .map((product) => (product && typeof product.name === "string" ? product.name.trim() : ""))
+  let options = [];
+  if (response.ok) {
+    options = response.data?.data?.options || [];
+  }
+
+  if (!options.length) {
+    const listResponse = await callPipedrive(`/dealFields`, requestId, { label: 'dealFields' });
+    const all = listResponse.ok && Array.isArray(listResponse.data?.data) ? listResponse.data.data : [];
+    const match = all.find((field) => field.key === fieldKey || String(field.id) === String(fieldKey));
+    options = match?.options || [];
+  }
+
+  const map = new Map();
+  for (const option of options) {
+    if (!option) continue;
+    map.set(option.id, option.label);
+  }
+  fieldOptionsCache.set(fieldKey, map);
+  return map;
+}
+
+async function mapCustomFieldOption(fieldKey, rawValue, requestId) {
+  if (rawValue === null || rawValue === undefined) return null;
+  const options = await fetchFieldOptions(fieldKey, requestId);
+  if (options.has(rawValue)) return options.get(rawValue);
+  const numeric = Number(rawValue);
+  if (!Number.isNaN(numeric) && options.has(numeric)) return options.get(numeric);
+  const asString = String(rawValue);
+  if (options.has(asString)) return options.get(asString);
+  return asString;
+}
+
+function normalizeTrainingProducts(products) {
+  return ensureArray(products).map((product) => ({
+    product_id: product?.product_id ?? null,
+    name: product?.name ?? null,
+    code: product?.code ?? null,
+    quantity: parseQuantity(product?.quantity)
+  }));
+}
+
+function normalizeParticipants(rawParticipants) {
+  const participants = [];
+  for (const participant of ensureArray(rawParticipants)) {
+    if (!participant) continue;
+    const id = parseNumberLike(participant.person_id || participant.id);
+    if (!id) continue;
+    participants.push({
+      id,
+      first_name: participant.first_name ?? participant.person_name ?? null,
+      last_name: participant.last_name ?? null,
+      email: extractPrimaryField(participant.emails || participant.email),
+      phone: extractPrimaryField(participant.phones || participant.phone),
+      role: participant.role || participant.owner_name || participant.participant_type || null
+    });
+  }
+  return participants;
+}
+
+function buildDealPayloadFromRecord(record) {
+  const training = Array.isArray(record.training) ? record.training : [];
+  const prodExtra = Array.isArray(record.prodExtra) ? record.prodExtra : [];
+  const documents = Array.isArray(record.documents) ? record.documents : [];
+  const notes = Array.isArray(record.notes) ? record.notes : [];
+  const trainingNames = training
+    .map((product) => (product && typeof product.name === 'string' ? product.name : null))
+    .filter(Boolean);
+  const extraNames = prodExtra
+    .map((product) => (product && typeof product.name === 'string' ? product.name : null))
     .filter(Boolean);
 
-  const documents = ensureArray(files)
-    .map((file) => (file && typeof file.name === "string" ? file.name : null))
-    .filter(Boolean);
-
-  const notesList = ensureArray(notes)
-    .map((note) => sanitizeHtml(note && note.content))
-    .filter(Boolean);
-
-  const summary = {
-    dealId,
-    title: typeof deal.title === "string" && deal.title.trim() ? deal.title.trim() : `Presupuesto ${dealId}`,
-    clientName: clientName || "Cliente sin nombre",
-    sede: (extractField(deal, DEAL_CUSTOM_FIELDS.sede) || "").toString().trim() || "—"
+  return {
+    deal_id: record.id,
+    deal_org_id: record.organizationId,
+    organization_name: record.organization?.name ?? 'Organización sin nombre',
+    title: record.title,
+    training_type: record.trainingType ?? null,
+    training,
+    training_names: trainingNames,
+    hours: record.hours,
+    deal_direction: record.direction ?? null,
+    sede: record.sede ?? null,
+    caes: record.caes ?? null,
+    fundae: record.fundae ?? null,
+    hotel_night: record.hotelNight ?? null,
+    prod_extra: prodExtra,
+    prod_extra_names: extraNames,
+    documents_num: record.documentsNum ?? documents.length,
+    documents_id: documents.map((doc) => doc.id),
+    documents: documents.map((doc) => doc.title),
+    notes_count: record.notesNum ?? notes.length,
+    notes: notes.map((note) => sanitizeHtml(note.comment) ?? note.comment),
+    created_at: record.createdAt?.toISOString?.() ?? record.createdAt,
+    updated_at: record.updatedAt?.toISOString?.() ?? record.updatedAt,
+    persons: (record.participants || []).map((participant) => ({
+      person_id: participant.personId,
+      role: participant.role ?? null,
+      first_name: participant.person?.firstName ?? null,
+      last_name: participant.person?.lastName ?? null,
+      email: participant.person?.email ?? null,
+      phone: participant.person?.phone ?? null
+    }))
   };
-
-  const trainingTypeRaw = extractField(deal, DEAL_CUSTOM_FIELDS.trainingType);
-  const hoursRaw = parseNumberLike(extractField(deal, DEAL_CUSTOM_FIELDS.hours));
-  const caesRaw = extractField(deal, DEAL_CUSTOM_FIELDS.caes);
-  const fundaeRaw = extractField(deal, DEAL_CUSTOM_FIELDS.fundae);
-  const hotelNightRaw = extractField(deal, DEAL_CUSTOM_FIELDS.hotelNight);
-
-  if (trainingNames.length) summary.trainingNames = trainingNames;
-  if (trainingTypeRaw !== null && trainingTypeRaw !== undefined && String(trainingTypeRaw).trim()) {
-    summary.trainingType = String(trainingTypeRaw).trim();
-  }
-  if (hoursRaw !== null) summary.hours = hoursRaw;
-  if (caesRaw !== null && caesRaw !== undefined && String(caesRaw).trim()) {
-    summary.caes = String(caesRaw).trim();
-  }
-  if (fundaeRaw !== null && fundaeRaw !== undefined && String(fundaeRaw).trim()) {
-    summary.fundae = String(fundaeRaw).trim();
-  }
-  if (hotelNightRaw !== null && hotelNightRaw !== undefined && String(hotelNightRaw).trim()) {
-    summary.hotelNight = String(hotelNightRaw).trim();
-  }
-  if (documents.length) summary.documents = documents;
-  if (notesList.length) summary.notes = notesList;
-
-  return summary;
 }
 
 exports.handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") {
-    return jsonResponse(204, "");
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
   }
 
+  const requestId = crypto.randomUUID();
+
   try {
-    if (event.httpMethod !== "POST") {
-      return jsonResponse(405, { error: "Method Not Allowed" });
+    if (event.httpMethod !== 'POST') {
+      return jsonResponse(405, { error: 'method_not_allowed', message: 'Método no permitido' });
     }
 
-    if (!event.body) {
-      return jsonResponse(400, { error: "Body vacío" });
-    }
-
-    let payload;
-    try {
-      payload = JSON.parse(event.body);
-    } catch (error) {
-      return jsonResponse(400, { error: "JSON inválido" });
-    }
-
-    const federalNumber = String(payload && payload.federalNumber ? payload.federalNumber : "").trim();
-    if (!federalNumber) {
-      return jsonResponse(400, { error: "federalNumber requerido" });
+    const dealIdInput = parseDealId(event);
+    if (!dealIdInput) {
+      return jsonResponse(400, { error: 'deal_id_required', message: 'dealId es obligatorio' });
     }
 
     if (!PIPEDRIVE_API_TOKEN) {
-      return jsonResponse(400, { error: "PIPEDRIVE_API_TOKEN no definido" });
+      return jsonResponse(500, {
+        error: 'pipedrive_token_missing',
+        message: 'PIPEDRIVE_API_TOKEN no configurado',
+        requestId
+      });
     }
 
-    const dealResult = await callPipedrive(`/deals/${encodeURIComponent(federalNumber)}?include_products=1`);
-    if (!dealResult.ok) {
-      return jsonResponse(502, { error: "pipedrive_upstream_failed", attempts: dealResult.attempts });
+    console.debug(`[${requestId}] Import deal ${dealIdInput}`);
+
+    const dealResponse = await callPipedrive(`/deals/${encodeURIComponent(dealIdInput)}?include_products=1`, requestId, {
+      label: `deal ${dealIdInput}`
+    });
+
+    if (!dealResponse.ok) {
+      return jsonResponse(502, {
+        error: 'pipedrive_upstream_failed',
+        message: 'No se pudo obtener el deal en Pipedrive',
+        attempts: dealResponse.attempts,
+        requestId
+      });
     }
 
-    const dealPayload = dealResult.json;
-    const dealData = dealPayload && typeof dealPayload === "object" ? dealPayload.data : null;
-    if (!dealData) {
-      return jsonResponse(404, { error: "No se ha encontrado el presupuesto solicitado en Pipedrive." });
+    const dealData = dealResponse.data?.data;
+    if (!dealData || typeof dealData !== 'object') {
+      return jsonResponse(404, {
+        error: 'deal_not_found',
+        message: 'No se ha encontrado el presupuesto solicitado en Pipedrive.',
+        requestId
+      });
     }
 
-    const dealId = dealData.id;
+    const dealId = parseNumberLike(dealData.id);
+    if (!dealId) {
+      return jsonResponse(500, {
+        error: 'deal_id_invalid',
+        message: 'Respuesta de Pipedrive inválida: falta id del deal',
+        requestId
+      });
+    }
 
-    const [notesResult, filesResult] = await Promise.all([
-      callPipedrive(`/deals/${encodeURIComponent(dealId)}/notes`),
-      callPipedrive(`/deals/${encodeURIComponent(dealId)}/files`)
+    const orgRaw = dealData.org_id;
+    const orgId = orgRaw == null ? null : typeof orgRaw === 'object' ? parseNumberLike(orgRaw.value) : parseNumberLike(orgRaw);
+    if (!orgId) {
+      return jsonResponse(400, {
+        error: 'organization_missing',
+        message: 'El presupuesto no tiene una organización asociada en Pipedrive.',
+        requestId
+      });
+    }
+
+    const personRaw = dealData.person_id;
+    const personId = personRaw == null ? null : typeof personRaw === 'object' ? parseNumberLike(personRaw.value) : parseNumberLike(personRaw);
+
+    const [organizationResponse, notesResponse, filesResponse, participantsResponse, primaryPersonResponse] = await Promise.all([
+      callPipedrive(`/organizations/${orgId}`, requestId, { label: `organization ${orgId}` }),
+      callPipedrive(`/deals/${dealId}/notes`, requestId, { label: `deal ${dealId} notes` }),
+      callPipedrive(`/deals/${dealId}/files`, requestId, { label: `deal ${dealId} files` }),
+      callPipedrive(`/deals/${dealId}/participants`, requestId, { label: `deal ${dealId} participants` }),
+      personId ? callPipedrive(`/persons/${personId}`, requestId, { label: `person ${personId}` }) : Promise.resolve({ ok: false })
     ]);
 
-    const notes = notesResult.ok && notesResult.json && Array.isArray(notesResult.json.data)
-      ? notesResult.json.data
-      : [];
-    const files = filesResult.ok && filesResult.json && Array.isArray(filesResult.json.data)
-      ? filesResult.json.data
-      : [];
+    const organizationData = organizationResponse.ok ? organizationResponse.data?.data ?? null : null;
+    const notes = Array.isArray(notesResponse.data?.data) ? notesResponse.data.data : [];
+    const files = Array.isArray(filesResponse.data?.data) ? filesResponse.data.data : [];
+    const rawParticipants = Array.isArray(participantsResponse.data?.data) ? participantsResponse.data.data : [];
+    const participants = normalizeParticipants(rawParticipants);
 
-    const summary = buildDealSummary({ deal: dealData, notes, files });
+    if (personId && !participants.some((participant) => participant.id === personId)) {
+      const primaryPersonData = primaryPersonResponse.ok ? primaryPersonResponse.data?.data ?? null : null;
+      if (primaryPersonData) {
+        participants.unshift({
+          id: personId,
+          first_name: primaryPersonData.first_name ?? null,
+          last_name: primaryPersonData.last_name ?? null,
+          email: extractPrimaryField(primaryPersonData.email ?? null),
+          phone: extractPrimaryField(primaryPersonData.phone ?? null),
+          role: 'Responsable'
+        });
+      }
+    }
+
+    const products = ensureArray(dealData.products);
+    const trainingProducts = products.filter((product) => {
+      const code = (product?.code ?? '').toString().toLowerCase();
+      return code.startsWith('form-');
+    });
+    const extraProducts = products.filter((product) => {
+      const code = (product?.code ?? '').toString().toLowerCase();
+      return !code.startsWith('form-');
+    });
+
+    const [sedeLabel, caesLabel, fundaeLabel, hotelLabel] = await Promise.all([
+      mapCustomFieldOption(DEAL_CUSTOM_FIELDS.sede, extractField(dealData, DEAL_CUSTOM_FIELDS.sede), requestId),
+      mapCustomFieldOption(DEAL_CUSTOM_FIELDS.caes, extractField(dealData, DEAL_CUSTOM_FIELDS.caes), requestId),
+      mapCustomFieldOption(DEAL_CUSTOM_FIELDS.fundae, extractField(dealData, DEAL_CUSTOM_FIELDS.fundae), requestId),
+      mapCustomFieldOption(DEAL_CUSTOM_FIELDS.hotelNight, extractField(dealData, DEAL_CUSTOM_FIELDS.hotelNight), requestId)
+    ]);
+
+    const trainingTypeRaw = extractField(dealData, DEAL_CUSTOM_FIELDS.pipeline);
+    const trainingTypeStr = trainingTypeRaw == null ? null : String(trainingTypeRaw);
+
+    const hoursRaw = extractField(dealData, DEAL_CUSTOM_FIELDS.hours);
+    const hoursParsed = parseNumberLike(hoursRaw);
+
+    const sessionsCount = trainingProducts.reduce((acc, product) => acc + parseQuantity(product.quantity), 0);
+
+    const prismaClient = getPrisma();
+
+    await prismaClient.$transaction(async (tx) => {
+      await tx.organization.upsert({
+        where: { id: orgId },
+        create: {
+          id: orgId,
+          name: organizationData?.name ?? 'Organización sin nombre',
+          cif: extractField(organizationData, ORGANIZATION_CUSTOM_FIELDS.cif),
+          phone: extractField(organizationData, ORGANIZATION_CUSTOM_FIELDS.phone),
+          address: organizationData?.address ?? null
+        },
+        update: {
+          name: organizationData?.name ?? 'Organización sin nombre',
+          cif: extractField(organizationData, ORGANIZATION_CUSTOM_FIELDS.cif),
+          phone: extractField(organizationData, ORGANIZATION_CUSTOM_FIELDS.phone),
+          address: organizationData?.address ?? null
+        }
+      });
+
+      const uniqueParticipants = new Map();
+      for (const participant of participants) {
+        if (!participant?.id) continue;
+        if (!uniqueParticipants.has(participant.id)) {
+          uniqueParticipants.set(participant.id, participant);
+        }
+      }
+
+      for (const participant of uniqueParticipants.values()) {
+        await tx.person.upsert({
+          where: { id: participant.id },
+          create: {
+            id: participant.id,
+            organizationId: orgId,
+            firstName: participant.first_name ?? null,
+            lastName: participant.last_name ?? null,
+            email: participant.email ?? null,
+            phone: participant.phone ?? null
+          },
+          update: {
+            organizationId: orgId,
+            firstName: participant.first_name ?? null,
+            lastName: participant.last_name ?? null,
+            email: participant.email ?? null,
+            phone: participant.phone ?? null
+          }
+        });
+      }
+
+      await tx.deal.upsert({
+        where: { id: dealId },
+        create: {
+          id: dealId,
+          organizationId: orgId,
+          title: dealData.title || `Presupuesto ${dealId}`,
+          trainingType: trainingTypeStr,
+          hours: hoursParsed,
+          direction: extractField(dealData, DEAL_CUSTOM_FIELDS.direction),
+          sede: sedeLabel ?? (extractField(dealData, DEAL_CUSTOM_FIELDS.sede) != null
+            ? String(extractField(dealData, DEAL_CUSTOM_FIELDS.sede))
+            : null),
+          caes: caesLabel ?? (extractField(dealData, DEAL_CUSTOM_FIELDS.caes) != null
+            ? String(extractField(dealData, DEAL_CUSTOM_FIELDS.caes))
+            : null),
+          fundae: fundaeLabel ?? (extractField(dealData, DEAL_CUSTOM_FIELDS.fundae) != null
+            ? String(extractField(dealData, DEAL_CUSTOM_FIELDS.fundae))
+            : null),
+          hotelNight: hotelLabel ?? (extractField(dealData, DEAL_CUSTOM_FIELDS.hotelNight) != null
+            ? String(extractField(dealData, DEAL_CUSTOM_FIELDS.hotelNight))
+            : null),
+          alumnos: 0,
+          training: normalizeTrainingProducts(trainingProducts),
+          prodExtra: normalizeTrainingProducts(extraProducts),
+          documentsNum: files.length,
+          documentsIds: files.map((file) => file.id).join(',') || null,
+          sessionsNum: sessionsCount,
+          notesNum: notes.length
+        },
+        update: {
+          organizationId: orgId,
+          title: dealData.title || `Presupuesto ${dealId}`,
+          trainingType: trainingTypeStr,
+          hours: hoursParsed,
+          direction: extractField(dealData, DEAL_CUSTOM_FIELDS.direction),
+          sede: sedeLabel ?? (extractField(dealData, DEAL_CUSTOM_FIELDS.sede) != null
+            ? String(extractField(dealData, DEAL_CUSTOM_FIELDS.sede))
+            : null),
+          caes: caesLabel ?? (extractField(dealData, DEAL_CUSTOM_FIELDS.caes) != null
+            ? String(extractField(dealData, DEAL_CUSTOM_FIELDS.caes))
+            : null),
+          fundae: fundaeLabel ?? (extractField(dealData, DEAL_CUSTOM_FIELDS.fundae) != null
+            ? String(extractField(dealData, DEAL_CUSTOM_FIELDS.fundae))
+            : null),
+          hotelNight: hotelLabel ?? (extractField(dealData, DEAL_CUSTOM_FIELDS.hotelNight) != null
+            ? String(extractField(dealData, DEAL_CUSTOM_FIELDS.hotelNight))
+            : null),
+          training: normalizeTrainingProducts(trainingProducts),
+          prodExtra: normalizeTrainingProducts(extraProducts),
+          documentsNum: files.length,
+          documentsIds: files.map((file) => file.id).join(',') || null,
+          sessionsNum: sessionsCount,
+          notesNum: notes.length
+        }
+      });
+
+      await tx.dealParticipant.deleteMany({ where: { dealId } });
+      if (uniqueParticipants.size) {
+        const participantsData = Array.from(uniqueParticipants.values()).map((participant) => ({
+          dealId,
+          personId: participant.id,
+          role: participant.role ?? null
+        }));
+        await tx.dealParticipant.createMany({ data: participantsData });
+      }
+
+      await tx.note.deleteMany({ where: { dealId } });
+      if (notes.length) {
+        await tx.note.createMany({
+          data: notes.map((note) => ({
+            id: note.id,
+            dealId,
+            comment: note.content ?? ''
+          }))
+        });
+      }
+
+      await tx.document.deleteMany({ where: { dealId } });
+      if (files.length) {
+        await tx.document.createMany({
+          data: files.map((file) => ({
+            id: file.id,
+            dealId,
+            title: file.name ?? `Documento ${file.id}`,
+            url: file.file_url ?? null
+          }))
+        });
+      }
+    });
+
+    const persisted = await prismaClient.deal.findUnique({
+      where: { id: dealId },
+      include: {
+        organization: true,
+        notes: true,
+        documents: true,
+        participants: { include: { person: true } }
+      }
+    });
+
+    if (!persisted) {
+      return jsonResponse(500, {
+        error: 'deal_persisted_not_found',
+        message: 'El deal se importó pero no se pudo recuperar de la base de datos.',
+        requestId
+      });
+    }
+
+    const payload = buildDealPayloadFromRecord(persisted);
 
     return jsonResponse(200, {
       ok: true,
-      host_used: dealResult.hostUsed,
-      deal: summary
+      requestId,
+      deal: payload
     });
   } catch (error) {
-    return jsonResponse(500, { error: error instanceof Error ? error.message : String(error) });
+    console.error(`[${requestId}] deals_import error`, error);
+    return jsonResponse(500, {
+      error: 'unexpected_error',
+      message: error instanceof Error ? error.message : 'Error inesperado',
+      requestId
+    });
   }
 };

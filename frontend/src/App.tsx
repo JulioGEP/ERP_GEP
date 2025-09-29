@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Container, Nav, Navbar, Button, Alert, Spinner } from 'react-bootstrap';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetTable } from './features/presupuestos/BudgetTable';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
-import { importDeal } from './features/presupuestos/api';
+import { fetchDealsWithoutSessions, importDeal } from './features/presupuestos/api';
 import type { DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
 
@@ -12,21 +12,25 @@ const NAVIGATION_ITEMS = ['Presupuestos', 'Calendario', 'Recursos'];
 
 export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
-  const [budgets, setBudgets] = useState<DealSummary[]>([]);
   const [selectedBudget, setSelectedBudget] = useState<DealSummary | null>(null);
   const [activeTab, setActiveTab] = useState('Presupuestos');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const queryClient = useQueryClient();
+
+  const budgetsQuery = useQuery({
+    queryKey: ['deals', 'noSessions'],
+    queryFn: fetchDealsWithoutSessions,
+    staleTime: 0
+  });
+
   const importMutation = useMutation({
-    mutationFn: (federalNumber: string) => importDeal(federalNumber),
+    mutationFn: (dealId: string) => importDeal(dealId),
     onSuccess: (budget) => {
-      setBudgets((previous) => {
-        const filtered = previous.filter((item) => item.dealId !== budget.dealId);
-        return [budget, ...filtered];
-      });
       setSelectedBudget(budget);
       setErrorMessage(null);
       setShowImportModal(false);
+      queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
     },
     onError: (error: unknown) => {
       setErrorMessage(
@@ -39,6 +43,9 @@ export default function App() {
 
   const isBudgetsView = activeTab === 'Presupuestos';
   const secondaryTabs = useMemo(() => NAVIGATION_ITEMS.filter((item) => item !== 'Presupuestos'), []);
+  const budgets = budgetsQuery.data ?? [];
+  const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
+  const refreshDisabled = budgetsQuery.isLoading || isRefreshing;
 
   return (
     <div className="min-vh-100 d-flex flex-column">
@@ -79,7 +86,17 @@ export default function App() {
                   <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
                 </div>
                 <div className="d-flex align-items-center gap-3">
-                  {importMutation.isPending && <Spinner animation="border" role="status" size="sm" />}
+                  {(importMutation.isPending || isRefreshing) && (
+                    <Spinner animation="border" role="status" size="sm" />
+                  )}
+                  <Button
+                    variant="outline-secondary"
+                    size="lg"
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] })}
+                    disabled={refreshDisabled}
+                  >
+                    Refrescar
+                  </Button>
                   <Button size="lg" onClick={() => setShowImportModal(true)}>
                     Importar presupuesto
                   </Button>
@@ -97,7 +114,14 @@ export default function App() {
                 </Alert>
               )}
 
-              <BudgetTable budgets={budgets} onSelect={setSelectedBudget} />
+              <BudgetTable
+                budgets={budgets}
+                isLoading={budgetsQuery.isLoading}
+                isFetching={isRefreshing}
+                error={budgetsQuery.error ?? null}
+                onRetry={() => budgetsQuery.refetch()}
+                onSelect={setSelectedBudget}
+              />
             </div>
           ) : (
             <div className="bg-white rounded-4 shadow-sm p-5 text-center text-muted">
@@ -129,7 +153,7 @@ export default function App() {
         show={showImportModal}
         isLoading={importMutation.isPending}
         onClose={() => setShowImportModal(false)}
-        onSubmit={(federalNumber) => importMutation.mutate(federalNumber)}
+        onSubmit={(dealId) => importMutation.mutate(dealId)}
       />
       <BudgetDetailModal budget={selectedBudget} onClose={() => setSelectedBudget(null)} />
     </div>

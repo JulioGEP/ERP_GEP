@@ -6,9 +6,11 @@
     "db:init": "dotenv -e .env -- node scripts/init-db.mjs"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.0.1"
+    "@neondatabase/serverless": "^1.0.1",
+    "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
-    "dotenv-cli": "^10.0.0"
+    "dotenv-cli": "^10.0.0",
+    "prisma": "^5.22.0"
   }
 }

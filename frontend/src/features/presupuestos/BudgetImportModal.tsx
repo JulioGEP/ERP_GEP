@@ -5,11 +5,11 @@ interface BudgetImportModalProps {
   show: boolean;
   isLoading: boolean;
   onClose: () => void;
-  onSubmit: (federalNumber: string) => void;
+  onSubmit: (dealId: string) => void;
 }
 
 export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: BudgetImportModalProps) {
-  const [federalNumber, setFederalNumber] = useState('');
+  const [dealId, setDealId] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -20,14 +20,14 @@ export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: Budget
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!federalNumber.trim()) {
+    if (!dealId.trim()) {
       return;
     }
-    onSubmit(federalNumber.trim());
+    onSubmit(dealId.trim());
   };
 
   const handleHide = () => {
-    setFederalNumber('');
+    setDealId('');
     onClose();
   };
 
@@ -38,14 +38,14 @@ export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: Budget
           <Modal.Title className="fw-semibold text-uppercase">Importar presupuesto</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Form.Group controlId="federalNumber">
-            <Form.Label className="fw-semibold">Presupuesto</Form.Label>
+          <Form.Group controlId="dealId">
+            <Form.Label className="fw-semibold">Presupuesto (dealId)</Form.Label>
             <Form.Control
               ref={inputRef}
               type="text"
-              placeholder="Ej. 0123"
-              value={federalNumber}
-              onChange={(event) => setFederalNumber(event.target.value)}
+              placeholder="Ej. 7222"
+              value={dealId}
+              onChange={(event) => setDealId(event.target.value)}
               disabled={isLoading}
               autoComplete="off"
             />
@@ -55,7 +55,7 @@ export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: Budget
           <Button variant="outline-secondary" onClick={handleHide} disabled={isLoading}>
             Cancelar
           </Button>
-          <Button type="submit" variant="primary" disabled={isLoading || !federalNumber.trim()}>
+          <Button type="submit" variant="primary" disabled={isLoading || !dealId.trim()}>
             {isLoading ? 'Importando…' : 'Importar presupuesto'}
           </Button>
         </Modal.Footer>

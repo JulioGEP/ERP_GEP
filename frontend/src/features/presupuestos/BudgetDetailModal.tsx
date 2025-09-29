@@ -47,13 +47,33 @@ export function BudgetDetailModal({ budget, onClose }: BudgetDetailModalProps) {
                 <dd className="col-sm-8">{budget.trainingType ?? 'Pendiente de sincronizar'}</dd>
                 <dt className="col-sm-4 text-muted">Horas</dt>
                 <dd className="col-sm-8">{budget.hours ?? '—'}</dd>
+                <dt className="col-sm-4 text-muted">Dirección</dt>
+                <dd className="col-sm-8">{budget.dealDirection ?? '—'}</dd>
                 <dt className="col-sm-4 text-muted">CAES</dt>
                 <dd className="col-sm-8">{budget.caes ?? '—'}</dd>
                 <dt className="col-sm-4 text-muted">FUNDAE</dt>
                 <dd className="col-sm-8">{budget.fundae ?? '—'}</dd>
                 <dt className="col-sm-4 text-muted">Hotel y pernocta</dt>
                 <dd className="col-sm-8">{budget.hotelNight ?? '—'}</dd>
+                <dt className="col-sm-4 text-muted">Documentos</dt>
+                <dd className="col-sm-8">{budget.documentsNum ?? budget.documents?.length ?? 0}</dd>
+                <dt className="col-sm-4 text-muted">Notas</dt>
+                <dd className="col-sm-8">{budget.notesCount ?? budget.notes?.length ?? 0}</dd>
               </dl>
+            </section>
+            <section>
+              <h6 className="text-uppercase text-muted fw-semibold small">Productos extra</h6>
+              {Array.isArray(budget.prodExtraNames) && budget.prodExtraNames.length ? (
+                <div className="d-flex flex-wrap gap-2">
+                  {budget.prodExtraNames.map((extra) => (
+                    <Badge bg="light" text="dark" key={extra} className="px-3 py-2 rounded-pill border">
+                      {extra}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="mb-0 text-muted">Sin productos extra asociados.</p>
+              )}
             </section>
             <section>
               <h6 className="text-uppercase text-muted fw-semibold small">Documentos</h6>
@@ -78,6 +98,19 @@ export function BudgetDetailModal({ budget, onClose }: BudgetDetailModalProps) {
               ) : (
                 <p className="mb-0 text-muted">Aún no hay notas asociadas.</p>
               )}
+            </section>
+            <section>
+              <h6 className="text-uppercase text-muted fw-semibold small">Trazabilidad</h6>
+              <dl className="row mb-0 small">
+                <dt className="col-sm-4 text-muted">Deal ID</dt>
+                <dd className="col-sm-8">{budget.dealId}</dd>
+                <dt className="col-sm-4 text-muted">Organización ID</dt>
+                <dd className="col-sm-8">{budget.dealOrgId}</dd>
+                <dt className="col-sm-4 text-muted">Creado</dt>
+                <dd className="col-sm-8">{budget.createdAt ? new Date(budget.createdAt).toLocaleString() : '—'}</dd>
+                <dt className="col-sm-4 text-muted">Actualizado</dt>
+                <dd className="col-sm-8">{budget.updatedAt ? new Date(budget.updatedAt).toLocaleString() : '—'}</dd>
+              </dl>
             </section>
           </div>
         ) : null}
