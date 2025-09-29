@@ -10,7 +10,6 @@
   NODE_VERSION = "20"
   VITE_API_BASE = "/.netlify/functions"
 
-# Endpoints explícitos
 [[redirects]]
   from = "/api/diag"
   to   = "/.netlify/functions/diag"
@@ -26,13 +25,11 @@
   to   = "/.netlify/functions/deals-import"
   status = 200
 
-# Fallback general por si se usa /api/* antiguo
 [[redirects]]
   from = "/api/*"
   to   = "/.netlify/functions/:splat"
   status = 200
 
-# SPA fallback
 [[redirects]]
   from = "/*"
   to   = "/index.html"
