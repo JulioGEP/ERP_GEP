@@ -1,4 +1,3 @@
-// netlify/functions/api.ts
 type HandlerEvent = {
   httpMethod: string;
   headers: Record<string, string | undefined>;
@@ -16,9 +15,8 @@ const JSON_HEADERS = {
 };
 
 export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 204, headers: JSON_HEADERS, body: "" };
-  }
+  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: JSON_HEADERS, body: "" };
+
   try {
     const url = new URL(event.rawUrl);
     const pathname = url.pathname.replace(/^\/api/, "");
@@ -38,11 +36,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       if (event.httpMethod !== "POST") return methodNotAllowed();
       if (!event.body) return badRequest("Body vacío");
       let payload: any;
-      try {
-        payload = JSON.parse(event.body);
-      } catch {
-        return badRequest("JSON inválido");
-      }
+      try { payload = JSON.parse(event.body); } catch { return badRequest("JSON inválido"); }
       const federalNumber = String(payload?.federalNumber || "").trim();
       if (!federalNumber) return badRequest("federalNumber requerido");
 
@@ -57,26 +51,16 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
   }
 };
 
-// ---------- HTTP helpers ----------
 function json(statusCode: number, data: unknown): HandlerResponse {
   return { statusCode, headers: JSON_HEADERS, body: JSON.stringify(data) };
 }
-function badRequest(msg: string): HandlerResponse {
-  return json(400, { error: msg });
-}
-function notFound(msg: string): HandlerResponse {
-  return json(404, { error: msg });
-}
-function methodNotAllowed(): HandlerResponse {
-  return { statusCode: 405, headers: JSON_HEADERS, body: "" };
-}
+function badRequest(msg: string): HandlerResponse { return json(400, { error: msg }); }
+function notFound(msg: string): HandlerResponse { return json(404, { error: msg }); }
+function methodNotAllowed(): HandlerResponse { return { statusCode: 405, headers: JSON_HEADERS, body: "" }; }
 function isPath(pathname: string, expected: string): boolean {
-  const a = pathname.replace(/\/+$/, "");
-  const b = expected.replace(/\/+$/, "");
-  return a === b;
+  const a = pathname.replace(/\/+$/, ""); const b = expected.replace(/\/+$/, ""); return a === b;
 }
 
-// ---------- Pipedrive ----------
 function normalizePipedriveBaseUrl(input?: string): string {
   const t = (input || "").trim();
   if (!t) return "https://api.pipedrive.com/v1";
@@ -101,15 +85,13 @@ async function fetchPipedrive(path: string, init?: RequestInit) {
   return res.json();
 }
 
-// ---------- DB (Neon) ----------
 import { neon } from "@neondatabase/serverless";
 async function withDb<T>(fn: (sql: any) => Promise<T>): Promise<T> {
   if (!DATABASE_URL) throw new Error("DATABASE_URL no definido");
-  const sql: any = neon(DATABASE_URL); // tipado relajado para evitar conflicto de genéricos
+  const sql: any = neon(DATABASE_URL);
   return fn(sql);
 }
 
-// ---------- Tipos ----------
 type DealNormalized = {
   deal_id: number;
   title: string;
@@ -129,7 +111,6 @@ type DealSummary = {
   person_email?: string | null;
 };
 
-// ---------- Lógica ----------
 async function importDealByFederal(federalNumber: string): Promise<DealSummary> {
   const id = Number(federalNumber);
   if (!Number.isFinite(id)) throw new Error("federalNumber debe ser numérico");
@@ -166,9 +147,7 @@ async function importDealByFederal(federalNumber: string): Promise<DealSummary> 
   };
 }
 
-function onlyStrings(a: any[]): string[] {
-  return a.filter((x) => typeof x === "string") as string[];
-}
+function onlyStrings(a: any[]): string[] { return a.filter((x) => typeof x === "string") as string[]; }
 
 async function upsertOrgAndDeal(normal: DealNormalized) {
   await withDb(async (sql) => {
