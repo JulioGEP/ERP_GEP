@@ -22,7 +22,7 @@
 
 [[redirects]]
   from = "/api/deals/import"
-  to   = "/.netlify/functions/deals-import"
+  to   = "/.netlify/functions/deals_import"
   status = 200
 
 [[redirects]]
