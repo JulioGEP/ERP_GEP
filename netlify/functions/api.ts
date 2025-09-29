@@ -26,13 +26,15 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
   }
   try {
     const url = new URL(event.rawUrl);
-    const pathname = url.pathname.replace(/^\/\.netlify\/functions\/api/, "").replace(/^\/api/, "");
+    const pathname = url.pathname
+      .replace(/^\/\.netlify\/functions\/api/, "")
+      .replace(/^\/api/, "");
 
     if (isPath(pathname, "/health")) {
       return json(200, {
         ok: true,
         env: {
-          pipedrive_base_url: true,
+          pipedrive_base_url_used: PIPEDRIVE_BASE_URL,
           pipedrive_api_token: PIPEDRIVE_API_TOKEN ? "present" : "missing",
           database_url: DB.SAFE ? "present" : "missing",
           database_url_sanitized: DB.MASKED || null,
@@ -102,16 +104,20 @@ async function fetchPipedrive(path: string, init?: AnyInit) {
 // ---------- DB (Neon) con URL saneada ----------
 function sanitizeDbUrl(raw?: string) {
   if (!raw) return { url: "", masked: "", safe: false };
-  let fixed = raw.trim().replace(/^postgres:\/\//i, "postgresql://");
+  let fixed = raw.trim();
+  fixed = fixed.replace(/^postgres:\/\//i, "postgresql://"); // admite postgres://
+
   try {
     const u = new URL(fixed);
-    u.searchParams.delete("channel_binding");
+    u.searchParams.delete("channel_binding"); // innecesario
     if (!u.searchParams.get("sslmode")) u.searchParams.set("sslmode", "require");
     fixed = u.toString();
     const masked = u.password ? fixed.replace(u.password, "***") : fixed;
     return { url: fixed, masked, safe: true };
   } catch {
-    if (!/[?&]sslmode=/.test(fixed)) fixed += (fixed.includes("?") ? "&" : "?") + "sslmode=require";
+    if (!/[?&]sslmode=/.test(fixed)) {
+      fixed = fixed + (fixed.includes("?") ? "&" : "?") + "sslmode=require";
+    }
     return { url: fixed, masked: fixed.replace(/(:\/\/[^:]+:)[^@]+(@)/, "$1***$2"), safe: true };
   }
 }
