@@ -1,7 +1,7 @@
 // netlify/functions/api.ts
 // Endpoints:
-//   - GET  /api/health
-//   - POST /api/deals/import  { federalNumber: string }
+//   - GET  /.netlify/functions/api/health
+//   - POST /.netlify/functions/api/deals/import  { federalNumber: string }
 
 type HandlerEvent = {
   httpMethod: string;
@@ -11,7 +11,6 @@ type HandlerEvent = {
   body: string | null;
 };
 type HandlerResponse = { statusCode: number; headers?: Record<string, string>; body: string };
-// Evita problemas de tipos al compilar en esbuild
 type AnyInit = any;
 
 const JSON_HEADERS = {
@@ -25,13 +24,9 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: JSON_HEADERS, body: "" };
   }
-
   try {
-    // Soporta invocación directa (/.netlify/functions/api/*) y vía redirect (/api/*)
     const url = new URL(event.rawUrl);
-    const pathname = url.pathname
-      .replace(/^\/\.netlify\/functions\/api/, "")
-      .replace(/^\/api/, "");
+    const pathname = url.pathname.replace(/^\/\.netlify\/functions\/api/, "").replace(/^\/api/, "");
 
     if (isPath(pathname, "/health")) {
       return json(200, {
@@ -53,6 +48,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
       try { payload = JSON.parse(event.body); } catch { return badRequest("JSON inválido"); }
       const federalNumber = String(payload?.federalNumber || "").trim();
       if (!federalNumber) return badRequest("federalNumber requerido");
+
       const data = await importDealByFederal(federalNumber);
       return json(200, data);
     }
@@ -64,7 +60,7 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
   }
 };
 
-// ---------- Helpers HTTP ----------
+// ---------- Helpers ----------
 function json(statusCode: number, data: unknown): HandlerResponse {
   return { statusCode, headers: JSON_HEADERS, body: JSON.stringify(data) };
 }
@@ -75,7 +71,7 @@ function isPath(pathname: string, expected: string): boolean {
   const a = pathname.replace(/\/+$/, ""); const b = expected.replace(/\/+$/, ""); return a === b;
 }
 
-// ---------- Pipedrive (HOST FIJO + parseo robusto) ----------
+// ---------- Pipedrive (host fijo + parseo robusto) ----------
 const PIPEDRIVE_API_TOKEN = process.env.PIPEDRIVE_API_TOKEN?.trim() || "";
 const PIPEDRIVE_BASE_URL = "https://api.pipedrive.com/v1";
 
@@ -94,9 +90,7 @@ async function fetchPipedrive(path: string, init?: AnyInit) {
   const urlMasked = fullUrl.replace(/(api_token=)[^&]+/i, "$1***");
   const bodySnippet = (text || "").replace(/\s+/g, " ").trim().slice(0, 180);
 
-  if (!res.ok) {
-    throw new Error(`Pipedrive ${res.status} ${res.statusText} -> ${bodySnippet} :: url=${urlMasked}`);
-  }
+  if (!res.ok) throw new Error(`Pipedrive ${res.status} ${res.statusText} -> ${bodySnippet} :: url=${urlMasked}`);
 
   try {
     return JSON.parse(text);
@@ -108,28 +102,20 @@ async function fetchPipedrive(path: string, init?: AnyInit) {
 // ---------- DB (Neon) con URL saneada ----------
 function sanitizeDbUrl(raw?: string) {
   if (!raw) return { url: "", masked: "", safe: false };
-  let fixed = raw.trim();
-  fixed = fixed.replace(/^postgres:\/\//i, "postgresql://"); // admite postgres://
-
+  let fixed = raw.trim().replace(/^postgres:\/\//i, "postgresql://");
   try {
     const u = new URL(fixed);
-    u.searchParams.delete("channel_binding"); // no necesario
+    u.searchParams.delete("channel_binding");
     if (!u.searchParams.get("sslmode")) u.searchParams.set("sslmode", "require");
     fixed = u.toString();
     const masked = u.password ? fixed.replace(u.password, "***") : fixed;
     return { url: fixed, masked, safe: true };
   } catch {
-    if (!/[?&]sslmode=/.test(fixed)) {
-      fixed = fixed + (fixed.includes("?") ? "&" : "?") + "sslmode=require";
-    }
+    if (!/[?&]sslmode=/.test(fixed)) fixed += (fixed.includes("?") ? "&" : "?") + "sslmode=require";
     return { url: fixed, masked: fixed.replace(/(:\/\/[^:]+:)[^@]+(@)/, "$1***$2"), safe: true };
   }
 }
-
-const DB = (() => {
-  const s = sanitizeDbUrl(process.env.DATABASE_URL);
-  return { URL: s.url, MASKED: s.masked, SAFE: s.safe };
-})();
+const DB = (() => { const s = sanitizeDbUrl(process.env.DATABASE_URL); return { URL: s.url, MASKED: s.masked, SAFE: s.safe }; })();
 
 import { neon } from "@neondatabase/serverless";
 async function withDb<T>(fn: (sql: any) => Promise<T>): Promise<T> {
@@ -138,7 +124,7 @@ async function withDb<T>(fn: (sql: any) => Promise<T>): Promise<T> {
   return fn(sql);
 }
 
-// ---------- Tipos mínimos ----------
+// ---------- Tipos ----------
 type DealNormalized = {
   deal_id: number;
   title: string;
@@ -173,13 +159,11 @@ async function importDealByFederal(federalNumber: string): Promise<DealSummary> 
     currency: d.currency ?? null,
     add_time: d.add_time ?? null,
     org: d.org_id ? { org_id: d.org_id, name: d.org_name ?? null } : null,
-    person: d.person_id
-      ? {
-          person_id: d.person_id,
-          name: d.person_name ?? null,
-          email: Array.isArray(d?.person?.email) ? onlyStrings(d.person.email).at(0) ?? null : d?.person?.email ?? null,
-        }
-      : null,
+    person: d.person_id ? {
+      person_id: d.person_id,
+      name: d.person_name ?? null,
+      email: Array.isArray(d?.person?.email) ? onlyStrings(d.person.email).at(0) ?? null : d?.person?.email ?? null
+    } : null
   };
 
   await upsertOrgAndDeal(normalized);
@@ -191,7 +175,7 @@ async function importDealByFederal(federalNumber: string): Promise<DealSummary> 
     currency: normalized.currency ?? null,
     org_name: normalized.org?.name ?? null,
     person_name: normalized.person?.name ?? null,
-    person_email: normalized.person?.email ?? null,
+    person_email: normalized.person?.email ?? null
   };
 }
 
