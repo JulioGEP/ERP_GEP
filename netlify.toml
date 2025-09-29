@@ -1,19 +1,17 @@
-cat > netlify.toml <<'EOF'
 [build]
-  publish = "frontend/dist"
-  command = "npm install && cd frontend && npm install && npm run build"
+publish = "frontend/dist"
+command = "npm install && cd frontend && npm install && npm run build"
 
 [functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
+directory = "netlify/functions"
+node_bundler = "esbuild"
 
 [[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/api/:splat"
-  status = 200
+from = "/api/*"
+to   = "/.netlify/functions/api/:splat"
+status = 200
 
 [[redirects]]
-  from = "/*"
-  to   = "/index.html"
-  status = 200
-EOF
+from = "/*"
+to   = "/index.html"
+status = 200
