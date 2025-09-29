@@ -18,7 +18,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const importMutation = useMutation({
-    mutationFn: importDeal,
+    mutationFn: (federalNumber: string) => importDeal(federalNumber),
     onSuccess: (budget) => {
       setBudgets((previous) => {
         const filtered = previous.filter((item) => item.dealId !== budget.dealId);
@@ -129,7 +129,7 @@ export default function App() {
         show={showImportModal}
         isLoading={importMutation.isPending}
         onClose={() => setShowImportModal(false)}
-        onSubmit={(federalNumber) => importMutation.mutate({ federalNumber })}
+        onSubmit={(federalNumber) => importMutation.mutate(federalNumber)}
       />
       <BudgetDetailModal budget={selectedBudget} onClose={() => setSelectedBudget(null)} />
     </div>
