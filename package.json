@@ -1,18 +1,14 @@
 {
-  "name": "erp_gep",
-  "version": "0.1.0",
-  "private": true,
-  "description": "Monorepo para el ERP interno de planificación de formaciones de GEP Group.",
-  "workspaces": [
-    "frontend",
-    "backend"
-  ],
   "scripts": {
-    "dev:frontend": "npm --workspace frontend run dev",
-    "dev:backend": "npm --workspace backend run dev",
-    "lint": "npm --workspaces run lint"
+    "dev": "netlify dev",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd frontend && npm install && npm run build",
+    "db:init": "dotenv -e .env -- node scripts/init-db.mjs"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.4"
+    "@neondatabase/serverless": "^1.0.1"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^10.0.0"
   }
 }

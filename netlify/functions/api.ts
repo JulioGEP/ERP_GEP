@@ -1,7 +1,3 @@
-// netlify/functions/api.ts
-// - GET  /api/health
-// - POST /api/deals/import  { federalNumber: string }
-
 type HandlerEvent = {
   httpMethod: string;
   headers: Record<string, string | undefined>;
@@ -15,269 +11,32 @@ const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type,Authorization"
 };
-
-function normalizePipedriveBaseUrl(rawUrl: string | undefined | null): string {
-  const fallback = "https://api.pipedrive.com/v1";
-  if (!rawUrl) return fallback;
-
-  const trimmed = rawUrl.trim().replace(/\/+$/, "");
-
-  if (!trimmed) {
-    return fallback;
-  }
-
-  if (/\/api\/v\d+$/i.test(trimmed)) {
-    return trimmed;
-  }
-
-  if (/\/api$/i.test(trimmed)) {
-    return `${trimmed}/v1`;
-  }
-
-  return `${trimmed}/api/v1`;
-}
-
-const PIPEDRIVE_BASE_URL = normalizePipedriveBaseUrl(process.env.PIPEDRIVE_BASE_URL);
-const PIPEDRIVE_API_TOKEN = process.env.PIPEDRIVE_API_TOKEN?.trim() || "";
-const DATABASE_URL = process.env.DATABASE_URL?.trim() || "";
-
-function json(statusCode: number, data: unknown): HandlerResponse {
-  return { statusCode, headers: JSON_HEADERS, body: JSON.stringify(data) };
-}
-function badRequest(msg: string): HandlerResponse {
-  return json(400, { error: msg });
-}
-function notFound(msg: string): HandlerResponse {
-  return json(404, { error: msg });
-}
-function methodNotAllowed(): HandlerResponse {
-  return { statusCode: 405, headers: JSON_HEADERS, body: "" };
-}
-
-async function fetchPipedrive(path: string, init?: RequestInit) {
-  if (!PIPEDRIVE_API_TOKEN) throw new Error("PIPEDRIVE_API_TOKEN no definido");
-  const url = new URL(path, PIPEDRIVE_BASE_URL);
-  url.searchParams.set("api_token", PIPEDRIVE_API_TOKEN);
-  const res = await fetch(url.toString(), {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Pipedrive ${res.status} ${res.statusText} -> ${text}`);
-  }
-  return res.json();
-}
-
-// ---------- DB (Neon) ----------
-import { neon } from "@neondatabase/serverless";
-
-async function withDb<T>(fn: (sql: ReturnType<typeof neon>) => Promise<T>): Promise<T> {
-  if (!DATABASE_URL) throw new Error("DATABASE_URL no definido");
-  const sql = neon(DATABASE_URL);
-  return fn(sql);
-}
-
-async function ensureSchema() {
-  return withDb(async (sql) => {
-    await sql`
-      CREATE TABLE IF NOT EXISTS organizations (
-        org_id BIGINT PRIMARY KEY,
-        name TEXT,
-        cif TEXT,
-        telf_org TEXT,
-        address TEXT
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS deals (
-        deal_id BIGINT PRIMARY KEY,
-        deal_org_id BIGINT REFERENCES organizations(org_id),
-        title TEXT,
-        training_type BIGINT,
-        hours TEXT,
-        deal_direction TEXT,
-        sede TEXT,
-        caes TEXT,
-        fundae TEXT,
-        hotel_night TEXT,
-        alumnos INTEGER,
-        training TEXT,
-        prod_extra TEXT,
-        seassons_num INTEGER,
-        seassons_id TEXT,
-        documents_num INTEGER,
-        documents_id TEXT
-      );
-    `;
-  });
-}
-
-type DealNormalized = {
-  deal_id: number;
-  title: string;
-  org: { org_id: number; name?: string | null } | null;
-  sede?: string | null;
-  training: string[];
-};
-
-function onlyStrings(a: any[]): string[] {
-  return a.filter((x) => typeof x === "string") as string[];
-}
-
-async function upsertOrgAndDeal(normal: DealNormalized, extra: Record<string, any>) {
-  await withDb(async (sql) => {
-    if (normal.org?.org_id) {
-      await sql`
-        INSERT INTO organizations (org_id, name)
-        VALUES (${normal.org.org_id}, ${normal.org.name || null})
-        ON CONFLICT (org_id) DO UPDATE SET name = EXCLUDED.name;
-      `;
-    }
-    await sql`
-      INSERT INTO deals (deal_id, deal_org_id, title, training_type, hours, deal_direction, sede, caes, fundae, hotel_night,
-                         alumnos, training, prod_extra, seassons_num, seassons_id, documents_num, documents_id)
-      VALUES (
-        ${normal.deal_id},
-        ${normal.org?.org_id || null},
-        ${normal.title || null},
-        ${extra.pipeline_id || null},
-        ${extra.hours || null},
-        ${extra.deal_direction || null},
-        ${normal.sede || null},
-        ${extra.caes || null},
-        ${extra.fundae || null},
-        ${extra.hotel_night || null},
-        ${extra.alumnos || null},
-        ${normal.training.join(", ") || null},
-        ${extra.prod_extra || null},
-        ${extra.seassons_num || null},
-        ${extra.seassons_id || null},
-        ${extra.documents_num || null},
-        ${extra.documents_id || null}
-      )
-      ON CONFLICT (deal_id) DO UPDATE SET
-        deal_org_id = EXCLUDED.deal_org_id,
-        title = EXCLUDED.title,
-        training_type = EXCLUDED.training_type,
-        hours = EXCLUDED.hours,
-        deal_direction = EXCLUDED.deal_direction,
-        sede = EXCLUDED.sede,
-        caes = EXCLUDED.caes,
-        fundae = EXCLUDED.fundae,
-        hotel_night = EXCLUDED.hotel_night,
-        alumnos = EXCLUDED.alumnos,
-        training = EXCLUDED.training,
-        prod_extra = EXCLUDED.prod_extra,
-        seassons_num = EXCLUDED.seassons_num,
-        seassons_id = EXCLUDED.seassons_id,
-        documents_num = EXCLUDED.documents_num,
-        documents_id = EXCLUDED.documents_id;
-    `;
-  });
-}
-
-async function importDealByFederal(federalNumber: string): Promise<DealNormalized> {
-  const deal = await fetchPipedrive(`/deals/${encodeURIComponent(federalNumber)}`);
-  const d = deal?.data;
-  if (!d) throw new Error("Deal no encontrado");
-
-  let org: DealNormalized["org"] = null;
-  if (d.org_id) {
-    const oid = typeof d.org_id === "object" ? d.org_id.value : d.org_id;
-    const oname = typeof d.org_id === "object" ? d.org_id.name : undefined;
-    org = { org_id: Number(oid), name: oname ?? null };
-  }
-
-  const prodsRes = await fetchPipedrive(`/deals/${encodeURIComponent(federalNumber)}/products`);
-  const products: any[] = prodsRes?.data || [];
-
-  const training = products
-    .filter((p) => {
-      const code = p?.code || p?.product?.code;
-      return typeof code === "string" && code.startsWith("form-");
-    })
-    .map((p) => p?.name || p?.product?.name)
-    .filter(Boolean);
-
-  const sede = d["676d6bd51e52999c582c01f67c99a35ed30bf6ae"] || null;
-
-  const extra = {
-    pipeline_id: d?.pipeline_id ?? null,
-    hours: d["38f11c8876ecde803a027fbf3c9041fda2ae7eb7"] ?? null,
-    deal_direction: d["8b2a7570f5ba8aa4754f061cd9dc92fd778376a7"] ?? null,
-    caes: d["e1971bf3a21d48737b682bf8d864ddc5eb15a351"] ?? null,
-    fundae: d["245d60d4d18aec40ba888998ef92e5d00e494583"] ?? null,
-    hotel_night: d["c3a6daf8eb5b4e59c3c07cda8e01f43439101269"] ?? null,
-    alumnos: null,
-    prod_extra: onlyStrings(
-      products
-        .filter((p) => {
-          const code = p?.code || p?.product?.code;
-          return !(typeof code === "string" && code.startsWith("form-"));
-        })
-        .map((p) => p?.name || p?.product?.name)
-        .filter(Boolean)
-    ).join(", "),
-    seassons_num: null,
-    seassons_id: null,
-    documents_num: null,
-    documents_id: null,
-  };
-
-  const normal: DealNormalized = {
-    deal_id: Number(d.id),
-    title: d.title || "",
-    org,
-    sede,
-    training: training as string[],
-  };
-
-  await ensureSchema();
-  await upsertOrgAndDeal(normal, extra);
-
-  return normal;
-}
-
-function isPath(pathname: string, segment: string) {
-  return pathname.endsWith(segment) && (pathname.includes("/api/") || pathname.includes("/.netlify/functions/api/"));
-}
 
 export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
+  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: JSON_HEADERS, body: "" };
+
   try {
-    if (event.httpMethod === "OPTIONS") {
-      return { statusCode: 200, headers: JSON_HEADERS, body: "" };
-    }
+    const url = new URL(event.rawUrl);
+    const pathname = url.pathname.replace(/^\/api/, "");
 
-    const url = new URL(event.rawUrl || "");
-    const pathname = url.pathname || "";
-
-    // Health
     if (isPath(pathname, "/health")) {
-      if (event.httpMethod !== "GET") return methodNotAllowed();
       return json(200, {
         ok: true,
         env: {
           pipedrive_base_url: !!PIPEDRIVE_BASE_URL,
           pipedrive_api_token: PIPEDRIVE_API_TOKEN ? "present" : "missing",
-          database_url: DATABASE_URL ? "present" : "missing",
-        },
-        path: pathname,
+          database_url: DATABASE_URL ? "present" : "missing"
+        }
       });
     }
 
-    // Import
     if (isPath(pathname, "/deals/import")) {
       if (event.httpMethod !== "POST") return methodNotAllowed();
       if (!event.body) return badRequest("Body vacío");
       let payload: any;
-      try {
-        payload = JSON.parse(event.body);
-      } catch {
-        return badRequest("JSON inválido");
-      }
+      try { payload = JSON.parse(event.body); } catch { return badRequest("JSON inválido"); }
       const federalNumber = String(payload?.federalNumber || "").trim();
       if (!federalNumber) return badRequest("federalNumber requerido");
 
@@ -291,3 +50,122 @@ export const handler = async (event: HandlerEvent): Promise<HandlerResponse> => 
     return json(500, { error: String(err?.message || err) });
   }
 };
+
+function json(statusCode: number, data: unknown): HandlerResponse {
+  return { statusCode, headers: JSON_HEADERS, body: JSON.stringify(data) };
+}
+function badRequest(msg: string): HandlerResponse { return json(400, { error: msg }); }
+function notFound(msg: string): HandlerResponse { return json(404, { error: msg }); }
+function methodNotAllowed(): HandlerResponse { return { statusCode: 405, headers: JSON_HEADERS, body: "" }; }
+function isPath(pathname: string, expected: string): boolean {
+  const a = pathname.replace(/\/+$/, ""); const b = expected.replace(/\/+$/, ""); return a === b;
+}
+
+function normalizePipedriveBaseUrl(input?: string): string {
+  const t = (input || "").trim();
+  if (!t) return "https://api.pipedrive.com/v1";
+  if (/\/api\/v\d+$/i.test(t)) return t.replace("/api/v1", "/v1");
+  if (/\/api$/i.test(t)) return `${t}/v1`;
+  if (/\/v\d+$/i.test(t)) return t;
+  return `${t}/v1`;
+}
+const PIPEDRIVE_BASE_URL = normalizePipedriveBaseUrl(process.env.PIPEDRIVE_BASE_URL);
+const PIPEDRIVE_API_TOKEN = process.env.PIPEDRIVE_API_TOKEN?.trim() || "";
+const DATABASE_URL = process.env.DATABASE_URL?.trim() || "";
+
+async function fetchPipedrive(path: string, init?: RequestInit) {
+  if (!PIPEDRIVE_API_TOKEN) throw new Error("PIPEDRIVE_API_TOKEN no definido");
+  const sep = path.includes("?") ? "&" : "?";
+  const url = `${PIPEDRIVE_BASE_URL}${path}${sep}api_token=${encodeURIComponent(PIPEDRIVE_API_TOKEN)}`;
+  const res = await fetch(url, { ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Pipedrive ${res.status} ${res.statusText} -> ${text}`);
+  }
+  return res.json();
+}
+
+import { neon } from "@neondatabase/serverless";
+async function withDb<T>(fn: (sql: any) => Promise<T>): Promise<T> {
+  if (!DATABASE_URL) throw new Error("DATABASE_URL no definido");
+  const sql: any = neon(DATABASE_URL);
+  return fn(sql);
+}
+
+type DealNormalized = {
+  deal_id: number;
+  title: string;
+  value?: number | null;
+  currency?: string | null;
+  add_time?: string | null;
+  org?: { org_id: number; name?: string | null } | null;
+  person?: { person_id: number; name?: string | null; email?: string | null } | null;
+};
+type DealSummary = {
+  deal_id: number;
+  title: string;
+  value?: number | null;
+  currency?: string | null;
+  org_name?: string | null;
+  person_name?: string | null;
+  person_email?: string | null;
+};
+
+async function importDealByFederal(federalNumber: string): Promise<DealSummary> {
+  const id = Number(federalNumber);
+  if (!Number.isFinite(id)) throw new Error("federalNumber debe ser numérico");
+
+  const detail = await fetchPipedrive(`/deals/${id}`);
+  const d = detail?.data || {};
+
+  const normalized: DealNormalized = {
+    deal_id: d.id,
+    title: d.title,
+    value: d.value ?? null,
+    currency: d.currency ?? null,
+    add_time: d.add_time ?? null,
+    org: d.org_id ? { org_id: d.org_id, name: d.org_name ?? null } : null,
+    person: d.person_id
+      ? {
+          person_id: d.person_id,
+          name: d.person_name ?? null,
+          email: Array.isArray(d?.person?.email) ? onlyStrings(d.person.email).at(0) ?? null : d?.person?.email ?? null
+        }
+      : null
+  };
+
+  await upsertOrgAndDeal(normalized);
+
+  return {
+    deal_id: normalized.deal_id,
+    title: normalized.title,
+    value: normalized.value ?? null,
+    currency: normalized.currency ?? null,
+    org_name: normalized.org?.name ?? null,
+    person_name: normalized.person?.name ?? null,
+    person_email: normalized.person?.email ?? null
+  };
+}
+
+function onlyStrings(a: any[]): string[] { return a.filter((x) => typeof x === "string") as string[]; }
+
+async function upsertOrgAndDeal(normal: DealNormalized) {
+  await withDb(async (sql) => {
+    if (normal.org?.org_id) {
+      await sql`
+        INSERT INTO organizations (org_id, name)
+        VALUES (${normal.org.org_id}, ${normal.org.name || null})
+        ON CONFLICT (org_id) DO UPDATE SET name = EXCLUDED.name;
+      `;
+    }
+    await sql`
+      INSERT INTO deals (deal_id, title, value, currency, org_id)
+      VALUES (${normal.deal_id}, ${normal.title}, ${normal.value || null}, ${normal.currency || null}, ${normal.org?.org_id || null})
+      ON CONFLICT (deal_id) DO UPDATE
+      SET title = EXCLUDED.title,
+          value = EXCLUDED.value,
+          currency = EXCLUDED.currency,
+          org_id = EXCLUDED.org_id;
+    `;
+  });
+}
