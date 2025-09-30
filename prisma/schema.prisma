@@ -1,96 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
-}
-
-enum DocumentOrigin {
-  imported
-  user_upload
-}
-
-model Organizations {
-  org_id     String   @id
+model organizations {
+  org_id     String    @id
   name       String
   CIF        String?
   telf_org   String?
   address    String?
-
-  persons    Persons[]
-  deals      Deals[]
-
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  @@map("organizations")
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now()) @updatedAt
+  cif        String?
+  phone      String?
+  deals      deals[]
+  persons    persons[]
 }
 
-model Persons {
-  person_id      String   @id
-  person_org_id  String?
-  first_name     String?
-  last_name      String?
-  email          String?
-  phone          String?
-
-  organization   Organizations? @relation(fields: [person_org_id], references: [org_id])
-
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+model persons {
+  person_id     String         @id
+  person_org_id String?
+  first_name    String?
+  last_name     String?
+  email         String?
+  phone         String?
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @default(now()) @updatedAt
+  org_id        String?
+  organizations organizations? @relation(fields: [person_org_id], references: [org_id])
 
   @@index([person_org_id])
-  @@map("persons")
 }
 
-model Deals {
-  deal_id         String   @id
-  deal_title      String?
-  deal_org_id     String?
-  training        String?
-  hours           Int?     @default(0)
-  deal_direction  String?
-  sede            String?
-
-  CAES            Boolean? @default(false)
-  FUNDAE          Boolean? @default(false)
-  Hotel_Night     Boolean? @default(false)
-  alumnos         Int?     @default(0)
-
-  organization    Organizations? @relation(fields: [deal_org_id], references: [org_id])
-  documents       Documents[]
-  comments        Comments[]
-  notes           Notes[]
-  seassons        Seassons[]
-
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+model deals {
+  deal_id          String         @id
+  deal_org_id      String?
+  training         Json?          @db.Json
+  hours            Int?           @default(0)
+  deal_direction   String?
+  sede             String?
+  CAES             Boolean?       @default(false)
+  FUNDAE           Boolean?       @default(false)
+  Hotel_Night      Boolean?       @default(false)
+  alumnos          Int?           @default(0)
+  created_at       DateTime       @default(now())
+  updated_at       DateTime       @default(now()) @updatedAt
+  title            String?
+  org_id           BigInt?
+  pipeline_id      String?
+  training_address String?
+  sede_label       String?
+  caes_label       String?
+  fundae_label     String?
+  hotel_label      String?
+  person_id        String?
+  extras           Json           @default("[]") @db.Json
+  prodextra        Json           @default("[]") @db.Json
+  comments         comments[]
+  organizations    organizations? @relation(fields: [deal_org_id], references: [org_id])
+  documents        documents[]
+  notes            notes[]
+  seassons         seassons[]
 
   @@index([deal_org_id])
-  @@map("deals")
 }
 
-model Comments {
-  comment_id  String   @id @default(cuid())
+model comments {
+  comment_id  String   @id
   deal_id     String
   author_id   String
   author_name String?
   content     String
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
+  deal        deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
 
-  deal        Deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
-
-  @@index([deal_id])
   @@index([author_id])
-  @@map("comments")
+  @@index([deal_id])
 }
 
-model Documents {
-  doc_id      String         @id @default(cuid())
+model notes {
+  notes_id     String   @id
+  deal_id      String
+  comment_deal String
+  created_at   DateTime @default(now())
+  deal         deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+
+  @@index([deal_id])
+}
+
+model documents {
+  doc_id      String         @id
   deal_id     String
   file_name   String
   file_size   Int
@@ -99,64 +103,91 @@ model Documents {
   origin      DocumentOrigin @default(imported)
   uploaded_by String?
   created_at  DateTime       @default(now())
-
-  deal        Deals          @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+  deal        deals          @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
 
   @@index([deal_id])
   @@index([origin])
-  @@map("documents")
 }
 
-model Notes {
-  notes_id     String   @id @default(cuid())
-  deal_id      String
-  comment_deal String
-  created_at   DateTime @default(now())
-
-  deal         Deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+model deal_products {
+  id          String           @id
+  deal_id     String?
+  product_id  String?
+  name        String?
+  code        String?
+  quantity    Decimal?         @db.Decimal
+  price       Decimal?         @db.Decimal
+  is_training Boolean?
+  created_at  DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime         @default(now()) @db.Timestamptz(6)
+  type        dealproducttype?
 
   @@index([deal_id])
-  @@map("notes")
+  @@index([type])
 }
 
-model Seassons {
-  seasson_id        String   @id @default(cuid())
-  deal_id           String
-  status            String?
-  date_start        DateTime?
-  date_end          DateTime?
-  sede              String?
-  seasson_address   String?
-  seasson_fireman   String?
-  seasson_vehicle   String?
-  comment_seasson   String?
+model deal_files {
+  id         String    @id
+  deal_id    String?
+  product_id String?
+  file_name  String?
+  file_url   String?
+  file_type  String?
+  added_at   DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime  @default(now()) @db.Timestamptz(6)
+}
 
-  deal              Deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+model deal_notes {
+  id         String    @id
+  deal_id    String?
+  product_id String?
+  content    String?
+  author     String?
+  created_at DateTime? @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+}
+
+model seassons {
+  seasson_id      String    @id
+  deal_id         String
+  status          String?
+  date_start      DateTime?
+  date_end        DateTime?
+  sede            String?
+  seasson_address String?
+  seasson_fireman String?
+  seasson_vehicle String?
+  comment_seasson String?
+  deals           deals     @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
 
   @@index([deal_id])
-  @@map("seassons")
 }
 
-model Trainers {
-  trainer_id String  @id @default(cuid())
+model trainers {
+  trainer_id String   @id
   name       String
   email      String?
   phone      String?
-
   created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  @@map("trainers")
+  updated_at DateTime
 }
 
-model UnidadesMoviles {
-  unidad_id       String  @id @default(cuid())
+model unidades_moviles {
+  unidad_id       String   @id
   name            String?
   plate           String?
   capacity_liters Int?
-
   created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  updated_at      DateTime
+}
 
-  @@map("unidades_moviles")
+enum DocumentOrigin {
+  imported
+  user_upload
+}
+
+enum dealproducttype {
+  TRAINING
+  EXTRA
 }
