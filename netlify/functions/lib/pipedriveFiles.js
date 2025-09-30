@@ -83,7 +83,7 @@ async function fetchDealFilesStrictOnly(pipedriveBase, token, dealId) {
       // Defensa extra
       if (f.deal_id != null && Number(f.deal_id) !== Number(dealId)) continue;
       if (f.activity_id != null) continue; // no adjuntos de actividades
-      if (f.remote_id != null || f.remote_location != null) continue; // no remotos
+      if (f.remote_location === 'url') continue;
 
       const file_name = normalizeName(f.file_name || f.name || null);
       const file_url = f.file_url ?? f.url ?? null;
