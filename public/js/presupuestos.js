@@ -1,53 +1,31 @@
-// public/js/presupuestos.js
-// Render de TODOS los deals + refresco tras importar.
-// Funciona con los IDs definidos en public/presupuestos.html
-
-const API_BASE = ''; // relativo al host actual
-
-async function apiGet(path) {
-  const res = await fetch(`${API_BASE}${path}`, { method: 'GET' });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.ok === false) {
-    throw new Error(data.message || `GET ${path} failed`);
-  }
-  return data;
-}
-
-async function apiPost(path, body) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {}),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.ok === false) {
-    throw new Error(data.message || `POST ${path} failed`);
-  }
-  return data;
-}
+import { httpGet, httpPost } from './http.js';
 
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
-  Object.entries(attrs).forEach(([k, v]) => {
-    if (k === 'class') node.className = v;
-    else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
-    else node.setAttribute(k, v);
+  Object.entries(attrs).forEach(([key, value]) => {
+    if (key === 'class') node.className = value;
+    else if (key === 'text') node.textContent = value;
+    else node.setAttribute(key, value);
   });
-  (Array.isArray(children) ? children : [children]).forEach(ch => {
-    if (ch == null) return;
-    node.appendChild(typeof ch === 'string' ? document.createTextNode(ch) : ch);
+  (Array.isArray(children) ? children : [children]).forEach((child) => {
+    if (child == null) return;
+    node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
   });
   return node;
 }
 
-function toast(msg, kind = 'danger', ms = 4200) {
-  const box = el('div', {
-    class: `position-fixed bottom-0 end-0 m-3 alert alert-${kind}`,
-    role: 'alert',
-    style: 'z-index:1080;'
-  }, msg);
+function toast(message, kind = 'danger', timeout = 4200) {
+  const box = el(
+    'div',
+    {
+      class: `position-fixed bottom-0 end-0 m-3 alert alert-${kind}`,
+      role: 'alert',
+      style: 'z-index:1080;',
+    },
+    message,
+  );
   document.body.appendChild(box);
-  setTimeout(() => box.remove(), ms);
+  setTimeout(() => box.remove(), timeout);
 }
 
 function renderEmpty(container) {
@@ -63,20 +41,32 @@ function renderEmpty(container) {
 
 function renderTable(container, deals) {
   container.innerHTML = '';
-  const table = el('table', { class: 'table table-hover align-middle mb-0', id: 'budgets-table' }, [
+
+  const rows = deals.map((row) => {
+    const hasDealId = row?.deal_id != null && row.deal_id !== '';
+    const dealId = hasDealId ? String(row.deal_id) : null;
+    const fallbackTitle = hasDealId ? `Presupuesto #${dealId}` : 'Presupuesto';
+    const title = (row?.title && String(row.title).trim()) || fallbackTitle;
+    const client = row?.org_name || row?.org_id || '—';
+
+    return el('tr', {}, [
+      el('td', {}, title),
+      el('td', {}, client),
+      el('td', {}, '—'),
+      el('td', {}, '—'),
+    ]);
+  });
+
+  const table = el('table', { class: 'table table-hover align-middle mb-0' }, [
     el('thead', {}, el('tr', {}, [
-      el('th', {}, 'ID'),
-      el('th', {}, 'Título'),
-      el('th', {}, 'Organización'),
+      el('th', {}, 'Presupuesto'),
+      el('th', {}, 'Cliente'),
+      el('th', {}, 'Sede'),
+      el('th', {}, 'Producto'),
     ])),
-    el('tbody', {}, deals.map(d =>
-      el('tr', {}, [
-        el('td', {}, String(d.deal_id ?? '—')),
-        el('td', {}, String(d.title ?? '—')),
-        el('td', {}, String(d.org_name ?? d.org_id ?? '—')),
-      ])
-    )),
+    el('tbody', {}, rows),
   ]);
+
   const card = el('div', { class: 'card shadow-sm' }, el('div', { class: 'card-body p-0' }, table));
   container.appendChild(card);
 }
@@ -84,71 +74,82 @@ function renderTable(container, deals) {
 async function loadDeals() {
   const container = document.getElementById('budgets-root');
   if (!container) return;
-  try {
-    const data = await apiGet('/.netlify/functions/deals');
-    const deals = Array.isArray(data.deals) ? data.deals : [];
-    if (deals.length === 0) renderEmpty(container);
-    else renderTable(container, deals);
-  } catch (err) {
+
+  const result = await httpGet('/.netlify/functions/deals');
+  if (!result.ok) {
+    console.error('[Presupuestos] loadDeals error', result);
+    toast(`[${result.error_code}] ${result.message}`, 'danger');
     renderEmpty(container);
-    console.error('[Presupuestos] loadDeals error', err);
-    toast(`Error cargando presupuestos: ${err.message}`);
+    return;
   }
+
+  const deals = Array.isArray(result.data?.deals) ? result.data.deals : [];
+  if (deals.length === 0) {
+    renderEmpty(container);
+    return;
+  }
+
+  renderTable(container, deals);
 }
 
 async function importDeal() {
   const input = document.getElementById('importDealId');
   const modalEl = document.getElementById('importModal');
   const dealId = (input?.value || '').trim();
+
   if (!dealId) {
     toast('Introduce un ID de presupuesto', 'warning');
+    input?.focus();
     return;
   }
-  try {
-    await apiPost('/.netlify/functions/deals_import', { dealId });
-    toast('Presupuesto importado correctamente', 'success');
-    // Cierra modal si existe (Bootstrap)
-    if (modalEl && window.bootstrap && window.bootstrap.Modal) {
-      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-      modal.hide();
-    }
-    await loadDeals();
-  } catch (err) {
-    console.error('[Presupuestos] import error', err);
-    toast(`No se pudo importar: ${err.message}`, 'danger');
+
+  const result = await httpPost('/.netlify/functions/deals_import', { dealId });
+
+  if (!result.ok) {
+    console.error('[Presupuestos] import error', result);
+    toast(`[${result.error_code}] ${result.message}`, 'danger');
+    return;
   }
+
+  if (modalEl && window.bootstrap?.Modal) {
+    const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.hide();
+  }
+
+  toast('Presupuesto importado correctamente', 'success');
+  if (input) input.value = '';
+  await loadDeals();
 }
 
 function wireUI() {
   const refreshBtn = document.getElementById('btnRefresh');
-  const importOpenBtn = document.getElementById('btnOpenImportModal');
-  const importConfirmBtn = document.getElementById('btnConfirmImport');
+  const openImportBtn = document.getElementById('btnOpenImportModal');
+  const confirmImportBtn = document.getElementById('btnConfirmImport');
+  const input = document.getElementById('importDealId');
 
-  refreshBtn?.addEventListener('click', (e) => {
-    e.preventDefault();
+  refreshBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
     loadDeals();
   });
 
-  importOpenBtn?.addEventListener('click', (e) => {
-    e.preventDefault();
+  openImportBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
     const modalEl = document.getElementById('importModal');
-    if (modalEl && window.bootstrap && window.bootstrap.Modal) {
-      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    if (modalEl && window.bootstrap?.Modal) {
+      const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
       modal.show();
-      // Foco al input
-      setTimeout(() => document.getElementById('importDealId')?.focus(), 150);
+      setTimeout(() => input?.focus(), 150);
     }
   });
 
-  importConfirmBtn?.addEventListener('click', (e) => {
-    e.preventDefault();
+  confirmImportBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
     importDeal();
   });
 
-  // ENTER en el input ⇒ importar
-  document.getElementById('importDealId')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
+  input?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
       importDeal();
     }
   });
@@ -158,3 +159,5 @@ document.addEventListener('DOMContentLoaded', () => {
   wireUI();
   loadDeals();
 });
+
+export { loadDeals, importDeal, wireUI };
