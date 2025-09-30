@@ -7,21 +7,22 @@ const ALLOWED_MIME = new Set([
   'application/pdf',
   'image/png',
   'image/jpeg',
-  'application/msword', // doc
+  'image/jpg',
+  'image/heic',
+  'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
-  'application/vnd.ms-excel', // xls
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
-  'application/vnd.ms-powerpoint', // ppt
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',       // xlsx
+  'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation', // pptx
   'text/csv',
+  'application/rtf',
 ]);
 
 const ALLOWED_EXT = new Set([
-  'pdf', 'png', 'jpg', 'jpeg',
-  'doc', 'docx',
-  'xls', 'xlsx',
-  'ppt', 'pptx',
-  'csv',
+  'pdf','png','jpg','jpeg','heic',
+  'doc','docx','xls','xlsx','ppt','pptx',
+  'csv','rtf'
 ]);
 
 function extFromName(name) {
@@ -127,7 +128,6 @@ async function fetchDealFilesFallback(pipedriveBase, token, dealId, dealRefDate)
 
     for (const f of data) {
       // Excluir remotos/inline
-      if (f.inline_flag === true) continue;
       if (f.remote_id != null || f.remote_location != null) continue;
 
       // Filtrar por mime/ext
