@@ -8,7 +8,7 @@ const { requireEnv } = require('./_shared/env');
 const { neon } = require('@neondatabase/serverless');
 // NUEVO: modo "smart" con fallback si /deals/{id}/files viene vacío
 const { fetchDealFilesSmart } = require('./lib/pipedriveFiles');
-const IMPORTER_VERSION = 'files.smart.2025-09-30.12';
+const IMPORTER_VERSION = 'notes.smart.2025-09-30.1';
 // --- Constantes de mapeo de campos personalizados ---
 const ORG_CUSTOM_FIELDS = {
   cif: '6d39d015a33921753410c1bab0b067ca93b8cf2c',
@@ -119,10 +119,71 @@ async function fetchDealProducts(dealId, client) {
   return Array.isArray(res.body?.data) ? res.body.data : [];
 }
 
-async function fetchDealNotes(dealId, client) {
-  const res = await pipedriveGet('/notes', { deal_id: dealId, start: 0, limit: 500 }, client);
-  if (!res.ok) throw createError('PIPEDRIVE_NOTES_ERROR', `No se pudieron recuperar las notas del deal ${dealId}`, res.status || 502);
-  return Array.isArray(res.body?.data) ? res.body.data : [];
+function inDateWindow(ts, refDate, days = 365) {
+  if (!ts || !refDate) return true;
+  const t = new Date(ts).getTime();
+  const r = new Date(refDate).getTime();
+  if (!Number.isFinite(t) || !Number.isFinite(r)) return true;
+  const diffDays = Math.abs((t - r) / (1000 * 60 * 60 * 24));
+  return diffDays <= days;
+}
+
+// Notas: intenta primero /v1/notes?deal_id=..., si viene vacío
+// une /v1/notes?person_id=... y /v1/notes?org_id=... y filtra por fecha.
+async function fetchDealNotesSmart(dealId, personId, orgId, client, dealRefDate = null) {
+  // 1) Notas pegadas al deal
+  {
+    const res = await pipedriveGet('/notes', {
+      deal_id: dealId,
+      start: 0,
+      limit: 500,
+      sort: 'add_time ASC'
+    }, client);
+    if (!res.ok) {
+      throw createError('PIPEDRIVE_NOTES_ERROR', `No se pudieron recuperar las notas del deal ${dealId}`, res.status || 502);
+    }
+    const arr = Array.isArray(res.body?.data) ? res.body.data : [];
+    if (arr.length > 0) {
+      return { source: 'notes_deal_v1', notes: arr };
+    }
+  }
+
+  // 2) Fallback: persona + organización, con ventana temporal ±365d alrededor del deal
+  const out = [];
+
+  if (personId) {
+    const rp = await pipedriveGet('/notes', {
+      person_id: personId,
+      start: 0,
+      limit: 250,
+      sort: 'add_time ASC'
+    }, client);
+    if (!rp.ok) throw createError('PIPEDRIVE_NOTES_ERROR', `No se pudieron recuperar notas de la persona ${personId}`, rp.status || 502);
+    const data = Array.isArray(rp.body?.data) ? rp.body.data : [];
+    for (const n of data) {
+      if (inDateWindow(n.add_time || n.update_time, dealRefDate, 365)) out.push(n);
+    }
+  }
+
+  if (orgId) {
+    const ro = await pipedriveGet('/notes', {
+      org_id: orgId,
+      start: 0,
+      limit: 250,
+      sort: 'add_time ASC'
+    }, client);
+    if (!ro.ok) throw createError('PIPEDRIVE_NOTES_ERROR', `No se pudieron recuperar notas de la organización ${orgId}`, ro.status || 502);
+    const data = Array.isArray(ro.body?.data) ? ro.body.data : [];
+    for (const n of data) {
+      if (inDateWindow(n.add_time || n.update_time, dealRefDate, 365)) out.push(n);
+    }
+  }
+
+  // Dedupe por id
+  const seen = new Set();
+  const deduped = out.filter(n => (seen.has(n.id) ? false : (seen.add(n.id), true)));
+
+  return { source: 'notes_person_org_v1', notes: deduped };
 }
 
 // --- LEGACY (NO USAR) ---
@@ -380,12 +441,19 @@ exports.handler = async (event) => {
     const orgId = getRefId(deal.org_id ?? deal.orgId);
     const personId = getRefId(deal.person_id ?? deal.personId);
 
-    const [organization, person, products, notes] = await Promise.all([
+    const [organization, person, products, filesSmart] = await Promise.all([
       fetchOrganization(orgId, client),
       fetchPerson(personId, client),
       fetchDealProducts(dealId, client),
-      fetchDealNotes(dealId, client),
+      // OJO: los files ya los estás trayendo con tu lib propia; si no, deja esta línea como estaba.
+      // Si sigues usando la lib externa, NO dupliques esta llamada.
     ]);
+
+// Fecha de referencia del deal para filtrar notas en fallback
+const dealRefDate = deal.add_time || deal.update_time || null;
+
+// Notas con modo smart
+const { source: notesSource, notes } = await fetchDealNotesSmart(dealId, personId, orgId, client, dealRefDate);
 
     // 2) DB
     const sql = neon(DATABASE_URL);
@@ -570,6 +638,8 @@ exports.handler = async (event) => {
       extra_products: extraProducts,
       training_sessions: trainingSessions,
       notes: noteSummaries,
+      notes_source: notesSource,
+      notes_count: noteSummaries.length,
       files: fileSummaries,
       filesSource,
     };
