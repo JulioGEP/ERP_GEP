@@ -1,7 +1,9 @@
 // netlify/functions/lib/pipedriveFiles.js
-// Modo "smart": usa /deals/{id}/files y, si viene vacío, cae a /files?deal_id= con filtros fuertes.
+// Modo "smart": usa /deals/{id}/files y, si viene vacío, cae a /files?deal_id= con filtros.
+// Incluye timeout, límite de páginas y tope de ficheros para evitar 504 en Netlify.
 
 const fetch = global.fetch || require('node-fetch');
+const DEFAULT_FETCH_TIMEOUT_MS = 4500;
 
 const ALLOWED_MIME = new Set([
   'application/pdf',
@@ -24,8 +26,8 @@ const ALLOWED_EXT = new Set([
   'doc','docx','xls','xlsx','ppt','pptx',
   'csv','rtf'
 ]);
-const MAX_FILES = 20; // límite duro para evitar timeouts en Netlify
 
+const MAX_FILES = 20; // límite duro para evitar timeouts en Netlify
 
 function extFromName(name) {
   if (!name) return '';
@@ -49,23 +51,19 @@ function normalizeName(name) {
   return s.includes('?') ? s.split('?')[0] : s;
 }
 
-function inDateWindow(add_time, refDate, days = 365) {
-  if (!add_time) return true; // si no viene fecha, no filtramos por tiempo
-  if (!refDate) return true;
-  const t = new Date(add_time).getTime();
-  const r = new Date(refDate).getTime();
-  if (!Number.isFinite(t) || !Number.isFinite(r)) return true;
-  const diffDays = Math.abs((t - r) / (1000 * 60 * 60 * 24));
-  return diffDays <= days;
-}
-
 async function pdGet(url) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`${url} -> ${res.status} ${txt}`);
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(new Error('fetch-timeout')), DEFAULT_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: ac.signal });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`${url} -> ${res.status} ${txt}`);
+    }
+    return await res.json();
+  } finally {
+    clearTimeout(to);
   }
-  return res.json();
 }
 
 /**
@@ -74,7 +72,7 @@ async function pdGet(url) {
 async function fetchDealFilesStrictOnly(pipedriveBase, token, dealId) {
   const out = [];
   let start = 0;
-  const limit = 100;
+  const limit = 50;
 
   while (true) {
     const url = `${pipedriveBase}/deals/${dealId}/files?limit=${limit}&start=${start}&api_token=${token}`;
@@ -97,7 +95,10 @@ async function fetchDealFilesStrictOnly(pipedriveBase, token, dealId) {
         file_url: file_url || null,
         add_time: f.add_time || null,
       });
+      if (out.length >= MAX_FILES) break;
     }
+
+    if (out.length >= MAX_FILES) break;
 
     const more = json?.additional_data?.pagination?.more_items_in_collection;
     if (more) {
@@ -107,44 +108,38 @@ async function fetchDealFilesStrictOnly(pipedriveBase, token, dealId) {
     }
   }
 
-  // Dedupe por id
+  // Dedupe por id y cap
   const seen = new Set();
-  return out.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)));
+  const deduped = out.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)));
+  return deduped.slice(0, MAX_FILES);
 }
 
 /**
- * Fallback: /files?deal_id= con filtros fuertes
- * - sin remotos ni inline
- * - mime/ext permitidos
- * - ventana temporal ±365 días alrededor de la fecha del deal
+ * Fallback: /files?deal_id= con filtros por tipo (pdf/img/office),
+ * sin filtrar por fecha ni inline/remotos, máx. 3 páginas y 20 ficheros.
  */
 async function fetchDealFilesFallback(pipedriveBase, token, dealId, dealRefDate) {
   const out = [];
   let start = 0;
-  const limit = 100;
+  const limit = 50; // páginas más pequeñas para ir rápido
 
-  while (true) {
+  for (let page = 0; page < 3; page++) {
+    if (out.length >= MAX_FILES) break;
+
     const url = `${pipedriveBase}/files?deal_id=${dealId}&limit=${limit}&start=${start}&api_token=${token}`;
     const json = await pdGet(url);
     const data = Array.isArray(json?.data) ? json.data : [];
 
     for (const f of data) {
-      // Excluir remotos/inline
-      if (f.remote_id != null || f.remote_location != null) continue;
       if (out.length >= MAX_FILES) break;
 
-
-      // Filtrar por mime/ext
+      // NO filtramos inline ni remotos; solo por tipo permitido
       const file_name = normalizeName(f.file_name || f.name || null);
       const file_type = f.file_type || f.mime_type || '';
       if (!isAllowedByMimeOrExt(file_type, file_name)) continue;
 
-      // Ventana temporal
-      const add_time = f.add_time || f.update_time || null;
-
-      const file_url =
-  f.file_url ?? f.url ?? f.public_url ?? f.download_url ??
-  `${pipedriveBase}/files/${f.id}/download?api_token=${token}`;
+      const add_time = f.add_time || f.update_time || f.added_at || null; // sin filtro temporal
+      const file_url = f.file_url ?? f.url ?? f.public_url ?? f.download_url ?? null;
 
       out.push({
         id: Number(f.id),
@@ -155,25 +150,22 @@ async function fetchDealFilesFallback(pipedriveBase, token, dealId, dealRefDate)
       });
     }
 
-   const more = json?.additional_data?.pagination?.more_items_in_collection;
-if (more && out.length < MAX_FILES) {
-  start = json.additional_data.pagination.next_start;
-} else {
-  break;
-}
+    const more = json?.additional_data?.pagination?.more_items_in_collection;
+    if (more && out.length < MAX_FILES) {
+      start = json.additional_data.pagination.next_start;
+    } else {
+      break;
+    }
+  }
 
-
+  // Dedupe y cap final
   const seen = new Set();
-const deduped = out.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)));
-return deduped.slice(0, MAX_FILES);
-
+  const deduped = out.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)));
+  return deduped.slice(0, MAX_FILES);
+}
 
 /**
  * Modo inteligente: intenta strict y, si no hay resultados, cae a fallback filtrado.
- * @param {string} pipedriveBase
- * @param {string} token
- * @param {number} dealId
- * @param {string|Date|null} dealRefDate  Fecha de referencia (ej: deal.add_time)
  */
 async function fetchDealFilesSmart(pipedriveBase, token, dealId, dealRefDate = null) {
   const strict = await fetchDealFilesStrictOnly(pipedriveBase, token, dealId);
@@ -186,7 +178,6 @@ async function fetchDealFilesSmart(pipedriveBase, token, dealId, dealRefDate = n
 
 module.exports = {
   fetchDealFilesSmart,
-  // exporto también estas por si se quieren depurar
   fetchDealFilesStrictOnly,
   fetchDealFilesFallback,
 };
