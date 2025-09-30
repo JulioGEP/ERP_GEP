@@ -8,7 +8,7 @@ const { requireEnv } = require('./_shared/env');
 const { neon } = require('@neondatabase/serverless');
 // NUEVO: modo "smart" con fallback si /deals/{id}/files viene vacío
 const { fetchDealFilesSmart } = require('./lib/pipedriveFiles');
-const IMPORTER_VERSION = 'notes.smart.2025-09-30.1';
+const IMPORTER_VERSION = 'notes.smart.2025-09-30.2';
 // --- Constantes de mapeo de campos personalizados ---
 const ORG_CUSTOM_FIELDS = {
   cif: '6d39d015a33921753410c1bab0b067ca93b8cf2c',
@@ -388,6 +388,39 @@ function toNullableString(value) {
   return trimmed.length ? trimmed : null;
 }
 
+function htmlToPlainText(html) {
+  if (html == null) return null;
+  let s = String(html);
+
+  // 1) Normaliza saltos de línea visibles
+  s = s.replace(/<\s*br\s*\/?>/gi, '\n');
+  s = s.replace(/<\/\s*p\s*>/gi, '\n');
+  s = s.replace(/<\s*p[^>]*>/gi, '');
+
+  // 2) Quita cualquier etiqueta restante
+  s = s.replace(/<[^>]+>/g, '');
+
+  // 3) Decodifica entidades básicas
+  const entities = {
+    '&nbsp;': ' ',
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+  };
+  s = s.replace(/&[a-zA-Z#0-9]+;/g, (m) => (m in entities ? entities[m] : m));
+
+  // 4) Colapsa espacios y saltos de línea
+  s = s.replace(/\r/g, '');
+  s = s.replace(/[ \t]+/g, ' ');
+  s = s.replace(/\n{3,}/g, '\n\n');
+
+  // 5) Trim
+  s = s.trim();
+  return s.length ? s : null;
+}
+
 function toNullableNumber(value) {
   if (value == null || value === '') return null;
   const num = Number(value);
@@ -411,6 +444,39 @@ function firstPinnedProductId(note) {
     }
   }
   return null;
+}
+
+function htmlToPlainText(html) {
+  if (html == null) return null;
+  let s = String(html);
+
+  // 1) Saltos de línea visibles
+  s = s.replace(/<\s*br\s*\/?>/gi, '\n');
+  s = s.replace(/<\/\s*p\s*>/gi, '\n');
+  s = s.replace(/<\s*p[^>]*>/gi, '');
+
+  // 2) Quitar etiquetas
+  s = s.replace(/<[^>]+>/g, '');
+
+  // 3) Decodificar entidades básicas
+  const entities = {
+    '&nbsp;': ' ',
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+  };
+  s = s.replace(/&[a-zA-Z#0-9]+;/g, (m) => (m in entities ? entities[m] : m));
+
+  // 4) Normalizar espacios y saltos
+  s = s.replace(/\r/g, '');
+  s = s.replace(/[ \t]+/g, ' ');
+  s = s.replace(/\n{3,}/g, '\n\n');
+
+  // 5) Trim
+  s = s.trim();
+  return s.length ? s : null;
 }
 
 // --- Handler ---
@@ -569,29 +635,37 @@ const { source: notesSource, notes } = await fetchDealNotesSmart(dealId, personI
     const trainingSessions = trainingProducts.reduce((acc, item) => acc + (item.quantity || 0), 0);
 
     // 7) Notas
-    const noteSummaries = [];
-    for (const note of notes) {
-      const noteId = toNullableString(note.id);
-      if (!noteId) continue;
-      const content = toNullableString(note.content);
-      const author = toNullableString(note.user?.name ?? note.user_name);
-      const pinnedProductId = firstPinnedProductId(note);
-      const createdAt = note.add_time ? new Date(note.add_time) : null;
-      const updatedAt = note.update_time ? new Date(note.update_time) : createdAt;
+    // 7) Notas
+const noteSummaries = [];
+for (const note of notes) {
+  const noteId = toNullableString(note.id);
+  if (!noteId) continue;
 
-      await sql`
-        INSERT INTO deal_notes (id, deal_id, product_id, content, author, created_at, updated_at)
-        VALUES (${noteId}, ${String(dealId)}, ${pinnedProductId}, ${content}, ${author}, ${createdAt}, ${updatedAt})
-        ON CONFLICT (id) DO UPDATE
-        SET deal_id = EXCLUDED.deal_id,
-            product_id = EXCLUDED.product_id,
-            content = EXCLUDED.content,
-            author = EXCLUDED.author,
-            created_at = EXCLUDED.created_at,
-            updated_at = EXCLUDED.updated_at
-      `;
-      noteSummaries.push({ id: noteId, product_id: pinnedProductId, has_product_link: Boolean(pinnedProductId) });
-    }
+  const contentRaw = toNullableString(note.content);
+  const contentPlain = toNullableString(htmlToPlainText(contentRaw));
+  const author = toNullableString(note.user?.name ?? note.user_name);
+  const pinnedProductId = firstPinnedProductId(note);
+  const createdAt = note.add_time ? new Date(note.add_time) : null;
+  const updatedAt = note.update_time ? new Date(note.update_time) : createdAt;
+
+  await sql`
+    INSERT INTO deal_notes (id, deal_id, product_id, content, author, created_at, updated_at)
+    VALUES (${noteId}, ${String(dealId)}, ${pinnedProductId}, ${contentPlain}, ${author}, ${createdAt}, ${updatedAt})
+    ON CONFLICT (id) DO UPDATE
+    SET deal_id = EXCLUDED.deal_id,
+        product_id = EXCLUDED.product_id,
+        content = EXCLUDED.content,
+        author = EXCLUDED.author,
+        created_at = EXCLUDED.created_at,
+        updated_at = EXCLUDED.updated_at
+  `;
+
+  noteSummaries.push({
+    id: noteId,
+    product_id: pinnedProductId,
+    has_product_link: Boolean(pinnedProductId),
+  });
+}
 
     // 8) Ficheros (modo inteligente: strict -> fallback)
     const refDate = deal.add_time || deal.update_time || null;
