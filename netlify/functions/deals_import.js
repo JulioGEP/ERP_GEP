@@ -174,6 +174,10 @@ async function ensureSchema(sql) {
   await sql`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS address TEXT;`;
   await sql`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();`;
   await sql`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();`;
+  await sql`ALTER TABLE organizations ALTER COLUMN created_at SET DEFAULT now();`;
+  await sql`ALTER TABLE organizations ALTER COLUMN updated_at SET DEFAULT now();`;
+  await sql`UPDATE organizations SET created_at = now() WHERE created_at IS NULL;`;
+  await sql`UPDATE organizations SET updated_at = now() WHERE updated_at IS NULL;`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS persons (
@@ -194,6 +198,10 @@ async function ensureSchema(sql) {
   await sql`ALTER TABLE persons ADD COLUMN IF NOT EXISTS org_id TEXT;`;
   await sql`ALTER TABLE persons ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();`;
   await sql`ALTER TABLE persons ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();`;
+  await sql`ALTER TABLE persons ALTER COLUMN created_at SET DEFAULT now();`;
+  await sql`ALTER TABLE persons ALTER COLUMN updated_at SET DEFAULT now();`;
+  await sql`UPDATE persons SET created_at = now() WHERE created_at IS NULL;`;
+  await sql`UPDATE persons SET updated_at = now() WHERE updated_at IS NULL;`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS deals (
@@ -224,6 +232,10 @@ async function ensureSchema(sql) {
   await sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS person_id TEXT;`;
   await sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();`;
   await sql`ALTER TABLE deals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();`;
+  await sql`ALTER TABLE deals ALTER COLUMN created_at SET DEFAULT now();`;
+  await sql`ALTER TABLE deals ALTER COLUMN updated_at SET DEFAULT now();`;
+  await sql`UPDATE deals SET created_at = now() WHERE created_at IS NULL;`;
+  await sql`UPDATE deals SET updated_at = now() WHERE updated_at IS NULL;`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS deal_products (
