@@ -44,11 +44,22 @@ function normalizeTraining(raw: unknown): { training?: DealSummary['training']; 
 }
 
 function normalizeDealSummary(row: Json): DealSummary {
-  const dealId = toNumber(row?.deal_id ?? row?.dealId ?? row?.id)
+  const rawDealId = row?.deal_id ?? row?.dealId ?? row?.id
+  const dealNumericId = toNumber(rawDealId)
+  const dealIdString = toStringValue(rawDealId) ?? (rawDealId != null ? String(rawDealId) : '')
   const dealOrgId = toNumber(row?.org_id ?? row?.deal_org_id ?? row?.organizationId ?? row?.orgId)
+  const explicitTitle = toStringValue(row?.title ?? row?.deal_title)
+  const presupuestoLabel = toStringValue(row?.presupuesto ?? row?.budget)
+  const resolvedDealId =
+    dealIdString || presupuestoLabel || (dealNumericId != null ? String(dealNumericId) : '')
   const title =
-    toStringValue(row?.title ?? row?.deal_title ?? row?.presupuesto ?? row?.budget) ??
-    (dealId != null ? `Presupuesto #${dealId}` : 'Presupuesto')
+    explicitTitle ??
+    presupuestoLabel ??
+    (resolvedDealId
+      ? `Presupuesto #${resolvedDealId}`
+      : dealNumericId != null
+        ? `Presupuesto #${dealNumericId}`
+        : 'Presupuesto')
 
   const organizationName =
     toStringValue(
@@ -66,17 +77,23 @@ function normalizeDealSummary(row: Json): DealSummary {
   )
 
   const summary: DealSummary = {
-    dealId: dealId ?? Number(row?.deal_id ?? row?.dealId ?? row?.id ?? 0),
-    dealOrgId: dealOrgId ?? Number(row?.org_id ?? row?.deal_org_id ?? row?.organizationId ?? 0),
+    dealId: resolvedDealId,
+    dealNumericId: dealNumericId ?? toNumber(resolvedDealId),
+    dealOrgId:
+      dealOrgId ??
+      toNumber(row?.deal_org_id ?? row?.organizationId ?? row?.orgId ?? null) ??
+      null,
     organizationName,
     clientName: toStringValue(row?.clientName ?? row?.cliente) ?? organizationName,
     title,
     sede,
     trainingType: toStringValue(row?.trainingType ?? row?.training_type ?? row?.pipeline) ?? undefined,
     hours: toNumber(row?.hours) ?? undefined,
+    dealDirection: toStringValue(row?.deal_direction ?? row?.dealDirection ?? row?.direction) ?? undefined,
     caes: toStringValue(row?.caes ?? row?.CAES) ?? undefined,
     fundae: toStringValue(row?.fundae ?? row?.FUNDAE) ?? undefined,
     hotelNight: toStringValue(row?.hotelNight ?? row?.Hotel_Night) ?? undefined,
+    alumnos: toNumber(row?.alumnos) ?? undefined,
     documentsNum: toNumber(row?.documentsNum ?? row?.documents_num) ?? undefined,
     notesCount: toNumber(row?.notesCount ?? row?.notes_num) ?? undefined,
     createdAt: toStringValue(row?.createdAt ?? row?.created_at) ?? undefined,

@@ -95,15 +95,25 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
           </tr>
         </thead>
         <tbody>
-          {budgets.map((budget) => {
+          {budgets.map((budget, index) => {
             const productInfo = getProductLabel(budget);
-            const presupuestoLabel = budget.title || `Presupuesto #${budget.dealId}`;
+            const presupuestoLabel =
+              budget.dealId ||
+              (budget.dealNumericId != null ? String(budget.dealNumericId) : budget.title || '—');
+            const presupuestoTitle = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
             const sedeLabel = budget.sede && budget.sede.trim() ? budget.sede : '—';
+            const clientLabel = budget.clientName || budget.organizationName;
 
             return (
-              <tr key={budget.dealId} role="button" onClick={() => onSelect(budget)}>
-                <td className="fw-semibold">{presupuestoLabel}</td>
-                <td>{budget.organizationName}</td>
+              <tr
+                key={budget.dealId || presupuestoLabel || presupuestoTitle || `${budget.organizationName}-${index}`}
+                role="button"
+                onClick={() => onSelect(budget)}
+              >
+                <td className="fw-semibold" title={presupuestoTitle}>
+                  {presupuestoLabel}
+                </td>
+                <td>{clientLabel}</td>
                 <td>{sedeLabel}</td>
                 <td title={productInfo.title}>{productInfo.label}</td>
               </tr>
