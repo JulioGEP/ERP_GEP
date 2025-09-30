@@ -1,139 +1,66 @@
+// netlify/functions/deals.js
+// Lista TODOS los deals (sin filtrar por sesiones). JOIN seguro casteando org_id a text.
+
 const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
-const { getPrisma } = require('./_shared/prisma');
-
-const EDITABLE = new Set(['sede','hours','deal_direction','CAES','FUNDAE','Hotel_Night','alumnos']);
-
-function dealIdFromPath(path) {
-  const m = path.match(/\/\.netlify\/functions\/deals\/([^\/\?]+)/);
-  return m ? m[1] : null;
-}
+const { requireEnv } = require('./_shared/env');
+const { neon } = require('@neondatabase/serverless');
 
 exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
+  if (event.httpMethod !== 'GET') return errorResponse('METHOD_NOT_ALLOWED', 'Solo se permite GET', 405);
+
   try {
-    if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
+    const DATABASE_URL = requireEnv('DATABASE_URL');
+    const sql = neon(DATABASE_URL);
 
-    const prisma = getPrisma();
-    const method = event.httpMethod;
-    const path = event.path || '';
-    const dealId = dealIdFromPath(path);
+    // Aseguramos existencia (si el import aún no ha creado tablas)
+    await sql`CREATE TABLE IF NOT EXISTS organizations (org_id TEXT PRIMARY KEY, name TEXT, created_at TIMESTAMPTZ DEFAULT now() NOT NULL, updated_at TIMESTAMPTZ DEFAULT now() NOT NULL);`;
+    await sql`CREATE TABLE IF NOT EXISTS deals (deal_id TEXT PRIMARY KEY, title TEXT, org_id TEXT, created_at TIMESTAMPTZ DEFAULT now() NOT NULL, updated_at TIMESTAMPTZ DEFAULT now() NOT NULL);`;
 
-    // === LISTADO para la tabla ===
-    if (method === 'GET' && !dealId) {
-      const wantNoSessions = event.queryStringParameters?.noSessions === 'true';
+    // Columnas realmente existentes
+    const dcols = await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'deals'`;
+    const ocols = await sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'organizations'`;
+    const dHasTitle = dcols.some(c => String(c.column_name) === 'title');
+    const dHasOrgId = dcols.some(c => String(c.column_name) === 'org_id');
+    const dHasUpdated = dcols.some(c => String(c.column_name) === 'updated_at');
+    const dHasCreated = dcols.some(c => String(c.column_name) === 'created_at');
+    const oHasOrgId = ocols.some(c => String(c.column_name) === 'org_id');
+    const oHasName  = ocols.some(c => String(c.column_name) === 'name');
 
-      const selectCols = {
-        deal_id: true,
-        deal_title: true,
-        organization: { select: { name: true } },
-        sede: true,
-        training: true,
-        created_at: true
-      };
-
-      let rows = [];
-      if (wantNoSessions) {
-        rows = await prisma.deals.findMany({
-          where: { seassons: { none: {} } },
-          select: selectCols,
-          orderBy: { created_at: 'desc' }
-        });
-        // Fallback: si no hay “sin sesiones”, devuelve todos para que la UI no quede vacía.
-        if (rows.length === 0) {
-          rows = await prisma.deals.findMany({
-            select: selectCols,
-            orderBy: { created_at: 'desc' }
-          });
-        }
-      } else {
-        rows = await prisma.deals.findMany({
-          select: selectCols,
-          orderBy: { created_at: 'desc' }
-        });
-      }
-
-      const mapped = rows.map(d => ({
-        deal_id: d.deal_id,
-        presupuesto: d.deal_title ?? d.deal_id,
-        cliente: d.organization?.name ?? '',
-        sede: d.sede ?? '',
-        producto: d.training ?? ''
-      }));
-
-      return successResponse({ deals: mapped });
+    // Query tolerante a tipos distintos (text/bigint) con CAST a text en el JOIN
+    let rows = [];
+    if (dHasOrgId && oHasOrgId) {
+      rows = await sql`
+        SELECT
+          d.deal_id,
+          ${dHasTitle ? sql`d.title` : sql`NULL AS title`},
+          d.org_id,
+          ${oHasName ? sql`o.name AS org_name` : sql`NULL AS org_name`}
+        FROM deals d
+        LEFT JOIN organizations o
+          ON o.org_id::text = d.org_id::text
+        ORDER BY
+          ${dHasUpdated ? sql`d.updated_at DESC,` : sql``}
+          ${dHasCreated ? sql`d.created_at DESC,` : sql``}
+          d.deal_id::text DESC
+        LIMIT 500
+      `;
+    } else {
+      rows = await sql`
+        SELECT
+          d.deal_id,
+          ${dHasTitle ? sql`d.title` : sql`NULL AS title`}
+        FROM deals d
+        ORDER BY
+          ${dHasUpdated ? sql`d.updated_at DESC,` : sql``}
+          ${dHasCreated ? sql`d.created_at DESC,` : sql``}
+          d.deal_id::text DESC
+        LIMIT 500
+      `;
     }
 
-    // === DETALLE ===
-    if (method === 'GET' && dealId) {
-      const deal = await prisma.deals.findUnique({
-        where: { deal_id: dealId },
-        include: {
-          organization: true,
-          documents: true,
-          comments: { orderBy: { created_at: 'desc' } }
-        }
-      });
-      if (!deal) return errorResponse('NOT_FOUND','Deal no encontrado',404);
-      return successResponse({ deal });
-    }
-
-    // === PATCH (solo 7 campos + comentarios del propio autor) ===
-    if (method === 'PATCH' && dealId) {
-      const userId = event.headers['x-user-id'] || event.headers['X-User-Id'];
-      const userName = event.headers['x-user-name'] || event.headers['X-User-Name'];
-      if (!userId) return errorResponse('UNAUTHORIZED','X-User-Id requerido',401);
-      if (!event.body) return errorResponse('VALIDATION_ERROR','Body requerido',400);
-
-      const body = JSON.parse(event.body || '{}');
-      const patch = {};
-      if (body.deal && typeof body.deal === 'object') {
-        for (const k of Object.keys(body.deal)) {
-          if (EDITABLE.has(k)) patch[k] = body.deal[k];
-        }
-      }
-      if ('hours' in patch && (isNaN(patch.hours) || Number(patch.hours) < 0)) return errorResponse('VALIDATION_ERROR','hours inválido',400);
-      if ('alumnos' in patch && (isNaN(patch.alumnos) || Number(patch.alumnos) < 0)) return errorResponse('VALIDATION_ERROR','alumnos inválido',400);
-
-      const creates = body?.comments?.create ?? [];
-      const updates = body?.comments?.update ?? [];
-
-      await prisma.$transaction(async (tx) => {
-        if (Object.keys(patch).length) {
-          const data = { ...patch };
-          if ('hours' in data) data.hours = Number(data.hours);
-          if ('alumnos' in data) data.alumnos = Number(data.alumnos);
-          await tx.deals.update({ where: { deal_id: dealId }, data });
-        }
-
-        if (creates.length) {
-          const rows = creates
-            .map(c => ({
-              deal_id: dealId,
-              author_id: String(userId),
-              author_name: c.author_name || userName || null,
-              content: String(c.content || '').trim()
-            }))
-            .filter(c => c.content.length > 0);
-          if (rows.length) await tx.comments.createMany({ data: rows });
-        }
-
-        if (updates.length) {
-          for (const u of updates) {
-            const row = await tx.comments.findUnique({ where: { comment_id: u.comment_id } });
-            if (!row) throw new Error('COMMENT_NOT_FOUND');
-            if (row.author_id !== String(userId)) throw new Error('FORBIDDEN_COMMENT_EDIT');
-            await tx.comments.update({ where: { comment_id: u.comment_id }, data: { content: String(u.content || '').trim() } });
-          }
-        }
-      });
-
-      return successResponse();
-    }
-
-    return errorResponse('NOT_IMPLEMENTED','Ruta o método no soportado',404);
-  } catch (e) {
-    const msg = e?.message || 'Unexpected';
-    if (msg === 'COMMENT_NOT_FOUND') return errorResponse('NOT_FOUND','Comentario no existe',404);
-    if (msg === 'FORBIDDEN_COMMENT_EDIT') return errorResponse('FORBIDDEN','No puedes editar comentarios de otros',403);
-    return errorResponse('UNEXPECTED_ERROR', msg, 500);
+    return successResponse({ ok: true, deals: rows }, 200);
+  } catch (err) {
+    return errorResponse('UNEXPECTED_ERROR', err.message || 'Error inesperado', 500);
   }
 };
