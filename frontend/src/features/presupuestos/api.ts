@@ -1,6 +1,168 @@
 // frontend/src/features/presupuestos/api.ts
 import type { DealSummary } from '../../types/deal'
 
+type Json = any
+
+const API_BASE = '/.netlify/functions'
+
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number') return Number.isNaN(value) ? null : value
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function toStringValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  const str = String(value).trim()
+  return str.length ? str : null
+}
+
+function normalizeTraining(raw: unknown): { training?: DealSummary['training']; trainingNames?: string[] } {
+  if (!raw) return {}
+  if (Array.isArray(raw)) {
+    if (!raw.length) return {}
+    const training = raw as DealSummary['training']
+    const names = raw
+      .map((entry) => {
+        if (entry && typeof entry === 'object' && 'name' in entry && entry.name) return String(entry.name)
+        if (entry && typeof entry === 'object' && 'code' in entry && entry.code) return String(entry.code)
+        return toStringValue(entry)
+      })
+      .filter((value): value is string => Boolean(value))
+
+    return {
+      training,
+      trainingNames: names.length ? names : undefined
+    }
+  }
+
+  const label = toStringValue(raw)
+  if (!label) return {}
+
+  return { trainingNames: [label] }
+}
+
+function normalizeDealSummary(row: Json): DealSummary {
+  const dealId = toNumber(row?.deal_id ?? row?.dealId ?? row?.id)
+  const dealOrgId = toNumber(row?.org_id ?? row?.deal_org_id ?? row?.organizationId ?? row?.orgId)
+  const title =
+    toStringValue(row?.title ?? row?.deal_title ?? row?.presupuesto ?? row?.budget) ??
+    (dealId != null ? `Presupuesto #${dealId}` : 'Presupuesto')
+
+  const organizationName =
+    toStringValue(
+      row?.org_name ??
+        row?.organizationName ??
+        row?.organization_name ??
+        row?.cliente ??
+        row?.clientName ??
+        row?.organization?.name
+    ) ?? ''
+
+  const sede = toStringValue(row?.sede ?? row?.site ?? row?.location) ?? ''
+  const trainingInfo = normalizeTraining(
+    row?.training ?? row?.trainingNames ?? row?.training_names ?? row?.producto ?? row?.product
+  )
+
+  const summary: DealSummary = {
+    dealId: dealId ?? Number(row?.deal_id ?? row?.dealId ?? row?.id ?? 0),
+    dealOrgId: dealOrgId ?? Number(row?.org_id ?? row?.deal_org_id ?? row?.organizationId ?? 0),
+    organizationName,
+    clientName: toStringValue(row?.clientName ?? row?.cliente) ?? organizationName,
+    title,
+    sede,
+    trainingType: toStringValue(row?.trainingType ?? row?.training_type ?? row?.pipeline) ?? undefined,
+    hours: toNumber(row?.hours) ?? undefined,
+    caes: toStringValue(row?.caes ?? row?.CAES) ?? undefined,
+    fundae: toStringValue(row?.fundae ?? row?.FUNDAE) ?? undefined,
+    hotelNight: toStringValue(row?.hotelNight ?? row?.Hotel_Night) ?? undefined,
+    documentsNum: toNumber(row?.documentsNum ?? row?.documents_num) ?? undefined,
+    notesCount: toNumber(row?.notesCount ?? row?.notes_num) ?? undefined,
+    createdAt: toStringValue(row?.createdAt ?? row?.created_at) ?? undefined,
+    updatedAt: toStringValue(row?.updatedAt ?? row?.updated_at) ?? undefined
+  }
+
+  if ('training' in trainingInfo && trainingInfo.training) {
+    summary.training = trainingInfo.training
+  }
+  if (trainingInfo.trainingNames) {
+    summary.trainingNames = trainingInfo.trainingNames
+  }
+
+  if (Array.isArray(row?.prodExtra)) summary.prodExtra = row.prodExtra
+  if (Array.isArray(row?.prodExtraNames)) summary.prodExtraNames = row.prodExtraNames
+  if (Array.isArray(row?.documents)) summary.documents = row.documents
+  if (Array.isArray(row?.documentsUrls)) summary.documentsUrls = row.documentsUrls
+  if (Array.isArray(row?.notes)) summary.notes = row.notes
+  if (Array.isArray(row?.participants)) summary.participants = row.participants
+
+  return summary
+}
+
+function normalizeDealDetail(raw: Json) {
+  if (!raw || typeof raw !== 'object') return raw
+
+  const deal: Record<string, any> = { ...raw }
+  const id = raw.id ?? raw.deal_id ?? raw.dealId
+  if (id !== undefined && id !== null) {
+    const numericId = toNumber(id)
+    deal.id = numericId ?? id
+    deal.deal_id = raw.deal_id ?? numericId ?? id
+  }
+
+  if (deal.deal_title === undefined && raw.title !== undefined) deal.deal_title = raw.title
+  if (deal.title === undefined && raw.deal_title !== undefined) deal.title = raw.deal_title
+
+  if (!deal.organization && raw.organization_name) {
+    deal.organization = { name: raw.organization_name }
+  }
+
+  if (raw.organization && typeof raw.organization === 'object') {
+    deal.organization = {
+      ...raw.organization,
+      id: raw.organization.id ?? raw.organization.org_id ?? raw.org_id ?? deal.organization?.id ?? null,
+      name:
+        raw.organization.name ??
+        raw.organizationName ??
+        raw.organization.name ??
+        raw.org_name ??
+        deal.organization?.name ??
+        null
+    }
+  }
+
+  if (Array.isArray(raw.comments)) {
+    deal.comments = raw.comments.map((comment: any) => ({
+      ...comment,
+      id: comment.id ?? comment.comment_id,
+      comment_id: comment.comment_id ?? comment.id,
+      authorId: comment.authorId ?? comment.author_id,
+      author_id: comment.author_id ?? comment.authorId,
+      createdAt: comment.createdAt ?? comment.created_at,
+      created_at: comment.created_at ?? comment.createdAt
+    }))
+  }
+
+  if (Array.isArray(raw.documents)) {
+    deal.documents = raw.documents.map((doc: any) => ({
+      ...doc,
+      id: doc.id ?? doc.doc_id,
+      doc_id: doc.doc_id ?? doc.id,
+      fileName: doc.fileName ?? doc.file_name,
+      file_name: doc.file_name ?? doc.fileName,
+      fileSize: doc.fileSize ?? doc.file_size,
+      file_size: doc.file_size ?? doc.fileSize,
+      mimeType: doc.mimeType ?? doc.mime_type,
+      mime_type: doc.mime_type ?? doc.mimeType,
+      storageKey: doc.storageKey ?? doc.storage_key,
+      storage_key: doc.storage_key ?? doc.storageKey
+    }))
+  }
+
+  return deal
+}
+
 /** Error uniforme para el front */
 export class ApiError extends Error {
   code: string
@@ -15,9 +177,6 @@ export class ApiError extends Error {
 export function isApiError(err: unknown): err is ApiError {
   return err instanceof ApiError || (typeof err === 'object' && !!err && (err as any).name === 'ApiError')
 }
-
-type Json = any
-const API_BASE = '/.netlify/functions'
 
 async function request(path: string, init?: RequestInit) {
   let res: Response
@@ -45,23 +204,23 @@ async function request(path: string, init?: RequestInit) {
 
 export async function fetchDealsWithoutSessions(): Promise<DealSummary[]> {
   const data = await request('/deals?noSessions=true')
-  const rows = data?.deals || []
-  return rows.map((d: Json) => ({
-    id: d.deal_id,
-    title: d.presupuesto,
-    organizationName: d.cliente,
-    sede: d.sede,
-    training: d.producto
-  }))
+  const rows: Json[] = Array.isArray(data?.deals) ? data.deals : []
+  return rows.map((row) => normalizeDealSummary(row))
 }
 
 export async function fetchDealDetail(dealId: number | string): Promise<any> {
   const data = await request(`/deals/${encodeURIComponent(String(dealId))}`)
-  return data?.deal
+  return normalizeDealDetail(data?.deal)
 }
 
-export async function importDeal(dealId: string): Promise<void> {
-  await request('/deals_import', { method: 'POST', body: JSON.stringify({ dealId }) })
+export async function importDeal(dealId: string): Promise<DealSummary | null> {
+  const data = await request('/deals_import', { method: 'POST', body: JSON.stringify({ dealId }) })
+  const importedId = data?.deal_id ?? data?.dealId ?? data?.id ?? dealId
+  if (!importedId) return null
+
+  const summaries = await fetchDealsWithoutSessions()
+  const summary = summaries.find((item) => String(item.dealId) === String(importedId))
+  return summary ?? null
 }
 
 /* ============ Edición (7 campos) + Comentarios ============ */
