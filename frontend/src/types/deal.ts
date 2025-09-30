@@ -15,8 +15,15 @@ export interface DealParticipant {
 }
 
 export interface DealSummary {
-  dealId: number;
-  dealOrgId: number;
+  /**
+   * Identificador externo del presupuesto. Se mantiene como string para preservar formatos no numéricos.
+   */
+  dealId: string;
+  /**
+   * Identificador numérico (si existe) del presupuesto. Útil para compatibilidad con APIs antiguas.
+   */
+  dealNumericId?: number | null;
+  dealOrgId: number | null;
   organizationName: string;
   organizationCif?: string | null;
   organizationPhone?: string | null;
@@ -32,6 +39,7 @@ export interface DealSummary {
   caes?: string | null;
   fundae?: string | null;
   hotelNight?: string | null;
+  alumnos?: number | null;
   prodExtra?: TrainingProduct[];
   prodExtraNames?: string[];
   documentsNum?: number;

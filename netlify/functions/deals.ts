@@ -5,8 +5,8 @@ const { getPrisma } = require('./_shared/prisma');
 const EDITABLE_FIELDS = new Set(['sede', 'hours', 'deal_direction', 'CAES', 'FUNDAE', 'Hotel_Night', 'alumnos']);
 
 function parsePathId(path) {
-  const m = path.match(/\/\.netlify\/functions\/deals\/(\d+)/);
-  return m ? Number(m[1]) : null;
+  const m = path.match(/\/\.netlify\/functions\/deals\/([^/]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
 exports.handler = async (event) => {
@@ -117,7 +117,9 @@ exports.handler = async (event) => {
 
       const rows = deals.map((d) => ({
         deal_id: d.id,
-        presupuesto: d.title || String(d.id),
+        presupuesto: d.id != null ? String(d.id) : '',
+        title: d.title || '',
+        deal_title: d.title || '',
         cliente: d.organization?.name || '',
         sede: d.sede || '',
         producto: d.training || ''

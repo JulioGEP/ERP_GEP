@@ -9,9 +9,11 @@ import {
   createDocumentMeta,
   deleteDocument
 } from './api';
+import type { DealSummary } from '../../types/deal';
 
 interface Props {
-  dealId: number | null;
+  dealId: string | null;
+  summary?: DealSummary | null;
   onClose: () => void;
 }
 
@@ -22,14 +24,43 @@ function useAuth() {
   return { userId, userName };
 }
 
-export function BudgetDetailModal({ dealId, onClose }: Props) {
+function formatProductNamesFromSummary(summary?: DealSummary | null): string {
+  if (!summary) return '';
+  if (Array.isArray(summary.trainingNames) && summary.trainingNames.length) {
+    return summary.trainingNames.join(', ');
+  }
+
+  if (Array.isArray(summary.training) && summary.training.length) {
+    const names = summary.training
+      .map((product) => (product?.name || product?.code || '')?.toString().trim())
+      .filter((value): value is string => Boolean(value));
+    if (names.length) return names.join(', ');
+  }
+
+  return '';
+}
+
+function toBooleanValue(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized || ['false', '0', 'no', 'n'].includes(normalized)) return false;
+    if (['true', '1', 'yes', 'y', 'si', 'sí', 's'].includes(normalized)) return true;
+    return Boolean(normalized);
+  }
+  return Boolean(value);
+}
+
+export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 
   const detailQuery = useQuery({
     queryKey: ['deal', dealId],
-    queryFn: () => fetchDealDetail(dealId as number),
-    enabled: typeof dealId === 'number',
+    queryFn: () => fetchDealDetail(dealId as string),
+    enabled: typeof dealId === 'string' && dealId.length > 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 0,
@@ -57,21 +88,32 @@ export function BudgetDetailModal({ dealId, onClose }: Props) {
         Hotel_Night: !!deal.Hotel_Night,
         alumnos: deal.alumnos ?? 0
       });
+    } else if (summary) {
+      setForm({
+        sede: summary.sede ?? '',
+        hours: summary.hours ?? 0,
+        deal_direction: summary.dealDirection ?? '',
+        CAES: toBooleanValue(summary.caes),
+        FUNDAE: toBooleanValue(summary.fundae),
+        Hotel_Night: toBooleanValue(summary.hotelNight),
+        alumnos: summary.alumnos ?? 0
+      });
     }
-  }, [deal]);
+  }, [deal, summary]);
 
   const initialEditable = useMemo(() => {
-    if (!deal) return null;
+    const source = deal ?? summary;
+    if (!source) return null;
     return {
-      sede: deal.sede ?? '',
-      hours: deal.hours ?? 0,
-      deal_direction: deal.deal_direction ?? deal.direction ?? '',
-      CAES: !!deal.CAES,
-      FUNDAE: !!deal.FUNDAE,
-      Hotel_Night: !!deal.Hotel_Night,
-      alumnos: deal.alumnos ?? 0
+      sede: source.sede ?? '',
+      hours: source.hours ?? 0,
+      deal_direction: source.deal_direction ?? source.dealDirection ?? source.direction ?? '',
+      CAES: toBooleanValue((source as any).CAES ?? (source as any).caes),
+      FUNDAE: toBooleanValue((source as any).FUNDAE ?? (source as any).fundae),
+      Hotel_Night: toBooleanValue((source as any).Hotel_Night ?? (source as any).hotelNight),
+      alumnos: source.alumnos ?? 0
     };
-  }, [deal]);
+  }, [deal, summary]);
 
   const dirtyDeal =
     !!initialEditable &&
@@ -82,6 +124,64 @@ export function BudgetDetailModal({ dealId, onClose }: Props) {
     (newComment.trim().length > 0) || Object.keys(editComments).length > 0;
 
   const isDirty = dirtyDeal || dirtyComments;
+
+  const presupuestoDisplay = useMemo(() => {
+    const detailId = (deal?.deal_id ?? deal?.id) as string | number | undefined;
+    if (detailId !== undefined && detailId !== null) {
+      const label = String(detailId).trim();
+      if (label) return label;
+    }
+    const summaryId = summary?.dealId?.trim();
+    if (summaryId) return summaryId;
+    if (summary?.dealNumericId != null) return String(summary.dealNumericId);
+    return '';
+  }, [deal, summary]);
+
+  const titleDisplay = useMemo(() => {
+    const detailTitle = (deal?.deal_title ?? deal?.title) as string | undefined;
+    if (detailTitle && detailTitle.trim()) return detailTitle.trim();
+    return summary?.title ?? '';
+  }, [deal, summary]);
+
+  const clientDisplay = useMemo(() => {
+    const possibleValues = [
+      (deal?.organization && (deal.organization as any).name) ?? undefined,
+      (deal as any)?.organization_name,
+      (deal as any)?.organizationName,
+      (deal as any)?.cliente
+    ];
+    for (const value of possibleValues) {
+      if (value !== undefined && value !== null) {
+        const label = String(value).trim();
+        if (label) return label;
+      }
+    }
+    return summary?.clientName || summary?.organizationName || '';
+  }, [deal, summary]);
+
+  const productDisplay = useMemo(() => {
+    if (deal?.training) {
+      if (Array.isArray(deal.training) && deal.training.length) {
+        const names = (deal.training as any[])
+          .map((item) => (item?.name || item?.code || '')?.toString().trim())
+          .filter((value: string | undefined): value is string => Boolean(value));
+        if (names.length) return names.join(', ');
+      }
+      if (typeof deal.training === 'string') {
+        const trimmed = deal.training.trim();
+        if (trimmed) return trimmed;
+      }
+    }
+    const summaryProducts = formatProductNamesFromSummary(summary);
+    if (summaryProducts) return summaryProducts;
+    return '';
+  }, [deal, summary]);
+
+  const detailErrorMessage = detailQuery.isError
+    ? detailQuery.error instanceof Error
+      ? detailQuery.error.message
+      : 'No se pudo cargar el detalle del presupuesto.'
+    : null;
 
   if (!dealId) return null;
 
@@ -159,9 +259,37 @@ export function BudgetDetailModal({ dealId, onClose }: Props) {
   return (
     <Modal show={!!dealId} onHide={requestClose} size="lg" backdrop="static">
       <Modal.Header closeButton>
-        <Modal.Title>Detalle presupuesto</Modal.Title>
+        <Modal.Title>
+          Detalle presupuesto
+          {presupuestoDisplay ? <span className="text-muted ms-2">· {presupuestoDisplay}</span> : null}
+        </Modal.Title>
       </Modal.Header>
       <Modal.Body>
+        {(presupuestoDisplay || titleDisplay || clientDisplay || productDisplay) && (
+          <Row className="g-3 mb-4">
+            <Col md={4}>
+              <Form.Label>Presupuesto</Form.Label>
+              <Form.Control value={presupuestoDisplay || '—'} readOnly />
+            </Col>
+            <Col md={8}>
+              <Form.Label>Título</Form.Label>
+              <Form.Control value={titleDisplay || '—'} readOnly />
+            </Col>
+            <Col md={6}>
+              <Form.Label>Cliente</Form.Label>
+              <Form.Control value={clientDisplay || '—'} readOnly />
+            </Col>
+            <Col md={6}>
+              <Form.Label>Producto</Form.Label>
+              <Form.Control value={productDisplay || '—'} readOnly title={productDisplay || undefined} />
+            </Col>
+          </Row>
+        )}
+        {detailErrorMessage && (
+          <Alert variant="danger" className="mb-3">
+            {detailErrorMessage}
+          </Alert>
+        )}
         {isLoading && (
           <div className="d-flex align-items-center gap-2">
             <Spinner size="sm" /> Cargando…
@@ -302,7 +430,7 @@ export function BudgetDetailModal({ dealId, onClose }: Props) {
         <Button variant="outline-secondary" onClick={requestClose} disabled={saving}>
           Cerrar
         </Button>
-        {isDirty && (
+        {isDirty && deal && (
           <Button variant="primary" onClick={handleSave} disabled={saving}>
             {saving ? 'Guardando…' : 'Guardar Cambios'}
           </Button>

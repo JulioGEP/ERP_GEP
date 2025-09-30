@@ -18,7 +18,7 @@ type ToastMessage = {
 
 export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
-  const [selectedBudgetId, setSelectedBudgetId] = useState<number | null>(null);
+  const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
   const [activeTab, setActiveTab] = useState('Presupuestos');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
