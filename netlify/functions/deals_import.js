@@ -11,7 +11,7 @@ const { neon } = require('@neondatabase/serverless');
 // NUEVO: modo "smart" con fallback si /deals/{id}/files viene vacío
 const { fetchDealFilesSmart } = require('./lib/pipedriveFiles');
 
-const IMPORTER_VERSION = 'files.smart.2025-09-30.4';
+const IMPORTER_VERSION = 'files.smart.2025-09-30.7';
 
 // --- Constantes de mapeo de campos personalizados ---
 const ORG_CUSTOM_FIELDS = {

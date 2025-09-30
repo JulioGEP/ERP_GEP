@@ -24,6 +24,8 @@ const ALLOWED_EXT = new Set([
   'doc','docx','xls','xlsx','ppt','pptx',
   'csv','rtf'
 ]);
+const MAX_FILES = 20; // límite duro para evitar timeouts en Netlify
+
 
 function extFromName(name) {
   if (!name) return '';
@@ -129,6 +131,8 @@ async function fetchDealFilesFallback(pipedriveBase, token, dealId, dealRefDate)
     for (const f of data) {
       // Excluir remotos/inline
       if (f.remote_id != null || f.remote_location != null) continue;
+      if (out.length >= MAX_FILES) break;
+
 
       // Filtrar por mime/ext
       const file_name = normalizeName(f.file_name || f.name || null);
@@ -151,18 +155,18 @@ async function fetchDealFilesFallback(pipedriveBase, token, dealId, dealRefDate)
       });
     }
 
-    const more = json?.additional_data?.pagination?.more_items_in_collection;
-    if (more) {
-      start = json.additional_data.pagination.next_start;
-    } else {
-      break;
-    }
-  }
-
-  // Dedupe por id
-  const seen = new Set();
-  return out.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)));
+   const more = json?.additional_data?.pagination?.more_items_in_collection;
+if (more && out.length < MAX_FILES) {
+  start = json.additional_data.pagination.next_start;
+} else {
+  break;
 }
+
+
+  const seen = new Set();
+const deduped = out.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)));
+return deduped.slice(0, MAX_FILES);
+
 
 /**
  * Modo inteligente: intenta strict y, si no hay resultados, cae a fallback filtrado.
