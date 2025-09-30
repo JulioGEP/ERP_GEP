@@ -89,9 +89,10 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
         <thead>
           <tr>
             <th scope="col">Presupuesto</th>
+            <th scope="col">Título</th>
             <th scope="col">Cliente</th>
             <th scope="col">Sede</th>
-            <th scope="col">Producto</th>
+            <th scope="col">Formación</th>
           </tr>
         </thead>
         <tbody>
@@ -102,7 +103,11 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
               (budget.dealNumericId != null ? String(budget.dealNumericId) : budget.title || '—');
             const presupuestoTitle = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
             const sedeLabel = budget.sede && budget.sede.trim() ? budget.sede : '—';
-            const clientLabel = budget.clientName || budget.organizationName;
+            const clientLabel =
+              (budget.clientName && budget.clientName.trim()) ||
+              (budget.organizationName && budget.organizationName.trim()) ||
+              '—';
+            const titleLabel = budget.title && budget.title.trim() ? budget.title : '—';
 
             return (
               <tr
@@ -113,6 +118,7 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
                 <td className="fw-semibold" title={presupuestoTitle}>
                   {presupuestoLabel}
                 </td>
+                <td title={budget.title}>{titleLabel}</td>
                 <td>{clientLabel}</td>
                 <td>{sedeLabel}</td>
                 <td title={productInfo.title}>{productInfo.label}</td>
