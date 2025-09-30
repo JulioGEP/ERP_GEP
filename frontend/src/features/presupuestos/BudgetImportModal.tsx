@@ -14,52 +14,49 @@ export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: Budget
 
   useEffect(() => {
     if (show) {
-      setTimeout(() => inputRef.current?.focus(), 180);
+      setDealId('');
+      const t = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(t);
     }
   }, [show]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!dealId.trim()) {
-      return;
-    }
-    onSubmit(dealId.trim());
-  };
+  function handleHide() {
+    if (!isLoading) onClose();
+  }
 
-  const handleHide = () => {
-    setDealId('');
-    onClose();
-  };
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!dealId.trim() || isLoading) return;
+    onSubmit(dealId.trim());
+  }
 
   return (
     <Modal show={show} onHide={handleHide} centered>
-      <Form onSubmit={handleSubmit}>
-        <Modal.Header closeButton className="border-0 pb-0">
-          <Modal.Title className="fw-semibold text-uppercase">Importar presupuesto</Modal.Title>
+      <Form onSubmit={submit}>
+        <Modal.Header closeButton>
+          <Modal.Title>Importar presupuesto</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Form.Group controlId="dealId">
-            <Form.Label className="fw-semibold">Presupuesto (dealId)</Form.Label>
-            <Form.Control
-              ref={inputRef}
-              type="text"
-              placeholder="Ej. 7222"
-              value={dealId}
-              onChange={(event) => setDealId(event.target.value)}
-              disabled={isLoading}
-              autoComplete="off"
-            />
-          </Form.Group>
+          {/* Sin etiqueta redundante */}
+          <Form.Control
+            ref={inputRef}
+            placeholder="Introduce el dealId"
+            value={dealId}
+            onChange={(e) => setDealId(e.target.value)}
+            disabled={isLoading}
+            autoComplete="off"
+          />
         </Modal.Body>
         <Modal.Footer className="border-0 pt-0">
           <Button variant="outline-secondary" onClick={handleHide} disabled={isLoading}>
             Cancelar
           </Button>
           <Button type="submit" variant="primary" disabled={isLoading || !dealId.trim()}>
-            {isLoading ? 'Importando…' : 'Importar presupuesto'}
+            {isLoading ? 'Importando…' : 'Importar'}
           </Button>
         </Modal.Footer>
       </Form>
     </Modal>
   );
 }
+

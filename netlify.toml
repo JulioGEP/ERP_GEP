@@ -1,45 +1,12 @@
 [build]
-  publish = "frontend/dist"
-  command = "npm install && npm run generate && cd frontend && npm install && npm run build"
+command = "npm ci && npm run generate && npm run build"
+publish = "frontend/dist"
 
 [functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
-  external_node_modules = ["@prisma/client", "prisma"]
-  included_files = ["node_modules/.prisma/**"]
+directory = "netlify/functions"
+node_bundler = "esbuild"
+external_node_modules = ["@prisma/client", "prisma", "@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner"]
+included_files = ["node_modules/.prisma/**"]
 
 [build.environment]
-  NODE_VERSION = "20"
-  VITE_API_BASE = "/.netlify/functions"
-  NPM_CONFIG_PRODUCTION = "false"
-  NPM_FLAGS = "--include=dev"
-
-[[redirects]]
-  from = "/api/diag"
-  to   = "/.netlify/functions/diag"
-  status = 200
-
-[[redirects]]
-  from = "/api/health"
-  to   = "/.netlify/functions/health"
-  status = 200
-
-[[redirects]]
-  from = "/api/db_health"
-  to   = "/.netlify/functions/db_health"
-  status = 200
-
-[[redirects]]
-  from = "/api/deals/import"
-  to   = "/.netlify/functions/deals_import"
-  status = 200
-
-[[redirects]]
-  from = "/api/*"
-  to   = "/.netlify/functions/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/*"
-  to   = "/index.html"
-  status = 200
+NODE_VERSION = "20"
