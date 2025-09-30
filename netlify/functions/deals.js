@@ -3,16 +3,14 @@ const { neon } = require('@neondatabase/serverless');
 const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
 const { buildDealPayloadFromRecord } = require('./_shared/dealPayload');
 const { getPrisma } = require('./_shared/prisma');
+const { requireEnv } = require('./_shared/env');
 
 let sqlClient;
 
 function getSqlClient() {
   if (!sqlClient) {
-    const { DATABASE_URL } = process.env;
-    if (!DATABASE_URL) {
-      throw new Error('DATABASE_URL environment variable is not configured');
-    }
-    sqlClient = neon(DATABASE_URL);
+    const databaseUrl = requireEnv('DATABASE_URL');
+    sqlClient = neon(databaseUrl);
   }
   return sqlClient;
 }
@@ -224,6 +222,15 @@ exports.handler = async (event) => {
     });
   } catch (error) {
     console.error(`[${requestId}] deals handler error`, error);
+    if (typeof error?.message === 'string' && error.message.startsWith('ENV_MISSING:')) {
+      return errorResponse({
+        statusCode: 500,
+        errorCode: 'ENV_MISSING',
+        message: error.message,
+        requestId
+      });
+    }
+
     return errorResponse({
       statusCode: 500,
       errorCode: 'UNEXPECTED_ERROR',

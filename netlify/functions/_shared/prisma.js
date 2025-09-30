@@ -1,12 +1,31 @@
 const { PrismaClient } = require('@prisma/client');
+const { requireEnv } = require('./env');
 
-let prisma;
+function createPrismaClient() {
+  requireEnv('DATABASE_URL');
+
+  return new PrismaClient({
+    log: process.env.NODE_ENV === 'production' ? ['error'] : ['query', 'error', 'warn']
+  });
+}
+
+const globalForPrisma = globalThis;
+let prisma = globalForPrisma.__erp_gep_prisma;
 
 function getPrisma() {
   if (!prisma) {
-    prisma = new PrismaClient();
+    prisma = createPrismaClient();
+    if (process.env.NODE_ENV !== 'production') {
+      globalForPrisma.__erp_gep_prisma = prisma;
+    }
   }
+
   return prisma;
 }
 
-module.exports = { getPrisma };
+module.exports = {
+  getPrisma,
+  get prisma() {
+    return getPrisma();
+  }
+};
