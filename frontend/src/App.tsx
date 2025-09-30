@@ -50,8 +50,13 @@ export default function App() {
   const importMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
     onSuccess: (budget) => {
-      setSelectedBudgetSummary(budget);
-      setSelectedBudgetId(budget.dealId);
+      if (budget) {
+        setSelectedBudgetSummary(budget);
+        setSelectedBudgetId(budget.dealId);
+      } else {
+        setSelectedBudgetSummary(null);
+        setSelectedBudgetId(null);
+      }
       pushToast({ variant: 'success', message: 'Presupuesto importado' });
       setShowImportModal(false);
       queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
