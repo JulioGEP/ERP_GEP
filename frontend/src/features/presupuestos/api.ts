@@ -71,7 +71,10 @@ function normalizeDealSummary(row: Json): DealSummary {
         row?.organization?.name
     ) ?? ''
 
-  const sede = toStringValue(row?.sede ?? row?.site ?? row?.location) ?? ''
+  const sede =
+    toStringValue(
+      row?.['676d6bd51e52999c582c01f67c99a35ed30bf6ae'] ?? row?.sede ?? row?.site ?? row?.location
+    ) ?? ''
   const trainingInfo = normalizeTraining(
     row?.training ?? row?.trainingNames ?? row?.training_names ?? row?.producto ?? row?.product
   )
