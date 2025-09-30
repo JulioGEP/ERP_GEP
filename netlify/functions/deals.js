@@ -1,241 +1,139 @@
-const crypto = require('crypto');
-const { neon } = require('@neondatabase/serverless');
 const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
-const { buildDealPayloadFromRecord } = require('./_shared/dealPayload');
 const { getPrisma } = require('./_shared/prisma');
-const { requireEnv } = require('./_shared/env');
 
-let sqlClient;
+const EDITABLE = new Set(['sede','hours','deal_direction','CAES','FUNDAE','Hotel_Night','alumnos']);
 
-function getSqlClient() {
-  if (!sqlClient) {
-    const databaseUrl = requireEnv('DATABASE_URL');
-    sqlClient = neon(databaseUrl);
-  }
-  return sqlClient;
-}
-
-function mapDealRecord(row) {
-  const organization =
-    row.organization_name || row.organization_cif || row.organization_phone || row.organization_address
-      ? {
-          name: row.organization_name ?? 'Organización sin nombre',
-          cif: row.organization_cif ?? null,
-          phone: row.organization_phone ?? null,
-          address: row.organization_address ?? null
-        }
-      : row.organization_name
-        ? { name: row.organization_name }
-        : null;
-
-  return buildDealPayloadFromRecord({
-    id: row.id,
-    organizationId: row.organization_id ?? null,
-    organization,
-    title: row.title,
-    trainingType: row.training_type ?? null,
-    hours: row.hours ?? null,
-    direction: row.direction ?? null,
-    sede: row.sede ?? null,
-    caes: row.caes ?? null,
-    fundae: row.fundae ?? null,
-    hotelNight: row.hotel_night ?? null,
-    training: row.training ?? [],
-    prodExtra: row.prod_extra ?? [],
-    documentsNum: row.documents_num ?? 0,
-    notesNum: row.notes_num ?? 0,
-    createdAt: row.created_at ?? null,
-    updatedAt: row.updated_at ?? null,
-    documents: [],
-    notes: [],
-    participants: []
-  });
-}
-
-async function fetchDeals({ noSessions, requestId }) {
-  const sql = getSqlClient();
-
-  const noSessionsFilter = noSessions
-    ? sql`WHERE NOT EXISTS (SELECT 1 FROM "Session" s WHERE s."dealId" = d.id)`
-    : sql``;
-
-  try {
-    const rows = await sql`
-      SELECT
-        d.id,
-        d."organizationId"          AS organization_id,
-        o.name                       AS organization_name,
-        o.cif                        AS organization_cif,
-        o.phone                      AS organization_phone,
-        o.address                    AS organization_address,
-        d.title,
-        d."trainingType"            AS training_type,
-        d.hours,
-        d.direction                  AS direction,
-        d.sede,
-        d.caes,
-        d.fundae,
-        d."hotelNight"              AS hotel_night,
-        d.training,
-        d."prodExtra"               AS prod_extra,
-        d."documentsNum"            AS documents_num,
-        d."notesNum"                AS notes_num,
-        d."createdAt"               AS created_at,
-        d."updatedAt"               AS updated_at
-      FROM "Deal" d
-      LEFT JOIN "Organization" o ON o.id = d."organizationId"
-      ${noSessionsFilter}
-      ORDER BY d."createdAt" DESC NULLS LAST
-    `;
-
-    return rows.map(mapDealRecord);
-  } catch (error) {
-    console.warn(`[${requestId}] falling back to legacy deals query`, error);
-  }
-
-  try {
-    const rows = await sql`
-      SELECT
-        d.deal_id AS id,
-        d.org_id  AS organization_id,
-        o.name    AS organization_name,
-        d.title,
-        d.value,
-        d.currency
-      FROM deals d
-      LEFT JOIN organizations o ON o.org_id = d.org_id
-      ORDER BY d.deal_id DESC
-    `;
-
-    return rows.map((row) =>
-      buildDealPayloadFromRecord({
-        id: row.id,
-        organizationId: row.organization_id ?? null,
-        organization: row.organization_name ? { name: row.organization_name } : null,
-        title: row.title,
-        trainingType: null,
-        hours: null,
-        direction: null,
-        sede: null,
-        caes: null,
-        fundae: null,
-        hotelNight: null,
-        training: [],
-        prodExtra: [],
-        documentsNum: 0,
-        notesNum: 0,
-        createdAt: null,
-        updatedAt: null,
-        documents: [],
-        notes: [],
-        participants: []
-      })
-    );
-  } catch (error) {
-    console.error(`[${requestId}] legacy deals query failed`, error);
-    throw error;
-  }
-}
-
-function extractDealIdFromPath(path) {
-  if (!path) return null;
-  const normalized = path.split('?')[0].replace(/\/$/, '');
-  const match = normalized.match(/\/deals\/([^/]+)$/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-async function fetchDealDetail(dealId, requestId) {
-  const prisma = getPrisma();
-
-  const record = await prisma.deal.findUnique({
-    where: { id: dealId },
-    include: {
-      organization: true,
-      notes: true,
-      documents: true,
-      participants: { include: { person: true } }
-    }
-  });
-
-  if (!record) {
-    return null;
-  }
-
-  return buildDealPayloadFromRecord(record);
+function dealIdFromPath(path) {
+  const m = path.match(/\/\.netlify\/functions\/deals\/([^\/\?]+)/);
+  return m ? m[1] : null;
 }
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
-  }
-
-  const requestId = crypto.randomUUID();
-
   try {
-    if (event.httpMethod !== 'GET') {
-      return errorResponse({
-        statusCode: 405,
-        errorCode: 'METHOD_NOT_ALLOWED',
-        message: 'Método no permitido',
-        requestId
-      });
-    }
+    if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
 
-    const dealIdFromPath = extractDealIdFromPath(event.path);
-    if (dealIdFromPath) {
-      const dealId = Number(dealIdFromPath);
-      if (!Number.isFinite(dealId)) {
-        return errorResponse({
-          statusCode: 400,
-          errorCode: 'VALIDATION_ERROR',
-          message: 'dealId debe ser numérico',
-          requestId
+    const prisma = getPrisma();
+    const method = event.httpMethod;
+    const path = event.path || '';
+    const dealId = dealIdFromPath(path);
+
+    // === LISTADO para la tabla ===
+    if (method === 'GET' && !dealId) {
+      const wantNoSessions = event.queryStringParameters?.noSessions === 'true';
+
+      const selectCols = {
+        deal_id: true,
+        deal_title: true,
+        organization: { select: { name: true } },
+        sede: true,
+        training: true,
+        created_at: true
+      };
+
+      let rows = [];
+      if (wantNoSessions) {
+        rows = await prisma.deals.findMany({
+          where: { seassons: { none: {} } },
+          select: selectCols,
+          orderBy: { created_at: 'desc' }
+        });
+        // Fallback: si no hay “sin sesiones”, devuelve todos para que la UI no quede vacía.
+        if (rows.length === 0) {
+          rows = await prisma.deals.findMany({
+            select: selectCols,
+            orderBy: { created_at: 'desc' }
+          });
+        }
+      } else {
+        rows = await prisma.deals.findMany({
+          select: selectCols,
+          orderBy: { created_at: 'desc' }
         });
       }
 
-      const detail = await fetchDealDetail(dealId, requestId);
-      if (!detail) {
-        return errorResponse({
-          statusCode: 404,
-          errorCode: 'DEAL_NOT_FOUND',
-          message: 'No se ha encontrado el presupuesto solicitado.',
-          requestId
-        });
+      const mapped = rows.map(d => ({
+        deal_id: d.deal_id,
+        presupuesto: d.deal_title ?? d.deal_id,
+        cliente: d.organization?.name ?? '',
+        sede: d.sede ?? '',
+        producto: d.training ?? ''
+      }));
+
+      return successResponse({ deals: mapped });
+    }
+
+    // === DETALLE ===
+    if (method === 'GET' && dealId) {
+      const deal = await prisma.deals.findUnique({
+        where: { deal_id: dealId },
+        include: {
+          organization: true,
+          documents: true,
+          comments: { orderBy: { created_at: 'desc' } }
+        }
+      });
+      if (!deal) return errorResponse('NOT_FOUND','Deal no encontrado',404);
+      return successResponse({ deal });
+    }
+
+    // === PATCH (solo 7 campos + comentarios del propio autor) ===
+    if (method === 'PATCH' && dealId) {
+      const userId = event.headers['x-user-id'] || event.headers['X-User-Id'];
+      const userName = event.headers['x-user-name'] || event.headers['X-User-Name'];
+      if (!userId) return errorResponse('UNAUTHORIZED','X-User-Id requerido',401);
+      if (!event.body) return errorResponse('VALIDATION_ERROR','Body requerido',400);
+
+      const body = JSON.parse(event.body || '{}');
+      const patch = {};
+      if (body.deal && typeof body.deal === 'object') {
+        for (const k of Object.keys(body.deal)) {
+          if (EDITABLE.has(k)) patch[k] = body.deal[k];
+        }
       }
+      if ('hours' in patch && (isNaN(patch.hours) || Number(patch.hours) < 0)) return errorResponse('VALIDATION_ERROR','hours inválido',400);
+      if ('alumnos' in patch && (isNaN(patch.alumnos) || Number(patch.alumnos) < 0)) return errorResponse('VALIDATION_ERROR','alumnos inválido',400);
 
-      return successResponse({
-        requestId,
-        deal_id: String(dealId),
-        deal: detail
+      const creates = body?.comments?.create ?? [];
+      const updates = body?.comments?.update ?? [];
+
+      await prisma.$transaction(async (tx) => {
+        if (Object.keys(patch).length) {
+          const data = { ...patch };
+          if ('hours' in data) data.hours = Number(data.hours);
+          if ('alumnos' in data) data.alumnos = Number(data.alumnos);
+          await tx.deals.update({ where: { deal_id: dealId }, data });
+        }
+
+        if (creates.length) {
+          const rows = creates
+            .map(c => ({
+              deal_id: dealId,
+              author_id: String(userId),
+              author_name: c.author_name || userName || null,
+              content: String(c.content || '').trim()
+            }))
+            .filter(c => c.content.length > 0);
+          if (rows.length) await tx.comments.createMany({ data: rows });
+        }
+
+        if (updates.length) {
+          for (const u of updates) {
+            const row = await tx.comments.findUnique({ where: { comment_id: u.comment_id } });
+            if (!row) throw new Error('COMMENT_NOT_FOUND');
+            if (row.author_id !== String(userId)) throw new Error('FORBIDDEN_COMMENT_EDIT');
+            await tx.comments.update({ where: { comment_id: u.comment_id }, data: { content: String(u.content || '').trim() } });
+          }
+        }
       });
+
+      return successResponse();
     }
 
-    const noSessionsRaw = event.queryStringParameters?.noSessions ?? event.queryStringParameters?.no_sessions;
-    const noSessions = typeof noSessionsRaw === 'string' ? noSessionsRaw.toLowerCase() === 'true' : false;
-
-    const deals = await fetchDeals({ noSessions, requestId });
-
-    return successResponse({
-      requestId,
-      count: deals.length,
-      deals
-    });
-  } catch (error) {
-    console.error(`[${requestId}] deals handler error`, error);
-    if (typeof error?.message === 'string' && error.message.startsWith('ENV_MISSING:')) {
-      return errorResponse({
-        statusCode: 500,
-        errorCode: 'ENV_MISSING',
-        message: error.message,
-        requestId
-      });
-    }
-
-    return errorResponse({
-      statusCode: 500,
-      errorCode: 'UNEXPECTED_ERROR',
-      message: error instanceof Error ? error.message : 'Error inesperado',
-      requestId
-    });
+    return errorResponse('NOT_IMPLEMENTED','Ruta o método no soportado',404);
+  } catch (e) {
+    const msg = e?.message || 'Unexpected';
+    if (msg === 'COMMENT_NOT_FOUND') return errorResponse('NOT_FOUND','Comentario no existe',404);
+    if (msg === 'FORBIDDEN_COMMENT_EDIT') return errorResponse('FORBIDDEN','No puedes editar comentarios de otros',403);
+    return errorResponse('UNEXPECTED_ERROR', msg, 500);
   }
 };

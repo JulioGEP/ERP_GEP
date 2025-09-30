@@ -1,26 +1,18 @@
-// ========= Prisma Schema (PostgreSQL/Neon) =========
-// Proveedor y conexión
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Generador de cliente
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
-
-// =============== ENUMS =============================
 
 enum DocumentOrigin {
   imported
   user_upload
 }
 
-// =============== MODELOS ===========================
-
-// Organización (Cliente)
 model Organizations {
   org_id     String   @id
   name       String
@@ -28,15 +20,15 @@ model Organizations {
   telf_org   String?
   address    String?
 
-  // Relaciones
   persons    Persons[]
   deals      Deals[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@map("organizations")
 }
 
-// Personas de contacto
 model Persons {
   person_id      String   @id
   person_org_id  String?
@@ -45,16 +37,15 @@ model Persons {
   email          String?
   phone          String?
 
-  // Relaciones
   organization   Organizations? @relation(fields: [person_org_id], references: [org_id])
 
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
   @@index([person_org_id])
+  @@map("persons")
 }
 
-// Presupuestos / Deals (fuente de verdad para la tabla “Presupuestos”)
 model Deals {
   deal_id         String   @id
   deal_title      String?
@@ -69,7 +60,6 @@ model Deals {
   Hotel_Night     Boolean? @default(false)
   alumnos         Int?     @default(0)
 
-  // Relaciones
   organization    Organizations? @relation(fields: [deal_org_id], references: [org_id])
   documents       Documents[]
   comments        Comments[]
@@ -80,9 +70,9 @@ model Deals {
   updated_at      DateTime @updatedAt
 
   @@index([deal_org_id])
+  @@map("deals")
 }
 
-// Comentarios (editables solo por su autor; listables por todos)
 model Comments {
   comment_id  String   @id @default(cuid())
   deal_id     String
@@ -96,9 +86,9 @@ model Comments {
 
   @@index([deal_id])
   @@index([author_id])
+  @@map("comments")
 }
 
-// Documentos (importados vs subidos por usuario)
 model Documents {
   doc_id      String         @id @default(cuid())
   deal_id     String
@@ -114,9 +104,9 @@ model Documents {
 
   @@index([deal_id])
   @@index([origin])
+  @@map("documents")
 }
 
-// Notas heredadas (si ya las usas; si no, puedes ignorar)
 model Notes {
   notes_id     String   @id @default(cuid())
   deal_id      String
@@ -126,9 +116,9 @@ model Notes {
   deal         Deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
 
   @@index([deal_id])
+  @@map("notes")
 }
 
-// Sesiones (planificación de la formación)
 model Seassons {
   seasson_id        String   @id @default(cuid())
   deal_id           String
@@ -144,9 +134,9 @@ model Seassons {
   deal              Deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
 
   @@index([deal_id])
+  @@map("seassons")
 }
 
-// Formadores (para futuras asignaciones)
 model Trainers {
   trainer_id String  @id @default(cuid())
   name       String
@@ -155,9 +145,10 @@ model Trainers {
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@map("trainers")
 }
 
-// Unidades Móviles (inventario/logística)
 model UnidadesMoviles {
   unidad_id       String  @id @default(cuid())
   name            String?
@@ -166,4 +157,6 @@ model UnidadesMoviles {
 
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
+
+  @@map("unidades_moviles")
 }
