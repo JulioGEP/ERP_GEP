@@ -3,8 +3,8 @@ const crypto = require('crypto');
 const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
 const { buildDealPayloadFromRecord } = require('./_shared/dealPayload');
 const { getPrisma } = require('./_shared/prisma');
+const { requireEnv } = require('./_shared/env');
 
-const PIPEDRIVE_API_TOKEN = (process.env.PIPEDRIVE_API_TOKEN || '').trim();
 const PIPEDRIVE_HOSTS = ['https://api.pipedrive.com/v1', 'https://api-eu.pipedrive.com/v1'];
 
 const DEAL_CUSTOM_FIELDS = {
@@ -72,12 +72,25 @@ function parseDealId(event) {
   }
 }
 
+let cachedPipedriveToken;
+
+function getPipedriveToken() {
+  if (!cachedPipedriveToken) {
+    const token = requireEnv('PIPEDRIVE_API_TOKEN').trim();
+    if (!token) {
+      throw new Error('ENV_MISSING:PIPEDRIVE_API_TOKEN');
+    }
+    cachedPipedriveToken = token;
+  }
+  return cachedPipedriveToken;
+}
+
 async function callPipedrive(path, requestId, context) {
   const attempts = [];
 
   for (const host of PIPEDRIVE_HOSTS) {
     const separator = path.includes('?') ? '&' : '?';
-    const url = `${host}${path}${separator}api_token=${encodeURIComponent(PIPEDRIVE_API_TOKEN)}`;
+    const url = `${host}${path}${separator}api_token=${encodeURIComponent(getPipedriveToken())}`;
     const start = Date.now();
 
     try {
@@ -243,6 +256,8 @@ exports.handler = async (event) => {
   }
 
   const requestId = crypto.randomUUID();
+  const timerLabel = `deals_import:${requestId}`;
+  console.time(timerLabel);
 
   try {
     if (event.httpMethod !== 'POST') {
@@ -264,16 +279,9 @@ exports.handler = async (event) => {
       });
     }
 
-    if (!PIPEDRIVE_API_TOKEN) {
-      return errorResponse({
-        statusCode: 500,
-        errorCode: 'CONFIGURATION_ERROR',
-        message: 'PIPEDRIVE_API_TOKEN no configurado',
-        requestId
-      });
-    }
+    getPipedriveToken();
 
-    console.debug(`[${requestId}] Import deal ${dealIdInput}`);
+    console.info(`[${requestId}] Import deal ${dealIdInput}`);
 
     const dealResponse = await callPipedrive(`/deals/${encodeURIComponent(dealIdInput)}?include_products=1`, requestId, {
       label: `deal ${dealIdInput}`
@@ -537,6 +545,8 @@ exports.handler = async (event) => {
 
     const payload = buildDealPayloadFromRecord(persisted);
 
+    console.info(`[${requestId}] Import completed for deal ${dealId}`);
+
     return successResponse({
       requestId,
       deal_id: String(dealId),
@@ -544,6 +554,15 @@ exports.handler = async (event) => {
     });
   } catch (error) {
     console.error(`[${requestId}] deals_import error`, error);
+
+    if (typeof error?.message === 'string' && error.message.startsWith('ENV_MISSING:')) {
+      return errorResponse({
+        statusCode: 500,
+        errorCode: 'ENV_MISSING',
+        message: error.message,
+        requestId
+      });
+    }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       const target = Array.isArray(error.meta?.target)
@@ -577,5 +596,7 @@ exports.handler = async (event) => {
       message: error instanceof Error ? error.message : 'Error inesperado',
       requestId
     });
+  } finally {
+    console.timeEnd(timerLabel);
   }
 };

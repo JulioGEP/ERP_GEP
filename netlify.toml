@@ -1,10 +1,12 @@
 [build]
   publish = "frontend/dist"
-  command = "npm install && cd frontend && npm install && npm run build"
+  command = "npm install && npm run generate && cd frontend && npm install && npm run build"
 
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+  external_node_modules = ["@prisma/client", "prisma"]
+  included_files = ["node_modules/.prisma/**"]
 
 [build.environment]
   NODE_VERSION = "20"
@@ -20,6 +22,11 @@
 [[redirects]]
   from = "/api/health"
   to   = "/.netlify/functions/health"
+  status = 200
+
+[[redirects]]
+  from = "/api/db_health"
+  to   = "/.netlify/functions/db_health"
   status = 200
 
 [[redirects]]
