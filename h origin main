@@ -1,0 +1,18 @@
+* [33mebd6cb1[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m fix(files): reemplaza TS por JS y usa /deals/{id}/files estricto
+[31m|[m * [33ma71eabd[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Remove budgets refresh button (#32)
+[31m|[m[31m/[m  
+[31m|[m * [33mc3c365c[m[33m ([m[1;31morigin/codex/remove-refresh-button-from-budget-table[m[33m)[m Remove budgets refresh button
+[31m|[m[31m/[m  
+* [33mfa9b683[m Ensure timestamp defaults in importer schema (#31)
+[33m|[m * [33m4f49e47[m[33m ([m[1;31morigin/codex/fix-import-error-related-to-updated_at[m[33m)[m Ensure timestamp defaults in importer schema
+[33m|[m[33m/[m  
+* [33m90750ad[m feat: show detailed budget columns (#30)
+* [33m6e792d1[m feat: enrich deals import from pipedrive (#29)
+[34m|[m * [33ma66b6d0[m[33m ([m[1;31morigin/codex/visualize-budget-fields-in-table[m[33m)[m feat: show detailed budget columns
+[34m|[m[34m/[m  
+[34m|[m * [33md4babdf[m[33m ([m[1;31morigin/codex/fix-data-import-to-handle-api-responses[m[33m)[m feat: enrich deals import from pipedrive
+[34m|[m[34m/[m  
+* [33m435c852[m Fix budget summary display and modal details (#28)
+[36m|[m * [33mf94e212[m[33m ([m[1;31morigin/codex/add-missing-fields-to-budget-tables[m[33m)[m Fix budget summary display and modal details
+[36m|[m[36m/[m  
+* [33m8eeeabc[m Fix budget list normalization and import flow (#27)
