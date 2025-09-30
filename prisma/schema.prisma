@@ -1,140 +1,169 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
+// ========= Prisma Schema (PostgreSQL/Neon) =========
+// Proveedor y conexión
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model Organization {
-  id        Int       @id
-  name      String
-  cif       String?   @db.VarChar(255)
-  phone     String?   @db.VarChar(255)
-  address   String?   @db.Text
-  persons   Person[]
-  deals     Deal[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+// Generador de cliente
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
-model Person {
-  id             Int             @id
-  organizationId Int
-  organization   Organization    @relation(fields: [organizationId], references: [id])
-  firstName      String?         @db.VarChar(255)
-  lastName       String?         @db.VarChar(255)
-  email          String?         @db.VarChar(255)
-  phone          String?         @db.VarChar(255)
-  participants   DealParticipant[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+// =============== ENUMS =============================
+
+enum DocumentOrigin {
+  imported
+  user_upload
 }
 
-model Deal {
-  id              Int               @id
-  organizationId  Int
-  organization    Organization      @relation(fields: [organizationId], references: [id])
-  title           String
-  trainingType    String?           @db.VarChar(255)
-  hours           Int?
-  direction       String?           @db.VarChar(255)
-  sede            String?           @db.VarChar(255)
-  caes            String?           @db.VarChar(255)
-  fundae          String?           @db.VarChar(255)
-  hotelNight      String?           @db.VarChar(255)
-  alumnos         Int?              @default(0)
-  training        Json?
-  prodExtra       Json?
-  documentsNum    Int?              @default(0)
-  documentsIds    String?           @db.Text
-  sessionsNum     Int?              @default(0)
-  sessionsIds     String?           @db.Text
-  notesNum        Int?              @default(0)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  notes           Note[]
-  documents       Document[]
-  sessions        Session[]
-  participants    DealParticipant[]
+// =============== MODELOS ===========================
+
+// Organización (Cliente)
+model Organizations {
+  org_id     String   @id
+  name       String
+  CIF        String?
+  telf_org   String?
+  address    String?
+
+  // Relaciones
+  persons    Persons[]
+  deals      Deals[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 }
 
-model Note {
-  id        Int      @id
-  dealId    Int
-  deal      Deal     @relation(fields: [dealId], references: [id])
-  comment   String
-  createdAt DateTime @default(now())
+// Personas de contacto
+model Persons {
+  person_id      String   @id
+  person_org_id  String?
+  first_name     String?
+  last_name      String?
+  email          String?
+  phone          String?
+
+  // Relaciones
+  organization   Organizations? @relation(fields: [person_org_id], references: [org_id])
+
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([person_org_id])
 }
 
-model Document {
-  id        Int      @id
-  dealId    Int
-  deal      Deal     @relation(fields: [dealId], references: [id])
-  title     String
-  url       String?  @db.Text
-  createdAt DateTime @default(now())
+// Presupuestos / Deals (fuente de verdad para la tabla “Presupuestos”)
+model Deals {
+  deal_id         String   @id
+  deal_title      String?
+  deal_org_id     String?
+  training        String?
+  hours           Int?     @default(0)
+  deal_direction  String?
+  sede            String?
+
+  CAES            Boolean? @default(false)
+  FUNDAE          Boolean? @default(false)
+  Hotel_Night     Boolean? @default(false)
+  alumnos         Int?     @default(0)
+
+  // Relaciones
+  organization    Organizations? @relation(fields: [deal_org_id], references: [org_id])
+  documents       Documents[]
+  comments        Comments[]
+  notes           Notes[]
+  seassons        Seassons[]
+
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([deal_org_id])
 }
 
-model Session {
-  id                String             @id
-  dealId            Int
-  deal              Deal               @relation(fields: [dealId], references: [id])
-  status            String?            @db.VarChar(255)
-  dateStart         DateTime?
-  dateEnd           DateTime?
-  sede              String?            @db.VarChar(255)
-  address           String?            @db.Text
-  firemanId         String?            @db.VarChar(255)
-  vehicleId         String?            @db.VarChar(255)
-  comment           String?            @db.Text
-  trainers          SessionTrainer[]
-  mobileUnits       SessionMobileUnit[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+// Comentarios (editables solo por su autor; listables por todos)
+model Comments {
+  comment_id  String   @id @default(cuid())
+  deal_id     String
+  author_id   String
+  author_name String?
+  content     String
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  deal        Deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+
+  @@index([deal_id])
+  @@index([author_id])
 }
 
-model Trainer {
-  id        String            @id
-  name      String
-  sessions  SessionTrainer[]
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+// Documentos (importados vs subidos por usuario)
+model Documents {
+  doc_id      String         @id @default(cuid())
+  deal_id     String
+  file_name   String
+  file_size   Int
+  mime_type   String?
+  storage_key String
+  origin      DocumentOrigin @default(imported)
+  uploaded_by String?
+  created_at  DateTime       @default(now())
+
+  deal        Deals          @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+
+  @@index([deal_id])
+  @@index([origin])
 }
 
-model MobileUnit {
-  id        String              @id
-  name      String
-  sessions  SessionMobileUnit[]
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
+// Notas heredadas (si ya las usas; si no, puedes ignorar)
+model Notes {
+  notes_id     String   @id @default(cuid())
+  deal_id      String
+  comment_deal String
+  created_at   DateTime @default(now())
+
+  deal         Deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+
+  @@index([deal_id])
 }
 
-model SessionTrainer {
-  sessionId String
-  trainerId String
-  session   Session @relation(fields: [sessionId], references: [id])
-  trainer   Trainer @relation(fields: [trainerId], references: [id])
+// Sesiones (planificación de la formación)
+model Seassons {
+  seasson_id        String   @id @default(cuid())
+  deal_id           String
+  status            String?
+  date_start        DateTime?
+  date_end          DateTime?
+  sede              String?
+  seasson_address   String?
+  seasson_fireman   String?
+  seasson_vehicle   String?
+  comment_seasson   String?
 
-  @@id([sessionId, trainerId])
+  deal              Deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+
+  @@index([deal_id])
 }
 
-model SessionMobileUnit {
-  sessionId String
-  mobileId  String
-  session   Session    @relation(fields: [sessionId], references: [id])
-  mobile    MobileUnit @relation(fields: [mobileId], references: [id])
+// Formadores (para futuras asignaciones)
+model Trainers {
+  trainer_id String  @id @default(cuid())
+  name       String
+  email      String?
+  phone      String?
 
-  @@id([sessionId, mobileId])
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 }
 
-model DealParticipant {
-  dealId   Int
-  personId Int
-  role     String? @db.VarChar(255)
-  deal     Deal    @relation(fields: [dealId], references: [id])
-  person   Person  @relation(fields: [personId], references: [id])
+// Unidades Móviles (inventario/logística)
+model UnidadesMoviles {
+  unidad_id       String  @id @default(cuid())
+  name            String?
+  plate           String?
+  capacity_liters Int?
 
-  @@id([dealId, personId])
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
 }
