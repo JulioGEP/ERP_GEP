@@ -1,5 +1,6 @@
 // netlify/functions/deals_import.js
 // Importa un deal de Pipedrive, normaliza y persiste en Postgres Neon (serverless).
+
 const crypto = require('crypto');
 const fetch = global.fetch || require('node-fetch');
 
@@ -7,11 +8,10 @@ const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/re
 const { requireEnv } = require('./_shared/env');
 const { neon } = require('@neondatabase/serverless');
 
-// NUEVO: módulo estricto de ficheros del deal
-const { fetchDealFilesStrict } = require('./lib/pipedriveFiles');
+// NUEVO: modo "smart" con fallback si /deals/{id}/files viene vacío
+const { fetchDealFilesSmart } = require('./lib/pipedriveFiles');
 
-// Marca de versión para saber qué handler está desplegado
-const IMPORTER_VERSION = 'files.strict.2025-09-30.3';
+const IMPORTER_VERSION = 'files.smart.2025-09-30.4';
 
 // --- Constantes de mapeo de campos personalizados ---
 const ORG_CUSTOM_FIELDS = {
@@ -75,7 +75,9 @@ async function pipedriveGet(path, params, client) {
   url.searchParams.set('api_token', client.token);
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
+      if (value !== undefined && value !== null) {
+        url.searchParams.set(key, String(value));
+      }
     });
   }
 
@@ -129,7 +131,6 @@ async function fetchDealNotes(dealId, client) {
 }
 
 // --- LEGACY (NO USAR) ---
-// Se mantiene por compatibilidad; no se llama en el handler.
 async function fetchDealFilesLegacy(dealId, client) {
   const res = await pipedriveGet('/files', { deal_id: dealId, start: 0, limit: 500 }, client);
   if (!res.ok) throw createError('PIPEDRIVE_FILES_ERROR', `No se pudieron recuperar los documentos del deal ${dealId}`, res.status || 502);
@@ -389,7 +390,6 @@ exports.handler = async (event) => {
       fetchPerson(personId, client),
       fetchDealProducts(dealId, client),
       fetchDealNotes(dealId, client),
-      // OJO: NO llamamos a fetchDealFilesLegacy aquí
     ]);
 
     // 2) DB
@@ -530,17 +530,19 @@ exports.handler = async (event) => {
       noteSummaries.push({ id: noteId, product_id: pinnedProductId, has_product_link: Boolean(pinnedProductId) });
     }
 
-    // 8) Ficheros (vía estricta /deals/{id}/files)  <<--- CLAVE
-    const strictFiles = await fetchDealFilesStrict(pipedriveBase(), PIPEDRIVE_API_TOKEN, Number(dealId));
+    // 8) Ficheros (modo inteligente: strict -> fallback)
+    const refDate = deal.add_time || deal.update_time || null;
+    const { source: filesSource, files: smartFiles } =
+      await fetchDealFilesSmart(pipedriveBase(), PIPEDRIVE_API_TOKEN, Number(dealId), refDate);
 
     const fileSummaries = [];
-    for (const file of strictFiles) {
+    for (const file of smartFiles) {
       const fileId = toNullableString(file.id);
       if (!fileId) continue;
       const fileName = toNullableString(file.file_name ?? file.name);
       const fileUrl = toNullableString(file.file_url ?? file.url ?? file.public_url ?? file.download_url);
       const fileType = toNullableString(file.file_type ?? file.mime_type);
-      const productId = null; // /deals/{id}/files no trae vínculo a línea de producto
+      const productId = null; // no vínculo a línea de producto
       const addedAt = file.add_time ? new Date(file.add_time) : null;
 
       await sql`
@@ -574,7 +576,7 @@ exports.handler = async (event) => {
       training_sessions: trainingSessions,
       notes: noteSummaries,
       files: fileSummaries,
-      filesSource: 'deals_files_strict_v1',
+      filesSource,
     };
 
     return successResponse({ ok: true, deal_id: String(dealId), summary }, 200);
