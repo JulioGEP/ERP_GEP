@@ -3,22 +3,17 @@
 
 const crypto = require('crypto');
 const fetch = global.fetch || require('node-fetch');
-
 const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
 const { requireEnv } = require('./_shared/env');
 const { neon } = require('@neondatabase/serverless');
-
 // NUEVO: modo "smart" con fallback si /deals/{id}/files viene vacío
 const { fetchDealFilesSmart } = require('./lib/pipedriveFiles');
-
-const IMPORTER_VERSION = 'files.smart.2025-09-30.11';
-
+const IMPORTER_VERSION = 'files.smart.2025-09-30.12';
 // --- Constantes de mapeo de campos personalizados ---
 const ORG_CUSTOM_FIELDS = {
   cif: '6d39d015a33921753410c1bab0b067ca93b8cf2c',
   phone: 'b4379db06dfbe0758d84c2c2dd45ef04fa093b6d',
 };
-
 const DEAL_CUSTOM_FIELDS = {
   hours: '38f11c8876ecde803a027fbf3c9041fda2ae7eb7',
   trainingAddress: '8b2a7570f5ba8aa4754f061cd9dc92fd778376a7',

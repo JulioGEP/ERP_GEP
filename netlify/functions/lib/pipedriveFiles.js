@@ -4,13 +4,8 @@
 
 const fetch = global.fetch || require('node-fetch');
 const DEFAULT_FETCH_TIMEOUT_MS = 4500;
-
 const ALLOWED_MIME = new Set([
   'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/heic',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
   'application/vnd.ms-excel',
@@ -20,13 +15,7 @@ const ALLOWED_MIME = new Set([
   'text/csv',
   'application/rtf',
 ]);
-
-const ALLOWED_EXT = new Set([
-  'pdf','png','jpg','jpeg','heic',
-  'doc','docx','xls','xlsx','ppt','pptx',
-  'csv','rtf'
-]);
-
+const ALLOWED_EXT = new Set(['pdf','doc','docx','xls','xlsx','ppt','pptx','csv','rtf']);
 const MAX_FILES = 20; // límite duro para evitar timeouts en Netlify
 
 function extFromName(name) {
@@ -66,9 +55,7 @@ async function pdGet(url) {
   }
 }
 
-/**
- * Strict: /deals/{id}/files
- */
+// Strict: /deals/{id}/files — permite S3, descarta inline y remotos "url", solo documentos (pdf/office)
 async function fetchDealFilesStrictOnly(pipedriveBase, token, dealId) {
   const out = [];
   let start = 0;
@@ -80,22 +67,25 @@ async function fetchDealFilesStrictOnly(pipedriveBase, token, dealId) {
     const data = Array.isArray(json?.data) ? json.data : [];
 
     for (const f of data) {
-      // Defensa extra
-      if (f.deal_id != null && Number(f.deal_id) !== Number(dealId)) continue;
-      if (f.activity_id != null) continue; // no adjuntos de actividades
-      if (f.remote_location === 'url') continue;
+      if (out.length >= MAX_FILES) break;
+
+      // filtros estrictos
+      if (f.inline_flag === true) continue;
+      if (String(f.remote_location || '').toLowerCase() === 'url') continue;
 
       const file_name = normalizeName(f.file_name || f.name || null);
+      const file_type = f.file_type || f.mime_type || '';
+      if (!isAllowedByMimeOrExt(file_type, file_name)) continue;
+
       const file_url = f.file_url ?? f.url ?? null;
 
       out.push({
         id: Number(f.id),
         file_name,
-        file_type: f.file_type || null,
+        file_type: file_type || null,
         file_url: file_url || null,
         add_time: f.add_time || null,
       });
-      if (out.length >= MAX_FILES) break;
     }
 
     if (out.length >= MAX_FILES) break;
@@ -108,7 +98,7 @@ async function fetchDealFilesStrictOnly(pipedriveBase, token, dealId) {
     }
   }
 
-  // Dedupe por id y cap
+  // Dedupe por id y cap final
   const seen = new Set();
   const deduped = out.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)));
   return deduped.slice(0, MAX_FILES);
