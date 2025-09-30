@@ -7,14 +7,22 @@ const ALLOWED_MIME = new Set([
   'application/pdf',
   'image/png',
   'image/jpeg',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
   'application/msword', // doc
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
   'application/vnd.ms-excel', // xls
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
+  'application/vnd.ms-powerpoint', // ppt
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // pptx
   'text/csv',
 ]);
 
-const ALLOWED_EXT = new Set(['pdf', 'png', 'jpg', 'jpeg', 'doc', 'docx', 'xls', 'xlsx', 'csv']);
+const ALLOWED_EXT = new Set([
+  'pdf', 'png', 'jpg', 'jpeg',
+  'doc', 'docx',
+  'xls', 'xlsx',
+  'ppt', 'pptx',
+  'csv',
+]);
 
 function extFromName(name) {
   if (!name) return '';
@@ -129,9 +137,10 @@ async function fetchDealFilesFallback(pipedriveBase, token, dealId, dealRefDate)
 
       // Ventana temporal
       const add_time = f.add_time || f.update_time || null;
-      if (!inDateWindow(add_time, dealRefDate, 365)) continue;
 
-      const file_url = f.file_url ?? f.url ?? f.public_url ?? f.download_url ?? null;
+      const file_url =
+  f.file_url ?? f.url ?? f.public_url ?? f.download_url ??
+  `${pipedriveBase}/files/${f.id}/download?api_token=${token}`;
 
       out.push({
         id: Number(f.id),
@@ -168,7 +177,7 @@ async function fetchDealFilesSmart(pipedriveBase, token, dealId, dealRefDate = n
     return { source: 'deals_files_strict_v1', files: strict };
   }
   const fb = await fetchDealFilesFallback(pipedriveBase, token, dealId, dealRefDate);
-  return { source: 'files_fallback_v1', files: fb };
+  return { source: 'files_fallback_v2', files: fb };
 }
 
 module.exports = {
