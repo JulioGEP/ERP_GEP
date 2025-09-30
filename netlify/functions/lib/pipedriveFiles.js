@@ -1,10 +1,9 @@
 // netlify/functions/lib/pipedriveFiles.js
-// Módulo CommonJS para traer SOLO adjuntos reales del deal desde /deals/{id}/files
-// y hacer upsert en Neon (si alguna vez usamos pg PoolClient).
+// Trae SOLO adjuntos reales del deal desde /deals/{id}/files (no remotos, no actividades)
 const fetch = global.fetch || require('node-fetch');
 
 /**
- * Trae solo ficheros adjuntos al deal desde /deals/{id}/files,
+ * Trae ficheros adjuntos al deal desde /deals/{id}/files,
  * excluye remotos (Drive/Gravatar), excluye adjuntos de actividades,
  * y sanea el file_name (quita querystrings).
  */
@@ -61,60 +60,4 @@ async function fetchDealFilesStrict(pipedriveBase, token, dealId) {
   return out.filter(f => (seen.has(f.id) ? false : (seen.add(f.id), true)));
 }
 
-/**
- * Upsert en Neon usando un PoolClient de 'pg'.
- * En este proyecto usamos 'neon(sql)' en el handler, por lo que
- * normalmente NO llamamos a esta función desde deals_import.js.
- * Se deja disponible si más adelante migramos a pg PoolClient.
- */
-async function upsertDealFiles(pgClient, dealId, files) {
-  await pgClient.query(`
-    CREATE TABLE IF NOT EXISTS deal_files (
-      id BIGINT PRIMARY KEY,
-      deal_id BIGINT NOT NULL,
-      product_id BIGINT NULL,
-      file_name TEXT NOT NULL,
-      file_url TEXT NULL,
-      file_type TEXT NULL,
-      added_at TIMESTAMPTZ NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-  `);
-
-  for (const f of files) {
-    await pgClient.query(
-      `
-      INSERT INTO deal_files (id, deal_id, product_id, file_name, file_url, file_type, added_at, created_at, updated_at)
-      VALUES ($1, $2, NULL, $3, $4, $5, $6, now(), now())
-      ON CONFLICT (id) DO UPDATE
-      SET deal_id = EXCLUDED.deal_id,
-          product_id = NULL,
-          file_name = EXCLUDED.file_name,
-          file_url = EXCLUDED.file_url,
-          file_type = EXCLUDED.file_type,
-          added_at = EXCLUDED.added_at,
-          updated_at = now();
-      `,
-      [
-        f.id,
-        Number(dealId),
-        f.file_name || '',
-        f.file_url || null,
-        f.file_type || null,
-        f.add_time ? new Date(f.add_time) : null,
-      ]
-    );
-  }
-
-  const ids = files.map(f => f.id);
-  await pgClient.query(
-    `DELETE FROM deal_files WHERE deal_id = $1 AND id <> ALL($2::bigint[])`,
-    [Number(dealId), ids.length ? ids : [0]]
-  );
-}
-
-module.exports = {
-  fetchDealFilesStrict,
-  upsertDealFiles,
-};
+module.exports = { fetchDealFilesStrict };

@@ -1,6 +1,5 @@
 // netlify/functions/deals_import.js
-// Importa un deal de Pipedrive, normaliza campos personalizados y persiste en Postgres Neon.
-
+// Importa un deal de Pipedrive, normaliza y persiste en Postgres Neon (serverless).
 const crypto = require('crypto');
 const fetch = global.fetch || require('node-fetch');
 
@@ -8,8 +7,11 @@ const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/re
 const { requireEnv } = require('./_shared/env');
 const { neon } = require('@neondatabase/serverless');
 
-// Nuevo módulo: SOLO adjuntos reales del deal desde /deals/{id}/files
+// NUEVO: módulo estricto de ficheros del deal
 const { fetchDealFilesStrict } = require('./lib/pipedriveFiles');
+
+// Marca de versión para saber qué handler está desplegado
+const IMPORTER_VERSION = 'files.strict.2025-09-30.3';
 
 // --- Constantes de mapeo de campos personalizados ---
 const ORG_CUSTOM_FIELDS = {
@@ -43,9 +45,7 @@ function readDealId(event) {
     try {
       const parsed = JSON.parse(rawBody);
       if (parsed?.dealId) return String(parsed.dealId).trim();
-    } catch (_) {
-      // Ignorado, se validará posteriormente.
-    }
+    } catch (_) {}
   }
   return null;
 }
@@ -75,24 +75,18 @@ async function pipedriveGet(path, params, client) {
   url.searchParams.set('api_token', client.token);
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, String(value));
-      }
+      if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
     });
   }
 
   let res;
   try {
     res = await fetch(url.toString(), { method: 'GET', headers: { Accept: 'application/json' } });
-  } catch (networkErr) {
+  } catch (_) {
     throw createError('PIPEDRIVE_FETCH_ERROR', `No se pudo conectar con Pipedrive (${path})`, 502);
   }
   let json = null;
-  try {
-    json = await res.json();
-  } catch (_) {
-    json = null;
-  }
+  try { json = await res.json(); } catch (_) {}
   const ok = res.ok && json && json.success !== false;
   return { ok, status: res.status, body: json };
 }
@@ -110,9 +104,7 @@ async function fetchOrganization(orgId, client) {
   if (!orgId) return null;
   const res = await pipedriveGet(`/organizations/${encodeURIComponent(orgId)}`, {}, client);
   if (res.status === 404) return null;
-  if (!res.ok) {
-    throw createError('PIPEDRIVE_ORG_ERROR', `No se pudo recuperar la organización ${orgId}`, res.status || 502);
-  }
+  if (!res.ok) throw createError('PIPEDRIVE_ORG_ERROR', `No se pudo recuperar la organización ${orgId}`, res.status || 502);
   return res.body?.data || null;
 }
 
@@ -120,50 +112,36 @@ async function fetchPerson(personId, client) {
   if (!personId) return null;
   const res = await pipedriveGet(`/persons/${encodeURIComponent(personId)}`, {}, client);
   if (res.status === 404) return null;
-  if (!res.ok) {
-    throw createError('PIPEDRIVE_PERSON_ERROR', `No se pudo recuperar la persona ${personId}`, res.status || 502);
-  }
+  if (!res.ok) throw createError('PIPEDRIVE_PERSON_ERROR', `No se pudo recuperar la persona ${personId}`, res.status || 502);
   return res.body?.data || null;
 }
 
 async function fetchDealProducts(dealId, client) {
   const res = await pipedriveGet(`/deals/${encodeURIComponent(dealId)}/products`, { limit: 500 }, client);
-  if (!res.ok) {
-    throw createError('PIPEDRIVE_PRODUCTS_ERROR', `No se pudieron recuperar los productos del deal ${dealId}`, res.status || 502);
-  }
+  if (!res.ok) throw createError('PIPEDRIVE_PRODUCTS_ERROR', `No se pudieron recuperar los productos del deal ${dealId}`, res.status || 502);
   return Array.isArray(res.body?.data) ? res.body.data : [];
 }
 
 async function fetchDealNotes(dealId, client) {
   const res = await pipedriveGet('/notes', { deal_id: dealId, start: 0, limit: 500 }, client);
-  if (!res.ok) {
-    throw createError('PIPEDRIVE_NOTES_ERROR', `No se pudieron recuperar las notas del deal ${dealId}`, res.status || 502);
-  }
+  if (!res.ok) throw createError('PIPEDRIVE_NOTES_ERROR', `No se pudieron recuperar las notas del deal ${dealId}`, res.status || 502);
   return Array.isArray(res.body?.data) ? res.body.data : [];
 }
 
-// --- LEGACY (NO USAR): devolvía "ruido" porque /files?deal_id= trae remotos/inline ---
-// Se mantiene por compatibilidad de código, pero NO se llama.
+// --- LEGACY (NO USAR) ---
+// Se mantiene por compatibilidad; no se llama en el handler.
 async function fetchDealFilesLegacy(dealId, client) {
   const res = await pipedriveGet('/files', { deal_id: dealId, start: 0, limit: 500 }, client);
-  if (!res.ok) {
-    throw createError('PIPEDRIVE_FILES_ERROR', `No se pudieron recuperar los documentos del deal ${dealId}`, res.status || 502);
-  }
+  if (!res.ok) throw createError('PIPEDRIVE_FILES_ERROR', `No se pudieron recuperar los documentos del deal ${dealId}`, res.status || 502);
   return Array.isArray(res.body?.data) ? res.body.data : [];
 }
 
 async function fetchDealFields(client) {
   const res = await pipedriveGet('/dealFields', { limit: 500 }, client);
-  if (!res.ok) {
-    throw createError('PIPEDRIVE_FIELDS_ERROR', 'No se pudo recuperar el catálogo de campos de deals', res.status || 502);
-  }
+  if (!res.ok) throw createError('PIPEDRIVE_FIELDS_ERROR', 'No se pudo recuperar el catálogo de campos de deals', res.status || 502);
   const fields = Array.isArray(res.body?.data) ? res.body.data : [];
   const map = new Map();
-  fields.forEach(field => {
-    if (field?.key) {
-      map.set(String(field.key), field);
-    }
-  });
+  fields.forEach(field => { if (field?.key) map.set(String(field.key), field); });
   return map;
 }
 
@@ -320,10 +298,7 @@ function optionValueToArray(value) {
   const stringValue = String(value).trim();
   if (!stringValue) return [];
   if (stringValue.includes(',')) {
-    return stringValue
-      .split(',')
-      .map(v => v.trim())
-      .filter(Boolean);
+    return stringValue.split(',').map(v => v.trim()).filter(Boolean);
   }
   return [stringValue];
 }
@@ -398,29 +373,26 @@ exports.handler = async (event) => {
     const PIPEDRIVE_API_TOKEN = requireEnv('PIPEDRIVE_API_TOKEN');
 
     const dealId = readDealId(event);
-    if (!dealId) {
-      return errorResponse('VALIDATION_ERROR', 'Falta dealId', 400);
-    }
+    if (!dealId) return errorResponse('VALIDATION_ERROR', 'Falta dealId', 400);
 
     const client = { base: pipedriveBase(), token: PIPEDRIVE_API_TOKEN };
 
-    // 1) Trae entidades base de Pipedrive
+    // 1) Entidades base
     const deal = await fetchDeal(dealId, client);
     const dealFieldsCatalog = await fetchDealFields(client);
 
     const orgId = getRefId(deal.org_id ?? deal.orgId);
     const personId = getRefId(deal.person_id ?? deal.personId);
 
-    // Quitamos files del Promise.all para no usar el legacy
     const [organization, person, products, notes] = await Promise.all([
       fetchOrganization(orgId, client),
       fetchPerson(personId, client),
       fetchDealProducts(dealId, client),
       fetchDealNotes(dealId, client),
-      // NO: fetchDealFilesLegacy(dealId, client)
+      // OJO: NO llamamos a fetchDealFilesLegacy aquí
     ]);
 
-    // 2) Conexión a Neon y asegurado de schema
+    // 2) DB
     const sql = neon(DATABASE_URL);
     await ensureSchema(sql);
 
@@ -442,7 +414,6 @@ exports.handler = async (event) => {
             address = EXCLUDED.address,
             updated_at = now()
       `;
-
       orgSummary = { org_id: orgId, name: orgName, cif: orgCif };
     }
 
@@ -468,16 +439,10 @@ exports.handler = async (event) => {
             updated_at = now()
       `;
 
-      personSummary = {
-        person_id: personId,
-        first_name: firstName,
-        last_name: lastName,
-        email: emailValue,
-        phone: phoneValue,
-      };
+      personSummary = { person_id: personId, first_name: firstName, last_name: lastName, email: emailValue, phone: phoneValue };
     }
 
-    // 5) Deal básico + option labels
+    // 5) Deal + option labels
     const dealTitle = toNullableString(deal.title) || `Presupuesto #${deal.id ?? dealId}`;
     const pipelineId = toNullableString(deal.pipeline_id);
     const hours = toNullableString(deal[DEAL_CUSTOM_FIELDS.hours]);
@@ -490,32 +455,10 @@ exports.handler = async (event) => {
     });
 
     await sql`
-      INSERT INTO deals (
-        deal_id,
-        title,
-        pipeline_id,
-        hours,
-        training_address,
-        sede_label,
-        caes_label,
-        fundae_label,
-        hotel_label,
-        org_id,
-        person_id
-      )
-      VALUES (
-        ${String(dealId)},
-        ${dealTitle},
-        ${pipelineId},
-        ${hours},
-        ${trainingAddress},
-        ${optionLabels.sede_label},
-        ${optionLabels.caes_label},
-        ${optionLabels.fundae_label},
-        ${optionLabels.hotel_label},
-        ${orgId},
-        ${personId}
-      )
+      INSERT INTO deals (deal_id, title, pipeline_id, hours, training_address, sede_label, caes_label, fundae_label, hotel_label, org_id, person_id)
+      VALUES (${String(dealId)}, ${dealTitle}, ${pipelineId}, ${hours}, ${trainingAddress},
+              ${optionLabels.sede_label}, ${optionLabels.caes_label}, ${optionLabels.fundae_label}, ${optionLabels.hotel_label},
+              ${orgId}, ${personId})
       ON CONFLICT (deal_id) DO UPDATE
       SET title = EXCLUDED.title,
           pipeline_id = EXCLUDED.pipeline_id,
@@ -533,7 +476,6 @@ exports.handler = async (event) => {
     // 6) Productos
     const trainingProducts = [];
     const extraProducts = [];
-
     for (const product of products) {
       const dealProductId = toNullableString(product.id);
       if (!dealProductId) continue;
@@ -558,24 +500,12 @@ exports.handler = async (event) => {
             updated_at = now()
       `;
 
-      const productSummary = {
-        id: dealProductId,
-        product_id: productId,
-        name: productName,
-        code: productCode,
-        quantity: quantity ?? 0,
-        price: price,
-      };
-      if (isTraining) {
-        trainingProducts.push(productSummary);
-      } else {
-        extraProducts.push(productSummary);
-      }
+      const productSummary = { id: dealProductId, product_id: productId, name: productName, code: productCode, quantity: quantity ?? 0, price };
+      (isTraining ? trainingProducts : extraProducts).push(productSummary);
     }
-
     const trainingSessions = trainingProducts.reduce((acc, item) => acc + (item.quantity || 0), 0);
 
-    // 7) Notas (vinculadas si vienen "pinned" a un producto)
+    // 7) Notas
     const noteSummaries = [];
     for (const note of notes) {
       const noteId = toNullableString(note.id);
@@ -597,11 +527,10 @@ exports.handler = async (event) => {
             created_at = EXCLUDED.created_at,
             updated_at = EXCLUDED.updated_at
       `;
-
       noteSummaries.push({ id: noteId, product_id: pinnedProductId, has_product_link: Boolean(pinnedProductId) });
     }
 
-    // 8) Ficheros (vía estricta /deals/{id}/files)
+    // 8) Ficheros (vía estricta /deals/{id}/files)  <<--- CLAVE
     const strictFiles = await fetchDealFilesStrict(pipedriveBase(), PIPEDRIVE_API_TOKEN, Number(dealId));
 
     const fileSummaries = [];
@@ -611,7 +540,7 @@ exports.handler = async (event) => {
       const fileName = toNullableString(file.file_name ?? file.name);
       const fileUrl = toNullableString(file.file_url ?? file.url ?? file.public_url ?? file.download_url);
       const fileType = toNullableString(file.file_type ?? file.mime_type);
-      const productId = null; // NO vinculamos a producto aquí (PD no lo expone en este endpoint)
+      const productId = null; // /deals/{id}/files no trae vínculo a línea de producto
       const addedAt = file.add_time ? new Date(file.add_time) : null;
 
       await sql`
@@ -626,12 +555,12 @@ exports.handler = async (event) => {
             added_at = EXCLUDED.added_at,
             updated_at = now()
       `;
-
       fileSummaries.push({ id: fileId, product_id: productId, file_name: fileName });
     }
 
-    // 9) Summary de salida
+    // 9) Summary
     const summary = {
+      importer_version: IMPORTER_VERSION,
       deal_id: String(dealId),
       title: dealTitle,
       pipeline_id: pipelineId,
