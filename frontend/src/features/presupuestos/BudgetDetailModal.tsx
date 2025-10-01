@@ -396,10 +396,10 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             </Col>
           </Row>
         )}
-        {detailErrorMessage && (
-          <Alert variant="danger" className="mb-3">
-            {detailErrorMessage}
-          </Alert>
+        {detailErrorMessage && !summary && (
+        <Alert variant="danger" className="mb-3">
+        {detailErrorMessage}
+        </Alert>
         )}
         {isLoading && (
           <div className="d-flex align-items-center gap-2">

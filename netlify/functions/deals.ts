@@ -1,15 +1,15 @@
-const crypto = require('crypto');
+import * as nodeCrypto from 'crypto'
 const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
 const { getPrisma } = require('./_shared/prisma');
 
-const EDITABLE_FIELDS = new Set(['sede_label', 'hours', 'training_address', 'caes_label', 'fundae_label', 'hotel_label', 'alumnos']);
+const EDITABLE_FIELDS = new Set(['sede_label', 'hours', 'training_address', 'caes_label', 'fundae_label', 'hotel_label', 'alumnos'])
 
-function parsePathId(path) {
+function parsePathId(path: any) {
   const m = path.match(/\/\.netlify\/functions\/deals\/([^/]+)/);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-exports.handler = async (event) => {
+export const handler = async (event: any, context: any) => {
   try {
     // Preflight CORS
     if (event.httpMethod === 'OPTIONS') {
@@ -45,14 +45,14 @@ exports.handler = async (event) => {
         deal.person_id ? prisma.persons.findUnique({ where: { person_id: deal.person_id } }) : null
       ]);
 
-      const normalizedProducts = products.map((product) => ({
+      const normalizedProducts = products.map((product: any) => ({
         ...product,
         quantity: product.quantity != null ? Number(product.quantity) : null,
         created_at: product.created_at?.toISOString?.() ?? product.created_at,
         updated_at: product.updated_at?.toISOString?.() ?? product.updated_at
       }));
 
-      const normalizedNotes = notes.map((note) => ({
+      const normalizedNotes = notes.map((note: any) => ({
         ...note,
         created_at: note.created_at?.toISOString?.() ?? note.created_at,
         updated_at: note.updated_at?.toISOString?.() ?? note.updated_at
@@ -60,29 +60,29 @@ exports.handler = async (event) => {
 
       const { organizations, ...rest } = deal;
       const normalizedDeal: any = {
-        ...rest,
-        org_id: deal.org_id != null ? String(deal.org_id) : null,
-        organization: organizations
-          ? {
-              ...organizations,
-              org_id: organizations.org_id != null ? String(organizations.org_id) : null
-            }
-          : null,
-        deal_products: normalizedProducts,
-        deal_notes: normalizedNotes,
-        person: person
-          ? {
-              ...person,
-              person_id: person.person_id,
-              first_name: person.first_name ?? null,
-              last_name: person.last_name ?? null,
-              email: person.email ?? null,
-              phone: person.phone ?? null
-            }
-          : null
-      };
+      ...rest,
+      org_id: deal.org_id != null ? String(deal.org_id) : null,
+      organization: organizations
+      ? {
+        ...organizations,
+        org_id: organizations.org_id != null ? String(organizations.org_id) : null
+      }
+      : null,
+      deal_products: normalizedProducts,
+      deal_notes: normalizedNotes,
+      person: person
+    ? {
+        ...person,
+        person_id: person.person_id,
+        first_name: person.first_name ?? null,
+        last_name: person.last_name ?? null,
+        email: person.email ?? null,
+        phone: person.phone ?? null
+      }
+    : null
+    };
+    return successResponse({ deal: normalizedDeal });
 
-      return successResponse({ deal: normalizedDeal });
     }
 
     // --- PATCH edición parcial (solo 7 campos) + comentarios ---
@@ -98,18 +98,18 @@ exports.handler = async (event) => {
       const patch = {};
       if (body.deal && typeof body.deal === 'object') {
         for (const k of Object.keys(body.deal)) {
-          if (EDITABLE_FIELDS.has(k)) patch[k] = body.deal[k];
+          if (EDITABLE_FIELDS.has(k)) path[k] = body.deal[k];
         }
       }
       if ('hours' in patch) {
         const value = patch.hours;
-        if (value !== null && (isNaN(value) || Number(value) < 0)) {
+        if (value != null && (Number.isNaN(Number(value)) || Number(value) < 0)) {
           return errorResponse('VALIDATION_ERROR', 'hours inválido', 400);
         }
       }
       if ('alumnos' in patch) {
         const value = patch.alumnos;
-        if (value !== null && (isNaN(value) || Number(value) < 0)) {
+        if (value != null && (Number.isNaN(Number(value)) || Number(value) < 0)) {
           return errorResponse('VALIDATION_ERROR', 'alumnos inválido', 400);
         }
       }
@@ -117,7 +117,7 @@ exports.handler = async (event) => {
       const creates = (body.comments && Array.isArray(body.comments.create)) ? body.comments.create : [];
       const updates = (body.comments && Array.isArray(body.comments.update)) ? body.comments.update : [];
 
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: any) => {
         if (Object.keys(patch).length) {
           const data: Record<string, any> = { ...patch };
           if ('hours' in data) data.hours = data.hours === null ? null : Number(data.hours);
@@ -127,13 +127,13 @@ exports.handler = async (event) => {
 
         if (creates.length) {
           const rows = creates
-            .map((c) => ({
+            .map((c: any) => ({
               dealId,
               authorId: String(userId),
               authorName: c.author_name || userName || null,
               content: String(c.content || '').trim()
             }))
-            .filter((c) => c.content.length > 0);
+            .filter((c: any) => c.content.length > 0);
           if (rows.length) {
             await tx.comments.createMany({ data: rows });
           }
@@ -179,7 +179,7 @@ exports.handler = async (event) => {
         orderBy: { created_at: 'desc' }
       });
 
-      const dealIds = deals.map((d) => d.deal_id);
+      const dealIds = deals.map((d: any) => d.deal_id);
       const products = dealIds.length
         ? await prisma.deal_products.findMany({
             where: { deal_id: { in: dealIds } },
@@ -198,16 +198,16 @@ exports.handler = async (event) => {
         productsByDeal.set(key, list);
       }
 
-      const personIds = deals.map((d) => d.person_id).filter((id): id is string => Boolean(id));
+      const personIds = deals.map((d: any) => d.person_id).filter((id: any): id is string => Boolean(id));
       const persons = personIds.length
         ? await prisma.persons.findMany({
             where: { person_id: { in: personIds } },
             select: { person_id: true, first_name: true, last_name: true, email: true, phone: true }
           })
         : [];
-      const personById = new Map(persons.map((p) => [p.person_id, p]));
+      const personById = new Map(persons.map((p: any) => [p.person_id, p]));
 
-      const rows = deals.map((d) => ({
+      const rows = deals.map((d: any) => ({
         deal_id: d.deal_id,
         title: d.title || '',
         sede_label: d.sede_label || '',
@@ -234,7 +234,7 @@ exports.handler = async (event) => {
     }
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
-  } catch (e) {
+  } catch (e: any) {
     const message = e?.message || 'Unexpected';
     if (message === 'COMMENT_NOT_FOUND') return errorResponse('NOT_FOUND', 'Comentario no existe', 404);
     if (message === 'FORBIDDEN_COMMENT_EDIT') return errorResponse('FORBIDDEN', 'No puedes editar comentarios de otros', 403);
