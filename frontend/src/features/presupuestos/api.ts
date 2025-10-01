@@ -1,5 +1,5 @@
 // frontend/src/features/presupuestos/api.ts
-import type { DealSummary } from '../../types/deal'
+import type { DealDetail, DealProduct, DealSummary } from '../../types/deal'
 
 type Json = any
 
@@ -18,169 +18,200 @@ function toStringValue(value: unknown): string | null {
   return str.length ? str : null
 }
 
-function normalizeTraining(raw: unknown): { training?: DealSummary['training']; trainingNames?: string[] } {
+function normalizeProducts(raw: unknown): { products?: DealProduct[]; productNames?: string[] } {
   if (!raw) return {}
-  if (Array.isArray(raw)) {
-    if (!raw.length) return {}
-    const training = raw as DealSummary['training']
-    const names = raw
-      .map((entry) => {
-        if (entry && typeof entry === 'object' && 'name' in entry && entry.name) return String(entry.name)
-        if (entry && typeof entry === 'object' && 'code' in entry && entry.code) return String(entry.code)
-        return toStringValue(entry)
-      })
-      .filter((value): value is string => Boolean(value))
 
-    return {
-      training,
-      trainingNames: names.length ? names : undefined
+  const entries = Array.isArray(raw) ? raw : []
+  if (!entries.length) return {}
+
+  const products: DealProduct[] = []
+  const names: string[] = []
+
+  for (const entry of entries) {
+    if (entry && typeof entry === 'object') {
+      const item = entry as Record<string, any>
+      const quantity = toNumber(item.quantity)
+      const product: DealProduct = {
+        id: item.id ?? item.product_id ?? null,
+        deal_id: item.deal_id ?? null,
+        product_id: item.product_id ?? null,
+        name: toStringValue(item.name) ?? null,
+        code: toStringValue(item.code) ?? null,
+        quantity: quantity ?? null
+      }
+      products.push(product)
+      const label = toStringValue(product.name ?? product.code)
+      if (label) names.push(label)
+    } else {
+      const label = toStringValue(entry)
+      if (label) names.push(label)
     }
   }
 
-  const label = toStringValue(raw)
-  if (!label) return {}
-
-  return { trainingNames: [label] }
+  const result: { products?: DealProduct[]; productNames?: string[] } = {}
+  if (products.length) result.products = products
+  if (names.length) result.productNames = names
+  return result
 }
 
 function normalizeDealSummary(row: Json): DealSummary {
   const rawDealId = row?.deal_id ?? row?.dealId ?? row?.id
   const dealNumericId = toNumber(rawDealId)
-  const dealIdString = toStringValue(rawDealId) ?? (rawDealId != null ? String(rawDealId) : '')
-  const dealOrgId = toNumber(row?.org_id ?? row?.deal_org_id ?? row?.organizationId ?? row?.orgId)
+  const resolvedDealId = toStringValue(rawDealId) ?? (rawDealId != null ? String(rawDealId) : '')
   const explicitTitle = toStringValue(row?.title ?? row?.deal_title)
-  const presupuestoLabel = toStringValue(row?.presupuesto ?? row?.budget)
-  const resolvedDealId =
-    dealIdString || presupuestoLabel || (dealNumericId != null ? String(dealNumericId) : '')
   const title =
     explicitTitle ??
-    presupuestoLabel ??
     (resolvedDealId
       ? `Presupuesto #${resolvedDealId}`
       : dealNumericId != null
         ? `Presupuesto #${dealNumericId}`
         : 'Presupuesto')
 
-  const organizationName =
-    toStringValue(
-      row?.org_name ??
-        row?.organizationName ??
-        row?.organization_name ??
-        row?.cliente ??
-        row?.clientName ??
-        row?.organization?.name
-    ) ?? ''
-
-  const sede =
-    toStringValue(
-      row?.['676d6bd51e52999c582c01f67c99a35ed30bf6ae'] ?? row?.sede ?? row?.site ?? row?.location
-    ) ?? ''
-  const trainingInfo = normalizeTraining(
-    row?.training ?? row?.trainingNames ?? row?.training_names ?? row?.producto ?? row?.product
+  const rawOrganization = row?.organization ?? row?.organizations ?? null
+  const organizationName = toStringValue(
+    rawOrganization?.name ?? row?.organization_name ?? row?.org_name
   )
+  const rawOrgId = rawOrganization?.org_id ?? rawOrganization?.id ?? row?.org_id ?? null
+  const organization =
+    organizationName !== null || rawOrgId !== null
+      ? {
+          name: organizationName ?? null,
+          org_id: rawOrgId != null ? String(rawOrgId) : null
+        }
+      : null
+
+  const rawPerson = row?.person ?? null
+  const personFirstName = toStringValue(rawPerson?.first_name ?? row?.first_name)
+  const personLastName = toStringValue(rawPerson?.last_name ?? row?.last_name)
+  const person =
+    personFirstName !== null || personLastName !== null
+      ? {
+          person_id: rawPerson?.person_id ?? rawPerson?.id ?? row?.person_id ?? null,
+          first_name: personFirstName ?? null,
+          last_name: personLastName ?? null,
+          email: rawPerson?.email ?? null,
+          phone: rawPerson?.phone ?? null
+        }
+      : null
+
+  const productsInfo = normalizeProducts(row?.deal_products ?? row?.products)
 
   const summary: DealSummary = {
     dealId: resolvedDealId,
     dealNumericId: dealNumericId ?? toNumber(resolvedDealId),
-    dealOrgId:
-      dealOrgId ??
-      toNumber(row?.deal_org_id ?? row?.organizationId ?? row?.orgId ?? null) ??
-      null,
-    organizationName,
-    clientName: toStringValue(row?.clientName ?? row?.cliente) ?? organizationName,
     title,
-    sede,
-    trainingType: toStringValue(row?.trainingType ?? row?.training_type ?? row?.pipeline) ?? undefined,
-    hours: toNumber(row?.hours) ?? undefined,
-    dealDirection: toStringValue(row?.deal_direction ?? row?.dealDirection ?? row?.direction) ?? undefined,
-    caes: toStringValue(row?.caes ?? row?.CAES) ?? undefined,
-    fundae: toStringValue(row?.fundae ?? row?.FUNDAE) ?? undefined,
-    hotelNight: toStringValue(row?.hotelNight ?? row?.Hotel_Night) ?? undefined,
-    alumnos: toNumber(row?.alumnos) ?? undefined,
-    documentsNum: toNumber(row?.documentsNum ?? row?.documents_num) ?? undefined,
-    notesCount: toNumber(row?.notesCount ?? row?.notes_num) ?? undefined,
-    createdAt: toStringValue(row?.createdAt ?? row?.created_at) ?? undefined,
-    updatedAt: toStringValue(row?.updatedAt ?? row?.updated_at) ?? undefined
+    sede_label: toStringValue(row?.sede_label) ?? null,
+    pipeline_id: toStringValue(row?.pipeline_id) ?? null,
+    training_address: toStringValue(row?.training_address) ?? null,
+    hours: toNumber(row?.hours) ?? null,
+    alumnos: toNumber(row?.alumnos) ?? null,
+    caes_label: toStringValue(row?.caes_label) ?? null,
+    fundae_label: toStringValue(row?.fundae_label) ?? null,
+    hotel_label: toStringValue(row?.hotel_label) ?? null,
+    prodextra: row?.prodextra ?? null,
+    organization,
+    person
   }
 
-  if ('training' in trainingInfo && trainingInfo.training) {
-    summary.training = trainingInfo.training
-  }
-  if (trainingInfo.trainingNames) {
-    summary.trainingNames = trainingInfo.trainingNames
-  }
-
-  if (Array.isArray(row?.prodExtra)) summary.prodExtra = row.prodExtra
-  if (Array.isArray(row?.prodExtraNames)) summary.prodExtraNames = row.prodExtraNames
-  if (Array.isArray(row?.documents)) summary.documents = row.documents
-  if (Array.isArray(row?.documentsUrls)) summary.documentsUrls = row.documentsUrls
-  if (Array.isArray(row?.notes)) summary.notes = row.notes
-  if (Array.isArray(row?.participants)) summary.participants = row.participants
+  if (productsInfo.products) summary.products = productsInfo.products
+  if (productsInfo.productNames) summary.productNames = productsInfo.productNames
 
   return summary
 }
 
-function normalizeDealDetail(raw: Json) {
-  if (!raw || typeof raw !== 'object') return raw
-
-  const deal: Record<string, any> = { ...raw }
-  const id = raw.id ?? raw.deal_id ?? raw.dealId
-  if (id !== undefined && id !== null) {
-    const numericId = toNumber(id)
-    deal.id = numericId ?? id
-    deal.deal_id = raw.deal_id ?? numericId ?? id
+function normalizeDealDetail(raw: Json): DealDetail {
+  if (!raw || typeof raw !== 'object') {
+    return raw as DealDetail
   }
 
-  if (deal.deal_title === undefined && raw.title !== undefined) deal.deal_title = raw.title
-  if (deal.title === undefined && raw.deal_title !== undefined) deal.title = raw.deal_title
-
-  if (!deal.organization && raw.organization_name) {
-    deal.organization = { name: raw.organization_name }
+  const detail: DealDetail = {
+    deal_id: toStringValue(raw.deal_id ?? raw.id ?? raw.dealId) ?? '',
+    title: toStringValue(raw.title ?? raw.deal_title) ?? null,
+    pipeline_id: toStringValue(raw.pipeline_id) ?? null,
+    training_address: toStringValue(raw.training_address) ?? null,
+    sede_label: toStringValue(raw.sede_label) ?? null,
+    caes_label: toStringValue(raw.caes_label) ?? null,
+    fundae_label: toStringValue(raw.fundae_label) ?? null,
+    hotel_label: toStringValue(raw.hotel_label) ?? null,
+    hours: toNumber(raw.hours) ?? null,
+    alumnos: toNumber(raw.alumnos) ?? null,
+    prodextra: raw.prodextra ?? raw.extras ?? null,
+    organization: null,
+    person: null,
+    deal_products: undefined,
+    deal_notes: undefined,
+    documents: undefined,
+    comments: undefined
   }
 
-  if (raw.organization && typeof raw.organization === 'object') {
-    deal.organization = {
-      ...raw.organization,
-      id: raw.organization.id ?? raw.organization.org_id ?? raw.org_id ?? deal.organization?.id ?? null,
-      name:
-        raw.organization.name ??
-        raw.organizationName ??
-        raw.organization.name ??
-        raw.org_name ??
-        deal.organization?.name ??
-        null
+  const rawOrganization = raw.organization ?? raw.organizations ?? null
+  const organizationName = toStringValue(
+    rawOrganization?.name ?? raw.organization_name ?? raw.org_name
+  )
+  const rawOrgId = rawOrganization?.org_id ?? rawOrganization?.id ?? raw.org_id ?? null
+  if (organizationName !== null || rawOrgId !== null) {
+    detail.organization = {
+      name: organizationName ?? null,
+      org_id: rawOrgId != null ? String(rawOrgId) : null
     }
   }
 
+  const rawPerson = raw.person ?? null
+  const personFirstName = toStringValue(rawPerson?.first_name ?? raw.first_name)
+  const personLastName = toStringValue(rawPerson?.last_name ?? raw.last_name)
+  if (personFirstName !== null || personLastName !== null) {
+    detail.person = {
+      person_id: rawPerson?.person_id ?? rawPerson?.id ?? raw.person_id ?? null,
+      first_name: personFirstName ?? null,
+      last_name: personLastName ?? null,
+      email: rawPerson?.email ?? null,
+      phone: rawPerson?.phone ?? null
+    }
+  }
+
+  const productsInfo = normalizeProducts(raw.deal_products ?? raw.products)
+  if (productsInfo.products) detail.deal_products = productsInfo.products
+
+  if (Array.isArray(raw.deal_notes)) {
+    detail.deal_notes = raw.deal_notes.map((note: any) => ({
+      id: note.id ?? note.notes_id ?? null,
+      deal_id: note.deal_id ?? null,
+      content: toStringValue(note.content ?? note.comment_deal) ?? null,
+      author: toStringValue(note.author) ?? null,
+      created_at: toStringValue(note.created_at) ?? null
+    }))
+  }
+
   if (Array.isArray(raw.comments)) {
-    deal.comments = raw.comments.map((comment: any) => ({
-      ...comment,
+    detail.comments = raw.comments.map((comment: any) => ({
       id: comment.id ?? comment.comment_id,
       comment_id: comment.comment_id ?? comment.id,
       authorId: comment.authorId ?? comment.author_id,
       author_id: comment.author_id ?? comment.authorId,
-      createdAt: comment.createdAt ?? comment.created_at,
-      created_at: comment.created_at ?? comment.createdAt
+      authorName: comment.authorName ?? comment.author_name ?? null,
+      content: comment.content ?? null,
+      createdAt: comment.createdAt ?? comment.created_at ?? null,
+      created_at: comment.created_at ?? comment.createdAt ?? null
     }))
   }
 
   if (Array.isArray(raw.documents)) {
-    deal.documents = raw.documents.map((doc: any) => ({
-      ...doc,
+    detail.documents = raw.documents.map((doc: any) => ({
       id: doc.id ?? doc.doc_id,
       doc_id: doc.doc_id ?? doc.id,
       fileName: doc.fileName ?? doc.file_name,
       file_name: doc.file_name ?? doc.fileName,
-      fileSize: doc.fileSize ?? doc.file_size,
-      file_size: doc.file_size ?? doc.fileSize,
-      mimeType: doc.mimeType ?? doc.mime_type,
-      mime_type: doc.mime_type ?? doc.mimeType,
-      storageKey: doc.storageKey ?? doc.storage_key,
-      storage_key: doc.storage_key ?? doc.storageKey
+      fileSize: toNumber(doc.fileSize ?? doc.file_size) ?? null,
+      file_size: toNumber(doc.file_size ?? doc.fileSize) ?? null,
+      mimeType: doc.mimeType ?? doc.mime_type ?? null,
+      mime_type: doc.mime_type ?? doc.mimeType ?? null,
+      storageKey: doc.storageKey ?? doc.storage_key ?? null,
+      storage_key: doc.storage_key ?? doc.storageKey ?? null,
+      origin: doc.origin ?? null
     }))
   }
 
-  return deal
+  return detail
 }
 
 /** Error uniforme para el front */
@@ -228,7 +259,7 @@ export async function fetchDealsWithoutSessions(): Promise<DealSummary[]> {
   return rows.map((row) => normalizeDealSummary(row))
 }
 
-export async function fetchDealDetail(dealId: number | string): Promise<any> {
+export async function fetchDealDetail(dealId: number | string): Promise<DealDetail> {
   const data = await request(`/deals/${encodeURIComponent(String(dealId))}`)
   return normalizeDealDetail(data?.deal)
 }
@@ -244,15 +275,15 @@ export async function importDeal(dealId: string): Promise<DealSummary | null> {
 }
 
 /* ============ Edición (7 campos) + Comentarios ============ */
-/** Tipo independiente para el PATCH de 7 campos (backend espera snake_case en deal_direction). */
+/** Tipo independiente para el PATCH de 7 campos con nombres de columnas actuales. */
 export type DealEditablePatch = {
-  sede?: string
-  hours?: number
-  deal_direction?: string
-  CAES?: boolean
-  FUNDAE?: boolean
-  Hotel_Night?: boolean
-  alumnos?: number
+  sede_label?: string | null
+  hours?: number | null
+  training_address?: string | null
+  caes_label?: string | null
+  fundae_label?: string | null
+  hotel_label?: string | null
+  alumnos?: number | null
 }
 
 export async function patchDealEditable(
