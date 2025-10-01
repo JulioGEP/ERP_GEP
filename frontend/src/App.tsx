@@ -73,8 +73,6 @@ export default function App() {
   const secondaryTabs = useMemo(() => NAVIGATION_ITEMS.filter((item) => item !== 'Presupuestos'), []);
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
-  const refreshDisabled = budgetsQuery.isLoading || isRefreshing;
-
   const handleSelectBudget = useCallback((budget: DealSummary) => {
     setSelectedBudgetSummary(budget);
     setSelectedBudgetId(budget.dealId);
@@ -127,14 +125,6 @@ export default function App() {
                   {(importMutation.isPending || isRefreshing) && (
                     <Spinner animation="border" role="status" size="sm" />
                   )}
-                  <Button
-                    variant="outline-secondary"
-                    size="lg"
-                    onClick={() => queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] })}
-                    disabled={refreshDisabled}
-                  >
-                    Refrescar
-                  </Button>
                   <Button size="lg" onClick={() => setShowImportModal(true)}>
                     Importar presupuesto
                   </Button>
