@@ -11,13 +11,13 @@ interface BudgetTableProps {
 }
 
 function getProductNames(budget: DealSummary): string[] {
-  if (Array.isArray(budget.trainingNames) && budget.trainingNames.length) {
-    return budget.trainingNames;
+  if (Array.isArray(budget.productNames) && budget.productNames.length) {
+    return budget.productNames;
   }
 
-  if (Array.isArray(budget.training) && budget.training.length) {
-    return budget.training
-      .map((product) => (product.name ?? product.code ?? '')?.toString().trim())
+  if (Array.isArray(budget.products) && budget.products.length) {
+    return budget.products
+      .map((product) => (product?.name ?? product?.code ?? '')?.toString().trim())
       .filter((value): value is string => Boolean(value));
   }
 
@@ -90,8 +90,8 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
           <tr>
             <th scope="col">Presupuesto</th>
             <th scope="col">Título</th>
-            <th scope="col">Cliente</th>
             <th scope="col">Sede</th>
+            <th scope="col">Empresa</th>
             <th scope="col">Formación</th>
           </tr>
         </thead>
@@ -99,19 +99,23 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
           {budgets.map((budget, index) => {
             const productInfo = getProductLabel(budget);
             const presupuestoLabel =
-              budget.dealId ||
+              budget.dealId?.trim() ||
               (budget.dealNumericId != null ? String(budget.dealNumericId) : budget.title || '—');
             const presupuestoTitle = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
-            const sedeLabel = budget.sede && budget.sede.trim() ? budget.sede : '—';
-            const clientLabel =
-              (budget.clientName && budget.clientName.trim()) ||
-              (budget.organizationName && budget.organizationName.trim()) ||
+            const sedeLabel = budget.sede_label && budget.sede_label.trim() ? budget.sede_label : '—';
+            const organizationLabel =
+              (budget.organization?.name && budget.organization.name.trim()) ||
               '—';
             const titleLabel = budget.title && budget.title.trim() ? budget.title : '—';
 
             return (
               <tr
-                key={budget.dealId || presupuestoLabel || presupuestoTitle || `${budget.organizationName}-${index}`}
+                key={
+                  budget.dealId ||
+                  presupuestoLabel ||
+                  presupuestoTitle ||
+                  `${budget.organization?.name ?? 'organization'}-${index}`
+                }
                 role="button"
                 onClick={() => onSelect(budget)}
               >
@@ -119,8 +123,8 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
                   {presupuestoLabel}
                 </td>
                 <td title={budget.title}>{titleLabel}</td>
-                <td>{clientLabel}</td>
                 <td>{sedeLabel}</td>
+                <td>{organizationLabel}</td>
                 <td title={productInfo.title}>{productInfo.label}</td>
               </tr>
             );

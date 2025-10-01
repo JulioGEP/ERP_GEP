@@ -18,7 +18,7 @@ function buildDealPayloadFromRecord(record) {
   if (!record) return null;
 
   const training = normalizeJsonArray(record.training);
-  const prodExtra = normalizeJsonArray(record.prodExtra);
+  const prodExtra = normalizeJsonArray(record.prodextra ?? record.prodExtra);
   const documents = Array.isArray(record.documents) ? record.documents : [];
   const notes = Array.isArray(record.notes) ? record.notes : [];
   const participants = Array.isArray(record.participants) ? record.participants : [];
@@ -32,23 +32,23 @@ function buildDealPayloadFromRecord(record) {
 
   return {
     deal_id: record.id,
-    deal_org_id: record.organizationId,
-    organization_name: record.organization?.name ?? 'Organización sin nombre',
-    organization_cif: record.organization?.cif ?? null,
-    organization_phone: record.organization?.phone ?? null,
-    organization_address: record.organization?.address ?? null,
+    org_id: record.organizationId ?? record.org_id ?? null,
+    organization_name: record.organization?.name ?? record.organization_name ?? 'Organización sin nombre',
+    organization_cif: record.organization?.cif ?? record.organization_cif ?? null,
+    organization_phone: record.organization?.phone ?? record.organization_phone ?? null,
+    organization_address: record.organization?.address ?? record.organization_address ?? null,
     title: record.title,
-    training_type: record.trainingType ?? null,
+    pipeline_id: record.trainingType ?? record.pipeline_id ?? null,
     training,
     training_names: trainingNames,
     hours: record.hours,
-    deal_direction: record.direction ?? null,
-    sede: record.sede ?? null,
-    caes: record.caes ?? null,
-    fundae: record.fundae ?? null,
-    hotel_night: record.hotelNight ?? null,
-    prod_extra: prodExtra,
-    prod_extra_names: extraNames,
+    training_address: record.training_address ?? record.trainingAddress ?? null,
+    sede_label: record.sede_label ?? record.sedeLabel ?? null,
+    caes_label: record.caes_label ?? record.caesLabel ?? null,
+    fundae_label: record.fundae_label ?? record.fundaeLabel ?? null,
+    hotel_label: record.hotel_label ?? record.hotelLabel ?? null,
+    prodextra: prodExtra,
+    prodextra_names: extraNames,
     documents_num: record.documentsNum ?? documents.length,
     documents_id: documents.map((doc) => doc.id),
     documents: documents.map((doc) => doc.title ?? doc.url ?? `Documento ${doc.id}`),

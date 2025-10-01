@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Form, ListGroup, Badge, Row, Col, Alert, Spinner } from 'react-bootstrap';
+import { Modal, Button, Form, ListGroup, Badge, Row, Col, Alert, Spinner, Table } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchDealDetail,
@@ -9,7 +9,8 @@ import {
   createDocumentMeta,
   deleteDocument
 } from './api';
-import type { DealSummary } from '../../types/deal';
+import type { DealEditablePatch } from './api';
+import type { DealDetail, DealSummary } from '../../types/deal';
 
 interface Props {
   dealId: string | null;
@@ -26,12 +27,12 @@ function useAuth() {
 
 function formatProductNamesFromSummary(summary?: DealSummary | null): string {
   if (!summary) return '';
-  if (Array.isArray(summary.trainingNames) && summary.trainingNames.length) {
-    return summary.trainingNames.join(', ');
+  if (Array.isArray(summary.productNames) && summary.productNames.length) {
+    return summary.productNames.join(', ');
   }
 
-  if (Array.isArray(summary.training) && summary.training.length) {
-    const names = summary.training
+  if (Array.isArray(summary.products) && summary.products.length) {
+    const names = summary.products
       .map((product) => (product?.name || product?.code || '')?.toString().trim())
       .filter((value): value is string => Boolean(value));
     if (names.length) return names.join(', ');
@@ -40,24 +41,21 @@ function formatProductNamesFromSummary(summary?: DealSummary | null): string {
   return '';
 }
 
-function toBooleanValue(value: unknown): boolean {
-  if (value === null || value === undefined) return false;
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'number') return value !== 0;
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized || ['false', '0', 'no', 'n'].includes(normalized)) return false;
-    if (['true', '1', 'yes', 'y', 'si', 'sí', 's'].includes(normalized)) return true;
-    return Boolean(normalized);
-  }
-  return Boolean(value);
-}
+type EditableDealForm = {
+  sede_label: string;
+  hours: string;
+  training_address: string;
+  caes_label: string;
+  fundae_label: string;
+  hotel_label: string;
+  alumnos: string;
+};
 
 export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 
-  const detailQuery = useQuery({
+  const detailQuery = useQuery<DealDetail>({
     queryKey: ['deal', dealId],
     queryFn: () => fetchDealDetail(dealId as string),
     enabled: typeof dealId === 'string' && dealId.length > 0,
@@ -70,34 +68,40 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const deal = detailQuery.data;
   const isLoading = detailQuery.isLoading;
 
-  const [form, setForm] = useState<any>(null);
+  const [form, setForm] = useState<EditableDealForm | null>(null);
   const [newComment, setNewComment] = useState('');
   const [editComments, setEditComments] = useState<Record<string, string>>({});
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const updateForm = (field: keyof EditableDealForm, value: string) => {
+    setForm((current) => (current ? { ...current, [field]: value } : current));
+  };
 
   // Inicializa solo los 7 campos
   useEffect(() => {
     if (deal) {
       setForm({
         sede_label: deal.sede_label ?? '',
-        hours: deal.hours ?? 0,
-        Dirección: deal.training_address ?? '',
-        CAES: !!deal.caes_label,
-        FUNDAE: !!deal.fundae_label,
-        Hotel: !!deal.hotel_label,
-        Alumnos: deal.alumnos ?? 0
+        hours: deal.hours != null ? String(deal.hours) : '',
+        training_address: deal.training_address ?? '',
+        caes_label: deal.caes_label ?? '',
+        fundae_label: deal.fundae_label ?? '',
+        hotel_label: deal.hotel_label ?? '',
+        alumnos: deal.alumnos != null ? String(deal.alumnos) : ''
       });
     } else if (summary) {
       setForm({
-        Sede: summary.sede_label ?? '',
-        Horas: summary.hours ?? 0,
-        Dirección: summary.training_address ?? '',
-        CAES: toBooleanValue(summary.caes_label),
-        FUNDAE: toBooleanValue(summary.fundae_label),
-        Hotel: toBooleanValue(summary.hotel_label),
-        Alumnos: summary.alumnos ?? 0
+        sede_label: summary.sede_label ?? '',
+        hours: summary.hours != null ? String(summary.hours) : '',
+        training_address: summary.training_address ?? '',
+        caes_label: summary.caes_label ?? '',
+        fundae_label: summary.fundae_label ?? '',
+        hotel_label: summary.hotel_label ?? '',
+        alumnos: summary.alumnos != null ? String(summary.alumnos) : ''
       });
+    } else {
+      setForm(null);
     }
   }, [deal, summary]);
 
@@ -106,12 +110,12 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     if (!source) return null;
     return {
       sede_label: source.sede_label ?? '',
-      hours: source.hours ?? 0,
-      training_address: source.training_address ?? source.dealDirection ?? source.direction ?? '',
-      caes_label: toBooleanValue((source as any).caes_label ?? (source as any).caes_label),
-      fundae_label: toBooleanValue((source as any).fundae_label ?? (source as any).fundae_label),
-      hotel_label: toBooleanValue((source as any).hotel_label ?? (source as any).hotelNight),
-      alumnos: source.alumnos ?? 0
+      hours: source.hours != null ? String(source.hours) : '',
+      training_address: source.training_address ?? '',
+      caes_label: (source as any).caes_label ?? '',
+      fundae_label: (source as any).fundae_label ?? '',
+      hotel_label: (source as any).hotel_label ?? '',
+      alumnos: source.alumnos != null ? String(source.alumnos) : ''
     };
   }, [deal, summary]);
 
@@ -126,7 +130,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const isDirty = dirtyDeal || dirtyComments;
 
   const presupuestoDisplay = useMemo(() => {
-    const detailId = (deal?.deal_id ?? deal?.id) as string | number | undefined;
+    const detailId = deal?.deal_id;
     if (detailId !== undefined && detailId !== null) {
       const label = String(detailId).trim();
       if (label) return label;
@@ -138,44 +142,128 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   }, [deal, summary]);
 
   const titleDisplay = useMemo(() => {
-    const detailTitle = (deal?.deal_title ?? deal?.title) as string | undefined;
+    const detailTitle = deal?.title;
     if (detailTitle && detailTitle.trim()) return detailTitle.trim();
     return summary?.title ?? '';
   }, [deal, summary]);
 
   const clientDisplay = useMemo(() => {
-    const possibleValues = [
-      (deal?.organization && (deal.organization as any).name) ?? undefined,
-      (deal as any)?.organization_name,
-      (deal as any)?.organizationName,
-      (deal as any)?.cliente
-    ];
+    const firstName = deal?.person?.first_name ?? summary?.person?.first_name ?? '';
+    const lastName = deal?.person?.last_name ?? summary?.person?.last_name ?? '';
+    const parts = [firstName, lastName]
+      .map((value) => (value ?? '').trim())
+      .filter((value) => value.length > 0);
+    return parts.join(' ');
+  }, [deal, summary]);
+
+  const organizationDisplay = useMemo(() => {
+    const possibleValues = [deal?.organization?.name, summary?.organization?.name];
     for (const value of possibleValues) {
-      if (value !== undefined && value !== null) {
-        const label = String(value).trim();
-        if (label) return label;
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
       }
     }
-    return summary?.clientName || summary?.organizationName || '';
+    return '';
+  }, [deal, summary]);
+
+  const pipelineDisplay = useMemo(() => {
+    const values = [deal?.pipeline_id, summary?.pipeline_id];
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return '';
   }, [deal, summary]);
 
   const productDisplay = useMemo(() => {
-    if (deal?.training) {
-      if (Array.isArray(deal.training) && deal.training.length) {
-        const names = (deal.training as any[])
-          .map((item) => (item?.name || item?.code || '')?.toString().trim())
-          .filter((value: string | undefined): value is string => Boolean(value));
-        if (names.length) return names.join(', ');
-      }
-      if (typeof deal.training === 'string') {
-        const trimmed = deal.training.trim();
-        if (trimmed) return trimmed;
-      }
+    const products = Array.isArray(deal?.deal_products) ? deal?.deal_products : undefined;
+    if (products && products.length) {
+      const names = products
+        .map((product) => (product?.name || product?.code || '')?.toString().trim())
+        .filter((value): value is string => Boolean(value));
+      if (names.length) return names.join(', ');
     }
     const summaryProducts = formatProductNamesFromSummary(summary);
     if (summaryProducts) return summaryProducts;
     return '';
   }, [deal, summary]);
+
+  const extrasValue = deal?.prodextra ?? summary?.prodextra ?? null;
+  const parsedExtras = useMemo(() => {
+    if (typeof extrasValue === 'string') {
+      try {
+        return JSON.parse(extrasValue);
+      } catch {
+        return extrasValue;
+      }
+    }
+    return extrasValue;
+  }, [extrasValue]);
+  const detailProducts = useMemo(() => {
+    if (Array.isArray(deal?.deal_products)) return deal.deal_products;
+    if (Array.isArray(summary?.products)) return summary.products;
+    return [];
+  }, [deal, summary]);
+  const dealNotes = useMemo(() => (Array.isArray(deal?.deal_notes) ? deal.deal_notes : []), [deal]);
+  const displayOrDash = (value?: string | null) => {
+    if (typeof value !== 'string') return '—';
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : '—';
+  };
+
+  const renderExtras = () => {
+    const value = parsedExtras;
+    if (value == null) return <span className="text-muted">-</span>;
+    if (Array.isArray(value)) {
+      if (!value.length) return <span className="text-muted">-</span>;
+      return (
+        <div className="d-flex flex-wrap gap-2">
+          {value.map((item, index) => {
+            let label = '';
+            if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+              label = String(item);
+            } else if (item && typeof item === 'object') {
+              const entry = item as Record<string, unknown>;
+              const mainKey = ['name', 'label', 'title'].find(
+                (key) => typeof entry[key] === 'string' && String(entry[key]).trim().length
+              );
+              if (mainKey) {
+                label = String(entry[mainKey]);
+              } else {
+                const pairs = Object.entries(entry)
+                  .filter(([, val]) => val !== null && val !== '')
+                  .map(([key, val]) => `${key}: ${String(val)}`);
+                label = pairs.join(' · ');
+              }
+            }
+            const finalLabel = label.trim() || `Extra ${index + 1}`;
+            return (
+              <Badge key={index} bg="light" text="dark">
+                {finalLabel}
+              </Badge>
+            );
+          })}
+        </div>
+      );
+    }
+    if (value && typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>).filter(([, val]) => val !== null && val !== '');
+      if (!entries.length) return <span className="text-muted">-</span>;
+      return (
+        <ListGroup className="mt-2">
+          {entries.map(([key, val]) => (
+            <ListGroup.Item key={key} className="d-flex justify-content-between align-items-start gap-2">
+              <span className="fw-semibold text-capitalize">{key}</span>
+              <span>{String(val)}</span>
+            </ListGroup.Item>
+          ))}
+        </ListGroup>
+      );
+    }
+    const stringValue = String(value);
+    return stringValue.trim() ? <span>{stringValue}</span> : <span className="text-muted">-</span>;
+  };
 
   const detailErrorMessage = detailQuery.isError
     ? detailQuery.error instanceof Error
@@ -187,14 +275,41 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
   async function handleSave() {
     if (!deal) return;
-    const patch: any = {};
-    if (form.sede_label !== (initialEditable?.sede_label ?? '')) patch.sede_label = String(form.sede_label ?? '');
-    if (Number(form.hours ?? 0) !== Number(initialEditable?.hours ?? 0)) patch.hours = Number(form.hours ?? 0);
-    if ((form.training_address || '') !== (initialEditable?.training_address || '')) patch.training_address = String(form.training_address || '');
-    if (!!form.caes_label !== !!initialEditable?.caes_label) patch.caes_label = !!form.caes_label;
-    if (!!form.fundae_label !== !!initialEditable?.fundae_label) patch.fundae_label = !!form.fundae_label;
-    if (!!form.hotel_label !== !!initialEditable?.hotel_label) patch.hotel_label = !!form.hotel_label;
-    if (Number(form.alumnos ?? 0) !== Number(initialEditable?.alumnos ?? 0)) patch.alumnos = Number(form.alumnos ?? 0);
+    const patch: Partial<DealEditablePatch> = {};
+
+    const normalizeString = (value: string | undefined | null) => (value ?? '').trim();
+    const toNullableString = (value: string | undefined | null) => {
+      const trimmed = normalizeString(value);
+      return trimmed.length ? trimmed : null;
+    };
+    const toNullableNumber = (value: string | undefined | null) => {
+      const trimmed = normalizeString(value);
+      if (!trimmed.length) return null;
+      const parsed = Number(trimmed);
+      return Number.isNaN(parsed) ? null : parsed;
+    };
+
+    if (normalizeString(form?.sede_label) !== normalizeString(initialEditable?.sede_label)) {
+      patch.sede_label = toNullableString(form?.sede_label);
+    }
+    if (normalizeString(form?.hours) !== normalizeString(initialEditable?.hours)) {
+      patch.hours = toNullableNumber(form?.hours);
+    }
+    if (normalizeString(form?.training_address) !== normalizeString(initialEditable?.training_address)) {
+      patch.training_address = toNullableString(form?.training_address);
+    }
+    if (normalizeString(form?.caes_label) !== normalizeString(initialEditable?.caes_label)) {
+      patch.caes_label = toNullableString(form?.caes_label);
+    }
+    if (normalizeString(form?.fundae_label) !== normalizeString(initialEditable?.fundae_label)) {
+      patch.fundae_label = toNullableString(form?.fundae_label);
+    }
+    if (normalizeString(form?.hotel_label) !== normalizeString(initialEditable?.hotel_label)) {
+      patch.hotel_label = toNullableString(form?.hotel_label);
+    }
+    if (normalizeString(form?.alumnos) !== normalizeString(initialEditable?.alumnos)) {
+      patch.alumnos = toNullableNumber(form?.alumnos);
+    }
 
     const create = newComment.trim().length ? [{ content: newComment.trim(), author_name: userName }] : [];
     const update = Object.entries(editComments).map(([comment_id, content]) => ({ comment_id, content: String(content).trim() }));
@@ -265,23 +380,31 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        {(presupuestoDisplay || titleDisplay || clientDisplay || productDisplay) && (
+        {(presupuestoDisplay || titleDisplay || organizationDisplay || clientDisplay || productDisplay || pipelineDisplay) && (
           <Row className="g-3 mb-4">
             <Col md={4}>
               <Form.Label>Presupuesto</Form.Label>
-              <Form.Control value={presupuestoDisplay || '—'} readOnly />
+              <Form.Control value={displayOrDash(presupuestoDisplay)} readOnly />
             </Col>
             <Col md={8}>
               <Form.Label>Título</Form.Label>
-              <Form.Control value={titleDisplay || '—'} readOnly />
+              <Form.Control value={displayOrDash(titleDisplay)} readOnly />
+            </Col>
+            <Col md={6}>
+              <Form.Label>Empresa</Form.Label>
+              <Form.Control value={displayOrDash(organizationDisplay)} readOnly />
             </Col>
             <Col md={6}>
               <Form.Label>Cliente</Form.Label>
-              <Form.Control value={clientDisplay || '—'} readOnly />
+              <Form.Control value={displayOrDash(clientDisplay)} readOnly />
             </Col>
             <Col md={6}>
-              <Form.Label>Producto</Form.Label>
-              <Form.Control value={productDisplay || '—'} readOnly title={productDisplay || undefined} />
+              <Form.Label>Tipo de Formación</Form.Label>
+              <Form.Control value={displayOrDash(pipelineDisplay)} readOnly />
+            </Col>
+            <Col md={6}>
+              <Form.Label>Formación</Form.Label>
+              <Form.Control value={displayOrDash(productDisplay)} readOnly title={productDisplay || undefined} />
             </Col>
           </Row>
         )}
@@ -295,51 +418,20 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             <Spinner size="sm" /> Cargando…
           </div>
         )}
-        {!isLoading && deal && (
+        {!isLoading && deal && form && (
           <>
             <Row className="g-3">
               <Col md={4}>
-                <Form.Label>sede_label</Form.Label>
-                <Form.Control value={form?.sede_label || ''} onChange={(e) => setForm({ ...form, sede_label: e.target.value })} />
+                <Form.Label>Sede</Form.Label>
+                <Form.Control value={form.sede_label} onChange={(e) => updateForm('sede_label', e.target.value)} />
               </Col>
               <Col md={2}>
                 <Form.Label>Horas</Form.Label>
                 <Form.Control
                   type="number"
                   min={0}
-                  value={form?.hours ?? 0}
-                  onChange={(e) => setForm({ ...form, hours: e.target.value })}
-                />
-              </Col>
-              <Col md={6}>
-                <Form.Label>Dirección del deal</Form.Label>
-                <Form.Control
-                  value={form?.training_address || ''}
-                  onChange={(e) => setForm({ ...form, training_address: e.target.value })}
-                />
-              </Col>
-              <Col md={2} className="d-flex align-items-center">
-                <Form.Check
-                  id="caes_label"
-                  label="CAE/S"
-                  checked={!!form?.caes_label}
-                  onChange={(e) => setForm({ ...form, caes_label: e.target.checked })}
-                />
-              </Col>
-              <Col md={2} className="d-flex align-items-center">
-                <Form.Check
-                  id="fundae_label"
-                  label="fundae_label"
-                  checked={!!form?.fundae_label}
-                  onChange={(e) => setForm({ ...form, fundae_label: e.target.checked })}
-                />
-              </Col>
-              <Col md={2} className="d-flex align-items-center">
-                <Form.Check
-                  id="hotel"
-                  label="Hotel/Noche"
-                  checked={!!form?.hotel_label}
-                  onChange={(e) => setForm({ ...form, hotel_label: e.target.checked })}
+                  value={form.hours}
+                  onChange={(e) => updateForm('hours', e.target.value)}
                 />
               </Col>
               <Col md={2}>
@@ -347,13 +439,77 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                 <Form.Control
                   type="number"
                   min={0}
-                  value={form?.alumnos ?? 0}
-                  onChange={(e) => setForm({ ...form, alumnos: e.target.value })}
+                  value={form.alumnos}
+                  onChange={(e) => updateForm('alumnos', e.target.value)}
                 />
+              </Col>
+              <Col md={4}>
+                <Form.Label>Dirección</Form.Label>
+                <Form.Control value={form.training_address} onChange={(e) => updateForm('training_address', e.target.value)} />
+              </Col>
+              <Col md={4}>
+                <Form.Label>CAES</Form.Label>
+                <Form.Control value={form.caes_label} onChange={(e) => updateForm('caes_label', e.target.value)} />
+              </Col>
+              <Col md={4}>
+                <Form.Label>FUNDAE</Form.Label>
+                <Form.Control value={form.fundae_label} onChange={(e) => updateForm('fundae_label', e.target.value)} />
+              </Col>
+              <Col md={4}>
+                <Form.Label>Hotel</Form.Label>
+                <Form.Control value={form.hotel_label} onChange={(e) => updateForm('hotel_label', e.target.value)} />
               </Col>
             </Row>
 
             <hr className="my-4" />
+            <h6>Extras</h6>
+            {renderExtras()}
+
+            <hr className="my-4" />
+            <h6>Notas</h6>
+            {dealNotes.length ? (
+              <ListGroup className="mb-3">
+                {dealNotes.map((note, index) => (
+                  <ListGroup.Item key={note.id ?? `${note.deal_id ?? 'nota'}-${index}`}>
+                    <div className="d-flex justify-content-between align-items-start gap-2">
+                      <span>{displayOrDash(note.content ?? '')}</span>
+                      <Badge bg="light" text="dark">{displayOrDash(note.author ?? '')}</Badge>
+                    </div>
+                  </ListGroup.Item>
+                ))}
+              </ListGroup>
+            ) : (
+              <p className="text-muted small mb-3">No hay notas registradas.</p>
+            )}
+
+            <h6>Formaciones</h6>
+            {detailProducts.length ? (
+              <Table size="sm" bordered responsive className="mb-4">
+                <thead>
+                  <tr>
+                    <th>Formación</th>
+                    <th className="text-end">Sesiones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailProducts.map((product, index) => {
+                    const quantity =
+                      product?.quantity != null && !Number.isNaN(Number(product.quantity))
+                        ? Number(product.quantity)
+                        : null;
+                    return (
+                      <tr key={product?.id ?? `${product?.name ?? 'producto'}-${index}`}>
+                        <td>{displayOrDash(product?.name ?? product?.code ?? '')}</td>
+                        <td className="text-end">{quantity ?? '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            ) : (
+              <p className="text-muted small mb-4">No hay formaciones asociadas.</p>
+            )}
+
             <h6>Comentarios</h6>
             <Form.Control
               as="textarea"
