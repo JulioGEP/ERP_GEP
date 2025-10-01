@@ -2,13 +2,13 @@ export interface DealSummary {
   dealId: number;
   title: string;
   clientName: string;
-  sede: string;
+  sede_label?: string | null;
   trainingNames?: string[];
   trainingType?: string | null;
   hours?: number | null;
-  caes?: string | null;
-  fundae?: string | null;
-  hotelNight?: string | null;
+  caes_label?: string | null;
+  fundae_label?: string | null;
+  hotel_label?: string | null;
   notes?: string[];
   documents?: string[];
 }
