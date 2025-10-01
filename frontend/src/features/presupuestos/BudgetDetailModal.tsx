@@ -80,23 +80,23 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   useEffect(() => {
     if (deal) {
       setForm({
-        sede: deal.sede ?? '',
+        sede_label: deal.sede_label ?? '',
         hours: deal.hours ?? 0,
-        deal_direction: deal.deal_direction ?? deal.direction ?? '',
-        CAES: !!deal.CAES,
-        FUNDAE: !!deal.FUNDAE,
-        Hotel_Night: !!deal.Hotel_Night,
-        alumnos: deal.alumnos ?? 0
+        Dirección: deal.training_address ?? '',
+        CAES: !!deal.caes_label,
+        FUNDAE: !!deal.fundae_label,
+        Hotel: !!deal.hotel_label,
+        Alumnos: deal.alumnos ?? 0
       });
     } else if (summary) {
       setForm({
-        sede: summary.sede ?? '',
-        hours: summary.hours ?? 0,
-        deal_direction: summary.dealDirection ?? '',
-        CAES: toBooleanValue(summary.caes),
-        FUNDAE: toBooleanValue(summary.fundae),
-        Hotel_Night: toBooleanValue(summary.hotelNight),
-        alumnos: summary.alumnos ?? 0
+        Sede: summary.sede_label ?? '',
+        Horas: summary.hours ?? 0,
+        Dirección: summary.training_address ?? '',
+        CAES: toBooleanValue(summary.caes_label),
+        FUNDAE: toBooleanValue(summary.fundae_label),
+        Hotel: toBooleanValue(summary.hotel_label),
+        Alumnos: summary.alumnos ?? 0
       });
     }
   }, [deal, summary]);
@@ -105,12 +105,12 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     const source = deal ?? summary;
     if (!source) return null;
     return {
-      sede: source.sede ?? '',
+      sede_label: source.sede_label ?? '',
       hours: source.hours ?? 0,
-      deal_direction: source.deal_direction ?? source.dealDirection ?? source.direction ?? '',
-      CAES: toBooleanValue((source as any).CAES ?? (source as any).caes),
-      FUNDAE: toBooleanValue((source as any).FUNDAE ?? (source as any).fundae),
-      Hotel_Night: toBooleanValue((source as any).Hotel_Night ?? (source as any).hotelNight),
+      training_address: source.training_address ?? source.dealDirection ?? source.direction ?? '',
+      caes_label: toBooleanValue((source as any).caes_label ?? (source as any).caes_label),
+      fundae_label: toBooleanValue((source as any).fundae_label ?? (source as any).fundae_label),
+      hotel_label: toBooleanValue((source as any).hotel_label ?? (source as any).hotelNight),
       alumnos: source.alumnos ?? 0
     };
   }, [deal, summary]);
@@ -188,12 +188,12 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   async function handleSave() {
     if (!deal) return;
     const patch: any = {};
-    if (form.sede !== (initialEditable?.sede ?? '')) patch.sede = String(form.sede ?? '');
+    if (form.sede_label !== (initialEditable?.sede_label ?? '')) patch.sede_label = String(form.sede_label ?? '');
     if (Number(form.hours ?? 0) !== Number(initialEditable?.hours ?? 0)) patch.hours = Number(form.hours ?? 0);
-    if ((form.deal_direction || '') !== (initialEditable?.deal_direction || '')) patch.deal_direction = String(form.deal_direction || '');
-    if (!!form.CAES !== !!initialEditable?.CAES) patch.CAES = !!form.CAES;
-    if (!!form.FUNDAE !== !!initialEditable?.FUNDAE) patch.FUNDAE = !!form.FUNDAE;
-    if (!!form.Hotel_Night !== !!initialEditable?.Hotel_Night) patch.Hotel_Night = !!form.Hotel_Night;
+    if ((form.training_address || '') !== (initialEditable?.training_address || '')) patch.training_address = String(form.training_address || '');
+    if (!!form.caes_label !== !!initialEditable?.caes_label) patch.caes_label = !!form.caes_label;
+    if (!!form.fundae_label !== !!initialEditable?.fundae_label) patch.fundae_label = !!form.fundae_label;
+    if (!!form.hotel_label !== !!initialEditable?.hotel_label) patch.hotel_label = !!form.hotel_label;
     if (Number(form.alumnos ?? 0) !== Number(initialEditable?.alumnos ?? 0)) patch.alumnos = Number(form.alumnos ?? 0);
 
     const create = newComment.trim().length ? [{ content: newComment.trim(), author_name: userName }] : [];
@@ -299,8 +299,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           <>
             <Row className="g-3">
               <Col md={4}>
-                <Form.Label>Sede</Form.Label>
-                <Form.Control value={form?.sede || ''} onChange={(e) => setForm({ ...form, sede: e.target.value })} />
+                <Form.Label>sede_label</Form.Label>
+                <Form.Control value={form?.sede_label || ''} onChange={(e) => setForm({ ...form, sede_label: e.target.value })} />
               </Col>
               <Col md={2}>
                 <Form.Label>Horas</Form.Label>
@@ -314,32 +314,32 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               <Col md={6}>
                 <Form.Label>Dirección del deal</Form.Label>
                 <Form.Control
-                  value={form?.deal_direction || ''}
-                  onChange={(e) => setForm({ ...form, deal_direction: e.target.value })}
+                  value={form?.training_address || ''}
+                  onChange={(e) => setForm({ ...form, training_address: e.target.value })}
                 />
               </Col>
               <Col md={2} className="d-flex align-items-center">
                 <Form.Check
-                  id="caes"
+                  id="caes_label"
                   label="CAE/S"
-                  checked={!!form?.CAES}
-                  onChange={(e) => setForm({ ...form, CAES: e.target.checked })}
+                  checked={!!form?.caes_label}
+                  onChange={(e) => setForm({ ...form, caes_label: e.target.checked })}
                 />
               </Col>
               <Col md={2} className="d-flex align-items-center">
                 <Form.Check
-                  id="fundae"
-                  label="FUNDAE"
-                  checked={!!form?.FUNDAE}
-                  onChange={(e) => setForm({ ...form, FUNDAE: e.target.checked })}
+                  id="fundae_label"
+                  label="fundae_label"
+                  checked={!!form?.fundae_label}
+                  onChange={(e) => setForm({ ...form, fundae_label: e.target.checked })}
                 />
               </Col>
               <Col md={2} className="d-flex align-items-center">
                 <Form.Check
                   id="hotel"
                   label="Hotel/Noche"
-                  checked={!!form?.Hotel_Night}
-                  onChange={(e) => setForm({ ...form, Hotel_Night: e.target.checked })}
+                  checked={!!form?.hotel_label}
+                  onChange={(e) => setForm({ ...form, hotel_label: e.target.checked })}
                 />
               </Col>
               <Col md={2}>

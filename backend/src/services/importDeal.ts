@@ -78,11 +78,11 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
 
   // Campos custom mínimos
   const hours = parseIntSafe(deal['38f11c8876ecde803a027fbf3c9041fda2ae7eb7']);
-  const deal_direction = String(deal['8b2a7570f5ba8aa4754f061cd9dc92fd778376a7'] ?? '');
-  const sede = String(deal['676d6bd51e52999c582c01f67c99a35ed30bf6ae'] ?? '');
-  const CAES = Boolean(deal['e1971bf3a21d48737b682bf8d864ddc5eb15a351'] ?? false);
-  const FUNDAE = Boolean(deal['245d60d4d18aec40ba888998ef92e5d00e494583'] ?? false);
-  const Hotel_Night = Boolean(deal['c3a6daf8eb5b4e59c3c07cda8e01f43439101269'] ?? false);
+  const training_address = String(deal['8b2a7570f5ba8aa4754f061cd9dc92fd778376a7'] ?? '');
+  const sede_label = String(deal['676d6bd51e52999c582c01f67c99a35ed30bf6ae'] ?? '');
+  const caes_label = Boolean(deal['e1971bf3a21d48737b682bf8d864ddc5eb15a351'] ?? false);
+  const fundae_label = Boolean(deal['245d60d4d18aec40ba888998ef92e5d00e494583'] ?? false);
+  const hotel_label = Boolean(deal['c3a6daf8eb5b4e59c3c07cda8e01f43439101269'] ?? false);
   const trainingType = deal.pipeline_id != null ? String(deal.pipeline_id) : null;
 
   // Persistencia (todo en strings para cuadrar tipos del client actual)
@@ -127,17 +127,16 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
 
     const dealDataCreate: any = {
       deal_id: String(deal.id),
-      deal_org_id: orgIdStr,
       org_id: orgIdStr,
       title: deal.title,
       training: trainingValue,
       extras: extrasValue,
       hours,
-      deal_direction,
-      sede,
-      CAES,
-      FUNDAE,
-      Hotel_Night,
+      training_address,
+      sede_label,
+      caes_label,
+      fundae_label,
+      hotel_label,
       // si existen en tu modelo:
       // sessionsNum: sessionsCount,
       // sessionsIds: JSON.stringify(sessionsIds),
@@ -148,11 +147,11 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
       training: trainingValue,
       extras: extrasValue,
       hours,
-      deal_direction,
-      sede,
-      CAES,
-      FUNDAE,
-      Hotel_Night,
+      training_address,
+      sede_label,
+      caes_label,
+      fundae_label,
+      hotel_label,
       // sessionsNum: sessionsCount,
       // sessionsIds: JSON.stringify(sessionsIds),
     };
@@ -191,7 +190,7 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
     if ($('notes')) {
       await $('notes').deleteMany({ where: { deal_id: String(deal.id) } });
       if (notes.length) {
-        const notesRows = notes.map((n) => ({
+        const notesRows = notes.map((n: any) => ({
           note_id: String(n.id),
           deal_id: String(deal.id),
           author_id: '0',
@@ -205,7 +204,7 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
     if ($('documents')) {
       await $('documents').deleteMany({ where: { deal_id: String(deal.id) } });
       if (files.length) {
-        const docsRows = files.map((f) => ({
+        const docsRows = files.map((f: any) => ({
           doc_id: String(f.id),
           deal_id: String(deal.id),
           file_name: String(f.name ?? `file_${f.id}`),
@@ -225,15 +224,15 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
     dealId: deal.id,
     title: deal.title,
     clientName: org?.name ?? 'Organización sin nombre',
-    sede,
+    sede_label,
     trainingNames: trainingProducts.map((p) => p.name).filter(Boolean),
     trainingType: trainingType ?? undefined,
     hours,
-    caes: CAES ? '1' : undefined,
-    fundae: FUNDAE ? '1' : undefined,
-    hotelNight: Hotel_Night ? '1' : undefined,
-    notes: notes.map((n) => String(n.content ?? '')),
-    documents: files.map((f) => String(f.name ?? ''))
+    caes_label: caes_label ? '1' : undefined,
+    fundae_label: fundae_label ? '1' : undefined,
+    hotel_label: hotel_label ? '1' : undefined,
+    notes: notes.map((n: any) => String(n.content ?? '')),
+    documents: files.map((f: any) => String(f.name ?? ''))
   };
 
   return summary;

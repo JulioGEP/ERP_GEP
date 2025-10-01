@@ -8,7 +8,7 @@ datasource db {
 }
 
 model organizations {
-  org_id     String    @id
+  org_id     BigInt    @id
   name       String
   CIF        String?
   telf_org   String?
@@ -23,14 +23,13 @@ model organizations {
 
 model persons {
   person_id     String         @id
-  person_org_id String?
   first_name    String?
   last_name     String?
   email         String?
   phone         String?
   created_at    DateTime       @default(now())
   updated_at    DateTime       @default(now()) @updatedAt
-  org_id        String?
+  person_org_id BigInt?
   organizations organizations? @relation(fields: [person_org_id], references: [org_id])
 
   @@index([person_org_id])
@@ -38,14 +37,8 @@ model persons {
 
 model deals {
   deal_id          String         @id
-  deal_org_id      String?
   training         Json?          @db.Json
   hours            Int?           @default(0)
-  deal_direction   String?
-  sede             String?
-  CAES             Boolean?       @default(false)
-  FUNDAE           Boolean?       @default(false)
-  Hotel_Night      Boolean?       @default(false)
   alumnos          Int?           @default(0)
   created_at       DateTime       @default(now())
   updated_at       DateTime       @default(now()) @updatedAt
@@ -61,12 +54,12 @@ model deals {
   extras           Json           @default("[]") @db.Json
   prodextra        Json           @default("[]") @db.Json
   comments         comments[]
-  organizations    organizations? @relation(fields: [deal_org_id], references: [org_id])
+  organizations organizations? @relation(fields: [org_id], references: [org_id])
   documents        documents[]
   notes            notes[]
   seassons         seassons[]
 
-  @@index([deal_org_id])
+  @@index([org_id])
 }
 
 model comments {

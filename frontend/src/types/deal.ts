@@ -30,15 +30,15 @@ export interface DealSummary {
   organizationAddress?: string | null;
   title: string;
   clientName: string;
-  sede: string;
+  sede_label?: string | null;
   trainingNames?: string[];
   training?: TrainingProduct[];
   trainingType?: string | null;
   hours?: number | null;
-  dealDirection?: string | null;
-  caes?: string | null;
-  fundae?: string | null;
-  hotelNight?: string | null;
+  training_address?: string | null;
+  caes_label?: string | null;
+  fundae_label?: string | null;
+  hotel_label?: string | null;
   alumnos?: number | null;
   prodExtra?: TrainingProduct[];
   prodExtraNames?: string[];
@@ -48,7 +48,4 @@ export interface DealSummary {
   documentsUrls?: (string | null)[];
   notesCount?: number;
   notes?: string[];
-  participants?: DealParticipant[];
-  createdAt?: string;
-  updatedAt?: string;
 }
