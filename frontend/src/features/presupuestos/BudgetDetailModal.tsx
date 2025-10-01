@@ -7,10 +7,11 @@ import {
   getDocPreviewUrl,
   getUploadUrl,
   createDocumentMeta,
-  deleteDocument
+  deleteDocument,
+  buildDealDetailViewModel
 } from './api';
 import type { DealEditablePatch } from './api';
-import type { DealDetail, DealSummary } from '../../types/deal';
+import type { DealDetail, DealDetailViewModel, DealSummary } from '../../types/deal';
 
 interface Props {
   dealId: string | null;
@@ -23,22 +24,6 @@ function useAuth() {
   const userId = localStorage.getItem('userId') || 'user@example.com';
   const userName = localStorage.getItem('userName') || 'Usuario';
   return { userId, userName };
-}
-
-function formatProductNamesFromSummary(summary?: DealSummary | null): string {
-  if (!summary) return '';
-  if (Array.isArray(summary.productNames) && summary.productNames.length) {
-    return summary.productNames.join(', ');
-  }
-
-  if (Array.isArray(summary.products) && summary.products.length) {
-    const names = summary.products
-      .map((product) => (product?.name || product?.code || '')?.toString().trim())
-      .filter((value): value is string => Boolean(value));
-    if (names.length) return names.join(', ');
-  }
-
-  return '';
 }
 
 type EditableDealForm = {
@@ -55,18 +40,32 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 
+  const normalizedDealId =
+    typeof dealId === 'string'
+      ? dealId.trim()
+      : dealId != null
+        ? String(dealId)
+        : '';
+
+  const detailQueryKey = ['deal', normalizedDealId] as const;
+
   const detailQuery = useQuery<DealDetail>({
-    queryKey: ['deal', dealId],
-    queryFn: () => fetchDealDetail(dealId as string),
-    enabled: typeof dealId === 'string' && dealId.length > 0,
+    queryKey: detailQueryKey,
+    queryFn: () => fetchDealDetail(normalizedDealId),
+    enabled: normalizedDealId.length > 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 0,
     staleTime: Infinity
   });
 
-  const deal = detailQuery.data;
+  const deal = detailQuery.data ?? null;
   const isLoading = detailQuery.isLoading;
+
+  const detailView: DealDetailViewModel = useMemo(
+    () => buildDealDetailViewModel(deal, summary ?? null),
+    [deal, summary]
+  );
 
   const [form, setForm] = useState<EditableDealForm | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -112,9 +111,9 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       sede_label: source.sede_label ?? '',
       hours: source.hours != null ? String(source.hours) : '',
       training_address: source.training_address ?? '',
-      caes_label: (source as any).caes_label ?? '',
-      fundae_label: (source as any).fundae_label ?? '',
-      hotel_label: (source as any).hotel_label ?? '',
+      caes_label: source.caes_label ?? '',
+      fundae_label: source.fundae_label ?? '',
+      hotel_label: source.hotel_label ?? '',
       alumnos: source.alumnos != null ? String(source.alumnos) : ''
     };
   }, [deal, summary]);
@@ -129,67 +128,21 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
   const isDirty = dirtyDeal || dirtyComments;
 
-  const presupuestoDisplay = useMemo(() => {
-    const detailId = deal?.deal_id;
-    if (detailId !== undefined && detailId !== null) {
-      const label = String(detailId).trim();
-      if (label) return label;
-    }
-    const summaryId = summary?.dealId?.trim();
-    if (summaryId) return summaryId;
-    if (summary?.dealNumericId != null) return String(summary.dealNumericId);
-    return '';
-  }, [deal, summary]);
+  const presupuestoDisplay = detailView.dealId;
+  const titleDisplay = detailView.title ?? '';
+  const organizationDisplay = detailView.organizationName ?? '';
+  const clientDisplay = detailView.clientName ?? '';
+  const pipelineDisplay = detailView.pipelineLabel ?? '';
+  const productDisplay = detailView.productName ?? '';
+  const direccionDisplay = detailView.trainingAddress ?? '';
+  const horasDisplay = detailView.hours;
+  const alumnosDisplay = detailView.alumnos;
+  const sedeDisplay = detailView.sedeLabel ?? '';
+  const caesDisplay = detailView.caesLabel ?? '';
+  const fundaeDisplay = detailView.fundaeLabel ?? '';
+  const hotelDisplay = detailView.hotelLabel ?? '';
 
-  const titleDisplay = useMemo(() => {
-    const detailTitle = deal?.title;
-    if (detailTitle && detailTitle.trim()) return detailTitle.trim();
-    return summary?.title ?? '';
-  }, [deal, summary]);
-
-  const clientDisplay = useMemo(() => {
-    const firstName = deal?.person?.first_name ?? summary?.person?.first_name ?? '';
-    const lastName = deal?.person?.last_name ?? summary?.person?.last_name ?? '';
-    const parts = [firstName, lastName]
-      .map((value) => (value ?? '').trim())
-      .filter((value) => value.length > 0);
-    return parts.join(' ');
-  }, [deal, summary]);
-
-  const organizationDisplay = useMemo(() => {
-    const possibleValues = [deal?.organization?.name, summary?.organization?.name];
-    for (const value of possibleValues) {
-      if (typeof value === 'string' && value.trim()) {
-        return value.trim();
-      }
-    }
-    return '';
-  }, [deal, summary]);
-
-  const pipelineDisplay = useMemo(() => {
-    const values = [deal?.pipeline_id, summary?.pipeline_id];
-    for (const value of values) {
-      if (typeof value === 'string' && value.trim()) {
-        return value.trim();
-      }
-    }
-    return '';
-  }, [deal, summary]);
-
-  const productDisplay = useMemo(() => {
-    const products = Array.isArray(deal?.deal_products) ? deal?.deal_products : undefined;
-    if (products && products.length) {
-      const names = products
-        .map((product) => (product?.name || product?.code || '')?.toString().trim())
-        .filter((value): value is string => Boolean(value));
-      if (names.length) return names.join(', ');
-    }
-    const summaryProducts = formatProductNamesFromSummary(summary);
-    if (summaryProducts) return summaryProducts;
-    return '';
-  }, [deal, summary]);
-
-  const extrasValue = deal?.prodextra ?? summary?.prodextra ?? null;
+  const extrasValue = detailView.extras ?? null;
   const parsedExtras = useMemo(() => {
     if (typeof extrasValue === 'string') {
       try {
@@ -200,23 +153,19 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     }
     return extrasValue;
   }, [extrasValue]);
-  const detailProducts = useMemo(() => {
-    if (Array.isArray(deal?.deal_products)) return deal.deal_products;
-    if (Array.isArray(summary?.products)) return summary.products;
-    return [];
-  }, [deal, summary]);
-  const dealNotes = useMemo(() => (Array.isArray(deal?.deal_notes) ? deal.deal_notes : []), [deal]);
-  const displayOrDash = (value?: string | null) => {
-    if (typeof value !== 'string') return '—';
-    const trimmed = value.trim();
+  const detailProducts = detailView.products;
+  const detailNotes = detailView.notes;
+  const displayOrDash = (value?: string | number | null) => {
+    if (value === null || value === undefined) return '—';
+    const trimmed = String(value).trim();
     return trimmed.length ? trimmed : '—';
   };
 
   const renderExtras = () => {
     const value = parsedExtras;
-    if (value == null) return <span className="text-muted">-</span>;
+    if (value == null) return <span className="text-muted">—</span>;
     if (Array.isArray(value)) {
-      if (!value.length) return <span className="text-muted">-</span>;
+      if (!value.length) return <span className="text-muted">—</span>;
       return (
         <div className="d-flex flex-wrap gap-2">
           {value.map((item, index) => {
@@ -249,7 +198,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     }
     if (value && typeof value === 'object') {
       const entries = Object.entries(value as Record<string, unknown>).filter(([, val]) => val !== null && val !== '');
-      if (!entries.length) return <span className="text-muted">-</span>;
+      if (!entries.length) return <span className="text-muted">—</span>;
       return (
         <ListGroup className="mt-2">
           {entries.map(([key, val]) => (
@@ -262,7 +211,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       );
     }
     const stringValue = String(value);
-    return stringValue.trim() ? <span>{stringValue}</span> : <span className="text-muted">-</span>;
+    return stringValue.trim() ? <span>{stringValue}</span> : <span className="text-muted">—</span>;
   };
 
   const detailErrorMessage = detailQuery.isError
@@ -274,7 +223,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   if (!dealId) return null;
 
   async function handleSave() {
-    if (!deal) return;
+    if (!deal || !deal.deal_id) return;
     const patch: Partial<DealEditablePatch> = {};
 
     const normalizeString = (value: string | undefined | null) => (value ?? '').trim();
@@ -316,8 +265,11 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
     setSaving(true);
     try {
-      await patchDealEditable(deal.id, patch, { create, update }, { id: userId, name: userName });
-      await qc.invalidateQueries({ queryKey: ['deal', deal.id] });
+      await patchDealEditable(deal.deal_id, patch, { create, update }, { id: userId, name: userName });
+      await qc.invalidateQueries({ queryKey: detailQueryKey });
+      if (deal.deal_id !== normalizedDealId) {
+        await qc.invalidateQueries({ queryKey: ['deal', deal.deal_id] });
+      }
       await qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
       onClose();
     } catch (e: any) {
@@ -328,8 +280,9 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   }
 
   async function handleView(docId: string) {
+    if (!deal?.deal_id) return;
     try {
-      const url = await getDocPreviewUrl(deal!.id, docId);
+      const url = await getDocPreviewUrl(deal.deal_id, docId);
       window.open(url, '_blank');
     } catch (e: any) {
       alert(e?.message || 'No se pudo abrir el documento');
@@ -339,9 +292,13 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   async function handleDelete(docId: string) {
     const ok = confirm('¿Eliminar documento?');
     if (!ok) return;
+    if (!deal?.deal_id) return;
     try {
-      await deleteDocument(deal!.id, docId);
-      await qc.invalidateQueries({ queryKey: ['deal', deal!.id] });
+      await deleteDocument(deal.deal_id, docId);
+      await qc.invalidateQueries({ queryKey: detailQueryKey });
+      if (deal.deal_id !== normalizedDealId) {
+        await qc.invalidateQueries({ queryKey: ['deal', deal.deal_id] });
+      }
     } catch (e: any) {
       alert(e?.message || 'No se pudo eliminar el documento');
     }
@@ -349,16 +306,19 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !deal) return;
+    if (!file || !deal?.deal_id) return;
     try {
-      const { uploadUrl, storageKey } = await getUploadUrl(deal.id, file);
+      const { uploadUrl, storageKey } = await getUploadUrl(deal.deal_id, file);
       await fetch(uploadUrl, { method: 'PUT', body: file }); // subida directa a S3
       await createDocumentMeta(
-        deal.id,
+        deal.deal_id,
         { file_name: file.name, file_size: file.size, mime_type: file.type, storage_key: storageKey },
         { id: userId, name: userName }
       );
-      await qc.invalidateQueries({ queryKey: ['deal', deal.id] });
+      await qc.invalidateQueries({ queryKey: detailQueryKey });
+      if (deal.deal_id !== normalizedDealId) {
+        await qc.invalidateQueries({ queryKey: ['deal', deal.deal_id] });
+      }
     } catch (e: any) {
       alert(e?.message || 'No se pudo subir el documento');
     } finally {
@@ -380,7 +340,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        {(presupuestoDisplay || titleDisplay || organizationDisplay || clientDisplay || productDisplay || pipelineDisplay) && (
+        {(presupuestoDisplay || titleDisplay || organizationDisplay || clientDisplay || productDisplay || pipelineDisplay || direccionDisplay || sedeDisplay || caesDisplay || fundaeDisplay || hotelDisplay) && (
           <Row className="g-3 mb-4">
             <Col md={4}>
               <Form.Label>Presupuesto</Form.Label>
@@ -405,6 +365,34 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             <Col md={6}>
               <Form.Label>Formación</Form.Label>
               <Form.Control value={displayOrDash(productDisplay)} readOnly title={productDisplay || undefined} />
+            </Col>
+            <Col md={12}>
+              <Form.Label>Dirección</Form.Label>
+              <Form.Control value={displayOrDash(direccionDisplay)} readOnly />
+            </Col>
+            <Col md={3}>
+              <Form.Label>Horas</Form.Label>
+              <Form.Control value={displayOrDash(horasDisplay)} readOnly />
+            </Col>
+            <Col md={3}>
+              <Form.Label>Alumnos</Form.Label>
+              <Form.Control value={displayOrDash(alumnosDisplay)} readOnly />
+            </Col>
+            <Col md={3}>
+              <Form.Label>Sede</Form.Label>
+              <Form.Control value={displayOrDash(sedeDisplay)} readOnly />
+            </Col>
+            <Col md={3}>
+              <Form.Label>CAES</Form.Label>
+              <Form.Control value={displayOrDash(caesDisplay)} readOnly />
+            </Col>
+            <Col md={3}>
+              <Form.Label>FUNDAE</Form.Label>
+              <Form.Control value={displayOrDash(fundaeDisplay)} readOnly />
+            </Col>
+            <Col md={3}>
+              <Form.Label>Hotel</Form.Label>
+              <Form.Control value={displayOrDash(hotelDisplay)} readOnly />
             </Col>
           </Row>
         )}
@@ -467,14 +455,12 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
             <hr className="my-4" />
             <h6>Notas</h6>
-            {dealNotes.length ? (
+            {detailNotes.length ? (
               <ListGroup className="mb-3">
-                {dealNotes.map((note, index) => (
-                  <ListGroup.Item key={note.id ?? `${note.deal_id ?? 'nota'}-${index}`}>
-                    <div className="d-flex justify-content-between align-items-start gap-2">
-                      <span>{displayOrDash(note.content ?? '')}</span>
-                      <Badge bg="light" text="dark">{displayOrDash(note.author ?? '')}</Badge>
-                    </div>
+                {detailNotes.map((note, index) => (
+                  <ListGroup.Item key={note.id ?? `note-${index}`}>
+                    <p className="mb-1">{displayOrDash(note.content)}</p>
+                    <small className="text-muted">Autor: {displayOrDash(note.author ?? null)}</small>
                   </ListGroup.Item>
                 ))}
               </ListGroup>

@@ -1,9 +1,23 @@
 // frontend/src/features/presupuestos/api.ts
-import type { DealDetail, DealProduct, DealSummary } from '../../types/deal'
+import type { DealDetail, DealDetailViewModel, DealProduct, DealSummary } from '../../types/deal'
 
 type Json = any
 
 const API_BASE = '/.netlify/functions'
+
+export class ApiError extends Error {
+  code: string
+  status?: number
+  constructor(code: string, message: string, status?: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+    this.status = status
+  }
+}
+export function isApiError(err: unknown): err is ApiError {
+  return err instanceof ApiError || (typeof err === 'object' && !!err && (err as any).name === 'ApiError')
+}
 
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
@@ -121,11 +135,16 @@ function normalizeDealSummary(row: Json): DealSummary {
 
 function normalizeDealDetail(raw: Json): DealDetail {
   if (!raw || typeof raw !== 'object') {
-    return raw as DealDetail
+    throw new ApiError('INVALID_DEAL_DETAIL', 'Detalle del presupuesto no disponible')
+  }
+
+  const detailId = toStringValue(raw.deal_id ?? raw.id ?? raw.dealId)
+  if (!detailId) {
+    throw new ApiError('INVALID_DEAL_DETAIL', 'Detalle del presupuesto no disponible')
   }
 
   const detail: DealDetail = {
-    deal_id: toStringValue(raw.deal_id ?? raw.id ?? raw.dealId) ?? '',
+    deal_id: detailId,
     title: toStringValue(raw.title ?? raw.deal_title) ?? null,
     pipeline_id: toStringValue(raw.pipeline_id) ?? null,
     training_address: toStringValue(raw.training_address) ?? null,
@@ -138,8 +157,8 @@ function normalizeDealDetail(raw: Json): DealDetail {
     prodextra: raw.prodextra ?? raw.extras ?? null,
     organization: null,
     person: null,
-    deal_products: undefined,
-    deal_notes: undefined,
+    deal_products: [],
+    deal_notes: [],
     documents: undefined,
     comments: undefined
   }
@@ -170,7 +189,7 @@ function normalizeDealDetail(raw: Json): DealDetail {
   }
 
   const productsInfo = normalizeProducts(raw.deal_products ?? raw.products)
-  if (productsInfo.products) detail.deal_products = productsInfo.products
+  detail.deal_products = productsInfo.products ?? []
 
   if (Array.isArray(raw.deal_notes)) {
     detail.deal_notes = raw.deal_notes.map((note: any) => ({
@@ -180,6 +199,8 @@ function normalizeDealDetail(raw: Json): DealDetail {
       author: toStringValue(note.author) ?? null,
       created_at: toStringValue(note.created_at) ?? null
     }))
+  } else {
+    detail.deal_notes = []
   }
 
   if (Array.isArray(raw.comments)) {
@@ -214,19 +235,106 @@ function normalizeDealDetail(raw: Json): DealDetail {
   return detail
 }
 
-/** Error uniforme para el front */
-export class ApiError extends Error {
-  code: string
-  status?: number
-  constructor(code: string, message: string, status?: number) {
-    super(message)
-    this.name = 'ApiError'
-    this.code = code
-    this.status = status
+function pickNonEmptyString(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed.length) return trimmed
+    }
   }
+  return null
 }
-export function isApiError(err: unknown): err is ApiError {
-  return err instanceof ApiError || (typeof err === 'object' && !!err && (err as any).name === 'ApiError')
+
+function buildPersonFullName(person?: { first_name?: string | null; last_name?: string | null } | null): string | null {
+  if (!person) return null
+  const parts = [person.first_name, person.last_name]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value.length > 0)
+  return parts.length ? parts.join(' ') : null
+}
+
+function resolveProducts(detail?: DealDetail | null, summary?: DealSummary | null): DealProduct[] {
+  if (detail && Array.isArray(detail.deal_products) && detail.deal_products.length) {
+    return detail.deal_products.filter((product): product is DealProduct => Boolean(product))
+  }
+
+  if (summary && Array.isArray(summary.products) && summary.products.length) {
+    return summary.products.filter((product): product is DealProduct => Boolean(product))
+  }
+
+  return []
+}
+
+function resolveProductName(detail?: DealDetail | null, summary?: DealSummary | null): string | null {
+  const products = resolveProducts(detail, summary)
+  for (const product of products) {
+    const label = pickNonEmptyString(product?.name ?? null, product?.code ?? null)
+    if (label) return label
+  }
+
+  if (Array.isArray(summary?.productNames)) {
+    const label = pickNonEmptyString(...summary.productNames)
+    if (label) return label
+  }
+
+  return null
+}
+
+export function buildDealDetailViewModel(
+  detail?: DealDetail | null,
+  summary?: DealSummary | null
+): DealDetailViewModel {
+  const dealId = pickNonEmptyString(
+    detail?.deal_id,
+    summary?.dealId,
+    summary?.dealNumericId != null ? String(summary.dealNumericId) : undefined
+  )
+
+  const title = pickNonEmptyString(detail?.title ?? null, summary?.title ?? null)
+  const organizationName = pickNonEmptyString(
+    detail?.organization?.name ?? null,
+    summary?.organization?.name ?? null
+  )
+  const clientName = buildPersonFullName(detail?.person ?? summary?.person ?? null)
+  const pipelineLabel = pickNonEmptyString(detail?.pipeline_id ?? null, summary?.pipeline_id ?? null)
+  const trainingAddress = pickNonEmptyString(
+    detail?.training_address ?? null,
+    summary?.training_address ?? null
+  )
+  const productName = resolveProductName(detail ?? null, summary ?? null)
+
+  const hours = detail?.hours ?? summary?.hours ?? null
+  const alumnos = detail?.alumnos ?? summary?.alumnos ?? null
+  const sedeLabel = pickNonEmptyString(detail?.sede_label ?? null, summary?.sede_label ?? null)
+  const caesLabel = pickNonEmptyString(detail?.caes_label ?? null, summary?.caes_label ?? null)
+  const fundaeLabel = pickNonEmptyString(detail?.fundae_label ?? null, summary?.fundae_label ?? null)
+  const hotelLabel = pickNonEmptyString(detail?.hotel_label ?? null, summary?.hotel_label ?? null)
+  const extras = detail?.prodextra ?? summary?.prodextra ?? null
+
+  const notes = (detail?.deal_notes ?? []).map((note) => ({
+    id: note?.id ?? null,
+    content: pickNonEmptyString(note?.content ?? null) ?? '',
+    author: pickNonEmptyString(note?.author ?? null)
+  }))
+
+  return {
+    dealId: dealId ?? '',
+    title: title ?? null,
+    organizationName: organizationName ?? null,
+    clientName: clientName ?? null,
+    pipelineLabel: pipelineLabel ?? null,
+    trainingAddress: trainingAddress ?? null,
+    productName: productName ?? null,
+    hours,
+    alumnos,
+    sedeLabel: sedeLabel ?? null,
+    caesLabel: caesLabel ?? null,
+    fundaeLabel: fundaeLabel ?? null,
+    hotelLabel: hotelLabel ?? null,
+    extras,
+    products: resolveProducts(detail, summary),
+    notes
+  }
 }
 
 async function request(path: string, init?: RequestInit) {

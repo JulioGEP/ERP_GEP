@@ -97,3 +97,28 @@ export interface DealDetail {
   documents?: DealDocument[];
   comments?: DealComment[];
 }
+
+export interface DealDetailViewNote {
+  id?: string | null;
+  content: string;
+  author?: string | null;
+}
+
+export interface DealDetailViewModel {
+  dealId: string;
+  title: string | null;
+  organizationName: string | null;
+  clientName: string | null;
+  pipelineLabel: string | null;
+  trainingAddress: string | null;
+  productName: string | null;
+  hours: number | null;
+  alumnos: number | null;
+  sedeLabel: string | null;
+  caesLabel: string | null;
+  fundaeLabel: string | null;
+  hotelLabel: string | null;
+  extras: unknown;
+  products: DealProduct[];
+  notes: DealDetailViewNote[];
+}
