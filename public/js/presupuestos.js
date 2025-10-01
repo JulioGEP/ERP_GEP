@@ -122,15 +122,9 @@ async function importDeal() {
 }
 
 function wireUI() {
-  const refreshBtn = document.getElementById('btnRefresh');
   const openImportBtn = document.getElementById('btnOpenImportModal');
   const confirmImportBtn = document.getElementById('btnConfirmImport');
   const input = document.getElementById('importDealId');
-
-  refreshBtn?.addEventListener('click', (event) => {
-    event.preventDefault();
-    loadDeals();
-  });
 
   openImportBtn?.addEventListener('click', (event) => {
     event.preventDefault();
