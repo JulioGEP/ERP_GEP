@@ -1,5 +1,5 @@
-import express from 'express';
-import cors from 'cors';
+import express, { Request, Response, NextFunction } from 'express';
+import cors, { type CorsOptions } from 'cors';
 import helmet from 'helmet';
 import pino from 'pino';
 import pinoHttp from 'pino-http';
@@ -9,10 +9,13 @@ const NODE_ENV = process.env.NODE_ENV ?? 'development';
 const PORT = Number(process.env.PORT ?? 4000);
 
 // Admite varios orígenes separados por coma (Netlify + localhost)
-const rawOrigins = process.env.CORS_ORIGIN?.split(',').map(s => s.trim()).filter(Boolean);
+const rawOrigins =
+  process.env.CORS_ORIGIN?.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean) || null;
 
 // Config CORS estricta en prod; permisiva en dev si no hay CORS_ORIGIN
-const corsOptions: cors.CorsOptions = {
+const corsOptions: CorsOptions = {
   origin: (origin, cb) => {
     // Requests sin origin (curl, healthchecks) se permiten
     if (!origin) return cb(null, true);
@@ -29,12 +32,12 @@ const corsOptions: cors.CorsOptions = {
 
     return cb(new Error(`CORS: Origin no permitido: ${origin}`));
   },
-  credentials: true
+  credentials: true,
 };
 
 const logger = pino({
   transport: NODE_ENV === 'development' ? { target: 'pino-pretty' } : undefined,
-  level: NODE_ENV === 'development' ? 'debug' : 'info'
+  level: NODE_ENV === 'development' ? 'debug' : 'info',
 });
 
 const app = express();
@@ -44,13 +47,16 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(pinoHttp({ logger }));
 
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+// Health y raíz (para evitar "Cannot GET /" en navegador)
+app.get('/health', (_req: Request, res: Response) => res.json({ status: 'ok' }));
+app.get('/', (_req: Request, res: Response) => res.redirect('/health'));
 
+// Rutas de negocio
 app.use('/api/deals', dealsRouter);
 
 // Error handler con detalle en dev
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   logger.error({ err }, 'Unhandled error');
   if (NODE_ENV === 'development') {
     const status = err?.statusCode || err?.status || 500;
@@ -58,7 +64,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
       message: 'Error interno del servidor',
       error: String(err?.message || err),
       details: err?.response?.data || undefined,
-      stack: err?.stack || undefined
+      stack: err?.stack || undefined,
     });
   }
   res.status(500).json({ message: 'Error interno del servidor' });
