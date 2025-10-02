@@ -1,26 +1,33 @@
 import type { Handler } from '@netlify/functions';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '-sdk/client-s3';
-import { getSignedUrl } from '-sdk/s3-request-presigner';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { prisma } from './_lib/db';
 import { ok, err, getUser } from './_lib/http';
 import { randomUUID } from 'node:crypto';
 
 const bucket = process.env.S3_BUCKET!;
 const region = process.env.S3_REGION!;
+const accessKeyId = process.env.S3_ACCESS_KEY_ID!;
+const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY!;
+
+if (!bucket || !region || !accessKeyId || !secretAccessKey) {
+  // Evita errores difíciles de depurar si falta alguna env var
+  console.warn('[deal_documents] Faltan variables S3: S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY');
+}
 
 const s3 = new S3Client({
   region,
   credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+    accessKeyId,
+    secretAccessKey,
   },
 });
 
 /**
  * ENDPOINTS
- * 1) POST  /.netlify/functions/deal_documents/:dealId/upload-url
- * 2) POST  /.netlify/functions/deal_documents/:dealId
- * 3) GET   /.netlify/functions/deal_documents/:dealId/:docId/url
+ * 1) POST   /.netlify/functions/deal_documents/:dealId/upload-url
+ * 2) POST   /.netlify/functions/deal_documents/:dealId
+ * 3) GET    /.netlify/functions/deal_documents/:dealId/:docId/url
  * 4) DELETE /.netlify/functions/deal_documents/:dealId/:docId
  */
 export const handler: Handler = async (event) => {
@@ -55,6 +62,7 @@ export const handler: Handler = async (event) => {
         ContentType: mimeType || 'application/octet-stream',
         ContentLength: fileSize,
       });
+
       const uploadUrl = await getSignedUrl(s3, putCmd, { expiresIn: 60 * 5 });
       return ok({ ok: true, uploadUrl, storageKey });
     }
@@ -72,11 +80,12 @@ export const handler: Handler = async (event) => {
 
       await prisma.deal_files.create({
         data: {
-          id,                 // ⬅️ requerido por tu esquema
+          id,
           deal_id: String(dealId),
           file_name,
-          file_url: storage_key,                           // guardamos la clave S3
-          // mime_type: mime_type ?? null,                 // descomenta si existe en tu tabla
+          file_url: storage_key,
+          // Descomenta estas si existen en tu esquema:
+          // mime_type: mime_type ?? null,
           // file_size: file_size != null ? Number(file_size) : null,
           // uploaded_by: userId || null,
         },
