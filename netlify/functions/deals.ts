@@ -192,7 +192,7 @@ export const handler = async (event: any) => {
       const organization =
         deal.org_id != null
           ? await prisma.organizations.findUnique({
-              where: { org_id: deal.org_id },
+              where: { org_id: String(deal.org_id) },
               select: { org_id: true, name: true },
             })
           : null;
