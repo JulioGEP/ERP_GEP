@@ -9,6 +9,7 @@ type PDPerson = { id: number; first_name?: string | null; last_name?: string | n
 
 function ensureArray<T>(v: T | T[] | null | undefined): T[] { return !v ? [] : Array.isArray(v) ? v : [v]; }
 function parseIntSafe(v: any): number { const n = parseInt(String(v ?? ''), 10); return Number.isNaN(n) ? 0 : n; }
+function parseNumberSafe(v: any): number { const n = Number(v ?? 0); return Number.isNaN(n) ? 0 : n; }
 function primaryFromField(field: any): string | null {
   if (!field) return null;
   if (typeof field === 'string') return field;
@@ -28,6 +29,21 @@ const isTraining = (p: any): boolean => {
 
 // Para evitar “no existe propiedad X en PrismaClient” cuando tu client está desfasado
 const $ = (model: string) => (prisma as any)[model];
+
+// Claves de Pipedrive que nos has dado (por claridad)
+const PD_KEY_PRODUCT_TYPE   = '5bad94030bb7917c186f3238fb2cd8f7a91cf30b'; // → deal_products.type (string)
+const PD_KEY_PRODUCT_HOURS  = '38f11c8876ecde803a027fbf3c9041fda2ae7eb7'; // → deal_products.hours (number)
+const PD_KEY_PRODUCT_CODE   = 'code';                                      // → deal_products.code (string)
+const PD_KEY_PRODUCT_CAT    = 'category';                                  // → deal_products.category (string)
+
+// Claves a nivel DEAL que ya usabas
+const PD_KEY_TRAINING_ADDR  = '8b2a7570f5ba8aa4754f061cd9dc92fd778376a7';
+const PD_KEY_SEDE_LABEL     = '676d6bd51e52999c582c01f67c99a35ed30bf6ae';
+const PD_KEY_CAES_LABEL     = 'e1971bf3a21d48737b682bf8d864ddc5eb15a351';
+const PD_KEY_FUNDAE_LABEL   = '245d60d4d18aec40ba888998ef92e5d00e494583';
+const PD_KEY_HOTEL_LABEL    = 'c3a6daf8eb5b4e59c3c07cda8e01f43439101269';
+// (hours a nivel deal lo mantenemos por compatibilidad)
+const PD_KEY_DEAL_HOURS     = '38f11c8876ecde803a027fbf3c9041fda2ae7eb7';
 
 export async function importDealFromPipedrive(federalNumber: string): Promise<DealSummary> {
   // Deal + productos embebidos
@@ -62,28 +78,59 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
 
   // Productos → arrays limpios
   const allProducts = ensureArray(deal.products);
-  const trainingProducts = allProducts.filter(isTraining).map((p) => ({
-    product_id: String(p.product_id ?? p.id ?? ''),
-    name: String(p.name ?? ''),
-    quantity: parseIntSafe(p.quantity ?? 0)
-  }));
-  const extraProducts = allProducts.filter((p) => !isTraining(p)).map((p) => ({
-    product_id: String(p.product_id ?? p.id ?? ''),
-    name: String(p.name ?? ''),
-    quantity: parseIntSafe(p.quantity ?? 0)
-  }));
+
+  // Normaliza todos los productos con los campos que quieres persistir en deal_products
+  const normalizedProducts = allProducts.map((p: any) => {
+    const product_id  = String(p.product_id ?? p.id ?? '');
+    const name        = String(p.name ?? '');
+    const quantity    = parseNumberSafe(p.quantity ?? 0);
+    const price       = parseNumberSafe(p.item_price ?? p.price ?? 0);
+
+    // Campos nuevos a guardar por producto
+    const prodTypeStr = p?.[PD_KEY_PRODUCT_TYPE] != null ? String(p[PD_KEY_PRODUCT_TYPE]) : null; // texto Pipedrive
+    const code        = p?.[PD_KEY_PRODUCT_CODE] != null ? String(p[PD_KEY_PRODUCT_CODE]) : null;
+    const category    = p?.[PD_KEY_PRODUCT_CAT]  != null ? String(p[PD_KEY_PRODUCT_CAT])  : null;
+    const hours       = p?.[PD_KEY_PRODUCT_HOURS] != null ? parseIntSafe(p[PD_KEY_PRODUCT_HOURS]) : null;
+
+    // Clasificación TRAINING/EXTRA (tu lógica previa)
+    const trainingFlag = isTraining(p);
+    const enumType = trainingFlag ? 'TRAINING' : 'EXTRA'; // dealproducttype?
+
+    return {
+      product_id,
+      name,
+      quantity,
+      price,
+      is_training: trainingFlag,
+      // mapeos solicitados:
+      code,
+      category,
+      hours,
+      // 'type' en tu tabla es dealproducttype? → guardamos la etiqueta enum usada (TRAINING/EXTRA)
+      type: enumType as any,
+      // además conservamos el valor textual de Pipedrive en caso de necesitarlo:
+      __pd_type_text: prodTypeStr, // (no se persiste; sólo informativo durante el import)
+      __raw: p
+    };
+  });
+
+  const trainingProducts = normalizedProducts.filter((p) => p.is_training);
+  const extraProducts    = normalizedProducts.filter((p) => !p.is_training);
 
   const sessionsCount = trainingProducts.reduce((acc, p) => acc + (p.quantity ?? 0), 0);
   const sessionsIds   = trainingProducts.map((p) => p.product_id);
 
-  // Campos custom mínimos
-  const hours = parseIntSafe(deal['38f11c8876ecde803a027fbf3c9041fda2ae7eb7']);
-  const training_address = String(deal['8b2a7570f5ba8aa4754f061cd9dc92fd778376a7'] ?? '');
-  const sede_label = String(deal['676d6bd51e52999c582c01f67c99a35ed30bf6ae'] ?? '');
-  const caes_label = Boolean(deal['e1971bf3a21d48737b682bf8d864ddc5eb15a351'] ?? false);
-  const fundae_label = Boolean(deal['245d60d4d18aec40ba888998ef92e5d00e494583'] ?? false);
-  const hotel_label = Boolean(deal['c3a6daf8eb5b4e59c3c07cda8e01f43439101269'] ?? false);
-  const trainingType = deal.pipeline_id != null ? String(deal.pipeline_id) : null;
+  // Campos custom a nivel DEAL (se mantienen)
+  const hoursFromDeal    = parseIntSafe(deal[PD_KEY_DEAL_HOURS]);
+  const training_address = String(deal[PD_KEY_TRAINING_ADDR] ?? '');
+  const sede_label       = String(deal[PD_KEY_SEDE_LABEL] ?? '');
+  const caes_label       = Boolean(deal[PD_KEY_CAES_LABEL] ?? false);
+  const fundae_label     = Boolean(deal[PD_KEY_FUNDAE_LABEL] ?? false);
+  const hotel_label      = Boolean(deal[PD_KEY_HOTEL_LABEL] ?? false);
+  const trainingType     = deal.pipeline_id != null ? String(deal.pipeline_id) : null;
+
+  // Horas agregadas desde productos (por si te interesa usarlo más adelante)
+  const hoursFromProducts = normalizedProducts.reduce((acc, p) => acc + (p.hours ?? 0), 0);
 
   // Persistencia (todo en strings para cuadrar tipos del client actual)
   await prisma.$transaction(async () => {
@@ -94,7 +141,6 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
         create: {
           org_id: orgIdStr,
           name: org?.name ?? 'Organización sin nombre',
-          // si tu modelo tiene cif/phone/address, añade aquí según tu client real
         },
         update: {
           name: org?.name ?? 'Organización sin nombre'
@@ -111,7 +157,6 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
           org_id: orgIdStr,
           name: person.first_name ?? null,
           email: primaryFromField(person.email)
-          // añade last_name / phone si tu client los tiene
         },
         update: {
           org_id: orgIdStr,
@@ -121,7 +166,7 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
       });
     }
 
-    // deals
+    // deals (se mantiene tu lógica previa)
     const trainingValue = $('deals')?.fields?.training?.type === 'Json' ? trainingProducts : JSON.stringify(trainingProducts);
     const extrasValue   = $('deals')?.fields?.extras?.type === 'Json'   ? extraProducts   : JSON.stringify(extraProducts);
 
@@ -131,13 +176,12 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
       title: deal.title,
       training: trainingValue,
       extras: extrasValue,
-      hours,
+      hours: hoursFromDeal, // mantenemos el campo hours del deal (compatibilidad)
       training_address,
       sede_label,
       caes_label,
       fundae_label,
       hotel_label,
-      // si existen en tu modelo:
       // sessionsNum: sessionsCount,
       // sessionsIds: JSON.stringify(sessionsIds),
     };
@@ -146,7 +190,7 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
       title: deal.title,
       training: trainingValue,
       extras: extrasValue,
-      hours,
+      hours: hoursFromDeal, // mantenido
       training_address,
       sede_label,
       caes_label,
@@ -164,25 +208,40 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
         })
       : { deal_id: String(deal.id) };
 
-    // deal_products (si tu client lo tiene ya)
+    // deal_products → ahora guardamos hours/type/code/category por producto
     if ($('deal_products')) {
       await $('deal_products').deleteMany({ where: { deal_id: savedDeal.deal_id } });
-      const rows: any[] = [
-        ...trainingProducts.map((p) => ({
-          deal_id: savedDeal.deal_id,
-          pd_product_id: p.product_id,
-          name: p.name,
-          quantity: p.quantity,
-          type: 'TRAINING'
-        })),
-        ...extraProducts.map((p) => ({
-          deal_id: savedDeal.deal_id,
-          pd_product_id: p.product_id,
-          name: p.name,
-          quantity: p.quantity,
-          type: 'EXTRA'
-        }))
-      ];
+
+      // Adaptamos a tu esquema:
+      // model deal_products {
+      //   id String @id
+      //   deal_id String?
+      //   product_id String?
+      //   name String?
+      //   code String?
+      //   quantity Decimal?
+      //   price Decimal?
+      //   is_training Boolean?
+      //   created_at DateTime @default(now())
+      //   updated_at DateTime @default(now())
+      //   type dealproducttype?
+      //   hours Int?
+      //   category String?
+      // }
+
+      const rows: any[] = normalizedProducts.map((p) => ({
+        deal_id: savedDeal.deal_id,
+        product_id: p.product_id,
+        name: p.name,
+        code: p.code ?? null,
+        quantity: p.quantity,
+        price: p.price,
+        is_training: p.is_training,
+        type: p.type,               // 'TRAINING' | 'EXTRA' (enum dealproducttype?)
+        hours: p.hours ?? null,     // NUEVO
+        category: p.category ?? null// NUEVO
+      }));
+
       if (rows.length) await $('deal_products').createMany({ data: rows });
     }
 
@@ -194,13 +253,13 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
           note_id: String(n.id),
           deal_id: String(deal.id),
           author_id: '0',
-          comment_deal: String(n.content ?? '') // <- nombre que tu client está pidiendo
+          comment_deal: String(n.content ?? '')
         }));
         await $('notes').createMany({ data: notesRows });
       }
     }
 
-    // documents
+    // documents → si finalmente mapeas a deal_files en otro sitio, deja esta parte como noop
     if ($('documents')) {
       await $('documents').deleteMany({ where: { deal_id: String(deal.id) } });
       if (files.length) {
@@ -219,15 +278,15 @@ export async function importDealFromPipedrive(federalNumber: string): Promise<De
     }
   });
 
-  // Resumen front
+  // Resumen front (sin romper tu shape)
   const summary: DealSummary = {
     dealId: deal.id,
     title: deal.title,
     clientName: org?.name ?? 'Organización sin nombre',
     sede_label,
-    trainingNames: trainingProducts.map((p) => p.name).filter(Boolean),
+    trainingNames: normalizedProducts.filter(p => p.is_training).map((p) => p.name).filter(Boolean),
     trainingType: trainingType ?? undefined,
-    hours,
+    hours: hoursFromDeal, // mantenido; el popup mostrará horas por producto desde deal_products
     caes_label: caes_label ? '1' : undefined,
     fundae_label: fundae_label ? '1' : undefined,
     hotel_label: hotel_label ? '1' : undefined,

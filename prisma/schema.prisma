@@ -8,7 +8,7 @@ datasource db {
 }
 
 model organizations {
-  org_id     BigInt    @id
+  org_id     String    @id
   name       String
   CIF        String?
   telf_org   String?
@@ -17,31 +17,29 @@ model organizations {
   updated_at DateTime  @default(now()) @updatedAt
   cif        String?
   phone      String?
-  deals      deals[]
   persons    persons[]
 }
 
 model persons {
   person_id     String         @id
+  person_org_id String?
   first_name    String?
   last_name     String?
   email         String?
   phone         String?
   created_at    DateTime       @default(now())
   updated_at    DateTime       @default(now()) @updatedAt
-  person_org_id BigInt?
+  org_id        String?
   organizations organizations? @relation(fields: [person_org_id], references: [org_id])
 
   @@index([person_org_id])
 }
 
 model deals {
-  deal_id          String         @id
-  training         Json?          @db.Json
-  hours            Int?           @default(0)
-  alumnos          Int?           @default(0)
-  created_at       DateTime       @default(now())
-  updated_at       DateTime       @default(now()) @updatedAt
+  deal_id          String     @id
+  alumnos          Int?       @default(0)
+  created_at       DateTime   @default(now())
+  updated_at       DateTime   @default(now()) @updatedAt
   title            String?
   org_id           BigInt?
   pipeline_id      String?
@@ -51,15 +49,11 @@ model deals {
   fundae_label     String?
   hotel_label      String?
   person_id        String?
-  extras           Json           @default("[]") @db.Json
-  prodextra        Json           @default("[]") @db.Json
+  extras           Json       @default("[]") @db.Json
+  prodextra        Json       @default("[]") @db.Json
+  hours            String?
   comments         comments[]
-  organizations organizations? @relation(fields: [org_id], references: [org_id])
-  documents        documents[]
-  notes            notes[]
   seassons         seassons[]
-
-  @@index([org_id])
 }
 
 model comments {
@@ -74,32 +68,6 @@ model comments {
 
   @@index([author_id])
   @@index([deal_id])
-}
-
-model notes {
-  notes_id     String   @id
-  deal_id      String
-  comment_deal String
-  created_at   DateTime @default(now())
-  deal         deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
-
-  @@index([deal_id])
-}
-
-model documents {
-  doc_id      String         @id
-  deal_id     String
-  file_name   String
-  file_size   Int
-  mime_type   String?
-  storage_key String
-  origin      DocumentOrigin @default(imported)
-  uploaded_by String?
-  created_at  DateTime       @default(now())
-  deal        deals          @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
-
-  @@index([deal_id])
-  @@index([origin])
 }
 
 model deal_products {

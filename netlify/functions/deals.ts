@@ -31,7 +31,6 @@ export const handler = async (event: any, context: any) => {
       const deal = await prisma.deals.findUnique({
         where: { deal_id: dealId },
         include: {
-          // documents: true, // ❌ NO existe "documents" en tu BBDD
           comments: { orderBy: { created_at: 'desc' } },
           organizations: true
         }
@@ -41,7 +40,23 @@ export const handler = async (event: any, context: any) => {
       const [products, notes, person, files] = await Promise.all([
         prisma.deal_products.findMany({
           where: { deal_id: dealId },
-          orderBy: { created_at: 'asc' }
+          orderBy: { created_at: 'asc' },
+          // ⬇️ incluye nuevos campos para el popup: hours, type, code, category
+          select: {
+            id: true,
+            deal_id: true,
+            product_id: true,
+            name: true,
+            code: true,
+            category: true,
+            quantity: true,
+            price: true,
+            is_training: true,
+            type: true,
+            hours: true,
+            created_at: true,
+            updated_at: true
+          }
         }),
         prisma.deal_notes.findMany({
           where: { deal_id: dealId },
@@ -50,14 +65,18 @@ export const handler = async (event: any, context: any) => {
         deal.person_id ? prisma.persons.findUnique({ where: { person_id: deal.person_id } }) : null,
         prisma.deal_files.findMany({
           where: { deal_id: dealId }
-          // si tienes created_at en deal_files y quieres ordenar, descomenta:
-          // orderBy: { created_at: 'desc' }
         })
       ]);
 
       const normalizedProducts = products.map((product: any) => ({
         ...product,
+        // normalizaciones
         quantity: product.quantity != null ? Number(product.quantity) : null,
+        price: product.price != null ? Number(product.price) : null,
+        hours: product.hours != null ? Number(product.hours) : null, // ⬅️ NUEVO
+        code: product.code ?? null,                                   // ⬅️ NUEVO
+        category: product.category ?? null,                           // ⬅️ NUEVO
+        type: product.type ?? null,                                   // ⬅️ NUEVO (enum/string)
         created_at: product.created_at?.toISOString?.() ?? product.created_at,
         updated_at: product.updated_at?.toISOString?.() ?? product.updated_at
       }));
@@ -67,8 +86,13 @@ export const handler = async (event: any, context: any) => {
         created_at: note.created_at?.toISOString?.() ?? note.created_at,
         updated_at: note.updated_at?.toISOString?.() ?? note.updated_at
       }));
-      const inferredHours = normalizedProducts.reduce((acc: number, p: any) => acc + (Number(p.quantity) || 0), 0) || null;
-      const firstTrainingName = normalizedProducts.find((p: any) => (p.name && String(p.name).trim().length))?.name ?? null;
+
+      // horas inferidas por si no existen a nivel deal (suma de hours de productos; si no, suma de quantity)
+      const hoursFromProducts = (() => {
+        const byHours = normalizedProducts.reduce((acc: number, p: any) => acc + (Number(p.hours) || 0), 0);
+        if (byHours > 0) return byHours;
+        return normalizedProducts.reduce((acc: number, p: any) => acc + (Number(p.quantity) || 0), 0) || null;
+      })();
 
       // Mapeo de deal_files -> documents (forma que espera el front)
       const normalizedDocs = files.map((f: any) => ({
@@ -76,44 +100,40 @@ export const handler = async (event: any, context: any) => {
         doc_id: f.id,
         file_name: f.file_name ?? null,
         fileName: f.file_name ?? null,
-        // si tu tabla tiene estos campos, los mostramos; si no, quedan null/0 y el front ya lo tolera
         file_size: (f as any).file_size ?? null,
         fileSize: (f as any).file_size ?? null,
         mime_type: (f as any).mime_type ?? null,
         mimeType: (f as any).mime_type ?? null,
-        // usamos file_url como "storage_key" porque el front lo espera así para previsualizar
         storage_key: f.file_url ?? null,
         storageKey: f.file_url ?? null,
-        // forzamos user_upload para que el botón "Eliminar" aparezca (si tu política lo permite)
         origin: 'user_upload'
       }));
 
       const { organizations, ...rest } = deal;
-const normalizedDeal: any = {
-  ...rest,
-  // fuerza hours si no viene de DB
-  hours: (rest as any).hours ?? inferredHours,
-  org_id: deal.org_id != null ? String(deal.org_id) : null,
-  organization: organizations
-    ? {
-        ...organizations,
-        org_id: organizations.org_id != null ? String(organizations.org_id) : null
-      }
-    : null,
-  deal_products: normalizedProducts,
-  deal_notes: normalizedNotes,
-  documents: normalizedDocs,
-  person: person
-    ? {
-        ...person,
-        person_id: person.person_id,
-        first_name: person.first_name ?? null,
-        last_name: person.last_name ?? null,
-        email: person.email ?? null,
-        phone: person.phone ?? null
-      }
-    : null
-};
+      const normalizedDeal: any = {
+        ...rest,
+        hours: (rest as any).hours ?? hoursFromProducts, // ⬅️ fallback seguro
+        org_id: deal.org_id != null ? String(deal.org_id) : null,
+        organization: organizations
+          ? {
+              ...organizations,
+              org_id: organizations.org_id != null ? String(organizations.org_id) : null
+            }
+          : null,
+        deal_products: normalizedProducts, // ⬅️ ya incluye hours/type/code/category
+        deal_notes: normalizedNotes,
+        documents: normalizedDocs,
+        person: person
+          ? {
+              ...person,
+              person_id: person.person_id,
+              first_name: person.first_name ?? null,
+              last_name: person.last_name ?? null,
+              email: person.email ?? null,
+              phone: person.phone ?? null
+            }
+          : null
+      };
 
       return successResponse({ deal: normalizedDeal });
     }
@@ -206,27 +226,45 @@ const normalizedDeal: any = {
           prodextra: true,
           org_id: true,
           person_id: true,
-          organizations: { select: { org_id: true, name: true } },
+          organizations: { select: { org_id: true, name: true} },
           created_at: true
         },
         orderBy: { created_at: 'desc' }
       });
 
       const dealIds = deals.map((d: any) => d.deal_id);
+
       const products = dealIds.length
         ? await prisma.deal_products.findMany({
             where: { deal_id: { in: dealIds } },
-            select: { id: true, deal_id: true, name: true, code: true, quantity: true },
+            // ⬇️ añadimos nuevos campos para que la tabla pueda construir “Formación” y horas
+            select: {
+              id: true,
+              deal_id: true,
+              product_id: true,
+              name: true,
+              code: true,        // NUEVO
+              category: true,    // NUEVO
+              quantity: true,
+              price: true,
+              is_training: true,
+              type: true,        // NUEVO
+              hours: true,       // NUEVO
+              created_at: true
+            },
             orderBy: { created_at: 'asc' }
           })
         : [];
-      const productsByDeal = new Map();
+
+      const productsByDeal = new Map<string, any[]>();
       for (const product of products) {
         const key = product.deal_id || '';
         const list = productsByDeal.get(key) || [];
         list.push({
           ...product,
-          quantity: product.quantity != null ? Number(product.quantity) : null
+          quantity: product.quantity != null ? Number(product.quantity) : null,
+          price: product.price != null ? Number(product.price) : null,
+          hours: product.hours != null ? Number(product.hours) : null
         });
         productsByDeal.set(key, list);
       }
@@ -240,28 +278,39 @@ const normalizedDeal: any = {
         : [];
       const personById = new Map(persons.map((p: any) => [p.person_id, p]));
 
-      const rows = deals.map((d: any) => ({
-        deal_id: d.deal_id,
-        title: d.title || '',
-        sede_label: d.sede_label || '',
-        pipeline_id: d.pipeline_id || null,
-        training_address: d.training_address || null,
-        hours: d.hours ?? null,
-        alumnos: d.alumnos ?? null,
-        caes_label: d.caes_label || null,
-        fundae_label: d.fundae_label || null,
-        hotel_label: d.hotel_label || null,
-        prodextra: d.prodextra ?? null,
-        org_id: d.org_id != null ? String(d.org_id) : null,
-        organization: d.organizations
-          ? {
-              ...d.organizations,
-              org_id: d.organizations.org_id != null ? String(d.organizations.org_id) : null
-            }
-          : null,
-        person: d.person_id ? personById.get(d.person_id) || null : null,
-        deal_products: productsByDeal.get(d.deal_id) || []
-      }));
+      const rows = deals.map((d: any) => {
+        const prods = productsByDeal.get(d.deal_id) || [];
+        // Si el deal no tiene hours, calculamos suma de hours por productos; si no hay, suma de quantity.
+        const computedHours = (() => {
+          const sumH = prods.reduce((acc: number, p: any) => acc + (Number(p.hours) || 0), 0);
+          if (sumH > 0) return sumH;
+          const sumQty = prods.reduce((acc: number, p: any) => acc + (Number(p.quantity) || 0), 0);
+          return sumQty || null;
+        })();
+
+        return {
+          deal_id: d.deal_id,
+          title: d.title || '',
+          sede_label: d.sede_label || '',
+          pipeline_id: d.pipeline_id || null,
+          training_address: d.training_address || null,
+          hours: d.hours ?? computedHours, // ⬅️ fallback seguro
+          alumnos: d.alumnos ?? null,
+          caes_label: d.caes_label || null,
+          fundae_label: d.fundae_label || null,
+          hotel_label: d.hotel_label || null,
+          prodextra: d.prodextra ?? null,
+          org_id: d.org_id != null ? String(d.org_id) : null,
+          organization: d.organizations
+            ? {
+                ...d.organizations,
+                org_id: d.organizations.org_id != null ? String(d.organizations.org_id) : null
+              }
+            : null,
+          person: d.person_id ? personById.get(d.person_id) || null : null,
+          deal_products: prods // ⬅️ cada producto ya incluye hours/type/code/category
+        };
+      });
 
       return successResponse({ deals: rows });
     }
