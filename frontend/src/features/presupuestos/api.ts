@@ -373,7 +373,8 @@ export async function fetchDealDetail(dealId: number | string): Promise<DealDeta
 }
 
 export async function importDeal(dealId: string): Promise<DealSummary | null> {
-  const data = await request('/deals_import', { method: 'POST', body: JSON.stringify({ dealId }) })
+  // FIX CTO: el backend expone '/deals/import' (no '/deals_import')
+  const data = await request('/deals/import', { method: 'POST', body: JSON.stringify({ dealId }) })
   const importedId = data?.deal_id ?? data?.dealId ?? data?.id ?? dealId
   if (!importedId) return null
 
