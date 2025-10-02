@@ -1,3 +1,4 @@
+// netlify/functions/deals.ts
 import * as nodeCrypto from 'crypto';
 import { COMMON_HEADERS, successResponse, errorResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
@@ -21,18 +22,17 @@ function parsePathId(path: any) {
 function idToString(v: any): string | null {
   if (v === null || v === undefined) return null;
   if (typeof v === 'object') {
-    const inner = (v as any).value ?? (v as any).id ?? (v as any).org_id ?? (v as any).person_id;
+    const inner =
+      (v as any).value ??
+      (v as any).id ??
+      (v as any).org_id ??
+      (v as any).person_id ??
+      (v as any).pipeline_id;
     if (inner === null || inner === undefined) return null;
     return String(inner);
   }
   const s = String(v).trim();
   return s.length ? s : null;
-}
-function idToNumber(v: any): number | null {
-  const s = idToString(v);
-  if (s === null) return null;
-  const n = Number(s);
-  return Number.isNaN(n) ? null : n;
 }
 
 /* ======================= IMPORT DESDE PIPEDRIVE ======================= */
@@ -54,58 +54,53 @@ async function importDealFromPipedrive(dealIdRaw: any) {
   const d = json?.data;
   if (!d) throw new Error('Deal no encontrado en Pipedrive');
 
-  // IDs duales (según tablas de nuestra BD)
-  const org_id_str = idToString(d?.org_id);
-  const person_id_str = idToString(d?.person_id);
-  const org_id_num = idToNumber(d?.org_id);
-  const person_id_num = idToNumber(d?.person_id);
+  // IDs como STRING (coinciden con nuestro schema)
+  const deal_id       = String(d.id);
+  const pipeline_id   = idToString(d?.pipeline_id);
+  const org_id        = idToString(d?.org_id);
+  const person_id     = idToString(d?.person_id);
 
-  const pipeline_id_str = d?.pipeline_id != null ? String(d.pipeline_id) : null; // deals.pipeline_id espera string
-
-  // Normalización básica
+  // Normalización
   const normalized = {
-    deal_id: String(d.id), // deals.deal_id es string
+    deal_id,
     title: d.title ?? '',
-    pipeline_id: pipeline_id_str, // string|null
+    pipeline_id, // string|null
     training_address: d?.deal_direction ?? d?.training_address ?? null,
     sede_label: d?.Sede ?? d?.sede_label ?? null,
     caes_label: d?.CAES ?? d?.caes_label ?? null,
     fundae_label: d?.FUNDAE ?? d?.fundae_label ?? null,
     hotel_label: d?.Hotel_Night ?? d?.hotel_label ?? null,
-    hours: Number(d?.hours ?? 0) || 0, // luego guardamos como string
+    hours: Number(d?.hours ?? 0) || 0, // luego se guarda string
     alumnos: Number(d?.alumnos ?? 0) || 0,
 
-    org_id_str,
+    org_id,
     org_name: d?.org_name ?? null,
-    person_id_str,
+    person_id,
     person_name: d?.person_name ?? null,
     person_email: d?.person_email ?? null,
     person_phone: d?.person_phone ?? null,
-
-    org_id_num,      // para deals
-    person_id_num,   // para deals
   };
 
-  // Upsert organización (tabla organizations usa STRING)
-  if (normalized.org_id_str) {
+  // Upsert organización (organizations.org_id = STRING)
+  if (normalized.org_id) {
     await prisma.organizations.upsert({
-      where:  { org_id: normalized.org_id_str },
+      where:  { org_id: normalized.org_id },
       update: { name: normalized.org_name ?? undefined },
-      create: { org_id: normalized.org_id_str, name: normalized.org_name ?? '' }, // name no null
+      create: { org_id: normalized.org_id, name: normalized.org_name ?? '' }, // name nunca null
     });
   }
 
-  // Upsert persona (tabla persons usa STRING)
-  if (normalized.person_id_str) {
+  // Upsert persona (persons.person_id = STRING)
+  if (normalized.person_id) {
     await prisma.persons.upsert({
-      where:  { person_id: normalized.person_id_str },
+      where:  { person_id: normalized.person_id },
       update: {
-        first_name: normalized.person_name ?? undefined,
+        first_name: normalized.person_name ?? undefined, // si separáis más adelante, adaptar
         email:      normalized.person_email ?? undefined,
         phone:      normalized.person_phone ?? undefined,
       },
       create: {
-        person_id:  normalized.person_id_str,
+        person_id:  normalized.person_id,
         first_name: normalized.person_name ?? '',
         last_name:  null,
         email:      normalized.person_email ?? null,
@@ -114,10 +109,10 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     });
   }
 
-  // Upsert deal (tabla deals: *_id numéricos; pipeline_id string; hours string)
+  // ⚠️ En deals TODAS las IDs son STRING en tu schema: org_id, person_id, pipeline_id, deal_id
   const dealDataBase = {
     title:            normalized.title,
-    pipeline_id:      normalized.pipeline_id,                 // string|null (TS ok)
+    pipeline_id:      normalized.pipeline_id,                 // string|null
     training_address: normalized.training_address,
     sede_label:       normalized.sede_label,
     caes_label:       normalized.caes_label,
@@ -125,8 +120,8 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     hotel_label:      normalized.hotel_label,
     hours:            normalized.hours != null ? String(normalized.hours) : null, // string|null
     alumnos:          normalized.alumnos ?? null,
-    org_id:           normalized.org_id_num,                  // number|null
-    person_id:        normalized.person_id_num,               // number|null
+    org_id:           normalized.org_id,                      // string|null ✅
+    person_id:        normalized.person_id,                   // string|null ✅
   };
 
   const saved = await prisma.deals.upsert({
@@ -179,11 +174,7 @@ export const handler = async (event: any) => {
     if (method === 'GET' && dealId !== null) {
       const deal = await prisma.deals.findUnique({
         where: { deal_id: dealId },
-        // ¡No uses include con relaciones no definidas en el schema!
-        // Solo comments (existe) y el resto se consulta aparte.
-        include: {
-          comments: { orderBy: { created_at: 'desc' } },
-        },
+        include: { comments: { orderBy: { created_at: 'desc' } } }, // solo relaciones existentes
       });
       if (!deal) return errorResponse('NOT_FOUND', 'Deal no encontrado', 404);
 
@@ -209,13 +200,10 @@ export const handler = async (event: any) => {
           where: { deal_id: dealId },
           orderBy: { created_at: 'desc' },
         }),
-        deal.person_id != null
-          ? prisma.persons.findUnique({ where: { person_id: String(deal.person_id) } })
-          : null,
+        deal.person_id ? prisma.persons.findUnique({ where: { person_id: String(deal.person_id) } }) : null,
         prisma.deal_files.findMany({ where: { deal_id: dealId } }),
       ]);
 
-      // Organización (tabla organizations indexa por string)
       const organization =
         deal.org_id != null
           ? await prisma.organizations.findUnique({
@@ -238,10 +226,8 @@ export const handler = async (event: any) => {
         updated_at: n.updated_at?.toISOString?.() ?? n.updated_at,
       }));
 
-      const hoursFromProducts = normalizedProducts.reduce(
-        (acc: number, pr: any) => acc + (Number(pr.quantity) || 0),
-        0,
-      ) || null;
+      const hoursFromProducts =
+        normalizedProducts.reduce((acc: number, pr: any) => acc + (Number(pr.quantity) || 0), 0) || null;
 
       const normalizedDocs = files.map((f: any) => ({
         id: f.id,
@@ -259,7 +245,7 @@ export const handler = async (event: any) => {
 
       const normalizedDeal: any = {
         ...deal,
-        hours: (deal as any).hours ?? hoursFromProducts, // hours en DB es string|null
+        hours: (deal as any).hours ?? hoursFromProducts, // DB: string|null → devolvemos número si no hay
         org_id: deal.org_id != null ? String(deal.org_id) : null,
         organization: organization
           ? { ...organization, org_id: organization.org_id != null ? String(organization.org_id) : null }
@@ -356,16 +342,16 @@ export const handler = async (event: any) => {
           deal_id: true,
           title: true,
           sede_label: true,
-          pipeline_id: true,
+          pipeline_id: true,      // string|null
           training_address: true,
-          hours: true,
+          hours: true,            // string|null
           alumnos: true,
           caes_label: true,
           fundae_label: true,
           hotel_label: true,
           prodextra: true,
-          org_id: true,     // number|null
-          person_id: true,  // number|null
+          org_id: true,           // string|null
+          person_id: true,        // string|null
           created_at: true,
         },
         orderBy: { created_at: 'desc' },
@@ -384,9 +370,8 @@ export const handler = async (event: any) => {
           })
         : [];
 
-      // Orgs/persons: nuestras tablas indexan por STRING
-      const orgIds = [...new Set(deals.map((d: any) => d.org_id).filter(Boolean).map((v: any) => String(v)))];
-      const personIds = [...new Set(deals.map((d: any) => d.person_id).filter(Boolean).map((v: any) => String(v)))];
+      const orgIds = [...new Set(deals.map((d: any) => d.org_id).filter(Boolean))] as string[];
+      const personIds = [...new Set(deals.map((d: any) => d.person_id).filter(Boolean))] as string[];
 
       const [orgs, persons] = await Promise.all([
         orgIds.length
@@ -396,8 +381,8 @@ export const handler = async (event: any) => {
           ? prisma.persons.findMany({ where: { person_id: { in: personIds } }, select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } })
           : Promise.resolve([] as any[]),
       ]);
-      const orgById = new Map(orgs.map((o: any) => [o.org_id, o]));
-      const personById = new Map(persons.map((p: any) => [p.person_id, p]));
+      const orgById = new Map(orgs.map((o) => [o.org_id, o]));
+      const personById = new Map(persons.map((p) => [p.person_id, p]));
 
       const productsByDeal = new Map<string, any[]>();
       for (const p of products) {
@@ -419,17 +404,17 @@ export const handler = async (event: any) => {
           deal_id: d.deal_id,
           title: d.title || '',
           sede_label: d.sede_label || '',
-          pipeline_id: d.pipeline_id || null, // string|null
+          pipeline_id: d.pipeline_id || null,
           training_address: d.training_address || null,
-          hours: d.hours ?? computedHours, // en DB hours es string|null
+          hours: d.hours ?? computedHours,
           alumnos: d.alumnos ?? null,
           caes_label: d.caes_label || null,
           fundae_label: d.fundae_label || null,
           hotel_label: d.hotel_label || null,
           prodextra: d.prodextra ?? null,
-          org_id: d.org_id != null ? String(d.org_id) : null,
-          organization: d.org_id != null ? orgById.get(String(d.org_id)) || null : null,
-          person: d.person_id != null ? personById.get(String(d.person_id)) || null : null,
+          org_id: d.org_id ?? null,
+          organization: d.org_id ? orgById.get(d.org_id) || null : null,
+          person: d.person_id ? personById.get(d.person_id) || null : null,
           deal_products: prods,
         };
       });
