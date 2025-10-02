@@ -9,7 +9,8 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "types": ["@netlify/functions", "node"]
   },
-  "include": ["./functions/**/*.ts"],
+  "include": ["./functions/**/*/*.ts"],
   "exclude": ["../node_modules", "./**/*.js"]
 }
