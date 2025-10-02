@@ -1,6 +1,6 @@
 import * as nodeCrypto from 'crypto'
-const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
-const { getPrisma } = require('./_shared/prisma');
+import { COMMON_HEADERS, successResponse, errorResponse } from './_shared/response';
+import { getPrisma } from './_shared/prisma';
 
 const EDITABLE_FIELDS = new Set(['sede_label', 'hours', 'training_address', 'caes_label', 'fundae_label', 'hotel_label', 'alumnos']);
 

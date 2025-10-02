@@ -1,6 +1,6 @@
 import type { Handler } from '@netlify/functions';
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '-sdk/client-s3';
+import { getSignedUrl } from '-sdk/s3-request-presigner';
 import { prisma } from './_lib/db';
 import { ok, err, getUser } from './_lib/http';
 import { randomUUID } from 'node:crypto';
