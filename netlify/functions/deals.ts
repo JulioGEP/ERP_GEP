@@ -19,21 +19,26 @@ export const handler = async (event: any, context: any) => {
     const prisma = getPrisma();
     const method = event.httpMethod;
     const path = event.path || '';
-    const dealId = parsePathId(path);
 
-    // --- GET detalle: /.netlify/functions/deals/:id ---
+    // Soporta id por PATH y también por QUERY (?dealId=)
+    const qsId = event.queryStringParameters?.dealId
+      ? String(event.queryStringParameters.dealId).trim()
+      : null;
+    const dealId = parsePathId(path) ?? (qsId && qsId.length ? qsId : null);
+
+    // --- GET detalle: /.netlify/functions/deals/:id  o  /.netlify/functions/deals?dealId= ---
     if (method === 'GET' && dealId !== null) {
       const deal = await prisma.deals.findUnique({
         where: { deal_id: dealId },
         include: {
-          documents: true,
+          // documents: true, // ❌ NO existe "documents" en tu BBDD
           comments: { orderBy: { created_at: 'desc' } },
           organizations: true
         }
       });
       if (!deal) return errorResponse('NOT_FOUND', 'Deal no encontrado', 404);
 
-      const [products, notes, person] = await Promise.all([
+      const [products, notes, person, files] = await Promise.all([
         prisma.deal_products.findMany({
           where: { deal_id: dealId },
           orderBy: { created_at: 'asc' }
@@ -42,7 +47,12 @@ export const handler = async (event: any, context: any) => {
           where: { deal_id: dealId },
           orderBy: { created_at: 'desc' }
         }),
-        deal.person_id ? prisma.persons.findUnique({ where: { person_id: deal.person_id } }) : null
+        deal.person_id ? prisma.persons.findUnique({ where: { person_id: deal.person_id } }) : null,
+        prisma.deal_files.findMany({
+          where: { deal_id: dealId }
+          // si tienes created_at en deal_files y quieres ordenar, descomenta:
+          // orderBy: { created_at: 'desc' }
+        })
       ]);
 
       const normalizedProducts = products.map((product: any) => ({
@@ -57,20 +67,43 @@ export const handler = async (event: any, context: any) => {
         created_at: note.created_at?.toISOString?.() ?? note.created_at,
         updated_at: note.updated_at?.toISOString?.() ?? note.updated_at
       }));
+      const inferredHours = normalizedProducts.reduce((acc: number, p: any) => acc + (Number(p.quantity) || 0), 0) || null;
+      const firstTrainingName = normalizedProducts.find((p: any) => (p.name && String(p.name).trim().length))?.name ?? null;
+
+      // Mapeo de deal_files -> documents (forma que espera el front)
+      const normalizedDocs = files.map((f: any) => ({
+        id: f.id,
+        doc_id: f.id,
+        file_name: f.file_name ?? null,
+        fileName: f.file_name ?? null,
+        // si tu tabla tiene estos campos, los mostramos; si no, quedan null/0 y el front ya lo tolera
+        file_size: (f as any).file_size ?? null,
+        fileSize: (f as any).file_size ?? null,
+        mime_type: (f as any).mime_type ?? null,
+        mimeType: (f as any).mime_type ?? null,
+        // usamos file_url como "storage_key" porque el front lo espera así para previsualizar
+        storage_key: f.file_url ?? null,
+        storageKey: f.file_url ?? null,
+        // forzamos user_upload para que el botón "Eliminar" aparezca (si tu política lo permite)
+        origin: 'user_upload'
+      }));
 
       const { organizations, ...rest } = deal;
-      const normalizedDeal: any = {
-      ...rest,
-      org_id: deal.org_id != null ? String(deal.org_id) : null,
-      organization: organizations
-      ? {
+const normalizedDeal: any = {
+  ...rest,
+  // fuerza hours si no viene de DB
+  hours: (rest as any).hours ?? inferredHours,
+  org_id: deal.org_id != null ? String(deal.org_id) : null,
+  organization: organizations
+    ? {
         ...organizations,
         org_id: organizations.org_id != null ? String(organizations.org_id) : null
       }
-      : null,
-      deal_products: normalizedProducts,
-      deal_notes: normalizedNotes,
-      person: person
+    : null,
+  deal_products: normalizedProducts,
+  deal_notes: normalizedNotes,
+  documents: normalizedDocs,
+  person: person
     ? {
         ...person,
         person_id: person.person_id,
@@ -80,9 +113,9 @@ export const handler = async (event: any, context: any) => {
         phone: person.phone ?? null
       }
     : null
-    };
-    return successResponse({ deal: normalizedDeal });
+};
 
+      return successResponse({ deal: normalizedDeal });
     }
 
     // --- PATCH edición parcial (solo 7 campos) + comentarios ---
@@ -94,11 +127,11 @@ export const handler = async (event: any, context: any) => {
 
       const body = JSON.parse(event.body || '{}');
 
-      // Deal patch
-      const patch = {};
+      // Deal patch (FIX: usar "patch", no "path")
+      const patch: Record<string, any> = {};
       if (body.deal && typeof body.deal === 'object') {
         for (const k of Object.keys(body.deal)) {
-          if (EDITABLE_FIELDS.has(k)) path[k] = body.deal[k];
+          if (EDITABLE_FIELDS.has(k)) patch[k] = body.deal[k];
         }
       }
       if ('hours' in patch) {
