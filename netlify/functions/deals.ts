@@ -396,8 +396,8 @@ export const handler = async (event: any) => {
           ? prisma.persons.findMany({ where: { person_id: { in: personIds } }, select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } })
           : Promise.resolve([] as any[]),
       ]);
-      const orgById = new Map(orgs.map((o) => [o.org_id, o]));
-      const personById = new Map(persons.map((p) => [p.person_id, p]));
+      const orgById = new Map(orgs.map((o: any) => [o.org_id, o]));
+      const personById = new Map(persons.map((p: any) => [p.person_id, p]));
 
       const productsByDeal = new Map<string, any[]>();
       for (const p of products) {
