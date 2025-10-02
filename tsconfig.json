@@ -1,31 +1,13 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    "lib": ["ES2022", "DOM"],
-    "strict": true,
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "isolatedModules": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "allowJs": false,
-    "noEmit": true
-  },
-  "include": [
-    "frontend/**/*.ts",
-    "frontend/**/*.tsx",
-    "backend/**/*.ts",
-    "backend/**/*.tsx"
+  "files": [],
+  "references": [
+    { "path": "./frontend" },
+    { "path": "./netlify/functions" }
   ],
   "exclude": [
     "node_modules",
-    "frontend/node_modules",
-    "backend/node_modules",
-    "dist",
-    "build",
-    "netlify/functions",
-    "**/*.js"
+    "**/dist",
+    "**/.netlify",
+    "**/.cache"
   ]
 }
