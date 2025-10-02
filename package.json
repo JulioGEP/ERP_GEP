@@ -10,13 +10,14 @@
     "build:functions": "netlify build"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.668.0",
-    "@aws-sdk/s3-request-presigner": "^3.668.0",
     "@neondatabase/serverless": "^1.0.1",
     "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.901.0",
+    "@aws-sdk/s3-request-presigner": "^3.901.0",
     "@netlify/functions": "^4.2.7",
+    "@types/node": "^24.6.2",
     "dotenv-cli": "^10.0.0",
     "netlify-cli": "^17.38.1",
     "pino-pretty": "^13.1.1",
