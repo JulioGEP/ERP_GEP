@@ -2,14 +2,121 @@ import * as nodeCrypto from 'crypto'
 const { COMMON_HEADERS, successResponse, errorResponse } = require('./_shared/response');
 const { getPrisma } = require('./_shared/prisma');
 
-const EDITABLE_FIELDS = new Set(['sede_label', 'hours', 'training_address', 'caes_label', 'fundae_label', 'hotel_label', 'alumnos'])
+const EDITABLE_FIELDS = new Set(['sede_label', 'hours', 'training_address', 'caes_label', 'fundae_label', 'hotel_label', 'alumnos']);
 
 function parsePathId(path: any) {
-  const m = path.match(/\/\.netlify\/functions\/deals\/([^/]+)/);
+  const m = String(path || '').match(/\/\.netlify\/functions\/deals\/([^/]+)/);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-export const handler = async (event: any, context: any) => {
+async function importDealFromPipedrive(dealIdRaw: any) {
+  const prisma = getPrisma();
+  const dealId = String(dealIdRaw ?? '').trim();
+  if (!dealId) throw new Error('Falta dealId');
+
+  const base = process.env.PIPEDRIVE_BASE_URL!;
+  const token = process.env.PIPEDRIVE_API_TOKEN!;
+  if (!base || !token) throw new Error('Pipedrive no configurado');
+
+  const res = await fetch(`${base}/deals/${dealId}?api_token=${token}`);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Pipedrive ${res.status}: ${txt}`);
+  }
+  const json = await res.json();
+  const d = json?.data;
+  if (!d) throw new Error('Deal no encontrado en Pipedrive');
+
+  // Normaliza con vuestras convenciones vigentes
+  const normalized = {
+    deal_id: d.id,
+    title: d.title ?? '',
+    pipeline_id: d.pipeline_id ?? null,
+    training_address: d?.deal_direction ?? d?.training_address ?? null,
+    sede_label: d?.Sede ?? d?.sede_label ?? null,
+    caes_label: d?.CAES ?? d?.caes_label ?? null,
+    fundae_label: d?.FUNDAE ?? d?.fundae_label ?? null,
+    hotel_label: d?.Hotel_Night ?? d?.hotel_label ?? null,
+    hours: Number(d?.hours ?? 0) || 0,
+    alumnos: Number(d?.alumnos ?? 0) || 0,
+    org_id: d?.org_id?.value ?? d?.org_id ?? null,
+    org_name: d?.org_name ?? null,
+    person_id: d?.person_id?.value ?? d?.person_id ?? null,
+    person_name: d?.person_name ?? null,
+    person_email: d?.person_email ?? null,
+    person_phone: d?.person_phone ?? null
+  };
+
+  let orgConnect: any = undefined;
+  if (normalized.org_id) {
+    const org = await prisma.organizations.upsert({
+      where: { org_id: normalized.org_id },
+      update: { name: normalized.org_name ?? undefined },
+      create: { org_id: normalized.org_id, name: normalized.org_name ?? '' }
+    });
+    orgConnect = { connect: { org_id: org.org_id } };
+  }
+
+  let personConnect: any = undefined;
+  if (normalized.person_id) {
+    const person = await prisma.persons.upsert({
+      where: { person_id: normalized.person_id },
+      update: {
+        name: normalized.person_name ?? undefined,
+        email: normalized.person_email ?? undefined,
+        phone: normalized.person_phone ?? undefined
+      },
+      create: {
+        person_id: normalized.person_id,
+        name: normalized.person_name ?? '',
+        email: normalized.person_email ?? null,
+        phone: normalized.person_phone ?? null
+      }
+    });
+    personConnect = { connect: { person_id: person.person_id } };
+  }
+
+  const saved = await prisma.deals.upsert({
+    where: { deal_id: normalized.deal_id },
+    update: {
+      title: normalized.title,
+      pipeline_id: normalized.pipeline_id,
+      training_address: normalized.training_address,
+      sede_label: normalized.sede_label,
+      caes_label: normalized.caes_label,
+      fundae_label: normalized.fundae_label,
+      hotel_label: normalized.hotel_label,
+      hours: normalized.hours,
+      alumnos: normalized.alumnos,
+      ...(orgConnect ? { organization: orgConnect } : {}),
+      ...(personConnect ? { person: personConnect } : {})
+    },
+    create: {
+      deal_id: normalized.deal_id,
+      title: normalized.title,
+      pipeline_id: normalized.pipeline_id,
+      training_address: normalized.training_address,
+      sede_label: normalized.sede_label,
+      caes_label: normalized.caes_label,
+      fundae_label: normalized.fundae_label,
+      hotel_label: normalized.hotel_label,
+      hours: normalized.hours,
+      alumnos: normalized.alumnos,
+      ...(orgConnect ? { organization: orgConnect } : {}),
+      ...(personConnect ? { person: personConnect } : {})
+    },
+    select: {
+      deal_id: true,
+      title: true,
+      organization: { select: { org_id: true, name: true } },
+      person: { select: { person_id: true, name: true, email: true, phone: true } }
+    }
+  });
+
+  return saved;
+}
+
+export const handler = async (event: any) => {
   try {
     // Preflight CORS
     if (event.httpMethod === 'OPTIONS') {
@@ -26,13 +133,28 @@ export const handler = async (event: any, context: any) => {
       : null;
     const dealId = parsePathId(path) ?? (qsId && qsId.length ? qsId : null);
 
+    // --- IMPORT: POST /.netlify/functions/deals/import  (y GET con ?dealId= para debug)
+    if ((method === 'POST' && path.endsWith('/deals/import')) ||
+        (method === 'GET' && path.endsWith('/deals/import'))) {
+      const body = event.body ? JSON.parse(event.body) : {};
+      const incomingId = body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
+      if (!incomingId) return errorResponse('VALIDATION_ERROR', 'Falta dealId', 400);
+
+      try {
+        const saved = await importDealFromPipedrive(incomingId);
+        return successResponse({ ok: true, deal: saved });
+      } catch (e: any) {
+        return errorResponse('IMPORT_ERROR', e?.message || 'Error importando deal', 502);
+      }
+    }
+
     // --- GET detalle: /.netlify/functions/deals/:id  o  /.netlify/functions/deals?dealId= ---
     if (method === 'GET' && dealId !== null) {
       const deal = await prisma.deals.findUnique({
         where: { deal_id: dealId },
         include: {
           comments: { orderBy: { created_at: 'desc' } },
-          organizations: true
+          organization: true
         }
       });
       if (!deal) return errorResponse('NOT_FOUND', 'Deal no encontrado', 404);
@@ -41,7 +163,6 @@ export const handler = async (event: any, context: any) => {
         prisma.deal_products.findMany({
           where: { deal_id: dealId },
           orderBy: { created_at: 'asc' },
-          // ⬇️ incluye nuevos campos para el popup: hours, type, code, category
           select: {
             id: true,
             deal_id: true,
@@ -63,38 +184,33 @@ export const handler = async (event: any, context: any) => {
           orderBy: { created_at: 'desc' }
         }),
         deal.person_id ? prisma.persons.findUnique({ where: { person_id: deal.person_id } }) : null,
-        prisma.deal_files.findMany({
-          where: { deal_id: dealId }
-        })
+        prisma.deal_files.findMany({ where: { deal_id: dealId } })
       ]);
 
-      const normalizedProducts = products.map((product: any) => ({
-        ...product,
-        // normalizaciones
-        quantity: product.quantity != null ? Number(product.quantity) : null,
-        price: product.price != null ? Number(product.price) : null,
-        hours: product.hours != null ? Number(product.hours) : null, // ⬅️ NUEVO
-        code: product.code ?? null,                                   // ⬅️ NUEVO
-        category: product.category ?? null,                           // ⬅️ NUEVO
-        type: product.type ?? null,                                   // ⬅️ NUEVO (enum/string)
-        created_at: product.created_at?.toISOString?.() ?? product.created_at,
-        updated_at: product.updated_at?.toISOString?.() ?? product.updated_at
+      const normalizedProducts = products.map((p: any) => ({
+        ...p,
+        quantity: p.quantity != null ? Number(p.quantity) : null,
+        price: p.price != null ? Number(p.price) : null,
+        hours: p.hours != null ? Number(p.hours) : null,
+        code: p.code ?? null,
+        category: p.category ?? null,
+        type: p.type ?? null,
+        created_at: p.created_at?.toISOString?.() ?? p.created_at,
+        updated_at: p.updated_at?.toISOString?.() ?? p.updated_at
       }));
 
-      const normalizedNotes = notes.map((note: any) => ({
-        ...note,
-        created_at: note.created_at?.toISOString?.() ?? note.created_at,
-        updated_at: note.updated_at?.toISOString?.() ?? note.updated_at
+      const normalizedNotes = notes.map((n: any) => ({
+        ...n,
+        created_at: n.created_at?.toISOString?.() ?? n.created_at,
+        updated_at: n.updated_at?.toISOString?.() ?? n.updated_at
       }));
 
-      // horas inferidas por si no existen a nivel deal (suma de hours de productos; si no, suma de quantity)
       const hoursFromProducts = (() => {
         const byHours = normalizedProducts.reduce((acc: number, p: any) => acc + (Number(p.hours) || 0), 0);
         if (byHours > 0) return byHours;
         return normalizedProducts.reduce((acc: number, p: any) => acc + (Number(p.quantity) || 0), 0) || null;
       })();
 
-      // Mapeo de deal_files -> documents (forma que espera el front)
       const normalizedDocs = files.map((f: any) => ({
         id: f.id,
         doc_id: f.id,
@@ -109,18 +225,18 @@ export const handler = async (event: any, context: any) => {
         origin: 'user_upload'
       }));
 
-      const { organizations, ...rest } = deal;
+      const { organization, ...rest } = deal as any;
       const normalizedDeal: any = {
         ...rest,
-        hours: (rest as any).hours ?? hoursFromProducts, // ⬅️ fallback seguro
+        hours: (rest as any).hours ?? hoursFromProducts,
         org_id: deal.org_id != null ? String(deal.org_id) : null,
-        organization: organizations
+        organization: organization
           ? {
-              ...organizations,
-              org_id: organizations.org_id != null ? String(organizations.org_id) : null
+              ...organization,
+              org_id: organization.org_id != null ? String(organization.org_id) : null
             }
           : null,
-        deal_products: normalizedProducts, // ⬅️ ya incluye hours/type/code/category
+        deal_products: normalizedProducts,
         deal_notes: normalizedNotes,
         documents: normalizedDocs,
         person: person
@@ -147,7 +263,6 @@ export const handler = async (event: any, context: any) => {
 
       const body = JSON.parse(event.body || '{}');
 
-      // Deal patch (FIX: usar "patch", no "path")
       const patch: Record<string, any> = {};
       if (body.deal && typeof body.deal === 'object') {
         for (const k of Object.keys(body.deal)) {
@@ -226,7 +341,7 @@ export const handler = async (event: any, context: any) => {
           prodextra: true,
           org_id: true,
           person_id: true,
-          organizations: { select: { org_id: true, name: true} },
+          organization: { select: { org_id: true, name: true } },
           created_at: true
         },
         orderBy: { created_at: 'desc' }
@@ -237,19 +352,18 @@ export const handler = async (event: any, context: any) => {
       const products = dealIds.length
         ? await prisma.deal_products.findMany({
             where: { deal_id: { in: dealIds } },
-            // ⬇️ añadimos nuevos campos para que la tabla pueda construir “Formación” y horas
             select: {
               id: true,
               deal_id: true,
               product_id: true,
               name: true,
-              code: true,        // NUEVO
-              category: true,    // NUEVO
+              code: true,
+              category: true,
               quantity: true,
               price: true,
               is_training: true,
-              type: true,        // NUEVO
-              hours: true,       // NUEVO
+              type: true,
+              hours: true,
               created_at: true
             },
             orderBy: { created_at: 'asc' }
@@ -280,7 +394,6 @@ export const handler = async (event: any, context: any) => {
 
       const rows = deals.map((d: any) => {
         const prods = productsByDeal.get(d.deal_id) || [];
-        // Si el deal no tiene hours, calculamos suma de hours por productos; si no hay, suma de quantity.
         const computedHours = (() => {
           const sumH = prods.reduce((acc: number, p: any) => acc + (Number(p.hours) || 0), 0);
           if (sumH > 0) return sumH;
@@ -294,21 +407,21 @@ export const handler = async (event: any, context: any) => {
           sede_label: d.sede_label || '',
           pipeline_id: d.pipeline_id || null,
           training_address: d.training_address || null,
-          hours: d.hours ?? computedHours, // ⬅️ fallback seguro
+          hours: d.hours ?? computedHours,
           alumnos: d.alumnos ?? null,
           caes_label: d.caes_label || null,
           fundae_label: d.fundae_label || null,
           hotel_label: d.hotel_label || null,
           prodextra: d.prodextra ?? null,
           org_id: d.org_id != null ? String(d.org_id) : null,
-          organization: d.organizations
+          organization: d.organization
             ? {
-                ...d.organizations,
-                org_id: d.organizations.org_id != null ? String(d.organizations.org_id) : null
+                ...d.organization,
+                org_id: d.organization.org_id != null ? String(d.organization.org_id) : null
               }
             : null,
           person: d.person_id ? personById.get(d.person_id) || null : null,
-          deal_products: prods // ⬅️ cada producto ya incluye hours/type/code/category
+          deal_products: prods
         };
       });
 
