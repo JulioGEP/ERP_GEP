@@ -89,10 +89,10 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
         <thead>
           <tr>
             <th scope="col">Presupuesto</th>
-            <th scope="col">Título</th>
-            <th scope="col">Sede</th>
             <th scope="col">Empresa</th>
+            <th scope="col">Título</th>
             <th scope="col">Formación</th>
+            <th scope="col">Sede</th>
           </tr>
         </thead>
         <tbody>
@@ -122,10 +122,10 @@ export function BudgetTable({ budgets, isLoading, isFetching, error, onRetry, on
                 <td className="fw-semibold" title={presupuestoTitle}>
                   {presupuestoLabel}
                 </td>
-                <td title={budget.title}>{titleLabel}</td>
-                <td>{sedeLabel}</td>
                 <td>{organizationLabel}</td>
+                <td title={budget.title}>{titleLabel}</td>
                 <td title={productInfo.title}>{productInfo.label}</td>
+                <td>{sedeLabel}</td>
               </tr>
             );
           })}
