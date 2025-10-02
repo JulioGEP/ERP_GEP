@@ -1,7 +1,54 @@
-import * as nodeCrypto from 'crypto';
-import { COMMON_HEADERS, successResponse, errorResponse } from './_shared/response';
-import { getPrisma } from './_shared/prisma';
+/* netlify/functions/deals.ts
+ * Endpoints soportados:
+ *  - GET    /.netlify/functions/deals?noSessions=true
+ *  - GET    /.netlify/functions/deals/:dealId
+ *  - POST   /.netlify/functions/deals/import  { dealId }
+ *  - PATCH  /.netlify/functions/deals/:dealId (campos editables + comments)
+ *
+ * NOTAS CTO:
+ * - Todas las IDs externas (deal_id, org_id, person_id, product_id, stage_id, pipeline_id)
+ *   se FUERZAN A STRING antes de persistir.
+ * - Corrige el error:
+ *   "Invalid value provided. Expected String, provided Int." en organizations.upsert
+ */
 
+import type { Handler } from '@netlify/functions'
+import fetch from 'node-fetch'
+import { PrismaClient } from '@prisma/client'
+
+const prisma2 = new PrismaClient()
+
+// ---- Utils ----------------------------------------------------
+
+const ok = (data: unknown, status = 200) => ({
+  statusCode: status,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(data),
+})
+
+const fail = (code: string, message: string, status = 500, extra?: any) => ({
+  statusCode: status,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ ok: false, error_code: code, message, ... (extra ?? {}) }),
+})
+
+const toStr = (v: any): string | null => {
+  if (v === null || v === undefined) return null
+  const s = String(v).trim()
+  return s.length ? s : null
+}
+const toNum = (v: any): number | null => {
+  if (v === null || v === undefined) return null
+  const n = Number(v)
+  return Number.isNaN(n) ? null : n
+}
+
+const ENV = {
+  PIPEDRIVE_BASE_URL: process.env.PIPEDRIVE_BASE_URL || 'https://api.pipedrive.com/v1',
+  PIPEDRIVE_API_TOKEN: process.env.PIPEDRIVE_API_TOKEN || '',
+}
+
+// Campos permitidos en PATCH (con naming vigente de la app)
 const EDITABLE_FIELDS = new Set([
   'sede_label',
   'hours',
@@ -10,438 +57,345 @@ const EDITABLE_FIELDS = new Set([
   'fundae_label',
   'hotel_label',
   'alumnos',
-]);
+])
 
-function parsePathId(path: any) {
-  const m = String(path || '').match(/\/\.netlify\/functions\/deals\/([^/]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
-}
+// ---- Pipedrive ------------------------------------------------
 
-// ---------- IMPORT DESDE PIPEDRIVE ----------
-async function importDealFromPipedrive(dealIdRaw: any) {
-  const prisma = getPrisma();
-  const dealId = String(dealIdRaw ?? '').trim();
-  if (!dealId) throw new Error('Falta dealId');
-
-  const base = process.env.PIPEDRIVE_BASE_URL!;
-  const token = process.env.PIPEDRIVE_API_TOKEN!;
-  if (!base || !token) throw new Error('Pipedrive no configurado');
-
-  const res = await fetch(`${base}/deals/${dealId}?api_token=${token}`);
+async function pdRequest(path: string) {
+  if (!ENV.PIPEDRIVE_API_TOKEN) {
+    throw new Error('PIPEDRIVE_API_TOKEN no configurado')
+  }
+  const url = `${ENV.PIPEDRIVE_BASE_URL}${path}${path.includes('?') ? '&' : '?'}api_token=${ENV.PIPEDRIVE_API_TOKEN}`
+  const res = await fetch(url)
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Pipedrive ${res.status}: ${txt}`);
+    const txt = await res.text().catch(() => '')
+    throw new Error(`Pipedrive ${res.status}: ${txt}`)
   }
-  const json = await res.json();
-  const d = json?.data;
-  if (!d) throw new Error('Deal no encontrado en Pipedrive');
-
-  // Normalización básica
-  const normalized = {
-    deal_id: d.id,
-    title: d.title ?? '',
-    pipeline_id: d.pipeline_id ?? null,
-    training_address: d?.deal_direction ?? d?.training_address ?? null,
-    sede_label: d?.Sede ?? d?.sede_label ?? null,
-    caes_label: d?.CAES ?? d?.caes_label ?? null,
-    fundae_label: d?.FUNDAE ?? d?.fundae_label ?? null,
-    hotel_label: d?.Hotel_Night ?? d?.hotel_label ?? null,
-    hours: Number(d?.hours ?? 0) || 0, // luego guardamos como string
-    alumnos: Number(d?.alumnos ?? 0) || 0,
-    org_id: d?.org_id?.value ?? d?.org_id ?? null,
-    org_name: d?.org_name ?? null,
-    person_id: d?.person_id?.value ?? d?.person_id ?? null,
-    person_name: d?.person_name ?? null,
-    person_email: d?.person_email ?? null,
-    person_phone: d?.person_phone ?? null,
-  };
-
-  // Upsert organización por org_id (sin relación directa en selects)
-  if (normalized.org_id) {
-    await prisma.organizations.upsert({
-      where: { org_id: normalized.org_id },
-      update: { name: normalized.org_name ?? undefined },
-      create: { org_id: normalized.org_id, name: normalized.org_name ?? '' },
-    });
-  }
-
-  // Upsert persona: schema usa first_name/last_name (no "name")
-  if (normalized.person_id) {
-    await prisma.persons.upsert({
-      where: { person_id: normalized.person_id },
-      update: {
-        first_name: normalized.person_name ?? undefined, // si algún día separáis nombre/apellidos, adaptar
-        email: normalized.person_email ?? undefined,
-        phone: normalized.person_phone ?? undefined,
-      },
-      create: {
-        person_id: normalized.person_id,
-        first_name: normalized.person_name ?? '',
-        last_name: null,
-        email: normalized.person_email ?? null,
-        phone: normalized.person_phone ?? null,
-      },
-    });
-  }
-
-  // Upsert deal: guarda hours como string y claves directas org_id/person_id
-  const dealDataBase = {
-    title: normalized.title,
-    pipeline_id: normalized.pipeline_id,
-    training_address: normalized.training_address,
-    sede_label: normalized.sede_label,
-    caes_label: normalized.caes_label,
-    fundae_label: normalized.fundae_label,
-    hotel_label: normalized.hotel_label,
-    hours: normalized.hours != null ? String(normalized.hours) : null, // <-- string
-    alumnos: normalized.alumnos ?? null,
-    org_id: normalized.org_id ?? null,
-    person_id: normalized.person_id ?? null,
-  };
-
-  const saved = await prisma.deals.upsert({
-    where: { deal_id: normalized.deal_id },
-    update: dealDataBase,
-    create: { deal_id: normalized.deal_id, ...dealDataBase },
-    select: {
-      deal_id: true,
-      title: true,
-      org_id: true,
-      person_id: true,
-    },
-  });
-
-  return saved;
+  const json = await res.json()
+  return json?.data ?? json
 }
 
-// ---------- HANDLER ----------
-export const handler = async (event: any) => {
+async function fetchDealFromPipedrive(dealId: string) {
+  const deal = await pdRequest(`/deals/${encodeURIComponent(dealId)}`)
+  // productos (deals/{id}/products), notas, persona, organización
+  let products: any[] = []
   try {
-    // CORS
-    if (event.httpMethod === 'OPTIONS') {
-      return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
-    }
-
-    const prisma = getPrisma();
-    const method = event.httpMethod;
-    const path = event.path || '';
-
-    // id por PATH o por QUERY (?dealId=)
-    const qsId = event.queryStringParameters?.dealId
-      ? String(event.queryStringParameters.dealId).trim()
-      : null;
-    const dealId = parsePathId(path) ?? (qsId && qsId.length ? qsId : null);
-
-    // --- IMPORT: POST /.netlify/functions/deals/import (y GET con ?dealId=)
-    if (
-      (method === 'POST' && path.endsWith('/deals/import')) ||
-      (method === 'GET' && path.endsWith('/deals/import'))
-    ) {
-      const body = event.body ? JSON.parse(event.body) : {};
-      const incomingId =
-        body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
-      if (!incomingId) return errorResponse('VALIDATION_ERROR', 'Falta dealId', 400);
-
-      try {
-        const saved = await importDealFromPipedrive(incomingId);
-        return successResponse({ ok: true, deal: saved });
-      } catch (e: any) {
-        return errorResponse('IMPORT_ERROR', e?.message || 'Error importando deal', 502);
-      }
-    }
-
-    // --- GET detalle: /.netlify/functions/deals/:id  o  ?dealId=
-    if (method === 'GET' && dealId !== null) {
-      const deal = await prisma.deals.findUnique({
-        where: { deal_id: dealId },
-        include: {
-          comments: { orderBy: { created_at: 'desc' } },
-          // NO organization (no hay relación en Prisma)
-        },
-      });
-      if (!deal) return errorResponse('NOT_FOUND', 'Deal no encontrado', 404);
-
-      // Productos: sin category ni hours en el esquema actual
-      const [products, notes, person, files] = await Promise.all([
-        prisma.deal_products.findMany({
-          where: { deal_id: dealId },
-          orderBy: { created_at: 'asc' },
-          select: {
-            id: true,
-            deal_id: true,
-            product_id: true,
-            name: true,
-            code: true,
-            quantity: true,
-            price: true,
-            is_training: true,
-            type: true,
-            created_at: true,
-            updated_at: true,
-          },
-        }),
-        prisma.deal_notes.findMany({
-          where: { deal_id: dealId },
-          orderBy: { created_at: 'desc' },
-        }),
-        deal.person_id ? prisma.persons.findUnique({ where: { person_id: deal.person_id } }) : null,
-        prisma.deal_files.findMany({ where: { deal_id: dealId } }),
-      ]);
-
-      // (Opcional) nombre de organización por org_id
-      const organization =
-        deal.org_id != null
-          ? await prisma.organizations.findUnique({
-              where: { org_id: String(deal.org_id) },
-              select: { org_id: true, name: true },
-            })
-          : null;
-
-      const normalizedProducts = products.map((p: any) => ({
-        ...p,
-        quantity: p.quantity != null ? Number(p.quantity) : null,
-        price: p.price != null ? Number(p.price) : null,
-        created_at: p.created_at?.toISOString?.() ?? p.created_at,
-        updated_at: p.updated_at?.toISOString?.() ?? p.updated_at,
-      }));
-
-      const normalizedNotes = notes.map((n: any) => ({
-        ...n,
-        created_at: n.created_at?.toISOString?.() ?? n.created_at,
-        updated_at: n.updated_at?.toISOString?.() ?? n.updated_at,
-      }));
-
-      // Horas inferidas: suma de quantity (ya que no hay hours en productos)
-      const hoursFromProducts = (() => {
-        const sumQty = normalizedProducts.reduce(
-          (acc: number, pr: any) => acc + (Number(pr.quantity) || 0),
-          0,
-        );
-        return sumQty || null;
-      })();
-
-      const normalizedDocs = files.map((f: any) => ({
-        id: f.id,
-        doc_id: f.id,
-        file_name: f.file_name ?? null,
-        fileName: f.file_name ?? null,
-        file_size: (f as any).file_size ?? null,
-        fileSize: (f as any).file_size ?? null,
-        mime_type: (f as any).mime_type ?? null,
-        mimeType: (f as any).mime_type ?? null,
-        storage_key: f.file_url ?? null,
-        storageKey: f.file_url ?? null,
-        origin: 'user_upload',
-      }));
-
-      const normalizedDeal: any = {
-        ...deal,
-        hours: (deal as any).hours ?? hoursFromProducts, // hours en DB es string|null; aquí devolvemos fallback numérico si faltara
-        org_id: deal.org_id != null ? String(deal.org_id) : null,
-        organization: organization
-          ? { ...organization, org_id: organization.org_id != null ? String(organization.org_id) : null }
-          : null,
-        deal_products: normalizedProducts,
-        deal_notes: normalizedNotes,
-        documents: normalizedDocs,
-        person: person
-          ? {
-              ...person,
-              person_id: person.person_id,
-              first_name: person.first_name ?? null,
-              last_name: person.last_name ?? null,
-              email: person.email ?? null,
-              phone: person.phone ?? null,
-            }
-          : null,
-      };
-
-      return successResponse({ deal: normalizedDeal });
-    }
-
-    // --- PATCH (solo campos editables) + comentarios
-    if (method === 'PATCH' && dealId !== null) {
-      if (!event.body) return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
-      const userId = event.headers['x-user-id'] || event.headers['X-User-Id'];
-      const userName = event.headers['x-user-name'] || event.headers['X-User-Name'];
-      if (!userId) return errorResponse('UNAUTHORIZED', 'X-User-Id requerido', 401);
-
-      const body = JSON.parse(event.body || '{}');
-
-      const patch: Record<string, any> = {};
-      if (body.deal && typeof body.deal === 'object') {
-        for (const k of Object.keys(body.deal)) {
-          if (EDITABLE_FIELDS.has(k)) patch[k] = body.deal[k];
-        }
-      }
-      // Validaciones + coerciones
-      if ('hours' in patch) {
-        const v = patch.hours;
-        if (v !== null && v !== undefined && (Number.isNaN(Number(v)) || Number(v) < 0)) {
-          return errorResponse('VALIDATION_ERROR', 'hours inválido', 400);
-        }
-      }
-      if ('alumnos' in patch) {
-        const v = patch.alumnos;
-        if (v !== null && v !== undefined && (Number.isNaN(Number(v)) || Number(v) < 0)) {
-          return errorResponse('VALIDATION_ERROR', 'alumnos inválido', 400);
-        }
-      }
-
-      const creates = body.comments && Array.isArray(body.comments.create) ? body.comments.create : [];
-      const updates = body.comments && Array.isArray(body.comments.update) ? body.comments.update : [];
-
-      await prisma.$transaction(async (tx: any) => {
-        if (Object.keys(patch).length) {
-          const data: Record<string, any> = { ...patch };
-          // Guarda hours como string|null
-          if ('hours' in data) data.hours = data.hours === null ? null : String(data.hours);
-          if ('alumnos' in data) data.alumnos = data.alumnos === null ? null : Number(data.alumnos);
-          await tx.deals.update({ where: { deal_id: dealId }, data });
-        }
-
-        if (creates.length) {
-          const rows = creates
-            .map((c: any) => ({
-              dealId,
-              authorId: String(userId),
-              authorName: c.author_name || userName || null,
-              content: String(c.content || '').trim(),
-            }))
-            .filter((c: any) => c.content.length > 0);
-          if (rows.length) {
-            await tx.comments.createMany({ data: rows });
-          }
-        }
-
-        if (updates.length) {
-          for (const u of updates) {
-            const row = await tx.comments.findUnique({ where: { id: u.comment_id } });
-            if (!row) throw new Error('COMMENT_NOT_FOUND');
-            if (row.authorId !== String(userId)) throw new Error('FORBIDDEN_COMMENT_EDIT');
-            await tx.comments.update({
-              where: { id: u.comment_id },
-              data: { content: String(u.content || '').trim() },
-            });
-          }
-        }
-      });
-
-      return successResponse({ ok: true });
-    }
-
-    // --- GET listado para la tabla: /.netlify/functions/deals?noSessions=true
-    if (method === 'GET' && event.queryStringParameters?.noSessions === 'true') {
-      const deals = await prisma.deals.findMany({
-        where: { seassons: { none: {} } },
-        select: {
-          deal_id: true,
-          title: true,
-          sede_label: true,
-          pipeline_id: true,
-          training_address: true,
-          hours: true,
-          alumnos: true,
-          caes_label: true,
-          fundae_label: true,
-          hotel_label: true,
-          prodextra: true,
-          org_id: true,
-          person_id: true,
-          created_at: true,
-        },
-        orderBy: { created_at: 'desc' },
-      });
-
-      const dealIds = deals.map((d: any) => d.deal_id);
-
-      // Productos por deal (sin category/hours)
-      const products = dealIds.length
-        ? await prisma.deal_products.findMany({
-            where: { deal_id: { in: dealIds } },
-            select: {
-              id: true,
-              deal_id: true,
-              product_id: true,
-              name: true,
-              code: true,
-              quantity: true,
-              price: true,
-              is_training: true,
-              type: true,
-              created_at: true,
-            },
-            orderBy: { created_at: 'asc' },
-          })
-        : [];
-
-      // Lookup de organizations por org_id (para mostrar nombre)
-      const orgIds = [...new Set(deals.map((d: any) => d.org_id).filter(Boolean))] as string[];
-      const orgs = orgIds.length
-        ? await prisma.organizations.findMany({
-            where: { org_id: { in: orgIds } },
-            select: { org_id: true, name: true },
-          })
-        : [];
-      const orgById = new Map(orgs.map((o) => [o.org_id, o]));
-
-      // Personas
-      const personIds = deals.map((d: any) => d.person_id).filter(Boolean) as string[];
-      const persons = personIds.length
-        ? await prisma.persons.findMany({
-            where: { person_id: { in: personIds } },
-            select: { person_id: true, first_name: true, last_name: true, email: true, phone: true },
-          })
-        : [];
-      const personById = new Map(persons.map((p) => [p.person_id, p]));
-
-      // Group products
-      const productsByDeal = new Map<string, any[]>();
-      for (const product of products) {
-        const key = product.deal_id || '';
-        const list = productsByDeal.get(key) || [];
-        list.push({
-          ...product,
-          quantity: product.quantity != null ? Number(product.quantity) : null,
-          price: product.price != null ? Number(product.price) : null,
-        });
-        productsByDeal.set(key, list);
-      }
-
-      const rows = deals.map((d: any) => {
-        const prods = productsByDeal.get(d.deal_id) || [];
-        const computedHours = (() => {
-          const sumQty = prods.reduce((acc: number, p: any) => acc + (Number(p.quantity) || 0), 0);
-          return sumQty || null;
-        })();
-
-        return {
-          deal_id: d.deal_id,
-          title: d.title || '',
-          sede_label: d.sede_label || '',
-          pipeline_id: d.pipeline_id || null,
-          training_address: d.training_address || null,
-          hours: d.hours ?? computedHours, // d.hours es string|null desde DB
-          alumnos: d.alumnos ?? null,
-          caes_label: d.caes_label || null,
-          fundae_label: d.fundae_label || null,
-          hotel_label: d.hotel_label || null,
-          prodextra: d.prodextra ?? null,
-          org_id: d.org_id != null ? String(d.org_id) : null,
-          organization: d.org_id ? orgById.get(d.org_id) || null : null,
-          person: d.person_id ? personById.get(d.person_id) || null : null,
-          deal_products: prods,
-        };
-      });
-
-      return successResponse({ deals: rows });
-    }
-
-    return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
-  } catch (e: any) {
-    const message = e?.message || 'Unexpected';
-    if (message === 'COMMENT_NOT_FOUND') return errorResponse('NOT_FOUND', 'Comentario no existe', 404);
-    if (message === 'FORBIDDEN_COMMENT_EDIT') return errorResponse('FORBIDDEN', 'No puedes editar comentarios de otros', 403);
-    return errorResponse('UNEXPECTED', message, 500);
+    const pr = await pdRequest(`/deals/${encodeURIComponent(dealId)}/products`)
+    products = Array.isArray(pr) ? pr : (pr?.items ?? [])
+  } catch {}
+  let org: any = null
+  if (deal?.org_id) {
+    try { org = await pdRequest(`/organizations/${encodeURIComponent(deal.org_id)}`) } catch {}
   }
-};
+  let person: any = null
+  if (deal?.person_id) {
+    try { person = await pdRequest(`/persons/${encodeURIComponent(deal.person_id)}`) } catch {}
+  }
+  return { deal, org, person, products }
+}
+
+// ---- Normalización --------------------------------------------
+
+type Normalized = {
+  deal_id: string
+  title: string | null
+  pipeline_id: string | null
+  stage_id: string | null
+  org_id: string | null
+  org_name: string | null
+  person_id: string | null
+  person_first_name: string | null
+  person_last_name: string | null
+  person_email: string | null
+  person_phone: string | null
+  // labels/valores que ya lee el front:
+  sede_label: string | null
+  training_address: string | null
+  hours: number | null
+  alumnos: number | null
+  caes_label: string | null
+  fundae_label: string | null
+  hotel_label: string | null
+  prodextra: any
+  products: Array<{ product_id: string | null; name: string | null; code: string | null; quantity: number | null }>
+}
+
+function normalizeFromPD(input: any): Normalized {
+  const d = input?.deal ?? input
+
+  const org_id = toStr(d?.org_id)
+  const person_id = toStr(d?.person_id)
+
+  const pipeline_id = toStr(d?.pipeline_id)
+  const stage_id = toStr(d?.stage_id)
+
+  // Campos propios del ERP (labels) – si vienen en PD via custom fields, mapea aquí
+  const sede_label = toStr(d?.sede_label ?? d?.cf_sede_label)
+  const training_address = toStr(d?.training_address ?? d?.cf_training_address)
+  const hours = toNum(d?.hours ?? d?.cf_hours)
+  const alumnos = toNum(d?.alumnos ?? d?.cf_alumnos)
+  const caes_label = toStr(d?.caes_label ?? d?.cf_caes_label)
+  const fundae_label = toStr(d?.fundae_label ?? d?.cf_fundae_label)
+  const hotel_label = toStr(d?.hotel_label ?? d?.cf_hotel_label)
+
+  const prodextra = d?.prodextra ?? null
+
+  const productsRaw = input?.products ?? []
+  const products = (Array.isArray(productsRaw) ? productsRaw : []).map((p: any) => ({
+    product_id: toStr(p?.product_id ?? p?.id),
+    name: toStr(p?.name),
+    code: toStr(p?.code),
+    quantity: toNum(p?.quantity),
+  }))
+
+  const org = input?.org ?? input?.organization
+  const person = input?.person
+
+  const normalized: Normalized = {
+    deal_id: toStr(d?.id ?? d?.deal_id) || '',
+    title: toStr(d?.title),
+    pipeline_id,
+    stage_id,
+    org_id,
+    org_name: toStr(org?.name),
+    person_id,
+    person_first_name: toStr(person?.first_name ?? person?.name) /* fallback */,
+    person_last_name: toStr(person?.last_name),
+    person_email: toStr(Array.isArray(person?.email) ? person.email[0]?.value ?? person.email[0] : person?.email),
+    person_phone: toStr(Array.isArray(person?.phone) ? person.phone[0]?.value ?? person.phone[0] : person?.phone),
+    sede_label,
+    training_address,
+    hours,
+    alumnos,
+    caes_label,
+    fundae_label,
+    hotel_label,
+    prodextra,
+    products,
+  }
+
+  // Seguridad: TODAS las IDs externas como string
+  normalized.deal_id = String(normalized.deal_id)
+  if (normalized.org_id !== null) normalized.org_id = String(normalized.org_id)
+  if (normalized.person_id !== null) normalized.person_id = String(normalized.person_id)
+  if (normalized.pipeline_id !== null) normalized.pipeline_id = String(normalized.pipeline_id)
+  if (normalized.stage_id !== null) normalized.stage_id = String(normalized.stage_id)
+  normalized.products = normalized.products.map(p => ({
+    product_id: p.product_id !== null ? String(p.product_id) : null,
+    name: p.name,
+    code: p.code,
+    quantity: p.quantity,
+  }))
+
+  return normalized
+}
+
+// ---- Persistencia ---------------------------------------------
+
+async function upsertOrganization(normalized: Normalized) {
+  if (!normalized.org_id && !normalized.org_name) return null
+  const org_id = normalized.org_id ?? undefined
+  return prisma2.organizations.upsert({
+    where: { org_id: normalized.org_id ?? '' }, // String requerido
+    update: {
+      name: normalized.org_name ?? undefined,
+    },
+    create: {
+      org_id: org_id!, // string
+      name: normalized.org_name ?? null,
+    },
+  })
+}
+
+async function upsertPerson(normalized: Normalized) {
+  if (!normalized.person_id && !normalized.person_first_name && !normalized.person_last_name) return null
+  const person_id = normalized.person_id ?? undefined
+  return prisma2.persons.upsert({
+    where: { person_id: normalized.person_id ?? '' },
+    update: {
+      first_name: normalized.person_first_name ?? undefined,
+      last_name: normalized.person_last_name ?? undefined,
+      email: normalized.person_email ?? undefined,
+      phone: normalized.person_phone ?? undefined,
+    },
+    create: {
+      person_id: person_id!, // string
+      first_name: normalized.person_first_name ?? null,
+      last_name: normalized.person_last_name ?? null,
+      email: normalized.person_email ?? null,
+      phone: normalized.person_phone ?? null,
+    },
+  })
+}
+
+async function upsertDeal(normalized: Normalized) {
+  return prisma2.deals.upsert({
+    where: { deal_id: normalized.deal_id },
+    update: {
+      title: normalized.title ?? undefined,
+      pipeline_id: normalized.pipeline_id ?? undefined,
+      stage_id: normalized.stage_id ?? undefined,
+      org_id: normalized.org_id ?? undefined,
+      person_id: normalized.person_id ?? undefined,
+      sede_label: normalized.sede_label ?? undefined,
+      training_address: normalized.training_address ?? undefined,
+      hours: normalized.hours ?? undefined,
+      alumnos: normalized.alumnos ?? undefined,
+      caes_label: normalized.caes_label ?? undefined,
+      fundae_label: normalized.fundae_label ?? undefined,
+      hotel_label: normalized.hotel_label ?? undefined,
+      prodextra: normalized.prodextra ?? undefined,
+    },
+    create: {
+      deal_id: normalized.deal_id,               // string
+      title: normalized.title,
+      pipeline_id: normalized.pipeline_id,
+      stage_id: normalized.stage_id,
+      org_id: normalized.org_id,                 // string | null
+      person_id: normalized.person_id,           // string | null
+      sede_label: normalized.sede_label,
+      training_address: normalized.training_address,
+      hours: normalized.hours,
+      alumnos: normalized.alumnos,
+      caes_label: normalized.caes_label,
+      fundae_label: normalized.fundae_label,
+      hotel_label: normalized.hotel_label,
+      prodextra: normalized.prodextra,
+    },
+  })
+}
+
+async function replaceDealProducts(deal_id: string, products: Normalized['products']) {
+  // estrategia simple: borrar e insertar
+  await prisma2.deal_products.deleteMany({ where: { deal_id } })
+  if (!products?.length) return
+  await prisma2.deal_products.createMany({
+    data: products.map(p => ({
+      deal_id,
+      product_id: p.product_id,
+      name: p.name,
+      code: p.code,
+      quantity: p.quantity,
+    })),
+    skipDuplicates: true,
+  })
+}
+
+// ---- Handler --------------------------------------------------
+
+const handler: Handler = async (event) => {
+  try {
+    const path = event.path || ''
+    const method = event.httpMethod
+
+    // GET /.netlify/functions/deals?noSessions=true
+    if (method === 'GET' && path.endsWith('/deals')) {
+      const noSessions = event.queryStringParameters?.noSessions === 'true'
+      if (noSessions) {
+        const deals = await prisma2.deals.findMany({
+          orderBy: { updated_at: 'desc' as const },
+          include: {
+            organization: true,
+            person: true,
+            deal_products: true,
+          },
+        })
+        const mapped = deals.map(d => ({
+          deal_id: d.deal_id,
+          title: d.title,
+          sede_label: d.sede_label,
+          pipeline_id: d.pipeline_id,
+          training_address: d.training_address,
+          hours: d.hours,
+          alumnos: d.alumnos,
+          caes_label: d.caes_label,
+          fundae_label: d.fundae_label,
+          hotel_label: d.hotel_label,
+          prodextra: d.prodextra,
+          organization: d.organization ? { name: d.organization.name, org_id: d.organization.org_id } : null,
+          person: d.person ? {
+            person_id: d.person.person_id,
+            first_name: d.person.first_name,
+            last_name: d.person.last_name,
+            email: d.person.email,
+            phone: d.person.phone,
+          } : null,
+          products: d.deal_products?.map(p => ({
+            id: p.id, deal_id: p.deal_id, product_id: p.product_id, name: p.name, code: p.code, quantity: p.quantity
+          })),
+        }))
+        return ok({ ok: true, deals: mapped })
+      }
+      // otros listados se implementarán más adelante
+      return ok({ ok: true, deals: [] })
+    }
+
+    // GET /.netlify/functions/deals/:dealId
+    if (method === 'GET' && /\/deals\/[^/]+$/.test(path)) {
+      const dealId = decodeURIComponent(path.split('/').pop()!)
+      const deal = await prisma2.deals.findUnique({
+        where: { deal_id: String(dealId) },
+        include: {
+          organization: true,
+          person: true,
+          deal_products: true,
+          deal_notes: true,
+          documents: true,
+        },
+      })
+      if (!deal) return fail('NOT_FOUND', 'Presupuesto no encontrado', 404)
+      return ok({ ok: true, deal })
+    }
+
+    // POST /.netlify/functions/deals/import
+    if (method === 'POST' && path.endsWith('/deals/import')) {
+      const body = event.body ? JSON.parse(event.body) : {}
+      const rawDealId = body?.dealId
+      const dealId = toStr(rawDealId)
+      if (!dealId) return fail('INVALID_DEAL_ID', 'dealId requerido', 400)
+
+      // 1) Traer Pipedrive y normalizar
+      const pd = await fetchDealFromPipedrive(dealId)
+      const normalized = normalizeFromPD(pd)
+
+      // 2) Upserts con IDs STRING
+      await upsertOrganization(normalized)
+      await upsertPerson(normalized)
+      await upsertDeal(normalized)
+      await replaceDealProducts(normalized.deal_id, normalized.products)
+
+      return ok({ ok: true, deal_id: normalized.deal_id })
+    }
+
+    // PATCH /.netlify/functions/deals/:dealId
+    if (method === 'PATCH' && /\/deals\/[^/]+$/.test(path)) {
+      const dealId = decodeURIComponent(path.split('/').pop()!)
+      const body = event.body ? JSON.parse(event.body) : {}
+      const dealPatch = body?.deal ?? body
+
+      // Filtrar solo campos permitidos
+      const data: Record<string, any> = {}
+      Object.keys(dealPatch || {}).forEach((k) => {
+        if (EDITABLE_FIELDS.has(k)) data[k] = dealPatch[k]
+      })
+
+      if (Object.keys(data).length) {
+        await prisma2.deals.update({
+          where: { deal_id: String(dealId) },
+          data,
+        })
+      }
+
+      // (Opcional) comentarios
+      // body.comments.create[] / update[] — implementar según modelo si fuera necesario
+
+      return ok({ ok: true })
+    }
+
+    return fail('NOT_IMPLEMENTED', 'Ruta no implementada', 404)
+  } catch (err: any) {
+    return fail('INTERNAL_ERROR', err?.message || 'Error inesperado', 502)
+  }
+}
+
+export { handler }
