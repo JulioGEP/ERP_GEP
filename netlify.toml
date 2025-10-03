@@ -10,4 +10,3 @@ included_files = ["node_modules/.prisma/**"]
 
 [build.environment]
 NODE_VERSION = "20"
-
