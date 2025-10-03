@@ -1,13 +1,13 @@
 {
   "scripts": {
-    "dev": "backend dev",
+    "dev": "netlify dev",
     "build": "npm run build:frontend",
     "build:frontend": "cd frontend && npm install && npm run build",
     "db:init": "dotenv -e .env -- node scripts/init-db.mjs",
     "generate": "prisma generate",
     "postinstall": "prisma generate",
     "typecheck:functions": "tsc -p backend/tsconfig.json",
-    "build:functions": "backend build"
+    "build:functions": "netlify build"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.1",
