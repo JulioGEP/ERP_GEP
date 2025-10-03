@@ -1,11 +1,9 @@
 [build]
-  # Evita `npm ci` en la raíz. Instalamos y build SOLO en frontend/
   command = "npm run netlify:build"
   publish = "frontend/dist"
 
 [build.environment]
   NODE_VERSION = "20"
-  # Opcional: menos ruido y más rápido
   NPM_FLAGS = "--no-audit --fund=false --progress=false"
 
 [functions]
@@ -13,30 +11,3 @@
   node_bundler = "esbuild"
   external_node_modules = ["@prisma/client", "prisma", "@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner"]
   included_files = ["node_modules/.prisma/**"]
-
-# --- Redirects API -> Netlify Functions ---
-[[redirects]]
-  from = "/api/diag"
-  to = "/.netlify/functions/diag"
-  status = 200
-
-[[redirects]]
-  from = "/api/health"
-  to = "/.netlify/functions/health"
-  status = 200
-
-[[redirects]]
-  from = "/api/deals/import"
-  to = "/.netlify/functions/deals_import"
-  status = 200
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-# SPA fallback
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
