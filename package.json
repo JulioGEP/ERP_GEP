@@ -1,25 +1,29 @@
 {
+  "name": "erp_gep_monorepo",
+  "private": true,
+  "version": "1.0.1",
+  "engines": {
+    "node": ">=20.18.0",
+    "npm": ">=10.8.0"
+  },
   "scripts": {
-    "dev": "backend dev",
     "build": "npm run build:frontend",
     "build:frontend": "cd frontend && npm install && npm run build",
-    "db:init": "dotenv -e .env -- node scripts/init-db.mjs",
+    "build:functions": "echo \"Functions bundled by Netlify\"",
     "generate": "prisma generate",
     "postinstall": "prisma generate",
+    "db:init": "dotenv -e .env -- node scripts/init-db.mjs",
     "typecheck:functions": "tsc -p backend/tsconfig.json",
-    "build:functions": "netlify build"
+    "netlify:build": "npm run generate && npm run build",
+    "dev": "netlify dev -p 8888"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.0.1",
     "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.901.0",
-    "@aws-sdk/s3-request-presigner": "^3.901.0",
-    "@netlify/functions": "^4.2.7",
+    "@netlify/cli": "^17.21.0",
     "@types/node": "^20.19.19",
     "dotenv-cli": "^10.0.0",
-    "backend-cli": "^17.38.1",
     "pino-pretty": "^13.1.1",
     "prisma": "^5.22.0",
     "typescript": "^5.9.3"
