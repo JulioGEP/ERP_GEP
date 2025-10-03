@@ -19,7 +19,7 @@
     "@backend/functions": "^4.2.7",
     "@types/node": "^24.6.2",
     "dotenv-cli": "^10.0.0",
-    "backend-cli": "^17.38.1",
+    "netlify-cli": "^17.38.1",
     "pino-pretty": "^13.1.1",
     "prisma": "^5.22.0",
     "typescript": "^5.9.3"
