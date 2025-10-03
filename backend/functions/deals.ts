@@ -35,6 +35,19 @@ function idToString(v: any): string | null {
   return s.length ? s : null;
 }
 
+function toNullableString(v: any): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return s.length ? s : null;
+}
+
+function toNonNegativeIntOrNull(v: any): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  if (Number.isNaN(n) || n < 0) return null;
+  return Math.trunc(n);
+}
+
 /* ======================= IMPORT DESDE PIPEDRIVE ======================= */
 async function importDealFromPipedrive(dealIdRaw: any) {
   const prisma = getPrisma();
@@ -54,48 +67,43 @@ async function importDealFromPipedrive(dealIdRaw: any) {
   const d: any = json?.data;
   if (!d) throw new Error('Deal no encontrado en Pipedrive');
 
-  // IDs como STRING (coinciden con nuestro schema)
-  const deal_id       = String(d.id);
-  const pipeline_id   = idToString(d?.pipeline_id);
-  const org_id        = idToString(d?.org_id);
-  const person_id     = idToString(d?.person_id);
-
-  // Normalización
+  // IDs como STRING (coinciden con nuestro schema lógico)
   const normalized = {
-    deal_id,
-    title: d.title ?? '',
-    pipeline_id, // string|null
-    training_address: d?.deal_direction ?? d?.training_address ?? null,
-    sede_label: d?.Sede ?? d?.sede_label ?? null,
-    caes_label: d?.CAES ?? d?.caes_label ?? null,
-    fundae_label: d?.FUNDAE ?? d?.fundae_label ?? null,
-    hotel_label: d?.Hotel_Night ?? d?.hotel_label ?? null,
-    hours: Number(d?.hours ?? 0) || 0, // luego se guarda string
-    alumnos: Number(d?.alumnos ?? 0) || 0,
+    deal_id:        String(d.id),
+    title:          d.title ?? '',
+    pipeline_id:    idToString(d?.pipeline_id),
+    // Convenciones de campos personalizados ya vigentes en el proyecto
+    training_address: toNullableString(d?.deal_direction ?? d?.training_address),
+    sede_label:       toNullableString(d?.Sede ?? d?.sede_label),
+    caes_label:       toNullableString(d?.CAES ?? d?.caes_label),
+    fundae_label:     toNullableString(d?.FUNDAE ?? d?.fundae_label),
+    hotel_label:      toNullableString(d?.Hotel_Night ?? d?.hotel_label),
+    hours_num:        toNonNegativeIntOrNull(d?.hours),
+    alumnos_num:      toNonNegativeIntOrNull(d?.alumnos),
 
-    org_id,
-    org_name: d?.org_name ?? null,
-    person_id,
-    person_name: d?.person_name ?? null,
-    person_email: d?.person_email ?? null,
-    person_phone: d?.person_phone ?? null,
+    org_id_str:       idToString(d?.org_id),      // STRING o null
+    org_name:         d?.org_name ?? null,
+    person_id:        idToString(d?.person_id),
+    person_name:      d?.person_name ?? null,
+    person_email:     d?.person_email ?? null,
+    person_phone:     d?.person_phone ?? null,
   };
 
-  // Upsert organización (organizations.org_id = STRING)
-  if (normalized.org_id) {
+  // Upsert organización (organizations.org_id = TEXT)
+  if (normalized.org_id_str) {
     await prisma.organizations.upsert({
-      where:  { org_id: normalized.org_id },
+      where:  { org_id: normalized.org_id_str },
       update: { name: normalized.org_name ?? undefined },
-      create: { org_id: normalized.org_id, name: normalized.org_name ?? '' }, // name nunca null
+      create: { org_id: normalized.org_id_str, name: normalized.org_name ?? '' },
     });
   }
 
-  // Upsert persona (persons.person_id = STRING)
+  // Upsert persona (persons.person_id = TEXT)
   if (normalized.person_id) {
     await prisma.persons.upsert({
       where:  { person_id: normalized.person_id },
       update: {
-        first_name: normalized.person_name ?? undefined, // si separáis más adelante, adaptar
+        first_name: normalized.person_name ?? undefined,
         email:      normalized.person_email ?? undefined,
         phone:      normalized.person_phone ?? undefined,
       },
@@ -109,7 +117,12 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     });
   }
 
-  // ⚠️ En deals TODAS las IDs son STRING en tu schema: org_id, person_id, pipeline_id, deal_id
+  // deals.org_id en DB es BIGINT → usar BigInt o null
+  const orgIdForDeal = normalized.org_id_str ? BigInt(normalized.org_id_str) : null;
+
+  // hours (DB: TEXT) → guardar como string o null
+  const hoursForDb = normalized.hours_num != null ? String(normalized.hours_num) : null;
+
   const dealDataBase = {
     title:            normalized.title,
     pipeline_id:      normalized.pipeline_id,                 // string|null
@@ -118,10 +131,10 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     caes_label:       normalized.caes_label,
     fundae_label:     normalized.fundae_label,
     hotel_label:      normalized.hotel_label,
-    hours:            normalized.hours != null ? String(normalized.hours) : null, // string|null
-    alumnos:          normalized.alumnos ?? null,
-    org_id:           normalized.org_id ? Number(normalized.org_id) : null, // ✅ number|null
-    person_id:        normalized.person_id,                                 // ✅ string|null
+    hours:            hoursForDb,                              // TEXT|null
+    alumnos:          normalized.alumnos_num,                  // integer|null
+    org_id:           orgIdForDeal,                            // BIGINT|null
+    person_id:        normalized.person_id ?? null,            // TEXT|null
   };
 
   const saved = await prisma.deals.upsert({
@@ -135,7 +148,9 @@ async function importDealFromPipedrive(dealIdRaw: any) {
 }
 
 /* ============================== HANDLER ============================== */
-const safeStringify = (obj: any): string => JSON.stringify(obj, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+const safeStringify = (obj: any): string =>
+  JSON.stringify(obj, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
+
 export const handler = async (event: any) => {
   try {
     // CORS
@@ -175,7 +190,7 @@ export const handler = async (event: any) => {
     if (method === 'GET' && dealId !== null) {
       const deal = await prisma.deals.findUnique({
         where: { deal_id: dealId },
-        include: { comments: { orderBy: { created_at: 'desc' } } }, // solo relaciones existentes
+        include: { comments: { orderBy: { created_at: 'desc' } } },
       });
       if (!deal) return errorResponse('NOT_FOUND', 'Deal no encontrado', 404);
 
@@ -310,24 +325,35 @@ export const handler = async (event: any) => {
           await tx.deals.update({ where: { deal_id: dealId }, data });
         }
 
+        // comments.createMany → columnas reales de la tabla comments
         if (creates.length) {
           const rows = creates
-            .map((c: any) => ({
-              dealId,
-              authorId: String(userId),
-              authorName: c.author_name || userName || null,
-              content: String(c.content || '').trim(),
-            }))
-            .filter((c: any) => c.content.length > 0);
-          if (rows.length) await tx.comments.createMany({ data: rows });
+            .map((c: any) => {
+              const content = String(c.content || '').trim();
+              if (!content) return null;
+              return {
+                comment_id: nodeCrypto.randomUUID(),
+                deal_id: String(dealId),
+                author_id: String(userId),
+                author_name: c.author_name || userName || null,
+                content,
+              };
+            })
+            .filter(Boolean);
+          if (rows.length) await tx.comments.createMany({ data: rows as any[] });
         }
 
         if (updates.length) {
           for (const u of updates) {
-            const row = await tx.comments.findUnique({ where: { id: u.comment_id } });
+            const id = u.comment_id ?? u.id;
+            if (!id) throw new Error('COMMENT_NOT_FOUND');
+            const row = await tx.comments.findUnique({ where: { comment_id: String(id) } });
             if (!row) throw new Error('COMMENT_NOT_FOUND');
-            if (row.authorId !== String(userId)) throw new Error('FORBIDDEN_COMMENT_EDIT');
-            await tx.comments.update({ where: { id: u.comment_id }, data: { content: String(u.content || '').trim() } });
+            if (String(row.author_id) !== String(userId)) throw new Error('FORBIDDEN_COMMENT_EDIT');
+            await tx.comments.update({
+              where: { comment_id: String(id) },
+              data: { content: String(u.content || '').trim() },
+            });
           }
         }
       });
@@ -351,7 +377,7 @@ export const handler = async (event: any) => {
           fundae_label: true,
           hotel_label: true,
           prodextra: true,
-          org_id: true,           // string|null
+          org_id: true,           // BIGINT|null
           person_id: true,        // string|null
           created_at: true,
         },
@@ -371,15 +397,21 @@ export const handler = async (event: any) => {
           })
         : [];
 
-      const orgIds = [...new Set(deals.map((d: any) => d.org_id).filter(Boolean))] as string[];
+      const orgIds = [...new Set(deals.map((d: any) => d.org_id).filter(Boolean))] as bigint[];
       const personIds = [...new Set(deals.map((d: any) => d.person_id).filter(Boolean))] as string[];
 
       const [orgs, persons] = await Promise.all([
         orgIds.length
-          ? prisma.organizations.findMany({ where: { org_id: { in: orgIds.map((x:any)=>String(x)).map((x:any)=>String(x)).map((x:any)=>String(x)).map((x:any)=>String(x)) } }, select: { org_id: true, name: true } })
+          ? prisma.organizations.findMany({
+              where: { org_id: { in: orgIds.map((x) => String(x)) } },
+              select: { org_id: true, name: true },
+            })
           : Promise.resolve([] as any[]),
         personIds.length
-          ? prisma.persons.findMany({ where: { person_id: { in: personIds.map((x:any)=>String(x)).map((x:any)=>String(x)).map((x:any)=>String(x)).map((x:any)=>String(x)) } }, select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } })
+          ? prisma.persons.findMany({
+              where: { person_id: { in: personIds.map((x) => String(x)) } },
+              select: { person_id: true, first_name: true, last_name: true, email: true, phone: true },
+            })
           : Promise.resolve([] as any[]),
       ]);
       const orgById = new Map(orgs.map((o: any) => [o.org_id, o]));
@@ -413,8 +445,8 @@ export const handler = async (event: any) => {
           fundae_label: d.fundae_label || null,
           hotel_label: d.hotel_label || null,
           prodextra: d.prodextra ?? null,
-          org_id: d.org_id ?? null,
-          organization: d.org_id ? orgById.get(d.org_id) || null : null,
+          org_id: d.org_id != null ? String(d.org_id) : null,
+          organization: d.org_id != null ? orgById.get(String(d.org_id)) || null : null,
           person: d.person_id ? personById.get(d.person_id) || null : null,
           deal_products: prods,
         };
