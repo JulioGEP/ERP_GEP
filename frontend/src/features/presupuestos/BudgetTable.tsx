@@ -200,11 +200,6 @@ export function BudgetTable({
           <span>Actualizando listado…</span>
         </div>
       )}
-      {fallbackBudgets && (
-        <div className="px-3 py-2 border-bottom small text-muted">
-          Mostrando datos directamente del servidor (respaldo).
-        </div>
-      )}
       <Table hover className="mb-0 align-middle">
         <thead>
           <tr>
