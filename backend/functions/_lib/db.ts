@@ -1,4 +1,4 @@
-// netlify/functions/_lib/db.ts
+// backend/functions/_lib/db.ts
 import { PrismaClient } from '@prisma/client';
 const g = globalThis as unknown as { prisma?: PrismaClient };
 

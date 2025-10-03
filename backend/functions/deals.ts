@@ -1,4 +1,4 @@
-// netlify/functions/deals.ts
+// backend/functions/deals.ts
 import * as nodeCrypto from 'crypto';
 import { COMMON_HEADERS, successResponse, errorResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
@@ -14,7 +14,7 @@ const EDITABLE_FIELDS = new Set([
 ]);
 
 function parsePathId(path: any) {
-  const m = String(path || '').match(/\/\.netlify\/functions\/deals\/([^/]+)/);
+  const m = String(path || '').match(/\/\.backend\/functions\/deals\/([^/]+)/);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
@@ -152,7 +152,7 @@ export const handler = async (event: any) => {
       : null;
     const dealId = parsePathId(path) ?? (qsId && qsId.length ? qsId : null);
 
-    /* ------------ IMPORT: POST/GET /.netlify/functions/deals/import ------------ */
+    /* ------------ IMPORT: POST/GET /.backend/functions/deals/import ------------ */
     if (
       (method === 'POST' && path.endsWith('/deals/import')) ||
       (method === 'GET'  && path.endsWith('/deals/import'))
@@ -334,7 +334,7 @@ export const handler = async (event: any) => {
       return successResponse({ ok: true });
     }
 
-    /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
+    /* -------------- GET listado: /.backend/functions/deals?noSessions=true -------------- */
     if (method === 'GET' && event.queryStringParameters?.noSessions === 'true') {
       const deals = await prisma.deals.findMany({
         where:   { seassons: { none: {} } },
@@ -381,8 +381,8 @@ export const handler = async (event: any) => {
           ? prisma.persons.findMany({ where: { person_id: { in: personIds } }, select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } })
           : Promise.resolve([] as any[]),
       ]);
-      const orgById = new Map(orgs.map((o) => [o.org_id, o]));
-      const personById = new Map(persons.map((p) => [p.person_id, p]));
+      const orgById = new Map(orgs.map((o: any) => [o.org_id, o]));
+      const personById = new Map(persons.map((p: any) => [p.person_id, p]));
 
       const productsByDeal = new Map<string, any[]>();
       for (const p of products) {

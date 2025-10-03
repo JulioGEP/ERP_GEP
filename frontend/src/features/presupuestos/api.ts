@@ -3,7 +3,7 @@ import type { DealDetail, DealDetailViewModel, DealProduct, DealSummary } from '
 
 type Json = any
 
-const API_BASE = '/.netlify/functions'
+const API_BASE = '/.backend/functions'
 
 export class ApiError extends Error {
   code: string

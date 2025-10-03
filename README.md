@@ -16,7 +16,7 @@ Este proyecto integra **Frontend React** y **Backend vía Netlify Functions** co
 
 ## 🔧 Configuración TypeScript
 
-Se ha unificado la configuración TS para Functions en `netlify/tsconfig.json`:
+Se ha unificado la configuración TS para Functions en `backend/tsconfig.json`:
 
 ```json
 {
@@ -42,7 +42,7 @@ Se ha unificado la configuración TS para Functions en `netlify/tsconfig.json`:
 java
 Copiar código
 frontend/                 → App React (Vite, Bootstrap, React Query)
-netlify/functions/        → Funciones serverless
+backend/functions/        → Funciones serverless
   ├── deals.ts            → CRUD + importación de deals desde Pipedrive
   ├── deal_documents.ts   → Gestión de documentos en S3 (upload, download, delete)
   ├── _lib/               → Librerías internas (db.ts, http.ts)
@@ -52,7 +52,7 @@ netlify/functions/        → Funciones serverless
        ├── env.js         → Variables de entorno
        ├── dealPayload.js → Payloads de deals (legacy, pendiente de refactor)
 prisma/schema.prisma      → Definición de modelos de BD
-netlify.toml              → Configuración Netlify (build, funciones, publish)
+backend.toml              → Configuración Netlify (build, funciones, publish)
 🛠️ Cambios recientes
 1. Migración a TypeScript ESM en Functions
 Sustituido require → import/export.
@@ -62,7 +62,7 @@ moduleResolution cambiado a "Bundler" (Netlify + esbuild).
 2. Prisma
 Eliminado prisma.js con tipos mal colocados.
 
-Nuevo singleton en netlify/functions/_shared/prisma.ts:
+Nuevo singleton en backend/functions/_shared/prisma.ts:
 
 ts
 Copiar código
@@ -130,13 +130,13 @@ npm run typecheck:functions
 npm run build:frontend
 
 # Build completo (Netlify)
-netlify build
+backend build
 📑 API Endpoints
 Deals (deals.ts)
 1. Importar deal desde Pipedrive
 http
 Copiar código
-POST /.netlify/functions/deals/import
+POST /.backend/functions/deals/import
 Content-Type: application/json
 
 {
@@ -158,7 +158,7 @@ Copiar código
 2. Obtener listado de deals (tabla presupuestos)
 http
 Copiar código
-GET /.netlify/functions/deals?noSessions=true
+GET /.backend/functions/deals?noSessions=true
 📤 Response
 
 json
@@ -178,7 +178,7 @@ Copiar código
 3. Obtener detalle de un deal
 http
 Copiar código
-GET /.netlify/functions/deals/123
+GET /.backend/functions/deals/123
 📤 Response
 
 json
@@ -198,7 +198,7 @@ Copiar código
 4. Editar deal (campos editables)
 http
 Copiar código
-PATCH /.netlify/functions/deals/123
+PATCH /.backend/functions/deals/123
 Content-Type: application/json
 
 {
@@ -214,7 +214,7 @@ Deal Documents (deal_documents.ts)
 1. Generar URL firmada para subida
 http
 Copiar código
-POST /.netlify/functions/deal_documents/123/upload-url
+POST /.backend/functions/deal_documents/123/upload-url
 Content-Type: application/json
 
 {
@@ -234,7 +234,7 @@ Copiar código
 2. Guardar metadatos del documento
 http
 Copiar código
-POST /.netlify/functions/deal_documents/123
+POST /.backend/functions/deal_documents/123
 Content-Type: application/json
 
 {
@@ -249,7 +249,7 @@ Copiar código
 3. Generar URL firmada para descarga
 http
 Copiar código
-GET /.netlify/functions/deal_documents/123/doc-uuid/url
+GET /.backend/functions/deal_documents/123/doc-uuid/url
 📤 Response
 
 json
@@ -261,7 +261,7 @@ Copiar código
 4. Borrar documento
 http
 Copiar código
-DELETE /.netlify/functions/deal_documents/123/doc-uuid
+DELETE /.backend/functions/deal_documents/123/doc-uuid
 📤 Response
 
 json

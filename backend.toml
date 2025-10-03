@@ -3,7 +3,7 @@ command = "npm ci && npm run generate && npm run build"
 publish = "frontend/dist"
 
 [functions]
-directory = "netlify/functions"
+directory = "backend/functions"
 node_bundler = "esbuild"
 external_node_modules = ["@prisma/client", "prisma", "@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner"]
 included_files = ["node_modules/.prisma/**"]

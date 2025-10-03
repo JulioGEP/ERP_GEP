@@ -1,4 +1,4 @@
-import type { Handler } from '@netlify/functions';
+import type { Handler } from '@backend/functions';
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { prisma } from './_lib/db';
@@ -25,10 +25,10 @@ const s3 = new S3Client({
 
 /**
  * ENDPOINTS
- * 1) POST   /.netlify/functions/deal_documents/:dealId/upload-url
- * 2) POST   /.netlify/functions/deal_documents/:dealId
- * 3) GET    /.netlify/functions/deal_documents/:dealId/:docId/url
- * 4) DELETE /.netlify/functions/deal_documents/:dealId/:docId
+ * 1) POST   /.backend/functions/deal_documents/:dealId/upload-url
+ * 2) POST   /.backend/functions/deal_documents/:dealId
+ * 3) GET    /.backend/functions/deal_documents/:dealId/:docId/url
+ * 4) DELETE /.backend/functions/deal_documents/:dealId/:docId
  */
 export const handler: Handler = async (event) => {
   try {
@@ -36,7 +36,7 @@ export const handler: Handler = async (event) => {
     const method = event.httpMethod;
 
     // /deal_documents/:dealId(/:docId)?(/upload-url)?
-    const m = path.match(/\/\.netlify\/functions\/deal_documents\/([^/]+)(?:\/([^/]+))?(?:\/(upload-url))?$/);
+    const m = path.match(/\/\.backend\/functions\/deal_documents\/([^/]+)(?:\/([^/]+))?(?:\/(upload-url))?$/);
     const dealId = m?.[1] ? String(m[1]) : null;
     const second = m?.[2] ? String(m[2]) : null;
     const isUploadUrl = m?.[3] === 'upload-url';
