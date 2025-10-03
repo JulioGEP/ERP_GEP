@@ -135,6 +135,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
 }
 
 /* ============================== HANDLER ============================== */
+const safeStringify = (obj: any): string => JSON.stringify(obj, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
 export const handler = async (event: any) => {
   try {
     // CORS
@@ -375,10 +376,10 @@ export const handler = async (event: any) => {
 
       const [orgs, persons] = await Promise.all([
         orgIds.length
-          ? prisma.organizations.findMany({ where: { org_id: { in: orgIds } }, select: { org_id: true, name: true } })
+          ? prisma.organizations.findMany({ where: { org_id: { in: orgIds.map((x:any)=>String(x)).map((x:any)=>String(x)).map((x:any)=>String(x)).map((x:any)=>String(x)) } }, select: { org_id: true, name: true } })
           : Promise.resolve([] as any[]),
         personIds.length
-          ? prisma.persons.findMany({ where: { person_id: { in: personIds } }, select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } })
+          ? prisma.persons.findMany({ where: { person_id: { in: personIds.map((x:any)=>String(x)).map((x:any)=>String(x)).map((x:any)=>String(x)).map((x:any)=>String(x)) } }, select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } })
           : Promise.resolve([] as any[]),
       ]);
       const orgById = new Map(orgs.map((o: any) => [o.org_id, o]));

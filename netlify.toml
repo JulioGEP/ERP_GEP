@@ -10,3 +10,29 @@ included_files = ["node_modules/.prisma/**"]
 
 [build.environment]
 NODE_VERSION = "20"
+
+# --- Redirects para enrutar /api/* a Netlify Functions ---
+[[redirects]]
+from = "/api/diag"
+to = "/.netlify/functions/diag"
+status = 200
+
+[[redirects]]
+from = "/api/health"
+to = "/.netlify/functions/health"
+status = 200
+
+[[redirects]]
+from = "/api/deals/import"
+to = "/.netlify/functions/deals_import"
+status = 200
+
+[[redirects]]
+from = "/api/*"
+to = "/.netlify/functions/:splat"
+status = 200
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
