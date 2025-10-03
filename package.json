@@ -1,13 +1,13 @@
 {
   "scripts": {
-    "dev": "netlify dev",
+    "dev": "backend dev",
     "build": "npm run build:frontend",
     "build:frontend": "cd frontend && npm install && npm run build",
     "db:init": "dotenv -e .env -- node scripts/init-db.mjs",
     "generate": "prisma generate",
     "postinstall": "prisma generate",
-    "typecheck:functions": "tsc -p netlify/tsconfig.json",
-    "build:functions": "netlify build"
+    "typecheck:functions": "tsc -p backend/tsconfig.json",
+    "build:functions": "backend build"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.1",
@@ -16,10 +16,10 @@
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
     "@aws-sdk/s3-request-presigner": "^3.901.0",
-    "@netlify/functions": "^4.2.7",
+    "@backend/functions": "^4.2.7",
     "@types/node": "^24.6.2",
     "dotenv-cli": "^10.0.0",
-    "netlify-cli": "^17.38.1",
+    "backend-cli": "^17.38.1",
     "pino-pretty": "^13.1.1",
     "prisma": "^5.22.0",
     "typescript": "^5.9.3"

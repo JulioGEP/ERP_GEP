@@ -25,4 +25,4 @@ build/
 .netlify
 
 # Asegura incluir functions
-!netlify/functions/**
+!backend/functions/**

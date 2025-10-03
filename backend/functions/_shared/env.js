@@ -1,4 +1,4 @@
-// netlify/functions/_shared/env.js
+// backend/functions/_shared/env.js
 function requireEnv(name) {
   const v = process.env[name];
   if (!v || String(v).trim() === '') {

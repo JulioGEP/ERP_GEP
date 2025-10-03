@@ -2,12 +2,12 @@
   "files": [],
   "references": [
     { "path": "./frontend" },
-    { "path": "./netlify/functions" }
+    { "path": "./backend/functions" }
   ],
   "exclude": [
     "node_modules",
     "**/dist",
-    "**/.netlify",
+    "**/.backend",
     "**/.cache"
   ]
 }
