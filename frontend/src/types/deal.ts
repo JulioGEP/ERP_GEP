@@ -1,19 +1,8 @@
-export interface DealProduct {
-  id?: string | null;
-  deal_id?: string | null;
-  product_id?: string | null;
-  name?: string | null;
-  code?: string | null;
-  quantity?: number | null;
-}
+// frontend/src/types/deal.ts
 
-export interface DealNote {
-  id?: string | null;
-  deal_id?: string | null;
-  content?: string | null;
-  author?: string | null;
-  created_at?: string | null;
-}
+/* ======================
+ * Tipos base (DB / API)
+ * ====================== */
 
 export interface DealOrganization {
   org_id?: string | null;
@@ -28,75 +17,108 @@ export interface DealPerson {
   phone?: string | null;
 }
 
-export interface DealDocument {
-  id?: string;
-  doc_id?: string;
-  fileName?: string | null;
-  file_name?: string | null;
-  fileSize?: number | null;
-  file_size?: number | null;
-  mimeType?: string | null;
-  mime_type?: string | null;
-  storageKey?: string | null;
-  storage_key?: string | null;
-  origin?: string | null;
-}
-
-export interface DealComment {
-  id?: string;
-  comment_id?: string;
-  authorId?: string | null;
-  author_id?: string | null;
-  authorName?: string | null;
+export interface DealNote {
+  id?: string | null;
+  deal_id?: string | null;
   content?: string | null;
-  createdAt?: string | null;
-  created_at?: string | null;
+  author?: string | null;
+  created_at?: string | null; // ISO
 }
 
+/* Productos del deal (con horas por producto y comentarios) */
+export type DealProductType = "TRAINING" | "EXTRA" | null;
+
+export interface DealProduct {
+  id?: string | null;
+  deal_id?: string | null;
+
+  name?: string | null;
+  code?: string | null;
+
+  quantity?: number | null; // decimal en DB, se normaliza a number en API
+  price?: number | null;    // decimal en DB, se normaliza a number en API
+
+  type?: DealProductType;   // enum existente
+
+  // NUEVOS (según migración)
+  hours?: number;               // entero, sin “h”; si no viene → 0
+  comments?: string | null;     // comentarios por línea
+  typeLabel?: string | null;    // solo para filtros futuros
+  categoryLabel?: string | null;
+}
+
+/* Documentos unificados (Pipedrive + S3) */
+export type DocumentSource = "PIPEDRIVE" | "S3";
+
+export interface DealDocument {
+  id: string;
+  source: DocumentSource;
+  name: string;
+  mime_type?: string | null;
+  size?: number | null;
+  url?: string | null;          // si S3 → firmada al pedirla; si Pipedrive → directa si se guardó
+  created_at?: string | null;   // ISO
+}
+
+/* ======================
+ * Resúmenes y Detalles
+ * ====================== */
+
+/** Fila para listados (tabla de presupuestos) */
 export interface DealSummary {
-  /**
-   * Identificador externo del presupuesto. Se mantiene como string para preservar formatos no numéricos.
-   */
-  dealId: string;
-  /**
-   * Identificador numérico (si existe) del presupuesto. Útil para compatibilidad con APIs antiguas.
-   */
-  dealNumericId?: number | null;
+  // La API devuelve deal_id; dejamos dealId opcional para compatibilidad de vistas antiguas
+  deal_id: string;
+  dealId?: string;
+
   title: string;
+
+  pipeline_label?: string | null;          // label (no ID)
+  training_address_label?: string | null;  // label (no valor crudo)
+
   sede_label?: string | null;
-  pipeline_id?: string | null;
-  training_address?: string | null;
-  hours?: number | null;
-  alumnos?: number | null;
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
-  prodextra?: unknown;
+
+  hours?: number | null;    // editable en ERP (no autocalculado)
+  alumnos?: number | null;  // editable en ERP
+
   organization?: DealOrganization | null;
   person?: DealPerson | null;
+
+  // Para pintar chips o resúmenes
   products?: DealProduct[];
   productNames?: string[];
 }
 
+/** Detalle completo (para el modal) */
 export interface DealDetail {
   deal_id: string;
   title?: string | null;
-  pipeline_id?: string | null;
-  training_address?: string | null;
+
+  pipeline_label?: string | null;          // label (no ID)
+  training_address_label?: string | null;  // label (no valor crudo)
+
   sede_label?: string | null;
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
-  hours?: number | null;
-  alumnos?: number | null;
-  prodextra?: unknown;
+
+  hours?: number | null;    // editable en ERP
+  alumnos?: number | null;  // editable en ERP
+
   organization?: DealOrganization | null;
   person?: DealPerson | null;
-  deal_products?: DealProduct[];
-  deal_notes?: DealNote[];
+
+  // Nombres alineados con el backend nuevo:
+  products?: DealProduct[]; // antes: deal_products
+  notes?: DealNote[];       // antes: deal_notes
   documents?: DealDocument[];
-  comments?: DealComment[];
 }
+
+/* ======================
+ * ViewModels de la UI
+ * ====================== */
 
 export interface DealDetailViewNote {
   id?: string | null;
@@ -107,18 +129,25 @@ export interface DealDetailViewNote {
 export interface DealDetailViewModel {
   dealId: string;
   title: string | null;
+
   organizationName: string | null;
   clientName: string | null;
-  pipelineLabel: string | null;
-  trainingAddress: string | null;
-  productName: string | null;
+
+  pipelineLabel: string | null;    // proviene de pipeline_label
+  trainingAddress: string | null;  // proviene de training_address_label
+
+  productName: string | null;      // si la vista necesita destacar uno
   hours: number | null;
   alumnos: number | null;
+
   sedeLabel: string | null;
   caesLabel: string | null;
   fundaeLabel: string | null;
   hotelLabel: string | null;
-  extras: unknown;
+
+  // 'extras' se deja por compatibilidad si la vista lo usaba (no llega ya del backend)
+  extras?: unknown;
+
   products: DealProduct[];
   notes: DealDetailViewNote[];
 }

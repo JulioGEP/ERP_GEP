@@ -1,14 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Button, Form } from 'react-bootstrap';
+import { Modal, Button, Form, Alert } from 'react-bootstrap';
 
 interface BudgetImportModalProps {
   show: boolean;
-  isLoading: boolean;
+  /** loading opcional (compat: antes era requerido) */
+  isLoading?: boolean;
+  /** warnings devueltos por el import (opcionales) */
+  resultWarnings?: string[] | null;
+  /** id importado para feedback (opcional) */
+  resultDealId?: string | null;
+  /** error del import (opcional) */
+  error?: string | null;
+
   onClose: () => void;
   onSubmit: (dealId: string) => void;
 }
 
-export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: BudgetImportModalProps) {
+export function BudgetImportModal({
+  show,
+  isLoading = false,
+  resultWarnings = null,
+  resultDealId = null,
+  error = null,
+  onClose,
+  onSubmit
+}: BudgetImportModalProps) {
   const [dealId, setDealId] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -26,9 +42,12 @@ export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: Budget
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!dealId.trim() || isLoading) return;
-    onSubmit(dealId.trim());
+    const value = dealId.trim();
+    if (!value || isLoading) return;
+    onSubmit(value);
   }
+
+  const hasWarnings = Array.isArray(resultWarnings) && resultWarnings.length > 0;
 
   return (
     <Modal show={show} onHide={handleHide} centered>
@@ -36,17 +55,44 @@ export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: Budget
         <Modal.Header closeButton>
           <Modal.Title>Importar presupuesto</Modal.Title>
         </Modal.Header>
+
         <Modal.Body>
-          {/* Sin etiqueta redundante */}
+          {/* Feedback de resultado */}
+          {error && (
+            <Alert variant="danger" className="mb-3">
+              <div className="fw-semibold">No se pudo importar el presupuesto</div>
+              <div className="small">{error}</div>
+            </Alert>
+          )}
+
+          {resultDealId && !error && (
+            <Alert variant={hasWarnings ? 'warning' : 'success'} className="mb-3">
+              <div className="fw-semibold">
+                {hasWarnings ? 'Importado con avisos' : 'Importado correctamente'}
+              </div>
+              <div className="small">Presupuesto #{resultDealId}</div>
+              {hasWarnings && (
+                <ul className="small mb-0 mt-2">
+                  {resultWarnings!.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              )}
+            </Alert>
+          )}
+
+          {/* Campo de entrada */}
           <Form.Control
             ref={inputRef}
-            placeholder="Introduce el dealId"
+            placeholder="Introduce el dealId de Pipedrive"
             value={dealId}
             onChange={(e) => setDealId(e.target.value)}
             disabled={isLoading}
             autoComplete="off"
           />
+          <small className="text-muted">Ej.: 1234</small>
         </Modal.Body>
+
         <Modal.Footer className="border-0 pt-0">
           <Button variant="outline-secondary" onClick={handleHide} disabled={isLoading}>
             Cancelar
@@ -59,4 +105,3 @@ export function BudgetImportModal({ show, isLoading, onClose, onSubmit }: Budget
     </Modal>
   );
 }
-

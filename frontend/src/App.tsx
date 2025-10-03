@@ -49,22 +49,35 @@ export default function App() {
 
   const importMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
-    onSuccess: (budget) => {
-      if (budget) {
-        setSelectedBudgetSummary(budget);
-        setSelectedBudgetId(budget.dealId);
-      } else {
-        setSelectedBudgetSummary(null);
-        setSelectedBudgetId(null);
-      }
-      pushToast({ variant: 'success', message: 'Presupuesto importado' });
-      setShowImportModal(false);
-      queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
-    },
+    onSuccess: (payload) => {
+  // Soporta ambos formatos de retorno:
+  // - DealSummary | null
+  // - { deal: DealSummary | null, warnings?: string[] }
+  const dealObj =
+    payload && typeof payload === 'object' && 'deal' in (payload as any)
+      ? (payload as any).deal
+      : (payload as any);
+
+  if (dealObj) {
+    setSelectedBudgetSummary(dealObj as DealSummary);
+    // Acepta dealId o deal_id y fuerza string|null
+    setSelectedBudgetId(
+      ((dealObj as any).dealId ?? (dealObj as any).deal_id ?? null) as string | null
+    );
+  } else {
+    setSelectedBudgetSummary(null);
+    setSelectedBudgetId(null);
+  }
+
+  pushToast({ variant: 'success', message: 'Presupuesto importado' });
+  setShowImportModal(false);
+  queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+},
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
       const code = apiError?.code ?? 'UNKNOWN_ERROR';
-      const message = apiError?.message ?? 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
+      const message =
+        apiError?.message ?? 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
       pushToast({ variant: 'danger', message: `No se pudo importar. [${code}] ${message}` });
     }
   });
@@ -73,9 +86,11 @@ export default function App() {
   const secondaryTabs = useMemo(() => NAVIGATION_ITEMS.filter((item) => item !== 'Presupuestos'), []);
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
+
   const handleSelectBudget = useCallback((budget: DealSummary) => {
     setSelectedBudgetSummary(budget);
-    setSelectedBudgetId(budget.dealId);
+    // 👇 asegura string | null
+    setSelectedBudgetId(budget.dealId ?? null);
   }, []);
 
   const handleCloseDetail = useCallback(() => {
@@ -171,7 +186,9 @@ export default function App() {
         onClose={() => setShowImportModal(false)}
         onSubmit={(dealId) => importMutation.mutate(dealId)}
       />
+
       <BudgetDetailModal dealId={selectedBudgetId} summary={selectedBudgetSummary} onClose={handleCloseDetail} />
+
       <ToastContainer position="bottom-end" className="p-3">
         {toasts.map((toast) => (
           <Toast
