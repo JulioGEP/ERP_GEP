@@ -3,12 +3,8 @@ import type { DealDetail, DealDetailViewModel, DealProduct, DealSummary } from '
 
 type Json = any
 
-// ✅ Corregido: usar /.netlify/functions (con override opcional por VITE_API_BASE)
-const API_BASE =
-  (typeof import.meta !== 'undefined' &&
-    (import.meta as any).env &&
-    (import.meta as any).env.VITE_API_BASE) ||
-  '/.netlify/functions'
+// Netlify Functions base
+const API_BASE = '/.netlify/functions'
 
 export class ApiError extends Error {
   code: string
@@ -357,7 +353,7 @@ async function request(path: string, init?: RequestInit) {
   try { data = await res.json() } catch { /* puede no haber body */ }
 
   if (!res.ok || data?.ok === false) {
-    const code = data?.error_code || `HTTP_${res.status}`
+    const code = data?.error_code || data?.code || `HTTP_${res.status}`
     const msg  = data?.message || 'Error inesperado'
     throw new ApiError(code, msg, res.status)
   }
@@ -373,13 +369,12 @@ export async function fetchDealsWithoutSessions(): Promise<DealSummary[]> {
 }
 
 export async function fetchDealDetail(dealId: number | string): Promise<DealDetail> {
-  // ✅ Backend obtiene el id por query (?dealId=), no por path param
   const data = await request(`/deals?dealId=${encodeURIComponent(String(dealId))}`)
   return normalizeDealDetail(data?.deal)
 }
 
 export async function importDeal(dealId: string): Promise<DealSummary | null> {
-  // Backend expone '/deals/import'
+  // ✅ Ruta correcta: función "deals" con subruta /import
   const data = await request('/deals/import', { method: 'POST', body: JSON.stringify({ dealId }) })
   const importedId = data?.deal_id ?? data?.dealId ?? data?.id ?? dealId
   if (!importedId) return null
@@ -389,7 +384,8 @@ export async function importDeal(dealId: string): Promise<DealSummary | null> {
   return summary ?? null
 }
 
-/* ============ Edición (7 campos) + Comentarios ============ */
+/* ============ Edición + Documentos (igual que antes) ============ */
+
 export type DealEditablePatch = {
   sede_label?: string | null
   hours?: number | null
@@ -423,8 +419,6 @@ export async function patchDealEditable(
     body: JSON.stringify(body)
   })
 }
-
-/* ================== Documentos (S3 presigned) ================= */
 
 export async function getDocPreviewUrl(dealId: string, docId: string): Promise<string> {
   const data = await request(`/deal_documents/${encodeURIComponent(String(dealId))}/${encodeURIComponent(docId)}/url`)
