@@ -7,10 +7,10 @@ export const COMMON_HEADERS = {
 };
 
 // Serializador seguro: convierte BigInt a string para que JSON.stringify no falle
-function safeStringify(data: unknown): string {
+function safeStringify(payload: unknown): string {
   return JSON.stringify(
-    data,
-    (_key, value) => (typeof value === 'bigint' ? value.toString() : value)
+    payload,
+    (_k, v) => (typeof v === 'bigint' ? v.toString() : v)
   );
 }
 

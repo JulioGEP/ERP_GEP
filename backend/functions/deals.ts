@@ -50,8 +50,8 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     const txt = await res.text();
     throw new Error(`Pipedrive ${res.status}: ${txt}`);
   }
-  const json = await res.json();
-  const d = json?.data;
+  const json = (await res.json()) as any;
+  const d: any = json?.data;
   if (!d) throw new Error('Deal no encontrado en Pipedrive');
 
   // IDs como STRING (coinciden con nuestro schema)
