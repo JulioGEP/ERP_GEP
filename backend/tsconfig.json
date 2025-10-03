@@ -6,11 +6,14 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
     "rootDir": "functions",
-    "outDir": "functions-serve"
+    "outDir": "functions-serve",
+    "types": ["node"],
+    "noEmit": true
   },
   "include": ["functions/**/*.ts"],
   "exclude": ["node_modules", "functions-serve", "../frontend", "../dist", "../build", "../.next"]
