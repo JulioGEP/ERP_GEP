@@ -3,7 +3,12 @@ import type { DealDetail, DealDetailViewModel, DealProduct, DealSummary } from '
 
 type Json = any
 
-const API_BASE = '/.backend/functions'
+// ✅ Corregido: usar /.netlify/functions (con override opcional por VITE_API_BASE)
+const API_BASE =
+  (typeof import.meta !== 'undefined' &&
+    (import.meta as any).env &&
+    (import.meta as any).env.VITE_API_BASE) ||
+  '/.netlify/functions'
 
 export class ApiError extends Error {
   code: string
@@ -368,12 +373,13 @@ export async function fetchDealsWithoutSessions(): Promise<DealSummary[]> {
 }
 
 export async function fetchDealDetail(dealId: number | string): Promise<DealDetail> {
-  const data = await request(`/deals/${encodeURIComponent(String(dealId))}`)
+  // ✅ Backend obtiene el id por query (?dealId=), no por path param
+  const data = await request(`/deals?dealId=${encodeURIComponent(String(dealId))}`)
   return normalizeDealDetail(data?.deal)
 }
 
 export async function importDeal(dealId: string): Promise<DealSummary | null> {
-  // FIX CTO: el backend expone '/deals/import' (no '/deals_import')
+  // Backend expone '/deals/import'
   const data = await request('/deals/import', { method: 'POST', body: JSON.stringify({ dealId }) })
   const importedId = data?.deal_id ?? data?.dealId ?? data?.id ?? dealId
   if (!importedId) return null
@@ -384,7 +390,6 @@ export async function importDeal(dealId: string): Promise<DealSummary | null> {
 }
 
 /* ============ Edición (7 campos) + Comentarios ============ */
-/** Tipo independiente para el PATCH de 7 campos con nombres de columnas actuales. */
 export type DealEditablePatch = {
   sede_label?: string | null
   hours?: number | null
