@@ -120,8 +120,8 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     hotel_label:      normalized.hotel_label,
     hours:            normalized.hours != null ? String(normalized.hours) : null, // string|null
     alumnos:          normalized.alumnos ?? null,
-    org_id:           normalized.org_id,                      // string|null ✅
-    person_id:        normalized.person_id,                   // string|null ✅
+    org_id:           normalized.org_id ? Number(normalized.org_id) : null, // ✅ number|null
+    person_id:        normalized.person_id,                                 // ✅ string|null
   };
 
   const saved = await prisma.deals.upsert({
