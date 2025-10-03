@@ -19,6 +19,12 @@ function safeTrim(v: unknown): string | null {
   return t.length ? t : null;
 }
 
+function toStringValue(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return s.length ? s : null;
+}
+
 function getProductNames(budget: DealSummary): string[] {
   if (Array.isArray(budget.productNames) && budget.productNames.length) {
     return budget.productNames.filter(Boolean).map(String);
@@ -38,38 +44,38 @@ function getProductLabel(budget: DealSummary): { label: string; title?: string }
   return { label: `${names[0]} (+${names.length - 1})`, title: names.join(', ') };
 }
 
-function toStringValue(v: unknown): string | null {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  return s.length ? s : null;
-}
-
 /** Normaliza mínimamente un item del backend a DealSummary (lo justo para la tabla) */
-function normalizeRowMinimal(row: any): DealSummary {
+function normalizeRowMinimal(row: any) {
   const dealId =
     toStringValue(row?.deal_id) ??
     toStringValue(row?.dealId) ??
     (row?.id != null ? String(row.id) : '');
 
   return {
-    dealId: dealId || '',
-    dealNumericId: Number.isFinite(Number(dealId)) ? Number(dealId) : null,
-    title: toStringValue(row?.title ?? row?.deal_title) ?? '—',
-    sede_label: toStringValue(row?.sede_label) ?? null,
-    pipeline_id: toStringValue(row?.pipeline_id) ?? null,
-    training_address: toStringValue(row?.training_address) ?? null,
-    hours: typeof row?.hours === 'number' ? row.hours : Number(row?.hours) || null,
-    alumnos: typeof row?.alumnos === 'number' ? row.alumnos : Number(row?.alumnos) || null,
-    caes_label: toStringValue(row?.caes_label) ?? null,
-    fundae_label: toStringValue(row?.fundae_label) ?? null,
-    hotel_label: toStringValue(row?.hotel_label) ?? null,
-    prodextra: Array.isArray(row?.prodextra) ? row.prodextra : null,
-    organization: row?.organization ?? null,
-    person: row?.person ?? null,
-    // productos si vinieran
-    products: Array.isArray(row?.deal_products) ? row.deal_products : Array.isArray(row?.products) ? row.products : undefined,
-    productNames: undefined
-  } as DealSummary;
+  // IDs en ambos formatos
+  dealId: dealId || '',
+  deal_id: dealId || '',
+
+  dealNumericId: Number.isFinite(Number(dealId)) ? Number(dealId) : null,
+  title: toStringValue(row?.title ?? row?.deal_title) ?? '—',
+  sede_label: toStringValue(row?.sede_label) ?? null,
+  pipeline_id: toStringValue(row?.pipeline_id) ?? null,
+  training_address: toStringValue(row?.training_address) ?? null,
+  hours: typeof row?.hours === 'number' ? row.hours : Number(row?.hours) || null,
+  alumnos: typeof row?.alumnos === 'number' ? row.alumnos : Number(row?.alumnos) || null,
+  caes_label: toStringValue(row?.caes_label) ?? null,
+  fundae_label: toStringValue(row?.fundae_label) ?? null,
+  hotel_label: toStringValue(row?.hotel_label) ?? null,
+  organization: row?.organization ?? null,
+  person: row?.person ?? null,
+  // productos si vinieran
+  products: Array.isArray(row?.deal_products)
+    ? row.deal_products
+    : Array.isArray(row?.products)
+    ? row.products
+    : undefined,
+  productNames: undefined
+};
 }
 
 /** ============ Componente ============ */
@@ -82,10 +88,6 @@ export function BudgetTable({
   onRetry,
   onSelect
 }: BudgetTableProps) {
-  /**
-   * Fallback: si el prop budgets llega vacío, intentamos cargar directamente del backend
-   * para descartar problemas de caché/useQuery aguas arriba.
-   */
   const [fallbackLoading, setFallbackLoading] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackBudgets, setFallbackBudgets] = useState<DealSummary[] | null>(null);
@@ -96,8 +98,6 @@ export function BudgetTable({
   }, [budgets, fallbackBudgets]);
 
   useEffect(() => {
-    // Si el backend tiene datos (según nos mostró el curl) y aquí no llegan,
-    // haz un fetch directo una sola vez como respaldo.
     if (!isLoading && !error && budgets.length === 0 && !fallbackBudgets && !fallbackLoading) {
       (async () => {
         try {
@@ -121,8 +121,6 @@ export function BudgetTable({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, error, budgets.length]);
-
-  /** ============ Estados ============ */
 
   if (isLoading) {
     return (
@@ -212,31 +210,27 @@ export function BudgetTable({
         </thead>
         <tbody>
           {effectiveBudgets.map((budget, index) => {
-            const productInfo = getProductLabel(budget);
-            const id = toStringValue(budget.dealId) ?? (budget.dealNumericId != null ? String(budget.dealNumericId) : null);
+            const names = getProductNames(budget);
+            const productLabel =
+              !names.length ? '—' : names.length === 1 ? names[0] : `${names[0]} (+${names.length - 1})`;
+
+            const id = toStringValue(budget.dealId);
             const presupuestoLabel = id ? `#${id}` : '—';
             const presupuestoTitle = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
-            const sedeLabel = safeTrim(budget.sede_label ?? '') ?? '—';
             const organizationLabel = safeTrim(budget.organization?.name ?? '') ?? '—';
             const titleLabel = safeTrim(budget.title ?? '') ?? '—';
+            const sedeLabel = safeTrim(budget.sede_label ?? '') ?? '—';
 
-            // clave estable priorizando id; si no, una combinada.
-            const rowKey =
-              id ??
-              `${organizationLabel}-${titleLabel}-${index}`;
+            const rowKey = id ?? `${organizationLabel}-${titleLabel}-${index}`;
 
             return (
-              <tr
-                key={rowKey}
-                role="button"
-                onClick={() => onSelect(budget)}
-              >
+              <tr key={rowKey} role="button" onClick={() => onSelect(budget)}>
                 <td className="fw-semibold" title={presupuestoTitle}>
                   {presupuestoLabel}
                 </td>
                 <td>{organizationLabel}</td>
                 <td title={budget.title ?? ''}>{titleLabel}</td>
-                <td title={productInfo.title}>{productInfo.label}</td>
+                <td title={names.join(', ')}>{productLabel}</td>
                 <td>{sedeLabel}</td>
               </tr>
             );

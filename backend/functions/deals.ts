@@ -1,166 +1,88 @@
 // backend/functions/deals.ts
-import * as nodeCrypto from 'crypto';
-import { COMMON_HEADERS, successResponse, errorResponse } from './_shared/response';
-import { getPrisma } from './_shared/prisma';
+import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
+import { getPrisma } from "./_shared/prisma";
+import {
+  getDeal,
+  getOrganization,
+  getPerson,
+  getDealProducts,
+  getDealNotes,
+  getDealFiles,
+} from "./_shared/pipedrive";
+import { mapAndUpsertDealTree } from "./_shared/mappers";
 
 const EDITABLE_FIELDS = new Set([
-  'sede_label',
-  'hours',
-  'training_address',
-  'caes_label',
-  'fundae_label',
-  'hotel_label',
-  'alumnos',
+  "sede_label",
+  "hours",
+  "training_address_label",
+  "caes_label",
+  "fundae_label",
+  "hotel_label",
+  "alumnos",
 ]);
 
-function parsePathId(path: any) {
-  const m = String(path || '').match(/\/\.backend\/functions\/deals\/([^/]+)/);
+/* -------------------- Helpers -------------------- */
+function parsePathId(path: any): string | null {
+  if (!path) return null;
+  // admite .../deals/:id
+  const m = String(path).match(/\/deals\/([^/?#]+)/i);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/* -------------------- Helpers robustos para IDs -------------------- */
-function idToString(v: any): string | null {
-  if (v === null || v === undefined) return null;
-  if (typeof v === 'object') {
-    const inner =
-      (v as any).value ??
-      (v as any).id ??
-      (v as any).org_id ??
-      (v as any).person_id ??
-      (v as any).pipeline_id;
-    if (inner === null || inner === undefined) return null;
-    return String(inner);
-  }
-  const s = String(v).trim();
-  return s.length ? s : null;
-}
-
-function toNullableString(v: any): string | null {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  return s.length ? s : null;
-}
-
-function toNonNegativeIntOrNull(v: any): number | null {
-  if (v === null || v === undefined || v === '') return null;
+function toIntOrNull(v: any): number | null {
+  if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
-  if (Number.isNaN(n) || n < 0) return null;
+  if (!Number.isFinite(n) || n < 0) return null;
   return Math.trunc(n);
 }
 
 /* ======================= IMPORT DESDE PIPEDRIVE ======================= */
 async function importDealFromPipedrive(dealIdRaw: any) {
-  const prisma = getPrisma();
-  const dealId = String(dealIdRaw ?? '').trim();
-  if (!dealId) throw new Error('Falta dealId');
+  const dealId = String(dealIdRaw ?? "").trim();
+  if (!dealId) throw new Error("Falta dealId");
 
-  const base = process.env.PIPEDRIVE_BASE_URL!;
-  const token = process.env.PIPEDRIVE_API_TOKEN!;
-  if (!base || !token) throw new Error('Pipedrive no configurado');
+  // 1) Traer árbol completo desde Pipedrive
+  const d = await getDeal(Number(dealId));
+  if (!d) throw new Error("Deal no encontrado en Pipedrive");
 
-  const res = await fetch(`${base}/deals/${encodeURIComponent(dealId)}?api_token=${token}`);
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`Pipedrive ${res.status}: ${txt}`);
-  }
-  const json = (await res.json()) as any;
-  const d: any = json?.data;
-  if (!d) throw new Error('Deal no encontrado en Pipedrive');
+  const org = d.org_id ? await getOrganization(Number(d.org_id)) : null;
+  const person = d.person_id ? await getPerson(Number(d.person_id)) : null;
+  const [products, notes, files] = await Promise.all([
+    getDealProducts(Number(dealId)).then((x) => x ?? []),
+    getDealNotes(Number(dealId)).then((x) => x ?? []),
+    getDealFiles(Number(dealId)).then((x) => x ?? []),
+  ]);
 
-  // IDs como STRING (coinciden con nuestro schema lógico)
-  const normalized = {
-    deal_id:        String(d.id),
-    title:          d.title ?? '',
-    pipeline_id:    idToString(d?.pipeline_id),
-    // Convenciones de campos personalizados ya vigentes en el proyecto
-    training_address: toNullableString(d?.deal_direction ?? d?.training_address),
-    sede_label:       toNullableString(d?.Sede ?? d?.sede_label),
-    caes_label:       toNullableString(d?.CAES ?? d?.caes_label),
-    fundae_label:     toNullableString(d?.FUNDAE ?? d?.fundae_label),
-    hotel_label:      toNullableString(d?.Hotel_Night ?? d?.hotel_label),
-    hours_num:        toNonNegativeIntOrNull(d?.hours),
-    alumnos_num:      toNonNegativeIntOrNull(d?.alumnos),
-
-    org_id_str:       idToString(d?.org_id),      // STRING o null
-    org_name:         d?.org_name ?? null,
-    person_id:        idToString(d?.person_id),
-    person_name:      d?.person_name ?? null,
-    person_email:     d?.person_email ?? null,
-    person_phone:     d?.person_phone ?? null,
-  };
-
-  // Upsert organización (organizations.org_id = TEXT)
-  if (normalized.org_id_str) {
-    await prisma.organizations.upsert({
-      where:  { org_id: normalized.org_id_str },
-      update: { name: normalized.org_name ?? undefined },
-      create: { org_id: normalized.org_id_str, name: normalized.org_name ?? '' },
-    });
-  }
-
-  // Upsert persona (persons.person_id = TEXT)
-  if (normalized.person_id) {
-    await prisma.persons.upsert({
-      where:  { person_id: normalized.person_id },
-      update: {
-        first_name: normalized.person_name ?? undefined,
-        email:      normalized.person_email ?? undefined,
-        phone:      normalized.person_phone ?? undefined,
-      },
-      create: {
-        person_id:  normalized.person_id,
-        first_name: normalized.person_name ?? '',
-        last_name:  null,
-        email:      normalized.person_email ?? null,
-        phone:      normalized.person_phone ?? null,
-      },
-    });
-  }
-
-  // deals.org_id en DB es BIGINT → usar BigInt o null
-  const orgIdForDeal = normalized.org_id_str ? BigInt(normalized.org_id_str) : null;
-
-  // hours (DB: TEXT) → guardar como string o null
-  const hoursForDb = normalized.hours_num != null ? String(normalized.hours_num) : null;
-
-  const dealDataBase = {
-    title:            normalized.title,
-    pipeline_id:      normalized.pipeline_id,                 // string|null
-    training_address: normalized.training_address,
-    sede_label:       normalized.sede_label,
-    caes_label:       normalized.caes_label,
-    fundae_label:     normalized.fundae_label,
-    hotel_label:      normalized.hotel_label,
-    hours:            hoursForDb,                              // TEXT|null
-    alumnos:          normalized.alumnos_num,                  // integer|null
-    org_id:           orgIdForDeal,                            // BIGINT|null
-    person_id:        normalized.person_id ?? null,            // TEXT|null
-  };
-
-  const saved = await prisma.deals.upsert({
-    where:  { deal_id: normalized.deal_id },                  // string
-    update: dealDataBase,
-    create: { deal_id: normalized.deal_id, ...dealDataBase },
-    select: { deal_id: true, title: true, org_id: true, person_id: true },
+  // 2) Mapear + upsert relacional en Neon
+  const savedDealId = await mapAndUpsertDealTree({
+    deal: d,
+    org: org || { id: d.org_id, name: d.org_name ?? "—" },
+    person: person || (d.person_id ? { id: d.person_id } : undefined),
+    products,
+    notes,
+    files,
   });
 
-  return saved;
+  // 3) Avisos no bloqueantes (warnings)
+  const warnings: string[] = [];
+  if (!d.title) warnings.push("Falta título en el deal.");
+  if (!d.pipeline_id) warnings.push("No se ha podido resolver el pipeline del deal.");
+  if (!products?.length) warnings.push("El deal no tiene productos vinculados en Pipedrive.");
+
+  return { deal_id: savedDealId, warnings };
 }
 
 /* ============================== HANDLER ============================== */
-const safeStringify = (obj: any): string =>
-  JSON.stringify(obj, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
-
 export const handler = async (event: any) => {
   try {
     // CORS
-    if (event.httpMethod === 'OPTIONS') {
-      return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
+    if (event.httpMethod === "OPTIONS") {
+      return { statusCode: 204, headers: COMMON_HEADERS, body: "" };
     }
 
     const prisma = getPrisma();
     const method = event.httpMethod;
-    const path = event.path || '';
+    const path = event.path || "";
 
     // id por PATH o por QUERY (?dealId=)
     const qsId = event.queryStringParameters?.dealId
@@ -170,296 +92,135 @@ export const handler = async (event: any) => {
 
     /* ------------ IMPORT: POST/GET /.backend/functions/deals/import ------------ */
     if (
-      (method === 'POST' && path.endsWith('/deals/import')) ||
-      (method === 'GET'  && path.endsWith('/deals/import'))
+      (method === "POST" && path.endsWith("/deals/import")) ||
+      (method === "GET" && path.endsWith("/deals/import"))
     ) {
       const body = event.body ? JSON.parse(event.body) : {};
       const incomingId =
         body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
-      if (!incomingId) return errorResponse('VALIDATION_ERROR', 'Falta dealId', 400);
+      if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
 
       try {
-        const saved = await importDealFromPipedrive(incomingId);
-        return successResponse({ ok: true, deal: saved });
+        const { deal_id, warnings } = await importDealFromPipedrive(incomingId);
+        const deal = await prisma.deals.findUnique({
+          where: { deal_id },
+          include: {
+            organization: { select: { org_id: true, name: true } },
+            person: { select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } },
+            products: true,
+            notes: true,
+            documents: true,
+          },
+        });
+        return successResponse({ ok: true, warnings, deal });
       } catch (e: any) {
-        return errorResponse('IMPORT_ERROR', e?.message || 'Error importando deal', 502);
+        return errorResponse("IMPORT_ERROR", e?.message || "Error importando deal", 502);
       }
     }
 
     /* ------------------- GET detalle: /deals/:id o ?dealId= ------------------- */
-    if (method === 'GET' && dealId !== null) {
+    if (method === "GET" && dealId !== null) {
       const deal = await prisma.deals.findUnique({
-        where: { deal_id: dealId },
-        include: { comments: { orderBy: { created_at: 'desc' } } },
+        where: { deal_id: String(dealId) },
+        include: {
+          organization: { select: { org_id: true, name: true } },
+          person: { select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } },
+          products: { orderBy: { created_at: "asc" } },
+          notes: { orderBy: { created_at: "desc" } },
+          documents: { orderBy: { created_at: "desc" } },
+        },
       });
-      if (!deal) return errorResponse('NOT_FOUND', 'Deal no encontrado', 404);
+      if (!deal) return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
 
-      const [products, notes, person, files] = await Promise.all([
-        prisma.deal_products.findMany({
-          where: { deal_id: dealId },
-          orderBy: { created_at: 'asc' },
-          select: {
-            id: true,
-            deal_id: true,
-            product_id: true,
-            name: true,
-            code: true,
-            quantity: true,
-            price: true,
-            is_training: true,
-            type: true,
-            created_at: true,
-            updated_at: true,
-          },
-        }),
-        prisma.deal_notes.findMany({
-          where: { deal_id: dealId },
-          orderBy: { created_at: 'desc' },
-        }),
-        deal.person_id ? prisma.persons.findUnique({ where: { person_id: String(deal.person_id) } }) : null,
-        prisma.deal_files.findMany({ where: { deal_id: dealId } }),
-      ]);
-
-      const organization =
-        deal.org_id != null
-          ? await prisma.organizations.findUnique({
-              where: { org_id: String(deal.org_id) },
-              select: { org_id: true, name: true },
-            })
-          : null;
-
-      const normalizedProducts = products.map((p: any) => ({
-        ...p,
-        quantity: p.quantity != null ? Number(p.quantity) : null,
-        price: p.price != null ? Number(p.price) : null,
-        created_at: p.created_at?.toISOString?.() ?? p.created_at,
-        updated_at: p.updated_at?.toISOString?.() ?? p.updated_at,
-      }));
-
-      const normalizedNotes = notes.map((n: any) => ({
-        ...n,
-        created_at: n.created_at?.toISOString?.() ?? n.created_at,
-        updated_at: n.updated_at?.toISOString?.() ?? n.updated_at,
-      }));
-
-      const hoursFromProducts =
-        normalizedProducts.reduce((acc: number, pr: any) => acc + (Number(pr.quantity) || 0), 0) || null;
-
-      const normalizedDocs = files.map((f: any) => ({
-        id: f.id,
-        doc_id: f.id,
-        file_name: f.file_name ?? null,
-        fileName: f.file_name ?? null,
-        file_size: (f as any).file_size ?? null,
-        fileSize: (f as any).file_size ?? null,
-        mime_type: (f as any).mime_type ?? null,
-        mimeType: (f as any).mime_type ?? null,
-        storage_key: f.file_url ?? null,
-        storageKey: f.file_url ?? null,
-        origin: 'user_upload',
-      }));
-
-      const normalizedDeal: any = {
-        ...deal,
-        hours: (deal as any).hours ?? hoursFromProducts, // DB: string|null → devolvemos número si no hay
-        org_id: deal.org_id != null ? String(deal.org_id) : null,
-        organization: organization
-          ? { ...organization, org_id: organization.org_id != null ? String(organization.org_id) : null }
-          : null,
-        deal_products: normalizedProducts,
-        deal_notes: normalizedNotes,
-        documents: normalizedDocs,
-        person: person
-          ? {
-              ...person,
-              person_id: person.person_id,
-              first_name: person.first_name ?? null,
-              last_name: person.last_name ?? null,
-              email: person.email ?? null,
-              phone: person.phone ?? null,
-            }
-          : null,
-      };
-
-      return successResponse({ deal: normalizedDeal });
+      return successResponse({ deal });
     }
 
-    /* ---------------- PATCH (campos editables) + comentarios ---------------- */
-    if (method === 'PATCH' && dealId !== null) {
-      if (!event.body) return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
-      const userId = event.headers['x-user-id'] || event.headers['X-User-Id'];
-      const userName = event.headers['x-user-name'] || event.headers['X-User-Name'];
-      if (!userId) return errorResponse('UNAUTHORIZED', 'X-User-Id requerido', 401);
+    /* ---------------- PATCH (campos editables) ---------------- */
+    if (method === "PATCH" && dealId !== null) {
+      if (!event.body) return errorResponse("VALIDATION_ERROR", "Body requerido", 400);
 
-      const body = JSON.parse(event.body || '{}');
-
+      const body = JSON.parse(event.body || "{}");
       const patch: Record<string, any> = {};
-      if (body.deal && typeof body.deal === 'object') {
+
+      if (body.deal && typeof body.deal === "object") {
         for (const k of Object.keys(body.deal)) {
           if (EDITABLE_FIELDS.has(k)) patch[k] = body.deal[k];
         }
       }
-      // Validaciones + coerciones
-      if ('hours' in patch) {
+
+      // Coerciones y validaciones
+      if ("hours" in patch) {
         const v = patch.hours;
-        if (v !== null && v !== undefined && (Number.isNaN(Number(v)) || Number(v) < 0)) {
-          return errorResponse('VALIDATION_ERROR', 'hours inválido', 400);
+        const n = toIntOrNull(v);
+        if (v !== null && v !== undefined && n === null) {
+          return errorResponse("VALIDATION_ERROR", "hours inválido", 400);
         }
+        patch.hours = n;
       }
-      if ('alumnos' in patch) {
+      if ("alumnos" in patch) {
         const v = patch.alumnos;
-        if (v !== null && v !== undefined && (Number.isNaN(Number(v)) || Number(v) < 0)) {
-          return errorResponse('VALIDATION_ERROR', 'alumnos inválido', 400);
+        const n = toIntOrNull(v);
+        if (v !== null && v !== undefined && n === null) {
+          return errorResponse("VALIDATION_ERROR", "alumnos inválido", 400);
         }
+        patch.alumnos = n;
       }
 
-      const creates = body.comments && Array.isArray(body.comments.create) ? body.comments.create : [];
-      const updates = body.comments && Array.isArray(body.comments.update) ? body.comments.update : [];
+      if (Object.keys(patch).length) {
+        await prisma.deals.update({
+          where: { deal_id: String(dealId) },
+          data: patch,
+        });
+      }
 
-      await prisma.$transaction(async (tx: any) => {
-        if (Object.keys(patch).length) {
-          const data: Record<string, any> = { ...patch };
-          // hours como string|null; alumnos como number|null
-          if ('hours' in data)   data.hours   = data.hours === null ? null : String(data.hours);
-          if ('alumnos' in data) data.alumnos = data.alumnos === null ? null : Number(data.alumnos);
-          await tx.deals.update({ where: { deal_id: dealId }, data });
-        }
-
-        // comments.createMany → columnas reales de la tabla comments
-        if (creates.length) {
-          const rows = creates
-            .map((c: any) => {
-              const content = String(c.content || '').trim();
-              if (!content) return null;
-              return {
-                comment_id: nodeCrypto.randomUUID(),
-                deal_id: String(dealId),
-                author_id: String(userId),
-                author_name: c.author_name || userName || null,
-                content,
-              };
-            })
-            .filter(Boolean);
-          if (rows.length) await tx.comments.createMany({ data: rows as any[] });
-        }
-
-        if (updates.length) {
-          for (const u of updates) {
-            const id = u.comment_id ?? u.id;
-            if (!id) throw new Error('COMMENT_NOT_FOUND');
-            const row = await tx.comments.findUnique({ where: { comment_id: String(id) } });
-            if (!row) throw new Error('COMMENT_NOT_FOUND');
-            if (String(row.author_id) !== String(userId)) throw new Error('FORBIDDEN_COMMENT_EDIT');
-            await tx.comments.update({
-              where: { comment_id: String(id) },
-              data: { content: String(u.content || '').trim() },
-            });
-          }
-        }
+      const updated = await prisma.deals.findUnique({
+        where: { deal_id: String(dealId) },
+        include: {
+          organization: { select: { org_id: true, name: true } },
+          person: { select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } },
+          products: { orderBy: { created_at: "asc" } },
+          notes: { orderBy: { created_at: "desc" } },
+          documents: { orderBy: { created_at: "desc" } },
+        },
       });
 
-      return successResponse({ ok: true });
+      return successResponse({ ok: true, deal: updated });
     }
 
     /* -------------- GET listado: /.backend/functions/deals?noSessions=true -------------- */
-    if (method === 'GET' && event.queryStringParameters?.noSessions === 'true') {
-      const deals = await prisma.deals.findMany({
-        where:   { seassons: { none: {} } },
-        select:  {
+    if (method === "GET" && event.queryStringParameters?.noSessions === "true") {
+      // listamos deals + organización/persona + productos (sin seassons)
+      const rows = await prisma.deals.findMany({
+        select: {
           deal_id: true,
           title: true,
           sede_label: true,
-          pipeline_id: true,      // string|null
-          training_address: true,
-          hours: true,            // string|null
+          pipeline_label: true,
+          training_address_label: true,
+          hours: true,
           alumnos: true,
           caes_label: true,
           fundae_label: true,
           hotel_label: true,
-          prodextra: true,
-          org_id: true,           // BIGINT|null
-          person_id: true,        // string|null
+          org_id: true,
+          person_id: true,
           created_at: true,
+          organization: { select: { org_id: true, name: true } },
+          person: { select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } },
+          products: {
+            select: { id: true, name: true, code: true, quantity: true, price: true, type: true, hours: true },
+            orderBy: { created_at: "asc" },
+          },
         },
-        orderBy: { created_at: 'desc' },
-      });
-
-      const dealIds = deals.map((d: any) => d.deal_id);
-
-      const products = dealIds.length
-        ? await prisma.deal_products.findMany({
-            where: { deal_id: { in: dealIds } },
-            select: {
-              id: true, deal_id: true, product_id: true, name: true, code: true,
-              quantity: true, price: true, is_training: true, type: true, created_at: true,
-            },
-            orderBy: { created_at: 'asc' },
-          })
-        : [];
-
-      const orgIds = [...new Set(deals.map((d: any) => d.org_id).filter(Boolean))] as bigint[];
-      const personIds = [...new Set(deals.map((d: any) => d.person_id).filter(Boolean))] as string[];
-
-      const [orgs, persons] = await Promise.all([
-        orgIds.length
-          ? prisma.organizations.findMany({
-              where: { org_id: { in: orgIds.map((x) => String(x)) } },
-              select: { org_id: true, name: true },
-            })
-          : Promise.resolve([] as any[]),
-        personIds.length
-          ? prisma.persons.findMany({
-              where: { person_id: { in: personIds.map((x) => String(x)) } },
-              select: { person_id: true, first_name: true, last_name: true, email: true, phone: true },
-            })
-          : Promise.resolve([] as any[]),
-      ]);
-      const orgById = new Map(orgs.map((o: any) => [o.org_id, o]));
-      const personById = new Map(persons.map((p: any) => [p.person_id, p]));
-
-      const productsByDeal = new Map<string, any[]>();
-      for (const p of products) {
-        const key = p.deal_id || '';
-        const list = productsByDeal.get(key) || [];
-        list.push({
-          ...p,
-          quantity: p.quantity != null ? Number(p.quantity) : null,
-          price: p.price != null ? Number(p.price) : null,
-        });
-        productsByDeal.set(key, list);
-      }
-
-      const rows = deals.map((d: any) => {
-        const prods = productsByDeal.get(d.deal_id) || [];
-        const computedHours = prods.reduce((acc: number, p: any) => acc + (Number(p.quantity) || 0), 0) || null;
-
-        return {
-          deal_id: d.deal_id,
-          title: d.title || '',
-          sede_label: d.sede_label || '',
-          pipeline_id: d.pipeline_id || null,
-          training_address: d.training_address || null,
-          hours: d.hours ?? computedHours,
-          alumnos: d.alumnos ?? null,
-          caes_label: d.caes_label || null,
-          fundae_label: d.fundae_label || null,
-          hotel_label: d.hotel_label || null,
-          prodextra: d.prodextra ?? null,
-          org_id: d.org_id != null ? String(d.org_id) : null,
-          organization: d.org_id != null ? orgById.get(String(d.org_id)) || null : null,
-          person: d.person_id ? personById.get(d.person_id) || null : null,
-          deal_products: prods,
-        };
+        orderBy: { created_at: "desc" },
       });
 
       return successResponse({ deals: rows });
     }
 
-    return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
+    return errorResponse("NOT_IMPLEMENTED", "Ruta o método no soportado", 404);
   } catch (e: any) {
-    const message = e?.message || 'Unexpected';
-    if (message === 'COMMENT_NOT_FOUND') return errorResponse('NOT_FOUND', 'Comentario no existe', 404);
-    if (message === 'FORBIDDEN_COMMENT_EDIT') return errorResponse('FORBIDDEN', 'No puedes editar comentarios de otros', 403);
-    return errorResponse('UNEXPECTED', message, 500);
+    const message = e?.message || "Unexpected";
+    return errorResponse("UNEXPECTED", message, 500);
   }
 };
