@@ -1,16 +1,16 @@
 # ERP_GEP
 
 ERP interno para planificación, visualización y gestión de formaciones procedentes de Pipedrive.  
-Este proyecto integra **Frontend React** y **Backend vía Netlify Functions** con conexión a **Neon PostgreSQL** a través de **Prisma ORM**.
+Este proyecto integra **Frontend React** y **Backend vía backend Functions** con conexión a **Neon PostgreSQL** a través de **Prisma ORM**.
 
 ---
 
 ## 📦 Stack tecnológico
 
 - **Frontend**: React + Vite + TypeScript + React-Bootstrap
-- **Backend**: Netlify Functions (Node.js, TypeScript, AWS SDK v3)
+- **Backend**: backend Functions (Node.js, TypeScript, AWS SDK v3)
 - **DB**: PostgreSQL (Neon) gestionada con **Prisma ORM**
-- **Infra**: Netlify (build y deploy)
+- **Infra**: backend (build y deploy)
 
 ---
 
@@ -52,12 +52,12 @@ backend/functions/        → Funciones serverless
        ├── env.js         → Variables de entorno
        ├── dealPayload.js → Payloads de deals (legacy, pendiente de refactor)
 prisma/schema.prisma      → Definición de modelos de BD
-backend.toml              → Configuración Netlify (build, funciones, publish)
+backend.toml              → Configuración backend (build, funciones, publish)
 🛠️ Cambios recientes
 1. Migración a TypeScript ESM en Functions
 Sustituido require → import/export.
 
-moduleResolution cambiado a "Bundler" (Netlify + esbuild).
+moduleResolution cambiado a "Bundler" (backend + esbuild).
 
 2. Prisma
 Eliminado prisma.js con tipos mal colocados.
@@ -129,7 +129,7 @@ npm run typecheck:functions
 # Build frontend
 npm run build:frontend
 
-# Build completo (Netlify)
+# Build completo (backend)
 backend build
 📑 API Endpoints
 Deals (deals.ts)
@@ -274,4 +274,4 @@ Backend Functions: Compila con TS (solo warnings menores resueltos)
 
 Prisma: prisma generate OK
 
-Netlify Deploy: Funcional, corrigiendo imports y organization
+backend Deploy: Funcional, corrigiendo imports y organization
