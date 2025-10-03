@@ -1,166 +1,253 @@
-README.md
-# ERP_GEP
+ERP_GEP
 
-ERP interno colaborativo para **planificar, visualizar y gestionar formaciones** de GEP Group, sincronizado con Pipedrive y desplegado en Netlify.
+ERP interno colaborativo para planificar, visualizar y gestionar formaciones de GEP Group, sincronizado con Pipedrive y desplegado en Netlify.
 
-## 🚀 Visión
+🚀 Visión
+
 El objetivo es disponer de una aplicación web interna que:
-- Importe datos de **Pipedrive** (deals, organizaciones, personas).
-- Permita planificar sesiones de formación, recursos y presupuestos.
-- Visualice la información en tiempo real para varios usuarios.
-- Exponga una API interna en Netlify Functions (`/api/*`).
 
----
+Importe datos de Pipedrive (deals, organizaciones, personas).
 
-## 📂 Estructura del monorepo
+Permita planificar sesiones de formación, recursos y presupuestos.
 
+Visualice la información en tiempo real para varios usuarios.
 
+Exponga una API interna en Netlify Functions.
 
+📂 Estructura del monorepo
 ERP_GEP/
-├── frontend/ # App React + Vite + TypeScript
-│ ├── src/ # Código de la aplicación
-│ ├── tsconfig.json # Configuración TS del frontend
-│ ├── tsconfig.node.json # Configuración TS para vite.config.ts
-│ ├── vite-env.d.ts # Tipos de Vite
-│ └── package.json
+├── frontend/                        # App React + Vite + TypeScript
+│   ├── public/
+│   │   └── _redirects               # (opcional) Alias /api/* → /.netlify/functions/:splat
+│   ├── src/
+│   │   └── features/presupuestos/
+│   │       ├── BudgetTable.tsx
+│   │       └── api.ts               # Cliente API → /.netlify/functions/*
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   ├── vite-env.d.ts
+│   └── package.json
 │
 ├── backend/
-│ ├── functions/ # Netlify Functions (API /api/*)
-│ │ ├── deals_import.ts
-│ │ ├── health.ts
-│ │ └── ...
-│ ├── tsconfig.json # Configuración TS para funciones
-│ └── package.json
+│   └── functions/                   # Netlify Functions (Node 20, esbuild)
+│       ├── deals.ts                 # GET /deals?..., POST /deals/import, PATCH /deals/:id
+│       ├── deal_documents.ts        # S3 presigned URLs
+│       ├── health.ts                # GET /health
+│       ├── _shared/
+│       │   ├── response.ts          # ✅ JSON seguro (BigInt→string)
+│       │   ├── prisma.ts
+│       │   └── env.js
+│       └── _lib/
+│           ├── http.ts              # (utilidades HTTP; también con safe stringify)
+│           └── db.ts
 │
-├── netlify.toml # Configuración de build + redirects API
-├── package.json # Scripts raíz (delegan en frontend/ y backend/)
+├── netlify.toml                     # Build + Functions (directory = "backend/functions")
+├── prisma/                          # schema.prisma (si aplica)
+├── package.json                     # Scripts raíz (generate/build)
 └── README.md
 
 
----
+Nota: Anteriormente la carpeta se llamaba netlify/. Ahora es backend/. El prefijo público de Functions siempre es /.netlify/functions/* (no depende del nombre de carpeta).
 
-## ⚙️ Requisitos
+⚙️ Requisitos
 
-- Node.js `>=20.18.0`
-- npm `>=10.8.0`
-- Prisma CLI (si usas Neon DB)
+Node.js >= 20.18.0 (usamos 20.19.x en CI)
 
----
+npm >= 10.8.0
 
-## 🖥️ Desarrollo local
+🔑 Variables de entorno (resumen)
 
-### 1. Instalar dependencias
-En Codespaces o local:
+Configúralas en Netlify y en local (.env) según corresponda:
 
-```bash
-# Frontend
-npm install --prefix frontend
+DATABASE_URL → Postgres (Neon u otro)
 
-# Backend Functions
-npm install --prefix backend/functions
+PIPEDRIVE_API_TOKEN → token API Pipedrive
 
-2. Ejecutar el frontend
+S3 (documentos):
+
+AWS_REGION
+
+AWS_S3_BUCKET
+
+AWS_ACCESS_KEY_ID
+
+AWS_SECRET_ACCESS_KEY
+
+🖥️ Desarrollo local
+1) Instalar dependencias (raíz y frontend)
+npm install
+cd frontend && npm install && cd ..
+
+
+Prisma se genera automáticamente en postinstall. Si lo necesitas manual:
+
+npx prisma generate
+
+2) Ejecutar en local
+
+Frontend (Vite):
+
 cd frontend
 npm run dev
+# http://localhost:5173
 
 
-Abrir en: http://localhost:5173
+(Opcional) Functions en local con Netlify CLI:
 
-3. Ejecutar funciones
+# requiere netlify-cli disponible via npx o global
+npx netlify dev -p 8888
+# Expone frontend y /.netlify/functions/*
 
-Con Netlify CLI:
+🏗️ Build y despliegue (Netlify)
 
-netlify dev
-
-
-Esto levanta el frontend y funciones /api/* en paralelo.
-
-🏗️ Build y despliegue
-Comando de build en Netlify
-
-Definido en netlify.toml:
+netlify.toml:
 
 [build]
-  command = "npm run netlify:build"
-  publish = "frontend/dist"
-  functions = "backend/functions"
+  command  = "npm run netlify:build"
+  publish  = "frontend/dist"
+
+[functions]
+  directory = "backend/functions"
 
 
-Ese script hace:
+Scripts relevantes en package.json (raíz):
 
-npm ci --prefix frontend && npm --prefix frontend run build
-
-Despliegue
-
-Netlify publica:
-
-Frontend: en frontend/dist
-
-API: en /.netlify/functions/*
-
-Redirects configurados:
-
-/api/diag → diag.ts
-
-/api/health → health.ts
-
-/api/deals/import → deals_import.ts
-
-/api/* → catch-all de funciones
-
-/* → index.html (SPA fallback)
-
-📦 Scripts raíz
-"scripts": {
-  "build": "npm --prefix frontend run build",
-  "netlify:build": "npm ci --prefix frontend && npm --prefix frontend run build",
-  "postinstall": "npm ci --prefix frontend && npm ci --prefix backend/functions || true",
-  "typecheck:functions": "npm --prefix backend/functions run typecheck || true",
-  "build:functions": "npm --prefix backend/functions run build || true"
-}
-
-🛠️ Tecnologías clave
-
-Frontend: React 18, React-Bootstrap, React Query, Vite 5, TypeScript.
-
-Backend Functions: Netlify Functions (Node 20, esbuild).
-
-ORM: Prisma + Neon (Postgres serverless).
-
-Infraestructura: Netlify (builds, API serverless, deploy).
-
-🔑 Notas de desarrollo
-
-Usa siempre la versión de TypeScript del proyecto (no la global):
-
-// .vscode/settings.json
 {
-  "typescript.tsdk": "frontend/node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true
+  "scripts": {
+    "generate": "prisma generate",
+    "postinstall": "prisma generate",
+    "build:frontend": "cd frontend && npm install && npm run build",
+    "build": "npm run build:frontend",
+    "netlify:build": "npm run generate && npm run build"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@aws-sdk/client-s3": "^3.679.0",
+    "@aws-sdk/s3-request-presigner": "^3.679.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "typescript": "^5.9.3"
+  }
 }
 
 
-Para regenerar lockfiles limpios:
+Publicación:
 
-rm -f package-lock.json
-npm install
-npm install --prefix frontend
-npm install --prefix backend/functions
+Frontend → frontend/dist
+
+API (Functions) → /.netlify/functions/*
+
+Alias /api (opcional):
+Si quieres usar /api/* como atajo, en frontend/public/_redirects:
+
+/*    /index.html   200
+/api/*  /.netlify/functions/:splat  200
+
+🔌 Endpoints principales
+
+GET /.netlify/functions/health → { ok: true, ts }
+
+GET /.netlify/functions/deals?noSessions=true → { ok: true, deals: [...] }
+
+GET /.netlify/functions/deals?dealId=7222 → { ok: true, deal: {...} }
+
+POST /.netlify/functions/deals/import (JSON: { "dealId": "7222" }) → { ok: true, deal: { deal_id, ... } }
+
+PATCH /.netlify/functions/deals/:dealId → actualiza campos editables (+comentarios)
+
+Documentos (deal_documents.ts):
+
+POST /.netlify/functions/deal_documents/:dealId/upload-url
+
+GET /.netlify/functions/deal_documents/:dealId/:docId/url
+
+POST /.netlify/functions/deal_documents/:dealId
+
+DELETE /.netlify/functions/deal_documents/:dealId/:docId
+
+🧪 Comprobaciones rápidas (desde terminal)
+# Salud
+curl -s https://<tu-sitio>.netlify.app/.netlify/functions/health | jq
+
+# Listado para la tabla de Presupuestos
+curl -s 'https://<tu-sitio>.netlify.app/.netlify/functions/deals?noSessions=true' | jq
+
+# Detalle
+curl -s 'https://<tu-sitio>.netlify.app/.netlify/functions/deals?dealId=7222' | jq
+
+# Importación (backend OK si responde 200)
+curl -s -X POST 'https://<tu-sitio>.netlify.app/.netlify/functions/deals/import' \
+  -H 'Content-Type: application/json' --data '{"dealId":"7222"}' | jq
 
 
-Los tipos vite/client y node están declarados en cada tsconfig.
+Si configuras _redirects, podrás usar el alias /api/* (tras deploy):
+POST https://<tu-sitio>.netlify.app/api/deals/import
 
-Netlify transpila automáticamente las funciones TS con esbuild.
+🧩 UI/Frontend (estado)
 
-✅ Estado actual
+Tabla de Presupuestos:
 
-🔹 Frontend: compilando correctamente con TS + Vite.
+Consume /.netlify/functions/deals?noSessions=true.
 
-🔹 Backend: funciones organizadas y tipadas.
+Render robusto: no descarta filas si faltan organization o productNames.
 
-🔹 Deploy: corregido error backend-cli (ya no existe en locks).
+Fallback de respaldo: si el prop llega vacío pero el backend tiene datos, hace un fetch directo y pinta.
 
-🔹 Pendiente: integrar datos reales de Pipedrive vía API/SDK.
+Importación de deals:
+
+Cliente importDeal() en frontend/src/features/presupuestos/api.ts.
+
+Ruta correcta: /.netlify/functions/deals/import.
+(Se eliminó el antiguo deals_import que provocaba HTTP_404).
+
+Detalle de deal:
+
+Usa GET /.netlify/functions/deals?dealId=<id> (por query string).
+
+✅ Cambios técnicos recientes
+
+Fix BigInt JSON: serialización segura en respuestas de Functions (_shared/response.ts y helpers HTTP)
+→ evita Do not know how to serialize a BigInt.
+
+Arreglo importación: frontend y redirects apuntan a deals/import (no deals_import).
+
+Prisma:
+
+@prisma/client en dependencias de raíz.
+
+postinstall ejecuta prisma generate.
+
+AWS SDK v3 agregado para presigned URLs de documentos.
+
+TypeScript: cast explícito del JSON de Pipedrive en deals.ts para evitar warnings de json.data.
+
+🧰 Contribución / Flujo de trabajo
+
+Trabaja en Codespaces (ramas sobre main o PRs según convenga).
+
+Revisa cambios:
+
+git status
+git diff --staged --name-only
 
 
----
+Sube TODO lo pendiente:
+
+git add -A
+git commit -m "feat/fix: descripción"
+git push origin main
+
+
+Netlify dispara deploy automático.
+Verifica con los curl de arriba y en la UI.
+
+🗺️ Roadmap corto
+
+Sincronización incremental con Pipedrive (webhooks / polling).
+
+Planificador visual de sesiones por presupuesto.
+
+Historial de cambios y actividad.
+
+Tests E2E básicos (importación y edición de 7 campos).
