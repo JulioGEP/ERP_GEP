@@ -36,28 +36,52 @@ function toIntOrNull(v: any): number | null {
   return Math.trunc(n);
 }
 
+function resolvePipedriveId(raw: any): number | null {
+  if (raw === null || raw === undefined) return null;
+  // puede venir como número o como objeto { value, name, ... }
+  if (typeof raw === "object") {
+    const v = (raw as any)?.value ?? (raw as any)?.id ?? null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function resolvePipedriveName(deal: any): string | null {
+  // d.org_name si existe; en algunos casos viene dentro de d.org_id.name
+  const direct = deal?.org_name ?? null;
+  const nested = typeof deal?.org_id === "object" ? deal.org_id?.name ?? null : null;
+  return (direct || nested || null) as string | null;
+}
+
 /* ======================= IMPORT DESDE PIPEDRIVE ======================= */
 async function importDealFromPipedrive(dealIdRaw: any) {
-  const dealId = String(dealIdRaw ?? "").trim();
-  if (!dealId) throw new Error("Falta dealId");
+  const dealIdStr = String(dealIdRaw ?? "").trim();
+  if (!dealIdStr) throw new Error("Falta dealId");
+  const dealIdNum = Number(dealIdStr);
+  if (!Number.isFinite(dealIdNum)) throw new Error("dealId inválido");
 
   // 1) Traer árbol completo desde Pipedrive
-  const d = await getDeal(Number(dealId));
+  const d = await getDeal(dealIdNum);
   if (!d) throw new Error("Deal no encontrado en Pipedrive");
 
-  const org = d.org_id ? await getOrganization(Number(d.org_id)) : null;
-  const person = d.person_id ? await getPerson(Number(d.person_id)) : null;
+  const orgId = resolvePipedriveId(d.org_id);
+  const personId = resolvePipedriveId(d.person_id);
+
+  const org = orgId ? await getOrganization(orgId) : null;
+  const person = personId ? await getPerson(personId) : null;
   const [products, notes, files] = await Promise.all([
-    getDealProducts(Number(dealId)).then((x) => x ?? []),
-    getDealNotes(Number(dealId)).then((x) => x ?? []),
-    getDealFiles(Number(dealId)).then((x) => x ?? []),
+    getDealProducts(dealIdNum).then((x) => x ?? []),
+    getDealNotes(dealIdNum).then((x) => x ?? []),
+    getDealFiles(dealIdNum).then((x) => x ?? []),
   ]);
 
   // 2) Mapear + upsert relacional en Neon
   const savedDealId = await mapAndUpsertDealTree({
     deal: d,
-    org: org || { id: d.org_id, name: d.org_name ?? "—" },
-    person: person || (d.person_id ? { id: d.person_id } : undefined),
+    org: org || (orgId ? { id: orgId, name: resolvePipedriveName(d) ?? "—" } : undefined),
+    person: person || (personId ? { id: personId } : undefined),
     products,
     notes,
     files,
@@ -106,7 +130,15 @@ export const handler = async (event: any) => {
           where: { deal_id },
           include: {
             organization: { select: { org_id: true, name: true } },
-            person: { select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } },
+            person: {
+              select: {
+                person_id: true,
+                first_name: true,
+                last_name: true,
+                email: true,
+                phone: true,
+              },
+            },
             products: true,
             notes: true,
             documents: true,
@@ -124,7 +156,15 @@ export const handler = async (event: any) => {
         where: { deal_id: String(dealId) },
         include: {
           organization: { select: { org_id: true, name: true } },
-          person: { select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } },
+          person: {
+            select: {
+              person_id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
+            },
+          },
           products: { orderBy: { created_at: "asc" } },
           notes: { orderBy: { created_at: "desc" } },
           documents: { orderBy: { created_at: "desc" } },
@@ -177,7 +217,15 @@ export const handler = async (event: any) => {
         where: { deal_id: String(dealId) },
         include: {
           organization: { select: { org_id: true, name: true } },
-          person: { select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } },
+          person: {
+            select: {
+              person_id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
+            },
+          },
           products: { orderBy: { created_at: "asc" } },
           notes: { orderBy: { created_at: "desc" } },
           documents: { orderBy: { created_at: "desc" } },
@@ -195,7 +243,7 @@ export const handler = async (event: any) => {
           deal_id: true,
           title: true,
           sede_label: true,
-          pipeline_label: true,
+          // pipeline_label removido: no existe en la BD
           training_address_label: true,
           hours: true,
           alumnos: true,
@@ -206,9 +254,25 @@ export const handler = async (event: any) => {
           person_id: true,
           created_at: true,
           organization: { select: { org_id: true, name: true } },
-          person: { select: { person_id: true, first_name: true, last_name: true, email: true, phone: true } },
+          person: {
+            select: {
+              person_id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
+            },
+          },
           products: {
-            select: { id: true, name: true, code: true, quantity: true, price: true, type: true, hours: true },
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              quantity: true,
+              price: true,
+              type: true,
+              hours: true,
+            },
             orderBy: { created_at: "asc" },
           },
         },
