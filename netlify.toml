@@ -3,12 +3,11 @@
   publish = "frontend/dist"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
   NPM_FLAGS = "--no-audit --fund=false --progress=false"
 
 [functions]
   directory = "backend/functions"
   node_bundler = "esbuild"
   external_node_modules = ["@prisma/client", "prisma", "@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner"]
-  # Incluye SOLO el cliente de Prisma (motores necesarios) y no todo .prisma
   included_files = ["node_modules/.prisma/client/**"]
