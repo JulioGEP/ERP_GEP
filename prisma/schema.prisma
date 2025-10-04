@@ -1,7 +1,11 @@
 // prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Fuerza Node-API (lib .node) en lugar de binarios CLI grandes
+  engineType    = "library"
+  // Solo el target del entorno de Netlify (Amazon Linux / OpenSSL 3)
+  binaryTargets = ["rhel-openssl-3.0.x"]
 }
 
 datasource db {
