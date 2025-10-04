@@ -10,4 +10,5 @@
   directory = "backend/functions"
   node_bundler = "esbuild"
   external_node_modules = ["@prisma/client", "prisma", "@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner"]
-  included_files = ["node_modules/.prisma/**"]
+  # Incluye SOLO el cliente de Prisma (motores necesarios) y no todo .prisma
+  included_files = ["node_modules/.prisma/client/**"]
