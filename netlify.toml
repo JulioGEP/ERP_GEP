@@ -9,12 +9,13 @@
 [functions]
   directory = "backend/functions"
   node_bundler = "esbuild"
-  external_node_modules = [
-    "@prisma/client",
-    "prisma",
-    "@aws-sdk/client-s3",
-    "@aws-sdk/s3-request-presigner"
+  # Dejamos que Netlify detecte las dependencias desde el package.json local
+  included_files = [
+    "node_modules/.prisma/client/libquery_engine-*.node",
+    "node_modules/.prisma/client/libquery_engine-*.so.node",
+    "node_modules/.prisma/client/schema.prisma"
   ]
+
   # Incluir SOLO lo imprescindible del cliente de Prisma en runtime
   included_files = [
     "node_modules/.prisma/client/libquery_engine-*.node",
