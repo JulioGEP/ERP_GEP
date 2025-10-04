@@ -4,130 +4,127 @@ ERP interno colaborativo para planificar, visualizar y gestionar formaciones de 
 
 🚀 Visión
 
-El objetivo es disponer de una aplicación web interna que:
+La aplicación permite:
 
-Importe datos de Pipedrive (deals, organizaciones, personas).
+Importar datos desde Pipedrive (deals, organizaciones, personas, productos, notas y ficheros).
 
-Permita planificar sesiones de formación, recursos y presupuestos.
+Planificar sesiones de formación, recursos y presupuestos.
 
-Visualice la información en tiempo real para varios usuarios.
+Visualizar la información en tiempo real para varios usuarios.
 
-Exponga una API interna en Netlify Functions.
+Exponer una API interna mediante Netlify Functions.
 
 📂 Estructura del monorepo
 ERP_GEP/
-├── frontend/                        # App React + Vite + TypeScript
-│   ├── public/
-│   │   └── _redirects               # (opcional) Alias /api/* → /.netlify/functions/:splat
-│   ├── src/
-│   │   └── features/presupuestos/
-│   │       ├── BudgetTable.tsx
-│   │       └── api.ts               # Cliente API → /.netlify/functions/*
-│   ├── tsconfig.json
-│   ├── tsconfig.node.json
-│   ├── vite-env.d.ts
-│   └── package.json
+├─ frontend/                        # App React + Vite + TypeScript
+│  ├─ public/
+│  │  └─ _redirects                 # (opcional) Alias /api/* → /.netlify/functions/:splat
+│  └─ src/
+│     └─ features/presupuestos/
+│        ├─ BudgetTable.tsx
+│        ├─ BudgetDetailModal.tsx
+│        ├─ BudgetImportModal.tsx
+│        └─ api.ts                  # Cliente API → /.netlify/functions/*
+│     ├─ App.tsx
+│     ├─ vite-env.d.ts
+│     └─ types/deal.ts
 │
-├── backend/
-│   └── functions/                   # Netlify Functions (Node 20, esbuild)
-│       ├── deals.ts                 # GET /deals?..., POST /deals/import, PATCH /deals/:id
-│       ├── deal_documents.ts        # S3 presigned URLs
-│       ├── health.ts                # GET /health
-│       ├── _shared/
-│       │   ├── response.ts          # ✅ JSON seguro (BigInt→string)
-│       │   ├── prisma.ts
-│       │   └── env.js
-│       └── _lib/
-│           ├── http.ts              # (utilidades HTTP; también con safe stringify)
-│           └── db.ts
+├─ backend/
+│  └─ functions/                    # Netlify Functions (Node 20, esbuild)
+│     ├─ deals.ts                   # GET /deals..., POST /deals/import, PATCH /deals/:id
+│     ├─ deal_documents.ts          # S3 presigned URLs (upload / get / delete)
+│     ├─ health.ts                  # GET /health
+│     └─ _shared/
+│        ├─ response.ts             # JSON seguro (BigInt→string)
+│        ├─ prisma.ts               # getPrisma()
+│        ├─ pipedrive.ts            # Cliente Pipedrive centralizado + caché básica
+│        └─ mappers.ts              # Mapeo/Upsert Deal + Org + Person + Productos + Notas + Ficheros
 │
-├── netlify.toml                     # Build + Functions (directory = "backend/functions")
-├── prisma/                          # schema.prisma (si aplica)
-├── package.json                     # Scripts raíz (generate/build)
-└── README.md
+├─ prisma/
+│  └─ schema.prisma                 # Esquema de BD (Neon u otro Postgres)
+│
+├─ netlify.toml                     # Build y Functions (directory = "backend/functions")
+├─ package.json                     # Scripts raíz (generate/build)
+└─ README.md
 
 
-Nota: Anteriormente la carpeta se llamaba netlify/. Ahora es backend/. El prefijo público de Functions siempre es /.netlify/functions/* (no depende del nombre de carpeta).
+Nota: Históricamente la carpeta se llamó netlify/. Ahora es backend/. El prefijo público de Functions es siempre /.netlify/functions/*.
 
 ⚙️ Requisitos
 
-Node.js >= 20.18.0 (usamos 20.19.x en CI)
+Node.js ≥ 20.18.0 (usamos 20.19.x en CI)
 
-npm >= 10.8.0
+npm ≥ 10.8.0
 
-🔑 Variables de entorno (resumen)
+🔑 Variables de entorno
 
-Configúralas en Netlify y en local (.env) según corresponda:
+Defínelas en Netlify y en local (.env) según corresponda:
 
-DATABASE_URL → Postgres (Neon u otro)
+Base de datos
 
-PIPEDRIVE_API_TOKEN → token API Pipedrive
+DATABASE_URL → cadena de conexión Postgres (Neon u otro)
 
-S3 (documentos):
+Pipedrive
 
-AWS_REGION
+PIPEDRIVE_API_TOKEN → token API
 
-AWS_S3_BUCKET
+PIPEDRIVE_BASE_URL → (opcional, por defecto https://api.pipedrive.com/v1)
 
-AWS_ACCESS_KEY_ID
+S3 (documentos)
 
-AWS_SECRET_ACCESS_KEY
+⚠️ Los nombres coinciden con el código actual de deal_documents.ts.
+
+S3_BUCKET
+
+S3_REGION
+
+S3_ACCESS_KEY_ID
+
+S3_SECRET_ACCESS_KEY
 
 🖥️ Desarrollo local
-1) Instalar dependencias (raíz y frontend)
+1) Instalar dependencias
+# en la raíz
 npm install
 cd frontend && npm install && cd ..
 
 
-Prisma se genera automáticamente en postinstall. Si lo necesitas manual:
+Prisma se genera en postinstall. Si necesitas forzarlo:
 
-npx prisma generate
+npx prisma generate --schema=prisma/schema.prisma
 
-2) Ejecutar en local
-
-Frontend (Vite):
-
+2) Levantar el frontend (Vite)
 cd frontend
 npm run dev
 # http://localhost:5173
 
-
-(Opcional) Functions en local con Netlify CLI:
-
-# requiere netlify-cli disponible via npx o global
+3) (Opcional) Functions en local con Netlify CLI
+# requiere netlify-cli (vía npx o global)
 npx netlify dev -p 8888
-# Expone frontend y /.netlify/functions/*
+# expone frontend y /.netlify/functions/*
 
 🏗️ Build y despliegue (Netlify)
 
-netlify.toml:
+netlify.toml (resumen):
 
 [build]
-  command  = "npm run netlify:build"
-  publish  = "frontend/dist"
+command = "npm run netlify:build"
+publish = "frontend/dist"
 
 [functions]
-  directory = "backend/functions"
+directory = "backend/functions"
 
 
-Scripts relevantes en package.json (raíz):
+Scripts relevantes (raíz package.json):
 
 {
   "scripts": {
-    "generate": "prisma generate",
-    "postinstall": "prisma generate",
+    "generate": "prisma generate --schema=prisma/schema.prisma",
+    "postinstall": "prisma generate --schema=prisma/schema.prisma",
     "build:frontend": "cd frontend && npm install && npm run build",
     "build": "npm run build:frontend",
-    "netlify:build": "npm run generate && npm run build"
-  },
-  "dependencies": {
-    "@prisma/client": "^5.22.0",
-    "@aws-sdk/client-s3": "^3.679.0",
-    "@aws-sdk/s3-request-presigner": "^3.679.0"
-  },
-  "devDependencies": {
-    "prisma": "^5.22.0",
-    "typescript": "^5.9.3"
+    "netlify:build": "npm run generate && npm run build",
+    "typecheck:functions": "tsc -p backend/tsconfig.json"
   }
 }
 
@@ -138,116 +135,146 @@ Frontend → frontend/dist
 
 API (Functions) → /.netlify/functions/*
 
-Alias /api (opcional):
-Si quieres usar /api/* como atajo, en frontend/public/_redirects:
+Alias /api (opcional): si quieres usar /api/* como atajo, en frontend/public/_redirects:
 
-/*    /index.html   200
-/api/*  /.netlify/functions/:splat  200
+/* /index.html 200
+/api/* /.netlify/functions/:splat 200
 
 🔌 Endpoints principales
 
+Salud:
+
 GET /.netlify/functions/health → { ok: true, ts }
 
-GET /.netlify/functions/deals?noSessions=true → { ok: true, deals: [...] }
+Presupuestos:
 
-GET /.netlify/functions/deals?dealId=7222 → { ok: true, deal: {...} }
+GET /.netlify/functions/deals?noSessions=true → { deals: [...] }
 
-POST /.netlify/functions/deals/import (JSON: { "dealId": "7222" }) → { ok: true, deal: { deal_id, ... } }
+GET /.netlify/functions/deals?dealId=7222 → { deal: {...} }
 
-PATCH /.netlify/functions/deals/:dealId → actualiza campos editables (+comentarios)
+POST /.netlify/functions/deals/import (body: {"dealId":"7222"}) → { ok: true, deal: { deal_id, ... } }
 
-Documentos (deal_documents.ts):
+PATCH /.netlify/functions/deals/:dealId → actualiza campos editables y comentarios
 
-POST /.netlify/functions/deal_documents/:dealId/upload-url
+Documentos (S3):
 
-GET /.netlify/functions/deal_documents/:dealId/:docId/url
+POST /.netlify/functions/deal_documents/:dealId/upload-url → { uploadUrl, storageKey }
 
-POST /.netlify/functions/deal_documents/:dealId
+POST /.netlify/functions/deal_documents/:dealId → guarda metadatos (deal_files)
 
-DELETE /.netlify/functions/deal_documents/:dealId/:docId
+GET /.netlify/functions/deal_documents/:dealId/:docId/url → { url } (presigned GET)
 
-🧪 Comprobaciones rápidas (desde terminal)
+DELETE /.netlify/functions/deal_documents/:dealId/:docId → borra S3 + BD
+
+🧠 Lógica de importación / datos (resumen funcional)
+
+Import por dealId (modal “Importar presupuesto”):
+
+Upsert de Deal, Organización (name) y Persona (nombre, email, tel).
+
+Productos del deal:
+
+Se guarda quantity como “horas por producto” (provisional) leyendo el custom field 38f11c8876ecde803a027fbf3c9041fda2ae7eb7.
+
+Si un producto no trae horas → 0 (editable posteriormente en el popup).
+
+Notas del deal (orden desc).
+
+Ficheros del deal (metadatos) + documentos S3 en un listado unificado en el modal.
+
+Labels: se guardan como texto legible en BD para:
+
+pipeline_id (se almacena el label, no el ID)
+
+sede_label, caes_label, fundae_label, hotel_label, training_address
+
+Campos editables desde la UI que no se sobrescriben en re-import:
+
+sede_label, hours, training_address, caes_label, fundae_label, hotel_label, alumnos
+
+Errores de import: warning no bloqueante; se persiste lo disponible.
+
+⚠️ Provisional: “horas por producto” se mapean a deal_products.quantity hasta realizar la migración de esquema que añada hours y comments por línea.
+
+🧩 UI / Frontend
+
+BudgetTable: consume GET /deals?noSessions=true. Tiene fallback para recuperar datos directos si props llegan vacíos.
+
+BudgetImportModal: usa POST /deals/import (corrige la ruta antigua deals_import).
+
+BudgetDetailModal:
+
+GET /deals?dealId=...
+
+Edición de 7 campos (con PATCH /deals/:id) y comentarios.
+
+Documentos: subida con presigned PUT a S3 + metadatos en BD; vista previa con presigned GET.
+
+🧪 Comprobaciones rápidas
 # Salud
-curl -s https://<tu-sitio>.netlify.app/.netlify/functions/health | jq
+curl -s 'http://localhost:8888/.netlify/functions/health' | jq
 
-# Listado para la tabla de Presupuestos
-curl -s 'https://<tu-sitio>.netlify.app/.netlify/functions/deals?noSessions=true' | jq
+# Listado Presupuestos (tabla)
+curl -s 'http://localhost:8888/.netlify/functions/deals?noSessions=true' | jq
 
 # Detalle
-curl -s 'https://<tu-sitio>.netlify.app/.netlify/functions/deals?dealId=7222' | jq
+curl -s 'http://localhost:8888/.netlify/functions/deals?dealId=7222' | jq
 
-# Importación (backend OK si responde 200)
-curl -s -X POST 'https://<tu-sitio>.netlify.app/.netlify/functions/deals/import' \
-  -H 'Content-Type: application/json' --data '{"dealId":"7222"}' | jq
-
-
-Si configuras _redirects, podrás usar el alias /api/* (tras deploy):
-POST https://<tu-sitio>.netlify.app/api/deals/import
-
-🧩 UI/Frontend (estado)
-
-Tabla de Presupuestos:
-
-Consume /.netlify/functions/deals?noSessions=true.
-
-Render robusto: no descarta filas si faltan organization o productNames.
-
-Fallback de respaldo: si el prop llega vacío pero el backend tiene datos, hace un fetch directo y pinta.
-
-Importación de deals:
-
-Cliente importDeal() en frontend/src/features/presupuestos/api.ts.
-
-Ruta correcta: /.netlify/functions/deals/import.
-(Se eliminó el antiguo deals_import que provocaba HTTP_404).
-
-Detalle de deal:
-
-Usa GET /.netlify/functions/deals?dealId=<id> (por query string).
-
-✅ Cambios técnicos recientes
-
-Fix BigInt JSON: serialización segura en respuestas de Functions (_shared/response.ts y helpers HTTP)
-→ evita Do not know how to serialize a BigInt.
-
-Arreglo importación: frontend y redirects apuntan a deals/import (no deals_import).
-
-Prisma:
-
-@prisma/client en dependencias de raíz.
-
-postinstall ejecuta prisma generate.
-
-AWS SDK v3 agregado para presigned URLs de documentos.
-
-TypeScript: cast explícito del JSON de Pipedrive en deals.ts para evitar warnings de json.data.
-
-🧰 Contribución / Flujo de trabajo
-
-Trabaja en Codespaces (ramas sobre main o PRs según convenga).
-
-Revisa cambios:
-
-git status
-git diff --staged --name-only
+# Importación
+curl -s -X POST 'http://localhost:8888/.netlify/functions/deals/import' \
+  -H 'Content-Type: application/json' \
+  --data '{"dealId":"7222"}' | jq
 
 
-Sube TODO lo pendiente:
+Cambia localhost:8888 por el dominio de Netlify tras el deploy.
 
+🛠️ Desarrollo Backend / Prisma
+
+Generar cliente Prisma
+
+# desde la raíz
+npx prisma generate --schema=prisma/schema.prisma
+
+
+Chequeo de tipos Functions
+
+cd backend
+npx tsc --noEmit
+
+🔁 Flujo de trabajo (Git)
+# crear rama
+git checkout -b fix/pipedrive-import-docs
+
+# añadir y commitear
 git add -A
-git commit -m "feat/fix: descripción"
-git push origin main
+git commit -m "fix(pipedrive): import robusto + labels legibles + docs S3"
 
+# subir y crear PR
+git push -u origin fix/pipedrive-import-docs
+gh pr create --fill --web
 
-Netlify dispara deploy automático.
-Verifica con los curl de arriba y en la UI.
+🗺️ Roadmap breve
 
-🗺️ Roadmap corto
+Webhook Pipedrive → import automático además del modo bajo demanda.
 
-Sincronización incremental con Pipedrive (webhooks / polling).
+Migración de esquema:
+
+deal_products: añadir hours y product_comments (y dejar quantity para cantidades reales).
+
+deal_files: añadir origin (imported | user_upload).
+
+Limpieza de columnas marcadas “eliminar” en el mapeo PDF.
+
+Filtros en UI por typedealproducttype y category.
 
 Planificador visual de sesiones por presupuesto.
 
-Historial de cambios y actividad.
+Tests E2E básicos (importación y edición de campos).
 
-Tests E2E básicos (importación y edición de 7 campos).
+📎 Notas técnicas
+
+Serialización BigInt: el backend devuelve JSON con BigInt serializado a string (helpers en _shared/response.ts) para evitar errores de JSON.stringify.
+
+Pipelines / Labels: pipeline_id en BD guarda el nombre del pipeline (label) para mostrarlo directamente en UI.
+
+Caché Pipedrive: pipedrive.ts cachea pipelines, dealFields y productFields durante la vida de la función.
