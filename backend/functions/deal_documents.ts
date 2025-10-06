@@ -11,7 +11,9 @@ const ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID!;
 const SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY!;
 
 if (!BUCKET || !REGION || !ACCESS_KEY_ID || !SECRET_ACCESS_KEY) {
-  console.warn("[deal_documents] Faltan variables S3: S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY");
+  console.warn(
+    "[deal_documents] Faltan variables S3: S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY"
+  );
 }
 
 const s3 = new S3Client({
@@ -19,16 +21,18 @@ const s3 = new S3Client({
   credentials: { accessKeyId: ACCESS_KEY_ID, secretAccessKey: SECRET_ACCESS_KEY },
 });
 
-// Admite rutas con o sin el prefijo /.backend/functions
+// Admite rutas con o sin el prefijo /.netlify/functions
 // 1) POST   /deal_documents/:dealId/upload-url    -> { uploadUrl, storageKey }
-// 2) POST   /deal_documents/:dealId               -> guarda metadatos S3 (source=S3)
-// 3) GET    /deal_documents/:dealId               -> lista documentos (PIPEDRIVE + S3)
-// 4) GET    /deal_documents/:dealId/:docId/url    -> { url } (firmada si S3, directa si Pipedrive)
-// 5) DELETE /deal_documents/:dealId/:docId        -> borra (S3+BD si S3, en PIPEDRIVE solo quita del listado local)
+// 2) POST   /deal_documents/:dealId               -> guarda metadatos en deal_files (source implícito)
+// 3) GET    /deal_documents/:dealId               -> lista documentos (mapeo a {name,mime_type,...})
+// 4) GET    /deal_documents/:dealId/:docId/url    -> { url } (presign si S3, directa si http(s))
+// 5) DELETE /deal_documents/:dealId/:docId        -> borra (S3+BD si S3; si http(s) solo BD)
 
 function parsePath(path: string) {
   const p = String(path || "");
-  const m = p.match(/\/(?:\.backend\/functions\/)?deal_documents\/([^/]+)(?:\/([^/]+))?(?:\/(upload-url|url))?$/i);
+  const m = p.match(
+    /\/(?:\.netlify\/functions\/)?deal_documents\/([^/]+)(?:\/([^/]+))?(?:\/(upload-url|url))?$/i
+  );
   const dealId = m?.[1] ? decodeURIComponent(m[1]) : null;
   const second = m?.[2] ? decodeURIComponent(m[2]) : null;
   const tail = m?.[3] ? String(m[3]) : null;
@@ -39,6 +43,11 @@ function parsePath(path: string) {
     isUploadUrl: tail === "upload-url",
     isGetUrl: tail === "url",
   };
+}
+
+function isHttpUrl(u?: string | null): boolean {
+  if (!u) return false;
+  return /^https?:\/\//i.test(u);
 }
 
 export const handler = async (event: any) => {
@@ -54,6 +63,8 @@ export const handler = async (event: any) => {
     if (!dealId) return errorResponse("VALIDATION_ERROR", "deal_id requerido en path", 400);
 
     const prisma = getPrisma();
+    const dealIdStr = String(dealId).trim();
+    if (!dealIdStr) return errorResponse("VALIDATION_ERROR", "deal_id inválido", 400);
 
     // 1) Presigned URL de subida (PUT a S3)
     if (method === "POST" && isUploadUrl) {
@@ -69,7 +80,7 @@ export const handler = async (event: any) => {
 
       const ext = fileName.includes(".") ? fileName.split(".").pop() : "bin";
       const key = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      const storageKey = `deals/${encodeURIComponent(dealId)}/${key}.${ext}`;
+      const storageKey = `deals/${encodeURIComponent(dealIdStr)}/${key}.${ext}`;
 
       const putCmd = new PutObjectCommand({
         Bucket: BUCKET,
@@ -82,100 +93,109 @@ export const handler = async (event: any) => {
       return successResponse({ ok: true, uploadUrl, storageKey });
     }
 
-    // 2) Guardar metadatos S3 en deal_documents (source=S3)
+    // 2) Guardar metadatos en deal_files (mapeando a columnas reales)
+    //    Para S3: guardamos file_url = storage_key (clave interna S3), file_type = mime_type
+    //    Para Pipedrive (si algún día llega): file_url deberá ser http(s)
     if (method === "POST" && !isUploadUrl) {
       if (!event.body) return errorResponse("VALIDATION_ERROR", "Body requerido", 400);
-      const { file_name, storage_key, mime_type, size } = JSON.parse(event.body || "{}") as {
+      const { file_name, storage_key, mime_type } = JSON.parse(event.body || "{}") as {
         file_name?: string;
-        storage_key?: string;
+        storage_key?: string; // en S3 usamos esta key como file_url interno
         mime_type?: string;
-        size?: number;
       };
       if (!file_name || !storage_key) {
         return errorResponse("VALIDATION_ERROR", "file_name y storage_key requeridos", 400);
       }
 
       const id = randomUUID();
-      await prisma.deal_documents.create({
+      await prisma.deal_files.create({
         data: {
           id,
-          deal_id: String(dealId),
-          source: "S3",
-          name: file_name,
-          mime_type: mime_type ?? null,
-          size: typeof size === "number" ? size : null,
-          external_id: storage_key, // en S3 usamos la key como external_id
-          url: null, // la generamos bajo demanda
+          deal_id: dealIdStr,
+          file_name: file_name,
+          file_type: mime_type ?? null,
+          file_url: storage_key, // guardamos la clave S3 (no es URL pública)
+          added_at: new Date(), // opcional: marca de alta
         },
       });
 
       return successResponse({ ok: true, id });
     }
 
-    // 3) Listado unificado (PIPEDRIVE + S3)
+    // 3) Listado (mapeamos a la forma esperada por el front)
     if (method === "GET" && !docId && !isGetUrl) {
-      const docs = await prisma.deal_documents.findMany({
-        where: { deal_id: String(dealId) },
+      const docsRaw = await prisma.deal_files.findMany({
+        where: { deal_id: dealIdStr },
         orderBy: { created_at: "desc" },
         select: {
           id: true,
-          source: true,
-          name: true,
-          mime_type: true,
-          size: true,
+          file_name: true,
+          file_type: true,
+          file_url: true,
           created_at: true,
         },
       });
 
-      return successResponse({ documents: docs });
+      const documents = docsRaw.map((d) => {
+        const fromS3 = !isHttpUrl(d.file_url);
+        return {
+          id: d.id,
+          source: fromS3 ? "S3" : "PIPEDRIVE",
+          name: d.file_name ?? null,
+          mime_type: d.file_type ?? null,
+          // no tenemos `size` en el esquema → lo omitimos
+          created_at: d.created_at,
+        };
+      });
+
+      return successResponse({ documents });
     }
 
     // 4) URL de visualización/descarga
     if (method === "GET" && docId && isGetUrl) {
-      const doc = await prisma.deal_documents.findUnique({
+      const doc = await prisma.deal_files.findUnique({
         where: { id: String(docId) },
-        select: { id: true, deal_id: true, source: true, external_id: true, url: true, name: true, mime_type: true },
+        select: { id: true, deal_id: true, file_url: true, file_type: true, file_name: true },
       });
-      if (!doc || doc.deal_id !== String(dealId)) {
+      if (!doc || doc.deal_id !== dealIdStr) {
         return errorResponse("NOT_FOUND", "Documento no encontrado", 404);
       }
 
-      if (doc.source === "S3") {
-        if (!doc.external_id) return errorResponse("VALIDATION_ERROR", "Documento S3 sin external_id", 400);
-        const getCmd = new GetObjectCommand({ Bucket: BUCKET, Key: String(doc.external_id) });
-        const url = await getSignedUrl(s3, getCmd, { expiresIn: 60 * 5 });
-        return successResponse({ ok: true, url, name: doc.name, mime_type: doc.mime_type ?? undefined });
+      // Si es http(s), devolvemos directamente (documento tipo Pipedrive u origen externo)
+      if (isHttpUrl(doc.file_url)) {
+        return successResponse({
+          ok: true,
+          url: String(doc.file_url),
+          name: doc.file_name ?? undefined,
+          mime_type: doc.file_type ?? undefined,
+        });
       }
 
-      // PIPEDRIVE: durante el import guardamos una url directa si Pipedrive la expone
-      if (doc.source === "PIPEDRIVE") {
-        if (doc.url) {
-          return successResponse({ ok: true, url: doc.url, name: doc.name, mime_type: doc.mime_type ?? undefined });
-        }
-        // Si no hay url persistida, de momento devolvemos error controlado (no generamos firmas Pipedrive aquí)
-        return errorResponse("NOT_IMPLEMENTED", "Documento de Pipedrive sin url persistida", 501);
+      // Si no es http(s), lo tratamos como S3 Key
+      if (!doc.file_url) {
+        return errorResponse("VALIDATION_ERROR", "Documento sin referencia de ubicación", 400);
       }
-
-      return errorResponse("VALIDATION_ERROR", "Origen de documento desconocido", 400);
+      const getCmd = new GetObjectCommand({ Bucket: BUCKET, Key: String(doc.file_url) });
+      const url = await getSignedUrl(s3, getCmd, { expiresIn: 60 * 5 });
+      return successResponse({ ok: true, url, name: doc.file_name ?? undefined, mime_type: doc.file_type ?? undefined });
     }
 
-    // 5) Borra documento
+    // 5) Borrado (si es S3 → borra objeto; si es http(s) → borra solo de BD)
     if (method === "DELETE" && docId) {
-      const doc = await prisma.deal_documents.findUnique({
+      const doc = await prisma.deal_files.findUnique({
         where: { id: String(docId) },
-        select: { id: true, deal_id: true, source: true, external_id: true },
+        select: { id: true, deal_id: true, file_url: true },
       });
-      if (!doc || doc.deal_id !== String(dealId)) {
+      if (!doc || doc.deal_id !== dealIdStr) {
         return errorResponse("NOT_FOUND", "Documento no encontrado", 404);
       }
 
-      if (doc.source === "S3" && doc.external_id) {
-        // borrar en S3
-        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: String(doc.external_id) }));
+      if (doc.file_url && !isHttpUrl(doc.file_url)) {
+        // interpretamos file_url como S3 Key
+        await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: String(doc.file_url) }));
       }
-      // Si es PIPEDRIVE, NO borramos en Pipedrive (solo lo quitamos del listado local)
-      await prisma.deal_documents.delete({ where: { id: String(docId) } });
 
+      await prisma.deal_files.delete({ where: { id: String(docId) } });
       return successResponse({ ok: true });
     }
 

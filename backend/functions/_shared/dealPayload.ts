@@ -4,6 +4,7 @@
 export function sanitizeHtml(html: unknown): string | null {
   if (html === null || html === undefined) return null;
   const text = String(html)
+    .replace(/\r\n/g, '\n')                    // normaliza CRLF
     .replace(/<br\s*\/?>/gi, '\n')            // <br> → salto de línea
     .replace(/<\/p>/gi, '\n')                 // </p> → salto de línea
     .replace(/<li[^>]*>/gi, '• ')             // <li> → viñeta
@@ -14,6 +15,8 @@ export function sanitizeHtml(html: unknown): string | null {
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
     .replace(/[ \t]+\n/g, '\n')               // espacios antes de \n
     .replace(/\n{3,}/g, '\n\n')               // colapsa múltiples \n
     .replace(/[ \t]{2,}/g, ' ')               // colapsa espacios
@@ -43,7 +46,8 @@ function toNonNegativeIntOrNull(v: unknown): number | null {
 
 /**
  * Construye un payload normalizado de Deal a partir de un "record" heterogéneo.
- * Soporta alias usados en el proyecto (trainingAddress/training_address, etc.).
+ * Soporta alias usados en el proyecto (trainingAddress/training_address, *_label, etc.).
+ * Nota: exponemos tanto `training_address_label` como `training_address` para compatibilidad.
  */
 export function buildDealPayloadFromRecord(record: any) {
   if (!record) return null;
@@ -74,6 +78,18 @@ export function buildDealPayloadFromRecord(record: any) {
 
   const organization = record.organization ?? null;
 
+  // Dirección de formación: resolvemos ambas variantes y exponemos las dos
+  const trainingAddressLabel =
+    toNullableString(record.training_address_label) ??
+    toNullableString(record.trainingAddressLabel);
+
+  const trainingAddressFallback =
+    toNullableString(record.training_address) ??
+    toNullableString(record.trainingAddress);
+
+  // Elegimos label si existe; si no, el fallback “address”
+  const trainingAddressPreferred = trainingAddressLabel ?? trainingAddressFallback;
+
   return {
     deal_id: record.id ?? record.deal_id ?? null,
 
@@ -101,9 +117,11 @@ export function buildDealPayloadFromRecord(record: any) {
     training,
     training_names: trainingNames,
     hours, // string|null
-    training_address:
-      toNullableString(record.training_address) ??
-      toNullableString(record.trainingAddress),
+
+    // Dirección — exponemos ambas claves para compatibilidad con front/backend
+    training_address_label: trainingAddressPreferred,
+    training_address: trainingAddressFallback ?? trainingAddressPreferred,
+
     sede_label: toNullableString(record.sede_label) ?? toNullableString(record.sedeLabel),
     caes_label: toNullableString(record.caes_label) ?? toNullableString(record.caesLabel),
     fundae_label: toNullableString(record.fundae_label) ?? toNullableString(record.fundaeLabel),
@@ -112,7 +130,7 @@ export function buildDealPayloadFromRecord(record: any) {
     prodextra: prodExtra,
     prodextra_names: extraNames,
 
-    // Documentos
+    // Documentos (mantenemos arrays auxiliares para compatibilidad)
     documents_num: toNonNegativeIntOrNull(record.documentsNum) ?? documents.length,
     documents_id: documents.map((d: any) => d?.id ?? null).filter(Boolean),
     documents: documents.map(
