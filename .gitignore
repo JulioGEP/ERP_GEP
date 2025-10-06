@@ -42,3 +42,6 @@ backend/functions/**
 backend/functions/node_modules/
 backend/functions/.netlify/
 backend/functions/dist/
+
+# Build artifacts
+backend/dist/
