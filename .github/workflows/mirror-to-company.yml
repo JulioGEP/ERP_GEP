@@ -1,0 +1,71 @@
+name: Mirror main to company
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.name "GEP Group CI"
+          git config user.email "ci@gepgroup.es"
+
+      - name: Add company remote
+        env:
+          TOKEN: ${{ secrets.COMPANY_REPO_PUSH_TOKEN }}
+        run: |
+          set -e
+          git remote add company "https://x-access-token:${TOKEN}@github.com/GEP-RISK-112-S-L/ERP_GEP.git"
+          git fetch company main || echo "no remote main yet"
+
+      - name: Fast-forward main on company (or create if missing)
+        id: ff
+        run: |
+          set -e
+          SRC_SHA="$(git rev-parse origin/main || git rev-parse HEAD)"
+          if git rev-parse --verify remotes/company/main >/dev/null 2>&1; then
+            TARGET_SHA="$(git rev-parse remotes/company/main)"
+            if git merge-base --is-ancestor "$TARGET_SHA" "$SRC_SHA"; then
+              git push company "${SRC_SHA}:refs/heads/main"
+              echo "updated=1" >> "$GITHUB_OUTPUT"
+            else
+              echo "updated=0" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # company/main no existe: crearlo
+            git push company "${SRC_SHA}:refs/heads/main"
+            echo "updated=1" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fallback → push branch and open PR
+        if: steps.ff.outputs.updated != '1'
+        env:
+          TOKEN: ${{ secrets.COMPANY_REPO_PUSH_TOKEN }}
+          GH_TOKEN: ${{ secrets.COMPANY_REPO_PUSH_TOKEN }}
+        run: |
+          set -e
+          BR="sync/julio-main"
+          git push -f company origin/main:refs/heads/$BR
+          if gh pr list --repo GEP-RISK-112-S-L/ERP_GEP --head $BR --base main --state open --json number --jq '.[0].number' >/dev/null 2>&1; then
+            echo "PR ya abierto."
+          else
+            gh pr create \
+              --repo GEP-RISK-112-S-L/ERP_GEP \
+              --base main \
+              --head $BR \
+              --title "Sync: fast-forward desde JulioGEP/main" \
+              --body "El auto-sync no puede hacer fast-forward limpio. Revisa y haz merge."
+          fi
