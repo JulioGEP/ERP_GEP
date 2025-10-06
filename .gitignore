@@ -1,44 +1,23 @@
-# Node / sistema
-node_modules
-npm-debug.log*
-.DS_Store
-
-# Entornos
-.env
-.env.local
-.env.*
-!.env.example
-backend/.env
-frontend/.env
-
-# IDE / tooling / builds
-.idea
-.vscode
-coverage
+# dependencias y builds
+node_modules/
+backend/node_modules/
+.netlify/
+backend/.netlify/
 dist/
 build/
-frontend/dist
-backend/dist
-.netlify
+.tmp-gen/
 
-# Logs
+# prisma generado
+node_modules/.prisma/
+backend/.netlify/functions-serve/**/.prisma/
+
+# SO / editor
+.DS_Store
 *.log
 
-# --- Reglas específicas del monorepo ---
-# Incluimos el código fuente de las funciones, pero NO su node_modules
-# (Netlify instalará/empacará dependencias y esbuild hará tree-shaking)
-
-# Primero ignoramos todo en backend/functions...
-backend/functions/**
-
-# ...y ahora re-incluimos SOLO lo necesario para construir/empacar
-!backend/functions/**/*.ts
-!backend/functions/package.json
-!backend/functions/tsconfig.json
-!backend/functions/_shared/**
-!backend/functions/_lib/**
-
-# Mantener fuera cualquier node_modules local dentro de functions
-backend/functions/node_modules/
-backend/functions/.netlify/
-backend/functions/dist/
+# entornos
+.env
+.env.*
+# (si NO quieres commitear locks ahora, ignóralos; si sí quieres, borra estas 2 líneas)
+package-lock.json
+backend/package-lock.json
