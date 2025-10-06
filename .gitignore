@@ -45,3 +45,6 @@ backend/functions/dist/
 
 # Build artifacts
 backend/dist/
+
+# Excluir build antiguo
+backend/dist/
