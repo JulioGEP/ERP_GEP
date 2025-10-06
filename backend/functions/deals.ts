@@ -14,7 +14,8 @@ import { mapAndUpsertDealTree } from "./_shared/mappers";
 const EDITABLE_FIELDS = new Set([
   "sede_label",
   "hours",
-  "training_address_label",
+  "training_address_label", // aceptamos alias de entrada…
+  "training_address",       // …y el nombre real en BD
   "caes_label",
   "fundae_label",
   "hotel_label",
@@ -38,7 +39,6 @@ function toIntOrNull(v: any): number | null {
 
 function resolvePipedriveId(raw: any): number | null {
   if (raw === null || raw === undefined) return null;
-  // puede venir como número o como objeto { value, name, ... }
   if (typeof raw === "object") {
     const v = (raw as any)?.value ?? (raw as any)?.id ?? null;
     const n = Number(v);
@@ -49,10 +49,30 @@ function resolvePipedriveId(raw: any): number | null {
 }
 
 function resolvePipedriveName(deal: any): string | null {
-  // d.org_name si existe; en algunos casos viene dentro de d.org_id.name
   const direct = deal?.org_name ?? null;
   const nested = typeof deal?.org_id === "object" ? deal.org_id?.name ?? null : null;
   return (direct || nested || null) as string | null;
+}
+
+/** Normaliza un deal de Prisma para exponer `products`, `notes`, `documents` */
+function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null {
+  if (!deal) return deal;
+  const out: any = { ...deal };
+
+  if ("deal_products" in out) {
+    out.products = out.deal_products;
+    delete out.deal_products;
+  }
+  if ("deal_notes" in out) {
+    out.notes = out.deal_notes;
+    delete out.deal_notes;
+  }
+  if ("deal_files" in out) {
+    out.documents = out.deal_files;
+    delete out.deal_files;
+  }
+
+  return out as T;
 }
 
 /* ======================= IMPORT DESDE PIPEDRIVE ======================= */
@@ -112,9 +132,10 @@ export const handler = async (event: any) => {
     const qsId = event.queryStringParameters?.dealId
       ? String(event.queryStringParameters.dealId).trim()
       : null;
-    const dealId = parsePathId(path) ?? (qsId && qsId.length ? qsId : null);
+    const dealIdStr = parsePathId(path) ?? (qsId && qsId.length ? qsId : null);
+    const dealId = dealIdStr !== null ? String(dealIdStr) : null;
 
-    /* ------------ IMPORT: POST/GET /.backend/functions/deals/import ------------ */
+    /* ------------ IMPORT: POST/GET /.netlify/functions/deals/import ------------ */
     if (
       (method === "POST" && path.endsWith("/deals/import")) ||
       (method === "GET" && path.endsWith("/deals/import"))
@@ -126,8 +147,8 @@ export const handler = async (event: any) => {
 
       try {
         const { deal_id, warnings } = await importDealFromPipedrive(incomingId);
-        const deal = await prisma.deals.findUnique({
-          where: { deal_id },
+        const dealRaw = await prisma.deals.findUnique({
+          where: { deal_id: String(deal_id) },
           include: {
             organization: { select: { org_id: true, name: true } },
             person: {
@@ -139,11 +160,12 @@ export const handler = async (event: any) => {
                 phone: true,
               },
             },
-            products: true,
-            notes: true,
-            documents: true,
+            deal_products: true,
+            deal_notes: true,
+            deal_files: true,
           },
         });
+        const deal = mapDealForApi(dealRaw);
         return successResponse({ ok: true, warnings, deal });
       } catch (e: any) {
         return errorResponse("IMPORT_ERROR", e?.message || "Error importando deal", 502);
@@ -152,7 +174,7 @@ export const handler = async (event: any) => {
 
     /* ------------------- GET detalle: /deals/:id o ?dealId= ------------------- */
     if (method === "GET" && dealId !== null) {
-      const deal = await prisma.deals.findUnique({
+      const dealRaw = await prisma.deals.findUnique({
         where: { deal_id: String(dealId) },
         include: {
           organization: { select: { org_id: true, name: true } },
@@ -165,13 +187,14 @@ export const handler = async (event: any) => {
               phone: true,
             },
           },
-          products: { orderBy: { created_at: "asc" } },
-          notes: { orderBy: { created_at: "desc" } },
-          documents: { orderBy: { created_at: "desc" } },
+          deal_products: { orderBy: { created_at: "asc" } },
+          deal_notes: { orderBy: { created_at: "desc" } },
+          deal_files: { orderBy: { created_at: "desc" } },
         },
       });
-      if (!deal) return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
+      if (!dealRaw) return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
 
+      const deal = mapDealForApi(dealRaw);
       return successResponse({ deal });
     }
 
@@ -188,6 +211,12 @@ export const handler = async (event: any) => {
         }
       }
 
+      // Normaliza alias de dirección de formación al campo real de BD
+      if ("training_address_label" in patch && patch.training_address_label != null) {
+        patch.training_address = patch.training_address_label;
+        delete patch.training_address_label;
+      }
+
       // Coerciones y validaciones
       if ("hours" in patch) {
         const v = patch.hours;
@@ -195,7 +224,8 @@ export const handler = async (event: any) => {
         if (v !== null && v !== undefined && n === null) {
           return errorResponse("VALIDATION_ERROR", "hours inválido", 400);
         }
-        patch.hours = n;
+        // En BD hours es String?; guardamos como string si hay número
+        patch.hours = n != null ? String(n) : null;
       }
       if ("alumnos" in patch) {
         const v = patch.alumnos;
@@ -213,7 +243,7 @@ export const handler = async (event: any) => {
         });
       }
 
-      const updated = await prisma.deals.findUnique({
+      const updatedRaw = await prisma.deals.findUnique({
         where: { deal_id: String(dealId) },
         include: {
           organization: { select: { org_id: true, name: true } },
@@ -226,25 +256,25 @@ export const handler = async (event: any) => {
               phone: true,
             },
           },
-          products: { orderBy: { created_at: "asc" } },
-          notes: { orderBy: { created_at: "desc" } },
-          documents: { orderBy: { created_at: "desc" } },
+          deal_products: { orderBy: { created_at: "asc" } },
+          deal_notes: { orderBy: { created_at: "desc" } },
+          deal_files: { orderBy: { created_at: "desc" } },
         },
       });
 
-      return successResponse({ ok: true, deal: updated });
+      const deal = mapDealForApi(updatedRaw);
+      return successResponse({ ok: true, deal });
     }
 
-    /* -------------- GET listado: /.backend/functions/deals?noSessions=true -------------- */
+    /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
     if (method === "GET" && event.queryStringParameters?.noSessions === "true") {
       // listamos deals + organización/persona + productos (sin seassons)
-      const rows = await prisma.deals.findMany({
+      const rowsRaw = await prisma.deals.findMany({
         select: {
           deal_id: true,
           title: true,
           sede_label: true,
-          // pipeline_label removido: no existe en la BD
-          training_address_label: true,
+          training_address: true, // <- en BD, no existe training_address_label
           hours: true,
           alumnos: true,
           caes_label: true,
@@ -263,7 +293,7 @@ export const handler = async (event: any) => {
               phone: true,
             },
           },
-          products: {
+          deal_products: {
             select: {
               id: true,
               name: true,
@@ -272,6 +302,7 @@ export const handler = async (event: any) => {
               price: true,
               type: true,
               hours: true,
+              created_at: true,
             },
             orderBy: { created_at: "asc" },
           },
@@ -279,7 +310,8 @@ export const handler = async (event: any) => {
         orderBy: { created_at: "desc" },
       });
 
-      return successResponse({ deals: rows });
+      const deals = rowsRaw.map((r) => mapDealForApi(r));
+      return successResponse({ deals });
     }
 
     return errorResponse("NOT_IMPLEMENTED", "Ruta o método no soportado", 404);
