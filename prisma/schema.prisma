@@ -1,9 +1,7 @@
 // prisma/schema.prisma
 
 generator client {
-  provider      = "prisma-client-js"
-  engineType    = "library"
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -11,193 +9,135 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* =========================
- * Tablas maestras existentes
- * ========================= */
+/**
+ * Nota de alineación:
+ * - organizations/persons/deals usan timestamps SIN TZ -> @db.Timestamp(6)
+ * - deal_products/deal_notes/deal_files usan timestamptz -> @db.Timestamptz(6)
+ * - deal_products.type en DB es un ENUM (dealproducttype). Lo mapeamos como Unsupported
+ *   para no forzar los valores mientras cerramos el modelo de negocio.
+ */
 
 model organizations {
-  org_id     String    @id
+  /// Clave primaria (TEXT)
+  org_id     String   @id
   name       String
-  CIF        String?
-  telf_org   String?
-  address    String?
-  created_at DateTime  @default(now())
-  updated_at DateTime  @default(now()) @updatedAt
+  // En Neon existen CIF (mayúscula) y cif (minúscula). Nos quedamos con `cif`.
   cif        String?
+  address    String?
   phone      String?
 
-  persons    persons[]
-  deals      deals[]
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
 
-  @@map("organizations")
+  // Relaciones
+  persons persons[]
+  deals   deals[]
 }
 
 model persons {
-  person_id     String         @id
-  person_org_id String?
-  first_name    String?
-  last_name     String?
-  email         String?
-  phone         String?
-  created_at    DateTime       @default(now())
-  updated_at    DateTime       @default(now()) @updatedAt
-  org_id        String?
-
-  organizations organizations? @relation(fields: [person_org_id], references: [org_id])
-  deals         deals[]        @relation("DealPerson")
-
-  @@index([person_org_id])
-  @@map("persons")
-}
-
-/* =========================
- * Deals (labels y relaciones)
- * ========================= */
-
-model deals {
-  deal_id                 String          @id
-  title                   String?
-  // Labels (no IDs crudos)
-  pipeline_label          String?
-  training_address_label  String?
-  sede_label              String?
-  caes_label              String?
-  fundae_label            String?
-  hotel_label             String?
-
-  // Editables
-  hours                   Int?
-  alumnos                 Int?
-
-  // Relaciones
-  org_id                  String?
-  person_id               String?
-
-  organization            organizations?  @relation(fields: [org_id], references: [org_id])
-  person                  persons?        @relation("DealPerson", fields: [person_id], references: [person_id])
-
-  products                deal_products[]
-  notes                   deal_notes[]
-  documents               deal_documents[]
-
-  created_at              DateTime        @default(now())
-  updated_at              DateTime        @default(now()) @updatedAt
-
-  @@index([org_id])
-  @@index([person_id])
-  @@map("deals")
-}
-
-/* =========================
- * Productos del deal
- * ========================= */
-
-model deal_products {
-  id            String          @id
-  deal_id       String
-  name          String?
-  code          String?
-  quantity      Decimal?        @db.Decimal
-  price         Decimal?        @db.Decimal
-  type          dealproducttype?
-
-  // Nuevos campos
-  hours         Int             @default(0)
-  comments      String?
-  typeLabel     String?
-  categoryLabel String?
-
-  created_at    DateTime        @default(now()) @db.Timestamptz(6)
-  updated_at    DateTime        @default(now()) @db.Timestamptz(6)
-
-  deal          deals           @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
-
-  @@index([deal_id])
-  @@index([type])
-  @@map("deal_products")
-}
-
-/* =========================
- * Notas del deal (Pipedrive)
- * ========================= */
-
-model deal_notes {
-  id         String    @id
-  deal_id    String
-  content    String?
-  author     String?
-  created_at DateTime? @db.Timestamptz(6)
-  updated_at DateTime? @db.Timestamptz(6)
-
-  deal       deals     @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
-
-  @@index([deal_id])
-  @@map("deal_notes")
-}
-
-/* =========================
- * Documentos unificados
- * ========================= */
-
-model deal_documents {
-  id          String         @id
-  deal_id     String
-  source      DocumentSource
-  name        String
-  mime_type   String?
-  size        Int?
-  external_id String?        // id en origen; en S3 es la storage key
-  url         String?        // Pipedrive puede traer URL directa
-
-  created_at  DateTime       @default(now()) @db.Timestamptz(6)
-  updated_at  DateTime       @default(now()) @db.Timestamptz(6)
-
-  deal        deals          @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
-
-  @@index([deal_id])
-  @@map("deal_documents")
-}
-
-/* =========================
- * Otros existentes (no usados ahora, se pueden limpiar más adelante)
- * ========================= */
-
-model trainers {
-  trainer_id String   @id
-  name       String
+  person_id  String   @id
+  first_name String?
+  last_name  String?
   email      String?
   phone      String?
-  created_at DateTime @default(now())
-  updated_at DateTime
 
-  @@map("trainers")
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
+
+  // Clave foránea real en Neon
+  org_id     String?
+  organization organizations? @relation(fields: [org_id], references: [org_id])
+
+  // Relaciones inversas
+  deals deals[]
+
+  @@index([org_id], map: "idx_persons_org_id")
 }
 
-model unidades_moviles {
-  unidad_id       String   @id
-  name            String?
-  plate           String?
-  capacity_liters Int?
-  created_at      DateTime @default(now())
-  updated_at      DateTime
+model deals {
+  deal_id    String   @id
+  alumnos    Int      @default(0)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @default(now()) @db.Timestamp(6)
 
-  @@map("unidades_moviles")
+  title            String?
+  org_id           String?     // En Neon ya convertido a TEXT
+  pipeline_id      String?
+  training_address String?
+  sede_label       String?
+  caes_label       String?
+  fundae_label     String?
+  hotel_label      String?
+  person_id        String?
+  hours            String?
+
+  // Relaciones
+  organization organizations? @relation(fields: [org_id], references: [org_id])
+  person       persons?       @relation(fields: [person_id], references: [person_id])
+
+  deal_products deal_products[]
+  deal_notes    deal_notes[]
+  deal_files    deal_files[]
+
+  @@index([org_id], map: "idx_deals_org_id")
+  @@index([person_id], map: "idx_deals_person_id")
 }
 
-/* =========================
- * Enums
- * ========================= */
+model deal_products {
+  id     String @id
+  deal_id String?
 
-enum dealproducttype {
-  TRAINING
-  EXTRA
+  name   String?
+  code   String?
 
-  @@map("dealproducttype")
+  quantity Decimal? @db.Numeric
+  price    Decimal? @db.Numeric
+
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  // ENUM en DB -> mantenemos como Unsupported para no romper migraciones
+  type   Unsupported("dealproducttype")?
+  hours  String?
+  product_comments String?
+  category        String?
+
+  // Relación
+  deal deals? @relation(fields: [deal_id], references: [deal_id])
+
+  @@index([deal_id], map: "idx_deal_products_deal_id")
 }
 
-enum DocumentSource {
-  PIPEDRIVE
-  S3
+model deal_notes {
+  id        String   @id
+  deal_id   String?
+  product_id String?
 
-  @@map("document_source")
+  content   String?
+  author    String?
+
+  created_at DateTime @db.Timestamptz(6)
+  updated_at DateTime @db.Timestamptz(6)
+
+  // Relación
+  deal deals? @relation(fields: [deal_id], references: [deal_id])
+
+  @@index([deal_id], map: "idx_deal_notes_deal_id")
+}
+
+model deal_files {
+  id        String   @id
+  deal_id   String?
+  file_name String?
+  file_url  String?
+  file_type String?
+
+  added_at   DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  // Relación
+  deal deals? @relation(fields: [deal_id], references: [deal_id])
+
+  @@index([deal_id], map: "idx_deal_files_deal_id")
 }
