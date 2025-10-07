@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
+import { fetchDealsWithoutSessions } from './api'; // ← usar API común
 
 interface BudgetTableProps {
   budgets: DealSummary[];
@@ -52,30 +53,30 @@ function normalizeRowMinimal(row: any) {
     (row?.id != null ? String(row.id) : '');
 
   return {
-  // IDs en ambos formatos
-  dealId: dealId || '',
-  deal_id: dealId || '',
+    // IDs en ambos formatos
+    dealId: dealId || '',
+    deal_id: dealId || '',
 
-  dealNumericId: Number.isFinite(Number(dealId)) ? Number(dealId) : null,
-  title: toStringValue(row?.title ?? row?.deal_title) ?? '—',
-  sede_label: toStringValue(row?.sede_label) ?? null,
-  pipeline_id: toStringValue(row?.pipeline_id) ?? null,
-  training_address: toStringValue(row?.training_address) ?? null,
-  hours: typeof row?.hours === 'number' ? row.hours : Number(row?.hours) || null,
-  alumnos: typeof row?.alumnos === 'number' ? row.alumnos : Number(row?.alumnos) || null,
-  caes_label: toStringValue(row?.caes_label) ?? null,
-  fundae_label: toStringValue(row?.fundae_label) ?? null,
-  hotel_label: toStringValue(row?.hotel_label) ?? null,
-  organization: row?.organization ?? null,
-  person: row?.person ?? null,
-  // productos si vinieran
-  products: Array.isArray(row?.deal_products)
-    ? row.deal_products
-    : Array.isArray(row?.products)
-    ? row.products
-    : undefined,
-  productNames: undefined
-};
+    dealNumericId: Number.isFinite(Number(dealId)) ? Number(dealId) : null,
+    title: toStringValue(row?.title ?? row?.deal_title) ?? '—',
+    sede_label: toStringValue(row?.sede_label) ?? null,
+    pipeline_id: toStringValue(row?.pipeline_id) ?? null,
+    training_address: toStringValue(row?.training_address) ?? null, // schema vigente
+    hours: typeof row?.hours === 'number' ? row.hours : Number(row?.hours) || null,
+    alumnos: typeof row?.alumnos === 'number' ? row.alumnos : Number(row?.alumnos) || null,
+    caes_label: toStringValue(row?.caes_label) ?? null,
+    fundae_label: toStringValue(row?.fundae_label) ?? null,
+    hotel_label: toStringValue(row?.hotel_label) ?? null,
+    organization: row?.organization ?? null,
+    person: row?.person ?? null,
+    // productos si vinieran
+    products: Array.isArray(row?.deal_products)
+      ? row.deal_products
+      : Array.isArray(row?.products)
+      ? row.products
+      : undefined,
+    productNames: Array.isArray(row?.productNames) ? row.productNames : undefined,
+  } as DealSummary;
 }
 
 /** ============ Componente ============ */
@@ -103,14 +104,9 @@ export function BudgetTable({
         try {
           setFallbackLoading(true);
           setFallbackError(null);
-          const res = await fetch('/.netlify/functions/deals?noSessions=true', {
-            headers: { 'content-type': 'application/json' }
-          });
-          const json = await res.json().catch(() => ({}));
-          if (!res.ok || json?.ok === false) {
-            throw new Error(json?.message || `HTTP_${res.status}`);
-          }
-          const rows: any[] = Array.isArray(json?.deals) ? json.deals : [];
+
+          // ← usar la API común para respetar API_BASE y shape
+          const rows = await fetchDealsWithoutSessions();
           setFallbackBudgets(rows.map(normalizeRowMinimal));
         } catch (e: any) {
           setFallbackError(e?.message || 'Fallo al cargar datos de respaldo');
@@ -211,8 +207,7 @@ export function BudgetTable({
         <tbody>
           {effectiveBudgets.map((budget, index) => {
             const names = getProductNames(budget);
-            const productLabel =
-              !names.length ? '—' : names.length === 1 ? names[0] : `${names[0]} (+${names.length - 1})`;
+            const { label: productLabel } = getProductLabel(budget);
 
             const id = toStringValue(budget.dealId);
             const presupuestoLabel = id ? `#${id}` : '—';
