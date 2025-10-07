@@ -13,9 +13,8 @@ import { mapAndUpsertDealTree } from "./_shared/mappers";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
-  "hours",
-  "training_address_label", // aceptamos alias de entrada…
-  "training_address",       // …y el nombre real en BD
+  "training_address_label", // alias de entrada…
+  "training_address",       // …campo real en BD
   "caes_label",
   "fundae_label",
   "hotel_label",
@@ -218,15 +217,6 @@ export const handler = async (event: any) => {
       }
 
       // Coerciones y validaciones
-      if ("hours" in patch) {
-        const v = patch.hours;
-        const n = toIntOrNull(v);
-        if (v !== null && v !== undefined && n === null) {
-          return errorResponse("VALIDATION_ERROR", "hours inválido", 400);
-        }
-        // En BD hours es String?; guardamos como string si hay número
-        patch.hours = n != null ? String(n) : null;
-      }
       if ("alumnos" in patch) {
         const v = patch.alumnos;
         const n = toIntOrNull(v);
@@ -268,14 +258,13 @@ export const handler = async (event: any) => {
 
     /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
     if (method === "GET" && event.queryStringParameters?.noSessions === "true") {
-      // listamos deals + organización/persona + productos (sin seassons)
+      // listamos deals + organización/persona + productos (sin sessions)
       const rowsRaw = await prisma.deals.findMany({
         select: {
           deal_id: true,
           title: true,
           sede_label: true,
-          training_address: true, // <- en BD, no existe training_address_label
-          hours: true,
+          training_address: true,
           alumnos: true,
           caes_label: true,
           fundae_label: true,
@@ -301,7 +290,7 @@ export const handler = async (event: any) => {
               quantity: true,
               price: true,
               type: true,
-              hours: true,
+              hours: true,       // hours existe en deal_products
               created_at: true,
             },
             orderBy: { created_at: "asc" },
