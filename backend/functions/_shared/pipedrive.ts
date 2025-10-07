@@ -72,7 +72,8 @@ export async function getDealNotes(dealId: number | string, limit = 500) {
 }
 
 export async function getDealFiles(dealId: number | string, limit = 500) {
-  return pd(`/files?${qs({ deal_id: String(dealId), limit })}`);
+  const id = encodeURIComponent(String(dealId));
+  return pd(`/deals/${id}/files?${qs({ limit })}`);
 }
 
 export async function getPipelines() {
