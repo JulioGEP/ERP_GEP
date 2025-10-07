@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Netlify Functions (AWS Lambda Node 20 → Linux x64 con OpenSSL 3)
+  binaryTargets = ["linux-x64-openssl-3.0.x"]
 }
 
 datasource db {

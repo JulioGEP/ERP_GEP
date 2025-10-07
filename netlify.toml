@@ -21,9 +21,9 @@
   # 👉 SOLO el cliente generado de Prisma (carpeta concreta)
   #   Evitamos incluir toda node_modules/.prisma o duplicados.
   included_files = [
-    "node_modules/.prisma/client/**",
-    "node_modules/@prisma/client/schema.prisma"
-  ]
+  "node_modules/.prisma/**",
+  "node_modules/@prisma/client/schema.prisma"
+]
 
 # --------- Redirects ---------
 [[redirects]]
