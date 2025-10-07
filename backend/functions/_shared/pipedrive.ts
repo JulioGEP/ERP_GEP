@@ -168,28 +168,35 @@ export async function extractProductCatalogAttributes(product: any) {
   // code (nativo de producto)
   const code = product?.code ?? null;
 
-  // ---- HOURS (numérico) ----
-  const fHours = findProductFieldByKeyOrName(
+  // ---- HOURS (Texto en PD → numérico opcional) ----
+const fHours =
+  findProductFieldByKeyOrName(
     productFields,
     [PRODUCT_HOURS_KEY, PD_PRODUCT_HOURS_HASH],
-    ["hours", "horas", "duración", "duracion"]
-  ) || findFieldDef(productFields, PRODUCT_HOURS_KEY) || findFieldDef(productFields, PD_PRODUCT_HOURS_HASH);
+    ["hours", "horas", "horas recomendadas", "duración", "duracion"]
+  ) ||
+  findFieldDef(productFields, PRODUCT_HOURS_KEY) ||
+  findFieldDef(productFields, PD_PRODUCT_HOURS_HASH);
 
-  let hoursNumber: number | null = null;
-  if (fHours) {
-    const raw = product?.[fHours.key] ?? product?.[PRODUCT_HOURS_KEY] ?? product?.[PD_PRODUCT_HOURS_HASH];
-    if (raw == null || raw === "") {
-      hoursNumber = null;
-    } else if (typeof raw === "number") {
-      hoursNumber = Number.isFinite(raw) ? raw : null;
-    } else if (typeof raw === "string") {
-      // Sin lógica “h”: tomamos tal cual como número si es convertible.
-      const n = Number(raw.replace(",", ".").trim());
-      hoursNumber = Number.isFinite(n) ? n : null;
-    } else {
-      hoursNumber = null;
-    }
+let hoursText: string | null = null;
+let hoursNumber: number | null = null;
+
+if (fHours) {
+  const cf = product?.custom_fields ?? {};
+  const raw =
+    product?.[fHours.key] ??
+    cf?.[fHours.key] ??
+    product?.[PRODUCT_HOURS_KEY] ??
+    cf?.[PRODUCT_HOURS_KEY] ??
+    product?.[PD_PRODUCT_HOURS_HASH] ??
+    cf?.[PD_PRODUCT_HOURS_HASH];
+
+  if (raw != null && raw !== "") {
+    hoursText = String(raw).trim();
+    const n = Number(hoursText.replace(",", "."));
+    hoursNumber = Number.isFinite(n) ? n : null;
   }
+}
 
   // ---- TYPE (single-option → label) ----
   const fType = findProductFieldByKeyOrName(
