@@ -1,12 +1,13 @@
 {
   "name": "erp_gep_monorepo",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "engines": {
-    "node": ">=20.18.0",
+    "node": ">=22.0.0",
     "npm": ">=10.8.0"
   },
   "scripts": {
+    "clean": "rm -rf node_modules .prisma",
     "build": "npm run build:frontend",
     "build:frontend": "cd frontend && npm install && npm run build",
     "build:functions": "echo \"Functions bundled by Netlify\"",
