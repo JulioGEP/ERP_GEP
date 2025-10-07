@@ -253,17 +253,13 @@ export async function mapAndUpsertDealTree({
 
     // HORAS en línea (si existiese ese custom en la línea, numérico directo)
     let hours: number | null = null;
-    if (fHoursInLine) {
-      const raw = p?.[fHoursInLine.key];
-      if (raw == null || raw === "") {
-        hours = null;
-      } else if (typeof raw === "number") {
-        hours = Number.isFinite(raw) ? Math.round(raw) : null;
-      } else {
-        const n = Number(String(raw).replace(",", ".").trim());
-        hours = Number.isFinite(n) ? Math.round(n) : null;
-      }
-    }
+  if (fHoursInLine) {
+  const raw = p?.[fHoursInLine.key];
+  if (raw != null && raw !== "") {
+    const n = Number(String(raw).replace(",", ".").trim());
+    hours = Number.isFinite(n) ? Math.round(n) : null;
+  }
+}
 
     // Enriquecimiento por PRODUCTO EMBEBIDO (include_product_data=1)
     const embedded = p.product ?? {};
