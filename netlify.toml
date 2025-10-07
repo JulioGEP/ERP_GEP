@@ -10,26 +10,28 @@
   directory = "backend/functions"
   node_bundler = "esbuild"
 
-  # Prisma: mantenemos @prisma/client y prisma como módulos externos
-  # y empaquetamos la carpeta .prisma con los binarios generados.
-  external_node_modules = ["@prisma/client", "prisma"]
+  # No rebundlear estas deps (se copiarán desde node_modules):
+  external_node_modules = [
+    "@prisma/client",
+    "prisma",
+    "@aws-sdk/client-s3",
+    "@aws-sdk/s3-request-presigner"
+  ]
+
+  # 👉 SOLO el cliente generado de Prisma (carpeta concreta)
+  #   Evitamos incluir toda node_modules/.prisma o duplicados.
   included_files = [
-    "backend/functions/node_modules/.prisma/**",
-    "node_modules/.prisma/**"
+    "node_modules/.prisma/client/**",
+    "node_modules/@prisma/client/schema.prisma"
   ]
 
 # --------- Redirects ---------
-[[redirects]]
-  from = "/api/diag"
-  to = "/.netlify/functions/health"
-  status = 200
-
 [[redirects]]
   from = "/api/health"
   to = "/.netlify/functions/health"
   status = 200
 
-# La función es "deals" y maneja la subruta "/import"
+# Legacy: mantiene compat si alguien llama a /api/deals/import
 [[redirects]]
   from = "/api/deals/import"
   to = "/.netlify/functions/deals/import"
