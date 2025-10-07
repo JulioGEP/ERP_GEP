@@ -1,11 +1,16 @@
 {
-  "name": "erp-backend-functions",
-  "version": "1.0.0",
+  "name": "erp-gep-functions",
   "private": true,
-  "type": "module",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall": "prisma generate --schema ../../prisma/schema.prisma"
+  },
   "dependencies": {
-    "@prisma/client": "^6.16.3",
-    "@aws-sdk/client-s3": "^3.641.0",
-    "@aws-sdk/s3-request-presigner": "^3.641.0"
+    "@prisma/client": "^5.17.0",
+    "prisma": "^5.17.0"
   }
 }

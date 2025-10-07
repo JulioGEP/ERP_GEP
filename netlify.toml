@@ -9,17 +9,19 @@
 [functions]
   directory = "backend/functions"
   node_bundler = "esbuild"
-  # Dependencias se resuelven desde backend/functions/package.json
+
+  # Prisma: mantenemos @prisma/client y prisma como módulos externos
+  # y empaquetamos la carpeta .prisma con los binarios generados.
+  external_node_modules = ["@prisma/client", "prisma"]
   included_files = [
-    "node_modules/.prisma/client/libquery_engine-*.node",
-    "node_modules/.prisma/client/libquery_engine-*.so.node",
-    "node_modules/.prisma/client/schema.prisma"
+    "backend/functions/node_modules/.prisma/**",
+    "node_modules/.prisma/**"
   ]
 
 # --------- Redirects ---------
 [[redirects]]
   from = "/api/diag"
-  to = "/.netlify/functions/diag"
+  to = "/.netlify/functions/health"
   status = 200
 
 [[redirects]]
@@ -27,9 +29,10 @@
   to = "/.netlify/functions/health"
   status = 200
 
+# La función es "deals" y maneja la subruta "/import"
 [[redirects]]
   from = "/api/deals/import"
-  to = "/.netlify/functions/deals_import"
+  to = "/.netlify/functions/deals/import"
   status = 200
 
 [[redirects]]
