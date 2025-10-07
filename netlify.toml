@@ -9,10 +9,11 @@
 [functions]
   directory = "backend/functions"
   node_bundler = "esbuild"
-  external_node_modules = ["@prisma/client", "prisma"]
-  # ⬇️ Solo lo imprescindible del cliente en runtime (sin arrastrar prisma/**)
+  # ⬇️ SOLO el cliente en runtime; fuera la CLI 'prisma'
+  external_node_modules = ["@prisma/client"]
   included_files = [
     "node_modules/.prisma/client/**",
+    "node_modules/@prisma/client/.prisma/client/**",
     "node_modules/@prisma/client/**"
   ]
 
