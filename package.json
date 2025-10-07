@@ -1,7 +1,7 @@
 {
   "name": "erp_gep_monorepo",
   "private": true,
-  "version": "1.0.6",
+  "version": "1.0.7",
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=10.8.0"
@@ -15,7 +15,7 @@
     "postinstall": "prisma generate --schema prisma/schema.prisma",
     "db:init": "dotenv -e .env -- node scripts/init-db.mjs",
     "typecheck:functions": "tsc -p backend/tsconfig.json",
-    "netlify:build": "prisma generate --schema prisma/schema.prisma --binary-target=rhel-openssl-3.0.x && npm run build",
+    "netlify:build": "npm run generate && npm run build",
     "dev": "echo \"Dev local: usa 'npx netlify dev -p 8888' si tienes Netlify CLI disponible\""
   },
   "dependencies": {
