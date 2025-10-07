@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,59 +7,41 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * Nota de alineación:
- * - organizations/persons/deals usan timestamps SIN TZ -> @db.Timestamp(6)
- * - deal_products/deal_notes/deal_files usan timestamptz -> @db.Timestamptz(6)
- * - deal_products.type en DB es un ENUM (dealproducttype). Lo mapeamos como Unsupported
- * para no forzar los valores mientras cerramos el modelo de negocio.
- */
-
 model organizations {
   /// Clave primaria (TEXT)
-  org_id  String  @id
-  name    String
-  // En Neon existen CIF (mayúscula) y cif (minúscula). Nos quedamos con `cif`.
-  cif     String?
-  address String?
-  phone   String?
-
-  created_at DateTime @default(now()) @db.Timestamp(6)
-  updated_at DateTime @default(now()) @db.Timestamp(6)
-
-  // Relaciones
-  persons persons[]
-  deals   deals[]
+  org_id     String    @id
+  name       String
+  address    String?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  cif        String?
+  phone      String?
+  deals      deals[]
+  persons    persons[]
 }
 
 model persons {
-  person_id  String  @id
-  first_name String?
-  last_name  String?
-  email      String?
-  phone      String?
-
-  created_at DateTime @default(now()) @db.Timestamp(6)
-  updated_at DateTime @default(now()) @db.Timestamp(6)
-
-  // Clave foránea real en Neon
+  person_id    String         @id
+  first_name   String?
+  last_name    String?
+  email        String?
+  phone        String?
+  created_at   DateTime       @default(now())
+  updated_at   DateTime       @default(now())
   org_id       String?
-  organization organizations? @relation(fields: [org_id], references: [org_id])
-
-  // Relaciones inversas
-  deals deals[]
+  deals        deals[]
+  organization organizations? @relation(fields: [org_id], references: [org_id], map: "persons_org_fk")
 
   @@index([org_id], map: "idx_persons_org_id")
 }
 
 model deals {
-  deal_id    String   @id
-  alumnos    Int      @default(0)
-  created_at DateTime @default(now()) @db.Timestamp(6)
-  updated_at DateTime @default(now()) @db.Timestamp(6)
-
+  deal_id          String          @id
+  alumnos          Int?            @default(0)
+  created_at       DateTime        @default(now())
+  updated_at       DateTime        @default(now())
   title            String?
-  org_id           String? // En Neon ya convertido a TEXT
+  org_id           String?
   pipeline_id      String?
   training_address String?
   sede_label       String?
@@ -69,75 +49,118 @@ model deals {
   fundae_label     String?
   hotel_label      String?
   person_id        String?
-  hours            String?
-
-  // Relaciones
-  organization organizations? @relation(fields: [org_id], references: [org_id])
-  person       persons?       @relation(fields: [person_id], references: [person_id])
-
-  deal_products deal_products[]
-  deal_notes    deal_notes[]
-  deal_files    deal_files[]
+  comments         comments[]
+  deal_files       deal_files[]
+  deal_notes       deal_notes[]
+  deal_products    deal_products[]
+  organization     organizations?  @relation(fields: [org_id], references: [org_id], map: "deals_org_fk")
+  person           persons?        @relation(fields: [person_id], references: [person_id], map: "deals_person_fk")
+  seassons         seassons[]
 
   @@index([org_id], map: "idx_deals_org_id")
   @@index([person_id], map: "idx_deals_person_id")
 }
 
 model deal_products {
-  id      String  @id
-  deal_id String?
-
-  name String?
-  code String?
-
-  quantity Decimal? @db.Decimal(12, 3)
-  price    Decimal? @db.Decimal(12, 2)
-
-  created_at DateTime @default(now()) @db.Timestamptz(6)
-  updated_at DateTime @default(now()) @db.Timestamptz(6)
-
-  // ENUM en DB -> mantenemos como Unsupported para no romper migraciones
-  type             Unsupported("dealproducttype")?
+  id               String   @id
+  deal_id          String?
+  name             String?
+  code             String?
+  quantity         Decimal  @db.Decimal(10, 0)
+  price            Decimal  @db.Decimal(12, 2)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  type             String?
   hours            String?
   product_comments String?
   category         String?
-
-  // Relación
-  deal deals? @relation(fields: [deal_id], references: [deal_id])
+  deal             deals?   @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_products_deal_fk")
 
   @@index([deal_id], map: "idx_deal_products_deal_id")
+  @@index([deal_id])
+  @@index([type])
 }
 
 model deal_notes {
-  id         String  @id
+  id         String    @id
   deal_id    String?
-  product_id String?
-
-  content String?
-  author  String?
-
-  created_at DateTime @db.Timestamptz(6)
-  updated_at DateTime @db.Timestamptz(6)
-
-  // Relación
-  deal deals? @relation(fields: [deal_id], references: [deal_id])
+  content    String?
+  author     String?
+  created_at DateTime? @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  deal       deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_notes_deal_fk")
 
   @@index([deal_id], map: "idx_deal_notes_deal_id")
 }
 
 model deal_files {
-  id        String  @id
-  deal_id   String?
-  file_name String?
-  file_url  String?
-  file_type String?
-
+  id         String    @id
+  deal_id    String?
+  file_name  String?
+  file_url   String?
+  file_type  String?
   added_at   DateTime? @db.Timestamptz(6)
   created_at DateTime  @default(now()) @db.Timestamptz(6)
   updated_at DateTime  @default(now()) @db.Timestamptz(6)
-
-  // Relación
-  deal deals? @relation(fields: [deal_id], references: [deal_id])
+  deal       deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_files_deal_fk")
 
   @@index([deal_id], map: "idx_deal_files_deal_id")
+}
+
+model comments {
+  comment_id  String   @id
+  deal_id     String
+  author_id   String
+  author_name String?
+  content     String
+  created_at  DateTime @default(now())
+  updated_at  DateTime
+  deals       deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+
+  @@index([author_id])
+  @@index([deal_id])
+}
+
+model seassons {
+  seasson_id      String    @id
+  deal_id         String
+  status          String?
+  date_start      DateTime?
+  date_end        DateTime?
+  sede            String?
+  seasson_address String?
+  seasson_fireman String?
+  seasson_vehicle String?
+  comment_seasson String?
+  deals           deals     @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+
+  @@index([deal_id])
+}
+
+model trainers {
+  trainer_id String   @id
+  name       String
+  email      String?
+  phone      String?
+  created_at DateTime @default(now())
+  updated_at DateTime
+}
+
+model unidades_moviles {
+  unidad_id       String   @id
+  name            String?
+  plate           String?
+  capacity_liters Int?
+  created_at      DateTime @default(now())
+  updated_at      DateTime
+}
+
+enum DocumentOrigin {
+  imported
+  user_upload
+}
+
+enum dealproducttype {
+  TRAINING
+  EXTRA
 }

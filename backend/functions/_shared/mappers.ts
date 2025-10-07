@@ -4,28 +4,37 @@
 import { getPrisma } from "./prisma";
 import {
   getDealFields,
-  getProductFields,
   optionLabelOf,
   findFieldDef,
   getPipelines,
+  getProductFields, // por si usas claves hash para horas en líneas de deal
+  getProductCached,
+  extractProductCatalogAttributes,
 } from "./pipedrive";
 
-// ========= Claves de campos custom (según Pipedrive) =========
-const KEY_TRAINING_ADDRESS = "training_address";
-const KEY_SEDE = "sede";
-const KEY_CAES = "caes";
-const KEY_FUNDAE = "fundae";
-const KEY_HOTEL = "hotel";
+/* ========= Claves de campos custom (según Pipedrive) =========
+   Usa las KEYS REALES de tu instancia, no el nombre visible del campo.
+   (Estas son las que compartiste antes) */
+const KEY_TRAINING_ADDRESS_BASE = "8b2a7570f5ba8aa4754f061cd9dc92fd778376a7"; // base, sin sufijo
+const KEY_SEDE   = "676d6bd51e52999c582c01f67c99a35ed30bf6ae";
+const KEY_CAES   = "e1971bf3a21d48737b682bf8d864ddc5eb15a351";
+const KEY_FUNDAE = "245d60d4d18aec40ba888998ef92e5d00e494583";
+const KEY_HOTEL  = "c3a6daf8eb5b4e59c3c07cda8e01f43439101269";
 
-// Campo custom de HORAS por producto en el deal (Product field key)
-const KEY_PRODUCT_HOURS = "38f11c8876ecde803a027fbf3c9041fda2ae7eb7";
+// Si tienes un campo de HORAS en la **línea del deal** (no en catálogo) pon aquí la key (hash):
+const KEY_PRODUCT_HOURS_IN_LINE = "38f11c8876ecde803a027fbf3c9041fda2ae7eb7";
 
-// -------- Helpers --------
-function stripHourSuffix(x: any): number {
-  if (x == null) return 0;
-  const s = String(x).trim();
-  const num = parseInt(s.replace(/h/i, "").trim(), 10);
-  return Number.isFinite(num) ? num : 0;
+/* ---------------- Helpers ---------------- */
+function toInt(val: any, def = 0): number {
+  if (val === null || val === undefined || val === "") return def;
+  const n = Number(val);
+  return Number.isFinite(n) ? Math.round(n) : def;
+}
+
+function toMoney(val: any, def = 0): number {
+  if (val === null || val === undefined || val === "") return def;
+  const n = Number(typeof val === "string" ? val.replace(",", ".") : val);
+  return Number.isFinite(n) ? n : def;
 }
 
 function pickFirstEmail(val: any): string | null {
@@ -36,7 +45,7 @@ function pickFirstEmail(val: any): string | null {
     return first?.value ?? first?.email ?? null;
   }
   if (typeof val === "object") {
-    return val.value ?? val.email ?? null;
+    return (val as any).value ?? (val as any).email ?? null;
   }
   return null;
 }
@@ -49,7 +58,7 @@ function pickFirstPhone(val: any): string | null {
     return first?.value ?? first?.phone ?? null;
   }
   if (typeof val === "object") {
-    return val.value ?? val.phone ?? null;
+    return (val as any).value ?? (val as any).phone ?? null;
   }
   return null;
 }
@@ -59,43 +68,59 @@ async function resolvePipelineLabel(
 ): Promise<string | undefined> {
   if (!pipeline_id && pipeline_id !== 0) return undefined;
   const pipelines = await getPipelines();
-  const idNum =
-    typeof pipeline_id === "string" ? Number(pipeline_id) : pipeline_id;
+  const idNum = typeof pipeline_id === "string" ? Number(pipeline_id) : pipeline_id;
   const match = pipelines?.find((pl: any) => pl.id === idNum);
   return match?.name ?? String(pipeline_id);
+}
+
+// HTML -> texto plano (para comments)
+function htmlToPlain(input?: string | null): string | null {
+  if (!input) return null;
+  let s = input.replace(/<br\s*\/?>/gi, "\n");
+  s = s.replace(/<\/div>\s*<div>/gi, "\n");
+  s = s.replace(/<div>/gi, "");
+  s = s.replace(/<\/div>/gi, "");
+  s = s.replace(/<[^>]+>/g, "");
+  s = s.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return s || null;
+}
+
+/* Dirección: prioriza *_formatted_address; si viene como objeto con formatted_address, úsalo;
+   si no, devuelve el valor plano del campo base. */
+function resolveAddressFromDeal(deal: any, keyBase: string): string | null {
+  if (!deal) return null;
+  const formattedKey = `${keyBase}_formatted_address`;
+  if (deal[formattedKey]) return String(deal[formattedKey]);
+  const raw = deal[keyBase];
+  if (raw && typeof raw === "object" && "formatted_address" in raw) {
+    return String((raw as any).formatted_address);
+  }
+  return raw != null ? String(raw) : null;
 }
 
 export async function resolveDealCustomLabels(deal: any) {
   const dealFields = await getDealFields();
 
-  const fAddr = findFieldDef(dealFields, KEY_TRAINING_ADDRESS);
-  const fSede = findFieldDef(dealFields, KEY_SEDE);
-  const fCaes = findFieldDef(dealFields, KEY_CAES);
+  const fSede   = findFieldDef(dealFields, KEY_SEDE);
+  const fCaes   = findFieldDef(dealFields, KEY_CAES);
   const fFundae = findFieldDef(dealFields, KEY_FUNDAE);
-  const fHotel = findFieldDef(dealFields, KEY_HOTEL);
+  const fHotel  = findFieldDef(dealFields, KEY_HOTEL);
 
-  const trainingAddress = fAddr
-    ? optionLabelOf(fAddr, deal?.[fAddr.key]) ?? deal?.[fAddr.key]
-    : deal?.[KEY_TRAINING_ADDRESS];
-  const sedeLabel = fSede
-    ? optionLabelOf(fSede, deal?.[fSede.key]) ?? deal?.[fSede.key]
-    : deal?.[KEY_SEDE];
-  const caesLabel = fCaes
-    ? optionLabelOf(fCaes, deal?.[fCaes.key]) ?? deal?.[fCaes.key]
-    : deal?.[KEY_CAES];
-  const fundaeLabel = fFundae
-    ? optionLabelOf(fFundae, deal?.[fFundae.key]) ?? deal?.[fFundae.key]
-    : deal?.[KEY_FUNDAE];
-  const hotelLabel = fHotel
-    ? optionLabelOf(fHotel, deal?.[fHotel.key]) ?? deal?.[fHotel.key]
-    : deal?.[KEY_HOTEL];
+  // Dirección (no es options): prioriza *_formatted_address
+  const trainingAddress = resolveAddressFromDeal(deal, KEY_TRAINING_ADDRESS_BASE);
+
+  // Opciones únicas: mapea id -> label ("Sí"/"No")
+  const sedeLabel   = fSede   ? (optionLabelOf(fSede, deal?.[fSede.key])     ?? null) : null;
+  const caesLabel   = fCaes   ? (optionLabelOf(fCaes, deal?.[fCaes.key])     ?? null) : null;
+  const fundaeLabel = fFundae ? (optionLabelOf(fFundae, deal?.[fFundae.key]) ?? null) : null;
+  const hotelLabel  = fHotel  ? (optionLabelOf(fHotel, deal?.[fHotel.key])   ?? null) : null;
 
   return { trainingAddress, sedeLabel, caesLabel, fundaeLabel, hotelLabel };
 }
 
-// ============================================================
-// ===============  MAP & UPSERT DEAL COMPLETO  ===============
-// ============================================================
+/* ============================================================
+ * ===============  MAP & UPSERT DEAL COMPLETO  ===============
+ * ============================================================ */
 
 export async function mapAndUpsertDealTree({
   deal,
@@ -163,7 +188,7 @@ export async function mapAndUpsertDealTree({
   const keep = <T>(prev: T | null | undefined, incoming: T | null | undefined) =>
     prev !== null && prev !== undefined ? prev : incoming ?? null;
 
-  // 5) Upsert deal
+  // 5) Upsert deal (sin 'hours' en deals)
   const orgIdForDeal = org?.id != null ? String(org.id) : null;
 
   const dbDeal = await prisma.deals.upsert({
@@ -177,7 +202,6 @@ export async function mapAndUpsertDealTree({
       caes_label: caesLabel ?? null,
       fundae_label: fundaeLabel ?? null,
       hotel_label: hotelLabel ?? null,
-      hours: null,
       alumnos: 0,
       org_id: orgIdForDeal,
       person_id: dbPersonId,
@@ -190,7 +214,6 @@ export async function mapAndUpsertDealTree({
       caes_label: keep(current?.caes_label, caesLabel),
       fundae_label: keep(current?.fundae_label, fundaeLabel),
       hotel_label: keep(current?.hotel_label, hotelLabel),
-      hours: current?.hours ?? null,
       alumnos: current?.alumnos ?? 0,
       org_id: orgIdForDeal,
       person_id: dbPersonId,
@@ -200,78 +223,105 @@ export async function mapAndUpsertDealTree({
 
   const dealId: string = dbDeal.deal_id;
 
-  // 6) Productos (reset + insert)
-  const productFields = await getProductFields();
-  const fHours = productFields?.find((f: any) => f.key === KEY_PRODUCT_HOURS);
+  // 6) Productos (reset + insert) — enriquecidos con CATÁLOGO
+  const productFields = await getProductFields(); // por si usas horas en la línea del deal
+  const fHoursInLine = productFields?.find((f: any) => f.key === KEY_PRODUCT_HOURS_IN_LINE);
 
   await prisma.deal_products.deleteMany({ where: { deal_id: dealId } });
 
   for (const p of Array.isArray(products) ? products : []) {
-    const name = p.name ?? p.product?.name ?? null;
-    const code = p.code ?? p.product?.code ?? null;
+    const baseName = p.name ?? p.product?.name ?? null;
+    const baseCode = p.code ?? p.product?.code ?? null;
 
-    const hoursRaw = fHours ? p?.[fHours.key] : p?.[KEY_PRODUCT_HOURS];
-    const hoursNum = stripHourSuffix(hoursRaw);
-    const quantity =
-      Number.isFinite(hoursNum) && hoursNum >= 0 ? hoursNum : 0;
-    const hoursTxt =
-      hoursRaw != null ? String(hoursRaw) : quantity ? `${quantity}h` : null;
+    // Desde línea del deal:
+    const quantity = toInt(p.quantity, 0);
+    const price = toMoney(p.item_price, 0);
+    const product_comments = htmlToPlain(p.comments ?? null);
 
-    const price =
-      p.item_price != null
-        ? Number(p.item_price)
-        : p.product?.prices?.[0]?.price != null
-        ? Number(p.product.prices[0].price)
-        : null;
+    // Horas en línea (si existiese ese custom en la línea)
+    const hoursInLineRaw = fHoursInLine ? p?.[fHoursInLine.key] : p?.[KEY_PRODUCT_HOURS_IN_LINE];
+    const hoursInLineText = hoursInLineRaw != null ? String(hoursInLineRaw) : null;
+
+    // Enriquecimiento por catálogo
+    let code: string | null = baseCode ?? null;
+    let hoursText: string | null = hoursInLineText; // luego lo normalizamos a solo número
+    let type: string | null = null;                 // TEXT en BD (no enum)
+    let category: string | null = null;
+
+    const productId = p.product_id ?? p.id ?? null;
+    if (productId != null) {
+      try {
+        const catalog = await getProductCached(productId);
+        const attrs = await extractProductCatalogAttributes(catalog);
+        // Completa si falta en línea
+        code = code ?? attrs.code ?? null;
+
+        // hours: si no viene en línea, usa catálogo; y deja solo el número
+        const hSrc = hoursText ?? attrs.hoursText ?? null;
+        if (hSrc) {
+          const m = String(hSrc).match(/(-?\d+(?:[.,]\d+)?)/);
+          hoursText = m ? m[1].replace(",", ".") : null; // solo número como string
+        }
+
+        // type / category como texto (labels)
+        type = attrs.type ?? null;
+        category = attrs.category ?? null;
+      } catch {
+        // no rompemos el import si falla el catálogo
+      }
+    }
 
     await prisma.deal_products.create({
       data: {
-        id: `${dealId}_${Math.random().toString(36).slice(2)}`,
+        id: `${dealId}_${(p.id ?? p.product_id ?? Math.random().toString(36).slice(2)).toString()}`,
         deal_id: dealId,
-        name,
+        name: baseName,
         code,
-        quantity: price == null && quantity === 0 ? null : quantity,
-        price,
-        hours: hoursTxt,
-        product_comments: null,
-        category: null,
+        quantity,           // entero (numeric(10,0) o similar)
+        price,              // decimal(12,2)
+        hours: hoursText,   // "2" (sin "h")
+        product_comments,   // texto limpio
+        category,           // texto
+        type,               // texto (TU confirmaste que es campo de texto)
       },
     });
   }
 
-  // 7) Notas
-  await prisma.deal_notes.deleteMany({ where: { deal_id: dealId } });
-  for (const n of Array.isArray(notes) ? notes : []) {
-    await prisma.deal_notes.create({
-      data: {
-        id: String(n.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`),
-        deal_id: dealId,
-        product_id: null,
-        content: n.content ?? n.note ?? "",
-        author: n.user?.name ?? n.author ?? null,
-        created_at: n.add_time ? new Date(n.add_time) : undefined,
-        updated_at: n.update_time ? new Date(n.update_time) : undefined,
-      },
-    });
-  }
+  // 7) Notas (sin product_id)
+  // 7) Notas (sin product_id)
+await prisma.deal_notes.deleteMany({ where: { deal_id: dealId } });
+for (const n of (Array.isArray(notes) ? notes : [])) {
+  const createdAt = n?.add_time ? new Date(n.add_time) : new Date();
+  const updatedAt = n?.update_time ? new Date(n.update_time) : new Date();
+
+  await prisma.deal_notes.create({
+    data: {
+      id: String(n?.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`),
+      deal_id: dealId,
+      content: n?.content ?? n?.note ?? "",
+      author: n?.user?.name ?? n?.author ?? null,
+      created_at: createdAt, // <- siempre Date
+      updated_at: updatedAt, // <- siempre Date
+    },
+  });
+}
 
   // 8) Ficheros
   await prisma.deal_files.deleteMany({ where: { deal_id: dealId } });
-  for (const f of Array.isArray(files) ? files : []) {
-    const id = String(
-      f.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`
-    );
-    await prisma.deal_files.create({
-      data: {
-        id,
-        deal_id: dealId,
-        file_name: f.file_name ?? f.name ?? "documento",
-        file_url: f.file_url ?? f.url ?? null,
-        file_type: f.file_type ?? f.mime_type ?? null,
-        added_at: f.add_time ? new Date(f.add_time) : undefined,
-      },
-    });
-  }
+for (const f of Array.isArray(files) ? files : []) {
+  const id = String(f.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`);
+  await prisma.deal_files.create({
+    data: {
+      id,
+      deal_id: dealId,
+      file_name: f.file_name ?? f.name ?? "documento",
+      file_url: f.file_url ?? f.url ?? null,
+      file_type: f.file_type ?? f.mime_type ?? null,
+      // Solo incluir si existe
+      ...(f.add_time ? { added_at: new Date(f.add_time) } : {}),
+    },
+  });
+}
 
   return dealId;
 }
