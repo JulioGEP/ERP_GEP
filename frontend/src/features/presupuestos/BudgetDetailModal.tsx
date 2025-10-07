@@ -29,7 +29,7 @@ function useAuth() {
 type EditableDealForm = {
   sede_label: string;
   hours: string;
-  training_address_label: string;
+  training_address: string; // <- schema vigente
   caes_label: string;
   fundae_label: string;
   hotel_label: string;
@@ -71,13 +71,13 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     setForm((current) => (current ? { ...current, [field]: value } : current));
   };
 
-  // Inicializa solo los campos editables
+  // Inicializa solo los campos editables (schema con training_address)
   useEffect(() => {
     if (deal) {
       setForm({
         sede_label: deal.sede_label ?? '',
         hours: deal.hours != null ? String(deal.hours) : '',
-        training_address_label: deal.training_address_label ?? '',
+        training_address: deal.training_address ?? '', // <- aquí
         caes_label: deal.caes_label ?? '',
         fundae_label: deal.fundae_label ?? '',
         hotel_label: deal.hotel_label ?? '',
@@ -87,7 +87,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       setForm({
         sede_label: summary.sede_label ?? '',
         hours: summary.hours != null ? String(summary.hours) : '',
-        training_address_label: summary.training_address_label ?? '',
+        training_address: summary.training_address ?? '', // <- aquí
         caes_label: summary.caes_label ?? '',
         fundae_label: summary.fundae_label ?? '',
         hotel_label: summary.hotel_label ?? '',
@@ -104,7 +104,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     return {
       sede_label: source.sede_label ?? '',
       hours: source.hours != null ? String(source.hours) : '',
-      training_address_label: source.training_address_label ?? '',
+      training_address: source.training_address ?? '', // <- aquí
       caes_label: source.caes_label ?? '',
       fundae_label: source.fundae_label ?? '',
       hotel_label: source.hotel_label ?? '',
@@ -123,7 +123,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const clientDisplay = detailView.clientName ?? '';
   const pipelineDisplay = detailView.pipelineLabel ?? '';
   const productDisplay = detailView.productName ?? '';
-  const direccionDisplay = detailView.trainingAddress ?? '';
+  const direccionDisplay = detailView.trainingAddress ?? ''; // ViewModel ya expone trainingAddress
   const horasDisplay = detailView.hours;
   const alumnosDisplay = detailView.alumnos;
   const sedeDisplay = detailView.sedeLabel ?? '';
@@ -167,8 +167,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     if (normalizeString(form?.hours) !== normalizeString(initialEditable?.hours)) {
       patch.hours = toNullableNumber(form?.hours);
     }
-    if (normalizeString(form?.training_address_label) !== normalizeString(initialEditable?.training_address_label)) {
-      patch.training_address_label = toNullableString(form?.training_address_label);
+    if (normalizeString(form?.training_address) !== normalizeString(initialEditable?.training_address)) {
+      patch.training_address = toNullableString(form?.training_address); // <- schema correcto
     }
     if (normalizeString(form?.caes_label) !== normalizeString(initialEditable?.caes_label)) {
       patch.caes_label = toNullableString(form?.caes_label);
@@ -348,8 +348,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               <Col md={4}>
                 <Form.Label>Dirección</Form.Label>
                 <Form.Control
-                  value={form.training_address_label}
-                  onChange={(e) => updateForm('training_address_label', e.target.value)}
+                  value={form.training_address}
+                  onChange={(e) => updateForm('training_address', e.target.value)}
                 />
               </Col>
               <Col md={4}>

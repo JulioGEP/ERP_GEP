@@ -72,8 +72,8 @@ export interface DealSummary {
 
   title: string;
 
-  pipeline_label?: string | null;          // label (no ID)
-  training_address_label?: string | null;  // label (no valor crudo)
+  pipeline_label?: string | null;     // label (no ID)
+  training_address?: string | null;   // <-- schema vigente
 
   sede_label?: string | null;
   caes_label?: string | null;
@@ -96,8 +96,8 @@ export interface DealDetail {
   deal_id: string;
   title?: string | null;
 
-  pipeline_label?: string | null;          // label (no ID)
-  training_address_label?: string | null;  // label (no valor crudo)
+  pipeline_label?: string | null;     // label (no ID)
+  training_address?: string | null;   // <-- schema vigente
 
   sede_label?: string | null;
   caes_label?: string | null;
@@ -134,7 +134,7 @@ export interface DealDetailViewModel {
   clientName: string | null;
 
   pipelineLabel: string | null;    // proviene de pipeline_label
-  trainingAddress: string | null;  // proviene de training_address_label
+  trainingAddress: string | null;  // proviene de training_address
 
   productName: string | null;      // si la vista necesita destacar uno
   hours: number | null;

@@ -9,8 +9,17 @@ import type {
 
 type Json = any;
 
-// Netlify Functions base
-const API_BASE = "/.netlify/functions";
+// Netlify Functions base (auto local/Netlify)
+// - Si estás en localhost:5173 (Vite), apunta a http://localhost:8888/.netlify/functions
+// - Si estás sirviendo vía Netlify Dev (8888) o en producción, usa ruta relativa
+const API_BASE =
+  typeof window !== "undefined" && window.location
+    ? (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+        ? (window.location.port === "8888"
+            ? "/.netlify/functions"
+            : "http://localhost:8888/.netlify/functions")
+        : "/.netlify/functions"
+    : "/.netlify/functions";
 
 /* =========================
  * Utilidades de normalizado
@@ -159,7 +168,7 @@ function normalizeDealSummary(row: Json): DealSummary {
     title,
 
     pipeline_label: toStringValue(row?.pipeline_label) ?? null,
-    training_address_label: toStringValue(row?.training_address_label) ?? null,
+    training_address: toStringValue(row?.training_address) ?? null,
 
     sede_label: toStringValue(row?.sede_label) ?? null,
     caes_label: toStringValue(row?.caes_label) ?? null,
@@ -195,8 +204,8 @@ function normalizeDealDetail(raw: Json): DealDetail {
     title: toStringValue(raw.title ?? raw.deal_title) ?? null,
 
     pipeline_label: toStringValue(raw.pipeline_label) ?? null,
-    training_address_label:
-      toStringValue(raw.training_address_label) ?? null,
+    training_address:
+      toStringValue(raw.training_address) ?? null,
 
     sede_label: toStringValue(raw.sede_label) ?? null,
     caes_label: toStringValue(raw.caes_label) ?? null,
@@ -337,7 +346,7 @@ export async function importDeal(dealId: string): Promise<ImportDealResult> {
 export type DealEditablePatch = {
   sede_label?: string | null;
   hours?: number | null;
-  training_address_label?: string | null; // <- ahora label
+  training_address?: string | null; // dirección de formación
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
@@ -468,8 +477,8 @@ export function buildDealDetailViewModel(
     summary?.pipeline_label ?? null
   );
   const trainingAddress = pickNonEmptyString(
-    detail?.training_address_label ?? null,
-    summary?.training_address_label ?? null
+    detail?.training_address ?? null,
+    summary?.training_address ?? null
   );
 
   const productName = resolveProductName(detail ?? null, summary ?? null);
