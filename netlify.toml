@@ -9,13 +9,11 @@
 [functions]
   directory = "backend/functions"
   node_bundler = "esbuild"
-  # Mantenemos prisma fuera del bundle y lo resolvemos desde node_modules:
   external_node_modules = ["@prisma/client", "prisma"]
-  # Incluir en el artefacto los binarios del cliente y el schema:
+  # ⬇️ Solo lo imprescindible del cliente en runtime (sin arrastrar prisma/**)
   included_files = [
     "node_modules/.prisma/client/**",
-    "node_modules/@prisma/client/**",
-    "prisma/**"
+    "node_modules/@prisma/client/**"
   ]
 
 # --------- Redirects ---------
@@ -24,7 +22,6 @@
   to = "/.netlify/functions/health"
   status = 200
 
-# Legacy: mantiene compat si alguien llama a /api/deals/import
 [[redirects]]
   from = "/api/deals/import"
   to = "/.netlify/functions/deals/import"
