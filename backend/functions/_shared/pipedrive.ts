@@ -8,9 +8,12 @@ const cache = new Map<string, any>();
 const getC = (k: string) => cache.get(k);
 const setC = (k: string, v: any) => (cache.set(k, v), v);
 
-// Posibles overrides por ENV para campos de producto en catálogo
-const PRODUCT_HOURS_KEY = process.env.PD_PRODUCT_HOURS_KEY || "hours";
-const PRODUCT_TYPE_KEY = process.env.PD_PRODUCT_TYPE_KEY || "type";
+// Claves hash reales (fallbacks) y posibles overrides por ENV
+const PD_PRODUCT_HOURS_HASH = "38f11c8876ecde803a027fbf3c9041fda2ae7eb7";
+const PD_PRODUCT_TYPE_HASH  = "5bad94030bb7917c186f3238fb2cd8f7a91cf30b";
+
+const PRODUCT_HOURS_KEY    = process.env.PD_PRODUCT_HOURS_KEY || "hours";
+const PRODUCT_TYPE_KEY     = process.env.PD_PRODUCT_TYPE_KEY  || "type";
 const PRODUCT_CATEGORY_KEY = process.env.PD_PRODUCT_CATEGORY_KEY || "category";
 
 type FetchOpts = {
@@ -67,7 +70,8 @@ export async function getPerson(id: number | string) {
 
 export async function getDealProducts(dealId: number | string, limit = 500) {
   const id = encodeURIComponent(String(dealId));
-  return pd(`/deals/${id}/products?${qs({ limit })}`);
+  // include_product_data=1 para traer datos del catálogo en la misma llamada
+  return pd(`/deals/${id}/products?${qs({ limit, include_product_data: 1 })}`);
 }
 
 export async function getDealNotes(dealId: number | string, limit = 500) {
@@ -133,14 +137,19 @@ export function findFieldDef(fieldDefs: any[], apiKey: string) {
 
 /**
  * Busca un campo de producto por:
- * 1) key exacta (hash o slug)
- * 2) nombre del campo (case-insensitive) en español/inglés
+ * - key exacta (preferKeys en orden de prioridad)
+ * - nombre del campo (case-insensitive) en español/inglés
  */
-function findProductFieldByKeyOrName(fieldDefs: any[], preferKey: string, names: string[]) {
+function findProductFieldByKeyOrName(
+  fieldDefs: any[],
+  preferKeys: string[],
+  names: string[]
+) {
   if (!Array.isArray(fieldDefs)) return undefined;
-  const byKey = fieldDefs.find((f: any) => f?.key === preferKey);
-  if (byKey) return byKey;
-
+  for (const k of preferKeys.filter(Boolean)) {
+    const byKey = fieldDefs.find((f: any) => f?.key === k);
+    if (byKey) return byKey;
+  }
   const namesLc = names.map((n) => n.toLowerCase());
   return fieldDefs.find((f: any) => {
     const nm = (f?.name ?? f?.field_name ?? "").toString().toLowerCase();
@@ -149,9 +158,9 @@ function findProductFieldByKeyOrName(fieldDefs: any[], preferKey: string, names:
 }
 
 /**
- * Extrae atributos del catálogo: code, hours, type, category
- * - hours: devuelve `hoursText` (lo que venga) y `hoursNumber` (parse 12h -> 12)
- * - type/category: si tienen options, devuelve el label humano
+ * Extrae atributos del catálogo: code, hours (number), type (label), category (label)
+ * - hours: devuelve número entero/decimal según venga del campo; sin parsear “h”.
+ * - type/category: si tienen options, devuelve el label humano.
  */
 export async function extractProductCatalogAttributes(product: any) {
   const productFields = await getProductFields();
@@ -159,61 +168,56 @@ export async function extractProductCatalogAttributes(product: any) {
   // code (nativo de producto)
   const code = product?.code ?? null;
 
-  // hours
-  const fHours =
-    findProductFieldByKeyOrName(productFields, PRODUCT_HOURS_KEY, [
-      "hours",
-      "horas",
-      "duración",
-      "duracion",
-    ]) || findFieldDef(productFields, PRODUCT_HOURS_KEY);
+  // ---- HOURS (numérico) ----
+  const fHours = findProductFieldByKeyOrName(
+    productFields,
+    [PRODUCT_HOURS_KEY, PD_PRODUCT_HOURS_HASH],
+    ["hours", "horas", "duración", "duracion"]
+  ) || findFieldDef(productFields, PRODUCT_HOURS_KEY) || findFieldDef(productFields, PD_PRODUCT_HOURS_HASH);
 
-  const hoursVal = fHours ? product?.[fHours.key] : product?.[PRODUCT_HOURS_KEY];
-  const hoursText =
-    hoursVal == null
-      ? null
-      : typeof hoursVal === "string"
-      ? hoursVal
-      : String(hoursVal);
-  const hoursNumber = hoursText
-    ? ((): number => {
-        const m = hoursText.match(/(-?\d+(?:[.,]\d+)?)\s*h?/i);
-        if (!m) return NaN;
-        const n = Number(m[1].replace(",", "."));
-        return Number.isFinite(n) ? n : NaN;
-      })()
-    : NaN;
+  let hoursNumber: number | null = null;
+  if (fHours) {
+    const raw = product?.[fHours.key] ?? product?.[PRODUCT_HOURS_KEY] ?? product?.[PD_PRODUCT_HOURS_HASH];
+    if (raw == null || raw === "") {
+      hoursNumber = null;
+    } else if (typeof raw === "number") {
+      hoursNumber = Number.isFinite(raw) ? raw : null;
+    } else if (typeof raw === "string") {
+      // Sin lógica “h”: tomamos tal cual como número si es convertible.
+      const n = Number(raw.replace(",", ".").trim());
+      hoursNumber = Number.isFinite(n) ? n : null;
+    } else {
+      hoursNumber = null;
+    }
+  }
 
-  // type
-  const fType =
-    findProductFieldByKeyOrName(productFields, PRODUCT_TYPE_KEY, [
-      "type",
-      "tipo",
-      "tipus",
-    ]) || findFieldDef(productFields, PRODUCT_TYPE_KEY);
+  // ---- TYPE (single-option → label) ----
+  const fType = findProductFieldByKeyOrName(
+    productFields,
+    [PRODUCT_TYPE_KEY, PD_PRODUCT_TYPE_HASH],
+    ["type", "tipo", "tipus"]
+  ) || findFieldDef(productFields, PRODUCT_TYPE_KEY) || findFieldDef(productFields, PD_PRODUCT_TYPE_HASH);
+
   let type: string | null = null;
   if (fType) {
-    const raw = product?.[fType.key];
+    const raw = product?.[fType.key] ?? product?.[PRODUCT_TYPE_KEY] ?? product?.[PD_PRODUCT_TYPE_HASH];
     type = optionLabelOf(fType, raw) ?? (raw != null ? String(raw) : null);
   }
 
-  // category
+  // ---- CATEGORY (puede ser texto u opción) ----
   const fCategory =
-    findProductFieldByKeyOrName(productFields, PRODUCT_CATEGORY_KEY, [
-      "category",
-      "categoría",
-      "categoria",
-    ]) || findFieldDef(productFields, PRODUCT_CATEGORY_KEY);
+    findProductFieldByKeyOrName(productFields, [PRODUCT_CATEGORY_KEY], ["category", "categoría", "categoria"]) ||
+    findFieldDef(productFields, PRODUCT_CATEGORY_KEY);
+
   let category: string | null = null;
   if (fCategory) {
-    const raw = product?.[fCategory.key];
+    const raw = product?.[fCategory.key] ?? product?.[PRODUCT_CATEGORY_KEY];
     category = optionLabelOf(fCategory, raw) ?? (raw != null ? String(raw) : null);
   }
 
   return {
     code: code ?? null,
-    hoursText: hoursText ?? null,
-    hoursNumber: Number.isFinite(hoursNumber) ? hoursNumber : null,
+    hoursNumber: hoursNumber ?? null, // <- número ya limpio
     type,
     category,
   };

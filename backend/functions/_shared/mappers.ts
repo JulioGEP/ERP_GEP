@@ -7,22 +7,24 @@ import {
   optionLabelOf,
   findFieldDef,
   getPipelines,
-  getProductFields, // por si usas claves hash para horas en líneas de deal
+  getProductFields, // seguimos consultando definiciones por si existe horas en la línea del deal
   getProductCached,
-  extractProductCatalogAttributes,
 } from "./pipedrive";
 
 /* ========= Claves de campos custom (según Pipedrive) =========
-   Usa las KEYS REALES de tu instancia, no el nombre visible del campo.
-   (Estas son las que compartiste antes) */
+   Usa las KEYS REALES de tu instancia, no el nombre visible del campo. */
 const KEY_TRAINING_ADDRESS_BASE = "8b2a7570f5ba8aa4754f061cd9dc92fd778376a7"; // base, sin sufijo
 const KEY_SEDE   = "676d6bd51e52999c582c01f67c99a35ed30bf6ae";
 const KEY_CAES   = "e1971bf3a21d48737b682bf8d864ddc5eb15a351";
 const KEY_FUNDAE = "245d60d4d18aec40ba888998ef92e5d00e494583";
 const KEY_HOTEL  = "c3a6daf8eb5b4e59c3c07cda8e01f43439101269";
 
-// Si tienes un campo de HORAS en la **línea del deal** (no en catálogo) pon aquí la key (hash):
+// HORAS en la **línea del deal** (si existe ese custom en tu instancia)
 const KEY_PRODUCT_HOURS_IN_LINE = "38f11c8876ecde803a027fbf3c9041fda2ae7eb7";
+
+// HASH reales de catálogo (opción única/type y hours)
+const KEY_PRODUCT_TYPE_HASH  = "5bad94030bb7917c186f3238fb2cd8f7a91cf30b";
+const KEY_PRODUCT_HOURS_HASH = "38f11c8876ecde803a027fbf3c9041fda2ae7eb7";
 
 /* ---------------- Helpers ---------------- */
 function toInt(val: any, def = 0): number {
@@ -224,8 +226,19 @@ export async function mapAndUpsertDealTree({
   const dealId: string = dbDeal.deal_id;
 
   // 6) Productos (reset + insert) — enriquecidos con CATÁLOGO
-  const productFields = await getProductFields(); // por si usas horas en la línea del deal
+  const productFields = await getProductFields(); // definiciones para mapear options y hashes
   const fHoursInLine = productFields?.find((f: any) => f.key === KEY_PRODUCT_HOURS_IN_LINE);
+
+  // definiciones para TYPE/HOURS/CATEGORY desde producto embebido o catálogo
+  const fTypeDef = productFields?.find((f: any) =>
+    [KEY_PRODUCT_TYPE_HASH, "type"].includes(f.key)
+  );
+  const fHoursDef = productFields?.find((f: any) =>
+    [KEY_PRODUCT_HOURS_HASH, "hours"].includes(f.key)
+  );
+  const fCategoryDef = productFields?.find((f: any) =>
+    ["category"].includes(f.key)
+  );
 
   await prisma.deal_products.deleteMany({ where: { deal_id: dealId } });
 
@@ -238,34 +251,75 @@ export async function mapAndUpsertDealTree({
     const price = toMoney(p.item_price, 0);
     const product_comments = htmlToPlain(p.comments ?? null);
 
-    // Horas en línea (si existiese ese custom en la línea)
-    const hoursInLineRaw = fHoursInLine ? p?.[fHoursInLine.key] : p?.[KEY_PRODUCT_HOURS_IN_LINE];
-    const hoursInLineText = hoursInLineRaw != null ? String(hoursInLineRaw) : null;
+    // HORAS en línea (si existiese ese custom en la línea, numérico directo)
+    let hours: number | null = null;
+    if (fHoursInLine) {
+      const raw = p?.[fHoursInLine.key];
+      if (raw == null || raw === "") {
+        hours = null;
+      } else if (typeof raw === "number") {
+        hours = Number.isFinite(raw) ? Math.round(raw) : null;
+      } else {
+        const n = Number(String(raw).replace(",", ".").trim());
+        hours = Number.isFinite(n) ? Math.round(n) : null;
+      }
+    }
 
-    // Enriquecimiento por catálogo
-    let code: string | null = baseCode ?? null;
-    let hoursText: string | null = hoursInLineText; // luego lo normalizamos a solo número
-    let type: string | null = null;                 // TEXT en BD (no enum)
+    // Enriquecimiento por PRODUCTO EMBEBIDO (include_product_data=1)
+    const embedded = p.product ?? {};
+    const embeddedCF = embedded.custom_fields ?? {};
+    let code: string | null = baseCode ?? (embedded.code ?? null);
+    let type: string | null = null;
     let category: string | null = null;
 
+    if (fHoursDef && hours == null) {
+      const rawE = embedded[fHoursDef.key] ?? embeddedCF[fHoursDef.key];
+      if (rawE != null && rawE !== "") {
+        const n = Number(String(rawE).replace(",", ".").trim());
+        hours = Number.isFinite(n) ? Math.round(n) : null;
+      }
+    }
+    if (fTypeDef) {
+      const rawTypeE = embedded[fTypeDef.key] ?? embeddedCF[fTypeDef.key];
+      if (rawTypeE != null) {
+        type = optionLabelOf(fTypeDef, rawTypeE) ?? String(rawTypeE);
+      }
+    }
+    if (fCategoryDef) {
+      const rawCatE = embedded[fCategoryDef.key] ?? embeddedCF[fCategoryDef.key];
+      if (rawCatE != null) {
+        category = optionLabelOf(fCategoryDef, rawCatE) ?? String(rawCatE);
+      }
+    }
+
+    // Fallback al CATÁLOGO (GET /products/{id}) y sus custom_fields
     const productId = p.product_id ?? p.id ?? null;
     if (productId != null) {
       try {
         const catalog = await getProductCached(productId);
-        const attrs = await extractProductCatalogAttributes(catalog);
-        // Completa si falta en línea
-        code = code ?? attrs.code ?? null;
+        const catCF = catalog?.custom_fields ?? {};
 
-        // hours: si no viene en línea, usa catálogo; y deja solo el número
-        const hSrc = hoursText ?? attrs.hoursText ?? null;
-        if (hSrc) {
-          const m = String(hSrc).match(/(-?\d+(?:[.,]\d+)?)/);
-          hoursText = m ? m[1].replace(",", ".") : null; // solo número como string
+        code = code ?? catalog?.code ?? null;
+
+        if (fHoursDef && hours == null) {
+          const rawC = catalog?.[fHoursDef.key] ?? catCF?.[fHoursDef.key];
+          if (rawC != null && rawC !== "") {
+            const n = Number(String(rawC).replace(",", ".").trim());
+            hours = Number.isFinite(n) ? Math.round(n) : null;
+          }
         }
-
-        // type / category como texto (labels)
-        type = attrs.type ?? null;
-        category = attrs.category ?? null;
+        if (!type && fTypeDef) {
+          const rawTypeC = catalog?.[fTypeDef.key] ?? catCF?.[fTypeDef.key];
+          if (rawTypeC != null) {
+            type = optionLabelOf(fTypeDef, rawTypeC) ?? String(rawTypeC);
+          }
+        }
+        if (!category && fCategoryDef) {
+          const rawCatC = catalog?.[fCategoryDef.key] ?? catCF?.[fCategoryDef.key];
+          if (rawCatC != null) {
+            category = optionLabelOf(fCategoryDef, rawCatC) ?? String(rawCatC);
+          }
+        }
       } catch {
         // no rompemos el import si falla el catálogo
       }
@@ -277,51 +331,49 @@ export async function mapAndUpsertDealTree({
         deal_id: dealId,
         name: baseName,
         code,
-        quantity,           // entero (numeric(10,0) o similar)
+        quantity,           // entero (NUMERIC(10,0) en DB)
         price,              // decimal(12,2)
-        hours: hoursText,   // "2" (sin "h")
+        hours,              // NUMERIC(10,0) en DB (o Int según Prisma)
         product_comments,   // texto limpio
         category,           // texto
-        type,               // texto (TU confirmaste que es campo de texto)
+        type,               // texto (label de opción única)
       },
     });
   }
 
   // 7) Notas (sin product_id)
-  // 7) Notas (sin product_id)
-await prisma.deal_notes.deleteMany({ where: { deal_id: dealId } });
-for (const n of (Array.isArray(notes) ? notes : [])) {
-  const createdAt = n?.add_time ? new Date(n.add_time) : new Date();
-  const updatedAt = n?.update_time ? new Date(n.update_time) : new Date();
+  await prisma.deal_notes.deleteMany({ where: { deal_id: dealId } });
+  for (const n of (Array.isArray(notes) ? notes : [])) {
+    const createdAt = n?.add_time ? new Date(n.add_time) : new Date();
+    const updatedAt = n?.update_time ? new Date(n.update_time) : new Date();
 
-  await prisma.deal_notes.create({
-    data: {
-      id: String(n?.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`),
-      deal_id: dealId,
-      content: n?.content ?? n?.note ?? "",
-      author: n?.user?.name ?? n?.author ?? null,
-      created_at: createdAt, // <- siempre Date
-      updated_at: updatedAt, // <- siempre Date
-    },
-  });
-}
+    await prisma.deal_notes.create({
+      data: {
+        id: String(n?.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`),
+        deal_id: dealId,
+        content: n?.content ?? n?.note ?? "",
+        author: n?.user?.name ?? n?.author ?? null,
+        created_at: createdAt, // <- siempre Date
+        updated_at: updatedAt, // <- siempre Date
+      },
+    });
+  }
 
   // 8) Ficheros
   await prisma.deal_files.deleteMany({ where: { deal_id: dealId } });
-for (const f of Array.isArray(files) ? files : []) {
-  const id = String(f.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`);
-  await prisma.deal_files.create({
-    data: {
-      id,
-      deal_id: dealId,
-      file_name: f.file_name ?? f.name ?? "documento",
-      file_url: f.file_url ?? f.url ?? null,
-      file_type: f.file_type ?? f.mime_type ?? null,
-      // Solo incluir si existe
-      ...(f.add_time ? { added_at: new Date(f.add_time) } : {}),
-    },
-  });
-}
+  for (const f of Array.isArray(files) ? files : []) {
+    const id = String(f.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`);
+    await prisma.deal_files.create({
+      data: {
+        id,
+        deal_id: dealId,
+        file_name: f.file_name ?? f.name ?? "documento",
+        file_url: f.file_url ?? f.url ?? null,
+        file_type: f.file_type ?? f.mime_type ?? null,
+        ...(f.add_time ? { added_at: new Date(f.add_time) } : {}),
+      },
+    });
+  }
 
   return dealId;
 }
