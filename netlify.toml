@@ -7,16 +7,13 @@
   NPM_FLAGS = "--no-audit --fund=false --progress=false"
 
 [functions]
-  directory = "backend/functions"
-  node_bundler = "esbuild"
-
-  # No rebundlear estas deps (se copiarán desde node_modules):
-  external_node_modules = [
-    "@prisma/client",
-    "prisma",
-    "@aws-sdk/client-s3",
-    "@aws-sdk/s3-request-presigner"
-  ]
+directory = "backend/functions"
+node_bundler = "esbuild"
+external_node_modules = ["@prisma/client"]   # lo resolvemos desde node_modules de raíz
+included_files = [
+  "node_modules/.prisma/**",                 # runtime de Prisma (binarios + JS)
+  "node_modules/@prisma/client/schema.prisma"
+]
 
   # 👉 SOLO el cliente generado de Prisma (carpeta concreta)
   #   Evitamos incluir toda node_modules/.prisma o duplicados.
