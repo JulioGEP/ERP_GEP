@@ -78,6 +78,33 @@ function resolvePipedriveName(deal: any): string | null {
 }
 
 /** Normaliza un deal de Prisma para exponer `products`, `notes`, `documents` */
+function isHttpUrl(value?: unknown): boolean {
+  if (!value) return false;
+  try {
+    const url = String(value);
+    return /^https?:\/\//i.test(url);
+  } catch {
+    return false;
+  }
+}
+
+function mapDealFileForApi(file: any) {
+  if (!file) return file;
+  const id = file.id != null ? String(file.id) : undefined;
+  const rawUrl = typeof file.url === "string" ? file.url : null;
+  const rawFileUrl = typeof file.file_url === "string" ? file.file_url : null;
+  const isHttp = isHttpUrl(rawUrl ?? rawFileUrl);
+
+  return {
+    id,
+    source: isHttp ? "PIPEDRIVE" : "S3",
+    name: file.file_name ?? file.name ?? null,
+    mime_type: file.file_type ?? file.mime_type ?? null,
+    url: isHttp ? rawUrl ?? rawFileUrl ?? null : null,
+    created_at: file.created_at ?? file.added_at ?? null,
+  };
+}
+
 function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null {
   if (!deal) return deal;
   const out: any = { ...deal };
@@ -91,7 +118,9 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
     delete out.deal_notes;
   }
   if ("deal_files" in out) {
-    out.documents = out.deal_files;
+    out.documents = Array.isArray(out.deal_files)
+      ? out.deal_files.map((file: any) => mapDealFileForApi(file))
+      : out.deal_files;
     delete out.deal_files;
   }
 

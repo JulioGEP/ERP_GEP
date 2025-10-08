@@ -137,12 +137,13 @@ export const handler = async (event: any) => {
       });
 
       const documents = docsRaw.map((d: any) => {
-        const fromS3 = !isHttpUrl(d.file_url);
+        const isHttp = isHttpUrl(d.file_url);
         return {
           id: d.id,
-          source: fromS3 ? "S3" : "PIPEDRIVE",
+          source: isHttp ? "PIPEDRIVE" : "S3",
           name: d.file_name ?? null,
           mime_type: d.file_type ?? null,
+          url: isHttp ? d.file_url ?? null : null,
           // no tenemos `size` en el esquema → lo omitimos
           created_at: d.created_at,
         };
