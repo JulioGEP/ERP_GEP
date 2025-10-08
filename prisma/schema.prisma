@@ -143,16 +143,20 @@ model seassons {
 model trainers {
   trainer_id   String   @id
   name         String
-  email        String?
-  phone        String?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
-  activo       Boolean? @default(true)
   apellido     String?
-  dni          String?
+  email        String?  @unique
+  phone        String?
+  dni          String?  @unique
   direccion    String?
   especialidad String?
   titulacion   String?
+  activo       Boolean  @default(true)
+
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @updatedAt      @db.Timestamptz(6)
+
+  @@index([apellido])
+  @@index([especialidad])
 }
 
 model unidades_moviles {
