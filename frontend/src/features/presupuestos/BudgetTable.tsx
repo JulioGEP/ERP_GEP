@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
 import { fetchDealsWithoutSessions } from './api'; // ← usar API común
+import { formatSedeLabel } from './formatSedeLabel';
 
 interface BudgetTableProps {
   budgets: DealSummary[];
@@ -214,7 +215,7 @@ export function BudgetTable({
             const presupuestoTitle = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
             const organizationLabel = safeTrim(budget.organization?.name ?? '') ?? '—';
             const titleLabel = safeTrim(budget.title ?? '') ?? '—';
-            const sedeLabel = safeTrim(budget.sede_label ?? '') ?? '—';
+            const sedeLabel = safeTrim(formatSedeLabel(budget.sede_label) ?? '') ?? '—';
 
             const rowKey = id ?? `${organizationLabel}-${titleLabel}-${index}`;
 

@@ -10,6 +10,7 @@ import {
   deleteDocument,
   buildDealDetailViewModel
 } from './api';
+import { formatSedeLabel } from './formatSedeLabel';
 import type { DealEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealSummary } from '../../types/deal';
 
@@ -280,7 +281,10 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             <Row className="g-3">
               <Col md={4}>
                 <Form.Label>Sede</Form.Label>
-                <Form.Control value={form.sede_label} onChange={(e) => updateForm('sede_label', e.target.value)} />
+                <Form.Control
+                  value={formatSedeLabel(form.sede_label) ?? ''}
+                  onChange={(e) => updateForm('sede_label', e.target.value)}
+                />
               </Col>
               <Col md={2}>
                 <Form.Label>Alumnos</Form.Label>
