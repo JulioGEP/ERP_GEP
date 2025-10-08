@@ -67,6 +67,10 @@ function pickFirstPhone(val: any): string | null {
   return null;
 }
 
+function isLikelyManualId(id?: string | null): boolean {
+  return typeof id === "string" && id.includes("-");
+}
+
 async function resolvePipelineLabel(
   pipeline_id?: number | string | null
 ): Promise<string | undefined> {
@@ -362,30 +366,78 @@ export async function mapAndUpsertDealTree({
   }
 
   // 7) Notas (sin product_id)
-  await prisma.deal_notes.deleteMany({ where: { deal_id: dealId } });
+  const existingNoteIds = await prisma.deal_notes.findMany({
+    where: { deal_id: dealId },
+    select: { id: true },
+  });
+  const preservedNoteIds = existingNoteIds
+    .map((n) => n.id)
+    .filter((id): id is string => isLikelyManualId(id));
+
+  if (preservedNoteIds.length) {
+    await prisma.deal_notes.deleteMany({
+      where: { deal_id: dealId, id: { notIn: preservedNoteIds } },
+    });
+  } else {
+    await prisma.deal_notes.deleteMany({ where: { deal_id: dealId } });
+  }
+
   for (const n of (Array.isArray(notes) ? notes : [])) {
     const createdAt = n?.add_time ? new Date(n.add_time) : new Date();
     const updatedAt = n?.update_time ? new Date(n.update_time) : new Date();
 
-    await prisma.deal_notes.create({
-      data: {
-        id: String(n?.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`),
+    const id = String(n?.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`);
+
+    await prisma.deal_notes.upsert({
+      where: { id },
+      create: {
+        id,
         deal_id: dealId,
         content: n?.content ?? n?.note ?? "",
         author: n?.user?.name ?? n?.author ?? null,
-        created_at: createdAt, // <- siempre Date
-        updated_at: updatedAt, // <- siempre Date
+        created_at: createdAt,
+        updated_at: updatedAt,
+      },
+      update: {
+        deal_id: dealId,
+        content: n?.content ?? n?.note ?? "",
+        author: n?.user?.name ?? n?.author ?? null,
+        created_at: createdAt,
+        updated_at: updatedAt,
       },
     });
   }
 
   // 8) Ficheros
-  await prisma.deal_files.deleteMany({ where: { deal_id: dealId } });
+  const existingDocIds = await prisma.deal_files.findMany({
+    where: { deal_id: dealId },
+    select: { id: true },
+  });
+  const preservedDocIds = existingDocIds
+    .map((d) => d.id)
+    .filter((id): id is string => isLikelyManualId(id));
+
+  if (preservedDocIds.length) {
+    await prisma.deal_files.deleteMany({
+      where: { deal_id: dealId, id: { notIn: preservedDocIds } },
+    });
+  } else {
+    await prisma.deal_files.deleteMany({ where: { deal_id: dealId } });
+  }
+
   for (const f of Array.isArray(files) ? files : []) {
     const id = String(f.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`);
-    await prisma.deal_files.create({
-      data: {
+    await prisma.deal_files.upsert({
+      where: { id },
+      create: {
         id,
+        deal_id: dealId,
+        file_name: f.file_name ?? f.name ?? "documento",
+        file_url: f.file_url ?? f.url ?? null,
+        file_type: f.file_type ?? f.mime_type ?? null,
+        ...(f.add_time ? { added_at: new Date(f.add_time) } : {}),
+      },
+      update: {
         deal_id: dealId,
         file_name: f.file_name ?? f.name ?? "documento",
         file_url: f.file_url ?? f.url ?? null,
