@@ -437,6 +437,24 @@ export async function updateDealNote(
   return normalizeDealNote(data?.note ?? {});
 }
 
+export async function deleteDealNote(
+  dealId: string,
+  noteId: string,
+  user?: { id: string; name?: string }
+): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (user?.id) headers["X-User-Id"] = user.id;
+  if (user?.name) headers["X-User-Name"] = user.name;
+
+  await request(
+    `/deal_notes/${encodeURIComponent(String(dealId))}/${encodeURIComponent(String(noteId))}`,
+    {
+      method: "DELETE",
+      headers,
+    }
+  );
+}
+
 /* ======================
  * Documentos (S3/PDrive)
  * ====================== */

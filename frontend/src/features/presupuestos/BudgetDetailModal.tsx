@@ -23,6 +23,7 @@ import {
   buildDealDetailViewModel,
   createDealNote,
   updateDealNote,
+  deleteDealNote,
   isApiError
 } from './api';
 import { formatSedeLabel } from './formatSedeLabel';
@@ -51,6 +52,8 @@ type EditableDealForm = {
   hotel_label: string;
   alumnos: string;
 };
+
+type DealNoteView = DealDetailViewModel['notes'][number];
 
 export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const qc = useQueryClient();
@@ -91,6 +94,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState('');
   const [updatingNote, setUpdatingNote] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
+  const [viewingNote, setViewingNote] = useState<DealNoteView | null>(null);
 
   const updateForm = (field: keyof EditableDealForm, value: string) => {
     setForm((current) => (current ? { ...current, [field]: value } : current));
@@ -223,6 +228,15 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         const nextNotes = (current.notes ?? []).map((n) => (n.id === updated.id ? updated : n));
         return { ...current, notes: nextNotes };
       });
+      setViewingNote((current) =>
+        current?.id === updated.id
+          ? {
+              ...current,
+              content: updated.content ?? '',
+              author: updated.author ?? null,
+            }
+          : current
+      );
       cancelEditingNote();
     } catch (error: unknown) {
       if (isApiError(error)) {
@@ -233,6 +247,41 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     } finally {
       setUpdatingNote(false);
     }
+  };
+
+  const handleDeleteNote = async (note: DealNoteView) => {
+    if (!note?.id || deletingNoteId === note.id) return;
+
+    setDeletingNoteId(note.id);
+    setNoteError(null);
+    try {
+      await deleteDealNote(normalizedDealId, note.id, { id: userId, name: userName });
+      qc.setQueryData(detailQueryKey, (current: DealDetail | undefined) => {
+        if (!current) return current;
+        const nextNotes = (current.notes ?? []).filter((n) => n.id !== note.id);
+        return { ...current, notes: nextNotes };
+      });
+      if (editingNoteId === note.id) {
+        cancelEditingNote();
+      }
+      setViewingNote((current) => (current?.id === note.id ? null : current));
+    } catch (error: unknown) {
+      if (isApiError(error)) {
+        setNoteError(error.message);
+      } else {
+        setNoteError('No se pudo eliminar la nota. Inténtalo de nuevo.');
+      }
+    } finally {
+      setDeletingNoteId(null);
+    }
+  };
+
+  const handleOpenNoteModal = (note: DealNoteView) => {
+    setViewingNote(note);
+  };
+
+  const handleCloseNoteModal = () => {
+    setViewingNote(null);
   };
 
   const normalizeAffirmative = (value?: string | number | null) => {
@@ -515,34 +564,13 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   </div>
                 </Accordion.Header>
                 <Accordion.Body>
-                  <Form onSubmit={handleCreateNote} className="mb-3">
-                    <Form.Group controlId="deal-note-content">
-                      <Form.Label className="fw-semibold">Añadir nota</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={3}
-                        value={newNoteContent}
-                        onChange={(event) => setNewNoteContent(event.target.value)}
-                        disabled={creatingNote}
-                        placeholder="Escribe una nota"
-                      />
-                    </Form.Group>
-                    <div className="d-flex justify-content-end align-items-center gap-2 mt-2">
-                      {noteError ? (
-                        <div className="text-danger small me-auto">{noteError}</div>
-                      ) : null}
-                      <Button
-                        type="submit"
-                        variant="primary"
-                        disabled={creatingNote || !newNoteContent.trim().length}
-                      >
-                        {creatingNote ? <Spinner size="sm" animation="border" role="status" /> : 'Guardar nota'}
-                      </Button>
-                    </div>
-                  </Form>
-                  <hr className="text-muted" />
+                  {noteError ? (
+                    <Alert variant="danger" className="mb-3">
+                      {noteError}
+                    </Alert>
+                  ) : null}
                   {detailNotes.length ? (
-                    <ListGroup>
+                    <ListGroup className="mb-3">
                       {detailNotes.map((note, index) => {
                         const key = note.id ?? `note-${index}`;
                         const canEdit =
@@ -550,8 +578,15 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                           !!userName &&
                           note.author.trim().toLowerCase() === userName.trim().toLowerCase();
                         const isEditing = editingNoteId === note.id;
+                        const isDeleting = deletingNoteId === note.id;
+                        const canOpenNote = !isEditing && !isDeleting;
                         return (
-                          <ListGroup.Item key={key}>
+                          <ListGroup.Item
+                            key={key}
+                            action={canOpenNote}
+                            disabled={isDeleting}
+                            onClick={canOpenNote ? () => handleOpenNoteModal(note) : undefined}
+                          >
                             {isEditing ? (
                               <>
                                 <Form.Control
@@ -586,13 +621,41 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                               </>
                             ) : (
                               <>
-                                <p className="mb-1">{displayOrDash(note.content)}</p>
-                                <div className="d-flex justify-content-between align-items-center">
-                                  <small className="text-muted">Autor: {displayOrDash(note.author ?? null)}</small>
+                                <p className="mb-2 text-break" style={{ whiteSpace: 'pre-line' }}>
+                                  {displayOrDash(note.content)}
+                                </p>
+                                <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                                  <small className="text-muted mb-0">
+                                    Autor: {displayOrDash(note.author ?? null)}
+                                  </small>
                                   {canEdit ? (
-                                    <Button size="sm" variant="outline-primary" onClick={() => startEditingNote(note)}>
-                                      Editar
-                                    </Button>
+                                    <div className="d-flex align-items-center gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline-primary"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          startEditingNote(note);
+                                        }}
+                                      >
+                                        Editar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline-danger"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          handleDeleteNote(note);
+                                        }}
+                                        disabled={isDeleting}
+                                      >
+                                        {isDeleting ? (
+                                          <Spinner animation="border" size="sm" role="status" />
+                                        ) : (
+                                          'Eliminar'
+                                        )}
+                                      </Button>
+                                    </div>
                                   ) : null}
                                 </div>
                               </>
@@ -601,8 +664,34 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                         );
                       })}
                     </ListGroup>
-                  ) : (
-                    <p className="text-muted small mb-0">Sin Notas</p>
+                  ) : null}
+                  <Form onSubmit={handleCreateNote} className="mb-3">
+                    <Form.Group controlId="deal-note-content">
+                      <Form.Label className="fw-semibold">Añadir nota</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={newNoteContent}
+                        onChange={(event) => setNewNoteContent(event.target.value)}
+                        disabled={creatingNote}
+                        placeholder="Escribe una nota"
+                      />
+                    </Form.Group>
+                    <div className="d-flex justify-content-end align-items-center gap-2 mt-2">
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        disabled={creatingNote || !newNoteContent.trim().length}
+                      >
+                        {creatingNote ? <Spinner size="sm" animation="border" role="status" /> : 'Guardar nota'}
+                      </Button>
+                    </div>
+                  </Form>
+                  {detailNotes.length ? null : (
+                    <>
+                      <hr className="text-muted" />
+                      <p className="text-muted small mb-0">Sin Notas</p>
+                    </>
                   )}
                 </Accordion.Body>
               </Accordion.Item>
@@ -722,6 +811,20 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           </Button>
         )}
       </Modal.Footer>
+
+      <Modal show={!!viewingNote} onHide={handleCloseNoteModal} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Detalle de la nota</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="mb-2">
+            <strong>Autor:</strong> {displayOrDash(viewingNote?.author ?? null)}
+          </div>
+          <div style={{ whiteSpace: 'pre-wrap' }}>
+            {displayOrDash(viewingNote?.content ?? null)}
+          </div>
+        </Modal.Body>
+      </Modal>
 
       {/* Confirmación cambios pendientes */}
       <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
