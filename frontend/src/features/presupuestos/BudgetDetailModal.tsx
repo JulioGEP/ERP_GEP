@@ -551,14 +551,14 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           <>
             {/* Editables */}
             <Row className="g-3">
-              <Col md={6}>
+              <Col md={4}>
                 <Form.Label>Sede</Form.Label>
                 <Form.Control
                   value={formatSedeLabel(form.sede_label) ?? ''}
                   onChange={(e) => updateForm('sede_label', e.target.value)}
                 />
               </Col>
-              <Col md={6}>
+              <Col md={8}>
                 <Form.Label>Dirección</Form.Label>
                 <div className="d-flex gap-2 align-items-start">
                   <Form.Control
