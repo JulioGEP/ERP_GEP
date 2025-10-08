@@ -538,7 +538,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       );
       await qc.invalidateQueries({ queryKey: detailQueryKey });
       await qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
-      onClose();
+      setShowConfirm(false);
     } catch (e: any) {
       alert(e?.message || 'No se pudieron guardar los cambios');
     } finally {
