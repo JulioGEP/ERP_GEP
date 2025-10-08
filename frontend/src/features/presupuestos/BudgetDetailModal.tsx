@@ -123,15 +123,10 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const clientDisplay = detailView.clientName ?? '';
   const pipelineDisplay = detailView.pipelineLabel ?? '';
   const productDisplay = detailView.productName ?? '';
-  const direccionDisplay = detailView.trainingAddress ?? ''; // ViewModel ya expone trainingAddress
-  const horasDisplay = detailView.hours;
-  const alumnosDisplay = detailView.alumnos;
-  const sedeDisplay = detailView.sedeLabel ?? '';
-  const caesDisplay = detailView.caesLabel ?? '';
-  const fundaeDisplay = detailView.fundaeLabel ?? '';
-  const hotelDisplay = detailView.hotelLabel ?? '';
   const detailProducts = detailView.products;
   const detailNotes = detailView.notes;
+
+  const modalTitle = organizationDisplay || 'Detalle presupuesto';
 
   const displayOrDash = (value?: string | number | null) => {
     if (value === null || value === undefined) return '—';
@@ -245,69 +240,54 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   }
 
   return (
-    <Modal show={!!dealId} onHide={requestClose} size="lg" backdrop="static">
-      <Modal.Header closeButton>
-        <Modal.Title>
-          Detalle presupuesto
-          {presupuestoDisplay ? <span className="text-muted ms-2">· {presupuestoDisplay}</span> : null}
+    <Modal
+      show={!!dealId}
+      onHide={requestClose}
+      size="lg"
+      backdrop="static"
+      centered
+      contentClassName="erp-modal-content"
+    >
+      <Modal.Header closeButton className="border-0 pb-0">
+        <Modal.Title as="div">
+          <div className="erp-modal-title text-truncate">{modalTitle}</div>
+          {presupuestoDisplay ? (
+            <div className="erp-modal-subtitle text-truncate">
+              Presupuesto {presupuestoDisplay}
+            </div>
+          ) : null}
         </Modal.Title>
       </Modal.Header>
-      <Modal.Body>
-        {(presupuestoDisplay || titleDisplay || organizationDisplay || clientDisplay || productDisplay || pipelineDisplay || direccionDisplay || sedeDisplay || caesDisplay || fundaeDisplay || hotelDisplay) && (
-          <Row className="g-3 mb-4">
-            <Col md={4}>
-              <Form.Label>Presupuesto</Form.Label>
-              <Form.Control value={displayOrDash(presupuestoDisplay)} readOnly />
-            </Col>
-            <Col md={8}>
-              <Form.Label>Título</Form.Label>
-              <Form.Control value={displayOrDash(titleDisplay)} readOnly />
-            </Col>
-            <Col md={6}>
-              <Form.Label>Empresa</Form.Label>
-              <Form.Control value={displayOrDash(organizationDisplay)} readOnly />
-            </Col>
-            <Col md={6}>
-              <Form.Label>Cliente</Form.Label>
-              <Form.Control value={displayOrDash(clientDisplay)} readOnly />
-            </Col>
-            <Col md={6}>
-              <Form.Label>Fuente</Form.Label>
-              <Form.Control value={displayOrDash(pipelineDisplay)} readOnly />
-            </Col>
-            <Col md={6}>
-              <Form.Label>Formación</Form.Label>
-              <Form.Control value={displayOrDash(productDisplay)} readOnly title={productDisplay || undefined} />
-            </Col>
-            <Col md={12}>
-              <Form.Label>Dirección</Form.Label>
-              <Form.Control value={displayOrDash(direccionDisplay)} readOnly />
-            </Col>
-            <Col md={3}>
-              <Form.Label>Horas</Form.Label>
-              <Form.Control value={displayOrDash(horasDisplay)} readOnly />
-            </Col>
-            <Col md={3}>
-              <Form.Label>Alumnos</Form.Label>
-              <Form.Control value={displayOrDash(alumnosDisplay)} readOnly />
-            </Col>
-            <Col md={3}>
-              <Form.Label>Sede</Form.Label>
-              <Form.Control value={displayOrDash(sedeDisplay)} readOnly />
-            </Col>
-            <Col md={3}>
-              <Form.Label>CAES</Form.Label>
-              <Form.Control value={displayOrDash(caesDisplay)} readOnly />
-            </Col>
-            <Col md={3}>
-              <Form.Label>FUNDAE</Form.Label>
-              <Form.Control value={displayOrDash(fundaeDisplay)} readOnly />
-            </Col>
-            <Col md={3}>
-              <Form.Label>Hotel</Form.Label>
-              <Form.Control value={displayOrDash(hotelDisplay)} readOnly />
-            </Col>
-          </Row>
+      <Modal.Body className="erp-modal-body">
+        {(presupuestoDisplay || titleDisplay || organizationDisplay || clientDisplay || productDisplay || pipelineDisplay) && (
+          <div className="erp-summary-card mb-4">
+            <Row className="g-3">
+              <Col md={4}>
+                <Form.Label>Presupuesto</Form.Label>
+                <Form.Control value={displayOrDash(presupuestoDisplay)} readOnly />
+              </Col>
+              <Col md={8}>
+                <Form.Label>Título</Form.Label>
+                <Form.Control value={displayOrDash(titleDisplay)} readOnly />
+              </Col>
+              <Col md={6}>
+                <Form.Label>Empresa</Form.Label>
+                <Form.Control value={displayOrDash(organizationDisplay)} readOnly />
+              </Col>
+              <Col md={6}>
+                <Form.Label>Cliente</Form.Label>
+                <Form.Control value={displayOrDash(clientDisplay)} readOnly />
+              </Col>
+              <Col md={6}>
+                <Form.Label>Fuente</Form.Label>
+                <Form.Control value={displayOrDash(pipelineDisplay)} readOnly />
+              </Col>
+              <Col md={6}>
+                <Form.Label>Formación</Form.Label>
+                <Form.Control value={displayOrDash(productDisplay)} readOnly title={productDisplay || undefined} />
+              </Col>
+            </Row>
+          </div>
         )}
         {detailErrorMessage && !summary && (
           <Alert variant="danger" className="mb-3">
@@ -448,7 +428,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           </>
         )}
       </Modal.Body>
-      <Modal.Footer>
+      <Modal.Footer className="erp-modal-footer border-0 pt-0">
         <Button variant="outline-secondary" onClick={requestClose} disabled={saving}>
           Cerrar
         </Button>
