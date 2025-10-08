@@ -58,14 +58,32 @@ body {
   background-color: #ffffff;
 }
 
+.erp-modal-header {
+  background-color: var(--color-red);
+  color: #ffffff;
+  padding: 1.5rem 1.5rem 1rem;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+}
+
+.erp-modal-header .modal-title {
+  color: inherit;
+}
+
+.erp-modal-header .btn-close {
+  filter: invert(1);
+  opacity: 1;
+}
+
 .erp-modal-title {
   font-weight: 600;
-  color: var(--color-gray-dark);
+  color: #ffffff;
+  font-size: 2rem;
 }
 
 .erp-modal-subtitle {
-  font-size: 0.9rem;
-  color: var(--color-gray-medium);
+  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .erp-modal-body {
