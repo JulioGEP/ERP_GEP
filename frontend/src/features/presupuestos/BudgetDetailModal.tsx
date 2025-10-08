@@ -133,6 +133,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const titleDisplay = detailView.title ?? '';
   const organizationDisplay = detailView.organizationName ?? '';
   const clientDisplay = detailView.clientName ?? '';
+  const clientPhoneDisplay = detailView.clientPhone ?? '';
+  const clientEmailDisplay = detailView.clientEmail ?? '';
   const detailProducts = detailView.products;
   const detailNotes = detailView.notes;
   const documents = deal?.documents ?? [];
@@ -178,12 +180,16 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     setMapAddress(null);
   };
 
-  const handleAccordionSelect = (eventKey: string | null) => {
+  const handleAccordionSelect = (eventKey: string | string[] | null | undefined) => {
     if (!eventKey) return;
+    const normalizedKey = Array.isArray(eventKey)
+      ? eventKey[eventKey.length - 1]
+      : eventKey;
+    if (!normalizedKey) return;
     setOpenSections((current) =>
-      current.includes(eventKey)
-        ? current.filter((key) => key !== eventKey)
-        : [...current, eventKey]
+      current.includes(normalizedKey)
+        ? current.filter((key) => key !== normalizedKey)
+        : [...current, normalizedKey]
     );
   };
 
@@ -309,16 +315,24 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="erp-modal-body">
-        {(titleDisplay || clientDisplay || deal) && (
+        {(titleDisplay || clientDisplay || clientPhoneDisplay || clientEmailDisplay || deal) && (
           <div className="erp-summary-card mb-4">
-            <Row className="g-3">
-              <Col md={6}>
+            <Row className="erp-summary-row gy-3 gx-0">
+              <Col md={3}>
                 <Form.Label>Título</Form.Label>
                 <Form.Control value={displayOrDash(titleDisplay)} readOnly />
               </Col>
-              <Col md={6}>
+              <Col md={3}>
                 <Form.Label>Cliente</Form.Label>
                 <Form.Control value={displayOrDash(clientDisplay)} readOnly />
+              </Col>
+              <Col md={3}>
+                <Form.Label>Teléfono</Form.Label>
+                <Form.Control value={displayOrDash(clientPhoneDisplay)} readOnly />
+              </Col>
+              <Col md={3}>
+                <Form.Label>Mail</Form.Label>
+                <Form.Control value={displayOrDash(clientEmailDisplay)} readOnly />
               </Col>
             </Row>
           </div>
@@ -397,15 +411,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                 <Form.Label>PO</Form.Label>
                 <Form.Control value={displayOrDash(deal.po ?? null)} readOnly />
               </Col>
-              <Col md={2}>
-                <Form.Label>Alumnos</Form.Label>
-                <Form.Control
-                  type="number"
-                  min={0}
-                  value={form.alumnos}
-                  onChange={(e) => updateForm('alumnos', e.target.value)}
-                />
-              </Col>
             </Row>
 
             <hr className="my-4" />
@@ -418,10 +423,9 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">
-                    <span>Notas</span>
-                    {detailNotes.length > 0 ? (
-                      <Badge bg="danger">{detailNotes.length}</Badge>
-                    ) : null}
+                    <span className="erp-accordion-title">
+                      Notas{detailNotes.length > 0 ? ` ${detailNotes.length}` : ''}
+                    </span>
                   </div>
                 </Accordion.Header>
                 <Accordion.Body>
@@ -435,7 +439,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                       ))}
                     </ListGroup>
                   ) : (
-                    <p className="text-muted small mb-0">No hay notas registradas.</p>
+                    <p className="text-muted small mb-0">Sin Notas</p>
                   )}
                 </Accordion.Body>
               </Accordion.Item>
@@ -443,8 +447,9 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               <Accordion.Item eventKey="documents">
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">
-                    <span>Documentos</span>
-                    {documents.length > 0 ? <Badge bg="danger">{documents.length}</Badge> : null}
+                    <span className="erp-accordion-title">
+                      Documentos{documents.length > 0 ? ` ${documents.length}` : ''}
+                    </span>
                   </div>
                 </Accordion.Header>
                 <Accordion.Body>
@@ -474,7 +479,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                       ))}
                     </ListGroup>
                   ) : (
-                    <p className="text-muted small mb-0">No hay documentos cargados.</p>
+                    <p className="text-muted small mb-0">Sin documentos</p>
                   )}
                 </Accordion.Body>
               </Accordion.Item>
@@ -482,8 +487,9 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               <Accordion.Item eventKey="extra-products">
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">
-                    <span>Productos Extra</span>
-                    {extraProducts.length > 0 ? <Badge bg="danger">{extraProducts.length}</Badge> : null}
+                    <span className="erp-accordion-title">
+                      Productos Extra{extraProducts.length > 0 ? ` ${extraProducts.length}` : ''}
+                    </span>
                   </div>
                 </Accordion.Header>
                 <Accordion.Body>
@@ -499,7 +505,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                       ))}
                     </ListGroup>
                   ) : (
-                    <p className="text-muted small mb-0">No hay productos extra asociados.</p>
+                    <p className="text-muted small mb-0">Sin Extras</p>
                   )}
                 </Accordion.Body>
               </Accordion.Item>

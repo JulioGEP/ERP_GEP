@@ -134,6 +134,8 @@ export interface DealDetailViewModel {
 
   organizationName: string | null;
   clientName: string | null;
+  clientEmail: string | null;
+  clientPhone: string | null;
 
   pipelineLabel: string | null;    // proviene de pipeline_label
   trainingAddress: string | null;  // proviene de training_address
