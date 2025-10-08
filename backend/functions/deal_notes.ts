@@ -108,6 +108,21 @@ export const handler = async (event: any) => {
       return successResponse({ note: mapNoteForResponse(updated) });
     }
 
+    if (method === "DELETE" && noteId) {
+      const existing = await prisma.deal_notes.findUnique({ where: { id: String(noteId) } });
+      if (!existing || existing.deal_id !== dealIdStr) {
+        return errorResponse("NOT_FOUND", "Nota no encontrada", 404);
+      }
+
+      if (existing.author && requestUser && existing.author !== requestUser) {
+        return errorResponse("FORBIDDEN", "No puedes eliminar esta nota", 403);
+      }
+
+      await prisma.deal_notes.delete({ where: { id: String(noteId) } });
+
+      return successResponse({ deleted: true });
+    }
+
     return errorResponse("NOT_IMPLEMENTED", "Ruta o método no soportado", 404);
   } catch (e: any) {
     const message = e?.message || "Unexpected";
