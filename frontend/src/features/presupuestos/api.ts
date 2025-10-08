@@ -475,7 +475,10 @@ export function buildDealDetailViewModel(
     detail?.organization?.name ?? null,
     summary?.organization?.name ?? null
   );
-  const clientName = buildPersonFullName(detail?.person ?? summary?.person ?? null);
+  const person = detail?.person ?? summary?.person ?? null;
+  const clientName = buildPersonFullName(person ?? null);
+  const clientEmail = pickNonEmptyString(person?.email ?? null);
+  const clientPhone = pickNonEmptyString(person?.phone ?? null);
 
   const pipelineLabel = pickNonEmptyString(
     detail?.pipeline_label ?? null,
@@ -501,6 +504,8 @@ export function buildDealDetailViewModel(
     title: title ?? null,
     organizationName: organizationName ?? null,
     clientName: clientName ?? null,
+    clientEmail: clientEmail ?? null,
+    clientPhone: clientPhone ?? null,
     pipelineLabel: pipelineLabel ?? null,
     trainingAddress: trainingAddress ?? null,
     productName: productName ?? null,
