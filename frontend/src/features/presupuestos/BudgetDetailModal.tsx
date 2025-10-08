@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Button,
@@ -20,7 +20,10 @@ import {
   getUploadUrl,
   createDocumentMeta,
   deleteDocument,
-  buildDealDetailViewModel
+  buildDealDetailViewModel,
+  createDealNote,
+  updateDealNote,
+  isApiError
 } from './api';
 import { formatSedeLabel } from './formatSedeLabel';
 import type { DealEditablePatch } from './api';
@@ -34,8 +37,9 @@ interface Props {
 
 function useAuth() {
   // Ajusta a tu sistema real de auth
-  const userId = localStorage.getItem('userId') || 'user@example.com';
-  const userName = localStorage.getItem('userName') || 'Usuario';
+  const fallbackUser = 'erp_user';
+  const userId = localStorage.getItem('userId') || fallbackUser;
+  const userName = localStorage.getItem('userName') || fallbackUser;
   return { userId, userName };
 }
 
@@ -81,6 +85,12 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<string[]>([]);
+  const [newNoteContent, setNewNoteContent] = useState('');
+  const [creatingNote, setCreatingNote] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteContent, setEditingNoteContent] = useState('');
+  const [updatingNote, setUpdatingNote] = useState(false);
 
   const updateForm = (field: keyof EditableDealForm, value: string) => {
     setForm((current) => (current ? { ...current, [field]: value } : current));
@@ -155,6 +165,74 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     if (value === null || value === undefined) return '—';
     const trimmed = String(value).trim();
     return trimmed.length ? trimmed : '—';
+  };
+
+  const handleCreateNote = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    const trimmed = newNoteContent.trim();
+    if (!trimmed.length || creatingNote) return;
+
+    setCreatingNote(true);
+    setNoteError(null);
+    try {
+      const created = await createDealNote(normalizedDealId, trimmed, { id: userId, name: userName });
+      qc.setQueryData(detailQueryKey, (current: DealDetail | undefined) => {
+        if (!current) return current;
+        const nextNotes = [created, ...(current.notes ?? [])];
+        return { ...current, notes: nextNotes };
+      });
+      setNewNoteContent('');
+    } catch (error: unknown) {
+      if (isApiError(error)) {
+        setNoteError(error.message);
+      } else {
+        setNoteError('No se pudo crear la nota. Inténtalo de nuevo.');
+      }
+    } finally {
+      setCreatingNote(false);
+    }
+  };
+
+  const startEditingNote = (note: DealDetailViewModel['notes'][number]) => {
+    if (!note?.id) return;
+    setEditingNoteId(note.id);
+    setEditingNoteContent(note.content ?? '');
+    setNoteError(null);
+  };
+
+  const cancelEditingNote = () => {
+    setEditingNoteId(null);
+    setEditingNoteContent('');
+    setUpdatingNote(false);
+  };
+
+  const handleUpdateNote = async (note: DealDetailViewModel['notes'][number]) => {
+    if (!note?.id) return;
+    const trimmed = editingNoteContent.trim();
+    if (!trimmed.length || updatingNote) return;
+
+    setUpdatingNote(true);
+    setNoteError(null);
+    try {
+      const updated = await updateDealNote(normalizedDealId, note.id, trimmed, {
+        id: userId,
+        name: userName,
+      });
+      qc.setQueryData(detailQueryKey, (current: DealDetail | undefined) => {
+        if (!current) return current;
+        const nextNotes = (current.notes ?? []).map((n) => (n.id === updated.id ? updated : n));
+        return { ...current, notes: nextNotes };
+      });
+      cancelEditingNote();
+    } catch (error: unknown) {
+      if (isApiError(error)) {
+        setNoteError(error.message);
+      } else {
+        setNoteError('No se pudo actualizar la nota. Inténtalo de nuevo.');
+      }
+    } finally {
+      setUpdatingNote(false);
+    }
   };
 
   const normalizeAffirmative = (value?: string | number | null) => {
@@ -437,14 +515,91 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   </div>
                 </Accordion.Header>
                 <Accordion.Body>
+                  <Form onSubmit={handleCreateNote} className="mb-3">
+                    <Form.Group controlId="deal-note-content">
+                      <Form.Label className="fw-semibold">Añadir nota</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={newNoteContent}
+                        onChange={(event) => setNewNoteContent(event.target.value)}
+                        disabled={creatingNote}
+                        placeholder="Escribe una nota"
+                      />
+                    </Form.Group>
+                    <div className="d-flex justify-content-end align-items-center gap-2 mt-2">
+                      {noteError ? (
+                        <div className="text-danger small me-auto">{noteError}</div>
+                      ) : null}
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        disabled={creatingNote || !newNoteContent.trim().length}
+                      >
+                        {creatingNote ? <Spinner size="sm" animation="border" role="status" /> : 'Guardar nota'}
+                      </Button>
+                    </div>
+                  </Form>
+                  <hr className="text-muted" />
                   {detailNotes.length ? (
                     <ListGroup>
-                      {detailNotes.map((note, index) => (
-                        <ListGroup.Item key={note.id ?? `note-${index}`}>
-                          <p className="mb-1">{displayOrDash(note.content)}</p>
-                          <small className="text-muted">Autor: {displayOrDash(note.author ?? null)}</small>
-                        </ListGroup.Item>
-                      ))}
+                      {detailNotes.map((note, index) => {
+                        const key = note.id ?? `note-${index}`;
+                        const canEdit =
+                          !!note.author &&
+                          !!userName &&
+                          note.author.trim().toLowerCase() === userName.trim().toLowerCase();
+                        const isEditing = editingNoteId === note.id;
+                        return (
+                          <ListGroup.Item key={key}>
+                            {isEditing ? (
+                              <>
+                                <Form.Control
+                                  as="textarea"
+                                  rows={3}
+                                  value={editingNoteContent}
+                                  onChange={(event) => setEditingNoteContent(event.target.value)}
+                                  disabled={updatingNote}
+                                />
+                                <div className="d-flex justify-content-end gap-2 mt-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline-secondary"
+                                    onClick={cancelEditingNote}
+                                    disabled={updatingNote}
+                                  >
+                                    Cancelar
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="primary"
+                                    disabled={updatingNote || !editingNoteContent.trim().length}
+                                    onClick={() => handleUpdateNote(note)}
+                                  >
+                                    {updatingNote ? (
+                                      <Spinner animation="border" size="sm" role="status" />
+                                    ) : (
+                                      'Guardar'
+                                    )}
+                                  </Button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <p className="mb-1">{displayOrDash(note.content)}</p>
+                                <div className="d-flex justify-content-between align-items-center">
+                                  <small className="text-muted">Autor: {displayOrDash(note.author ?? null)}</small>
+                                  {canEdit ? (
+                                    <Button size="sm" variant="outline-primary" onClick={() => startEditingNote(note)}>
+                                      Editar
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </>
+                            )}
+                          </ListGroup.Item>
+                        );
+                      })}
                     </ListGroup>
                   ) : (
                     <p className="text-muted small mb-0">Sin Notas</p>

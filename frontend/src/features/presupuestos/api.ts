@@ -5,6 +5,7 @@ import type {
   DealProduct,
   DealSummary,
   DealDocument,
+  DealNote,
 } from "../../types/deal";
 
 type Json = any;
@@ -281,6 +282,22 @@ function normalizeDealDetail(raw: Json): DealDetail {
   return detail;
 }
 
+function normalizeDealNote(raw: Json): DealNote {
+  const id = toStringValue(raw?.id ?? raw?.note_id ?? null);
+  const deal_id = toStringValue(raw?.deal_id ?? null);
+  const contentValue = toStringValue(raw?.content ?? null);
+  const author = toStringValue(raw?.author ?? null);
+  const created_at = toStringValue(raw?.created_at ?? null);
+
+  return {
+    id: id ?? (raw?.id != null ? String(raw.id) : null),
+    deal_id,
+    content: contentValue ?? (raw?.content != null ? String(raw.content) : ""),
+    author,
+    created_at,
+  };
+}
+
 /* =====================
  * Request helper (fetch)
  * ===================== */
@@ -374,6 +391,50 @@ export async function patchDealEditable(
     headers,
     body: JSON.stringify({ deal: dealPatch }),
   });
+}
+
+/* ==============
+ * Notas del deal
+ * ============== */
+
+export async function createDealNote(
+  dealId: string,
+  content: string,
+  user?: { id: string; name?: string }
+): Promise<DealNote> {
+  const headers: Record<string, string> = {};
+  if (user?.id) headers["X-User-Id"] = user.id;
+  if (user?.name) headers["X-User-Name"] = user.name;
+
+  const data = await request(`/deal_notes/${encodeURIComponent(String(dealId))}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ content }),
+  });
+
+  return normalizeDealNote(data?.note ?? {});
+}
+
+export async function updateDealNote(
+  dealId: string,
+  noteId: string,
+  content: string,
+  user?: { id: string; name?: string }
+): Promise<DealNote> {
+  const headers: Record<string, string> = {};
+  if (user?.id) headers["X-User-Id"] = user.id;
+  if (user?.name) headers["X-User-Name"] = user.name;
+
+  const data = await request(
+    `/deal_notes/${encodeURIComponent(String(dealId))}/${encodeURIComponent(String(noteId))}`,
+    {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ content }),
+    }
+  );
+
+  return normalizeDealNote(data?.note ?? {});
 }
 
 /* ======================
