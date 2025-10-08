@@ -208,7 +208,7 @@ export async function mapAndUpsertDealTree({
   });
 
   const keep = <T>(prev: T | null | undefined, incoming: T | null | undefined) =>
-    prev !== null && prev !== undefined ? prev : incoming ?? null;
+    incoming !== null && incoming !== undefined ? incoming : prev ?? null;
 
   // 5) Upsert deal (sin 'hours' en deals)
   const orgIdForDeal = org?.id != null ? String(org.id) : null;
