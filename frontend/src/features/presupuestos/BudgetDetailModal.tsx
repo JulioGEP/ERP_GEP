@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Form, ListGroup, Row, Col, Alert, Spinner, Table, Badge } from 'react-bootstrap';
+import {
+  Modal,
+  Button,
+  Form,
+  ListGroup,
+  Row,
+  Col,
+  Alert,
+  Spinner,
+  Table,
+  Badge,
+  Accordion
+} from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchDealDetail,
@@ -66,6 +78,9 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const [form, setForm] = useState<EditableDealForm | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [mapAddress, setMapAddress] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState<string[]>([]);
 
   const updateForm = (field: keyof EditableDealForm, value: string) => {
     setForm((current) => (current ? { ...current, [field]: value } : current));
@@ -120,6 +135,17 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const clientDisplay = detailView.clientName ?? '';
   const detailProducts = detailView.products;
   const detailNotes = detailView.notes;
+  const documents = deal?.documents ?? [];
+
+  const trainingProducts = detailProducts.filter((product) => {
+    const code = product?.code ?? '';
+    return typeof code === 'string' ? !code.toLowerCase().startsWith('ext-') : true;
+  });
+
+  const extraProducts = detailProducts.filter((product) => {
+    const code = product?.code ?? '';
+    return typeof code === 'string' ? code.toLowerCase().startsWith('ext-') : false;
+  });
 
   const modalTitle = organizationDisplay || 'Detalle presupuesto';
 
@@ -127,6 +153,38 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     if (value === null || value === undefined) return '—';
     const trimmed = String(value).trim();
     return trimmed.length ? trimmed : '—';
+  };
+
+  const normalizeAffirmative = (value?: string | number | null) => {
+    if (value === null || value === undefined) return '';
+    const raw = String(value).trim().toLowerCase();
+    return raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  };
+
+  const isAffirmative = (value?: string | number | null) => normalizeAffirmative(value) === 'si';
+
+  const affirmativeBorder = (value?: string | number | null) =>
+    isAffirmative(value) ? { borderColor: '#e4032d' } : undefined;
+
+  const handleOpenMap = () => {
+    const address = form?.training_address?.trim();
+    if (!address) return;
+    setMapAddress(address);
+    setShowMapModal(true);
+  };
+
+  const handleCloseMap = () => {
+    setShowMapModal(false);
+    setMapAddress(null);
+  };
+
+  const handleAccordionSelect = (eventKey: string | null) => {
+    if (!eventKey) return;
+    setOpenSections((current) =>
+      current.includes(eventKey)
+        ? current.filter((key) => key !== eventKey)
+        : [...current, eventKey]
+    );
   };
 
   const detailErrorMessage = detailQuery.isError
@@ -254,7 +312,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         {(titleDisplay || clientDisplay || deal) && (
           <div className="erp-summary-card mb-4">
             <Row className="g-3">
-              <Col md={12}>
+              <Col md={6}>
                 <Form.Label>Título</Form.Label>
                 <Form.Control value={displayOrDash(titleDisplay)} readOnly />
               </Col>
@@ -262,21 +320,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                 <Form.Label>Cliente</Form.Label>
                 <Form.Control value={displayOrDash(clientDisplay)} readOnly />
               </Col>
-              {deal ? (
-                <>
-                  <Col md={6}>
-                    <Form.Label>Transporte de Alumnos</Form.Label>
-                    <Form.Control
-                      value={displayOrDash(deal.transporte ?? null)}
-                      readOnly
-                    />
-                  </Col>
-                  <Col md={6}>
-                    <Form.Label>PO</Form.Label>
-                    <Form.Control value={displayOrDash(deal.po ?? null)} readOnly />
-                  </Col>
-                </>
-              ) : null}
             </Row>
           </div>
         )}
@@ -294,12 +337,65 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           <>
             {/* Editables */}
             <Row className="g-3">
-              <Col md={4}>
+              <Col md={6}>
                 <Form.Label>Sede</Form.Label>
                 <Form.Control
                   value={formatSedeLabel(form.sede_label) ?? ''}
                   onChange={(e) => updateForm('sede_label', e.target.value)}
                 />
+              </Col>
+              <Col md={6}>
+                <Form.Label>Dirección</Form.Label>
+                <div className="d-flex gap-2 align-items-start">
+                  <Form.Control
+                    className="flex-grow-1"
+                    value={form.training_address}
+                    onChange={(e) => updateForm('training_address', e.target.value)}
+                  />
+                  <Button
+                    variant="outline-primary"
+                    onClick={handleOpenMap}
+                    disabled={!form.training_address?.trim()}
+                  >
+                    Ver
+                  </Button>
+                </div>
+              </Col>
+              <Col md={2}>
+                <Form.Label>CAES</Form.Label>
+                <Form.Control
+                  value={form.caes_label}
+                  onChange={(e) => updateForm('caes_label', e.target.value)}
+                  style={affirmativeBorder(form.caes_label)}
+                />
+              </Col>
+              <Col md={2}>
+                <Form.Label>FUNDAE</Form.Label>
+                <Form.Control
+                  value={form.fundae_label}
+                  onChange={(e) => updateForm('fundae_label', e.target.value)}
+                  style={affirmativeBorder(form.fundae_label)}
+                />
+              </Col>
+              <Col md={2}>
+                <Form.Label>Hotel</Form.Label>
+                <Form.Control
+                  value={form.hotel_label}
+                  onChange={(e) => updateForm('hotel_label', e.target.value)}
+                  style={affirmativeBorder(form.hotel_label)}
+                />
+              </Col>
+              <Col md={2}>
+                <Form.Label>Transporte</Form.Label>
+                <Form.Control
+                  value={displayOrDash(deal.transporte ?? null)}
+                  readOnly
+                  style={affirmativeBorder(deal.transporte ?? null)}
+                />
+              </Col>
+              <Col md={4}>
+                <Form.Label>PO</Form.Label>
+                <Form.Control value={displayOrDash(deal.po ?? null)} readOnly />
               </Col>
               <Col md={2}>
                 <Form.Label>Alumnos</Form.Label>
@@ -310,64 +406,119 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   onChange={(e) => updateForm('alumnos', e.target.value)}
                 />
               </Col>
-              <Col md={4}>
-                <Form.Label>Dirección</Form.Label>
-                <Form.Control
-                  value={form.training_address}
-                  onChange={(e) => updateForm('training_address', e.target.value)}
-                />
-              </Col>
-              <Col md={4}>
-                <Form.Label>CAES</Form.Label>
-                <Form.Control value={form.caes_label} onChange={(e) => updateForm('caes_label', e.target.value)} />
-              </Col>
-              <Col md={4}>
-                <Form.Label>FUNDAE</Form.Label>
-                <Form.Control value={form.fundae_label} onChange={(e) => updateForm('fundae_label', e.target.value)} />
-              </Col>
-              <Col md={4}>
-                <Form.Label>Hotel</Form.Label>
-                <Form.Control value={form.hotel_label} onChange={(e) => updateForm('hotel_label', e.target.value)} />
-              </Col>
             </Row>
 
             <hr className="my-4" />
-            <h6>Notas</h6>
-            {detailNotes.length ? (
-              <ListGroup className="mb-3">
-                {detailNotes.map((note, index) => (
-                  <ListGroup.Item key={note.id ?? `note-${index}`}>
-                    <p className="mb-1">{displayOrDash(note.content)}</p>
-                    <small className="text-muted">Autor: {displayOrDash(note.author ?? null)}</small>
-                  </ListGroup.Item>
-                ))}
-              </ListGroup>
-            ) : (
-              <p className="text-muted small mb-3">No hay notas registradas.</p>
-            )}
+            <Accordion
+              activeKey={openSections}
+              onSelect={handleAccordionSelect}
+              alwaysOpen
+              className="mb-4"
+            >
+              <Accordion.Item eventKey="notes">
+                <Accordion.Header>
+                  <div className="d-flex justify-content-between align-items-center w-100">
+                    <span>Notas</span>
+                    {detailNotes.length > 0 ? (
+                      <Badge bg="danger">{detailNotes.length}</Badge>
+                    ) : null}
+                  </div>
+                </Accordion.Header>
+                <Accordion.Body>
+                  {detailNotes.length ? (
+                    <ListGroup>
+                      {detailNotes.map((note, index) => (
+                        <ListGroup.Item key={note.id ?? `note-${index}`}>
+                          <p className="mb-1">{displayOrDash(note.content)}</p>
+                          <small className="text-muted">Autor: {displayOrDash(note.author ?? null)}</small>
+                        </ListGroup.Item>
+                      ))}
+                    </ListGroup>
+                  ) : (
+                    <p className="text-muted small mb-0">No hay notas registradas.</p>
+                  )}
+                </Accordion.Body>
+              </Accordion.Item>
 
-            {detailProducts.length ? (
+              <Accordion.Item eventKey="documents">
+                <Accordion.Header>
+                  <div className="d-flex justify-content-between align-items-center w-100">
+                    <span>Documentos</span>
+                    {documents.length > 0 ? <Badge bg="danger">{documents.length}</Badge> : null}
+                  </div>
+                </Accordion.Header>
+                <Accordion.Body>
+                  <Form.Control type="file" onChange={handleFile} className="mb-3" />
+                  {documents.length ? (
+                    <ListGroup>
+                      {documents.map((d) => (
+                        <ListGroup.Item key={d.id} className="d-flex justify-content-between align-items-center">
+                          <div>
+                            <strong>{d.name}</strong>{' '}
+                            <small className="text-muted">
+                              ({Math.round(((d.size || 0) as number) / 1024)} KB) •{' '}
+                              <Badge bg={d.source === 'S3' ? 'primary' : 'secondary'}>{d.source}</Badge>
+                            </small>
+                          </div>
+                          <div className="d-flex gap-2">
+                            <Button size="sm" variant="outline-secondary" onClick={() => handleView(d.id)}>
+                              Ver
+                            </Button>
+                            {d.source === 'S3' && (
+                              <Button size="sm" variant="outline-danger" onClick={() => handleDelete(d.id)}>
+                                Eliminar
+                              </Button>
+                            )}
+                          </div>
+                        </ListGroup.Item>
+                      ))}
+                    </ListGroup>
+                  ) : (
+                    <p className="text-muted small mb-0">No hay documentos cargados.</p>
+                  )}
+                </Accordion.Body>
+              </Accordion.Item>
+
+              <Accordion.Item eventKey="extra-products">
+                <Accordion.Header>
+                  <div className="d-flex justify-content-between align-items-center w-100">
+                    <span>Productos Extra</span>
+                    {extraProducts.length > 0 ? <Badge bg="danger">{extraProducts.length}</Badge> : null}
+                  </div>
+                </Accordion.Header>
+                <Accordion.Body>
+                  {extraProducts.length ? (
+                    <ListGroup>
+                      {extraProducts.map((product, index) => (
+                        <ListGroup.Item key={product?.id ?? `${product?.code ?? 'extra'}-${index}`}>
+                          <div className="fw-semibold">{displayOrDash(product?.name ?? product?.code ?? '')}</div>
+                          {product?.comments ? (
+                            <div className="text-muted small">{product.comments}</div>
+                          ) : null}
+                        </ListGroup.Item>
+                      ))}
+                    </ListGroup>
+                  ) : (
+                    <p className="text-muted small mb-0">No hay productos extra asociados.</p>
+                  )}
+                </Accordion.Body>
+              </Accordion.Item>
+            </Accordion>
+
+            {trainingProducts.length ? (
               <Table size="sm" bordered responsive className="mb-4">
                 <thead>
                   <tr>
                     <th>Formación</th>
-                    <th className="text-end">Horas</th>
                     <th>Comentarios</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {detailProducts.map((product, index) => {
-                    const hours =
-                      typeof product?.hours === 'number'
-                        ? product.hours
-                        : product?.hours != null
-                          ? Number(product.hours)
-                          : 0;
+                  {trainingProducts.map((product, index) => {
                     const comments = product?.comments ?? '';
                     return (
                       <tr key={product?.id ?? `${product?.name ?? 'producto'}-${index}`}>
                         <td>{displayOrDash(product?.name ?? product?.code ?? '')}</td>
-                        <td className="text-end">{Number.isFinite(hours) ? hours : 0}</td>
                         <td>
                           {comments ? (
                             <span>{comments}</span>
@@ -383,32 +534,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             ) : (
               <p className="text-muted small mb-4">No hay formaciones asociadas.</p>
             )}
-
-            <h6>Documentos</h6>
-            <Form.Control type="file" onChange={handleFile} />
-            <ListGroup className="mt-3">
-              {(deal.documents || []).map((d) => (
-                <ListGroup.Item key={d.id} className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <strong>{d.name}</strong>{' '}
-                    <small className="text-muted">
-                      ({Math.round(((d.size || 0) as number) / 1024)} KB) •{' '}
-                      <Badge bg={d.source === 'S3' ? 'primary' : 'secondary'}>{d.source}</Badge>
-                    </small>
-                  </div>
-                  <div className="d-flex gap-2">
-                    <Button size="sm" variant="outline-secondary" onClick={() => handleView(d.id)}>
-                      Ver
-                    </Button>
-                    {d.source === 'S3' && (
-                      <Button size="sm" variant="outline-danger" onClick={() => handleDelete(d.id)}>
-                        Eliminar
-                      </Button>
-                    )}
-                  </div>
-                </ListGroup.Item>
-              ))}
-            </ListGroup>
           </>
         )}
       </Modal.Body>
@@ -437,6 +562,25 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             Salir sin guardar
           </Button>
         </Modal.Footer>
+      </Modal>
+
+      <Modal show={showMapModal} onHide={handleCloseMap} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Ubicación</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {mapAddress ? (
+            <div className="ratio ratio-16x9">
+              <iframe
+                src={`https://www.google.com/maps?q=${encodeURIComponent(mapAddress)}&output=embed`}
+                title={`Mapa de ${mapAddress}`}
+                allowFullScreen
+              />
+            </div>
+          ) : (
+            <p className="text-muted mb-0">No se ha especificado una dirección.</p>
+          )}
+        </Modal.Body>
       </Modal>
     </Modal>
   );
