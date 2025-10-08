@@ -103,6 +103,8 @@ export interface DealDetail {
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
+  transporte?: "Si" | "Sí" | "No" | null;
+  po?: string | null;
 
   hours?: number | null;    // editable en ERP
   alumnos?: number | null;  // editable en ERP

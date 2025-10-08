@@ -269,6 +269,8 @@ export const handler = async (event: any) => {
           caes_label: true,
           fundae_label: true,
           hotel_label: true,
+          transporte: true,
+          po: true,
           org_id: true,
           person_id: true,
           created_at: true,

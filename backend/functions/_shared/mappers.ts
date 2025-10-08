@@ -18,6 +18,8 @@ const KEY_SEDE   = "676d6bd51e52999c582c01f67c99a35ed30bf6ae";
 const KEY_CAES   = "e1971bf3a21d48737b682bf8d864ddc5eb15a351";
 const KEY_FUNDAE = "245d60d4d18aec40ba888998ef92e5d00e494583";
 const KEY_HOTEL  = "c3a6daf8eb5b4e59c3c07cda8e01f43439101269";
+const KEY_TRANSPORTE = "30dccde5faa7c09a3b380f8597d4f9acfe403877";
+const KEY_PO         = "9cf8ccb7ef293494974f98ddbc72ec726486310e";
 
 // HORAS en la **línea del deal** (si existe ese custom en tu instancia)
 const KEY_PRODUCT_HOURS_IN_LINE = "38f11c8876ecde803a027fbf3c9041fda2ae7eb7";
@@ -107,6 +109,7 @@ export async function resolveDealCustomLabels(deal: any) {
   const fCaes   = findFieldDef(dealFields, KEY_CAES);
   const fFundae = findFieldDef(dealFields, KEY_FUNDAE);
   const fHotel  = findFieldDef(dealFields, KEY_HOTEL);
+  const fTransporte = findFieldDef(dealFields, KEY_TRANSPORTE);
 
   // Dirección (no es options): prioriza *_formatted_address
   const trainingAddress = resolveAddressFromDeal(deal, KEY_TRAINING_ADDRESS_BASE);
@@ -116,8 +119,25 @@ export async function resolveDealCustomLabels(deal: any) {
   const caesLabel   = fCaes   ? (optionLabelOf(fCaes, deal?.[fCaes.key])     ?? null) : null;
   const fundaeLabel = fFundae ? (optionLabelOf(fFundae, deal?.[fFundae.key]) ?? null) : null;
   const hotelLabel  = fHotel  ? (optionLabelOf(fHotel, deal?.[fHotel.key])   ?? null) : null;
+  const transporteLabel = fTransporte
+    ? optionLabelOf(fTransporte, deal?.[fTransporte.key]) ?? null
+    : null;
 
-  return { trainingAddress, sedeLabel, caesLabel, fundaeLabel, hotelLabel };
+  const poValueRaw = deal?.[KEY_PO];
+  const poValue =
+    poValueRaw === null || poValueRaw === undefined
+      ? null
+      : String(poValueRaw).trim() || null;
+
+  return {
+    trainingAddress,
+    sedeLabel,
+    caesLabel,
+    fundaeLabel,
+    hotelLabel,
+    transporteLabel,
+    poValue,
+  };
 }
 
 /* ============================================================
@@ -143,7 +163,7 @@ export async function mapAndUpsertDealTree({
 
   // 1) Labels
   const pipelineLabel = await resolvePipelineLabel(deal?.pipeline_id);
-  const { trainingAddress, sedeLabel, caesLabel, fundaeLabel, hotelLabel } =
+  const { trainingAddress, sedeLabel, caesLabel, fundaeLabel, hotelLabel, transporteLabel, poValue } =
     await resolveDealCustomLabels(deal);
 
   // 2) Organización
@@ -204,6 +224,8 @@ export async function mapAndUpsertDealTree({
       caes_label: caesLabel ?? null,
       fundae_label: fundaeLabel ?? null,
       hotel_label: hotelLabel ?? null,
+      transporte: transporteLabel ?? null,
+      po: poValue ?? null,
       alumnos: 0,
       org_id: orgIdForDeal,
       person_id: dbPersonId,
@@ -216,6 +238,8 @@ export async function mapAndUpsertDealTree({
       caes_label: keep(current?.caes_label, caesLabel),
       fundae_label: keep(current?.fundae_label, fundaeLabel),
       hotel_label: keep(current?.hotel_label, hotelLabel),
+      transporte: keep(current?.transporte, transporteLabel),
+      po: poValue ?? null,
       alumnos: current?.alumnos ?? 0,
       org_id: orgIdForDeal,
       person_id: dbPersonId,
