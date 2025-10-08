@@ -50,3 +50,40 @@ body {
 .modal-content {
   border-radius: 18px;
 }
+
+.erp-modal-content {
+  border-radius: 18px;
+  border: none;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12);
+  background-color: #ffffff;
+}
+
+.erp-modal-title {
+  font-weight: 600;
+  color: var(--color-gray-dark);
+}
+
+.erp-modal-subtitle {
+  font-size: 0.9rem;
+  color: var(--color-gray-medium);
+}
+
+.erp-modal-body {
+  background-color: var(--color-background);
+}
+
+.erp-modal-footer {
+  border-top: none;
+}
+
+.erp-summary-card {
+  background-color: #ffffff;
+  border: 1px solid var(--color-gray-light);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.erp-summary-card .form-label {
+  font-weight: 600;
+  color: var(--color-gray-medium);
+}
