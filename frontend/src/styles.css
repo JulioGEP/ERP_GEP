@@ -5,6 +5,7 @@
   --color-gray-medium: #565656;
   --color-gray-light: #f2f2f2;
   --color-background: #fafafa;
+  --color-red-muted: #f9d1d3;
   --font-family-base: 'Poppins', sans-serif;
 }
 
@@ -13,6 +14,17 @@ body {
   font-family: var(--font-family-base);
   background-color: var(--color-background);
   color: var(--color-gray-dark);
+}
+
+.accordion {
+  --bs-accordion-btn-bg: var(--color-red-muted);
+  --bs-accordion-btn-color: var(--color-gray-dark);
+  --bs-accordion-active-bg: var(--color-red-muted);
+  --bs-accordion-active-color: var(--color-gray-dark);
+  --bs-accordion-border-color: var(--color-red-muted);
+  --bs-accordion-btn-focus-border-color: rgba(232, 71, 77, 0.4);
+  --bs-accordion-active-border-color: var(--color-red-muted);
+  --bs-accordion-btn-focus-box-shadow: 0 0 0 0.25rem rgba(232, 71, 77, 0.15);
 }
 
 .btn-primary {
