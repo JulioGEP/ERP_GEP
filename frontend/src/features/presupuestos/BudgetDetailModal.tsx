@@ -28,7 +28,6 @@ function useAuth() {
 
 type EditableDealForm = {
   sede_label: string;
-  hours: string;
   training_address: string; // <- schema vigente
   caes_label: string;
   fundae_label: string;
@@ -76,7 +75,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     if (deal) {
       setForm({
         sede_label: deal.sede_label ?? '',
-        hours: deal.hours != null ? String(deal.hours) : '',
         training_address: deal.training_address ?? '', // <- aquí
         caes_label: deal.caes_label ?? '',
         fundae_label: deal.fundae_label ?? '',
@@ -86,7 +84,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     } else if (summary) {
       setForm({
         sede_label: summary.sede_label ?? '',
-        hours: summary.hours != null ? String(summary.hours) : '',
         training_address: summary.training_address ?? '', // <- aquí
         caes_label: summary.caes_label ?? '',
         fundae_label: summary.fundae_label ?? '',
@@ -103,7 +100,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     if (!source) return null;
     return {
       sede_label: source.sede_label ?? '',
-      hours: source.hours != null ? String(source.hours) : '',
       training_address: source.training_address ?? '', // <- aquí
       caes_label: source.caes_label ?? '',
       fundae_label: source.fundae_label ?? '',
@@ -121,8 +117,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const titleDisplay = detailView.title ?? '';
   const organizationDisplay = detailView.organizationName ?? '';
   const clientDisplay = detailView.clientName ?? '';
-  const pipelineDisplay = detailView.pipelineLabel ?? '';
-  const productDisplay = detailView.productName ?? '';
   const detailProducts = detailView.products;
   const detailNotes = detailView.notes;
 
@@ -158,9 +152,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
     if (normalizeString(form?.sede_label) !== normalizeString(initialEditable?.sede_label)) {
       patch.sede_label = toNullableString(form?.sede_label);
-    }
-    if (normalizeString(form?.hours) !== normalizeString(initialEditable?.hours)) {
-      patch.hours = toNullableNumber(form?.hours);
     }
     if (normalizeString(form?.training_address) !== normalizeString(initialEditable?.training_address)) {
       patch.training_address = toNullableString(form?.training_address); // <- schema correcto
@@ -248,7 +239,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       centered
       contentClassName="erp-modal-content"
     >
-      <Modal.Header closeButton className="border-0 pb-0">
+      <Modal.Header closeButton className="erp-modal-header border-0 pb-0">
         <Modal.Title as="div">
           <div className="erp-modal-title text-truncate">{modalTitle}</div>
           {presupuestoDisplay ? (
@@ -259,32 +250,16 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="erp-modal-body">
-        {(presupuestoDisplay || titleDisplay || organizationDisplay || clientDisplay || productDisplay || pipelineDisplay) && (
+        {(titleDisplay || clientDisplay) && (
           <div className="erp-summary-card mb-4">
             <Row className="g-3">
-              <Col md={4}>
-                <Form.Label>Presupuesto</Form.Label>
-                <Form.Control value={displayOrDash(presupuestoDisplay)} readOnly />
-              </Col>
-              <Col md={8}>
+              <Col md={12}>
                 <Form.Label>Título</Form.Label>
                 <Form.Control value={displayOrDash(titleDisplay)} readOnly />
               </Col>
               <Col md={6}>
-                <Form.Label>Empresa</Form.Label>
-                <Form.Control value={displayOrDash(organizationDisplay)} readOnly />
-              </Col>
-              <Col md={6}>
                 <Form.Label>Cliente</Form.Label>
                 <Form.Control value={displayOrDash(clientDisplay)} readOnly />
-              </Col>
-              <Col md={6}>
-                <Form.Label>Fuente</Form.Label>
-                <Form.Control value={displayOrDash(pipelineDisplay)} readOnly />
-              </Col>
-              <Col md={6}>
-                <Form.Label>Formación</Form.Label>
-                <Form.Control value={displayOrDash(productDisplay)} readOnly title={productDisplay || undefined} />
               </Col>
             </Row>
           </div>
@@ -306,15 +281,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               <Col md={4}>
                 <Form.Label>Sede</Form.Label>
                 <Form.Control value={form.sede_label} onChange={(e) => updateForm('sede_label', e.target.value)} />
-              </Col>
-              <Col md={2}>
-                <Form.Label>Horas</Form.Label>
-                <Form.Control
-                  type="number"
-                  min={0}
-                  value={form.hours}
-                  onChange={(e) => updateForm('hours', e.target.value)}
-                />
               </Col>
               <Col md={2}>
                 <Form.Label>Alumnos</Form.Label>
@@ -361,7 +327,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               <p className="text-muted small mb-3">No hay notas registradas.</p>
             )}
 
-            <h6>Formaciones (horas por producto)</h6>
             {detailProducts.length ? (
               <Table size="sm" bordered responsive className="mb-4">
                 <thead>
