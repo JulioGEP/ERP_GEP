@@ -12,10 +12,11 @@ import {
   Badge,
   Accordion
 } from 'react-bootstrap';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchDealDetail,
   patchDealEditable,
+  importDeal,
   getDocPreviewUrl,
   getUploadUrl,
   createDocumentMeta,
@@ -76,6 +77,34 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
   const deal = detailQuery.data ?? null;
   const isLoading = detailQuery.isLoading;
+
+  const refreshMutation = useMutation({
+    mutationFn: (dealId: string) => importDeal(dealId),
+    onSuccess: (payload) => {
+      const nextDeal = payload?.deal ?? null;
+      if (nextDeal) {
+        qc.setQueryData(detailQueryKey, nextDeal);
+      } else {
+        qc.invalidateQueries({ queryKey: detailQueryKey });
+      }
+      qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+
+      const warnings = Array.isArray(payload?.warnings)
+        ? payload.warnings.filter((warning) => typeof warning === 'string' && warning.trim().length)
+        : [];
+      if (warnings.length) {
+        alert(`Presupuesto actualizado con avisos:\n\n${warnings.join('\n')}`);
+      }
+    },
+    onError: (error: unknown) => {
+      if (isApiError(error)) {
+        alert(`No se pudo actualizar el presupuesto. [${error.code}] ${error.message}`);
+      } else {
+        const message = error instanceof Error ? error.message : 'No se pudo actualizar la información';
+        alert(message);
+      }
+    }
+  });
 
   const detailView: DealDetailViewModel = useMemo(
     () => buildDealDetailViewModel(deal, summary ?? null),
@@ -141,7 +170,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
   const dirtyDeal = !!initialEditable && !!form && JSON.stringify(initialEditable) !== JSON.stringify(form);
   const isDirty = dirtyDeal;
-  const isRefetching = detailQuery.isRefetching;
+  const isRefetching = detailQuery.isRefetching || refreshMutation.isPending;
 
   if (!dealId) return null;
 
@@ -199,14 +228,9 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     }
   };
 
-  const handleRefresh = async () => {
-    if (!normalizedDealId) return;
-    const result = await detailQuery.refetch();
-    if (result.error) {
-      const error: any = result.error;
-      const message = typeof error?.message === 'string' ? error.message : 'No se pudo actualizar la información';
-      alert(message);
-    }
+  const handleRefresh = () => {
+    if (!normalizedDealId || refreshMutation.isPending) return;
+    refreshMutation.mutate(normalizedDealId);
   };
 
   const startEditingNote = (note: DealDetailViewModel['notes'][number]) => {
