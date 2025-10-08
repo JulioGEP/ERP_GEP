@@ -1,7 +1,5 @@
 generator client {
   provider      = "prisma-client-js"
-  // Netlify/AWS Lambda (Amazon Linux con OpenSSL 3)
-  // + "native" para desarrollo local.
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
@@ -51,9 +49,9 @@ model deals {
   caes_label       String?
   fundae_label     String?
   hotel_label      String?
+  person_id        String?
   transporte       String?         @db.VarChar(10)
   po               String?         @db.VarChar(191)
-  person_id        String?
   comments         comments[]
   deal_files       deal_files[]
   deal_notes       deal_notes[]
@@ -145,20 +143,16 @@ model seassons {
 model trainers {
   trainer_id   String   @id
   name         String
-  apellido     String?          // Nuevo
-  email        String?  @unique // Usado para upsert y búsqueda
+  email        String?
   phone        String?
-  dni          String?          // Nuevo
-  direccion    String?          // Nuevo
-  especialidad String?          // Nuevo
-  titulacion   String?          // Nuevo
-  activo       Boolean  @default(true) // Nuevo
-
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime @updatedAt      @db.Timestamptz(6)
-
-  @@index([apellido])
-  @@index([especialidad])
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  activo       Boolean? @default(true)
+  apellido     String?
+  dni          String?
+  direccion    String?
+  especialidad String?
+  titulacion   String?
 }
 
 model unidades_moviles {
