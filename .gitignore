@@ -48,3 +48,7 @@ backend/dist/
 
 # Excluir build antiguo
 backend/dist/
+
+# Limpieza import puntual trainers
+backend/data/
+backend/scripts/
