@@ -211,6 +211,11 @@ function normalizeDealDetail(raw: Json): DealDetail {
     caes_label: toStringValue(raw.caes_label) ?? null,
     fundae_label: toStringValue(raw.fundae_label) ?? null,
     hotel_label: toStringValue(raw.hotel_label) ?? null,
+    transporte:
+      toStringValue(raw.transporte) === null
+        ? null
+        : (toStringValue(raw.transporte) as "Si" | "Sí" | "No"),
+    po: toStringValue(raw.po) ?? null,
 
     hours: toNumber(raw.hours) ?? null,
     alumnos: toNumber(raw.alumnos) ?? null,

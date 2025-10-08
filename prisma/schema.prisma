@@ -51,6 +51,8 @@ model deals {
   caes_label       String?
   fundae_label     String?
   hotel_label      String?
+  transporte       String?         @db.VarChar(10)
+  po               String?         @db.VarChar(191)
   person_id        String?
   comments         comments[]
   deal_files       deal_files[]

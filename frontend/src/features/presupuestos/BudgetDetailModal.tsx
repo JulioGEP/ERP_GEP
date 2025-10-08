@@ -251,7 +251,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="erp-modal-body">
-        {(titleDisplay || clientDisplay) && (
+        {(titleDisplay || clientDisplay || deal) && (
           <div className="erp-summary-card mb-4">
             <Row className="g-3">
               <Col md={12}>
@@ -262,6 +262,21 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                 <Form.Label>Cliente</Form.Label>
                 <Form.Control value={displayOrDash(clientDisplay)} readOnly />
               </Col>
+              {deal ? (
+                <>
+                  <Col md={6}>
+                    <Form.Label>Transporte de Alumnos</Form.Label>
+                    <Form.Control
+                      value={displayOrDash(deal.transporte ?? null)}
+                      readOnly
+                    />
+                  </Col>
+                  <Col md={6}>
+                    <Form.Label>PO</Form.Label>
+                    <Form.Control value={displayOrDash(deal.po ?? null)} readOnly />
+                  </Col>
+                </>
+              ) : null}
             </Row>
           </div>
         )}
