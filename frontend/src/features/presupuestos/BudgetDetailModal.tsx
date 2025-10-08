@@ -181,15 +181,20 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   };
 
   const handleAccordionSelect = (eventKey: string | string[] | null | undefined) => {
-    if (!eventKey) return;
-    const normalizedKey = Array.isArray(eventKey)
-      ? eventKey[eventKey.length - 1]
-      : eventKey;
-    if (!normalizedKey) return;
+    if (eventKey === null || eventKey === undefined) {
+      setOpenSections([]);
+      return;
+    }
+
+    if (Array.isArray(eventKey)) {
+      setOpenSections(eventKey);
+      return;
+    }
+
     setOpenSections((current) =>
-      current.includes(normalizedKey)
-        ? current.filter((key) => key !== normalizedKey)
-        : [...current, normalizedKey]
+      current.includes(eventKey)
+        ? current.filter((key) => key !== eventKey)
+        : [...current, eventKey]
     );
   };
 
@@ -316,7 +321,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       </Modal.Header>
       <Modal.Body className="erp-modal-body">
         {(titleDisplay || clientDisplay || clientPhoneDisplay || clientEmailDisplay || deal) && (
-          <div className="erp-summary-card mb-4">
+          <div className="mb-4">
             <Row className="erp-summary-row gy-3 gx-0">
               <Col md={3}>
                 <Form.Label>Título</Form.Label>
@@ -424,7 +429,10 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">
                     <span className="erp-accordion-title">
-                      Notas{detailNotes.length > 0 ? ` ${detailNotes.length}` : ''}
+                      Notas
+                      {detailNotes.length > 0 ? (
+                        <span className="erp-accordion-count">{detailNotes.length}</span>
+                      ) : null}
                     </span>
                   </div>
                 </Accordion.Header>
@@ -448,7 +456,10 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">
                     <span className="erp-accordion-title">
-                      Documentos{documents.length > 0 ? ` ${documents.length}` : ''}
+                      Documentos
+                      {documents.length > 0 ? (
+                        <span className="erp-accordion-count">{documents.length}</span>
+                      ) : null}
                     </span>
                   </div>
                 </Accordion.Header>
@@ -488,7 +499,10 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">
                     <span className="erp-accordion-title">
-                      Productos Extra{extraProducts.length > 0 ? ` ${extraProducts.length}` : ''}
+                      Productos Extra
+                      {extraProducts.length > 0 ? (
+                        <span className="erp-accordion-count">{extraProducts.length}</span>
+                      ) : null}
                     </span>
                   </div>
                 </Accordion.Header>
