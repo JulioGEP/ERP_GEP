@@ -66,6 +66,8 @@ body {
   border-top-right-radius: 18px;
   display: flex;
   align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .erp-modal-header .modal-title {
@@ -75,6 +77,33 @@ body {
   justify-content: center;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.erp-modal-header-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.erp-modal-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.erp-modal-action {
+  font-weight: 600;
+}
+
+.erp-modal-header-actions .btn-outline-light {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+.erp-modal-header-actions .btn-outline-light:hover,
+.erp-modal-header-actions .btn-outline-light:focus {
+  color: var(--color-red);
+  background-color: #ffffff;
+  border-color: #ffffff;
 }
 
 .erp-modal-header .btn-close {
