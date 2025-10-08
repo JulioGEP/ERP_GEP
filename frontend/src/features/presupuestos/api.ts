@@ -13,7 +13,7 @@ type Json = any;
 // Netlify Functions base (auto local/Netlify)
 // - Si estás en localhost:5173 (Vite), apunta a http://localhost:8888/.netlify/functions
 // - Si estás sirviendo vía Netlify Dev (8888) o en producción, usa ruta relativa
-const API_BASE =
+export const API_BASE =
   typeof window !== "undefined" && window.location
     ? (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
         ? (window.location.port === "8888"

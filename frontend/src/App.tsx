@@ -1,5 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Container, Nav, Navbar, Button, Spinner, Toast, ToastContainer } from 'react-bootstrap';
+import {
+  Container,
+  Nav,
+  Navbar,
+  Button,
+  Spinner,
+  Toast,
+  ToastContainer,
+  NavDropdown,
+} from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetTable } from './features/presupuestos/BudgetTable';
@@ -7,8 +16,38 @@ import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
 import { ApiError, fetchDealsWithoutSessions, importDeal } from './features/presupuestos/api';
 import type { DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
+import { TrainersView } from './features/recursos/TrainersView';
 
-const NAVIGATION_ITEMS = ['Presupuestos', 'Calendario', 'Recursos'];
+type NavView = {
+  key: string;
+  label: string;
+};
+
+type NavItem = NavView & {
+  children?: NavView[];
+};
+
+const NAVIGATION_ITEMS: NavItem[] = [
+  { key: 'Presupuestos', label: 'Presupuestos' },
+  { key: 'Calendario', label: 'Calendario' },
+  {
+    key: 'Recursos',
+    label: 'Recursos',
+    children: [
+      { key: 'Recursos/Formadores', label: 'Formadores / Bomberos' },
+      { key: 'Recursos/Unidades', label: 'Unidades Móviles' },
+      { key: 'Recursos/Salas', label: 'Salas' },
+    ],
+  },
+];
+
+const VIEW_ITEMS: NavView[] = NAVIGATION_ITEMS.flatMap((item) =>
+  item.children ? item.children : [item]
+);
+
+const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
+  (item) => item.key !== 'Presupuestos' && item.key !== 'Recursos/Formadores'
+);
 
 type ToastMessage = {
   id: string;
@@ -20,7 +59,7 @@ export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
-  const [activeTab, setActiveTab] = useState('Presupuestos');
+  const [activeView, setActiveView] = useState('Presupuestos');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const queryClient = useQueryClient();
@@ -82,8 +121,13 @@ export default function App() {
     }
   });
 
-  const isBudgetsView = activeTab === 'Presupuestos';
-  const secondaryTabs = useMemo(() => NAVIGATION_ITEMS.filter((item) => item !== 'Presupuestos'), []);
+  const isBudgetsView = activeView === 'Presupuestos';
+  const isTrainersView = activeView === 'Recursos/Formadores';
+  const activeViewLabel = useMemo(
+    () => VIEW_ITEMS.find((item) => item.key === activeView)?.label ?? activeView,
+    [activeView]
+  );
+  const placeholderViews = PLACEHOLDER_VIEWS;
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
 
@@ -112,17 +156,39 @@ export default function App() {
             </div>
           </Navbar.Brand>
           <Nav className="ms-auto gap-3">
-            {NAVIGATION_ITEMS.map((item) => (
-              <Nav.Item key={item}>
-                <Nav.Link
-                  active={activeTab === item}
-                  onClick={() => setActiveTab(item)}
-                  className="text-uppercase"
+            {NAVIGATION_ITEMS.map((item) =>
+              item.children ? (
+                <NavDropdown
+                  key={item.key}
+                  title={<span className="text-uppercase">{item.label}</span>}
+                  id={`nav-${item.key}`}
+                  active={item.children.some((child) => child.key === activeView)}
                 >
-                  {item}
-                </Nav.Link>
-              </Nav.Item>
-            ))}
+                  {item.children.map((child) => (
+                    <NavDropdown.Item
+                      key={child.key}
+                      active={activeView === child.key}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setActiveView(child.key);
+                      }}
+                    >
+                      {child.label}
+                    </NavDropdown.Item>
+                  ))}
+                </NavDropdown>
+              ) : (
+                <Nav.Item key={item.key}>
+                  <Nav.Link
+                    active={activeView === item.key}
+                    onClick={() => setActiveView(item.key)}
+                    className="text-uppercase"
+                  >
+                    {item.label}
+                  </Nav.Link>
+                </Nav.Item>
+              )
+            )}
           </Nav>
         </Container>
       </Navbar>
@@ -154,17 +220,19 @@ export default function App() {
                 onSelect={handleSelectBudget}
               />
             </div>
+          ) : isTrainersView ? (
+            <TrainersView onNotify={pushToast} />
           ) : (
             <div className="bg-white rounded-4 shadow-sm p-5 text-center text-muted">
-              <h2 className="h4 fw-semibold mb-2">{activeTab}</h2>
+              <h2 className="h4 fw-semibold mb-2">{activeViewLabel}</h2>
               <p className="mb-0">
-                Esta sección estará disponible próximamente. Mientras tanto, puedes seguir trabajando en la pestaña
-                de Presupuestos.
+                La sección {activeViewLabel} estará disponible próximamente. Mientras tanto, puedes seguir trabajando en
+                la pestaña de Presupuestos.
               </p>
               <div className="d-flex justify-content-center gap-2 mt-4">
-                {secondaryTabs.map((tab) => (
-                  <Button key={tab} variant="outline-secondary" size="sm" disabled>
-                    {tab}
+                {placeholderViews.map((view) => (
+                  <Button key={view.key} variant="outline-secondary" size="sm" disabled>
+                    {view.label}
                   </Button>
                 ))}
               </div>
