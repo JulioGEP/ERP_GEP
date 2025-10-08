@@ -209,10 +209,14 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const detailNotes = detailView.notes;
   const documents = deal?.documents ?? [];
 
-  const trainingProducts = detailProducts.filter((product) => {
-    const code = product?.code ?? '';
-    return typeof code === 'string' ? !code.toLowerCase().startsWith('ext-') : true;
-  });
+  const trainingProducts = useMemo(
+    () =>
+      detailProducts.filter((product) => {
+        const code = product?.code ?? '';
+        return typeof code === 'string' ? !code.toLowerCase().startsWith('ext-') : true;
+      }),
+    [detailProducts]
+  );
 
   const initialProductHours = useMemo(() => {
     const map: Record<string, string> = {};
@@ -961,8 +965,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                 <thead>
                   <tr>
                     <th>Formación</th>
-                    <th style={{ width: 120 }}>Horas</th>
-                    <th>Comentarios</th>
+                    <th style={{ width: 60 }}>Horas</th>
+                    <th style={{ width: 130 }}>Comentarios</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -978,7 +982,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                     return (
                       <tr key={product?.id ?? `${product?.name ?? 'producto'}-${index}`}>
                         <td>{productLabel}</td>
-                        <td style={{ width: 120 }}>
+                        <td style={{ width: 60 }}>
                           {isEditable ? (
                             <Form.Control
                               type="text"
@@ -995,7 +999,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                             <span className="text-muted">{displayOrDash(product?.hours ?? null)}</span>
                           )}
                         </td>
-                        <td>
+                        <td style={{ width: 130 }}>
                           {commentPreview ? (
                             <Button
                               type="button"
@@ -1006,7 +1010,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                             >
                               <span
                                 className="d-inline-block text-truncate"
-                                style={{ maxWidth: 260 }}
+                                style={{ maxWidth: 130 }}
                                 title={commentText}
                               >
                                 {commentPreview}
