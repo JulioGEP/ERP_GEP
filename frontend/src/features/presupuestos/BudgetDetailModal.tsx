@@ -205,18 +205,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     };
   }, [deal, summary]);
 
-  const dirtyDeal = !!initialEditable && !!form && JSON.stringify(initialEditable) !== JSON.stringify(form);
-  const isDirty = dirtyDeal || dirtyProducts;
-  const isRefetching = detailQuery.isRefetching || refreshMutation.isPending;
-
-  if (!dealId) return null;
-
-  const presupuestoDisplay = detailView.dealId;
-  const titleDisplay = detailView.title ?? '';
-  const organizationDisplay = detailView.organizationName ?? '';
-  const clientDisplay = detailView.clientName ?? '';
-  const clientPhoneDisplay = detailView.clientPhone ?? '';
-  const clientEmailDisplay = detailView.clientEmail ?? '';
   const detailProducts = detailView.products;
   const detailNotes = detailView.notes;
   const documents = deal?.documents ?? [];
@@ -252,6 +240,19 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     () => !areHourMapsEqual(productHours, initialProductHours),
     [productHours, initialProductHours]
   );
+
+  const dirtyDeal = !!initialEditable && !!form && JSON.stringify(initialEditable) !== JSON.stringify(form);
+  const isDirty = dirtyDeal || dirtyProducts;
+  const isRefetching = detailQuery.isRefetching || refreshMutation.isPending;
+
+  if (!dealId) return null;
+
+  const presupuestoDisplay = detailView.dealId;
+  const titleDisplay = detailView.title ?? '';
+  const organizationDisplay = detailView.organizationName ?? '';
+  const clientDisplay = detailView.clientName ?? '';
+  const clientPhoneDisplay = detailView.clientPhone ?? '';
+  const clientEmailDisplay = detailView.clientEmail ?? '';
 
   const extraProducts = detailProducts.filter((product) => {
     const code = product?.code ?? '';
