@@ -36,6 +36,30 @@ function toIntOrNull(v: any): number | null {
   return Math.trunc(n);
 }
 
+function normalizeProductId(raw: any): string | null {
+  if (raw === null || raw === undefined) return null;
+  const id = String(raw).trim();
+  return id.length ? id : null;
+}
+
+function parseProductHours(raw: any): { ok: boolean; value: number | null } {
+  if (raw === null || raw === undefined || raw === "") {
+    return { ok: true, value: null };
+  }
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw) || raw < 0) return { ok: false, value: null };
+    return { ok: true, value: Math.round(raw) };
+  }
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed.length) return { ok: true, value: null };
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return { ok: false, value: null };
+    return { ok: true, value: Math.round(parsed) };
+  }
+  return { ok: false, value: null };
+}
+
 function resolvePipedriveId(raw: any): number | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw === "object") {
@@ -226,11 +250,60 @@ export const handler = async (event: any) => {
         patch.alumnos = n;
       }
 
+      const productPatches: Array<{ id: string; data: Record<string, any> }> = [];
+      if (Array.isArray(body.products)) {
+        for (const entry of body.products) {
+          if (!entry || typeof entry !== "object") continue;
+          const rawId = (entry as any).id ?? (entry as any).product_id;
+          const productId = normalizeProductId(rawId);
+          if (!productId) continue;
+
+          const data: Record<string, any> = {};
+
+          if (Object.prototype.hasOwnProperty.call(entry, "hours")) {
+            const { ok, value } = parseProductHours((entry as any).hours);
+            if (!ok) {
+              return errorResponse("VALIDATION_ERROR", "hours inválido para producto", 400);
+            }
+            data.hours = value;
+          }
+
+          if (
+            Object.prototype.hasOwnProperty.call(entry, "comments") ||
+            Object.prototype.hasOwnProperty.call(entry, "product_comments")
+          ) {
+            const rawComment = (entry as any).comments ?? (entry as any).product_comments;
+            if (rawComment === null || rawComment === undefined) {
+              data.product_comments = null;
+            } else {
+              const commentStr = String(rawComment).trim();
+              data.product_comments = commentStr.length ? commentStr : null;
+            }
+          }
+
+          if (Object.keys(data).length) {
+            productPatches.push({ id: productId, data });
+          }
+        }
+      }
+
       if (Object.keys(patch).length) {
         await prisma.deals.update({
           where: { deal_id: String(dealId) },
           data: patch,
         });
+      }
+
+      if (productPatches.length) {
+        const timestamp = new Date();
+        await Promise.all(
+          productPatches.map((product) =>
+            prisma.deal_products.updateMany({
+              where: { id: product.id, deal_id: String(dealId) },
+              data: { ...product.data, updated_at: timestamp },
+            })
+          )
+        );
       }
 
       const updatedRaw = await prisma.deals.findUnique({
@@ -301,7 +374,7 @@ export const handler = async (event: any) => {
         orderBy: { created_at: "desc" },
       });
 
-      const deals = rowsRaw.map((r) => mapDealForApi(r));
+      const deals = rowsRaw.map((r: any) => mapDealForApi(r));
       return successResponse({ deals });
     }
 

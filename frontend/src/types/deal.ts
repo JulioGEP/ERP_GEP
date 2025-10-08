@@ -41,7 +41,7 @@ export interface DealProduct {
   type?: DealProductType;   // enum existente
 
   // NUEVOS (según migración)
-  hours?: number;               // entero, sin “h”; si no viene → 0
+  hours?: number | null;        // entero opcional; si no viene → null
   comments?: string | null;     // comentarios por línea
   typeLabel?: string | null;    // solo para filtros futuros
   categoryLabel?: string | null;
