@@ -28,7 +28,7 @@ import {
   isApiError
 } from './api';
 import { formatSedeLabel } from './formatSedeLabel';
-import type { DealEditablePatch } from './api';
+import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealSummary } from '../../types/deal';
 
 interface Props {
@@ -55,6 +55,39 @@ type EditableDealForm = {
 };
 
 type DealNoteView = DealDetailViewModel['notes'][number];
+
+function normalizeHoursMapValue(value?: string): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function areHourMapsEqual(
+  a: Record<string, string>,
+  b: Record<string, string>
+): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (normalizeHoursMapValue(a[key]) !== normalizeHoursMapValue(b[key])) return false;
+  }
+  return true;
+}
+
+function formatInitialHours(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.round(value));
+  }
+  const trimmed = String(value).trim();
+  if (!trimmed.length) return '';
+  const parsed = Number(trimmed);
+  if (Number.isFinite(parsed)) return String(Math.round(parsed));
+  return trimmed;
+}
+
+function buildCommentPreview(comment: string, maxLength = 120): string {
+  const normalized = comment.replace(/\s+/g, ' ').trim();
+  if (!normalized.length) return '';
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized;
+}
 
 export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const qc = useQueryClient();
@@ -125,6 +158,10 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const [updatingNote, setUpdatingNote] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   const [viewingNote, setViewingNote] = useState<DealNoteView | null>(null);
+  const [productHours, setProductHours] = useState<Record<string, string>>({});
+  const [viewingComment, setViewingComment] = useState<
+    { productName: string; comment: string } | null
+  >(null);
 
   const updateForm = (field: keyof EditableDealForm, value: string) => {
     setForm((current) => (current ? { ...current, [field]: value } : current));
@@ -169,7 +206,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   }, [deal, summary]);
 
   const dirtyDeal = !!initialEditable && !!form && JSON.stringify(initialEditable) !== JSON.stringify(form);
-  const isDirty = dirtyDeal;
+  const isDirty = dirtyDeal || dirtyProducts;
   const isRefetching = detailQuery.isRefetching || refreshMutation.isPending;
 
   if (!dealId) return null;
@@ -189,6 +226,33 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     return typeof code === 'string' ? !code.toLowerCase().startsWith('ext-') : true;
   });
 
+  const initialProductHours = useMemo(() => {
+    const map: Record<string, string> = {};
+    trainingProducts.forEach((product) => {
+      const productId = product?.id != null ? String(product.id) : null;
+      if (!productId) return;
+      map[productId] = formatInitialHours(product?.hours ?? null);
+    });
+    return map;
+  }, [trainingProducts]);
+
+  useEffect(() => {
+    setProductHours((current) => {
+      if (areHourMapsEqual(current, initialProductHours)) return current;
+      return { ...initialProductHours };
+    });
+  }, [initialProductHours]);
+
+  const trainingProductIds = useMemo(
+    () => new Set(Object.keys(initialProductHours)),
+    [initialProductHours]
+  );
+
+  const dirtyProducts = useMemo(
+    () => !areHourMapsEqual(productHours, initialProductHours),
+    [productHours, initialProductHours]
+  );
+
   const extraProducts = detailProducts.filter((product) => {
     const code = product?.code ?? '';
     return typeof code === 'string' ? code.toLowerCase().startsWith('ext-') : false;
@@ -200,6 +264,24 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     if (value === null || value === undefined) return '—';
     const trimmed = String(value).trim();
     return trimmed.length ? trimmed : '—';
+  };
+
+  const handleHoursChange = (productId: string, value: string) => {
+    if (!trainingProductIds.has(productId)) return;
+    if (value === '' || /^\d+$/.test(value)) {
+      setProductHours((current) => ({ ...current, [productId]: value }));
+    }
+  };
+
+  const handleOpenProductComment = (product: DealDetailViewModel['products'][number]) => {
+    const rawComment = (product?.comments ?? '').trim();
+    if (!rawComment.length) return;
+    const productName = displayOrDash(product?.name ?? product?.code ?? '');
+    setViewingComment({ productName, comment: rawComment });
+  };
+
+  const handleCloseCommentModal = () => {
+    setViewingComment(null);
   };
 
   const handleCreateNote = async (event?: FormEvent<HTMLFormElement>) => {
@@ -401,11 +483,47 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       patch.alumnos = toNullableNumber(form?.alumnos);
     }
 
-    if (!Object.keys(patch).length) return;
+    const productPatches: DealProductEditablePatch[] = [];
+
+    for (const [productId, currentValueRaw] of Object.entries(productHours)) {
+      if (!trainingProductIds.has(productId)) continue;
+      const currentValue = currentValueRaw.trim();
+      const initialValue = (initialProductHours[productId] ?? '').trim();
+
+      if (currentValue === initialValue) continue;
+
+      if (!currentValue.length) {
+        productPatches.push({ id: productId, hours: null });
+        continue;
+      }
+
+      if (!/^\d+$/.test(currentValue)) {
+        alert('Las horas deben ser un número entero mayor o igual que cero.');
+        return;
+      }
+
+      const parsed = parseInt(currentValue, 10);
+      if (!Number.isFinite(parsed)) {
+        alert('Las horas deben ser un número entero válido.');
+        return;
+      }
+
+      productPatches.push({ id: productId, hours: parsed });
+    }
+
+    const hasDealPatch = Object.keys(patch).length > 0;
+    const hasProductPatch = productPatches.length > 0;
+
+    if (!hasDealPatch && !hasProductPatch) return;
 
     setSaving(true);
     try {
-      await patchDealEditable(deal.deal_id, patch, { id: userId, name: userName });
+      await patchDealEditable(
+        deal.deal_id,
+        patch,
+        { id: userId, name: userName },
+        { products: productPatches }
+      );
       await qc.invalidateQueries({ queryKey: detailQueryKey });
       await qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
       onClose();
@@ -842,18 +960,57 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                 <thead>
                   <tr>
                     <th>Formación</th>
+                    <th style={{ width: 120 }}>Horas</th>
                     <th>Comentarios</th>
                   </tr>
                 </thead>
                 <tbody>
                   {trainingProducts.map((product, index) => {
-                    const comments = product?.comments ?? '';
+                    const productId = product?.id != null ? String(product.id) : null;
+                    const productLabel = displayOrDash(product?.name ?? product?.code ?? '');
+                    const isEditable = !!productId && trainingProductIds.has(productId);
+                    const hoursValue = isEditable
+                      ? productHours[productId] ?? ''
+                      : formatInitialHours(product?.hours ?? null);
+                    const commentText = (product?.comments ?? '').trim();
+                    const commentPreview = buildCommentPreview(commentText);
                     return (
                       <tr key={product?.id ?? `${product?.name ?? 'producto'}-${index}`}>
-                        <td>{displayOrDash(product?.name ?? product?.code ?? '')}</td>
+                        <td>{productLabel}</td>
+                        <td style={{ width: 120 }}>
+                          {isEditable ? (
+                            <Form.Control
+                              type="text"
+                              size="sm"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={hoursValue}
+                              placeholder="0"
+                              onChange={(event) => handleHoursChange(productId!, event.target.value)}
+                              className="text-center"
+                              aria-label={`Horas de ${productLabel}`}
+                            />
+                          ) : (
+                            <span className="text-muted">{displayOrDash(product?.hours ?? null)}</span>
+                          )}
+                        </td>
                         <td>
-                          {comments ? (
-                            <span>{comments}</span>
+                          {commentPreview ? (
+                            <Button
+                              type="button"
+                              variant="link"
+                              className="p-0 text-start text-decoration-none"
+                              onClick={() => handleOpenProductComment(product)}
+                              aria-label={`Ver comentario de ${productLabel}`}
+                            >
+                              <span
+                                className="d-inline-block text-truncate"
+                                style={{ maxWidth: 260 }}
+                                title={commentText}
+                              >
+                                {commentPreview}
+                              </span>
+                            </Button>
                           ) : (
                             <span className="text-muted">—</span>
                           )}
@@ -891,6 +1048,20 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           <div style={{ whiteSpace: 'pre-wrap' }}>
             {displayOrDash(viewingNote?.content ?? null)}
           </div>
+        </Modal.Body>
+      </Modal>
+
+      <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Comentario de la formación</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {viewingComment?.productName ? (
+            <div className="mb-2">
+              <strong>Formación:</strong> {viewingComment.productName}
+            </div>
+          ) : null}
+          <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
         </Modal.Body>
       </Modal>
 

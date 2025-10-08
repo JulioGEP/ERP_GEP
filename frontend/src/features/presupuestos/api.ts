@@ -106,8 +106,8 @@ function normalizeProducts(
         quantity: toNumber(item.quantity),
         price: toNumber(item.price),
         type: item.type ?? null,
-        hours: typeof item.hours === "number" ? item.hours : toNumber(item.hours) ?? 0,
-        comments: toStringValue(item.comments),
+        hours: typeof item.hours === "number" ? item.hours : toNumber(item.hours) ?? null,
+        comments: toStringValue(item.product_comments ?? item.comments),
         typeLabel: toStringValue(item.typeLabel),
         categoryLabel: toStringValue(item.categoryLabel),
       };
@@ -375,21 +375,59 @@ export type DealEditablePatch = {
   alumnos?: number | null;
 };
 
+export type DealProductEditablePatch = {
+  id: string;
+  hours?: number | null;
+  comments?: string | null;
+};
+
 export async function patchDealEditable(
   dealId: string,
   dealPatch: Partial<DealEditablePatch>,
-  user?: { id: string; name?: string }
+  user?: { id: string; name?: string },
+  options?: { products?: DealProductEditablePatch[] }
 ): Promise<void> {
   const headers: Record<string, string> = {};
   if (user?.id) headers["X-User-Id"] = user.id;
   if (user?.name) headers["X-User-Name"] = user.name;
 
-  if (!dealPatch || !Object.keys(dealPatch).length) return;
+  const sanitizedDealPatch = dealPatch
+    ? (Object.fromEntries(
+        Object.entries(dealPatch).filter(([, value]) => value !== undefined)
+      ) as Partial<DealEditablePatch>)
+    : null;
+  const hasDealPatch = !!sanitizedDealPatch && Object.keys(sanitizedDealPatch).length > 0;
+
+  const sanitizedProductPatch: DealProductEditablePatch[] = Array.isArray(options?.products)
+    ? options!.products
+        .map((product) => {
+          if (!product || typeof product !== "object") return null;
+          const id = "id" in product ? String(product.id).trim() : "";
+          if (!id) return null;
+
+          const entry: DealProductEditablePatch = { id };
+          if (Object.prototype.hasOwnProperty.call(product, "hours")) {
+            entry.hours = product.hours ?? null;
+          }
+          if (Object.prototype.hasOwnProperty.call(product, "comments")) {
+            entry.comments = product.comments ?? null;
+          }
+
+          return Object.keys(entry).length > 1 ? entry : null;
+        })
+        .filter((entry): entry is DealProductEditablePatch => entry !== null)
+    : [];
+
+  if (!hasDealPatch && !sanitizedProductPatch.length) return;
+
+  const body: Record<string, unknown> = {};
+  if (hasDealPatch && sanitizedDealPatch) body.deal = sanitizedDealPatch;
+  if (sanitizedProductPatch.length) body.products = sanitizedProductPatch;
 
   await request(`/deals/${encodeURIComponent(String(dealId))}`, {
     method: "PATCH",
     headers,
-    body: JSON.stringify({ deal: dealPatch }),
+    body: JSON.stringify(body),
   });
 }
 

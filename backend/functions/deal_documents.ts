@@ -136,7 +136,7 @@ export const handler = async (event: any) => {
         },
       });
 
-      const documents = docsRaw.map((d) => {
+      const documents = docsRaw.map((d: any) => {
         const fromS3 = !isHttpUrl(d.file_url);
         return {
           id: d.id,
