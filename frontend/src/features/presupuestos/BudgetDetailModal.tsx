@@ -141,6 +141,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
   const dirtyDeal = !!initialEditable && !!form && JSON.stringify(initialEditable) !== JSON.stringify(form);
   const isDirty = dirtyDeal;
+  const isRefetching = detailQuery.isRefetching;
 
   if (!dealId) return null;
 
@@ -195,6 +196,16 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       }
     } finally {
       setCreatingNote(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (!normalizedDealId) return;
+    const result = await detailQuery.refetch();
+    if (result.error) {
+      const error: any = result.error;
+      const message = typeof error?.message === 'string' ? error.message : 'No se pudo actualizar la información';
+      alert(message);
     }
   };
 
@@ -436,8 +447,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       centered
       contentClassName="erp-modal-content"
     >
-      <Modal.Header closeButton className="erp-modal-header border-0 pb-0">
-        <Modal.Title as="div">
+      <Modal.Header className="erp-modal-header border-0 pb-0">
+        <Modal.Title as="div" className="erp-modal-header-main">
           <div className="erp-modal-title text-truncate">{modalTitle}</div>
           {presupuestoDisplay ? (
             <div className="erp-modal-subtitle text-truncate">
@@ -445,6 +456,39 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             </div>
           ) : null}
         </Modal.Title>
+        <div className="erp-modal-header-actions">
+          <Button
+            variant="light"
+            size="sm"
+            className="erp-modal-action"
+            onClick={handleRefresh}
+            disabled={isLoading || isRefetching}
+          >
+            {isRefetching ? (
+              <>
+                <Spinner
+                  as="span"
+                  animation="border"
+                  size="sm"
+                  role="status"
+                  aria-hidden="true"
+                  className="me-2"
+                />
+                Actualizando...
+              </>
+            ) : (
+              'Actualizar'
+            )}
+          </Button>
+          <Button
+            variant="outline-light"
+            size="sm"
+            className="erp-modal-action"
+            onClick={requestClose}
+          >
+            Cerrar
+          </Button>
+        </div>
       </Modal.Header>
       <Modal.Body className="erp-modal-body">
         {(titleDisplay || clientDisplay || clientPhoneDisplay || clientEmailDisplay || deal) && (
