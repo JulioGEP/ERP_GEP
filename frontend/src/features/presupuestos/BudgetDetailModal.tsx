@@ -322,7 +322,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       <Modal.Body className="erp-modal-body">
         {(titleDisplay || clientDisplay || clientPhoneDisplay || clientEmailDisplay || deal) && (
           <div className="mb-4">
-            <Row className="erp-summary-row gy-3 gx-0">
+            <Row className="erp-summary-row g-3">
               <Col md={3}>
                 <Form.Label>Título</Form.Label>
                 <Form.Control value={displayOrDash(titleDisplay)} readOnly />
