@@ -29,7 +29,7 @@ import {
 } from './api';
 import { formatSedeLabel } from './formatSedeLabel';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
-import type { DealDetail, DealDetailViewModel, DealSummary } from '../../types/deal';
+import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
 
 interface Props {
   dealId: string | null;
@@ -162,6 +162,13 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const [viewingComment, setViewingComment] = useState<
     { productName: string; comment: string } | null
   >(null);
+  const [previewDocument, setPreviewDocument] = useState<DealDocument | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewMeta, setPreviewMeta] = useState<{ name?: string | null; mime_type?: string | null } | null>(
+    null
+  );
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const updateForm = (field: keyof EditableDealForm, value: string) => {
     setForm((current) => (current ? { ...current, [field]: value } : current));
@@ -535,13 +542,32 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     }
   }
 
-  async function handleView(docId: string) {
+  async function handleView(doc: DealDocument) {
     if (!deal?.deal_id) return;
+    const directUrl = doc.url ?? null;
+
+    setPreviewLoading(!directUrl);
+    setPreviewError(null);
+    setPreviewUrl(directUrl);
+    setPreviewMeta({ name: doc.name, mime_type: doc.mime_type ?? null });
+    setPreviewDocument(doc);
+
+    if (directUrl) return;
+
     try {
-      const url = await getDocPreviewUrl(deal.deal_id, docId);
-      window.open(url, '_blank', 'noopener');
+      const response = await getDocPreviewUrl(deal.deal_id, doc.id);
+      if (!response?.url) {
+        throw new Error('URL de previsualización no disponible');
+      }
+      setPreviewUrl(response.url);
+      setPreviewMeta((current) => ({
+        name: response.name ?? current?.name ?? doc.name,
+        mime_type: response.mime_type ?? current?.mime_type ?? doc.mime_type ?? null,
+      }));
     } catch (e: any) {
-      alert(e?.message || 'No se pudo abrir el documento');
+      setPreviewError(e?.message || 'No se pudo abrir el documento');
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -551,6 +577,9 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     if (!deal?.deal_id) return;
     try {
       await deleteDocument(deal.deal_id, docId);
+      if (previewDocument && previewDocument.id === docId) {
+        closePreview();
+      }
       await qc.invalidateQueries({ queryKey: detailQueryKey });
     } catch (e: any) {
       alert(e?.message || 'No se pudo eliminar el documento');
@@ -581,8 +610,19 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     else onClose();
   }
 
+  function closePreview() {
+    setPreviewDocument(null);
+    setPreviewUrl(null);
+    setPreviewMeta(null);
+    setPreviewLoading(false);
+    setPreviewError(null);
+  }
+
+  const previewDownloadName = previewMeta?.name ?? previewDocument?.name ?? undefined;
+
   return (
-    <Modal
+    <>
+      <Modal
       show={!!dealId}
       onHide={requestClose}
       size="lg"
@@ -898,27 +938,39 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   <Form.Control type="file" onChange={handleFile} className="mb-3" />
                   {documents.length ? (
                     <ListGroup>
-                      {documents.map((d) => (
-                        <ListGroup.Item key={d.id} className="d-flex justify-content-between align-items-center">
-                          <div>
-                            <strong>{d.name}</strong>{' '}
-                            <small className="text-muted">
-                              ({Math.round(((d.size || 0) as number) / 1024)} KB) •{' '}
-                              <Badge bg={d.source === 'S3' ? 'primary' : 'secondary'}>{d.source}</Badge>
-                            </small>
-                          </div>
-                          <div className="d-flex gap-2">
-                            <Button size="sm" variant="outline-secondary" onClick={() => handleView(d.id)}>
-                              Ver
-                            </Button>
-                            {d.source === 'S3' && (
-                              <Button size="sm" variant="outline-danger" onClick={() => handleDelete(d.id)}>
-                                Eliminar
-                              </Button>
-                            )}
-                          </div>
-                        </ListGroup.Item>
-                      ))}
+                      {documents.map((d) => {
+                        const sizeLabel =
+                          typeof d.size === 'number' && Number.isFinite(d.size) && d.size > 0
+                            ? `${Math.round((d.size / 1024) * 10) / 10} KB`
+                            : null;
+                        return (
+                          <ListGroup.Item
+                            key={d.id}
+                            className="d-flex justify-content-between align-items-start flex-column flex-md-row gap-2"
+                          >
+                            <div className="d-flex flex-column">
+                              <button
+                                type="button"
+                                className="btn btn-link p-0 text-start align-baseline fw-semibold"
+                                onClick={() => handleView(d)}
+                              >
+                                {d.name || 'Documento'}
+                              </button>
+                              <div className="text-muted small d-flex align-items-center gap-2 flex-wrap">
+                                {sizeLabel ? <span>{sizeLabel}</span> : null}
+                                <Badge bg={d.source === 'S3' ? 'primary' : 'secondary'}>{d.source}</Badge>
+                              </div>
+                            </div>
+                            {d.source === 'S3' ? (
+                              <div className="d-flex gap-2">
+                                <Button size="sm" variant="outline-danger" onClick={() => handleDelete(d.id)}>
+                                  Eliminar
+                                </Button>
+                              </div>
+                            ) : null}
+                          </ListGroup.Item>
+                        );
+                      })}
                     </ListGroup>
                   ) : (
                     <p className="text-muted small mb-0">Sin documentos</p>
@@ -1037,69 +1089,134 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           </Button>
         )}
       </Modal.Footer>
-
-      <Modal show={!!viewingNote} onHide={handleCloseNoteModal} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Detalle de la nota</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <div className="mb-2">
-            <strong>Autor:</strong> {displayOrDash(viewingNote?.author ?? null)}
-          </div>
-          <div style={{ whiteSpace: 'pre-wrap' }}>
-            {displayOrDash(viewingNote?.content ?? null)}
-          </div>
-        </Modal.Body>
-      </Modal>
-
-      <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Comentario de la formación</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {viewingComment?.productName ? (
-            <div className="mb-2">
-              <strong>Formación:</strong> {viewingComment.productName}
-            </div>
-          ) : null}
-          <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
-        </Modal.Body>
-      </Modal>
-
-      {/* Confirmación cambios pendientes */}
-      <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Cambios sin guardar</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>Tienes cambios pendientes de guardar</Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowConfirm(false)}>
-            Seguir con los cambios
-          </Button>
-          <Button variant="danger" onClick={onClose}>
-            Salir sin guardar
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      <Modal show={showMapModal} onHide={handleCloseMap} size="lg" centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Ubicación</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {mapAddress ? (
-            <div className="ratio ratio-16x9">
-              <iframe
-                src={`https://www.google.com/maps?q=${encodeURIComponent(mapAddress)}&output=embed`}
-                title={`Mapa de ${mapAddress}`}
-                allowFullScreen
-              />
-            </div>
-          ) : (
-            <p className="text-muted mb-0">No se ha especificado una dirección.</p>
-          )}
-        </Modal.Body>
-      </Modal>
     </Modal>
+
+    <Modal show={!!previewDocument} onHide={closePreview} size="lg" centered>
+      <Modal.Header closeButton>
+        <Modal.Title as="div">
+          <div className="fw-semibold">{previewDocument?.name ?? 'Documento'}</div>
+          <div className="text-muted small">
+            {previewDocument?.source === 'S3' ? 'Documento interno' : 'Documento de Pipedrive'}
+          </div>
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {previewLoading ? (
+          <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '50vh' }}>
+            <Spinner animation="border" role="status" />
+          </div>
+        ) : previewError ? (
+          <Alert variant="danger" className="mb-0">
+            <p className="mb-2">{previewError}</p>
+            {previewUrl ? (
+              <Button
+                variant="outline-danger"
+                size="sm"
+                onClick={() => window.open(previewUrl, '_blank', 'noopener')}
+              >
+                Abrir en una nueva pestaña
+              </Button>
+            ) : null}
+          </Alert>
+        ) : previewUrl ? (
+          <div className="border rounded overflow-hidden" style={{ minHeight: '60vh' }}>
+            <iframe
+              src={previewUrl}
+              title={previewDocument?.name ?? 'Documento'}
+              style={{ border: 0, width: '100%', height: '100%' }}
+            />
+          </div>
+        ) : (
+          <p className="text-muted mb-0">Previsualización no disponible para este documento.</p>
+        )}
+      </Modal.Body>
+      <Modal.Footer className="justify-content-between">
+        <Button variant="outline-secondary" onClick={closePreview}>
+          Cerrar
+        </Button>
+        <div className="d-flex gap-2">
+          {previewUrl ? (
+            <Button variant="outline-primary" onClick={() => window.open(previewUrl, '_blank', 'noopener')}>
+              Abrir en nueva pestaña
+            </Button>
+          ) : null}
+          {previewUrl ? (
+            <Button
+              as="a"
+              href={previewUrl}
+              target="_blank"
+              rel="noopener"
+              download={previewDownloadName || undefined}
+            >
+              Descargar
+            </Button>
+          ) : null}
+        </div>
+      </Modal.Footer>
+    </Modal>
+
+    <Modal show={!!viewingNote} onHide={handleCloseNoteModal} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Detalle de la nota</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <div className="mb-2">
+          <strong>Autor:</strong> {displayOrDash(viewingNote?.author ?? null)}
+        </div>
+        <div style={{ whiteSpace: 'pre-wrap' }}>
+          {displayOrDash(viewingNote?.content ?? null)}
+        </div>
+      </Modal.Body>
+    </Modal>
+
+    <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Comentario de la formación</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {viewingComment?.productName ? (
+          <div className="mb-2">
+            <strong>Formación:</strong> {viewingComment.productName}
+          </div>
+        ) : null}
+        <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
+      </Modal.Body>
+    </Modal>
+
+    {/* Confirmación cambios pendientes */}
+    <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Cambios sin guardar</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>Tienes cambios pendientes de guardar</Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setShowConfirm(false)}>
+          Seguir con los cambios
+        </Button>
+        <Button variant="danger" onClick={onClose}>
+          Salir sin guardar
+        </Button>
+      </Modal.Footer>
+    </Modal>
+
+    <Modal show={showMapModal} onHide={handleCloseMap} size="lg" centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Ubicación</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {mapAddress ? (
+          <div className="ratio ratio-16x9">
+            <iframe
+              src={`https://www.google.com/maps?q=${encodeURIComponent(mapAddress)}&output=embed`}
+              title={`Mapa de ${mapAddress}`}
+              allowFullScreen
+            />
+          </div>
+        ) : (
+          <p className="text-muted mb-0">No se ha especificado una dirección.</p>
+        )}
+      </Modal.Body>
+    </Modal>
+  </>
   );
 }

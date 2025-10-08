@@ -56,6 +56,16 @@ function toStringValue(value: unknown): string | null {
   return str.length ? str : null;
 }
 
+function isHttpUrl(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  try {
+    const str = String(value);
+    return /^https?:\/\//i.test(str);
+  } catch {
+    return false;
+  }
+}
+
 function pickNonEmptyString(
   ...values: Array<string | null | undefined>
 ): string | null {
@@ -268,15 +278,7 @@ function normalizeDealDetail(raw: Json): DealDetail {
 
   // Documentos
   if (Array.isArray(raw.documents)) {
-    detail.documents = (raw.documents as any[]).map<DealDocument>((doc) => ({
-      id: String(doc.id),
-      source: doc.source,
-      name: doc.name,
-      mime_type: doc.mime_type ?? null,
-      size: toNumber(doc.size) ?? null,
-      url: toStringValue(doc.url),
-      created_at: toStringValue(doc.created_at),
-    }));
+    detail.documents = (raw.documents as any[]).map((doc) => normalizeDealDocument(doc));
   }
 
   return detail;
@@ -295,6 +297,37 @@ function normalizeDealNote(raw: Json): DealNote {
     content: contentValue ?? (raw?.content != null ? String(raw.content) : ""),
     author,
     created_at,
+  };
+}
+
+function normalizeDealDocument(raw: any): DealDocument {
+  const id = toStringValue(raw?.id) ?? (raw?.id != null ? String(raw.id) : "");
+  const name =
+    toStringValue(raw?.name) ??
+    toStringValue(raw?.file_name) ??
+    (raw?.name != null ? String(raw.name) : "Documento");
+  const mime = toStringValue(raw?.mime_type ?? raw?.file_type);
+  const size = raw?.size ?? raw?.file_size;
+  const normalizedSize = typeof size === "number" ? size : toNumber(size);
+  const rawUrl =
+    toStringValue(raw?.url) ??
+    toStringValue(isHttpUrl(raw?.file_url) ? raw?.file_url : null);
+  const sourceValue = toStringValue(raw?.source);
+  const source =
+    sourceValue === "S3" || sourceValue === "PIPEDRIVE"
+      ? sourceValue
+      : isHttpUrl(rawUrl)
+      ? "PIPEDRIVE"
+      : "S3";
+
+  return {
+    id: id || (raw?.id != null ? String(raw.id) : ""),
+    source,
+    name: name && name.length ? name : "Documento",
+    mime_type: mime,
+    size: normalizedSize ?? null,
+    url: rawUrl ?? null,
+    created_at: toStringValue(raw?.created_at ?? raw?.added_at),
   };
 }
 
@@ -500,22 +533,21 @@ export async function deleteDealNote(
 export async function listDocuments(dealId: string): Promise<DealDocument[]> {
   const data = await request(`/deal_documents/${encodeURIComponent(String(dealId))}`);
   const docs: any[] = Array.isArray(data?.documents) ? data.documents : [];
-  return docs.map((d) => ({
-    id: String(d.id),
-    source: d.source,
-    name: d.name,
-    mime_type: d.mime_type ?? null,
-    size: toNumber(d.size) ?? null,
-    url: toStringValue(d.url),
-    created_at: toStringValue(d.created_at),
-  }));
+  return docs.map((doc) => normalizeDealDocument(doc));
 }
 
-export async function getDocPreviewUrl(dealId: string, docId: string): Promise<string> {
+export async function getDocPreviewUrl(
+  dealId: string,
+  docId: string
+): Promise<{ url: string; name?: string | null; mime_type?: string | null }> {
   const data = await request(
     `/deal_documents/${encodeURIComponent(String(dealId))}/${encodeURIComponent(docId)}/url`
   );
-  return data?.url;
+  return {
+    url: String(data?.url ?? ""),
+    name: toStringValue(data?.name),
+    mime_type: toStringValue(data?.mime_type),
+  };
 }
 
 export async function getUploadUrl(
