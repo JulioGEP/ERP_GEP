@@ -645,6 +645,11 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     else onClose();
   }
 
+  function exitWithoutSaving() {
+    setShowConfirm(false);
+    onClose();
+  }
+
   function closePreview() {
     setPreviewDocument(null);
     setPreviewUrl(null);
@@ -1260,7 +1265,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         <Button variant="secondary" onClick={() => setShowConfirm(false)}>
           Seguir con los cambios
         </Button>
-        <Button variant="danger" onClick={onClose}>
+        <Button variant="danger" onClick={exitWithoutSaving}>
           Salir sin guardar
         </Button>
       </Modal.Footer>
