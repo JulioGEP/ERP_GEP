@@ -160,6 +160,15 @@ model trainers {
   @@index([especialidad])
 }
 
+model salas {
+  sala_id    String   @id
+  name       String
+  sede       String
+
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt      @db.Timestamptz(6)
+}
+
 model unidades_moviles {
   unidad_id       String   @id
   name            String?
