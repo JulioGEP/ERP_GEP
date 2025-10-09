@@ -72,7 +72,6 @@ export interface DealSummary {
 
   title: string;
 
-  pipeline_id?: string | null;        // id interno del pipeline
   pipeline_label?: string | null;     // label (no ID)
   training_address?: string | null;   // <-- schema vigente
 
@@ -80,8 +79,6 @@ export interface DealSummary {
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
-  transporte?: string | null;
-  po?: string | null;
 
   hours?: number | null;    // editable en ERP (no autocalculado)
   alumnos?: number | null;  // editable en ERP
@@ -158,43 +155,3 @@ export interface DealDetailViewModel {
   products: DealProduct[];
   notes: DealDetailViewNote[];
 }
-
-/* ======================
- * Sesiones del deal
- * ====================== */
-
-export type DealSessionStatus = 'BORRADOR' | 'PLANIFICADA' | 'SUSPENDIDO' | 'CANCELADO';
-
-export interface DealSession {
-  id: string;
-  dealId: string;
-  status: DealSessionStatus;
-  start: string | null;
-  end: string | null;
-  sede: string | null;
-  address: string | null;
-  roomId: string | null;
-  trainerIds: string[];
-  mobileUnitIds: string[];
-  comment: string | null;
-  dealProductId?: string | null;
-  dealProductCode?: string | null;
-  dealProductHours?: number | null;
-  isEmpty?: boolean;
-  isExceedingQuantity?: boolean;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-}
-
-export type DealSessionUpdatePayload = {
-  inicio?: string | null;
-  fin?: string | null;
-  sala_id?: string | null;
-  formadores?: string[] | null;
-  unidades_moviles?: string[] | null;
-  direccion?: string | null;
-  sede?: string | null;
-  comentarios?: string | null;
-  estado?: DealSessionStatus | null;
-  deal_product_id?: string | null;
-};

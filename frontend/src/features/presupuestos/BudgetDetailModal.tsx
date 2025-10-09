@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Button,
@@ -27,21 +27,14 @@ import {
   deleteDealNote,
   isApiError
 } from './api';
-import { canonicalizeSedeLabel, SEDE_OPTIONS } from './formatSedeLabel';
+import { formatSedeLabel } from './formatSedeLabel';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
-import { SessionPlanner } from './SessionPlanner';
-
-type ToastNotification = {
-  variant: 'success' | 'danger' | 'warning';
-  message: string;
-};
 
 interface Props {
   dealId: string | null;
   summary?: DealSummary | null;
   onClose: () => void;
-  onNotify?: (toast: ToastNotification) => void;
 }
 
 function useAuth() {
@@ -96,7 +89,7 @@ function buildCommentPreview(comment: string, maxLength = 120): string {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized;
 }
 
-export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props) {
+export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 
@@ -156,8 +149,7 @@ export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props)
   const [saving, setSaving] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
-  const [openSections, setOpenSections] = useState<string[]>(['sessions']);
-  const sessionsSectionRef = useRef<HTMLDivElement | null>(null);
+  const [openSections, setOpenSections] = useState<string[]>([]);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [creatingNote, setCreatingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -186,7 +178,7 @@ export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props)
   useEffect(() => {
     if (deal) {
       setForm({
-        sede_label: canonicalizeSedeLabel(deal.sede_label) ?? '',
+        sede_label: deal.sede_label ?? '',
         training_address: deal.training_address ?? '', // <- aquí
         caes_label: deal.caes_label ?? '',
         fundae_label: deal.fundae_label ?? '',
@@ -195,7 +187,7 @@ export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props)
       });
     } else if (summary) {
       setForm({
-        sede_label: canonicalizeSedeLabel(summary.sede_label) ?? '',
+        sede_label: summary.sede_label ?? '',
         training_address: summary.training_address ?? '', // <- aquí
         caes_label: summary.caes_label ?? '',
         fundae_label: summary.fundae_label ?? '',
@@ -211,7 +203,7 @@ export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props)
     const source = deal ?? summary;
     if (!source) return null;
     return {
-      sede_label: canonicalizeSedeLabel(source.sede_label) ?? '',
+      sede_label: source.sede_label ?? '',
       training_address: source.training_address ?? '', // <- aquí
       caes_label: source.caes_label ?? '',
       fundae_label: source.fundae_label ?? '',
@@ -622,11 +614,6 @@ export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props)
     else onClose();
   }
 
-  function exitWithoutSaving() {
-    setShowConfirm(false);
-    onClose();
-  }
-
   function closePreview() {
     setPreviewDocument(null);
     setPreviewUrl(null);
@@ -729,17 +716,10 @@ export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props)
             <Row className="g-3">
               <Col md={4}>
                 <Form.Label>Sede</Form.Label>
-                <Form.Select
-                  value={form.sede_label ?? ''}
+                <Form.Control
+                  value={formatSedeLabel(form.sede_label) ?? ''}
                   onChange={(e) => updateForm('sede_label', e.target.value)}
-                >
-                  <option value="">Selecciona una sede</option>
-                  {SEDE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </Form.Select>
+                />
               </Col>
               <Col md={8}>
                 <Form.Label>Dirección</Form.Label>
@@ -803,22 +783,6 @@ export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props)
               alwaysOpen
               className="mb-4"
             >
-              <Accordion.Item eventKey="sessions">
-                <Accordion.Header>
-                  <div className="d-flex justify-content-between align-items-center w-100">
-                    <span className="erp-accordion-title">Planificación de sesiones</span>
-                  </div>
-                </Accordion.Header>
-                <Accordion.Body>
-                  <div ref={sessionsSectionRef}>
-                    <SessionPlanner
-                      dealId={deal.deal_id}
-                      dealTitle={deal.title ?? summary?.title ?? null}
-                      onNotify={onNotify}
-                    />
-                  </div>
-                </Accordion.Body>
-              </Accordion.Item>
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">
@@ -1233,7 +1197,7 @@ export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props)
         <Button variant="secondary" onClick={() => setShowConfirm(false)}>
           Seguir con los cambios
         </Button>
-        <Button variant="danger" onClick={exitWithoutSaving}>
+        <Button variant="danger" onClick={onClose}>
           Salir sin guardar
         </Button>
       </Modal.Footer>
