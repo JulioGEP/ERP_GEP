@@ -371,8 +371,8 @@ export async function mapAndUpsertDealTree({
     select: { id: true },
   });
   const preservedNoteIds = existingNoteIds
-    .map((n) => n.id)
-    .filter((id): id is string => isLikelyManualId(id));
+    .map((n: { id: string | null }) => n.id)
+    .filter((id: string | null): id is string => isLikelyManualId(id));
 
   if (preservedNoteIds.length) {
     await prisma.deal_notes.deleteMany({
@@ -414,8 +414,8 @@ export async function mapAndUpsertDealTree({
     select: { id: true },
   });
   const preservedDocIds = existingDocIds
-    .map((d) => d.id)
-    .filter((id): id is string => isLikelyManualId(id));
+    .map((d: { id: string | null }) => d.id)
+    .filter((id: string | null): id is string => isLikelyManualId(id));
 
   if (preservedDocIds.length) {
     await prisma.deal_files.deleteMany({

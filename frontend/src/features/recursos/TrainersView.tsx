@@ -4,6 +4,7 @@ import { Alert, Button, Spinner, Table } from "react-bootstrap";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrainerModal, type TrainerFormValues } from "./TrainerModal";
 import { createTrainer, fetchTrainers, updateTrainer, type TrainerPayload } from "./api";
+import { SEDE_OPTIONS } from "./trainers.constants";
 import type { Trainer } from "../../types/trainer";
 import { ApiError } from "../presupuestos/api";
 
@@ -23,7 +24,6 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
   };
 
   return {
-    trainer_id: values.trainer_id.trim() || null,
     name: values.name.trim(),
     apellido: toNullable(values.apellido),
     email: toNullable(values.email),
@@ -33,6 +33,7 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     especialidad: toNullable(values.especialidad),
     titulacion: toNullable(values.titulacion),
     activo: values.activo,
+    sede: values.sede.filter((value) => SEDE_OPTIONS.includes(value as (typeof SEDE_OPTIONS)[number])),
   };
 }
 

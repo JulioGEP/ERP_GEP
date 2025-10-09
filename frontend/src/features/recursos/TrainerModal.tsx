@@ -2,9 +2,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button, Col, Form, Modal, Row, Spinner } from "react-bootstrap";
 import type { Trainer } from "../../types/trainer";
+import { SEDE_OPTIONS } from "./trainers.constants";
 
 export type TrainerFormValues = {
-  trainer_id: string;
   name: string;
   apellido: string;
   email: string;
@@ -14,6 +14,7 @@ export type TrainerFormValues = {
   especialidad: string;
   titulacion: string;
   activo: boolean;
+  sede: string[];
 };
 
 type TrainerModalProps = {
@@ -26,7 +27,6 @@ type TrainerModalProps = {
 };
 
 const EMPTY_FORM: TrainerFormValues = {
-  trainer_id: "",
   name: "",
   apellido: "",
   email: "",
@@ -36,13 +36,13 @@ const EMPTY_FORM: TrainerFormValues = {
   especialidad: "",
   titulacion: "",
   activo: true,
+  sede: [],
 };
 
 function trainerToFormValues(trainer?: Trainer | null): TrainerFormValues {
   if (!trainer) return { ...EMPTY_FORM };
 
   return {
-    trainer_id: trainer.trainer_id ?? "",
     name: trainer.name ?? "",
     apellido: trainer.apellido ?? "",
     email: trainer.email ?? "",
@@ -52,6 +52,7 @@ function trainerToFormValues(trainer?: Trainer | null): TrainerFormValues {
     especialidad: trainer.especialidad ?? "",
     titulacion: trainer.titulacion ?? "",
     activo: trainer.activo ?? false,
+    sede: Array.isArray(trainer.sede) ? trainer.sede : [],
   };
 }
 
@@ -84,6 +85,11 @@ export function TrainerModal({
       setFormValues((prev) => ({ ...prev, [field]: value }));
     };
 
+  const handleSedeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedValues = Array.from(event.target.selectedOptions, (option) => option.value);
+    setFormValues((prev) => ({ ...prev, sede: selectedValues }));
+  };
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = formValues.name.trim();
@@ -96,7 +102,6 @@ export function TrainerModal({
 
     const payload: TrainerFormValues = {
       ...formValues,
-      trainer_id: formValues.trainer_id.trim(),
       name: trimmedName,
       apellido: formValues.apellido.trim(),
       email: formValues.email.trim(),
@@ -105,6 +110,7 @@ export function TrainerModal({
       direccion: formValues.direccion.trim(),
       especialidad: formValues.especialidad.trim(),
       titulacion: formValues.titulacion.trim(),
+      sede: formValues.sede.filter((value) => SEDE_OPTIONS.includes(value as (typeof SEDE_OPTIONS)[number])),
     };
 
     onSubmit(payload);
@@ -123,18 +129,6 @@ export function TrainerModal({
             </div>
           )}
           <Row className="g-3">
-            <Col md={6}>
-              <Form.Group controlId="trainerId">
-                <Form.Label>ID Formador</Form.Label>
-                <Form.Control
-                  type="text"
-                  placeholder="Generado automáticamente si se deja en blanco"
-                  value={formValues.trainer_id}
-                  onChange={handleChange("trainer_id")}
-                  disabled={isSaving}
-                />
-              </Form.Group>
-            </Col>
             <Col md={6}>
               <Form.Group controlId="trainerName">
                 <Form.Label>Nombre *</Form.Label>
@@ -167,6 +161,23 @@ export function TrainerModal({
                   onChange={handleChange("especialidad")}
                   disabled={isSaving}
                 />
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group controlId="trainerSede">
+                <Form.Label>Sede</Form.Label>
+                <Form.Select
+                  multiple
+                  value={formValues.sede}
+                  onChange={handleSedeChange}
+                  disabled={isSaving}
+                >
+                  {SEDE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </Form.Select>
               </Form.Group>
             </Col>
             <Col md={6}>
