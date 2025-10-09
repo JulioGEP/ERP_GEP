@@ -678,7 +678,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         </div>
       </Modal.Header>
       <Modal.Body className="erp-modal-body">
-        {(titleDisplay || clientDisplay || clientPhoneDisplay || clientEmailDisplay || deal) && (
+        {!isLoading && (titleDisplay || clientDisplay || clientPhoneDisplay || clientEmailDisplay || deal) && (
           <div className="mb-4">
             <Row className="erp-summary-row g-3">
               <Col md={3}>
