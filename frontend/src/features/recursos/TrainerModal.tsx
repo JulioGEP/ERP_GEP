@@ -1,8 +1,8 @@
 // frontend/src/features/recursos/TrainerModal.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Col, Form, Modal, Row, Spinner } from "react-bootstrap";
 import type { Trainer } from "../../types/trainer";
-import { SEDE_OPTIONS } from "./trainers.constants";
+import { SEDE_OPTIONS, type SedeOption } from "./trainers.constants";
 
 export type TrainerFormValues = {
   name: string;
@@ -66,13 +66,40 @@ export function TrainerModal({
 }: TrainerModalProps) {
   const [formValues, setFormValues] = useState<TrainerFormValues>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [isSedeMenuOpen, setIsSedeMenuOpen] = useState(false);
+  const sedeContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (show) {
       setFormValues(trainerToFormValues(initialData));
       setError(null);
     }
+    if (!show) {
+      setIsSedeMenuOpen(false);
+    }
   }, [show, initialData]);
+
+  useEffect(() => {
+    if (!isSedeMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!sedeContainerRef.current) return;
+      if (!sedeContainerRef.current.contains(event.target as Node)) {
+        setIsSedeMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isSedeMenuOpen]);
+
+  useEffect(() => {
+    if (isSaving) {
+      setIsSedeMenuOpen(false);
+    }
+  }, [isSaving]);
 
   const modalTitle = useMemo(
     () => (mode === "create" ? "Añadir Formador/Bombero" : "Editar Formador/Bombero"),
@@ -85,10 +112,33 @@ export function TrainerModal({
       setFormValues((prev) => ({ ...prev, [field]: value }));
     };
 
-  const handleSedeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedValues = Array.from(event.target.selectedOptions, (option) => option.value);
-    setFormValues((prev) => ({ ...prev, sede: selectedValues }));
+  const handleSedeToggle = (option: SedeOption) => {
+    setFormValues((prev) => {
+      const alreadySelected = prev.sede.includes(option);
+      const updatedSede = alreadySelected
+        ? prev.sede.filter((value) => value !== option)
+        : [...prev.sede, option];
+      return { ...prev, sede: updatedSede };
+    });
   };
+
+  const openSedeMenu = () => {
+    if (!isSaving) {
+      setIsSedeMenuOpen(true);
+    }
+  };
+
+  const handleSedeFieldKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === " " || event.key === "Enter" || event.key === "ArrowDown") {
+      event.preventDefault();
+      openSedeMenu();
+    } else if (event.key === "Escape") {
+      event.stopPropagation();
+      setIsSedeMenuOpen(false);
+    }
+  };
+
+  const sedeDisplayValue = formValues.sede.join(", ");
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -166,18 +216,46 @@ export function TrainerModal({
             <Col md={6}>
               <Form.Group controlId="trainerSede">
                 <Form.Label>Sede</Form.Label>
-                <Form.Select
-                  multiple
-                  value={formValues.sede}
-                  onChange={handleSedeChange}
-                  disabled={isSaving}
-                >
-                  {SEDE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </Form.Select>
+                <div ref={sedeContainerRef} className="position-relative">
+                  <Form.Control
+                    type="text"
+                    value={sedeDisplayValue}
+                    placeholder="Selecciona una o varias sedes"
+                    readOnly
+                    onClick={openSedeMenu}
+                    onFocus={openSedeMenu}
+                    onKeyDown={handleSedeFieldKeyDown}
+                    disabled={isSaving}
+                    aria-haspopup="listbox"
+                    aria-expanded={isSedeMenuOpen}
+                    role="combobox"
+                  />
+                  {isSedeMenuOpen && (
+                    <div
+                      className="dropdown-menu show w-100 p-3 shadow"
+                      role="listbox"
+                      aria-multiselectable="true"
+                    >
+                      {SEDE_OPTIONS.map((option, index) => {
+                        const optionId = `trainer-sede-${option.replace(/\s+/g, "-").toLowerCase()}`;
+                        return (
+                          <Form.Check
+                            key={option}
+                            id={optionId}
+                            type="checkbox"
+                            label={option}
+                            checked={formValues.sede.includes(option)}
+                            onChange={() => handleSedeToggle(option)}
+                            className={index !== SEDE_OPTIONS.length - 1 ? "mb-2" : undefined}
+                            disabled={isSaving}
+                            role="option"
+                            aria-selected={formValues.sede.includes(option)}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </Form.Group>
             </Col>
             <Col md={6}>
