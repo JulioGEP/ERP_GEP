@@ -54,7 +54,7 @@ CREATE INDEX IF NOT EXISTS "idx_deal_session_mobile_units_unidad_id" ON "deal_se
 ALTER TABLE "deal_sessions"
   ADD CONSTRAINT "deal_sessions_deal_fk" FOREIGN KEY ("deal_id") REFERENCES "deals" ("deal_id") ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT "deal_sessions_deal_product_fk" FOREIGN KEY ("deal_product_id") REFERENCES "deal_products" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-  ADD CONSTRAINT "deal_sessions_sala_fk" FOREIGN KEY ("sala_id") REFERENCES "salas" ("sala_id") ON DELETE SET NULL ON UPDATE CASCADE;
+  ADD CONSTRAINT "deal_sessions_sala_fk" FOREIGN KEY ("sala_id") REFERENCES "salas" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE "deal_session_trainers"
   ADD CONSTRAINT "deal_session_trainers_session_fk" FOREIGN KEY ("session_id") REFERENCES "deal_sessions" ("session_id") ON DELETE CASCADE ON UPDATE CASCADE,
