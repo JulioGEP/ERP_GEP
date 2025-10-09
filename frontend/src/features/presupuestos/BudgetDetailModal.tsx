@@ -197,7 +197,12 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     } else {
       setForm(null);
     }
+    setShowConfirm(false);
   }, [deal, summary]);
+
+  useEffect(() => {
+    setShowConfirm(false);
+  }, [dealId]);
 
   const initialEditable = useMemo(() => {
     const source = deal ?? summary;
@@ -610,9 +615,18 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   }
 
   function requestClose() {
-    if (isDirty) setShowConfirm(true);
-    else onClose();
+    if (isDirty) {
+      setShowConfirm(true);
+    } else {
+      setShowConfirm(false);
+      onClose();
+    }
   }
+
+  const handleDiscardChanges = () => {
+    setShowConfirm(false);
+    onClose();
+  };
 
   function closePreview() {
     setPreviewDocument(null);
@@ -1197,7 +1211,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         <Button variant="secondary" onClick={() => setShowConfirm(false)}>
           Seguir con los cambios
         </Button>
-        <Button variant="danger" onClick={onClose}>
+        <Button variant="danger" onClick={handleDiscardChanges}>
           Salir sin guardar
         </Button>
       </Modal.Footer>
