@@ -9,7 +9,7 @@
   "scripts": {
     "clean": "rm -rf node_modules .prisma",
     "build": "npm run build:frontend",
-    "build:frontend": "npm run build --prefix frontend",
+    "build:frontend": "npm install --prefix frontend && npm run build --prefix frontend",
     "build:functions": "echo \"Functions bundled by Netlify\"",
     "generate": "prisma generate --schema prisma/schema.prisma",
     "postinstall": "prisma generate --schema prisma/schema.prisma",
