@@ -156,54 +156,24 @@ export interface DealDetailViewModel {
   notes: DealDetailViewNote[];
 }
 
-export interface DealSessionTrainer {
-  trainer_id: string;
-  name: string | null;
-  activo: boolean;
-}
+/* ======================
+ * Sesiones del deal
+ * ====================== */
 
-export interface DealSessionMobileUnit {
-  unidad_id: string;
-  name: string | null;
-  matricula: string | null;
-  tipo: string[];
-  sede: string[];
-}
-
-export interface DealSessionSala {
-  sala_id: string;
-  name: string | null;
-  sede: string | null;
-}
+export type DealSessionStatus = 'BORRADOR' | 'PLANIFICADA' | 'SUSPENDIDO' | 'CANCELADO';
 
 export interface DealSession {
-  session_id: string;
-  deal_id: string;
-  deal_product_id?: string | null;
-  deal_product?: { id?: string | null; code?: string | null; hours?: number | null } | null;
-  inicio: string | null;
-  fin: string | null;
-  sala_id: string | null;
-  sala?: DealSessionSala | null;
-  formadores: DealSessionTrainer[];
-  unidades_moviles: DealSessionMobileUnit[];
-  direccion?: string | null;
-  sede?: string | null;
-  comentarios?: string | null;
-  estado?: string | null;
-  origen?: { deal_product_id?: string | null; code?: string | null } | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-}
-
-export interface DealSessionUpdatePayload {
-  inicio?: string | null;
-  fin?: string | null;
-  sala_id?: string | null;
-  formadores?: string[] | null;
-  unidades_moviles?: string[] | null;
-  direccion?: string | null;
-  sede?: string | null;
-  comentarios?: string | null;
-  estado?: string | null;
+  id: string;
+  dealId: string;
+  status: DealSessionStatus;
+  start: string | null;
+  end: string | null;
+  sede: string | null;
+  address: string | null;
+  roomId: string | null;
+  trainerIds: string[];
+  mobileUnitIds: string[];
+  comment: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
