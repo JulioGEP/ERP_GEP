@@ -1,4 +1,5 @@
 // frontend/src/types/deal.ts
+import type { ResourceAvailability } from './resource-conflict';
 
 /* ======================
  * Tipos base (DB / API)
@@ -162,6 +163,32 @@ export interface DealDetailViewModel {
 
 export type DealSessionStatus = 'BORRADOR' | 'PLANIFICADA' | 'SUSPENDIDO' | 'CANCELADO';
 
+export type DealSessionTrainer = {
+  trainer_id: string;
+  name?: string | null;
+  apellido?: string | null;
+  availability?: ResourceAvailability;
+};
+
+export type DealSessionMobileUnit = {
+  unidad_id: string;
+  name?: string | null;
+  matricula?: string | null;
+  availability?: ResourceAvailability;
+};
+
+export type DealSessionRoom = {
+  sala_id: string;
+  name?: string | null;
+  sede?: string | null;
+  availability?: ResourceAvailability;
+};
+
+export type DealSessionProduct = {
+  code?: string | null;
+  name?: string | null;
+};
+
 export interface DealSession {
   id: string;
   dealId: string;
@@ -176,4 +203,35 @@ export interface DealSession {
   comment: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+
+  /**
+   * Campos adicionales expuestos por el backend cuando se solicitan recursos
+   * extendidos. Se mantienen opcionales para conservar compatibilidad con la
+   * vista clásica del modal de sesiones.
+   */
+  session_id?: string;
+  deal_id?: string;
+  inicio?: string | null;
+  fin?: string | null;
+  sala_id?: string | null;
+  comentarios?: string | null;
+  estado?: DealSessionStatus | null;
+  direccion?: string | null;
+  sala?: DealSessionRoom | null;
+  formadores: DealSessionTrainer[];
+  unidades_moviles: DealSessionMobileUnit[];
+  deal_product?: DealSessionProduct | null;
+  origen?: DealSessionProduct | null;
 }
+
+export type DealSessionUpdatePayload = {
+  inicio?: string | null;
+  fin?: string | null;
+  sala_id?: string | null;
+  formadores?: string[] | null;
+  unidades_moviles?: string[] | null;
+  direccion?: string | null;
+  sede?: string | null;
+  comentarios?: string | null;
+  estado?: DealSessionStatus | null;
+};
