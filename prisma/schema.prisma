@@ -132,6 +132,7 @@ model seassons {
   date_end        DateTime?
   sede            String?
   seasson_address String?
+  room_id         String?
   seasson_fireman String?
   seasson_vehicle String?
   comment_seasson String?

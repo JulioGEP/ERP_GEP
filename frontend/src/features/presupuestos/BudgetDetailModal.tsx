@@ -28,6 +28,7 @@ import {
   isApiError
 } from './api';
 import { formatSedeLabel } from './formatSedeLabel';
+import { DealSessionsModal } from './DealSessionsModal';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
 
@@ -169,6 +170,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   );
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [showSessionsModal, setShowSessionsModal] = useState(false);
 
   const updateForm = (field: keyof EditableDealForm, value: string) => {
     setForm((current) => (current ? { ...current, [field]: value } : current));
@@ -199,6 +201,12 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     }
   }, [deal, summary]);
 
+  useEffect(() => {
+    if (!dealId) {
+      setShowSessionsModal(false);
+    }
+  }, [dealId]);
+
   const initialEditable = useMemo(() => {
     const source = deal ?? summary;
     if (!source) return null;
@@ -224,6 +232,23 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       }),
     [detailProducts]
   );
+
+  const defaultSessionDurationHours = useMemo(() => {
+    for (const product of trainingProducts) {
+      const rawHours = product?.hours;
+      if (typeof rawHours === 'number' && Number.isFinite(rawHours) && rawHours > 0) {
+        return rawHours;
+      }
+      if (typeof rawHours === 'string') {
+        const trimmed = rawHours.trim();
+        if (trimmed.length) {
+          const parsed = Number(trimmed);
+          if (Number.isFinite(parsed) && parsed > 0) return parsed;
+        }
+      }
+    }
+    return null;
+  }, [trainingProducts]);
 
   const initialProductHours = useMemo(() => {
     const map: Record<string, string> = {};
@@ -277,6 +302,11 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     const trimmed = String(value).trim();
     return trimmed.length ? trimmed : '—';
   };
+
+  const sessionDefaultSede =
+    form?.sede_label ?? deal?.sede_label ?? summary?.sede_label ?? '';
+  const sessionDefaultAddress =
+    form?.training_address ?? deal?.training_address ?? summary?.training_address ?? '';
 
   const handleHoursChange = (productId: string, value: string) => {
     if (!trainingProductIds.has(productId)) return;
@@ -644,6 +674,15 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           ) : null}
         </Modal.Title>
         <div className="erp-modal-header-actions">
+          <Button
+            variant="primary"
+            size="sm"
+            className="erp-modal-action"
+            onClick={() => setShowSessionsModal(true)}
+            disabled={!normalizedDealId}
+          >
+            Planificación
+          </Button>
           <Button
             variant="light"
             size="sm"
@@ -1094,6 +1133,16 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         )}
       </Modal.Footer>
     </Modal>
+
+    <DealSessionsModal
+      show={showSessionsModal}
+      dealId={normalizedDealId.length ? normalizedDealId : null}
+      dealTitle={modalTitle}
+      defaultSede={sessionDefaultSede}
+      defaultAddress={sessionDefaultAddress}
+      defaultDurationHours={defaultSessionDurationHours}
+      onClose={() => setShowSessionsModal(false)}
+    />
 
     <Modal show={!!previewDocument} onHide={closePreview} size="lg" centered>
       <Modal.Header closeButton>

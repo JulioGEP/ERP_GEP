@@ -6,6 +6,8 @@ import type {
   DealSummary,
   DealDocument,
   DealNote,
+  DealSession,
+  DealSessionStatus,
 } from "../../types/deal";
 
 type Json = any;
@@ -76,6 +78,69 @@ function pickNonEmptyString(
     }
   }
   return null;
+}
+
+const SESSION_STATUS_VALUES: DealSessionStatus[] = [
+  "BORRADOR",
+  "PLANIFICADA",
+  "SUSPENDIDO",
+  "CANCELADO",
+];
+
+function normalizeSessionStatus(value: unknown): DealSessionStatus {
+  if (typeof value !== "string") return "BORRADOR";
+  const normalized = value.trim().toUpperCase();
+  return SESSION_STATUS_VALUES.includes(normalized as DealSessionStatus)
+    ? (normalized as DealSessionStatus)
+    : "BORRADOR";
+}
+
+function normalizeIdArray(value: unknown): string[] {
+  if (!value) return [];
+  const addUnique = (acc: string[], entry: unknown) => {
+    const str = typeof entry === "string" ? entry.trim() : String(entry ?? "").trim();
+    if (str.length && !acc.includes(str)) acc.push(str);
+    return acc;
+  };
+
+  if (Array.isArray(value)) {
+    return value.reduce<string[]>((acc, entry) => addUnique(acc, entry), []);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed.length) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.reduce<string[]>((acc, entry) => addUnique(acc, entry), []);
+      }
+    } catch {
+      // fallback to comma-separated values
+    }
+    return trimmed
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length)
+      .reduce<string[]>((acc, entry) => addUnique(acc, entry), []);
+  }
+
+  return [];
+}
+
+function cleanIdArray(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const entry of values) {
+    const str = typeof entry === "string" ? entry.trim() : String(entry ?? "").trim();
+    if (!str.length || seen.has(str)) continue;
+    seen.add(str);
+    result.push(str);
+  }
+
+  return result;
 }
 
 function buildPersonFullName(person?: {
@@ -331,6 +396,39 @@ function normalizeDealDocument(raw: any): DealDocument {
   };
 }
 
+function normalizeDealSession(raw: any): DealSession {
+  if (!raw || typeof raw !== "object") {
+    throw new ApiError("INVALID_RESPONSE", "Sesión no válida");
+  }
+
+  const id = toStringValue((raw as any).seasson_id ?? (raw as any).id) ?? "";
+  const dealId =
+    toStringValue((raw as any).deal_id ?? (raw as any).dealId ?? (raw as any).deal) ?? "";
+
+  const start = toStringValue((raw as any).date_start ?? (raw as any).start ?? null);
+  const end = toStringValue((raw as any).date_end ?? (raw as any).end ?? null);
+  const sede = toStringValue((raw as any).sede ?? null);
+  const address = toStringValue((raw as any).seasson_address ?? (raw as any).address ?? null);
+  const roomId = toStringValue((raw as any).room_id ?? (raw as any).roomId ?? null);
+  const comment = toStringValue((raw as any).comment_seasson ?? (raw as any).comment ?? null);
+
+  return {
+    id,
+    dealId,
+    status: normalizeSessionStatus((raw as any).status),
+    start,
+    end,
+    sede,
+    address,
+    roomId,
+    trainerIds: normalizeIdArray((raw as any).seasson_fireman ?? (raw as any).trainerIds),
+    mobileUnitIds: normalizeIdArray((raw as any).seasson_vehicle ?? (raw as any).mobileUnitIds),
+    comment,
+    createdAt: toStringValue((raw as any).created_at ?? null),
+    updatedAt: toStringValue((raw as any).updated_at ?? null),
+  };
+}
+
 /* =====================
  * Request helper (fetch)
  * ===================== */
@@ -535,6 +633,99 @@ export async function deleteDealNote(
       headers,
     }
   );
+}
+
+/* ======================
+ * Sesiones del deal
+ * ====================== */
+
+export type DealSessionPayload = {
+  status?: DealSessionStatus | null;
+  start?: string | null;
+  end?: string | null;
+  sede?: string | null;
+  address?: string | null;
+  roomId?: string | null;
+  trainerIds?: string[] | null;
+  mobileUnitIds?: string[] | null;
+  comment?: string | null;
+};
+
+function buildSessionRequestPayload(payload: DealSessionPayload) {
+  const session: Record<string, any> = {};
+
+  session.status = payload.status ? normalizeSessionStatus(payload.status) : null;
+  session.date_start = payload.start ?? null;
+  session.date_end = payload.end ?? null;
+  session.sede = toStringValue(payload.sede);
+  session.seasson_address = toStringValue(payload.address);
+  session.room_id = toStringValue(payload.roomId);
+  session.seasson_fireman = cleanIdArray(payload.trainerIds ?? []);
+  session.seasson_vehicle = cleanIdArray(payload.mobileUnitIds ?? []);
+  session.comment_seasson = toStringValue(payload.comment);
+
+  return { session };
+}
+
+export async function fetchDealSessions(dealId: string): Promise<DealSession[]> {
+  const normalizedDealId = toStringValue(dealId);
+  if (!normalizedDealId) return [];
+
+  const data = await request(`/deal-sessions?dealId=${encodeURIComponent(normalizedDealId)}`);
+  const rows: any[] = Array.isArray(data?.sessions) ? data.sessions : [];
+  return rows.map((row) => normalizeDealSession(row));
+}
+
+export async function createDealSession(
+  dealId: string,
+  payload: DealSessionPayload
+): Promise<DealSession> {
+  const normalizedDealId = toStringValue(dealId);
+  if (!normalizedDealId) {
+    throw new ApiError("VALIDATION_ERROR", "dealId requerido para crear sesión");
+  }
+
+  const body = {
+    dealId: normalizedDealId,
+    ...buildSessionRequestPayload(payload),
+  };
+
+  const data = await request(`/deal-sessions`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+  return normalizeDealSession(data?.session ?? {});
+}
+
+export async function updateDealSession(
+  sessionId: string,
+  payload: DealSessionPayload
+): Promise<DealSession> {
+  const normalizedSessionId = toStringValue(sessionId);
+  if (!normalizedSessionId) {
+    throw new ApiError("VALIDATION_ERROR", "sessionId requerido para actualizar");
+  }
+
+  const body = buildSessionRequestPayload(payload);
+
+  const data = await request(`/deal-sessions/${encodeURIComponent(normalizedSessionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+  return normalizeDealSession(data?.session ?? {});
+}
+
+export async function deleteDealSession(sessionId: string): Promise<void> {
+  const normalizedSessionId = toStringValue(sessionId);
+  if (!normalizedSessionId) {
+    throw new ApiError("VALIDATION_ERROR", "sessionId requerido para eliminar");
+  }
+
+  await request(`/deal-sessions/${encodeURIComponent(normalizedSessionId)}`, {
+    method: "DELETE",
+  });
 }
 
 /* ======================

@@ -155,3 +155,25 @@ export interface DealDetailViewModel {
   products: DealProduct[];
   notes: DealDetailViewNote[];
 }
+
+/* ======================
+ * Sesiones del deal
+ * ====================== */
+
+export type DealSessionStatus = 'BORRADOR' | 'PLANIFICADA' | 'SUSPENDIDO' | 'CANCELADO';
+
+export interface DealSession {
+  id: string;
+  dealId: string;
+  status: DealSessionStatus;
+  start: string | null;
+  end: string | null;
+  sede: string | null;
+  address: string | null;
+  roomId: string | null;
+  trainerIds: string[];
+  mobileUnitIds: string[];
+  comment: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
