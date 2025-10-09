@@ -19,6 +19,7 @@ import {
   fetchTrainersAvailability,
   isApiError,
   normalizeConflictSummaries,
+  syncDealSessions,
   updateDealSessionWithResources,
   type DealSessionResource,
   type DealSessionUpdatePayload,
@@ -553,14 +554,50 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
   const queryClient = useQueryClient();
   const [forms, setForms] = useState<Record<string, SessionFormState>>({});
   const [errors, setErrors] = useState<Record<string, SessionErrorState>>({});
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const normalizedDealId = useMemo(() => dealId.trim(), [dealId]);
+  const sessionQueryKey = useMemo(
+    () => ['deal', normalizedDealId, 'sessions'] as const,
+    [normalizedDealId]
+  );
 
   const sessionsQuery = useQuery({
-    queryKey: ['deal', dealId, 'sessions'],
+    queryKey: sessionQueryKey,
     queryFn: () => fetchDealSessionsWithResources(dealId),
-    enabled: dealId.trim().length > 0,
+    enabled: normalizedDealId.length > 0,
   });
 
   const sessions = sessionsQuery.data ?? [];
+
+  useEffect(() => {
+    if (!normalizedDealId.length) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsSyncing(true);
+    setSyncError(null);
+
+    syncDealSessions(normalizedDealId)
+      .catch((error) => {
+        if (cancelled) return;
+        const message = isApiError(error)
+          ? error.message
+          : 'No se pudieron sincronizar las sesiones automáticamente.';
+        setSyncError(message);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsSyncing(false);
+        queryClient.invalidateQueries({ queryKey: sessionQueryKey });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedDealId, queryClient, sessionQueryKey]);
 
   useEffect(() => {
     if (!sessions.length) {
@@ -591,7 +628,7 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
       updateDealSessionWithResources(sessionId, payload),
     onSuccess: (updatedSession, variables) => {
       queryClient.setQueryData<DealSessionResource[]>(
-        ['deal', dealId, 'sessions'],
+        sessionQueryKey,
         (current) =>
           (current ?? []).map((session) =>
             session.session_id === updatedSession.session_id ? updatedSession : session,
@@ -686,12 +723,48 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
     return <Alert variant="danger" className="mb-0">{message}</Alert>;
   }
 
+  const showSyncIndicator =
+    isSyncing || (sessionsQuery.isFetching && !sessionsQuery.isLoading);
+
   if (!sessions.length) {
-    return <p className="text-muted mb-0">{dealTitle ? `No hay sesiones planificadas para ${dealTitle}.` : 'No hay sesiones planificadas.'}</p>;
+    if (showSyncIndicator) {
+      return (
+        <div className="d-flex align-items-center gap-2">
+          <Spinner animation="border" size="sm" role="status" />
+          <span>Sincronizando sesiones…</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="d-flex flex-column gap-3">
+        {syncError ? (
+          <Alert variant="warning" className="mb-0">
+            {syncError}
+          </Alert>
+        ) : null}
+        <p className="text-muted mb-0">
+          {dealTitle
+            ? `No hay sesiones planificadas para ${dealTitle}.`
+            : 'No hay sesiones planificadas.'}
+        </p>
+      </div>
+    );
   }
 
   return (
     <div className="d-flex flex-column gap-3">
+      {showSyncIndicator ? (
+        <div className="d-flex align-items-center gap-2 text-muted small">
+          <Spinner animation="border" size="sm" role="status" />
+          <span>Sincronizando sesiones…</span>
+        </div>
+      ) : null}
+      {syncError ? (
+        <Alert variant="warning" className="mb-0">
+          {syncError}
+        </Alert>
+      ) : null}
       {sessions.map((session, index) => (
         <SessionRow
           key={session.session_id}
