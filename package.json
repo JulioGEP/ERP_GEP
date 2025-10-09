@@ -9,7 +9,7 @@
   "scripts": {
     "clean": "rm -rf node_modules .prisma",
     "build": "npm run build:frontend",
-    "build:frontend": "cd frontend && npm install && npm run build",
+    "build:frontend": "npm run build --prefix frontend",
     "build:functions": "echo \"Functions bundled by Netlify\"",
     "generate": "prisma generate --schema prisma/schema.prisma",
     "postinstall": "prisma generate --schema prisma/schema.prisma",
@@ -21,8 +21,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
     "@aws-sdk/s3-request-presigner": "^3.901.0",
-    "@prisma/client": "^6.16.3",
-    "prisma": "^6.16.3",
+    "@prisma/client": "^5.16.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -30,6 +29,7 @@
     "@types/node": "^20.19.19",
     "dotenv-cli": "^10.0.0",
     "pino-pretty": "^13.1.1",
+    "prisma": "^5.16.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
