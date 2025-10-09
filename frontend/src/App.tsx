@@ -17,7 +17,7 @@ import { ApiError, fetchDealsWithoutSessions, importDeal } from './features/pres
 import type { DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
 import { TrainersView } from './features/recursos/TrainersView';
-import { MobileUnitsView } from './features/recursos/MobileUnitsView';
+import { RoomsView } from './features/recursos/RoomsView';
 
 type NavView = {
   key: string;
@@ -47,10 +47,7 @@ const VIEW_ITEMS: NavView[] = NAVIGATION_ITEMS.flatMap((item) =>
 );
 
 const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
-  (item) =>
-    item.key !== 'Presupuestos' &&
-    item.key !== 'Recursos/Formadores' &&
-    item.key !== 'Recursos/Unidades'
+  (item) => item.key !== 'Presupuestos' && item.key !== 'Recursos/Formadores' && item.key !== 'Recursos/Salas'
 );
 
 type ToastMessage = {
@@ -127,7 +124,7 @@ export default function App() {
 
   const isBudgetsView = activeView === 'Presupuestos';
   const isTrainersView = activeView === 'Recursos/Formadores';
-  const isMobileUnitsView = activeView === 'Recursos/Unidades';
+  const isRoomsView = activeView === 'Recursos/Salas';
   const activeViewLabel = useMemo(
     () => VIEW_ITEMS.find((item) => item.key === activeView)?.label ?? activeView,
     [activeView]
@@ -227,8 +224,8 @@ export default function App() {
             </div>
           ) : isTrainersView ? (
             <TrainersView onNotify={pushToast} />
-          ) : isMobileUnitsView ? (
-            <MobileUnitsView onNotify={pushToast} />
+          ) : isRoomsView ? (
+            <RoomsView onNotify={pushToast} />
           ) : (
             <div className="bg-white rounded-4 shadow-sm p-5 text-center text-muted">
               <h2 className="h4 fw-semibold mb-2">{activeViewLabel}</h2>
