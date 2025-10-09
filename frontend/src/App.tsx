@@ -11,6 +11,7 @@ import {
 } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
+import { BudgetFiltersModal } from './features/presupuestos/BudgetFiltersModal';
 import { BudgetTable } from './features/presupuestos/BudgetTable';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
 import {
@@ -24,6 +25,14 @@ import logo from './assets/gep-group-logo.png';
 import { TrainersView } from './features/recursos/TrainersView';
 import { RoomsView } from './features/recursos/RoomsView';
 import { MobileUnitsView } from './features/recursos/MobileUnitsView';
+import {
+  type ActiveBudgetFilter,
+  type BudgetFilterKey,
+  type BudgetFilters,
+  applyBudgetFilters,
+  cleanBudgetFilters,
+  getActiveBudgetFilters,
+} from './features/presupuestos/budgetFilters';
 
 type NavView = {
   key: string;
@@ -70,10 +79,12 @@ type ToastMessage = {
 
 export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
   const [activeView, setActiveView] = useState('Presupuestos');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [filters, setFilters] = useState<BudgetFilters>({});
 
   const queryClient = useQueryClient();
 
@@ -97,6 +108,23 @@ export default function App() {
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
+  const handleApplyFilters = useCallback((nextFilters: BudgetFilters) => {
+    setFilters(cleanBudgetFilters(nextFilters));
+    setShowFiltersModal(false);
+  }, []);
+
+  const handleClearFilters = useCallback(() => {
+    setFilters({});
+  }, []);
+
+  const handleRemoveFilter = useCallback((key: BudgetFilterKey) => {
+    setFilters((current) => {
+      if (!current || !(key in current)) return current;
+      const { [key]: _removed, ...rest } = current;
+      return rest;
+    });
   }, []);
 
   const importMutation = useMutation({
@@ -145,6 +173,34 @@ export default function App() {
   const placeholderViews = PLACEHOLDER_VIEWS;
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
+  const cleanedFilters = useMemo(() => cleanBudgetFilters(filters), [filters]);
+  const filteredBudgets = useMemo(
+    () => applyBudgetFilters(budgets, cleanedFilters),
+    [budgets, cleanedFilters]
+  );
+  const activeFilters = useMemo<ActiveBudgetFilter[]>(
+    () => getActiveBudgetFilters(cleanedFilters),
+    [cleanedFilters]
+  );
+  const hasActiveFilters = activeFilters.length > 0;
+
+  const titleSuggestions = useMemo(() => {
+    const values = new Set<string>();
+    budgets.forEach((budget) => {
+      const title = typeof budget.title === 'string' ? budget.title.trim() : '';
+      if (title.length) values.add(title);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [budgets]);
+
+  const trainingAddressSuggestions = useMemo(() => {
+    const values = new Set<string>();
+    budgets.forEach((budget) => {
+      const address = typeof budget.training_address === 'string' ? budget.training_address.trim() : '';
+      if (address.length) values.add(address);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [budgets]);
 
   const deleteDealMutation = useMutation({
     mutationFn: (dealId: string) => deleteDeal(dealId),
@@ -253,23 +309,51 @@ export default function App() {
                   <h1 className="h3 fw-bold mb-1">Presupuestos</h1>
                   <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
                 </div>
-                <div className="d-flex align-items-center gap-3">
+                <div className="d-flex align-items-center gap-3 flex-wrap justify-content-md-end">
+                  {activeFilters.map((filter) => (
+                    <span
+                      key={filter.key}
+                      className="badge rounded-pill text-bg-light d-inline-flex align-items-center gap-2"
+                    >
+                      <span className="d-flex flex-column flex-sm-row gap-1">
+                        <span className="text-muted">{filter.label}:</span>
+                        <span className="fw-semibold">{filter.value}</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-link p-0 border-0 text-muted"
+                        onClick={() => handleRemoveFilter(filter.key)}
+                        aria-label={`Eliminar filtro ${filter.label}`}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
                   {(importMutation.isPending || isRefreshing) && (
                     <Spinner animation="border" role="status" size="sm" />
                   )}
+                  <Button
+                    variant="outline-primary"
+                    size="lg"
+                    onClick={() => setShowFiltersModal(true)}
+                  >
+                    Filtrar
+                  </Button>
                   <Button size="lg" onClick={() => setShowImportModal(true)}>
                     Importar presupuesto
                   </Button>
                 </div>
               </section>
               <BudgetTable
-                budgets={budgets}
+                budgets={filteredBudgets}
                 isLoading={budgetsQuery.isLoading}
                 isFetching={isRefreshing}
                 error={budgetsQuery.error ?? null}
                 onRetry={() => budgetsQuery.refetch()}
                 onSelect={handleSelectBudget}
                 onDelete={handleDeleteBudget}
+                hasActiveFilters={hasActiveFilters}
+                onClearFilters={hasActiveFilters ? handleClearFilters : undefined}
               />
             </div>
           ) : isTrainersView ? (
@@ -303,6 +387,16 @@ export default function App() {
           <span>ERP colaborativo para planificación de formaciones</span>
         </Container>
       </footer>
+
+      <BudgetFiltersModal
+        show={showFiltersModal}
+        filters={cleanedFilters}
+        titleOptions={titleSuggestions}
+        trainingAddressOptions={trainingAddressSuggestions}
+        onApply={handleApplyFilters}
+        onClearAll={handleClearFilters}
+        onClose={() => setShowFiltersModal(false)}
+      />
 
       <BudgetImportModal
         show={showImportModal}

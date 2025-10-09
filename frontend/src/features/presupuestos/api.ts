@@ -254,6 +254,7 @@ function normalizeDealSummary(row: Json): DealSummary {
     dealId: resolvedDealId, // compat
     title,
 
+    pipeline_id: toStringValue(row?.pipeline_id) ?? null,
     pipeline_label: toStringValue(row?.pipeline_label) ?? null,
     training_address: toStringValue(row?.training_address) ?? null,
 
@@ -261,6 +262,8 @@ function normalizeDealSummary(row: Json): DealSummary {
     caes_label: toStringValue(row?.caes_label) ?? null,
     fundae_label: toStringValue(row?.fundae_label) ?? null,
     hotel_label: toStringValue(row?.hotel_label) ?? null,
+    transporte: toStringValue(row?.transporte) ?? null,
+    po: toStringValue(row?.po) ?? null,
 
     hours: toNumber(row?.hours) ?? null,
     alumnos: toNumber(row?.alumnos) ?? null,
