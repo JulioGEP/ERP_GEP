@@ -143,15 +143,17 @@ model seassons {
 model trainers {
   trainer_id   String   @id
   name         String
-  apellido     String?
   email        String?  @unique
   phone        String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @updatedAt @db.Timestamptz(6)
+  activo       Boolean  @default(true)
+  apellido     String?
   dni          String?  @unique
   direccion    String?
   especialidad String?
   titulacion   String?
   activo       Boolean  @default(true)
-  sede         String[] @default([])
 
   created_at   DateTime @default(now()) @db.Timestamptz(6)
   updated_at   DateTime @updatedAt      @db.Timestamptz(6)
@@ -170,13 +172,12 @@ model salas {
 }
 
 model unidades_moviles {
-  unidad_id  String   @id
-  name       String
-  matricula  String   @unique
-  tipo       String
-  sede       String
-  created_at DateTime @default(now()) @db.Timestamptz(6)
-  updated_at DateTime @updatedAt      @db.Timestamptz(6)
+  unidad_id       String   @id
+  name            String?
+  plate           String?
+  capacity_liters Int?
+  created_at      DateTime @default(now())
+  updated_at      DateTime
 }
 
 enum DocumentOrigin {
