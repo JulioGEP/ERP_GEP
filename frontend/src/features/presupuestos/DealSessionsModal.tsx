@@ -5,10 +5,11 @@ import {
   createDealSession,
   deleteDealSession,
   fetchDealSessions,
+  syncDealSessions,
   updateDealSession,
   isApiError,
-  type DealSessionPayload,
   type DealSessionStatus,
+  type DealSessionsSyncResult,
 } from './api';
 import { fetchTrainers } from '../recursos/api';
 import { fetchRooms } from '../recursos/rooms.api';
@@ -16,7 +17,7 @@ import { fetchMobileUnits } from '../recursos/mobileUnits.api';
 import type { Trainer } from '../../types/trainer';
 import type { Room } from '../../types/room';
 import type { MobileUnit } from '../../types/mobile-unit';
-import type { DealSession } from '../../types/deal';
+import type { DealSession, DealSessionUpdatePayload } from '../../types/deal';
 
 const STATUS_LABELS: Record<DealSessionStatus, string> = {
   BORRADOR: 'Borrador',
@@ -45,6 +46,7 @@ type DealSessionForm = {
   trainerIds: string[];
   mobileUnitIds: string[];
   comment: string;
+  dealProductId: string | null;
 };
 
 type DealSessionsModalProps = {
@@ -92,6 +94,7 @@ function createFormFromSession(
     trainerIds: Array.isArray(session.trainerIds) ? [...session.trainerIds] : [],
     mobileUnitIds: Array.isArray(session.mobileUnitIds) ? [...session.mobileUnitIds] : [],
     comment: session.comment ?? '',
+    dealProductId: session.dealProductId ?? null,
   };
 }
 
@@ -118,6 +121,13 @@ function formatMobileUnit(unit: MobileUnit): string {
   const label = unit.name?.trim() ?? '';
   const matricula = unit.matricula?.trim() ?? '';
   return matricula ? `${label} (${matricula})` : label;
+}
+
+function computeSessionDurationMs(session: DealSession | null | undefined): number | null {
+  if (!session) return null;
+  const hours = typeof session.dealProductHours === 'number' ? session.dealProductHours : null;
+  if (!Number.isFinite(hours) || !hours || hours <= 0) return null;
+  return Math.round(hours * 60 * 60 * 1000);
 }
 
 export function DealSessionsModal({
@@ -213,7 +223,47 @@ export function DealSessionsModal({
   const [duplicatingSessionId, setDuplicatingSessionId] = useState<string | null>(null);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [successMap, setSuccessMap] = useState<Record<string, number>>({});
+  const [sessionDurations, setSessionDurations] = useState<Record<string, number | null>>({});
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncSummary, setSyncSummary] = useState<DealSessionsSyncResult | null>(null);
+  const [syncFlaggedIds, setSyncFlaggedIds] = useState<string[]>([]);
+  const [dataFlaggedIds, setDataFlaggedIds] = useState<string[]>([]);
   const successTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const sessionInfoMap = useMemo(() => {
+    const map: Record<string, DealSession> = {};
+    const data = sessionsQuery.data ?? [];
+    data.forEach((session) => {
+      map[session.id] = session;
+    });
+    return map;
+  }, [sessionsQuery.data]);
+  const exceedingSessionIds = useMemo(() => {
+    const set = new Set<string>();
+    syncFlaggedIds.forEach((id) => set.add(id));
+    dataFlaggedIds.forEach((id) => set.add(id));
+    return set;
+  }, [syncFlaggedIds, dataFlaggedIds]);
+  const syncSummaryMessage = useMemo(() => {
+    if (!syncSummary) return null;
+    const parts: string[] = [];
+    if (syncSummary.created > 0) {
+      parts.push(
+        `${syncSummary.created === 1 ? 'Se creó' : 'Se crearon'} ${syncSummary.created} ${
+          syncSummary.created === 1 ? 'sesión' : 'sesiones'
+        } automáticamente.`
+      );
+    }
+    if (syncSummary.deleted > 0) {
+      parts.push(
+        `${syncSummary.deleted === 1 ? 'Se eliminó' : 'Se eliminaron'} ${
+          syncSummary.deleted === 1 ? 'una sesión vacía' : `${syncSummary.deleted} sesiones vacías`
+        } automáticamente.`
+      );
+    }
+    if (!parts.length) return null;
+    return parts.join(' ');
+  }, [syncSummary]);
 
   useEffect(() => {
     if (!show) {
@@ -221,6 +271,12 @@ export function DealSessionsModal({
       setSavingSessionId(null);
       setDuplicatingSessionId(null);
       setDeletingSessionId(null);
+      setSessionDurations({});
+      setSyncing(false);
+      setSyncError(null);
+      setSyncSummary(null);
+      setSyncFlaggedIds([]);
+      setDataFlaggedIds([]);
     }
   }, [show]);
 
@@ -232,23 +288,72 @@ export function DealSessionsModal({
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    if (!show || !normalizedDealId.length) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setSyncing(true);
+    setSyncError(null);
+
+    syncDealSessions(normalizedDealId)
+      .then((result) => {
+        if (cancelled) return;
+        setSyncSummary(result);
+        setSyncFlaggedIds(result.flagged ?? []);
+        queryClient.invalidateQueries({ queryKey: sessionQueryKey });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const message = isApiError(error)
+          ? error.message
+          : 'No se pudo sincronizar las sesiones. Inténtalo de nuevo.';
+        setSyncError(message);
+        setSyncSummary(null);
+        setSyncFlaggedIds([]);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSyncing(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [show, normalizedDealId, queryClient, sessionQueryKey]);
+
+  useEffect(() => {
     const data = sessionsQuery.data;
     if (!data || !Array.isArray(data)) {
       setForms({});
       setSessionOrder([]);
+      setSessionDurations({});
+      setDataFlaggedIds([]);
       return;
     }
 
     const nextForms: Record<string, DealSessionForm> = {};
     const nextOrder: string[] = [];
+    const nextDurations: Record<string, number | null> = {};
+    const nextFlagged: string[] = [];
 
     data.forEach((session) => {
       nextForms[session.id] = createFormFromSession(session, defaults);
       nextOrder.push(session.id);
+      nextDurations[session.id] = computeSessionDurationMs(session);
+      if (session.isExceedingQuantity) {
+        nextFlagged.push(session.id);
+      }
     });
 
     setForms(nextForms);
     setSessionOrder(nextOrder);
+    setSessionDurations(nextDurations);
+    setDataFlaggedIds(nextFlagged);
   }, [sessionsQuery.data, defaults]);
 
   const updateForm = (sessionId: string, updater: (current: DealSessionForm) => DealSessionForm) => {
@@ -274,8 +379,13 @@ export function DealSessionsModal({
   };
 
   const updateMutation = useMutation({
-    mutationFn: ({ sessionId, payload }: { sessionId: string; payload: DealSessionPayload }) =>
-      updateDealSession(sessionId, payload),
+    mutationFn: ({
+      sessionId,
+      payload,
+    }: {
+      sessionId: string;
+      payload: DealSessionUpdatePayload;
+    }) => updateDealSession(sessionId, payload),
     onSuccess: (session) => {
       if (!normalizedDealId) return;
       queryClient.setQueryData<DealSession[]>(sessionQueryKey, (current) => {
@@ -286,8 +396,13 @@ export function DealSessionsModal({
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ dealId, payload }: { dealId: string; payload: DealSessionPayload }) =>
-      createDealSession(dealId, payload),
+    mutationFn: ({
+      dealId,
+      payload,
+    }: {
+      dealId: string;
+      payload: DealSessionUpdatePayload;
+    }) => createDealSession(dealId, payload),
     onSuccess: (session) => {
       if (!normalizedDealId) return;
       queryClient.setQueryData<DealSession[]>(sessionQueryKey, (current) => {
@@ -312,10 +427,12 @@ export function DealSessionsModal({
     updateForm(sessionId, (form) => {
       const startIso = fromInputDateValue(value);
       let endIso = form.end;
-      if (durationMs && startIso && (!form.end || !form.end.trim())) {
+      const sessionDuration = sessionDurations[sessionId] ?? null;
+      const effectiveDuration = sessionDuration ?? durationMs;
+      if (effectiveDuration && startIso && (!form.end || !form.end.trim())) {
         const startDate = new Date(startIso);
         if (!Number.isNaN(startDate.getTime())) {
-          const suggested = new Date(startDate.getTime() + durationMs);
+          const suggested = new Date(startDate.getTime() + effectiveDuration);
           endIso = suggested.toISOString();
         }
       }
@@ -366,6 +483,7 @@ export function DealSessionsModal({
       trainerIds: [],
       mobileUnitIds: [],
       comment: '',
+      dealProductId: form.dealProductId ?? null,
     }));
     setErrorBySession((current) => ({ ...current, [sessionId]: null }));
     if (successTimeouts.current[sessionId]) {
@@ -378,16 +496,20 @@ export function DealSessionsModal({
     });
   };
 
-  const buildPayloadFromForm = (form: DealSessionForm, statusOverride?: DealSessionStatus): DealSessionPayload => ({
-    status: statusOverride ?? form.status,
-    start: form.start,
-    end: form.end,
+  const buildPayloadFromForm = (
+    form: DealSessionForm,
+    statusOverride?: DealSessionStatus
+  ): DealSessionUpdatePayload => ({
+    estado: statusOverride ?? form.status,
+    inicio: form.start,
+    fin: form.end,
     sede: form.sede,
-    address: form.address,
-    roomId: form.roomId || null,
-    trainerIds: form.trainerIds,
-    mobileUnitIds: form.mobileUnitIds,
-    comment: form.comment,
+    direccion: form.address,
+    sala_id: form.roomId || null,
+    formadores: form.trainerIds,
+    unidades_moviles: form.mobileUnitIds,
+    comentarios: form.comment,
+    deal_product_id: form.dealProductId ?? null,
   });
 
   const handleSaveSession = async (sessionId: string) => {
@@ -407,6 +529,18 @@ export function DealSessionsModal({
         payload: buildPayloadFromForm(form, effectiveStatus),
       });
       setForms((current) => ({ ...current, [sessionId]: createFormFromSession(updated, defaults) }));
+      setSessionDurations((current) => ({
+        ...current,
+        [sessionId]: computeSessionDurationMs(updated),
+      }));
+      setDataFlaggedIds((current) => {
+        const without = current.filter((id) => id !== sessionId);
+        return updated.isExceedingQuantity ? [...without, sessionId] : without;
+      });
+      setSyncFlaggedIds((current) => {
+        const without = current.filter((id) => id !== sessionId);
+        return updated.isExceedingQuantity ? [...without, sessionId] : without;
+      });
       markSuccess(sessionId);
     } catch (error) {
       const message = isApiError(error)
@@ -433,6 +567,18 @@ export function DealSessionsModal({
         [created.id]: createFormFromSession(created, defaults),
       }));
       setSessionOrder((current) => [...current, created.id]);
+      setSessionDurations((current) => ({
+        ...current,
+        [created.id]: computeSessionDurationMs(created),
+      }));
+      setDataFlaggedIds((current) => {
+        const without = current.filter((id) => id !== created.id);
+        return created.isExceedingQuantity ? [...without, created.id] : without;
+      });
+      setSyncFlaggedIds((current) => {
+        const without = current.filter((id) => id !== created.id);
+        return created.isExceedingQuantity ? [...without, created.id] : without;
+      });
       markSuccess(created.id);
     } catch (error) {
       const message = isApiError(error)
@@ -455,6 +601,13 @@ export function DealSessionsModal({
         return next;
       });
       setSessionOrder((current) => current.filter((id) => id !== sessionId));
+      setSessionDurations((current) => {
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
+      setSyncFlaggedIds((current) => current.filter((id) => id !== sessionId));
+      setDataFlaggedIds((current) => current.filter((id) => id !== sessionId));
       setSuccessMap((current) => {
         const { [sessionId]: _removed, ...rest } = current;
         return rest;
@@ -494,6 +647,30 @@ export function DealSessionsModal({
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
+        {syncing ? (
+          <Alert variant="secondary" className="mt-0">
+            Sincronizando sesiones con la cantidad contratada…
+          </Alert>
+        ) : null}
+        {syncError ? (
+          <Alert variant="danger" className="mt-3">
+            {syncError}
+          </Alert>
+        ) : null}
+        {syncSummaryMessage ? (
+          <Alert variant="info" className="mt-3">
+            {syncSummaryMessage}
+          </Alert>
+        ) : null}
+        {exceedingSessionIds.size > 0 ? (
+          <Alert variant="warning" className="mt-3">
+            Hay {exceedingSessionIds.size}{' '}
+            {exceedingSessionIds.size === 1
+              ? 'sesión que excede la cantidad contratada.'
+              : 'sesiones que exceden la cantidad contratada.'}{' '}
+            Elimínalas o reasígnalas manualmente.
+          </Alert>
+        ) : null}
         {isLoadingSessions ? (
           <div className="d-flex align-items-center gap-2 text-muted">
             <Spinner size="sm" animation="border" /> Cargando sesiones…
@@ -520,6 +697,8 @@ export function DealSessionsModal({
             const background = STATUS_BACKGROUND[status] ?? STATUS_BACKGROUND.BORRADOR;
             const errorMessage = errorBySession[sessionId] ?? null;
             const showSuccess = successMap[sessionId] != null;
+            const sessionInfo = sessionInfoMap[sessionId] ?? null;
+            const isExceeding = exceedingSessionIds.has(sessionId);
             const currentMobileValue =
               form.mobileUnitIds.length > 0 ? form.mobileUnitIds : [NO_MOBILE_UNIT_VALUE];
             const isSaving = savingSessionId === sessionId;
@@ -529,15 +708,25 @@ export function DealSessionsModal({
             return (
               <div
                 key={sessionId}
-                className="session-card"
+                className={`session-card${isExceeding ? ' session-card-exceeding' : ''}`}
                 style={{ backgroundColor: background }}
               >
                 <div className="session-card-header">
                   <div>
                     <div className="fw-semibold">Sesión {index + 1}</div>
+                    {sessionInfo?.dealProductCode ? (
+                      <div className="text-muted small mt-1">
+                        Producto: {sessionInfo.dealProductCode}
+                      </div>
+                    ) : null}
                     <Badge bg="secondary" className="mt-1">
                       {STATUS_LABELS[status]}
                     </Badge>
+                    {isExceeding ? (
+                      <div className="session-card-warning small mt-2">
+                        Esta sesión excede la cantidad contratada. Elimínala o reasígnala manualmente.
+                      </div>
+                    ) : null}
                   </div>
                   <div className="session-card-actions">
                     <Button
