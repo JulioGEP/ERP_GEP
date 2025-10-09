@@ -19,6 +19,8 @@ const EXCLUDED_PREFIX = "ext-";
 
 const VALID_STATUS = new Set(["Borrador", "Planificada", "Suspendido", "Cancelado"]);
 
+let ensureDealSessionsPromise: Promise<void> | null = null;
+
 type ExpandKey =
   | "deal_product"
   | "sala"
@@ -151,6 +153,286 @@ function decimalToNumber(value: unknown): number | null {
     }
   }
   return null;
+}
+
+function normalizeLegacyStatus(value: unknown): string {
+  if (typeof value !== "string") return "Borrador";
+  const normalized = value.trim();
+  if (!normalized.length) return "Borrador";
+  const upper = normalized.toUpperCase();
+  if (upper === "PLANIFICADA" || upper === "PLANIFICADO") return "Planificada";
+  if (upper === "BORRADOR") return "Borrador";
+  if (upper === "SUSPENDIDO" || upper === "SUSPENDIDA") return "Suspendido";
+  if (upper === "CANCELADO" || upper === "CANCELADA") return "Cancelado";
+  return VALID_STATUS.has(normalized) ? normalized : "Borrador";
+}
+
+function parseLegacyDate(value: unknown): Date | null {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function parseLegacyIdList(value: unknown): string[] {
+  if (!value) return [];
+  const addUnique = (acc: string[], entry: unknown) => {
+    if (entry === null || entry === undefined) return acc;
+    const text = typeof entry === "string" ? entry.trim() : String(entry).trim();
+    if (text.length && !acc.includes(text)) acc.push(text);
+    return acc;
+  };
+
+  if (Array.isArray(value)) {
+    return value.reduce<string[]>((acc, entry) => addUnique(acc, entry), []);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed.length) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.reduce<string[]>((acc, entry) => addUnique(acc, entry), []);
+      }
+    } catch {
+      /* ignore */
+    }
+    return trimmed
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length)
+      .reduce<string[]>((acc, entry) => addUnique(acc, entry), []);
+  }
+
+  return addUnique([], value);
+}
+
+async function createDealSessionsTables(prisma: ReturnType<typeof getPrisma>) {
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'deal_session_status') THEN
+        CREATE TYPE "deal_session_status" AS ENUM ('Borrador', 'Planificada', 'Suspendido', 'Cancelado');
+      END IF;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "deal_sessions" (
+      "session_id" TEXT PRIMARY KEY,
+      "deal_id" TEXT NOT NULL,
+      "deal_product_id" TEXT,
+      "status" "deal_session_status" NOT NULL DEFAULT 'Borrador',
+      "start_at" TIMESTAMPTZ(6),
+      "end_at" TIMESTAMPTZ(6),
+      "sala_id" UUID,
+      "direccion" TEXT,
+      "sede" TEXT,
+      "comentarios" TEXT,
+      "origen" TEXT,
+      "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(
+    'CREATE INDEX IF NOT EXISTS "idx_deal_sessions_deal_id" ON "deal_sessions" ("deal_id")'
+  );
+  await prisma.$executeRawUnsafe(
+    'CREATE INDEX IF NOT EXISTS "idx_deal_sessions_deal_product_id" ON "deal_sessions" ("deal_product_id")'
+  );
+  await prisma.$executeRawUnsafe(
+    'CREATE INDEX IF NOT EXISTS "idx_deal_sessions_sala_id" ON "deal_sessions" ("sala_id")'
+  );
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "deal_session_trainers" (
+      "session_id" TEXT NOT NULL,
+      "trainer_id" TEXT NOT NULL,
+      "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "deal_session_trainers_pkey" PRIMARY KEY ("session_id", "trainer_id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(
+    'CREATE INDEX IF NOT EXISTS "idx_deal_session_trainers_trainer_id" ON "deal_session_trainers" ("trainer_id")'
+  );
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "deal_session_mobile_units" (
+      "session_id" TEXT NOT NULL,
+      "unidad_id" TEXT NOT NULL,
+      "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "deal_session_mobile_units_pkey" PRIMARY KEY ("session_id", "unidad_id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(
+    'CREATE INDEX IF NOT EXISTS "idx_deal_session_mobile_units_unidad_id" ON "deal_session_mobile_units" ("unidad_id")'
+  );
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_sessions_deal_fk') THEN
+        ALTER TABLE "deal_sessions"
+        ADD CONSTRAINT "deal_sessions_deal_fk" FOREIGN KEY ("deal_id") REFERENCES "deals" ("deal_id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_sessions_deal_product_fk') THEN
+        ALTER TABLE "deal_sessions"
+        ADD CONSTRAINT "deal_sessions_deal_product_fk" FOREIGN KEY ("deal_product_id") REFERENCES "deal_products" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_sessions_sala_fk') THEN
+        ALTER TABLE "deal_sessions"
+        ADD CONSTRAINT "deal_sessions_sala_fk" FOREIGN KEY ("sala_id") REFERENCES "salas" ("sala_id") ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_session_trainers_session_fk') THEN
+        ALTER TABLE "deal_session_trainers"
+        ADD CONSTRAINT "deal_session_trainers_session_fk" FOREIGN KEY ("session_id") REFERENCES "deal_sessions" ("session_id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_session_trainers_trainer_fk') THEN
+        ALTER TABLE "deal_session_trainers"
+        ADD CONSTRAINT "deal_session_trainers_trainer_fk" FOREIGN KEY ("trainer_id") REFERENCES "trainers" ("trainer_id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_session_mobile_units_session_fk') THEN
+        ALTER TABLE "deal_session_mobile_units"
+        ADD CONSTRAINT "deal_session_mobile_units_session_fk" FOREIGN KEY ("session_id") REFERENCES "deal_sessions" ("session_id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_session_mobile_units_unidad_fk') THEN
+        ALTER TABLE "deal_session_mobile_units"
+        ADD CONSTRAINT "deal_session_mobile_units_unidad_fk" FOREIGN KEY ("unidad_id") REFERENCES "unidades_moviles" ("unidad_id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+}
+
+async function ensureDealSessionsSchema(prisma: ReturnType<typeof getPrisma>) {
+  if (!ensureDealSessionsPromise) {
+    ensureDealSessionsPromise = (async () => {
+      const [dealSessionsExists = { exists: false }] = await prisma.$queryRawUnsafe<
+        Array<{ exists: boolean }>
+      >(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'deal_sessions'
+        ) AS exists;
+      `);
+
+      if (dealSessionsExists?.exists) {
+        return;
+      }
+
+      await createDealSessionsTables(prisma);
+
+      const [legacyExists = { exists: false }] = await prisma.$queryRawUnsafe<
+        Array<{ exists: boolean }>
+      >(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'seassons'
+        ) AS exists;
+      `);
+
+      if (!legacyExists?.exists) {
+        return;
+      }
+
+      const legacyRows = (await prisma.$queryRawUnsafe<
+        Array<{ data: Record<string, any> | null }>
+      >(`
+        SELECT row_to_json(s) AS data FROM seassons s;
+      `)) ?? [];
+
+      for (const row of legacyRows) {
+        const record = row?.data ?? {};
+        const sessionId = toNullableString(
+          (record as any).session_id ?? (record as any).seasson_id
+        );
+        const dealId = toNullableString((record as any).deal_id);
+        if (!sessionId || !dealId) {
+          continue;
+        }
+
+        const createdAt = parseLegacyDate((record as any).created_at) ?? new Date();
+        const updatedAt = parseLegacyDate((record as any).updated_at) ?? createdAt;
+        const startAt = parseLegacyDate((record as any).date_start ?? (record as any).start_at);
+        const endAt = parseLegacyDate((record as any).date_end ?? (record as any).end_at);
+        const status = normalizeLegacyStatus((record as any).status);
+        const salaId = toNullableString((record as any).sala_id);
+        const direccion = toNullableString(
+          (record as any).seasson_address ?? (record as any).direccion
+        );
+        const sede = toNullableString((record as any).sede);
+        const comentarios = toNullableString(
+          (record as any).comment_seasson ?? (record as any).comentarios
+        );
+        const dealProductId = toNullableString((record as any).deal_product_id);
+        const origen = toNullableString((record as any).deal_product_code ?? (record as any).origen);
+
+        await prisma.deal_sessions.upsert({
+          where: { session_id: sessionId },
+          create: {
+            session_id: sessionId,
+            deal_id: dealId,
+            deal_product_id: dealProductId,
+            status,
+            start_at: startAt,
+            end_at: endAt,
+            sala_id: salaId,
+            direccion,
+            sede,
+            comentarios,
+            origen,
+            created_at: createdAt,
+            updated_at: updatedAt,
+          },
+          update: {
+            deal_id: dealId,
+            deal_product_id: dealProductId,
+            status,
+            start_at: startAt,
+            end_at: endAt,
+            sala_id: salaId,
+            direccion,
+            sede,
+            comentarios,
+            origen,
+          },
+        });
+
+        const trainerIds = parseLegacyIdList(
+          (record as any).seasson_fireman ?? (record as any).trainerIds
+        );
+        if (trainerIds.length) {
+          await prisma.deal_session_trainers.createMany({
+            data: trainerIds.map((trainerId) => ({
+              session_id: sessionId,
+              trainer_id: trainerId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        const mobileUnitIds = parseLegacyIdList(
+          (record as any).seasson_vehicle ?? (record as any).mobileUnitIds
+        );
+        if (mobileUnitIds.length) {
+          await prisma.deal_session_mobile_units.createMany({
+            data: mobileUnitIds.map((unidadId) => ({
+              session_id: sessionId,
+              unidad_id: unidadId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+    })().catch((error) => {
+      ensureDealSessionsPromise = null;
+      throw error;
+    });
+  }
+
+  return ensureDealSessionsPromise ?? Promise.resolve();
 }
 
 function formatRangeForMessage(startIso: string | null, endIso: string | null) {
@@ -1388,6 +1670,7 @@ export const handler = async (event: any) => {
     }
 
     const prisma = getPrisma();
+    await ensureDealSessionsSchema(prisma);
     const method = event.httpMethod;
     const path = event.path || "";
     const normalizedPath = path.replace(/\/$/, "");
