@@ -819,6 +819,62 @@ async function syncSessionsForDeal(prisma: ReturnType<typeof getPrisma>, dealId:
   });
 }
 
+async function bootstrapSessionsForDeal(
+  prisma: ReturnType<typeof getPrisma>,
+  dealId: string
+) {
+  const context = await loadPlanningContext(prisma, dealId);
+  if (!context) {
+    return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
+  }
+
+  const { planificables } = context;
+  if (!planificables.length) {
+    return successResponse({ created: 0 });
+  }
+
+  let createdCount = 0;
+
+  await prisma.$transaction(async (tx) => {
+    const existingCount = await tx.deal_sessions.count({ where: { deal_id: dealId } });
+    if (existingCount > 0) {
+      return;
+    }
+
+    const placeholders: Array<{ deal_id: string; deal_product_id: string; session_id: string }> = [];
+
+    for (const product of planificables) {
+      if (!product?.id) continue;
+      const quantity = ensurePositiveInt(product.quantity);
+      if (quantity <= 0) continue;
+      for (let index = 0; index < quantity; index += 1) {
+        placeholders.push({
+          session_id: randomUUID(),
+          deal_id: dealId,
+          deal_product_id: product.id,
+        });
+      }
+    }
+
+    if (!placeholders.length) {
+      return;
+    }
+
+    createdCount = placeholders.length;
+    await tx.deal_sessions.createMany({
+      data: placeholders.map((entry) => ({
+        session_id: entry.session_id,
+        deal_id: entry.deal_id,
+        deal_product_id: entry.deal_product_id,
+        status: "Borrador",
+      })),
+      skipDuplicates: true,
+    });
+  });
+
+  return successResponse({ created: createdCount });
+}
+
 async function handleCreateSession(
   prisma: ReturnType<typeof getPrisma>,
   dealId: string,
@@ -1676,7 +1732,8 @@ export const handler = async (event: any) => {
     const normalizedPath = path.replace(/\/$/, "");
     const rawSessionId = parseSessionIdFromPath(path);
     const isSyncRoute = /\/deal-sessions\/sync$/i.test(normalizedPath);
-    const sessionIdFromPath = isSyncRoute ? null : rawSessionId;
+    const isBootstrapRoute = /\/deal-sessions\/bootstrap$/i.test(normalizedPath);
+    const sessionIdFromPath = isSyncRoute || isBootstrapRoute ? null : rawSessionId;
 
     if (method === "GET" && !sessionIdFromPath) {
       const dealIdRaw = event.queryStringParameters?.dealId ?? event.queryStringParameters?.deal_id;
@@ -1754,6 +1811,17 @@ export const handler = async (event: any) => {
       }
 
       return await syncSessionsForDeal(prisma, dealId);
+    }
+
+    if (method === "POST" && isBootstrapRoute) {
+      const dealIdRaw =
+        event.queryStringParameters?.dealId ?? event.queryStringParameters?.deal_id;
+      const dealId = dealIdRaw ? String(dealIdRaw).trim() : "";
+      if (!dealId.length) {
+        return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
+      }
+
+      return await bootstrapSessionsForDeal(prisma, dealId);
     }
 
     if (method === "POST" && !sessionIdFromPath) {

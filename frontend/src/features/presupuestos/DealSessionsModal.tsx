@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Button, Form, Spinner, Alert, Row, Col, Badge } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  bootstrapDealSessions,
   createDealSession,
   deleteDealSession,
   fetchDealSessions,
-  syncDealSessions,
   updateDealSession,
   isApiError,
   type DealSessionStatus,
@@ -229,6 +229,7 @@ export function DealSessionsModal({
   const [syncSummary, setSyncSummary] = useState<DealSessionsSyncResult | null>(null);
   const [syncFlaggedIds, setSyncFlaggedIds] = useState<string[]>([]);
   const [dataFlaggedIds, setDataFlaggedIds] = useState<string[]>([]);
+  const [bootstrapStatus, setBootstrapStatus] = useState<'idle' | 'running' | 'completed'>('idle');
   const successTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const sessionInfoMap = useMemo(() => {
     const map: Record<string, DealSession> = {};
@@ -277,6 +278,7 @@ export function DealSessionsModal({
       setSyncSummary(null);
       setSyncFlaggedIds([]);
       setDataFlaggedIds([]);
+      setBootstrapStatus('idle');
     }
   }, [show]);
 
@@ -288,22 +290,36 @@ export function DealSessionsModal({
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
     if (!show || !normalizedDealId.length) {
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
 
+    if (!sessionsQuery.isSuccess) {
+      return;
+    }
+
+    if (bootstrapStatus === 'running' || bootstrapStatus === 'completed') {
+      return;
+    }
+
+    const sessions = Array.isArray(sessionsQuery.data) ? sessionsQuery.data : [];
+    if (sessions.length > 0) {
+      setBootstrapStatus('completed');
+      return;
+    }
+
+    let cancelled = false;
+
+    setBootstrapStatus('running');
     setSyncing(true);
     setSyncError(null);
+    setSyncSummary(null);
+    setSyncFlaggedIds([]);
 
-    syncDealSessions(normalizedDealId)
-      .then((result) => {
+    bootstrapDealSessions(normalizedDealId)
+      .then(() => {
         if (cancelled) return;
-        setSyncSummary(result);
-        setSyncFlaggedIds(result.flagged ?? []);
+        setBootstrapStatus('completed');
         queryClient.invalidateQueries({ queryKey: sessionQueryKey });
       })
       .catch((error) => {
@@ -312,8 +328,7 @@ export function DealSessionsModal({
           ? error.message
           : 'No se pudo sincronizar las sesiones. Inténtalo de nuevo.';
         setSyncError(message);
-        setSyncSummary(null);
-        setSyncFlaggedIds([]);
+        setBootstrapStatus('idle');
       })
       .finally(() => {
         if (!cancelled) {
@@ -324,7 +339,15 @@ export function DealSessionsModal({
     return () => {
       cancelled = true;
     };
-  }, [show, normalizedDealId, queryClient, sessionQueryKey]);
+  }, [
+    show,
+    normalizedDealId,
+    sessionsQuery.isSuccess,
+    sessionsQuery.data,
+    bootstrapStatus,
+    queryClient,
+    sessionQueryKey,
+  ]);
 
   useEffect(() => {
     const data = sessionsQuery.data;

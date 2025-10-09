@@ -957,6 +957,26 @@ export async function fetchDealSessions(dealId: string): Promise<DealSession[]> 
   return rows.map((row) => normalizeDealSession(row));
 }
 
+export async function bootstrapDealSessions(
+  dealId: string
+): Promise<{ created: number }> {
+  const normalizedId = String(dealId ?? '').trim();
+  if (!normalizedId.length) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId requerido para crear sesiones');
+  }
+
+  const data = await request(
+    `/deal-sessions/bootstrap?dealId=${encodeURIComponent(normalizedId)}`,
+    {
+      method: 'POST',
+    }
+  );
+
+  return {
+    created: Number.isFinite(Number(data?.created)) ? Number(data.created) : 0,
+  };
+}
+
 export async function createDealSession(
   dealId: string,
   payload: DealSessionUpdatePayload
