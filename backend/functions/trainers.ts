@@ -78,7 +78,17 @@ function parseSedeInput(input: unknown): ParseSedeResult {
     return { values: [] as string[] };
   }
 
-  const rawValues = Array.isArray(input) ? input : [input];
+  if (!Array.isArray(input)) {
+    return {
+      error: errorResponse(
+        'VALIDATION_ERROR',
+        'El campo sede debe ser un array de strings',
+        400,
+      ),
+    };
+  }
+
+  const rawValues = input;
   const values: string[] = [];
 
   for (const raw of rawValues) {
