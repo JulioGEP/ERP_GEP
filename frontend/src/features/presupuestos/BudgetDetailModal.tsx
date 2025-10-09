@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Button,
@@ -28,7 +28,6 @@ import {
   isApiError
 } from './api';
 import { formatSedeLabel } from './formatSedeLabel';
-import { DealSessionsModal } from './DealSessionsModal';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
 import { SessionPlanner } from './SessionPlanner';
@@ -151,7 +150,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
-  const [openSections, setOpenSections] = useState<string[]>([]);
+  const [openSections, setOpenSections] = useState<string[]>(['sessions']);
+  const sessionsSectionRef = useRef<HTMLDivElement | null>(null);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [creatingNote, setCreatingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -171,10 +171,16 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   );
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [showSessionsModal, setShowSessionsModal] = useState(false);
 
   const updateForm = (field: keyof EditableDealForm, value: string) => {
     setForm((current) => (current ? { ...current, [field]: value } : current));
+  };
+
+  const openSessionsSection = () => {
+    setOpenSections((current) => (current.includes('sessions') ? current : [...current, 'sessions']));
+    if (sessionsSectionRef.current) {
+      sessionsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   // Inicializa solo los campos editables (schema con training_address)
@@ -202,12 +208,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     }
   }, [deal, summary]);
 
-  useEffect(() => {
-    if (!dealId) {
-      setShowSessionsModal(false);
-    }
-  }, [dealId]);
-
   const initialEditable = useMemo(() => {
     const source = deal ?? summary;
     if (!source) return null;
@@ -233,23 +233,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       }),
     [detailProducts]
   );
-
-  const defaultSessionDurationHours = useMemo(() => {
-    for (const product of trainingProducts) {
-      const rawHours = product?.hours;
-      if (typeof rawHours === 'number' && Number.isFinite(rawHours) && rawHours > 0) {
-        return rawHours;
-      }
-      if (typeof rawHours === 'string') {
-        const trimmed = rawHours.trim();
-        if (trimmed.length) {
-          const parsed = Number(trimmed);
-          if (Number.isFinite(parsed) && parsed > 0) return parsed;
-        }
-      }
-    }
-    return null;
-  }, [trainingProducts]);
 
   const initialProductHours = useMemo(() => {
     const map: Record<string, string> = {};
@@ -303,11 +286,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     const trimmed = String(value).trim();
     return trimmed.length ? trimmed : '—';
   };
-
-  const sessionDefaultSede =
-    form?.sede_label ?? deal?.sede_label ?? summary?.sede_label ?? '';
-  const sessionDefaultAddress =
-    form?.training_address ?? deal?.training_address ?? summary?.training_address ?? '';
 
   const handleHoursChange = (productId: string, value: string) => {
     if (!trainingProductIds.has(productId)) return;
@@ -684,7 +662,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             variant="primary"
             size="sm"
             className="erp-modal-action"
-            onClick={() => setShowSessionsModal(true)}
+            onClick={openSessionsSection}
             disabled={!normalizedDealId}
           >
             Planificación
@@ -835,10 +813,12 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   </div>
                 </Accordion.Header>
                 <Accordion.Body>
-                  <SessionPlanner
-                    dealId={deal.deal_id}
-                    dealTitle={deal.title ?? summary?.title ?? null}
-                  />
+                  <div ref={sessionsSectionRef}>
+                    <SessionPlanner
+                      dealId={deal.deal_id}
+                      dealTitle={deal.title ?? summary?.title ?? null}
+                    />
+                  </div>
                 </Accordion.Body>
               </Accordion.Item>
               <Accordion.Item eventKey="notes">
@@ -1152,16 +1132,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         )}
       </Modal.Footer>
     </Modal>
-
-    <DealSessionsModal
-      show={showSessionsModal}
-      dealId={normalizedDealId.length ? normalizedDealId : null}
-      dealTitle={modalTitle}
-      defaultSede={sessionDefaultSede}
-      defaultAddress={sessionDefaultAddress}
-      defaultDurationHours={defaultSessionDurationHours}
-      onClose={() => setShowSessionsModal(false)}
-    />
 
     <Modal show={!!previewDocument} onHide={closePreview} size="lg" centered>
       <Modal.Header closeButton>
