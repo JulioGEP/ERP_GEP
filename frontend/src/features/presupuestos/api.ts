@@ -9,6 +9,7 @@ import type {
   DealSession,
   DealSessionStatus,
 } from "../../types/deal";
+export type { DealSessionStatus } from "../../types/deal";
 import type { Room } from "../../types/room";
 import type { Trainer } from "../../types/trainer";
 import type { MobileUnit } from "../../types/mobile-unit";
@@ -459,66 +460,231 @@ function normalizeDealSession(raw: any): DealSession {
   };
 }
 
-export function normalizeConflictSummaries(raw: any): ResourceConflictSummary[] {
-  if (!Array.isArray(raw)) return [];
+type DealSessionResourceTrainer = {
+  trainer_id: string;
+  name: string | null;
+  activo: boolean;
+};
 
-  const summaries: ResourceConflictSummary[] = [];
+type DealSessionResourceMobileUnit = {
+  unidad_id: string;
+  name: string | null;
+  matricula: string | null;
+  tipo: string[];
+  sede: string[];
+};
 
-  for (const entry of raw) {
-    if (!entry || typeof entry !== "object") continue;
-    const item = entry as Record<string, any>;
+type DealSessionResourceRoom = {
+  sala_id: string;
+  name: string | null;
+  sede: string | null;
+};
 
-    const typeRaw = toStringValue(
-      item.resource_type ?? item.type ?? item.resourceType ?? item.resource
-    );
-    const resourceType =
-      typeRaw === "sala" || typeRaw === "formador" || typeRaw === "unidad_movil"
-        ? (typeRaw as ResourceConflictSummary["resource_type"])
-        : null;
-    if (!resourceType) continue;
+export type DealSessionResource = {
+  session_id: string;
+  deal_id: string;
+  deal_product_id: string | null;
+  deal_product: { id: string; code: string | null; hours: number | null } | null;
+  inicio: string | null;
+  fin: string | null;
+  sala_id: string | null;
+  sala: DealSessionResourceRoom | null;
+  formadores: DealSessionResourceTrainer[];
+  unidades_moviles: DealSessionResourceMobileUnit[];
+  direccion: string | null;
+  sede: string | null;
+  comentarios: string | null;
+  estado: string | null;
+  origen: { deal_product_id: string | null; code: string | null } | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
 
-    const resourceId =
-      toStringValue(item.resource_id ?? item.resourceId ?? item.id ?? item.resource) ?? "";
-    if (!resourceId.length) continue;
-
-    const resourceLabel = toStringValue(
-      item.resource_label ?? item.resourceLabel ?? item.name ?? item.label
-    );
-
-    const detailsRaw = Array.isArray(item.conflicts)
-      ? item.conflicts
-      : Array.isArray(item.details)
-      ? item.details
-      : [];
-
-    const conflicts: ResourceConflictDetail[] = [];
-    for (const detail of detailsRaw) {
-      if (!detail || typeof detail !== "object") continue;
-      const row = detail as Record<string, any>;
-
-      conflicts.push({
-        session_id:
-          toStringValue(row.session_id ?? row.sessionId ?? row.id ?? row.session) ?? "",
-        deal_id: toStringValue(row.deal_id ?? row.dealId ?? row.deal ?? row.deal_id) ?? "",
-        deal_title: toStringValue(row.deal_title ?? row.dealTitle) ?? null,
-        organization_name:
-          toStringValue(row.organization_name ?? row.organizationName) ?? null,
-        product_code: toStringValue(row.product_code ?? row.productCode) ?? null,
-        product_name: toStringValue(row.product_name ?? row.productName) ?? null,
-        inicio: toStringValue(row.inicio ?? row.start ?? row.start_at ?? row.startAt) ?? null,
-        fin: toStringValue(row.fin ?? row.end ?? row.end_at ?? row.endAt) ?? null,
-      });
+function toStringArray(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => toStringValue(entry))
+      .filter((entry): entry is string => entry !== null);
+  }
+  const parsed = toStringValue(value);
+  if (!parsed) return [];
+  try {
+    const json = JSON.parse(parsed);
+    if (Array.isArray(json)) {
+      return json
+        .map((entry) => toStringValue(entry))
+        .filter((entry): entry is string => entry !== null);
     }
+  } catch {
+    /* ignore */
+  }
+  return parsed
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length);
+}
 
-    summaries.push({
-      resource_type: resourceType,
-      resource_id: resourceId,
-      resource_label: resourceLabel,
-      conflicts,
-    });
+function normalizeDealSessionResourceTrainer(raw: any): DealSessionResourceTrainer | null {
+  const trainerId = toStringValue(raw?.trainer_id ?? raw?.trainerId);
+  if (!trainerId) return null;
+  return {
+    trainer_id: trainerId,
+    name: toStringValue(raw?.name ?? raw?.trainer?.name) ?? null,
+    activo: Boolean(raw?.activo ?? raw?.trainer?.activo ?? false),
+  };
+}
+
+function normalizeDealSessionResourceMobileUnit(
+  raw: any
+): DealSessionResourceMobileUnit | null {
+  const unitId = toStringValue(raw?.unidad_id ?? raw?.unidadId);
+  if (!unitId) return null;
+  const unit = raw?.unidad ?? raw;
+  return {
+    unidad_id: unitId,
+    name: toStringValue(unit?.name) ?? null,
+    matricula: toStringValue(unit?.matricula) ?? null,
+    tipo: toStringArray(unit?.tipo),
+    sede: toStringArray(unit?.sede),
+  };
+}
+
+function normalizeDealSessionResourceRoom(raw: any): DealSessionResourceRoom | null {
+  const roomId = toStringValue(raw?.sala_id ?? raw?.room_id ?? raw?.salaId);
+  if (!roomId) return null;
+  return {
+    sala_id: roomId,
+    name: toStringValue(raw?.name) ?? null,
+    sede: toStringValue(raw?.sede) ?? null,
+  };
+}
+
+function normalizeDealSessionResource(raw: any): DealSessionResource {
+  if (!raw || typeof raw !== "object") {
+    throw new ApiError("INVALID_RESPONSE", "Sesión no válida");
   }
 
-  return summaries;
+  const sessionId =
+    toStringValue(raw?.session_id ?? raw?.seasson_id ?? raw?.id) ?? "";
+  const dealId =
+    toStringValue(raw?.deal_id ?? raw?.dealId ?? raw?.deal) ?? "";
+
+  if (!sessionId || !dealId) {
+    throw new ApiError("INVALID_RESPONSE", "Sesión no válida");
+  }
+
+  const trainers: DealSessionResourceTrainer[] = Array.isArray(raw?.formadores)
+    ? raw.formadores
+        .map((entry: any) => normalizeDealSessionResourceTrainer(entry))
+        .filter((entry): entry is DealSessionResourceTrainer => entry !== null)
+    : [];
+
+  const mobileUnits: DealSessionResourceMobileUnit[] = Array.isArray(
+    raw?.unidades_moviles
+  )
+    ? raw.unidades_moviles
+        .map((entry: any) => normalizeDealSessionResourceMobileUnit(entry))
+        .filter((entry): entry is DealSessionResourceMobileUnit => entry !== null)
+    : [];
+
+  const room = normalizeDealSessionResourceRoom(raw?.sala ?? null);
+
+  let dealProduct: DealSessionResource["deal_product"] = null;
+  if (raw?.deal_product && typeof raw.deal_product === "object") {
+    const productId = toStringValue(raw.deal_product.id);
+    dealProduct = {
+      id: productId ?? (raw.deal_product.id != null ? String(raw.deal_product.id) : ""),
+      code: toStringValue(raw.deal_product.code) ?? null,
+      hours: toNumber(raw.deal_product.hours),
+    };
+  }
+
+  const origin = raw?.origen && typeof raw.origen === "object"
+    ? {
+        deal_product_id:
+          toStringValue(raw.origen.deal_product_id ?? raw.origen.dealProductId) ?? null,
+        code: toStringValue(raw.origen.code) ?? null,
+      }
+    : null;
+
+  return {
+    session_id: sessionId,
+    deal_id: dealId,
+    deal_product_id: toStringValue(raw?.deal_product_id) ?? null,
+    deal_product: dealProduct,
+    inicio: toStringValue(raw?.inicio ?? raw?.date_start) ?? null,
+    fin: toStringValue(raw?.fin ?? raw?.date_end) ?? null,
+    sala_id: toStringValue(raw?.sala_id ?? raw?.room_id) ?? null,
+    sala: room,
+    formadores: trainers,
+    unidades_moviles: mobileUnits,
+    direccion: toStringValue(raw?.direccion ?? raw?.seasson_address) ?? null,
+    sede: toStringValue(raw?.sede) ?? null,
+    comentarios: toStringValue(raw?.comentarios ?? raw?.comment_seasson) ?? null,
+    estado: toStringValue(raw?.estado ?? raw?.status) ?? null,
+    origen: origin,
+    created_at: toStringValue(raw?.created_at) ?? null,
+    updated_at: toStringValue(raw?.updated_at) ?? null,
+  };
+}
+
+function normalizeConflictDetail(raw: any): ResourceConflictDetail | null {
+  const sessionId = toStringValue(raw?.session_id ?? raw?.sessionId);
+  const dealId = toStringValue(raw?.deal_id ?? raw?.dealId);
+  if (!sessionId || !dealId) return null;
+
+  return {
+    session_id: sessionId,
+    deal_id: dealId,
+    deal_title: toStringValue(raw?.deal_title ?? raw?.dealTitle) ?? null,
+    organization_name:
+      toStringValue(raw?.organization_name ?? raw?.organizationName) ?? null,
+    product_code: toStringValue(raw?.product_code ?? raw?.productCode) ?? null,
+    product_name: toStringValue(raw?.product_name ?? raw?.productName) ?? null,
+    inicio: toStringValue(raw?.inicio ?? raw?.start) ?? null,
+    fin: toStringValue(raw?.fin ?? raw?.end) ?? null,
+  };
+}
+
+function normalizeConflictSummary(raw: any): ResourceConflictSummary | null {
+  const typeValue = toStringValue(raw?.resource_type ?? raw?.resourceType);
+  const id = toStringValue(raw?.resource_id ?? raw?.resourceId);
+  if (!typeValue || !id) return null;
+
+  const normalizedType =
+    typeValue === "sala"
+      ? "sala"
+      : typeValue === "formador"
+      ? "formador"
+      : typeValue === "unidad_movil" || typeValue === "unidad-movil"
+      ? "unidad_movil"
+      : null;
+  if (!normalizedType) return null;
+
+  const conflictsRaw = Array.isArray(raw?.conflicts) ? raw.conflicts : [];
+  const conflicts = conflictsRaw
+    .map((entry: any) => normalizeConflictDetail(entry))
+    .filter((entry): entry is ResourceConflictDetail => entry !== null);
+
+  return {
+    resource_type: normalizedType,
+    resource_id: id,
+    resource_label: toStringValue(raw?.resource_label ?? raw?.resourceLabel) ?? null,
+    conflicts,
+  };
+}
+
+export function normalizeConflictSummaries(raw: unknown): ResourceConflictSummary[] {
+  const entries = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as any)?.conflicts)
+    ? ((raw as any).conflicts as unknown[])
+    : [];
+
+  return entries
+    .map((entry) => normalizeConflictSummary(entry))
+    .filter((entry): entry is ResourceConflictSummary => entry !== null);
 }
 
 /* =====================
@@ -1014,6 +1180,86 @@ export function buildDealDetailViewModel(
       author: pickNonEmptyString(n?.author ?? null),
     })),
   };
+}
+
+/* =============================================
+ * Sesiones con recursos (planificador)
+ * ============================================= */
+
+export type DealSessionUpdatePayload = {
+  inicio?: string | null;
+  fin?: string | null;
+  sala_id?: string | null;
+  formadores?: string[];
+  unidades_moviles?: string[];
+  direccion?: string | null;
+  sede?: string | null;
+  comentarios?: string | null;
+  estado?: string | null;
+};
+
+export async function fetchDealSessionsWithResources(
+  dealId: string
+): Promise<DealSessionResource[]> {
+  const normalizedId = String(dealId ?? "").trim();
+  if (!normalizedId.length) {
+    throw new ApiError("VALIDATION_ERROR", "dealId requerido para obtener sesiones");
+  }
+
+  const data = await request(
+    `/deal-sessions?dealId=${encodeURIComponent(normalizedId)}&expand=resources`
+  );
+  const rows: any[] = Array.isArray(data?.sessions) ? data.sessions : [];
+  return rows.map((row) => normalizeDealSessionResource(row));
+}
+
+export async function updateDealSessionWithResources(
+  sessionId: string,
+  payload: DealSessionUpdatePayload
+): Promise<DealSessionResource> {
+  const normalizedId = String(sessionId ?? "").trim();
+  if (!normalizedId.length) {
+    throw new ApiError(
+      "VALIDATION_ERROR",
+      "sessionId requerido para actualizar la sesión"
+    );
+  }
+
+  const body: Record<string, unknown> = { expand: "resources" };
+  if (Object.prototype.hasOwnProperty.call(payload, "inicio")) {
+    body.inicio = payload.inicio;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "fin")) {
+    body.fin = payload.fin;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "sala_id")) {
+    body.sala_id = payload.sala_id;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "formadores")) {
+    body.formadores = payload.formadores;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "unidades_moviles")) {
+    body.unidades_moviles = payload.unidades_moviles;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "direccion")) {
+    body.direccion = payload.direccion;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "sede")) {
+    body.sede = payload.sede;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "comentarios")) {
+    body.comentarios = payload.comentarios;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "estado")) {
+    body.estado = payload.estado;
+  }
+
+  const data = await request(`/deal-sessions/${encodeURIComponent(normalizedId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+  return normalizeDealSessionResource(data?.session ?? {});
 }
 
 export async function fetchRoomsAvailability(
