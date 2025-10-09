@@ -32,6 +32,8 @@ interface BudgetTableProps {
   onRetry: () => void;
   onSelect: (budget: DealSummary) => void;
   onDelete?: (budget: DealSummary) => Promise<void>;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -131,7 +133,9 @@ export function BudgetTable({
   error,
   onRetry,
   onSelect,
-  onDelete
+  onDelete,
+  hasActiveFilters = false,
+  onClearFilters,
 }: BudgetTableProps) {
   const [fallbackLoading, setFallbackLoading] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
@@ -286,6 +290,25 @@ export function BudgetTable({
   }
 
   if (!effectiveBudgets.length) {
+    if (hasActiveFilters) {
+      return (
+        <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm">
+          <p className="mb-1 fw-semibold">No se encontraron presupuestos que coincidan con los filtros.</p>
+          <p className="mb-0 small">Ajusta los criterios o limpia los filtros para ver más resultados.</p>
+          <div className="mt-3 d-flex justify-content-center gap-2 flex-wrap">
+            {typeof onClearFilters === 'function' && (
+              <Button size="sm" variant="outline-primary" onClick={onClearFilters}>
+                Limpiar filtros
+              </Button>
+            )}
+            <Button size="sm" variant="outline-secondary" onClick={onRetry}>
+              Reintentar
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm">
         <p className="mb-1 fw-semibold">No hay presupuestos sin sesiones pendientes.</p>

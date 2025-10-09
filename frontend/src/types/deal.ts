@@ -72,6 +72,7 @@ export interface DealSummary {
 
   title: string;
 
+  pipeline_id?: string | null;        // id interno del pipeline
   pipeline_label?: string | null;     // label (no ID)
   training_address?: string | null;   // <-- schema vigente
 
@@ -79,6 +80,8 @@ export interface DealSummary {
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
+  transporte?: string | null;
+  po?: string | null;
 
   hours?: number | null;    // editable en ERP (no autocalculado)
   alumnos?: number | null;  // editable en ERP
