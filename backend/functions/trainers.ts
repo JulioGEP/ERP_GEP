@@ -2,6 +2,7 @@
 import { randomUUID } from 'crypto';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { toMadridISOString } from './_shared/timezone';
 
 const OPTIONAL_STRING_FIELDS = [
   'apellido',
@@ -62,10 +63,8 @@ function normalizeTrainer(row: TrainerRecord) {
     titulacion: row.titulacion,
     activo: Boolean(row.activo),
     sede: normalizedSede,
-    created_at:
-      row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at ?? null,
-    updated_at:
-      row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at ?? null,
+    created_at: toMadridISOString(row.created_at),
+    updated_at: toMadridISOString(row.updated_at),
   };
 }
 

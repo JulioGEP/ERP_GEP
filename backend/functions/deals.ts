@@ -1,6 +1,7 @@
 // backend/functions/deals.ts
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { getPrisma } from "./_shared/prisma";
+import { nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import {
   getDeal,
   getOrganization,
@@ -95,13 +96,15 @@ function mapDealFileForApi(file: any) {
   const rawFileUrl = typeof file.file_url === "string" ? file.file_url : null;
   const isHttp = isHttpUrl(rawUrl ?? rawFileUrl);
 
+  const createdAt = file.created_at ?? file.added_at ?? null;
+
   return {
     id,
     source: isHttp ? "PIPEDRIVE" : "S3",
     name: file.file_name ?? file.name ?? null,
     mime_type: file.file_type ?? file.mime_type ?? null,
     url: isHttp ? rawUrl ?? rawFileUrl ?? null : null,
-    created_at: file.created_at ?? file.added_at ?? null,
+    created_at: toMadridISOString(createdAt),
   };
 }
 
@@ -109,12 +112,31 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
   if (!deal) return deal;
   const out: any = { ...deal };
 
+  if ("created_at" in out) {
+    out.created_at = toMadridISOString(out.created_at);
+  }
+  if ("updated_at" in out) {
+    out.updated_at = toMadridISOString(out.updated_at);
+  }
+
   if ("deal_products" in out) {
-    out.products = out.deal_products;
+    out.products = Array.isArray(out.deal_products)
+      ? out.deal_products.map((product: any) => ({
+          ...product,
+          created_at: toMadridISOString(product?.created_at ?? null),
+          updated_at: toMadridISOString(product?.updated_at ?? null),
+        }))
+      : out.deal_products;
     delete out.deal_products;
   }
   if ("deal_notes" in out) {
-    out.notes = out.deal_notes;
+    out.notes = Array.isArray(out.deal_notes)
+      ? out.deal_notes.map((note: any) => ({
+          ...note,
+          created_at: toMadridISOString(note?.created_at ?? null),
+          updated_at: toMadridISOString(note?.updated_at ?? null),
+        }))
+      : out.deal_notes;
     delete out.deal_notes;
   }
   if ("deal_files" in out) {
@@ -324,7 +346,7 @@ export const handler = async (event: any) => {
       }
 
       if (productPatches.length) {
-        const timestamp = new Date();
+        const timestamp = nowInMadridISO();
         await Promise.all(
           productPatches.map((product) =>
             prisma.deal_products.updateMany({

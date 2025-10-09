@@ -2,6 +2,7 @@
 import { randomUUID } from "crypto";
 import { getPrisma } from "./_shared/prisma";
 import { COMMON_HEADERS, errorResponse, successResponse } from "./_shared/response";
+import { nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 
 const DEFAULT_AUTHOR = process.env.DEFAULT_NOTE_AUTHOR || "erp_user";
 
@@ -28,8 +29,8 @@ function mapNoteForResponse(note: any) {
     deal_id: note.deal_id,
     content: note.content,
     author: note.author,
-    created_at: note.created_at instanceof Date ? note.created_at.toISOString() : note.created_at ?? null,
-    updated_at: note.updated_at instanceof Date ? note.updated_at.toISOString() : note.updated_at ?? null,
+    created_at: toMadridISOString(note.created_at),
+    updated_at: toMadridISOString(note.updated_at),
   };
 }
 
@@ -63,8 +64,8 @@ export const handler = async (event: any) => {
         return errorResponse("VALIDATION_ERROR", "content requerido", 400);
       }
 
-      const now = new Date();
       const author = requestUser && requestUser.length ? requestUser : DEFAULT_AUTHOR;
+      const now = nowInMadridISO();
 
       const created = await prisma.deal_notes.create({
         data: {
@@ -97,11 +98,13 @@ export const handler = async (event: any) => {
         return errorResponse("VALIDATION_ERROR", "content requerido", 400);
       }
 
+      const updatedNow = nowInMadridISO();
+
       const updated = await prisma.deal_notes.update({
         where: { id: String(noteId) },
         data: {
           content: trimmedContent,
-          updated_at: new Date(),
+          updated_at: updatedNow,
         },
       });
 
