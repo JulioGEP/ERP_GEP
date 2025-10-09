@@ -1,8 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
 import { fetchDealsWithoutSessions } from './api'; // ← usar API común
 import { formatSedeLabel } from './formatSedeLabel';
+import { useDataTable } from '../../hooks/useDataTable';
+import { SortableHeader } from '../../components/table/SortableHeader';
+import { DataTablePagination } from '../../components/table/DataTablePagination';
 
 interface BudgetTableProps {
   budgets: DealSummary[];
@@ -44,6 +47,18 @@ function getProductLabel(budget: DealSummary): { label: string; title?: string }
   if (!names.length) return { label: '—' };
   if (names.length === 1) return { label: names[0] };
   return { label: `${names[0]} (+${names.length - 1})`, title: names.join(', ') };
+}
+
+function getOrganizationLabel(budget: DealSummary): string {
+  return safeTrim(budget.organization?.name ?? '') ?? '—';
+}
+
+function getTitleLabel(budget: DealSummary): string {
+  return safeTrim(budget.title ?? '') ?? '—';
+}
+
+function getSedeLabel(budget: DealSummary): string {
+  return safeTrim(formatSedeLabel(budget.sede_label) ?? '') ?? '—';
 }
 
 /** Normaliza mínimamente un item del backend a DealSummary (lo justo para la tabla) */
@@ -98,6 +113,36 @@ export function BudgetTable({
     if (fallbackBudgets && fallbackBudgets.length) return fallbackBudgets;
     return budgets;
   }, [budgets, fallbackBudgets]);
+
+  const getSortValue = useCallback((budget: DealSummary, column: string) => {
+    switch (column) {
+      case 'presupuesto':
+        return budget.dealNumericId ?? toStringValue(budget.dealId) ?? null;
+      case 'empresa':
+        return getOrganizationLabel(budget);
+      case 'titulo':
+        return getTitleLabel(budget);
+      case 'formacion':
+        return getProductNames(budget).join(', ');
+      case 'sede':
+        return getSedeLabel(budget);
+      default:
+        return null;
+    }
+  }, []);
+
+  const {
+    pageItems,
+    sortState,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    requestSort,
+    goToPage,
+  } = useDataTable(effectiveBudgets, {
+    getSortValue,
+  });
 
   useEffect(() => {
     if (!isLoading && !error && budgets.length === 0 && !fallbackBudgets && !fallbackLoading) {
@@ -198,24 +243,51 @@ export function BudgetTable({
       <Table hover className="mb-0 align-middle">
         <thead>
           <tr>
-            <th scope="col" style={{ width: 160 }}>Presupuesto</th>
-            <th scope="col">Empresa</th>
-            <th scope="col">Título</th>
-            <th scope="col">Formación</th>
-            <th scope="col" style={{ width: 140 }}>Sede</th>
+            <SortableHeader
+              columnKey="presupuesto"
+              label="Presupuesto"
+              sortState={sortState}
+              onSort={requestSort}
+              style={{ width: 160 }}
+            />
+            <SortableHeader
+              columnKey="empresa"
+              label="Empresa"
+              sortState={sortState}
+              onSort={requestSort}
+            />
+            <SortableHeader
+              columnKey="titulo"
+              label="Título"
+              sortState={sortState}
+              onSort={requestSort}
+            />
+            <SortableHeader
+              columnKey="formacion"
+              label="Formación"
+              sortState={sortState}
+              onSort={requestSort}
+            />
+            <SortableHeader
+              columnKey="sede"
+              label="Sede"
+              sortState={sortState}
+              onSort={requestSort}
+              style={{ width: 140 }}
+            />
           </tr>
         </thead>
         <tbody>
-          {effectiveBudgets.map((budget, index) => {
+          {pageItems.map((budget, index) => {
             const names = getProductNames(budget);
             const { label: productLabel } = getProductLabel(budget);
 
             const id = toStringValue(budget.dealId);
             const presupuestoLabel = id ? `#${id}` : '—';
             const presupuestoTitle = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
-            const organizationLabel = safeTrim(budget.organization?.name ?? '') ?? '—';
-            const titleLabel = safeTrim(budget.title ?? '') ?? '—';
-            const sedeLabel = safeTrim(formatSedeLabel(budget.sede_label) ?? '') ?? '—';
+            const organizationLabel = getOrganizationLabel(budget);
+            const titleLabel = getTitleLabel(budget);
+            const sedeLabel = getSedeLabel(budget);
 
             const rowKey = id ?? `${organizationLabel}-${titleLabel}-${index}`;
 
@@ -233,6 +305,13 @@ export function BudgetTable({
           })}
         </tbody>
       </Table>
+      <DataTablePagination
+        page={currentPage}
+        totalPages={totalPages}
+        pageSize={pageSize}
+        totalItems={totalItems}
+        onPageChange={goToPage}
+      />
     </div>
   );
 }

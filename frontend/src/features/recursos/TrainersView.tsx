@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/TrainersView.tsx
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Alert, Button, Spinner, Table } from "react-bootstrap";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrainerModal, type TrainerFormValues } from "./TrainerModal";
@@ -7,6 +7,9 @@ import { createTrainer, fetchTrainers, updateTrainer, type TrainerPayload } from
 import { SEDE_OPTIONS } from "./trainers.constants";
 import type { Trainer } from "../../types/trainer";
 import { ApiError } from "../presupuestos/api";
+import { useDataTable } from "../../hooks/useDataTable";
+import { SortableHeader } from "../../components/table/SortableHeader";
+import { DataTablePagination } from "../../components/table/DataTablePagination";
 
 type ToastParams = {
   variant: "success" | "danger";
@@ -105,7 +108,6 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
   const trainers = trainersQuery.data ?? [];
   const isLoading = trainersQuery.isLoading;
   const isFetching = trainersQuery.isFetching && !trainersQuery.isLoading;
-  const tableRows = trainers.length;
 
   const handleAddTrainer = () => {
     setSelectedTrainer(null);
@@ -137,6 +139,32 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const modalInitialData = modalMode === "edit" ? selectedTrainer : null;
   const errorMessage = trainersQuery.error ? formatError(trainersQuery.error) : null;
+
+  const getSortValue = useCallback((trainer: Trainer, column: string) => {
+    switch (column) {
+      case "nombre":
+        return buildFullName(trainer);
+      case "especialidad":
+        return trainer.especialidad ?? "";
+      case "email":
+        return trainer.email ?? "";
+      default:
+        return null;
+    }
+  }, []);
+
+  const {
+    pageItems,
+    sortState,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    requestSort,
+    goToPage,
+  } = useDataTable(trainers, {
+    getSortValue,
+  });
 
   const subtitle = useMemo(
     () => "Consulta, edita o añade nuevos formadores y bomberos a tu base de datos.",
@@ -171,9 +199,24 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
           <Table hover className="mb-0 align-middle">
             <thead>
               <tr className="text-muted text-uppercase small">
-                <th className="fw-semibold">Nombre</th>
-                <th className="fw-semibold">Especialidad</th>
-                <th className="fw-semibold">Email</th>
+                <SortableHeader
+                  columnKey="nombre"
+                  label={<span className="fw-semibold">Nombre</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
+                <SortableHeader
+                  columnKey="especialidad"
+                  label={<span className="fw-semibold">Especialidad</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
+                <SortableHeader
+                  columnKey="email"
+                  label={<span className="fw-semibold">Email</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
               </tr>
             </thead>
             <tbody>
@@ -183,8 +226,8 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
-              ) : tableRows ? (
-                trainers.map((trainer) => {
+              ) : totalItems ? (
+                pageItems.map((trainer) => {
                   const fullName = buildFullName(trainer);
                   return (
                     <tr
@@ -209,6 +252,13 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
             </tbody>
           </Table>
         </div>
+        <DataTablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={totalItems}
+          onPageChange={goToPage}
+        />
       </div>
 
       <TrainerModal
