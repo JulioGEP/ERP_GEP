@@ -26,6 +26,29 @@ type ExpandKey =
   | "unidades_moviles"
   | "resources";
 
+type PlanificableProduct = {
+  id: string;
+  code: string | null;
+  quantity: any;
+  hours: any;
+};
+
+type ExistingSessionInfo = {
+  session_id: string;
+  deal_id: string;
+  deal_product_id: string | null;
+  status: string;
+  start_at: Date | string | null;
+  end_at: Date | string | null;
+  sala_id: string | null;
+  direccion: string | null;
+  sede: string | null;
+  comentarios: string | null;
+  created_at: Date | string | null;
+  trainers?: Array<{ trainer_id: string }>;
+  mobile_units?: Array<{ unidad_id: string }>;
+};
+
 type DealSessionRecord = {
   session_id: string;
   deal_id: string;
@@ -147,12 +170,94 @@ function formatRangeForMessage(startIso: string | null, endIso: string | null) {
   return startText ?? endText ?? null;
 }
 
-function mapSession(record: DealSessionRecord, expand: Set<ExpandKey>) {
+function toComparableTimestamp(value: Date | string | null | undefined): number {
+  if (!value) return 0;
+  const date = value instanceof Date ? value : new Date(value);
+  const ts = date.getTime();
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function isSessionEmpty(record: {
+  start_at: Date | string | null;
+  end_at: Date | string | null;
+  sala_id: string | null;
+  direccion: string | null;
+  comentarios: string | null;
+  trainers?: Array<{ trainer_id: string }>;
+  mobile_units?: Array<{ unidad_id: string }>;
+}) {
+  const hasStart = !!record.start_at;
+  const hasEnd = !!record.end_at;
+  const hasRoom = typeof record.sala_id === "string" && record.sala_id.trim().length > 0;
+  const hasDireccion = typeof record.direccion === "string" && record.direccion.trim().length > 0;
+  const hasComentarios = typeof record.comentarios === "string" && record.comentarios.trim().length > 0;
+  const hasTrainers = Array.isArray(record.trainers) && record.trainers.length > 0;
+  const hasMobileUnits =
+    Array.isArray(record.mobile_units) && record.mobile_units.length > 0;
+
+  return !(
+    hasStart ||
+    hasEnd ||
+    hasRoom ||
+    hasDireccion ||
+    hasComentarios ||
+    hasTrainers ||
+    hasMobileUnits
+  );
+}
+
+function compareSessionsByCreated(a: ExistingSessionInfo, b: ExistingSessionInfo) {
+  const diff = toComparableTimestamp(a.created_at) - toComparableTimestamp(b.created_at);
+  if (diff !== 0) return diff;
+  return a.session_id.localeCompare(b.session_id);
+}
+
+function assessProductSessions(
+  requiredQuantity: number,
+  sessions: ExistingSessionInfo[]
+) {
+  const ordered = [...sessions].sort(compareSessionsByCreated);
+  const emptySessions = ordered.filter((session) => isSessionEmpty(session));
+  const emptyIds = emptySessions.map((session) => session.session_id);
+
+  let remainingExcess = Math.max(0, ordered.length - requiredQuantity);
+  const deletableIds: string[] = [];
+
+  if (remainingExcess > 0 && emptySessions.length > 0) {
+    for (let index = emptySessions.length - 1; index >= 0 && remainingExcess > 0; index -= 1) {
+      deletableIds.push(emptySessions[index]!.session_id);
+      remainingExcess -= 1;
+    }
+  }
+
+  const remaining = ordered.filter((session) => !deletableIds.includes(session.session_id));
+  const flaggedCount = Math.max(0, remaining.length - requiredQuantity);
+  const flaggedIds: string[] = [];
+
+  if (flaggedCount > 0) {
+    for (let offset = 0; offset < flaggedCount; offset += 1) {
+      const session = remaining[remaining.length - 1 - offset]!;
+      flaggedIds.push(session.session_id);
+    }
+  }
+
+  const missingCount = Math.max(0, requiredQuantity - remaining.length);
+
+  return { deletableIds, flaggedIds, emptyIds, missingCount };
+}
+
+function mapSession(
+  record: DealSessionRecord,
+  expand: Set<ExpandKey>,
+  metadata?: { exceeding?: Set<string>; empty?: Set<string> }
+) {
   const includeResources = expand.has("resources");
   const includeDealProduct = includeResources || expand.has("deal_product");
   const includeSala = includeResources || expand.has("sala");
   const includeTrainers = includeResources || expand.has("formadores");
   const includeMobileUnits = includeResources || expand.has("unidades_moviles");
+  const isEmpty = metadata?.empty?.has(record.session_id) ?? isSessionEmpty(record);
+  const isExceeding = metadata?.exceeding?.has(record.session_id) ?? false;
 
   return {
     session_id: record.session_id,
@@ -208,6 +313,8 @@ function mapSession(record: DealSessionRecord, expand: Set<ExpandKey>) {
     },
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
+    is_empty,
+    is_exceeding_quantity: isExceeding,
   };
 }
 
@@ -269,7 +376,10 @@ function normalizeStatusInput(value: unknown) {
   return { value: normalized };
 }
 
-async function syncSessionsForDeal(prisma: ReturnType<typeof getPrisma>, dealId: string) {
+async function loadPlanningContext(
+  prisma: ReturnType<typeof getPrisma>,
+  dealId: string
+) {
   const deal = await prisma.deals.findUnique({
     where: { deal_id: dealId },
     select: {
@@ -283,47 +393,120 @@ async function syncSessionsForDeal(prisma: ReturnType<typeof getPrisma>, dealId:
   });
 
   if (!deal) {
+    return null;
+  }
+
+  const planificables = deal.deal_products.filter((product: PlanificableProduct) =>
+    isPlanificableProduct(product.code)
+  );
+
+  return {
+    planificables,
+    defaultDireccion: deal.training_address ?? null,
+    defaultSede: deal.sede_label ?? null,
+  };
+}
+
+async function fetchExistingSessions(
+  prisma: ReturnType<typeof getPrisma>,
+  dealId: string
+): Promise<ExistingSessionInfo[]> {
+  const sessions = await prisma.deal_sessions.findMany({
+    where: { deal_id: dealId },
+    select: {
+      session_id: true,
+      deal_id: true,
+      deal_product_id: true,
+      status: true,
+      start_at: true,
+      end_at: true,
+      sala_id: true,
+      direccion: true,
+      sede: true,
+      comentarios: true,
+      created_at: true,
+      trainers: { select: { trainer_id: true } },
+      mobile_units: { select: { unidad_id: true } },
+    },
+    orderBy: [{ created_at: "asc" }],
+  });
+
+  return sessions as ExistingSessionInfo[];
+}
+
+function computeSessionMetadata(
+  planificables: PlanificableProduct[],
+  sessions: ExistingSessionInfo[]
+) {
+  const flagged = new Set<string>();
+  const empty = new Set<string>();
+  const sessionsByProduct = new Map<string, ExistingSessionInfo[]>();
+
+  for (const session of sessions) {
+    if (isSessionEmpty(session)) {
+      empty.add(session.session_id);
+    }
+    if (session.deal_product_id) {
+      const list = sessionsByProduct.get(session.deal_product_id) ?? [];
+      list.push(session);
+      sessionsByProduct.set(session.deal_product_id, list);
+    }
+  }
+
+  for (const product of planificables) {
+    if (!product?.id) continue;
+    const quantity = ensurePositiveInt(product.quantity);
+    const { flaggedIds } = assessProductSessions(
+      quantity,
+      sessionsByProduct.get(product.id) ?? []
+    );
+    flaggedIds.forEach((id) => flagged.add(id));
+  }
+
+  return { flagged, empty };
+}
+
+async function syncSessionsForDeal(prisma: ReturnType<typeof getPrisma>, dealId: string) {
+  const context = await loadPlanningContext(prisma, dealId);
+  if (!context) {
     return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
   }
 
-  const planificables = deal.deal_products.filter(
-    (product: (typeof deal.deal_products)[number]) =>
-      isPlanificableProduct(product.code)
-  );
-
+  const { planificables, defaultDireccion, defaultSede } = context;
   if (!planificables.length) {
     const total = await prisma.deal_sessions.count({ where: { deal_id: dealId } });
-    return successResponse({ created: 0, total });
+    return successResponse({ created: 0, deleted: 0, flagged: [], total });
   }
 
-  const existing = await prisma.deal_sessions.findMany({
-    where: { deal_id: dealId },
-    select: { session_id: true, deal_product_id: true },
-  });
+  const existing = await fetchExistingSessions(prisma, dealId);
+  const sessionsByProduct = new Map<string, ExistingSessionInfo[]>();
 
-  const existingCountByProduct = new Map<string, number>();
   for (const session of existing) {
-    if (!session.deal_product_id) continue;
-    existingCountByProduct.set(
-      session.deal_product_id,
-      (existingCountByProduct.get(session.deal_product_id) ?? 0) + 1
-    );
+    if (session.deal_product_id) {
+      const list = sessionsByProduct.get(session.deal_product_id) ?? [];
+      list.push(session);
+      sessionsByProduct.set(session.deal_product_id, list);
+    }
   }
 
-  const defaultDireccion = deal.training_address ?? null;
-  const defaultSede = deal.sede_label ?? null;
-
-  const creations: Array<{ [key: string]: any }> = [];
+  const deletable = new Set<string>();
+  const flagged = new Set<string>();
+  const creations: Array<Record<string, any>> = [];
 
   for (const product of planificables) {
+    if (!product?.id) continue;
     const quantity = ensurePositiveInt(product.quantity);
-    if (quantity <= 0) continue;
+    const sessionsForProduct = sessionsByProduct.get(product.id) ?? [];
 
-    const existingForProduct = existingCountByProduct.get(product.id) ?? 0;
-    const missing = Math.max(0, quantity - existingForProduct);
-    if (missing <= 0) continue;
+    const { deletableIds, flaggedIds, missingCount } = assessProductSessions(
+      quantity,
+      sessionsForProduct
+    );
 
-    for (let i = 0; i < missing; i += 1) {
+    deletableIds.forEach((id) => deletable.add(id));
+    flaggedIds.forEach((id) => flagged.add(id));
+
+    for (let index = 0; index < missingCount; index += 1) {
       creations.push({
         session_id: randomUUID(),
         deal_id: dealId,
@@ -335,12 +518,425 @@ async function syncSessionsForDeal(prisma: ReturnType<typeof getPrisma>, dealId:
     }
   }
 
+  if (deletable.size) {
+    await prisma.deal_sessions.deleteMany({
+      where: { session_id: { in: Array.from(deletable) } },
+    });
+  }
+
   if (creations.length) {
     await prisma.deal_sessions.createMany({ data: creations, skipDuplicates: true });
   }
 
   const total = await prisma.deal_sessions.count({ where: { deal_id: dealId } });
-  return successResponse({ created: creations.length, total });
+  return successResponse({
+    created: creations.length,
+    deleted: deletable.size,
+    flagged: Array.from(flagged),
+    total,
+  });
+}
+
+async function handleCreateSession(
+  prisma: ReturnType<typeof getPrisma>,
+  dealId: string,
+  body: any,
+  expandRaw?: unknown
+) {
+  if (!body || typeof body !== "object") {
+    return errorResponse("VALIDATION_ERROR", "Body inválido", 400);
+  }
+
+  const context = await loadPlanningContext(prisma, dealId);
+  if (!context) {
+    return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
+  }
+
+  const expand = parseExpand(expandRaw);
+
+  let dealProductId = toNullableString(body.deal_product_id ?? body.dealProductId);
+  let productForSession: PlanificableProduct | null = null;
+
+  if (dealProductId) {
+    productForSession =
+      context.planificables.find((product) => product.id === dealProductId) ?? null;
+
+    if (!productForSession) {
+      const product = await prisma.deal_products.findUnique({
+        where: { id: dealProductId },
+        select: { id: true, deal_id: true, code: true, hours: true },
+      });
+      if (!product || product.deal_id !== dealId) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          "El producto asociado a la sesión no es válido para este presupuesto",
+          400
+        );
+      }
+      productForSession = {
+        id: product.id,
+        code: product.code,
+        quantity: null,
+        hours: product.hours,
+      };
+    }
+  } else if (context.planificables.length === 1) {
+    productForSession = context.planificables[0] ?? null;
+    dealProductId = productForSession?.id ?? null;
+  }
+
+  if (!dealProductId) {
+    return errorResponse(
+      "VALIDATION_ERROR",
+      "Es necesario indicar el producto asociado a la sesión",
+      400
+    );
+  }
+
+  const sessionId = randomUUID();
+
+  let startAt: Date | null = null;
+  if (Object.prototype.hasOwnProperty.call(body, "inicio")) {
+    const result = parseDateInput(body.inicio, "inicio");
+    if ("error" in result) return result.error;
+    startAt = result.value ?? null;
+  }
+
+  let endAt: Date | null = null;
+  let explicitFin = false;
+  if (Object.prototype.hasOwnProperty.call(body, "fin")) {
+    explicitFin = true;
+    const result = parseDateInput(body.fin, "fin");
+    if ("error" in result) return result.error;
+    endAt = result.value ?? null;
+  }
+
+  let salaId: string | null | undefined = undefined;
+  if (Object.prototype.hasOwnProperty.call(body, "sala_id")) {
+    const parsed = toNullableString(body.sala_id);
+    if (parsed) {
+      const salaExists = await prisma.salas.findUnique({
+        where: { sala_id: parsed },
+        select: { sala_id: true },
+      });
+      if (!salaExists) {
+        return errorResponse("VALIDATION_ERROR", "La sala especificada no existe", 400);
+      }
+      salaId = parsed;
+    } else {
+      salaId = null;
+    }
+  }
+
+  const direccion = Object.prototype.hasOwnProperty.call(body, "direccion")
+    ? toNullableString(body.direccion)
+    : null;
+  const sede = Object.prototype.hasOwnProperty.call(body, "sede")
+    ? toNullableString(body.sede)
+    : null;
+  const comentarios = Object.prototype.hasOwnProperty.call(body, "comentarios")
+    ? toNullableString(body.comentarios)
+    : null;
+
+  const statusExplicitlyProvided = Object.prototype.hasOwnProperty.call(body, "estado");
+  let statusValue: string | null = null;
+  if (statusExplicitlyProvided) {
+    const statusResult = normalizeStatusInput(body.estado);
+    if (statusResult && "error" in statusResult) {
+      return statusResult.error;
+    }
+    if (statusResult && "value" in statusResult) {
+      statusValue = statusResult.value;
+    }
+  }
+
+  let trainerIds: string[] = [];
+  if (Object.prototype.hasOwnProperty.call(body, "formadores")) {
+    const trainersRaw = body.formadores;
+    if (trainersRaw === null) {
+      trainerIds = [];
+    } else if (Array.isArray(trainersRaw)) {
+      trainerIds = Array.from(
+        new Set(
+          trainersRaw
+            .map((id: unknown) => toNullableString(id))
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+
+      if (trainerIds.length) {
+        const trainers = await prisma.trainers.findMany({
+          where: { trainer_id: { in: trainerIds }, activo: true },
+          select: { trainer_id: true },
+        });
+        if (trainers.length !== trainerIds.length) {
+          return errorResponse(
+            "VALIDATION_ERROR",
+            "Alguno de los formadores especificados no existe o no está activo",
+            400
+          );
+        }
+      }
+    } else {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "El campo formadores debe ser una lista de identificadores",
+        400
+      );
+    }
+  }
+
+  let mobileUnitIds: string[] = [];
+  if (Object.prototype.hasOwnProperty.call(body, "unidades_moviles")) {
+    const unitsRaw = body.unidades_moviles;
+    if (unitsRaw === null) {
+      mobileUnitIds = [];
+    } else if (Array.isArray(unitsRaw)) {
+      mobileUnitIds = Array.from(
+        new Set(
+          unitsRaw
+            .map((id: unknown) => toNullableString(id))
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+
+      if (mobileUnitIds.length) {
+        const units = await prisma.unidades_moviles.findMany({
+          where: { unidad_id: { in: mobileUnitIds } },
+          select: { unidad_id: true },
+        });
+        if (units.length !== mobileUnitIds.length) {
+          return errorResponse(
+            "VALIDATION_ERROR",
+            "Alguna de las unidades móviles especificadas no existe",
+            400
+          );
+        }
+      }
+    } else {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "El campo unidades_moviles debe ser una lista de identificadores",
+        400
+      );
+    }
+  }
+
+  if (
+    startAt &&
+    !explicitFin &&
+    productForSession &&
+    ensurePositiveInt(productForSession.hours) > 0
+  ) {
+    const hours = ensurePositiveInt(productForSession.hours);
+    const startDate = startAt instanceof Date ? startAt : new Date(startAt);
+    endAt = new Date(startDate.getTime() + hours * 60 * 60 * 1000);
+  }
+
+  const nextSala = salaId === undefined ? null : salaId;
+  const requiredComplete = Boolean(
+    startAt &&
+    endAt &&
+    nextSala &&
+    trainerIds.length > 0 &&
+    direccion &&
+    sede
+  );
+
+  const normalizedStart =
+    startAt instanceof Date ? startAt : startAt ? new Date(startAt) : null;
+  const normalizedEnd = endAt instanceof Date ? endAt : endAt ? new Date(endAt) : null;
+
+  const hasValidRange =
+    normalizedStart instanceof Date &&
+    normalizedEnd instanceof Date &&
+    !Number.isNaN(normalizedStart.getTime()) &&
+    !Number.isNaN(normalizedEnd.getTime()) &&
+    normalizedEnd.getTime() > normalizedStart.getTime();
+
+  if (hasValidRange) {
+    const range = { start: normalizedStart as Date, end: normalizedEnd as Date };
+    const conflicts: ResourceConflictSummary[] = [];
+
+    const nextSalaId = typeof nextSala === "string" && nextSala.trim().length ? nextSala : null;
+    if (nextSalaId) {
+      const roomConflictsMap = await findRoomsConflicts(prisma, [nextSalaId], range);
+      const roomConflicts = roomConflictsMap.get(nextSalaId) ?? [];
+      if (roomConflicts.length) {
+        const salaRecord = await prisma.salas.findUnique({
+          where: { sala_id: nextSalaId },
+          select: { name: true },
+        });
+        conflicts.push({
+          resource_type: "sala",
+          resource_id: nextSalaId,
+          resource_label: salaRecord?.name ?? null,
+          conflicts: roomConflicts,
+        });
+      }
+    }
+
+    if (trainerIds.length) {
+      const trainerConflictsMap = await findTrainersConflicts(prisma, trainerIds, range);
+      const conflictingTrainerIds = Array.from(trainerConflictsMap.keys());
+      if (conflictingTrainerIds.length) {
+        const trainers = await prisma.trainers.findMany({
+          where: { trainer_id: { in: conflictingTrainerIds } },
+          select: { trainer_id: true, name: true },
+        });
+        const trainerLabels = new Map<string, string | null>();
+        for (const trainer of trainers) {
+          trainerLabels.set(trainer.trainer_id, trainer.name ?? null);
+        }
+        for (const trainerId of conflictingTrainerIds) {
+          conflicts.push({
+            resource_type: "formador",
+            resource_id: trainerId,
+            resource_label: trainerLabels.get(trainerId) ?? null,
+            conflicts: trainerConflictsMap.get(trainerId) ?? [],
+          });
+        }
+      }
+    }
+
+    if (mobileUnitIds.length) {
+      const mobileConflictsMap = await findMobileUnitsConflicts(
+        prisma,
+        mobileUnitIds,
+        range
+      );
+      const conflictingUnitIds = Array.from(mobileConflictsMap.keys());
+      if (conflictingUnitIds.length) {
+        const units = await prisma.unidades_moviles.findMany({
+          where: { unidad_id: { in: conflictingUnitIds } },
+          select: { unidad_id: true, name: true, matricula: true },
+        });
+        const unitLabels = new Map<string, string | null>();
+        for (const unit of units) {
+          const parts = [unit.name, unit.matricula]
+            .map((value) => (typeof value === "string" ? value.trim() : ""))
+            .filter((value) => value.length > 0);
+          unitLabels.set(unit.unidad_id, parts.length ? parts.join(" - ") : null);
+        }
+        for (const unidadId of conflictingUnitIds) {
+          conflicts.push({
+            resource_type: "unidad_movil",
+            resource_id: unidadId,
+            resource_label: unitLabels.get(unidadId) ?? null,
+            conflicts: mobileConflictsMap.get(unidadId) ?? [],
+          });
+        }
+      }
+    }
+
+    if (conflicts.length) {
+      const firstConflict = conflicts[0];
+      const firstDetail = firstConflict.conflicts[0];
+      const resourceTypeLabel =
+        firstConflict.resource_type === "sala"
+          ? "La sala seleccionada"
+          : firstConflict.resource_type === "formador"
+          ? "El formador seleccionado"
+          : "La unidad móvil seleccionada";
+      const resourceLabel = firstConflict.resource_label ?? firstConflict.resource_id;
+      const dealLabel =
+        firstDetail?.deal_title ?? firstDetail?.organization_name ?? firstDetail?.deal_id;
+      const rangeLabel = formatRangeForMessage(
+        firstDetail?.inicio ?? null,
+        firstDetail?.fin ?? null
+      );
+
+      const messageParts = [
+        `${resourceTypeLabel}${resourceLabel ? ` (${resourceLabel})` : ""}`,
+      ];
+      if (dealLabel) {
+        messageParts.push(`ya está asignado a ${dealLabel}`);
+      }
+      if (rangeLabel) {
+        messageParts.push(`en el horario ${rangeLabel}`);
+      }
+
+      return errorResponse("RESOURCE_CONFLICT", `${messageParts.join(" ")}.`, 409, {
+        conflicts,
+      });
+    }
+  }
+
+  if (statusExplicitlyProvided && statusValue === "Planificada" && !requiredComplete) {
+    return errorResponse(
+      "VALIDATION_ERROR",
+      "Para marcar la sesión como Planificada deben completarse inicio, fin, sala, al menos un formador, dirección y sede",
+      400
+    );
+  }
+
+  const finalStatus = statusValue
+    ? statusValue
+    : requiredComplete
+    ? "Planificada"
+    : "Borrador";
+
+  const createData: Record<string, any> = {
+    session_id: sessionId,
+    deal_id: dealId,
+    deal_product_id: dealProductId,
+    status: finalStatus,
+    start_at: startAt ?? null,
+    end_at: endAt ?? null,
+    direccion,
+    sede,
+    comentarios,
+    origen: productForSession?.code ?? null,
+  };
+
+  if (salaId !== undefined) {
+    createData.sala_id = salaId;
+  }
+
+  const operations: any[] = [prisma.deal_sessions.create({ data: createData })];
+
+  if (trainerIds.length) {
+    operations.push(
+      prisma.deal_session_trainers.createMany({
+        data: trainerIds.map((trainerId) => ({
+          session_id: sessionId,
+          trainer_id: trainerId,
+        })),
+      })
+    );
+  }
+
+  if (mobileUnitIds.length) {
+    operations.push(
+      prisma.deal_session_mobile_units.createMany({
+        data: mobileUnitIds.map((unidadId) => ({
+          session_id: sessionId,
+          unidad_id: unidadId,
+        })),
+      })
+    );
+  }
+
+  await prisma.$transaction(operations);
+
+  const include = buildInclude(expand);
+  const created = await prisma.deal_sessions.findUnique({
+    where: { session_id: sessionId },
+    include: Object.keys(include).length ? include : undefined,
+  });
+
+  if (!created) {
+    return errorResponse("NOT_FOUND", "Sesión no encontrada", 404);
+  }
+
+  const metadata = computeSessionMetadata(
+    context.planificables,
+    await fetchExistingSessions(prisma, dealId)
+  );
+
+  return successResponse({
+    session: mapSession(created as any, expand, metadata),
+  });
 }
 
 async function handleUpdateSession(
@@ -794,7 +1390,10 @@ export const handler = async (event: any) => {
     const prisma = getPrisma();
     const method = event.httpMethod;
     const path = event.path || "";
-    const sessionIdFromPath = parseSessionIdFromPath(path);
+    const normalizedPath = path.replace(/\/$/, "");
+    const rawSessionId = parseSessionIdFromPath(path);
+    const isSyncRoute = /\/deal-sessions\/sync$/i.test(normalizedPath);
+    const sessionIdFromPath = isSyncRoute ? null : rawSessionId;
 
     if (method === "GET" && !sessionIdFromPath) {
       const dealIdRaw = event.queryStringParameters?.dealId ?? event.queryStringParameters?.deal_id;
@@ -827,9 +1426,51 @@ export const handler = async (event: any) => {
         orderBy: [{ created_at: "asc" }],
       });
 
+      const context = await loadPlanningContext(prisma, dealId);
+      const planificables = context?.planificables ?? [];
+      const assessmentInput: ExistingSessionInfo[] = sessions.map((session: any) => ({
+        session_id: session.session_id,
+        deal_id: session.deal_id,
+        deal_product_id: session.deal_product_id,
+        status: session.status,
+        start_at: session.start_at,
+        end_at: session.end_at,
+        sala_id: session.sala_id,
+        direccion: session.direccion,
+        sede: session.sede,
+        comentarios: session.comentarios,
+        created_at: session.created_at,
+        trainers: Array.isArray(session.trainers)
+          ? session.trainers.map((entry: any) => ({ trainer_id: entry.trainer_id }))
+          : undefined,
+        mobile_units: Array.isArray(session.mobile_units)
+          ? session.mobile_units.map((entry: any) => ({ unidad_id: entry.unidad_id }))
+          : undefined,
+      }));
+
+      const metadata = computeSessionMetadata(planificables, assessmentInput);
+
       return successResponse({
-        sessions: sessions.map((session: any) => mapSession(session, expand)),
+        sessions: sessions.map((session: any) =>
+          mapSession(session, expand, {
+            exceeding: metadata.flagged,
+            empty: metadata.empty,
+          })
+        ),
       });
+    }
+
+    if (method === "POST" && isSyncRoute) {
+      if (!event.body) {
+        return errorResponse("VALIDATION_ERROR", "Body requerido", 400);
+      }
+      const body = JSON.parse(event.body || "{}");
+      const dealId = toNullableString(body?.dealId ?? body?.deal_id);
+      if (!dealId) {
+        return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
+      }
+
+      return await syncSessionsForDeal(prisma, dealId);
     }
 
     if (method === "POST" && !sessionIdFromPath) {
@@ -840,6 +1481,29 @@ export const handler = async (event: any) => {
       const dealId = toNullableString(body?.dealId ?? body?.deal_id);
       if (!dealId) {
         return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
+      }
+
+      const expandRaw = body.expand ?? event.queryStringParameters?.expand;
+      const sessionFieldKeys = [
+        "inicio",
+        "fin",
+        "sala_id",
+        "formadores",
+        "unidades_moviles",
+        "direccion",
+        "sede",
+        "comentarios",
+        "estado",
+        "deal_product_id",
+        "dealProductId",
+      ];
+
+      const hasSessionFields = sessionFieldKeys.some((key) =>
+        Object.prototype.hasOwnProperty.call(body, key)
+      );
+
+      if (hasSessionFields) {
+        return await handleCreateSession(prisma, dealId, body, expandRaw);
       }
 
       return await syncSessionsForDeal(prisma, dealId);

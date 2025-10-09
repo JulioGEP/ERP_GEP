@@ -422,6 +422,18 @@ function normalizeDealSession(raw: any): DealSession {
   const address = toStringValue((raw as any).seasson_address ?? (raw as any).address ?? null);
   const roomId = toStringValue((raw as any).room_id ?? (raw as any).roomId ?? null);
   const comment = toStringValue((raw as any).comment_seasson ?? (raw as any).comment ?? null);
+  const dealProduct = (raw as any).deal_product ?? (raw as any).dealProduct ?? null;
+  const origin = (raw as any).origen ?? (raw as any).origin ?? null;
+  const dealProductId =
+    toStringValue((raw as any).deal_product_id ?? dealProduct?.id ?? origin?.deal_product_id) ?? null;
+  const dealProductCode =
+    toStringValue(dealProduct?.code ?? origin?.code ?? origin ?? null) ?? null;
+  const hoursRaw =
+    dealProduct?.hours ?? (raw as any).deal_product_hours ?? (raw as any).hours ?? null;
+  const dealProductHours = typeof hoursRaw === "number" ? hoursRaw : toNumber(hoursRaw);
+  const isEmptyRaw = (raw as any).is_empty ?? (raw as any).isEmpty;
+  const isExceedingRaw =
+    (raw as any).is_exceeding_quantity ?? (raw as any).isExceedingQuantity ?? (raw as any).exceeds_quantity;
 
   return {
     id,
@@ -435,6 +447,14 @@ function normalizeDealSession(raw: any): DealSession {
     trainerIds: normalizeIdArray((raw as any).seasson_fireman ?? (raw as any).trainerIds),
     mobileUnitIds: normalizeIdArray((raw as any).seasson_vehicle ?? (raw as any).mobileUnitIds),
     comment,
+    dealProductId,
+    dealProductCode,
+    dealProductHours:
+      typeof dealProductHours === "number" && Number.isFinite(dealProductHours)
+        ? dealProductHours
+        : null,
+    isEmpty: Boolean(isEmptyRaw),
+    isExceedingQuantity: Boolean(isExceedingRaw),
     createdAt: toStringValue((raw as any).created_at ?? null),
     updatedAt: toStringValue((raw as any).updated_at ?? null),
   };
@@ -878,59 +898,81 @@ export async function deleteDealNote(
  * Sesiones del deal
  * ====================== */
 
-export type DealSessionPayload = {
-  status?: DealSessionStatus | null;
-  start?: string | null;
-  end?: string | null;
-  sede?: string | null;
-  address?: string | null;
-  roomId?: string | null;
-  trainerIds?: string[] | null;
-  mobileUnitIds?: string[] | null;
-  comment?: string | null;
+export type DealSessionsSyncResult = {
+  created: number;
+  deleted: number;
+  flagged: string[];
+  total: number;
 };
 
-function buildSessionRequestPayload(payload: DealSessionPayload) {
-  const session: Record<string, any> = {};
+function buildSessionUpdateBody(payload: DealSessionUpdatePayload) {
+  const body: Record<string, unknown> = { expand: 'resources' };
 
-  session.status = payload.status ? normalizeSessionStatus(payload.status) : null;
-  session.date_start = payload.start ?? null;
-  session.date_end = payload.end ?? null;
-  session.sede = toStringValue(payload.sede);
-  session.seasson_address = toStringValue(payload.address);
-  session.room_id = toStringValue(payload.roomId);
-  session.seasson_fireman = cleanIdArray(payload.trainerIds ?? []);
-  session.seasson_vehicle = cleanIdArray(payload.mobileUnitIds ?? []);
-  session.comment_seasson = toStringValue(payload.comment);
+  if (Object.prototype.hasOwnProperty.call(payload, 'estado')) {
+    body.estado = payload.estado ? normalizeSessionStatus(payload.estado) : null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'inicio')) {
+    body.inicio = payload.inicio ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'fin')) {
+    body.fin = payload.fin ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'sala_id')) {
+    body.sala_id = payload.sala_id ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'formadores')) {
+    body.formadores = Array.isArray(payload.formadores) ? payload.formadores : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'unidades_moviles')) {
+    body.unidades_moviles = Array.isArray(payload.unidades_moviles)
+      ? payload.unidades_moviles
+      : [];
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'direccion')) {
+    body.direccion = payload.direccion ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'sede')) {
+    body.sede = payload.sede ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'comentarios')) {
+    body.comentarios = payload.comentarios ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, 'deal_product_id')) {
+    body.deal_product_id = payload.deal_product_id ?? null;
+  }
 
-  return { session };
+  return body;
 }
 
 export async function fetchDealSessions(dealId: string): Promise<DealSession[]> {
-  const normalizedDealId = toStringValue(dealId);
-  if (!normalizedDealId) return [];
+  const normalizedId = String(dealId ?? '').trim();
+  if (!normalizedId.length) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId requerido para obtener sesiones');
+  }
 
-  const data = await request(`/deal-sessions?dealId=${encodeURIComponent(normalizedDealId)}`);
+  const data = await request(
+    `/deal-sessions?dealId=${encodeURIComponent(normalizedId)}&expand=resources`
+  );
   const rows: any[] = Array.isArray(data?.sessions) ? data.sessions : [];
   return rows.map((row) => normalizeDealSession(row));
 }
 
 export async function createDealSession(
   dealId: string,
-  payload: DealSessionPayload
+  payload: DealSessionUpdatePayload
 ): Promise<DealSession> {
-  const normalizedDealId = toStringValue(dealId);
-  if (!normalizedDealId) {
-    throw new ApiError("VALIDATION_ERROR", "dealId requerido para crear sesión");
+  const normalizedId = String(dealId ?? '').trim();
+  if (!normalizedId.length) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId requerido para crear sesión');
   }
 
   const body = {
-    dealId: normalizedDealId,
-    ...buildSessionRequestPayload(payload),
+    dealId: normalizedId,
+    ...buildSessionUpdateBody(payload),
   };
 
   const data = await request(`/deal-sessions`, {
-    method: "POST",
+    method: 'POST',
     body: JSON.stringify(body),
   });
 
@@ -939,17 +981,17 @@ export async function createDealSession(
 
 export async function updateDealSession(
   sessionId: string,
-  payload: DealSessionPayload
+  payload: DealSessionUpdatePayload
 ): Promise<DealSession> {
-  const normalizedSessionId = toStringValue(sessionId);
-  if (!normalizedSessionId) {
-    throw new ApiError("VALIDATION_ERROR", "sessionId requerido para actualizar");
+  const normalizedId = String(sessionId ?? '').trim();
+  if (!normalizedId.length) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId requerido para actualizar la sesión');
   }
 
-  const body = buildSessionRequestPayload(payload);
+  const body = buildSessionUpdateBody(payload);
 
-  const data = await request(`/deal-sessions/${encodeURIComponent(normalizedSessionId)}`, {
-    method: "PATCH",
+  const data = await request(`/deal-sessions/${encodeURIComponent(normalizedId)}`, {
+    method: 'PATCH',
     body: JSON.stringify(body),
   });
 
@@ -957,14 +999,39 @@ export async function updateDealSession(
 }
 
 export async function deleteDealSession(sessionId: string): Promise<void> {
-  const normalizedSessionId = toStringValue(sessionId);
-  if (!normalizedSessionId) {
-    throw new ApiError("VALIDATION_ERROR", "sessionId requerido para eliminar");
+  const normalizedId = String(sessionId ?? '').trim();
+  if (!normalizedId.length) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId requerido para eliminar');
   }
 
-  await request(`/deal-sessions/${encodeURIComponent(normalizedSessionId)}`, {
-    method: "DELETE",
+  await request(`/deal-sessions/${encodeURIComponent(normalizedId)}`, {
+    method: 'DELETE',
   });
+}
+
+export async function syncDealSessions(dealId: string): Promise<DealSessionsSyncResult> {
+  const normalizedDealId = toStringValue(dealId);
+  if (!normalizedDealId) {
+    throw new ApiError("VALIDATION_ERROR", "dealId requerido para sincronizar sesiones");
+  }
+
+  const data = await request(`/deal-sessions/sync`, {
+    method: "POST",
+    body: JSON.stringify({ dealId: normalizedDealId }),
+  });
+
+  const flaggedRaw = Array.isArray(data?.flagged)
+    ? data.flagged
+    : Array.isArray(data?.flaggedSessions)
+    ? data.flaggedSessions
+    : [];
+
+  return {
+    created: Number.isFinite(Number(data?.created)) ? Number(data.created) : 0,
+    deleted: Number.isFinite(Number(data?.deleted)) ? Number(data.deleted) : 0,
+    flagged: flaggedRaw.map((id: any) => String(id)).filter((id) => id.length > 0),
+    total: Number.isFinite(Number(data?.total)) ? Number(data.total) : 0,
+  };
 }
 
 /* ======================

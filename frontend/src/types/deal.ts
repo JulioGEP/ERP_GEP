@@ -174,6 +174,24 @@ export interface DealSession {
   trainerIds: string[];
   mobileUnitIds: string[];
   comment: string | null;
+  dealProductId?: string | null;
+  dealProductCode?: string | null;
+  dealProductHours?: number | null;
+  isEmpty?: boolean;
+  isExceedingQuantity?: boolean;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
+
+export type DealSessionUpdatePayload = {
+  inicio?: string | null;
+  fin?: string | null;
+  sala_id?: string | null;
+  formadores?: string[] | null;
+  unidades_moviles?: string[] | null;
+  direccion?: string | null;
+  sede?: string | null;
+  comentarios?: string | null;
+  estado?: DealSessionStatus | null;
+  deal_product_id?: string | null;
+};
