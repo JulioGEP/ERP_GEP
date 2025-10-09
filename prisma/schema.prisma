@@ -161,12 +161,13 @@ model trainers {
 }
 
 model unidades_moviles {
-  unidad_id       String   @id
-  name            String?
-  plate           String?
-  capacity_liters Int?
-  created_at      DateTime @default(now())
-  updated_at      DateTime
+  unidad_id  String   @id
+  name       String
+  matricula  String   @unique
+  tipo       String
+  sede       String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt      @db.Timestamptz(6)
 }
 
 enum DocumentOrigin {
