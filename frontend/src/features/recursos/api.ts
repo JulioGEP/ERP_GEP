@@ -1,6 +1,7 @@
 // frontend/src/features/recursos/api.ts
 import { API_BASE, ApiError } from "../presupuestos/api";
 import type { Trainer } from "../../types/trainer";
+import { SEDE_OPTIONS } from "./trainers.constants";
 
 export type TrainerPayload = {
   trainer_id?: string | null;
@@ -13,6 +14,7 @@ export type TrainerPayload = {
   especialidad?: string | null;
   titulacion?: string | null;
   activo?: boolean | null;
+  sede?: string[] | null;
 };
 
 type TrainerListResponse = {
@@ -57,6 +59,9 @@ function normalizeTrainer(row: any): Trainer {
     especialidad: row.especialidad ?? null,
     titulacion: row.titulacion ?? null,
     activo: Boolean(row.activo ?? false),
+    sede: Array.isArray(row.sede)
+      ? row.sede.filter((value: unknown): value is string => typeof value === "string")
+      : [],
     created_at: createdAt,
     updated_at: updatedAt,
   };
@@ -99,6 +104,20 @@ function buildRequestBody(payload: TrainerPayload): Record<string, any> {
 
   if ("activo" in payload) {
     body.activo = Boolean(payload.activo);
+  }
+
+  if ("sede" in payload) {
+    const rawValues = Array.isArray(payload.sede) ? payload.sede : [];
+    const values: string[] = [];
+    for (const raw of rawValues) {
+      const value = typeof raw === "string" ? raw.trim() : "";
+      if (!value.length) continue;
+      if (!SEDE_OPTIONS.includes(value as (typeof SEDE_OPTIONS)[number])) continue;
+      if (!values.includes(value)) {
+        values.push(value);
+      }
+    }
+    body.sede = values;
   }
 
   return body;

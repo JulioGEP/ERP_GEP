@@ -1,6 +1,5 @@
 // backend/functions/trainers.ts
 import { randomUUID } from 'crypto';
-import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 
@@ -14,6 +13,8 @@ const OPTIONAL_STRING_FIELDS = [
   'titulacion',
 ] as const;
 
+const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
+
 type TrainerRecord = {
   trainer_id: string;
   name: string;
@@ -25,6 +26,7 @@ type TrainerRecord = {
   especialidad: string | null;
   titulacion: string | null;
   activo: boolean;
+  sede: string[] | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
 };
@@ -42,6 +44,12 @@ function toNullableString(value: unknown): string | null {
 }
 
 function normalizeTrainer(row: TrainerRecord) {
+  const sedeValues = Array.isArray(row.sede) ? row.sede : [];
+  const normalizedSede = sedeValues.filter(
+    (value): value is string =>
+      typeof value === 'string' && VALID_SEDES.includes(value as (typeof VALID_SEDES)[number])
+  );
+
   return {
     trainer_id: row.trainer_id,
     name: row.name,
@@ -53,11 +61,45 @@ function normalizeTrainer(row: TrainerRecord) {
     especialidad: row.especialidad,
     titulacion: row.titulacion,
     activo: Boolean(row.activo),
+    sede: normalizedSede,
     created_at:
       row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at ?? null,
     updated_at:
       row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at ?? null,
   };
+}
+
+type ParseSedeResult =
+  | { values: string[] }
+  | { error: ReturnType<typeof errorResponse> };
+
+function parseSedeInput(input: unknown): ParseSedeResult {
+  if (input === undefined || input === null) {
+    return { values: [] as string[] };
+  }
+
+  const rawValues = Array.isArray(input) ? input : [input];
+  const values: string[] = [];
+
+  for (const raw of rawValues) {
+    if (raw === undefined || raw === null) continue;
+    const value = String(raw).trim();
+    if (!value.length) continue;
+    if (!VALID_SEDES.includes(value as (typeof VALID_SEDES)[number])) {
+      return {
+        error: errorResponse(
+          'VALIDATION_ERROR',
+          'El campo sede contiene valores no válidos',
+          400
+        ),
+      };
+    }
+    if (!values.includes(value)) {
+      values.push(value);
+    }
+  }
+
+  return { values };
 }
 
 function buildCreateData(body: any) {
@@ -77,6 +119,12 @@ function buildCreateData(body: any) {
   for (const field of OPTIONAL_STRING_FIELDS) {
     data[field] = toNullableString(body?.[field]);
   }
+
+  const sedeResult = parseSedeInput(body?.sede);
+  if ('error' in sedeResult) {
+    return { error: sedeResult.error };
+  }
+  data.sede = sedeResult.values;
 
   return { data };
 }
@@ -113,6 +161,15 @@ function buildUpdateData(body: any) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, 'sede')) {
+    const sedeResult = parseSedeInput(body.sede);
+    if ('error' in sedeResult) {
+      return { error: sedeResult.error };
+    }
+    data.sede = sedeResult.values;
+    hasChanges = true;
+  }
+
   if (Object.prototype.hasOwnProperty.call(body, 'activo')) {
     data.activo = Boolean(body.activo);
     hasChanges = true;
@@ -125,8 +182,17 @@ function buildUpdateData(body: any) {
   return { data };
 }
 
-function handleKnownPrismaError(error: Prisma.PrismaClientKnownRequestError) {
-  if (error.code === 'P2002') {
+type PrismaKnownError = {
+  code: string;
+  meta?: { target?: string | string[] };
+};
+
+function isPrismaKnownError(error: unknown): error is PrismaKnownError {
+  return Boolean(error && typeof error === 'object' && 'code' in error && typeof (error as any).code === 'string');
+}
+
+function handleKnownPrismaError(error: unknown) {
+  if (isPrismaKnownError(error) && error.code === 'P2002') {
     const target = Array.isArray(error.meta?.target)
       ? error.meta?.target.join(', ')
       : String(error.meta?.target ?? 'registro');
@@ -151,7 +217,9 @@ export const handler = async (event: any) => {
       const trainers = await prisma.trainers.findMany({
         orderBy: [{ name: 'asc' }, { apellido: 'asc' }],
       });
-      return successResponse({ trainers: trainers.map((trainer) => normalizeTrainer(trainer)) });
+      return successResponse({
+        trainers: trainers.map((trainer: TrainerRecord) => normalizeTrainer(trainer)),
+      });
     }
 
     if (method === 'GET' && trainerIdFromPath) {
@@ -161,7 +229,7 @@ export const handler = async (event: any) => {
       if (!trainer) {
         return errorResponse('NOT_FOUND', 'Formador/Bombero no encontrado', 404);
       }
-      return successResponse({ trainer: normalizeTrainer(trainer) });
+      return successResponse({ trainer: normalizeTrainer(trainer as TrainerRecord) });
     }
 
     if (method === 'POST') {
@@ -169,10 +237,10 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
       }
       const body = JSON.parse(event.body || '{}');
-      const { data, error } = buildCreateData(body);
-      if (error) return error;
+      const result = buildCreateData(body);
+      if ('error' in result) return result.error;
 
-      const created = await prisma.trainers.create({ data });
+      const created = await prisma.trainers.create({ data: result.data });
       return successResponse({ trainer: normalizeTrainer(created) }, 201);
     }
 
@@ -187,25 +255,23 @@ export const handler = async (event: any) => {
       }
 
       const body = JSON.parse(event.body || '{}');
-      const { data, error } = buildUpdateData(body);
-      if (error) return error;
+      const result = buildUpdateData(body);
+      if ('error' in result) return result.error;
 
       const updated = await prisma.trainers.update({
         where: { trainer_id: trainerIdFromPath },
-        data,
+        data: result.data,
       });
 
       return successResponse({ trainer: normalizeTrainer(updated) });
     }
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
-  } catch (error: any) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      const handled = handleKnownPrismaError(error);
-      if (handled) return handled;
-    }
+  } catch (error: unknown) {
+    const handled = handleKnownPrismaError(error);
+    if (handled) return handled;
 
-    const message = error?.message ?? 'Error inesperado';
+    const message = error instanceof Error ? error.message : 'Error inesperado';
     return errorResponse('UNEXPECTED_ERROR', message, 500);
   }
 };
