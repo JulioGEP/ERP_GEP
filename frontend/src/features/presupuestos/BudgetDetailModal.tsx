@@ -27,15 +27,21 @@ import {
   deleteDealNote,
   isApiError
 } from './api';
-import { formatSedeLabel } from './formatSedeLabel';
+import { canonicalizeSedeLabel, SEDE_OPTIONS } from './formatSedeLabel';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
 import { SessionPlanner } from './SessionPlanner';
+
+type ToastNotification = {
+  variant: 'success' | 'danger' | 'warning';
+  message: string;
+};
 
 interface Props {
   dealId: string | null;
   summary?: DealSummary | null;
   onClose: () => void;
+  onNotify?: (toast: ToastNotification) => void;
 }
 
 function useAuth() {
@@ -90,7 +96,7 @@ function buildCommentPreview(comment: string, maxLength = 120): string {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized;
 }
 
-export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
+export function BudgetDetailModal({ dealId, summary, onClose, onNotify }: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 
@@ -180,7 +186,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   useEffect(() => {
     if (deal) {
       setForm({
-        sede_label: deal.sede_label ?? '',
+        sede_label: canonicalizeSedeLabel(deal.sede_label) ?? '',
         training_address: deal.training_address ?? '', // <- aquí
         caes_label: deal.caes_label ?? '',
         fundae_label: deal.fundae_label ?? '',
@@ -189,7 +195,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       });
     } else if (summary) {
       setForm({
-        sede_label: summary.sede_label ?? '',
+        sede_label: canonicalizeSedeLabel(summary.sede_label) ?? '',
         training_address: summary.training_address ?? '', // <- aquí
         caes_label: summary.caes_label ?? '',
         fundae_label: summary.fundae_label ?? '',
@@ -205,7 +211,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     const source = deal ?? summary;
     if (!source) return null;
     return {
-      sede_label: source.sede_label ?? '',
+      sede_label: canonicalizeSedeLabel(source.sede_label) ?? '',
       training_address: source.training_address ?? '', // <- aquí
       caes_label: source.caes_label ?? '',
       fundae_label: source.fundae_label ?? '',
@@ -723,10 +729,17 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             <Row className="g-3">
               <Col md={4}>
                 <Form.Label>Sede</Form.Label>
-                <Form.Control
-                  value={formatSedeLabel(form.sede_label) ?? ''}
+                <Form.Select
+                  value={form.sede_label ?? ''}
                   onChange={(e) => updateForm('sede_label', e.target.value)}
-                />
+                >
+                  <option value="">Selecciona una sede</option>
+                  {SEDE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </Form.Select>
               </Col>
               <Col md={8}>
                 <Form.Label>Dirección</Form.Label>
@@ -801,6 +814,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                     <SessionPlanner
                       dealId={deal.deal_id}
                       dealTitle={deal.title ?? summary?.title ?? null}
+                      onNotify={onNotify}
                     />
                   </div>
                 </Accordion.Body>

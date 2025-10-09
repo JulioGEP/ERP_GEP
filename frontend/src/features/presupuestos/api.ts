@@ -498,6 +498,7 @@ export type DealSessionResource = {
   origen: { deal_product_id: string | null; code: string | null } | null;
   created_at: string | null;
   updated_at: string | null;
+  is_exceeding_quantity: boolean;
 };
 
 function toStringArray(value: unknown): string[] {
@@ -608,6 +609,9 @@ function normalizeDealSessionResource(raw: any): DealSessionResource {
       }
     : null;
 
+  const isExceedingRaw =
+    raw?.is_exceeding_quantity ?? raw?.isExceedingQuantity ?? raw?.exceeds_quantity;
+
   return {
     session_id: sessionId,
     deal_id: dealId,
@@ -626,6 +630,7 @@ function normalizeDealSessionResource(raw: any): DealSessionResource {
     origen: origin,
     created_at: toStringValue(raw?.created_at) ?? null,
     updated_at: toStringValue(raw?.updated_at) ?? null,
+    is_exceeding_quantity: Boolean(isExceedingRaw),
   };
 }
 
@@ -1051,6 +1056,44 @@ export async function syncDealSessions(dealId: string): Promise<DealSessionsSync
     deleted: Number.isFinite(Number(data?.deleted)) ? Number(data.deleted) : 0,
     flagged: flaggedRaw.map((id: any) => String(id)).filter((id) => id.length > 0),
     total: Number.isFinite(Number(data?.total)) ? Number(data.total) : 0,
+  };
+}
+
+export type AdjustDealSessionsResult = {
+  created: number;
+  exceeding_session_ids: string[];
+  exceeding_count: number;
+};
+
+export async function adjustDealSessions(
+  dealId: string
+): Promise<AdjustDealSessionsResult> {
+  const normalizedDealId = toStringValue(dealId);
+  if (!normalizedDealId) {
+    throw new ApiError("VALIDATION_ERROR", "dealId requerido para ajustar sesiones");
+  }
+
+  const data = await request(
+    `/deal-sessions/adjust?dealId=${encodeURIComponent(normalizedDealId)}`,
+    { method: "POST" }
+  );
+
+  const exceedingRaw = Array.isArray(data?.exceeding_session_ids)
+    ? data.exceeding_session_ids
+    : [];
+
+  const exceedingIds = exceedingRaw
+    .map((id: unknown) => toStringValue(id))
+    .filter((id): id is string => !!id && id.length > 0);
+
+  const exceedingCount = Number.isFinite(Number(data?.exceeding_count))
+    ? Number(data.exceeding_count)
+    : exceedingIds.length;
+
+  return {
+    created: Number.isFinite(Number(data?.created)) ? Number(data.created) : 0,
+    exceeding_session_ids: exceedingIds,
+    exceeding_count: exceedingCount,
   };
 }
 

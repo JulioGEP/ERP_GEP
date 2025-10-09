@@ -60,9 +60,11 @@ const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
     item.key !== 'Recursos/Unidades'
 );
 
+type ToastVariant = 'success' | 'danger' | 'warning';
+
 type ToastMessage = {
   id: string;
-  variant: 'success' | 'danger';
+  variant: ToastVariant;
   message: string;
 };
 
@@ -309,7 +311,12 @@ export default function App() {
         onSubmit={(dealId) => importMutation.mutate(dealId)}
       />
 
-      <BudgetDetailModal dealId={selectedBudgetId} summary={selectedBudgetSummary} onClose={handleCloseDetail} />
+      <BudgetDetailModal
+        dealId={selectedBudgetId}
+        summary={selectedBudgetSummary}
+        onClose={handleCloseDetail}
+        onNotify={pushToast}
+      />
 
       <ToastContainer position="bottom-end" className="p-3">
         {toasts.map((toast) => (
@@ -320,7 +327,9 @@ export default function App() {
             delay={5000}
             autohide
           >
-            <Toast.Body className="text-white">{toast.message}</Toast.Body>
+            <Toast.Body className={toast.variant === 'warning' ? 'text-dark' : 'text-white'}>
+              {toast.message}
+            </Toast.Body>
           </Toast>
         ))}
       </ToastContainer>
