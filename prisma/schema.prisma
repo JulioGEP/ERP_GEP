@@ -143,25 +143,23 @@ model seassons {
 model trainers {
   trainer_id   String   @id
   name         String
-  apellido     String?
   email        String?  @unique
   phone        String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @updatedAt @db.Timestamptz(6)
+  activo       Boolean  @default(true)
+  apellido     String?
   dni          String?  @unique
   direccion    String?
   especialidad String?
   titulacion   String?
-  activo       Boolean  @default(true)
-  sede         String[] @default([])
-
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime @updatedAt      @db.Timestamptz(6)
 
   @@index([apellido])
   @@index([especialidad])
 }
 
 model salas {
-  sala_id    String   @id
+  sala_id    String   @id @map("id")
   name       String
   sede       String
 
