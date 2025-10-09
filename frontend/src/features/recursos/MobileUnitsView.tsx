@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/MobileUnitsView.tsx
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Alert, Button, Spinner, Table } from "react-bootstrap";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MobileUnitModal, type MobileUnitFormValues } from "./MobileUnitModal";
@@ -15,6 +15,9 @@ import {
 } from "./mobileUnits.constants";
 import type { MobileUnit } from "../../types/mobile-unit";
 import { ApiError } from "../presupuestos/api";
+import { useDataTable } from "../../hooks/useDataTable";
+import { SortableHeader } from "../../components/table/SortableHeader";
+import { DataTablePagination } from "../../components/table/DataTablePagination";
 
 type ToastParams = {
   variant: "success" | "danger";
@@ -112,7 +115,6 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
   const units = unitsQuery.data ?? [];
   const isLoading = unitsQuery.isLoading;
   const isFetching = unitsQuery.isFetching && !unitsQuery.isLoading;
-  const tableRows = units.length;
 
   const handleAddUnit = () => {
     setSelectedUnit(null);
@@ -144,6 +146,34 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
   const isSaving = createMutation.isPending || updateMutation.isPending;
   const modalInitialData = modalMode === "edit" ? selectedUnit : null;
   const errorMessage = unitsQuery.error ? formatError(unitsQuery.error) : null;
+
+  const getSortValue = useCallback((unit: MobileUnit, column: string) => {
+    switch (column) {
+      case "nombre":
+        return unit.name;
+      case "matricula":
+        return unit.matricula;
+      case "tipo":
+        return unit.tipo.join(", ");
+      case "sede":
+        return unit.sede.join(", ");
+      default:
+        return null;
+    }
+  }, []);
+
+  const {
+    pageItems,
+    sortState,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    requestSort,
+    goToPage,
+  } = useDataTable(units, {
+    getSortValue,
+  });
 
   const subtitle = useMemo(
     () => "Consulta, edita o añade nuevas unidades móviles a tu base de datos.",
@@ -178,10 +208,30 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
           <Table hover className="mb-0 align-middle">
             <thead>
               <tr className="text-muted text-uppercase small">
-                <th className="fw-semibold">Nombre</th>
-                <th className="fw-semibold">Matrícula</th>
-                <th className="fw-semibold">Tipo</th>
-                <th className="fw-semibold">Sede</th>
+                <SortableHeader
+                  columnKey="nombre"
+                  label={<span className="fw-semibold">Nombre</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
+                <SortableHeader
+                  columnKey="matricula"
+                  label={<span className="fw-semibold">Matrícula</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
+                <SortableHeader
+                  columnKey="tipo"
+                  label={<span className="fw-semibold">Tipo</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
+                <SortableHeader
+                  columnKey="sede"
+                  label={<span className="fw-semibold">Sede</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
               </tr>
             </thead>
             <tbody>
@@ -191,8 +241,8 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
-              ) : tableRows ? (
-                units.map((unit) => (
+              ) : totalItems ? (
+                pageItems.map((unit) => (
                   <tr
                     key={unit.unidad_id}
                     role="button"
@@ -215,6 +265,13 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
             </tbody>
           </Table>
         </div>
+        <DataTablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={totalItems}
+          onPageChange={goToPage}
+        />
       </div>
 
       <MobileUnitModal

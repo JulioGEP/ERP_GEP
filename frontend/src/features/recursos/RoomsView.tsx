@@ -1,11 +1,14 @@
 // frontend/src/features/recursos/RoomsView.tsx
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RoomModal, type RoomFormValues } from './RoomModal';
 import { createRoom, fetchRooms, updateRoom, type RoomPayload } from './rooms.api';
 import type { Room } from '../../types/room';
 import { ApiError } from '../presupuestos/api';
+import { useDataTable } from '../../hooks/useDataTable';
+import { SortableHeader } from '../../components/table/SortableHeader';
+import { DataTablePagination } from '../../components/table/DataTablePagination';
 
 export type ToastParams = {
   variant: 'success' | 'danger';
@@ -76,8 +79,31 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
   const isLoading = roomsQuery.isLoading;
   const isFetching = roomsQuery.isFetching && !roomsQuery.isLoading;
   const isSaving = createMutation.isPending || updateMutation.isPending;
-  const tableRows = rooms.length;
   const errorMessage = roomsQuery.error ? formatError(roomsQuery.error) : null;
+
+  const getSortValue = useCallback((room: Room, column: string) => {
+    switch (column) {
+      case 'nombre':
+        return room.name;
+      case 'sede':
+        return room.sede ?? '';
+      default:
+        return null;
+    }
+  }, []);
+
+  const {
+    pageItems,
+    sortState,
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize,
+    requestSort,
+    goToPage,
+  } = useDataTable(rooms, {
+    getSortValue,
+  });
 
   const handleAddRoom = () => {
     setSelectedRoom(null);
@@ -140,8 +166,18 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
           <Table hover className="mb-0 align-middle">
             <thead>
               <tr className="text-muted text-uppercase small">
-                <th className="fw-semibold">Nombre</th>
-                <th className="fw-semibold">Sede</th>
+                <SortableHeader
+                  columnKey="nombre"
+                  label={<span className="fw-semibold">Nombre</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
+                <SortableHeader
+                  columnKey="sede"
+                  label={<span className="fw-semibold">Sede</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
               </tr>
             </thead>
             <tbody>
@@ -151,8 +187,8 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
-              ) : tableRows ? (
-                rooms.map((room) => (
+              ) : totalItems ? (
+                pageItems.map((room) => (
                   <tr
                     key={room.sala_id}
                     role="button"
@@ -178,6 +214,13 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
             </tbody>
           </Table>
         </div>
+        <DataTablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          totalItems={totalItems}
+          onPageChange={goToPage}
+        />
       </div>
 
       <RoomModal
