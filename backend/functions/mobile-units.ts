@@ -7,11 +7,18 @@ type MobileUnitRecord = {
   unidad_id: string;
   name: string;
   matricula: string;
-  tipo: string;
-  sede: string;
+  tipo: string[] | string | null;
+  sede: string[] | string | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
 };
+
+const VALID_SEDE = ["GEP Arganda", "GEP Sabadell", "In Company"] as const;
+const VALID_TIPO = ["Formación", "Preventivo", "PCI", "Remolque"] as const;
+
+type SelectionValidationResult =
+  | { value: string[] }
+  | { error: ReturnType<typeof errorResponse> };
 
 function parseUnitIdFromPath(path: string): string | null {
   const value = String(path || '');
@@ -25,35 +32,96 @@ function toTrimmedString(value: unknown): string | null {
   return text.length ? text : null;
 }
 
+function mapSelectionValues(value: unknown, validValues: readonly string[]) {
+  const items = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  const normalized = items
+    .map((item) => (item === undefined || item === null ? '' : String(item).trim()))
+    .filter((item) => item.length);
+
+  const mapped: string[] = [];
+
+  for (const entry of normalized) {
+    const match = validValues.find((valid) => valid.toLowerCase() === entry.toLowerCase());
+    if (match && !mapped.includes(match)) {
+      mapped.push(match);
+    }
+  }
+
+  return mapped;
+}
+
 function normalizeMobileUnit(row: MobileUnitRecord) {
+  const tipo = mapSelectionValues(row.tipo, VALID_TIPO);
+  const sede = mapSelectionValues(row.sede, VALID_SEDE);
+
   return {
     unidad_id: row.unidad_id,
     name: row.name,
     matricula: row.matricula,
-    tipo: row.tipo,
-    sede: row.sede,
+    tipo,
+    sede,
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at ?? null,
     updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at ?? null,
   };
 }
 
+function normalizeSelection(
+  value: unknown,
+  validValues: readonly string[],
+  fieldName: string,
+  { required = true }: { required?: boolean } = {},
+): SelectionValidationResult {
+  const items = Array.isArray(value) ? value : value === undefined ? [] : [value];
+  const normalized = items
+    .map((item) => (item === undefined || item === null ? "" : String(item).trim()))
+    .filter((item) => item.length);
+
+  const mappedValues: string[] = [];
+  const invalidValues: string[] = [];
+
+  for (const entry of normalized) {
+    const match = validValues.find((valid) => valid.toLowerCase() === entry.toLowerCase());
+    if (match) {
+      if (!mappedValues.includes(match)) {
+        mappedValues.push(match);
+      }
+    } else if (!invalidValues.includes(entry)) {
+      invalidValues.push(entry);
+    }
+  }
+
+  if (invalidValues.length) {
+    return {
+      error: errorResponse(
+        "VALIDATION_ERROR",
+        `Los valores [${invalidValues.join(", ")}] no son válidos para ${fieldName}`,
+        400
+      ),
+    };
+  }
+
+  if (required && mappedValues.length === 0) {
+    return {
+      error: errorResponse("VALIDATION_ERROR", `El campo ${fieldName} es obligatorio`, 400),
+    };
+  }
+
+  return { value: mappedValues };
+}
+
 function buildCreateData(body: any) {
   const name = toTrimmedString(body?.name);
   const matricula = toTrimmedString(body?.matricula);
-  const tipo = toTrimmedString(body?.tipo);
-  const sede = toTrimmedString(body?.sede);
+  const tipoResult = normalizeSelection(body?.tipo, VALID_TIPO, "tipo");
+  if ("error" in tipoResult) return tipoResult;
+  const sedeResult = normalizeSelection(body?.sede, VALID_SEDE, "sede");
+  if ("error" in sedeResult) return sedeResult;
 
   if (!name) {
     return { error: errorResponse('VALIDATION_ERROR', 'El campo name es obligatorio', 400) };
   }
   if (!matricula) {
     return { error: errorResponse('VALIDATION_ERROR', 'El campo matricula es obligatorio', 400) };
-  }
-  if (!tipo) {
-    return { error: errorResponse('VALIDATION_ERROR', 'El campo tipo es obligatorio', 400) };
-  }
-  if (!sede) {
-    return { error: errorResponse('VALIDATION_ERROR', 'El campo sede es obligatorio', 400) };
   }
 
   const unidadId = toTrimmedString(body?.unidad_id) ?? randomUUID();
@@ -62,8 +130,8 @@ function buildCreateData(body: any) {
     unidad_id: unidadId,
     name,
     matricula,
-    tipo,
-    sede,
+    tipo: tipoResult.value,
+    sede: sedeResult.value,
   };
 
   return { data };
@@ -104,20 +172,16 @@ function buildUpdateData(body: any) {
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'tipo')) {
-    const tipo = toTrimmedString(body.tipo);
-    if (!tipo) {
-      return { error: errorResponse('VALIDATION_ERROR', 'El campo tipo es obligatorio', 400) };
-    }
-    data.tipo = tipo;
+    const tipoResult = normalizeSelection(body.tipo, VALID_TIPO, 'tipo');
+    if ('error' in tipoResult) return tipoResult;
+    data.tipo = tipoResult.value;
     hasChanges = true;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'sede')) {
-    const sede = toTrimmedString(body.sede);
-    if (!sede) {
-      return { error: errorResponse('VALIDATION_ERROR', 'El campo sede es obligatorio', 400) };
-    }
-    data.sede = sede;
+    const sedeResult = normalizeSelection(body.sede, VALID_SEDE, 'sede');
+    if ('error' in sedeResult) return sedeResult;
+    data.sede = sedeResult.value;
     hasChanges = true;
   }
 

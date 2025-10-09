@@ -173,8 +173,8 @@ model unidades_moviles {
   unidad_id  String   @id
   name       String
   matricula  String   @unique
-  tipo       String
-  sede       String
+  tipo       String[] @default([])
+  sede       String[] @default([])
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @updatedAt      @db.Timestamptz(6)
 }
