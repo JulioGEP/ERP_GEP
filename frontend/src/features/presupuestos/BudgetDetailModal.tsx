@@ -176,13 +176,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     setForm((current) => (current ? { ...current, [field]: value } : current));
   };
 
-  const openSessionsSection = () => {
-    setOpenSections((current) => (current.includes('sessions') ? current : [...current, 'sessions']));
-    if (sessionsSectionRef.current) {
-      sessionsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
   // Inicializa solo los campos editables (schema con training_address)
   useEffect(() => {
     if (deal) {
@@ -658,15 +651,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           ) : null}
         </Modal.Title>
         <div className="erp-modal-header-actions">
-          <Button
-            variant="primary"
-            size="sm"
-            className="erp-modal-action"
-            onClick={openSessionsSection}
-            disabled={!normalizedDealId}
-          >
-            Planificación
-          </Button>
           <Button
             variant="light"
             size="sm"
