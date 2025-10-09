@@ -3,6 +3,7 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } fro
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "crypto";
 import { getPrisma } from "./_shared/prisma";
+import { nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 
 const BUCKET = process.env.S3_BUCKET!;
@@ -115,7 +116,7 @@ export const handler = async (event: any) => {
           file_name: file_name,
           file_type: mime_type ?? null,
           file_url: storage_key, // guardamos la clave S3 (no es URL pública)
-          added_at: new Date(), // opcional: marca de alta
+          added_at: nowInMadridISO(), // opcional: marca de alta en hora local de Madrid
         },
       });
 
@@ -145,7 +146,7 @@ export const handler = async (event: any) => {
           mime_type: d.file_type ?? null,
           url: isHttp ? d.file_url ?? null : null,
           // no tenemos `size` en el esquema → lo omitimos
-          created_at: d.created_at,
+          created_at: toMadridISOString(d.created_at),
         };
       });
 
