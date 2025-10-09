@@ -3,10 +3,6 @@ import { randomUUID } from 'crypto';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
-import {
-  findTrainersConflicts,
-  type ResourceConflictDetail,
-} from './_lib/resource-conflicts';
 
 const OPTIONAL_STRING_FIELDS = [
   'apellido',
@@ -48,12 +44,7 @@ function toNullableString(value: unknown): string | null {
   return text.length ? text : null;
 }
 
-type TrainerAvailability = {
-  isBusy: boolean;
-  conflicts: ResourceConflictDetail[];
-};
-
-function normalizeTrainer(row: TrainerRecord, availability?: TrainerAvailability) {
+function normalizeTrainer(row: TrainerRecord) {
   const sedeValues = Array.isArray(row.sede) ? row.sede : [];
   const normalizedSede = sedeValues.filter(
     (value): value is string =>
@@ -74,70 +65,7 @@ function normalizeTrainer(row: TrainerRecord, availability?: TrainerAvailability
     sede: normalizedSede,
     created_at: toMadridISOString(row.created_at),
     updated_at: toMadridISOString(row.updated_at),
-    availability: availability ? { ...availability } : undefined,
   };
-}
-
-type DateRangeParseResult =
-  | { start: Date | null; end: Date | null; excludeSessionId: string | null }
-  | { error: ReturnType<typeof errorResponse> };
-
-function parseDateRangeParams(query: Record<string, unknown>): DateRangeParseResult {
-  const startRaw = query.start ?? query.start_at ?? query.inicio ?? null;
-  const endRaw = query.end ?? query.end_at ?? query.fin ?? null;
-  const excludeRaw =
-    query.excludeSessionId ??
-    query.exclude_session_id ??
-    query.sessionId ??
-    query.session_id ??
-    null;
-
-  const startText = toNullableString(startRaw);
-  const endText = toNullableString(endRaw);
-  const excludeSessionId = toNullableString(excludeRaw);
-
-  let start: Date | null = null;
-  let end: Date | null = null;
-
-  if (startText) {
-    const parsed = new Date(startText);
-    if (Number.isNaN(parsed.getTime())) {
-      return {
-        error: errorResponse(
-          'VALIDATION_ERROR',
-          'El parámetro start debe ser una fecha ISO válida',
-          400,
-        ),
-      };
-    }
-    start = parsed;
-  }
-
-  if (endText) {
-    const parsed = new Date(endText);
-    if (Number.isNaN(parsed.getTime())) {
-      return {
-        error: errorResponse(
-          'VALIDATION_ERROR',
-          'El parámetro end debe ser una fecha ISO válida',
-          400,
-        ),
-      };
-    }
-    end = parsed;
-  }
-
-  if (start && end && end.getTime() <= start.getTime()) {
-    return {
-      error: errorResponse(
-        'VALIDATION_ERROR',
-        'El rango horario es inválido. end debe ser posterior a start',
-        400,
-      ),
-    };
-  }
-
-  return { start, end, excludeSessionId };
 }
 
 type ParseSedeResult =
@@ -295,37 +223,11 @@ export const handler = async (event: any) => {
     const trainerIdFromPath = parseTrainerIdFromPath(path);
 
     if (method === 'GET' && !trainerIdFromPath) {
-      const rangeResult = parseDateRangeParams(event.queryStringParameters ?? {});
-      if ('error' in rangeResult) {
-        return rangeResult.error;
-      }
-
-      const { start: rangeStart, end: rangeEnd, excludeSessionId } = rangeResult;
-      const hasRange = Boolean(rangeStart && rangeEnd);
-
       const trainers = await prisma.trainers.findMany({
         orderBy: [{ name: 'asc' }, { apellido: 'asc' }],
       });
-
-      let availabilityMap = new Map<string, ResourceConflictDetail[]>();
-      if (hasRange && trainers.length) {
-        availabilityMap = await findTrainersConflicts(
-          prisma,
-          trainers.map((trainer) => trainer.trainer_id),
-          { start: rangeStart as Date, end: rangeEnd as Date, excludeSessionId },
-        );
-      }
-
       return successResponse({
-        trainers: trainers.map((trainer: TrainerRecord) => {
-          const conflicts = hasRange
-            ? availabilityMap.get(trainer.trainer_id) ?? []
-            : [];
-          const availability = hasRange
-            ? { isBusy: conflicts.length > 0, conflicts }
-            : undefined;
-          return normalizeTrainer(trainer, availability);
-        }),
+        trainers: trainers.map((trainer: TrainerRecord) => normalizeTrainer(trainer)),
       });
     }
 

@@ -1,7 +1,6 @@
 // backend/functions/_shared/mappers.ts
 // Mapeos y upserts a BD desde objetos de Pipedrive (deal + org + person + productos + notas + ficheros)
 
-import { randomUUID } from "crypto";
 import { getPrisma } from "./prisma";
 import {
   getDealFields,
@@ -92,25 +91,6 @@ function htmlToPlain(input?: string | null): string | null {
   s = s.replace(/<[^>]+>/g, "");
   s = s.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   return s || null;
-}
-
-function normalizeProductLineId(product: any): string | null {
-  if (!product || typeof product !== "object") return null;
-
-  const candidateKeys = [
-    "id",
-    "item_id",
-    "deal_product_id",
-  ];
-
-  for (const key of candidateKeys) {
-    const value = product?.[key];
-    if (value === null || value === undefined) continue;
-    const str = String(value).trim();
-    if (str.length) return str;
-  }
-
-  return null;
 }
 
 /* Dirección: prioriza *_formatted_address; si viene como objeto con formatted_address, úsalo;
@@ -290,8 +270,6 @@ export async function mapAndUpsertDealTree({
 
   await prisma.deal_products.deleteMany({ where: { deal_id: dealId } });
 
-  const usedProductIds = new Set<string>();
-
   for (const p of Array.isArray(products) ? products : []) {
     const baseName = p.name ?? p.product?.name ?? null;
     const baseCode = p.code ?? p.product?.code ?? null;
@@ -303,13 +281,13 @@ export async function mapAndUpsertDealTree({
 
     // HORAS en línea (si existiese ese custom en la línea, numérico directo)
     let hours: number | null = null;
-    if (fHoursInLine) {
-      const raw = p?.[fHoursInLine.key];
-      if (raw != null && raw !== "") {
-        const n = Number(String(raw).replace(",", ".").trim());
-        hours = Number.isFinite(n) ? Math.round(n) : null;
-      }
-    }
+  if (fHoursInLine) {
+  const raw = p?.[fHoursInLine.key];
+  if (raw != null && raw !== "") {
+    const n = Number(String(raw).replace(",", ".").trim());
+    hours = Number.isFinite(n) ? Math.round(n) : null;
+  }
+}
 
     // Enriquecimiento por PRODUCTO EMBEBIDO (include_product_data=1)
     const embedded = p.product ?? {};
@@ -339,10 +317,10 @@ export async function mapAndUpsertDealTree({
     }
 
     // Fallback al CATÁLOGO (GET /products/{id}) y sus custom_fields
-    const productIdForCatalog = p.product_id ?? p.id ?? null;
-    if (productIdForCatalog != null) {
+    const productId = p.product_id ?? p.id ?? null;
+    if (productId != null) {
       try {
-        const catalog = await getProductCached(productIdForCatalog);
+        const catalog = await getProductCached(productId);
         const catCF = catalog?.custom_fields ?? {};
 
         code = code ?? catalog?.code ?? null;
@@ -371,19 +349,9 @@ export async function mapAndUpsertDealTree({
       }
     }
 
-    let dealProductId = normalizeProductLineId(p);
-    if (!dealProductId) {
-      dealProductId = randomUUID();
-    }
-
-    while (usedProductIds.has(dealProductId)) {
-      dealProductId = randomUUID();
-    }
-    usedProductIds.add(dealProductId);
-
     await prisma.deal_products.create({
       data: {
-        id: dealProductId,
+        id: `${dealId}_${(p.id ?? p.product_id ?? Math.random().toString(36).slice(2)).toString()}`,
         deal_id: dealId,
         name: baseName,
         code,

@@ -34,8 +34,7 @@ export function successResponse(body: any = {}, statusCode = 200) {
 export function errorResponse(
   code: string,
   message: string,
-  statusCode = 400,
-  extra?: Record<string, unknown>
+  statusCode = 400
 ) {
   return {
     statusCode,
@@ -45,7 +44,6 @@ export function errorResponse(
       error_code: code,
       message,
       requestId: randomUUID(),
-      ...(extra && typeof extra === "object" ? extra : {}),
     }),
   };
 }
