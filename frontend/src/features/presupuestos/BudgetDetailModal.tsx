@@ -30,6 +30,7 @@ import {
 import { formatSedeLabel } from './formatSedeLabel';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
+import { SessionPlanner } from './SessionPlanner';
 
 interface Props {
   dealId: string | null;
@@ -783,6 +784,19 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               alwaysOpen
               className="mb-4"
             >
+              <Accordion.Item eventKey="sessions">
+                <Accordion.Header>
+                  <div className="d-flex justify-content-between align-items-center w-100">
+                    <span className="erp-accordion-title">Planificación de sesiones</span>
+                  </div>
+                </Accordion.Header>
+                <Accordion.Body>
+                  <SessionPlanner
+                    dealId={deal.deal_id}
+                    dealTitle={deal.title ?? summary?.title ?? null}
+                  />
+                </Accordion.Body>
+              </Accordion.Item>
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">
