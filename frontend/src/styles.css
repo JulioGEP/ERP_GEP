@@ -61,6 +61,22 @@ body {
   background-color: rgba(232, 71, 77, 0.08);
 }
 
+.pagination .page-link {
+  color: var(--color-red);
+}
+
+.pagination .page-link:hover,
+.pagination .page-link:focus {
+  color: #ffffff;
+  background-color: var(--color-red);
+  border-color: var(--color-red);
+}
+
+.pagination .page-item.active .page-link {
+  background-color: var(--color-red);
+  border-color: var(--color-red);
+}
+
 .modal-content {
   border-radius: 18px;
 }
