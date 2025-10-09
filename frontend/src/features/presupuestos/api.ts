@@ -9,6 +9,14 @@ import type {
   DealSession,
   DealSessionStatus,
 } from "../../types/deal";
+import type { Room } from "../../types/room";
+import type { Trainer } from "../../types/trainer";
+import type { MobileUnit } from "../../types/mobile-unit";
+import type {
+  ResourceAvailability,
+  ResourceConflictDetail,
+  ResourceConflictSummary,
+} from "../../types/resource-conflict";
 
 type Json = any;
 
@@ -31,11 +39,13 @@ export const API_BASE =
 export class ApiError extends Error {
   code: string;
   status?: number;
-  constructor(code: string, message: string, status?: number) {
+  details?: unknown;
+  constructor(code: string, message: string, status?: number, details?: unknown) {
     super(message);
     this.name = "ApiError";
     this.code = code;
     this.status = status;
+    this.details = details;
   }
 }
 export function isApiError(err: unknown): err is ApiError {
@@ -457,7 +467,8 @@ async function request(path: string, init?: RequestInit) {
   if (!res.ok || data?.ok === false) {
     const code = data?.error_code || data?.code || `HTTP_${res.status}`;
     const msg = data?.message || "Error inesperado";
-    throw new ApiError(code, msg, res.status);
+    const details = data?.conflicts ?? data?.details ?? null;
+    throw new ApiError(code, msg, res.status, details);
   }
   return data;
 }
@@ -874,4 +885,94 @@ export function buildDealDetailViewModel(
       author: pickNonEmptyString(n?.author ?? null),
     })),
   };
+}
+
+/* ===============================
+ * Sesiones y disponibilidad
+ * =============================== */
+
+export async function fetchDealSessions(dealId: string): Promise<DealSession[]> {
+  const normalizedId = String(dealId ?? "").trim();
+  if (!normalizedId.length) {
+    throw new ApiError("VALIDATION_ERROR", "dealId requerido para obtener sesiones");
+  }
+
+  const data = await request(
+    `/deal-sessions?dealId=${encodeURIComponent(normalizedId)}&expand=resources`
+  );
+  const rows: any[] = Array.isArray(data?.sessions) ? data.sessions : [];
+  return rows.map((row) => normalizeDealSession(row));
+}
+
+export async function updateDealSession(
+  sessionId: string,
+  payload: DealSessionUpdatePayload
+): Promise<DealSession> {
+  const normalizedId = String(sessionId ?? "").trim();
+  if (!normalizedId.length) {
+    throw new ApiError("VALIDATION_ERROR", "sessionId requerido para actualizar la sesión");
+  }
+
+  const body: Record<string, unknown> = { expand: "resources" };
+  if (Object.prototype.hasOwnProperty.call(payload, "inicio")) {
+    body.inicio = payload.inicio;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "fin")) {
+    body.fin = payload.fin;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "sala_id")) {
+    body.sala_id = payload.sala_id;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "formadores")) {
+    body.formadores = payload.formadores;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "unidades_moviles")) {
+    body.unidades_moviles = payload.unidades_moviles;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "direccion")) {
+    body.direccion = payload.direccion;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "sede")) {
+    body.sede = payload.sede;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "comentarios")) {
+    body.comentarios = payload.comentarios;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "estado")) {
+    body.estado = payload.estado;
+  }
+
+  const data = await request(`/deal-sessions/${encodeURIComponent(normalizedId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+  return normalizeDealSession(data?.session ?? {});
+}
+
+export async function fetchRoomsAvailability(
+  params: AvailabilityQuery = {}
+): Promise<Room[]> {
+  const query = buildAvailabilityQuery(params);
+  const data = await request(`/rooms${query}`);
+  const rows: any[] = Array.isArray(data?.rooms) ? data.rooms : [];
+  return rows.map((row) => normalizeRoomWithAvailability(row));
+}
+
+export async function fetchTrainersAvailability(
+  params: AvailabilityQuery = {}
+): Promise<Trainer[]> {
+  const query = buildAvailabilityQuery(params);
+  const data = await request(`/trainers${query}`);
+  const rows: any[] = Array.isArray(data?.trainers) ? data.trainers : [];
+  return rows.map((row) => normalizeTrainerWithAvailability(row));
+}
+
+export async function fetchMobileUnitsAvailability(
+  params: AvailabilityQuery = {}
+): Promise<MobileUnit[]> {
+  const query = buildAvailabilityQuery(params);
+  const data = await request(`/mobile-units${query}`);
+  const rows: any[] = Array.isArray(data?.mobileUnits) ? data.mobileUnits : [];
+  return rows.map((row) => normalizeMobileUnitWithAvailability(row));
 }

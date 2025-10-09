@@ -3,6 +3,10 @@ import { randomUUID } from 'crypto';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
+import {
+  findRoomsConflicts,
+  type ResourceConflictDetail,
+} from './_lib/resource-conflicts';
 
 const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
 
@@ -26,14 +30,82 @@ function toNullableString(value: unknown): string | null {
   return text.length ? text : null;
 }
 
-function normalizeRoom(row: RoomRecord) {
+type RoomAvailability = {
+  isBusy: boolean;
+  conflicts: ResourceConflictDetail[];
+};
+
+function normalizeRoom(row: RoomRecord, availability?: RoomAvailability) {
   return {
     sala_id: row.sala_id,
     name: row.name,
     sede: row.sede ?? null,
     created_at: toMadridISOString(row.created_at),
     updated_at: toMadridISOString(row.updated_at),
+    availability: availability ? { ...availability } : undefined,
   };
+}
+
+type DateRangeParseResult =
+  | { start: Date | null; end: Date | null; excludeSessionId: string | null }
+  | { error: ReturnType<typeof errorResponse> };
+
+function parseDateRangeParams(query: Record<string, unknown>): DateRangeParseResult {
+  const startRaw = query.start ?? query.start_at ?? query.inicio ?? null;
+  const endRaw = query.end ?? query.end_at ?? query.fin ?? null;
+  const excludeRaw =
+    query.excludeSessionId ??
+    query.exclude_session_id ??
+    query.sessionId ??
+    query.session_id ??
+    null;
+
+  const startText = toNullableString(startRaw);
+  const endText = toNullableString(endRaw);
+  const excludeSessionId = toNullableString(excludeRaw);
+
+  let start: Date | null = null;
+  let end: Date | null = null;
+
+  if (startText) {
+    const parsed = new Date(startText);
+    if (Number.isNaN(parsed.getTime())) {
+      return {
+        error: errorResponse(
+          'VALIDATION_ERROR',
+          'El parámetro start debe ser una fecha ISO válida',
+          400,
+        ),
+      };
+    }
+    start = parsed;
+  }
+
+  if (endText) {
+    const parsed = new Date(endText);
+    if (Number.isNaN(parsed.getTime())) {
+      return {
+        error: errorResponse(
+          'VALIDATION_ERROR',
+          'El parámetro end debe ser una fecha ISO válida',
+          400,
+        ),
+      };
+    }
+    end = parsed;
+  }
+
+  if (start && end && end.getTime() <= start.getTime()) {
+    return {
+      error: errorResponse(
+        'VALIDATION_ERROR',
+        'El rango horario es inválido. end debe ser posterior a start',
+        400,
+      ),
+    };
+  }
+
+  return { start, end, excludeSessionId };
 }
 
 type ParseSedeResult = { value: string } | { error: ReturnType<typeof errorResponse> };
@@ -151,6 +223,14 @@ export const handler = async (event: any) => {
       const searchRaw = event.queryStringParameters?.search ?? '';
       const search = typeof searchRaw === 'string' ? searchRaw.trim() : '';
 
+      const rangeResult = parseDateRangeParams(event.queryStringParameters ?? {});
+      if ('error' in rangeResult) {
+        return rangeResult.error;
+      }
+
+      const { start: rangeStart, end: rangeEnd, excludeSessionId } = rangeResult;
+      const hasRange = Boolean(rangeStart && rangeEnd);
+
       const where = search
         ? {
             name: {
@@ -165,8 +245,25 @@ export const handler = async (event: any) => {
         orderBy: [{ name: 'asc' }],
       });
 
+      let availabilityMap = new Map<string, ResourceConflictDetail[]>();
+      if (hasRange && rooms.length) {
+        availabilityMap = await findRoomsConflicts(
+          prisma,
+          rooms.map((room) => room.sala_id),
+          { start: rangeStart as Date, end: rangeEnd as Date, excludeSessionId },
+        );
+      }
+
       return successResponse({
-        rooms: rooms.map((room: RoomRecord) => normalizeRoom(room)),
+        rooms: rooms.map((room: RoomRecord) => {
+          const conflicts = hasRange
+            ? availabilityMap.get(room.sala_id) ?? []
+            : [];
+          const availability = hasRange
+            ? { isBusy: conflicts.length > 0, conflicts }
+            : undefined;
+          return normalizeRoom(room, availability);
+        }),
       });
     }
 

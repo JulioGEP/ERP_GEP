@@ -7,6 +7,12 @@ import {
   successResponse,
 } from "./_shared/response";
 import { toMadridISOString } from "./_shared/timezone";
+import {
+  findMobileUnitsConflicts,
+  findRoomsConflicts,
+  findTrainersConflicts,
+  type ResourceConflictSummary,
+} from "./_lib/resource-conflicts";
 
 const PLANIFICABLE_PREFIXES = ["form-", "pci-", "ces-", "prev-"];
 const EXCLUDED_PREFIX = "ext-";
@@ -122,6 +128,23 @@ function decimalToNumber(value: unknown): number | null {
     }
   }
   return null;
+}
+
+function formatRangeForMessage(startIso: string | null, endIso: string | null) {
+  const formatDate = (iso: string | null) => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" });
+  };
+
+  const startText = formatDate(startIso);
+  const endText = formatDate(endIso);
+
+  if (startText && endText) {
+    return `${startText} – ${endText}`;
+  }
+  return startText ?? endText ?? null;
 }
 
 function mapSession(record: DealSessionRecord, expand: Set<ExpandKey>) {
@@ -335,6 +358,7 @@ async function handleUpdateSession(
     include: {
       deal_product: { select: { id: true, hours: true } },
       trainers: { select: { trainer_id: true } },
+      mobile_units: { select: { unidad_id: true } },
     },
   });
 
@@ -407,6 +431,7 @@ async function handleUpdateSession(
   )
     ? body.unidades_moviles
     : undefined;
+  let mobileUnitIdsForUpdate: string[] | null = null;
 
   if (
     updateData.start_at &&
@@ -484,6 +509,7 @@ async function handleUpdateSession(
       operations.push(
         prisma.deal_session_mobile_units.deleteMany({ where: { session_id: sessionId } })
       );
+      mobileUnitIdsForUpdate = [];
     } else if (Array.isArray(mobileUnitsRaw)) {
       const unitIds = Array.from(
         new Set(
@@ -512,6 +538,7 @@ async function handleUpdateSession(
       );
 
       if (unitIds.length) {
+        mobileUnitIdsForUpdate = unitIds;
         operations.push(
           prisma.deal_session_mobile_units.createMany({
             data: unitIds.map((unidadId) => ({
@@ -520,6 +547,8 @@ async function handleUpdateSession(
             })),
           })
         );
+      } else {
+        mobileUnitIdsForUpdate = [];
       }
     } else {
       return errorResponse(
@@ -557,6 +586,157 @@ async function handleUpdateSession(
     nextDireccion &&
     nextSede
   );
+
+  const normalizedStart =
+    nextStart instanceof Date
+      ? nextStart
+      : nextStart
+      ? new Date(nextStart)
+      : null;
+  const normalizedEnd =
+    nextEnd instanceof Date ? nextEnd : nextEnd ? new Date(nextEnd) : null;
+
+  const hasValidRange =
+    normalizedStart instanceof Date &&
+    normalizedEnd instanceof Date &&
+    !Number.isNaN(normalizedStart.getTime()) &&
+    !Number.isNaN(normalizedEnd.getTime()) &&
+    normalizedEnd.getTime() > normalizedStart.getTime();
+
+  if (hasValidRange) {
+    const range = {
+      start: normalizedStart as Date,
+      end: normalizedEnd as Date,
+      excludeSessionId: sessionId,
+    };
+
+    const conflicts: ResourceConflictSummary[] = [];
+
+    const nextSalaId =
+      typeof nextSala === "string" && nextSala.trim().length ? nextSala : null;
+    if (nextSalaId) {
+      const roomConflictsMap = await findRoomsConflicts(prisma, [nextSalaId], range);
+      const roomConflicts = roomConflictsMap.get(nextSalaId) ?? [];
+      if (roomConflicts.length) {
+        const salaRecord = await prisma.salas.findUnique({
+          where: { sala_id: nextSalaId },
+          select: { name: true },
+        });
+        conflicts.push({
+          resource_type: "sala",
+          resource_id: nextSalaId,
+          resource_label: salaRecord?.name ?? null,
+          conflicts: roomConflicts,
+        });
+      }
+    }
+
+    const existingTrainerIds = Array.isArray(session.trainers)
+      ? session.trainers
+          .map((entry) => entry.trainer_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [];
+    const trainerIdsToCheck =
+      trainerIdsForUpdate !== null ? trainerIdsForUpdate : existingTrainerIds;
+    const uniqueTrainerIds = Array.from(new Set(trainerIdsToCheck));
+    if (uniqueTrainerIds.length) {
+      const trainerConflictsMap = await findTrainersConflicts(
+        prisma,
+        uniqueTrainerIds,
+        range
+      );
+      const conflictingTrainerIds = Array.from(trainerConflictsMap.keys());
+      if (conflictingTrainerIds.length) {
+        const trainerLabels = new Map<string, string | null>();
+        const trainers = await prisma.trainers.findMany({
+          where: { trainer_id: { in: conflictingTrainerIds } },
+          select: { trainer_id: true, name: true },
+        });
+        for (const trainer of trainers) {
+          trainerLabels.set(trainer.trainer_id, trainer.name ?? null);
+        }
+        for (const trainerId of conflictingTrainerIds) {
+          conflicts.push({
+            resource_type: "formador",
+            resource_id: trainerId,
+            resource_label: trainerLabels.get(trainerId) ?? null,
+            conflicts: trainerConflictsMap.get(trainerId) ?? [],
+          });
+        }
+      }
+    }
+
+    const existingMobileUnits = Array.isArray(session.mobile_units)
+      ? session.mobile_units
+          .map((entry) => entry.unidad_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+      : [];
+    const mobileUnitIdsToCheck =
+      mobileUnitIdsForUpdate !== null
+        ? mobileUnitIdsForUpdate
+        : existingMobileUnits;
+    const uniqueMobileUnitIds = Array.from(new Set(mobileUnitIdsToCheck));
+    if (uniqueMobileUnitIds.length) {
+      const mobileUnitConflictsMap = await findMobileUnitsConflicts(
+        prisma,
+        uniqueMobileUnitIds,
+        range
+      );
+      const conflictingUnitIds = Array.from(mobileUnitConflictsMap.keys());
+      if (conflictingUnitIds.length) {
+        const unitLabels = new Map<string, string | null>();
+        const units = await prisma.unidades_moviles.findMany({
+          where: { unidad_id: { in: conflictingUnitIds } },
+          select: { unidad_id: true, name: true, matricula: true },
+        });
+        for (const unit of units) {
+          const parts = [unit.name, unit.matricula]
+            .map((value) => (typeof value === "string" ? value.trim() : ""))
+            .filter((value) => value.length > 0);
+          unitLabels.set(unit.unidad_id, parts.length ? parts.join(" - ") : null);
+        }
+        for (const unidadId of conflictingUnitIds) {
+          conflicts.push({
+            resource_type: "unidad_movil",
+            resource_id: unidadId,
+            resource_label: unitLabels.get(unidadId) ?? null,
+            conflicts: mobileUnitConflictsMap.get(unidadId) ?? [],
+          });
+        }
+      }
+    }
+
+    if (conflicts.length) {
+      const firstConflict = conflicts[0];
+      const firstDetail = firstConflict.conflicts[0];
+      const resourceTypeLabel =
+        firstConflict.resource_type === "sala"
+          ? "La sala seleccionada"
+          : firstConflict.resource_type === "formador"
+          ? "El formador seleccionado"
+          : "La unidad móvil seleccionada";
+      const resourceLabel = firstConflict.resource_label ?? firstConflict.resource_id;
+      const dealLabel =
+        firstDetail.deal_title ??
+        firstDetail.organization_name ??
+        firstDetail.deal_id;
+      const rangeLabel = formatRangeForMessage(firstDetail.inicio, firstDetail.fin);
+
+      const messageParts = [
+        `${resourceTypeLabel}${resourceLabel ? ` (${resourceLabel})` : ""}`,
+      ];
+      if (dealLabel) {
+        messageParts.push(`ya está asignado a ${dealLabel}`);
+      }
+      if (rangeLabel) {
+        messageParts.push(`en el horario ${rangeLabel}`);
+      }
+
+      return errorResponse("RESOURCE_CONFLICT", `${messageParts.join(" ")}.`, 409, {
+        conflicts,
+      });
+    }
+  }
 
   if (statusExplicitlyProvided && updateData.status === "Planificada" && !requiredComplete) {
     return errorResponse(
