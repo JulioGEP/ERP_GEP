@@ -7,7 +7,12 @@ import type {
   DealDocument,
   DealNote,
   DealSession,
+  DealSessionMobileUnit,
+  DealSessionProduct,
+  DealSessionRoom,
   DealSessionStatus,
+  DealSessionTrainer,
+  DealSessionUpdatePayload,
 } from "../../types/deal";
 import type { Room } from "../../types/room";
 import type { Trainer } from "../../types/trainer";
@@ -162,6 +167,270 @@ function buildPersonFullName(person?: {
     .map((v) => (typeof v === "string" ? v.trim() : ""))
     .filter((v) => v.length > 0);
   return parts.length ? parts.join(" ") : null;
+}
+
+type AvailabilityQuery = {
+  start?: string;
+  end?: string;
+  excludeSessionId?: string;
+};
+
+function normalizeResourceConflictDetail(raw: any): ResourceConflictDetail | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const sessionId =
+    toStringValue((raw as any).session_id ?? (raw as any).sessionId ?? (raw as any).session) ?? "";
+  const dealId = toStringValue((raw as any).deal_id ?? (raw as any).dealId ?? (raw as any).deal) ?? "";
+
+  return {
+    session_id: sessionId,
+    deal_id: dealId,
+    deal_title: toStringValue((raw as any).deal_title ?? (raw as any).dealTitle) ?? null,
+    organization_name:
+      toStringValue((raw as any).organization_name ?? (raw as any).organizationName) ?? null,
+    product_code: toStringValue((raw as any).product_code ?? (raw as any).productCode) ?? null,
+    product_name: toStringValue((raw as any).product_name ?? (raw as any).productName) ?? null,
+    inicio: toStringValue((raw as any).inicio ?? (raw as any).start ?? null),
+    fin: toStringValue((raw as any).fin ?? (raw as any).end ?? null),
+  };
+}
+
+function normalizeResourceAvailability(raw: any): ResourceAvailability {
+  if (!raw || typeof raw !== "object") {
+    return { isBusy: false, conflicts: [] };
+  }
+
+  const isBusyValue =
+    (raw as any).isBusy ?? (raw as any).busy ?? (raw as any).ocupado ?? (raw as any).is_busy ?? null;
+  const conflictsRaw = (raw as any).conflicts ?? (raw as any).detalles ?? (raw as any).details;
+  const conflicts = Array.isArray(conflictsRaw)
+    ? conflictsRaw
+        .map((entry) => normalizeResourceConflictDetail(entry))
+        .filter((entry) => Boolean(entry))
+    : [];
+
+  return {
+    isBusy: typeof isBusyValue === "boolean" ? isBusyValue : Boolean(isBusyValue),
+    conflicts,
+  };
+}
+
+function normalizeResourceConflictSummary(raw: any): ResourceConflictSummary | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const rawType = toStringValue((raw as any).resource_type ?? (raw as any).type ?? null);
+  const normalizedType = rawType
+    ? rawType
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase()
+    : null;
+
+  let resource_type: ResourceConflictSummary["resource_type"] | null = null;
+  if (normalizedType === "sala") resource_type = "sala";
+  if (normalizedType === "formador") resource_type = "formador";
+  if (normalizedType === "unidad_movil" || normalizedType === "unidad movil") {
+    resource_type = "unidad_movil";
+  }
+
+  if (!resource_type) return null;
+
+  const resource_id =
+    toStringValue((raw as any).resource_id ?? (raw as any).id ?? (raw as any).resource) ?? "";
+  const resource_label = toStringValue((raw as any).resource_label ?? (raw as any).label ?? null) ?? null;
+  const conflictsRaw = (raw as any).conflicts ?? (raw as any).detalles ?? [];
+  const conflicts = Array.isArray(conflictsRaw)
+    ? conflictsRaw
+        .map((entry) => normalizeResourceConflictDetail(entry))
+        .filter((entry) => Boolean(entry))
+    : [];
+
+  return {
+    resource_type,
+    resource_id,
+    resource_label,
+    conflicts,
+  };
+}
+
+function normalizeSessionTrainer(raw: any): DealSessionTrainer | null {
+  if (!raw || typeof raw !== "object") return null;
+  const trainerId =
+    toStringValue((raw as any).trainer_id ?? (raw as any).id ?? (raw as any).trainer) ?? null;
+  if (!trainerId) return null;
+
+  const availabilityRaw = (raw as any).availability ?? (raw as any).disponibilidad ?? null;
+  const availability = availabilityRaw ? normalizeResourceAvailability(availabilityRaw) : undefined;
+
+  return {
+    trainer_id: trainerId,
+    name: toStringValue((raw as any).name ?? null),
+    apellido: toStringValue((raw as any).apellido ?? (raw as any).last_name ?? null),
+    availability,
+  };
+}
+
+function normalizeSessionMobileUnit(raw: any): DealSessionMobileUnit | null {
+  if (!raw || typeof raw !== "object") return null;
+  const unitId = toStringValue((raw as any).unidad_id ?? (raw as any).id ?? (raw as any).unidad) ?? null;
+  if (!unitId) return null;
+
+  const availabilityRaw = (raw as any).availability ?? (raw as any).disponibilidad ?? null;
+  const availability = availabilityRaw ? normalizeResourceAvailability(availabilityRaw) : undefined;
+
+  return {
+    unidad_id: unitId,
+    name: toStringValue((raw as any).name ?? null),
+    matricula: toStringValue((raw as any).matricula ?? null),
+    availability,
+  };
+}
+
+function normalizeSessionRoom(raw: any, fallbackId: string | null): DealSessionRoom | null {
+  if (!raw || typeof raw !== "object") {
+    if (!fallbackId) return null;
+    return {
+      sala_id: fallbackId,
+      name: null,
+      sede: null,
+    };
+  }
+
+  const salaId = toStringValue((raw as any).sala_id ?? (raw as any).id ?? fallbackId) ?? null;
+  if (!salaId) return null;
+
+  const availabilityRaw = (raw as any).availability ?? (raw as any).disponibilidad ?? null;
+  const availability = availabilityRaw ? normalizeResourceAvailability(availabilityRaw) : undefined;
+
+  return {
+    sala_id: salaId,
+    name: toStringValue((raw as any).name ?? null),
+    sede: toStringValue((raw as any).sede ?? null),
+    availability,
+  };
+}
+
+function normalizeDealSessionProduct(raw: any): DealSessionProduct | null {
+  if (!raw || typeof raw !== "object") return null;
+  const code = toStringValue((raw as any).code ?? (raw as any).product_code ?? null) ?? null;
+  const name = toStringValue((raw as any).name ?? (raw as any).product_name ?? null) ?? null;
+  if (!code && !name) return null;
+  return { code, name };
+}
+
+function buildAvailabilityQuery(params: AvailabilityQuery): string {
+  const searchParams = new URLSearchParams();
+  const start = toStringValue(params.start ?? null);
+  if (start) searchParams.set("start", start);
+  const end = toStringValue(params.end ?? null);
+  if (end) searchParams.set("end", end);
+  const exclude = toStringValue(params.excludeSessionId ?? null);
+  if (exclude) searchParams.set("excludeSessionId", exclude);
+  const queryString = searchParams.toString();
+  return queryString.length ? `?${queryString}` : "";
+}
+
+function normalizeRoomWithAvailability(raw: any): Room {
+  if (!raw || typeof raw !== "object") {
+    throw new ApiError("INVALID_RESPONSE", "Sala no válida");
+  }
+
+  const salaId = toStringValue((raw as any).sala_id ?? (raw as any).id) ?? "";
+  const name = toStringValue((raw as any).name ?? null) ?? "";
+  const sede = toStringValue((raw as any).sede ?? null) ?? null;
+  const created = toStringValue((raw as any).created_at ?? null);
+  const updated = toStringValue((raw as any).updated_at ?? null);
+
+  const availabilityRaw = (raw as any).availability ?? (raw as any).disponibilidad ?? null;
+  const availability = availabilityRaw ? normalizeResourceAvailability(availabilityRaw) : undefined;
+
+  const room: Room = {
+    sala_id: salaId,
+    name,
+    sede,
+    created_at: created,
+    updated_at: updated,
+  };
+
+  if (availability) {
+    room.availability = availability;
+  }
+
+  return room;
+}
+
+function normalizeTrainerWithAvailability(raw: any): Trainer {
+  if (!raw || typeof raw !== "object") {
+    throw new ApiError("INVALID_RESPONSE", "Formador no válido");
+  }
+
+  const trainerId = toStringValue((raw as any).trainer_id ?? (raw as any).id) ?? "";
+  const sedeRaw = Array.isArray((raw as any).sede) ? ((raw as any).sede as any[]) : [];
+  const sede = sedeRaw
+    .map((value) => toStringValue(value ?? null))
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  const availabilityRaw = (raw as any).availability ?? (raw as any).disponibilidad ?? null;
+  const availability = availabilityRaw ? normalizeResourceAvailability(availabilityRaw) : undefined;
+
+  const trainer: Trainer = {
+    trainer_id: trainerId,
+    name: toStringValue((raw as any).name ?? null) ?? "",
+    apellido: toStringValue((raw as any).apellido ?? (raw as any).last_name ?? null) ?? null,
+    email: toStringValue((raw as any).email ?? null) ?? null,
+    phone: toStringValue((raw as any).phone ?? null) ?? null,
+    dni: toStringValue((raw as any).dni ?? null) ?? null,
+    direccion: toStringValue((raw as any).direccion ?? (raw as any).address ?? null) ?? null,
+    especialidad: toStringValue((raw as any).especialidad ?? (raw as any).specialty ?? null) ?? null,
+    titulacion: toStringValue((raw as any).titulacion ?? (raw as any).degree ?? null) ?? null,
+    activo: Boolean((raw as any).activo ?? (raw as any).active ?? true),
+    sede,
+    created_at: toStringValue((raw as any).created_at ?? null),
+    updated_at: toStringValue((raw as any).updated_at ?? null),
+  };
+
+  if (availability) {
+    trainer.availability = availability;
+  }
+
+  return trainer;
+}
+
+function normalizeMobileUnitWithAvailability(raw: any): MobileUnit {
+  if (!raw || typeof raw !== "object") {
+    throw new ApiError("INVALID_RESPONSE", "Unidad móvil no válida");
+  }
+
+  const unidadId = toStringValue((raw as any).unidad_id ?? (raw as any).id) ?? "";
+  const sedeRaw = Array.isArray((raw as any).sede) ? ((raw as any).sede as any[]) : [];
+  const sede = sedeRaw
+    .map((value) => toStringValue(value ?? null))
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  const availabilityRaw = (raw as any).availability ?? (raw as any).disponibilidad ?? null;
+  const availability = availabilityRaw ? normalizeResourceAvailability(availabilityRaw) : undefined;
+
+  const unit: MobileUnit = {
+    unidad_id: unidadId,
+    name: toStringValue((raw as any).name ?? null) ?? "",
+    matricula: toStringValue((raw as any).matricula ?? null) ?? "",
+    tipo: Array.isArray((raw as any).tipo)
+      ? ((raw as any).tipo as any[])
+          .map((value) => toStringValue(value ?? null))
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+      : [],
+    sede,
+    created_at: toStringValue((raw as any).created_at ?? null),
+    updated_at: toStringValue((raw as any).updated_at ?? null),
+  };
+
+  if (availability) {
+    unit.availability = availability;
+  }
+
+  return unit;
 }
 
 /* ==================================
@@ -411,31 +680,87 @@ function normalizeDealSession(raw: any): DealSession {
     throw new ApiError("INVALID_RESPONSE", "Sesión no válida");
   }
 
-  const id = toStringValue((raw as any).seasson_id ?? (raw as any).id) ?? "";
+  const sessionId =
+    toStringValue((raw as any).seasson_id ?? (raw as any).session_id ?? (raw as any).id) ?? "";
   const dealId =
     toStringValue((raw as any).deal_id ?? (raw as any).dealId ?? (raw as any).deal) ?? "";
 
-  const start = toStringValue((raw as any).date_start ?? (raw as any).start ?? null);
-  const end = toStringValue((raw as any).date_end ?? (raw as any).end ?? null);
+  const start = toStringValue(
+    (raw as any).inicio ?? (raw as any).date_start ?? (raw as any).start ?? null
+  );
+  const end = toStringValue(
+    (raw as any).fin ?? (raw as any).date_end ?? (raw as any).end ?? null
+  );
   const sede = toStringValue((raw as any).sede ?? null);
-  const address = toStringValue((raw as any).seasson_address ?? (raw as any).address ?? null);
-  const roomId = toStringValue((raw as any).room_id ?? (raw as any).roomId ?? null);
-  const comment = toStringValue((raw as any).comment_seasson ?? (raw as any).comment ?? null);
+  const address =
+    toStringValue((raw as any).direccion ?? (raw as any).seasson_address ?? (raw as any).address ?? null) ?? null;
+  const roomId =
+    toStringValue((raw as any).sala_id ?? (raw as any).room_id ?? (raw as any).roomId ?? null) ?? null;
+  const comment =
+    toStringValue((raw as any).comentarios ?? (raw as any).comment_seasson ?? (raw as any).comment ?? null) ?? null;
+
+  const statusRaw = (raw as any).estado ?? (raw as any).status;
+  const status = normalizeSessionStatus(statusRaw);
+  const estado = typeof (raw as any).estado === "string" ? normalizeSessionStatus((raw as any).estado) : status;
+
+  const trainerIdSet = new Set<string>(
+    normalizeIdArray((raw as any).seasson_fireman ?? (raw as any).trainerIds)
+  );
+  const formadores = Array.isArray((raw as any).formadores)
+    ? ((raw as any).formadores as any[])
+        .map((entry) => normalizeSessionTrainer(entry))
+        .filter((entry): entry is DealSessionTrainer => Boolean(entry))
+    : [];
+  for (const trainer of formadores) {
+    if (trainer.trainer_id && !trainerIdSet.has(trainer.trainer_id)) {
+      trainerIdSet.add(trainer.trainer_id);
+    }
+  }
+
+  const mobileUnitIdSet = new Set<string>(
+    normalizeIdArray((raw as any).seasson_vehicle ?? (raw as any).mobileUnitIds)
+  );
+  const unidades = Array.isArray((raw as any).unidades_moviles)
+    ? ((raw as any).unidades_moviles as any[])
+        .map((entry) => normalizeSessionMobileUnit(entry))
+        .filter((entry): entry is DealSessionMobileUnit => Boolean(entry))
+    : [];
+  for (const unit of unidades) {
+    if (unit.unidad_id && !mobileUnitIdSet.has(unit.unidad_id)) {
+      mobileUnitIdSet.add(unit.unidad_id);
+    }
+  }
+
+  const sala = (raw as any).sala ?? (raw as any).room ?? null;
+  const normalizedRoom = normalizeSessionRoom(sala, roomId);
 
   return {
-    id,
+    id: sessionId,
+    session_id: sessionId,
     dealId,
-    status: normalizeSessionStatus((raw as any).status),
+    deal_id: dealId,
+    status,
+    estado,
     start,
     end,
+    inicio: start,
+    fin: end,
     sede,
     address,
+    direccion: address,
     roomId,
-    trainerIds: normalizeIdArray((raw as any).seasson_fireman ?? (raw as any).trainerIds),
-    mobileUnitIds: normalizeIdArray((raw as any).seasson_vehicle ?? (raw as any).mobileUnitIds),
+    sala_id: roomId,
+    trainerIds: Array.from(trainerIdSet),
+    formadores,
+    mobileUnitIds: Array.from(mobileUnitIdSet),
+    unidades_moviles: unidades,
     comment,
+    comentarios: comment,
     createdAt: toStringValue((raw as any).created_at ?? null),
     updatedAt: toStringValue((raw as any).updated_at ?? null),
+    sala: normalizedRoom,
+    deal_product: normalizeDealSessionProduct((raw as any).deal_product),
+    origen: normalizeDealSessionProduct((raw as any).origen),
   };
 }
 
@@ -678,11 +1003,31 @@ function buildSessionRequestPayload(payload: DealSessionPayload) {
   return { session };
 }
 
+function isPlannerUpdatePayload(payload: unknown): payload is DealSessionUpdatePayload {
+  if (!payload || typeof payload !== "object") return false;
+  const keys: (keyof DealSessionUpdatePayload)[] = [
+    "inicio",
+    "fin",
+    "sala_id",
+    "formadores",
+    "unidades_moviles",
+    "direccion",
+    "sede",
+    "comentarios",
+    "estado",
+  ];
+  return keys.some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+}
+
 export async function fetchDealSessions(dealId: string): Promise<DealSession[]> {
   const normalizedDealId = toStringValue(dealId);
-  if (!normalizedDealId) return [];
+  if (!normalizedDealId) {
+    throw new ApiError("VALIDATION_ERROR", "dealId requerido para obtener sesiones");
+  }
 
-  const data = await request(`/deal-sessions?dealId=${encodeURIComponent(normalizedDealId)}`);
+  const search = new URLSearchParams({ dealId: normalizedDealId });
+  search.set("expand", "resources");
+  const data = await request(`/deal-sessions?${search.toString()}`);
   const rows: any[] = Array.isArray(data?.sessions) ? data.sessions : [];
   return rows.map((row) => normalizeDealSession(row));
 }
@@ -711,14 +1056,54 @@ export async function createDealSession(
 
 export async function updateDealSession(
   sessionId: string,
-  payload: DealSessionPayload
+  payload: DealSessionPayload | DealSessionUpdatePayload
 ): Promise<DealSession> {
   const normalizedSessionId = toStringValue(sessionId);
   if (!normalizedSessionId) {
     throw new ApiError("VALIDATION_ERROR", "sessionId requerido para actualizar");
   }
 
-  const body = buildSessionRequestPayload(payload);
+  let body: Record<string, unknown>;
+
+  if (isPlannerUpdatePayload(payload)) {
+    const plannerPayload = payload as DealSessionUpdatePayload;
+    body = { expand: "resources" };
+
+    if (Object.prototype.hasOwnProperty.call(plannerPayload, "inicio")) {
+      body.inicio = plannerPayload.inicio ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(plannerPayload, "fin")) {
+      body.fin = plannerPayload.fin ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(plannerPayload, "sala_id")) {
+      body.sala_id = plannerPayload.sala_id ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(plannerPayload, "formadores")) {
+      const values = plannerPayload.formadores;
+      body.formadores = Array.isArray(values) ? cleanIdArray(values) : values ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(plannerPayload, "unidades_moviles")) {
+      const values = plannerPayload.unidades_moviles;
+      body.unidades_moviles = Array.isArray(values) ? cleanIdArray(values) : values ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(plannerPayload, "direccion")) {
+      body.direccion = toStringValue(plannerPayload.direccion) ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(plannerPayload, "sede")) {
+      body.sede = toStringValue(plannerPayload.sede) ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(plannerPayload, "comentarios")) {
+      body.comentarios = toStringValue(plannerPayload.comentarios) ?? null;
+    }
+    if (Object.prototype.hasOwnProperty.call(plannerPayload, "estado")) {
+      body.estado =
+        plannerPayload.estado !== undefined && plannerPayload.estado !== null
+          ? normalizeSessionStatus(plannerPayload.estado)
+          : null;
+    }
+  } else {
+    body = { ...buildSessionRequestPayload(payload as DealSessionPayload), expand: "resources" };
+  }
 
   const data = await request(`/deal-sessions/${encodeURIComponent(normalizedSessionId)}`, {
     method: "PATCH",
@@ -887,69 +1272,6 @@ export function buildDealDetailViewModel(
   };
 }
 
-/* ===============================
- * Sesiones y disponibilidad
- * =============================== */
-
-export async function fetchDealSessions(dealId: string): Promise<DealSession[]> {
-  const normalizedId = String(dealId ?? "").trim();
-  if (!normalizedId.length) {
-    throw new ApiError("VALIDATION_ERROR", "dealId requerido para obtener sesiones");
-  }
-
-  const data = await request(
-    `/deal-sessions?dealId=${encodeURIComponent(normalizedId)}&expand=resources`
-  );
-  const rows: any[] = Array.isArray(data?.sessions) ? data.sessions : [];
-  return rows.map((row) => normalizeDealSession(row));
-}
-
-export async function updateDealSession(
-  sessionId: string,
-  payload: DealSessionUpdatePayload
-): Promise<DealSession> {
-  const normalizedId = String(sessionId ?? "").trim();
-  if (!normalizedId.length) {
-    throw new ApiError("VALIDATION_ERROR", "sessionId requerido para actualizar la sesión");
-  }
-
-  const body: Record<string, unknown> = { expand: "resources" };
-  if (Object.prototype.hasOwnProperty.call(payload, "inicio")) {
-    body.inicio = payload.inicio;
-  }
-  if (Object.prototype.hasOwnProperty.call(payload, "fin")) {
-    body.fin = payload.fin;
-  }
-  if (Object.prototype.hasOwnProperty.call(payload, "sala_id")) {
-    body.sala_id = payload.sala_id;
-  }
-  if (Object.prototype.hasOwnProperty.call(payload, "formadores")) {
-    body.formadores = payload.formadores;
-  }
-  if (Object.prototype.hasOwnProperty.call(payload, "unidades_moviles")) {
-    body.unidades_moviles = payload.unidades_moviles;
-  }
-  if (Object.prototype.hasOwnProperty.call(payload, "direccion")) {
-    body.direccion = payload.direccion;
-  }
-  if (Object.prototype.hasOwnProperty.call(payload, "sede")) {
-    body.sede = payload.sede;
-  }
-  if (Object.prototype.hasOwnProperty.call(payload, "comentarios")) {
-    body.comentarios = payload.comentarios;
-  }
-  if (Object.prototype.hasOwnProperty.call(payload, "estado")) {
-    body.estado = payload.estado;
-  }
-
-  const data = await request(`/deal-sessions/${encodeURIComponent(normalizedId)}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
-
-  return normalizeDealSession(data?.session ?? {});
-}
-
 export async function fetchRoomsAvailability(
   params: AvailabilityQuery = {}
 ): Promise<Room[]> {
@@ -975,4 +1297,18 @@ export async function fetchMobileUnitsAvailability(
   const data = await request(`/mobile-units${query}`);
   const rows: any[] = Array.isArray(data?.mobileUnits) ? data.mobileUnits : [];
   return rows.map((row) => normalizeMobileUnitWithAvailability(row));
+}
+
+export function normalizeConflictSummaries(raw: unknown): ResourceConflictSummary[] {
+  const source = Array.isArray(raw)
+    ? raw
+    : Array.isArray((raw as any)?.conflicts)
+    ? ((raw as any).conflicts as unknown[])
+    : Array.isArray((raw as any)?.details)
+    ? ((raw as any).details as unknown[])
+    : [];
+
+  return source
+    .map((entry) => normalizeResourceConflictSummary(entry))
+    .filter((entry): entry is ResourceConflictSummary => Boolean(entry));
 }
