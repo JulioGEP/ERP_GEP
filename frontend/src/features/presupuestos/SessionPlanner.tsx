@@ -13,13 +13,13 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
+  adjustDealSessions,
   fetchDealSessionsWithResources,
   fetchMobileUnitsAvailability,
   fetchRoomsAvailability,
   fetchTrainersAvailability,
   isApiError,
   normalizeConflictSummaries,
-  syncDealSessions,
   updateDealSessionWithResources,
   type DealSessionResource,
   type DealSessionUpdatePayload,
@@ -32,6 +32,7 @@ import type { ResourceConflictDetail, ResourceConflictSummary } from '../../type
 type SessionPlannerProps = {
   dealId: string;
   dealTitle?: string | null;
+  onNotify?: (toast: { variant: 'success' | 'danger' | 'warning'; message: string }) => void;
 };
 
 type SessionFormState = {
@@ -433,6 +434,9 @@ function SessionRow({ session, index, formState, onChange, onSave, error, isSavi
     return <div className="d-flex flex-column">{items.map(renderItem)}</div>;
   };
 
+  const messageLines = error ? error.message.split('\n') : [];
+  const isExceeding = session.is_exceeding_quantity;
+
   return (
     <div className="border rounded p-3">
       <div className="d-flex justify-content-between align-items-start gap-2 mb-3 flex-wrap">
@@ -442,6 +446,11 @@ function SessionRow({ session, index, formState, onChange, onSave, error, isSavi
         </div>
         <div className="d-flex align-items-center gap-2">
           {statusLabel ? <Badge bg="secondary">{statusLabel}</Badge> : null}
+          {isExceeding ? (
+            <Badge bg="warning" text="dark">
+              Excedente
+            </Badge>
+          ) : null}
           <Button
             variant="primary"
             size="sm"
@@ -462,7 +471,14 @@ function SessionRow({ session, index, formState, onChange, onSave, error, isSavi
 
       {error ? (
         <Alert variant="danger">
-          <p className="mb-2">{error.message}</p>
+          {messageLines.map((line, idx) => (
+            <div
+              key={`${session.session_id}-message-${idx}`}
+              className={idx === messageLines.length - 1 && !error.conflicts.length ? 'mb-0' : 'mb-1'}
+            >
+              {line || '\u00A0'}
+            </div>
+          ))}
           {error.conflicts.length ? (
             <ul className="mb-0 ps-3">
               {error.conflicts.map((conflict) => (
@@ -550,12 +566,11 @@ function SessionRow({ session, index, formState, onChange, onSave, error, isSavi
   );
 }
 
-export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
+export function SessionPlanner({ dealId, dealTitle, onNotify }: SessionPlannerProps) {
   const queryClient = useQueryClient();
   const [forms, setForms] = useState<Record<string, SessionFormState>>({});
   const [errors, setErrors] = useState<Record<string, SessionErrorState>>({});
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const [adjustError, setAdjustError] = useState<string | null>(null);
 
   const normalizedDealId = useMemo(() => dealId.trim(), [dealId]);
   const sessionQueryKey = useMemo(
@@ -570,34 +585,6 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
   });
 
   const sessions = sessionsQuery.data ?? [];
-
-  useEffect(() => {
-    if (!normalizedDealId.length) {
-      return;
-    }
-
-    let cancelled = false;
-    setIsSyncing(true);
-    setSyncError(null);
-
-    syncDealSessions(normalizedDealId)
-      .catch((error) => {
-        if (cancelled) return;
-        const message = isApiError(error)
-          ? error.message
-          : 'No se pudieron sincronizar las sesiones automáticamente.';
-        setSyncError(message);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setIsSyncing(false);
-        queryClient.invalidateQueries({ queryKey: sessionQueryKey });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [normalizedDealId, queryClient, sessionQueryKey]);
 
   useEffect(() => {
     if (!sessions.length) {
@@ -618,6 +605,29 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
       return next;
     });
   }, [sessions]);
+
+  const adjustMutation = useMutation({
+    mutationFn: (dealIdParam: string) => adjustDealSessions(dealIdParam),
+    onSuccess: (result) => {
+      setAdjustError(null);
+      queryClient.invalidateQueries({ queryKey: sessionQueryKey });
+      if (onNotify) {
+        onNotify({ variant: 'success', message: `Creado: ${result.created} sesiones en Borrador.` });
+        onNotify({
+          variant: 'warning',
+          message: `Exceden el pedido: ${result.exceeding_count} (marcadas en la lista).`,
+        });
+      }
+    },
+    onError: (error: unknown) => {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo ajustar las sesiones al pedido.';
+      setAdjustError(message);
+    },
+  });
 
   const updateSessionMutation = useMutation<
     DealSessionResource,
@@ -706,6 +716,12 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
     updateSessionMutation.mutate({ sessionId, payload });
   };
 
+  const handleAdjustClick = () => {
+    if (!normalizedDealId.length) return;
+    setAdjustError(null);
+    adjustMutation.mutate(normalizedDealId);
+  };
+
   if (sessionsQuery.isLoading) {
     return (
       <div className="d-flex align-items-center gap-2">
@@ -723,24 +739,38 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
     return <Alert variant="danger" className="mb-0">{message}</Alert>;
   }
 
-  const showSyncIndicator =
-    isSyncing || (sessionsQuery.isFetching && !sessionsQuery.isLoading);
+  const showFetchingIndicator = sessionsQuery.isFetching && !sessionsQuery.isLoading;
+  const isAdjusting = adjustMutation.isPending;
 
   if (!sessions.length) {
-    if (showSyncIndicator) {
-      return (
-        <div className="d-flex align-items-center gap-2">
-          <Spinner animation="border" size="sm" role="status" />
-          <span>Sincronizando sesiones…</span>
-        </div>
-      );
-    }
-
     return (
       <div className="d-flex flex-column gap-3">
-        {syncError ? (
-          <Alert variant="warning" className="mb-0">
-            {syncError}
+        <div className="d-flex flex-wrap align-items-center gap-2">
+          <Button
+            variant="outline-primary"
+            size="sm"
+            onClick={handleAdjustClick}
+            disabled={isAdjusting || !normalizedDealId.length}
+          >
+            {isAdjusting ? (
+              <>
+                <Spinner animation="border" size="sm" role="status" className="me-2" />
+                Ajustando…
+              </>
+            ) : (
+              'Ajustar al pedido'
+            )}
+          </Button>
+          {showFetchingIndicator ? (
+            <div className="d-flex align-items-center gap-2 text-muted small">
+              <Spinner animation="border" size="sm" role="status" />
+              <span>Cargando sesiones…</span>
+            </div>
+          ) : null}
+        </div>
+        {adjustError ? (
+          <Alert variant="danger" className="mb-0">
+            {adjustError}
           </Alert>
         ) : null}
         <p className="text-muted mb-0">
@@ -754,15 +784,32 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
 
   return (
     <div className="d-flex flex-column gap-3">
-      {showSyncIndicator ? (
-        <div className="d-flex align-items-center gap-2 text-muted small">
-          <Spinner animation="border" size="sm" role="status" />
-          <span>Sincronizando sesiones…</span>
-        </div>
-      ) : null}
-      {syncError ? (
-        <Alert variant="warning" className="mb-0">
-          {syncError}
+      <div className="d-flex flex-wrap align-items-center gap-2">
+        <Button
+          variant="outline-primary"
+          size="sm"
+          onClick={handleAdjustClick}
+          disabled={isAdjusting || !normalizedDealId.length}
+        >
+          {isAdjusting ? (
+            <>
+              <Spinner animation="border" size="sm" role="status" className="me-2" />
+              Ajustando…
+            </>
+          ) : (
+            'Ajustar al pedido'
+          )}
+        </Button>
+        {showFetchingIndicator ? (
+          <div className="d-flex align-items-center gap-2 text-muted small">
+            <Spinner animation="border" size="sm" role="status" />
+            <span>Actualizando sesiones…</span>
+          </div>
+        ) : null}
+      </div>
+      {adjustError ? (
+        <Alert variant="danger" className="mb-0">
+          {adjustError}
         </Alert>
       ) : null}
       {sessions.map((session, index) => (

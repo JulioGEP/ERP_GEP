@@ -2,7 +2,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { toMadridISOString } from '../_shared/timezone';
 
-const ACTIVE_STATUSES = new Set(['Borrador', 'Planificada', 'Suspendido']);
+const ACTIVE_STATUSES = new Set(['Planificada']);
 
 export type ResourceConflictDetail = {
   session_id: string;
