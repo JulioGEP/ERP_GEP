@@ -284,7 +284,7 @@ async function createDealSessionsTables(prisma: ReturnType<typeof getPrisma>) {
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_sessions_sala_fk') THEN
         ALTER TABLE "deal_sessions"
-        ADD CONSTRAINT "deal_sessions_sala_fk" FOREIGN KEY ("sala_id") REFERENCES "salas" ("sala_id") ON DELETE SET NULL ON UPDATE CASCADE;
+        ADD CONSTRAINT "deal_sessions_sala_fk" FOREIGN KEY ("sala_id") REFERENCES "salas" ("id") ON DELETE SET NULL ON UPDATE CASCADE;
       END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'deal_session_trainers_session_fk') THEN
         ALTER TABLE "deal_session_trainers"

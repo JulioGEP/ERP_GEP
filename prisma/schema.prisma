@@ -206,7 +206,7 @@ model trainers {
 }
 
 model salas {
-  sala_id String @id
+  sala_id String @id @map("id")
   name    String
   sede    String
 
