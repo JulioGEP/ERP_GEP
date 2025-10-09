@@ -394,6 +394,17 @@ export async function importDeal(dealId: string): Promise<ImportDealResult> {
   return { warnings, deal };
 }
 
+export async function deleteDeal(dealId: string): Promise<void> {
+  const normalizedId = String(dealId ?? "").trim();
+  if (!normalizedId) {
+    throw new ApiError("VALIDATION_ERROR", "Falta dealId para eliminar el presupuesto");
+  }
+
+  await request(`/deals/${encodeURIComponent(normalizedId)}`, {
+    method: "DELETE",
+  });
+}
+
 /* =========================
  * PATCH (campos editables)
  * ========================= */

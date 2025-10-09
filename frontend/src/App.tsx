@@ -13,7 +13,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetTable } from './features/presupuestos/BudgetTable';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
-import { ApiError, fetchDealsWithoutSessions, importDeal } from './features/presupuestos/api';
+import {
+  ApiError,
+  fetchDealsWithoutSessions,
+  importDeal,
+  deleteDeal,
+} from './features/presupuestos/api';
 import type { DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
 import { TrainersView } from './features/recursos/TrainersView';
@@ -139,11 +144,47 @@ export default function App() {
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
 
+  const deleteDealMutation = useMutation({
+    mutationFn: (dealId: string) => deleteDeal(dealId),
+    onSuccess: (_, dealId) => {
+      setSelectedBudgetId((current) => (current === dealId ? null : current));
+      setSelectedBudgetSummary((current) => {
+        if (!current) return current;
+        const currentId = current.dealId ?? current.deal_id;
+        return currentId === dealId ? null : current;
+      });
+      pushToast({ variant: 'success', message: 'Presupuesto eliminado' });
+      queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+    },
+    onError: (error: unknown) => {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+          ? error.message
+          : 'No se pudo eliminar el presupuesto.';
+      pushToast({ variant: 'danger', message });
+    },
+  });
+
   const handleSelectBudget = useCallback((budget: DealSummary) => {
     setSelectedBudgetSummary(budget);
     // 👇 asegura string | null
     setSelectedBudgetId(budget.dealId ?? null);
   }, []);
+
+  const handleDeleteBudget = useCallback(
+    async (budget: DealSummary) => {
+      const rawId = budget.dealId ?? budget.deal_id;
+      const id = typeof rawId === 'string' ? rawId.trim() : '';
+      if (!id) {
+        throw new Error('No se pudo determinar el identificador del presupuesto.');
+      }
+
+      await deleteDealMutation.mutateAsync(id);
+    },
+    [deleteDealMutation]
+  );
 
   const handleCloseDetail = useCallback(() => {
     setSelectedBudgetSummary(null);
@@ -226,6 +267,7 @@ export default function App() {
                 error={budgetsQuery.error ?? null}
                 onRetry={() => budgetsQuery.refetch()}
                 onSelect={handleSelectBudget}
+                onDelete={handleDeleteBudget}
               />
             </div>
           ) : isTrainersView ? (

@@ -7,6 +7,23 @@ import { useDataTable } from '../../hooks/useDataTable';
 import { SortableHeader } from '../../components/table/SortableHeader';
 import { DataTablePagination } from '../../components/table/DataTablePagination';
 
+function TrashIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      fill="currentColor"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M5.5 5.5a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z" />
+      <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zm8.382-1 .5-.5H11V2z" />
+    </svg>
+  );
+}
+
 interface BudgetTableProps {
   budgets: DealSummary[];
   isLoading: boolean;
@@ -14,6 +31,7 @@ interface BudgetTableProps {
   error: unknown;
   onRetry: () => void;
   onSelect: (budget: DealSummary) => void;
+  onDelete?: (budget: DealSummary) => Promise<void>;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -61,6 +79,15 @@ function getSedeLabel(budget: DealSummary): string {
   return safeTrim(formatSedeLabel(budget.sede_label) ?? '') ?? '—';
 }
 
+function getBudgetId(budget: DealSummary): string | null {
+  const idCandidates = [budget.dealId, budget.deal_id]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value.length);
+
+  if (idCandidates.length) return idCandidates[0];
+  return null;
+}
+
 /** Normaliza mínimamente un item del backend a DealSummary (lo justo para la tabla) */
 function normalizeRowMinimal(row: any) {
   const dealId =
@@ -103,11 +130,13 @@ export function BudgetTable({
   isFetching,
   error,
   onRetry,
-  onSelect
+  onSelect,
+  onDelete
 }: BudgetTableProps) {
   const [fallbackLoading, setFallbackLoading] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackBudgets, setFallbackBudgets] = useState<DealSummary[] | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const effectiveBudgets: DealSummary[] = useMemo(() => {
     if (fallbackBudgets && fallbackBudgets.length) return fallbackBudgets;
@@ -117,7 +146,10 @@ export function BudgetTable({
   const getSortValue = useCallback((budget: DealSummary, column: string) => {
     switch (column) {
       case 'presupuesto':
-        return budget.dealNumericId ?? toStringValue(budget.dealId) ?? null;
+        const budgetId = getBudgetId(budget);
+        if (!budgetId) return null;
+        const numericId = Number(budgetId);
+        return Number.isFinite(numericId) ? numericId : budgetId;
       case 'empresa':
         return getOrganizationLabel(budget);
       case 'titulo':
@@ -143,6 +175,41 @@ export function BudgetTable({
   } = useDataTable(effectiveBudgets, {
     getSortValue,
   });
+
+  const showDeleteAction = typeof onDelete === 'function';
+
+  const handleDelete = useCallback(
+    async (event: React.MouseEvent, budget: DealSummary) => {
+      event.stopPropagation();
+      if (!showDeleteAction || !onDelete) return;
+
+      const budgetId = getBudgetId(budget);
+      if (!budgetId) {
+        window.alert('No se pudo determinar el identificador del presupuesto.');
+        return;
+      }
+
+      const confirmed = window.confirm(
+        '¿Seguro que quieres eliminar este presupuesto? Esta acción no se puede deshacer.'
+      );
+
+      if (!confirmed) return;
+
+      try {
+        setDeletingId(budgetId);
+        await onDelete(budget);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'No se pudo eliminar el presupuesto. Inténtalo de nuevo más tarde.';
+        window.alert(message);
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [onDelete, showDeleteAction]
+  );
 
   useEffect(() => {
     if (!isLoading && !error && budgets.length === 0 && !fallbackBudgets && !fallbackLoading) {
@@ -273,8 +340,13 @@ export function BudgetTable({
               label="Sede"
               sortState={sortState}
               onSort={requestSort}
-              style={{ width: 140 }}
+              style={{ width: showDeleteAction ? 120 : 140 }}
             />
+            {showDeleteAction && (
+              <th className="text-end" style={{ width: 56 }}>
+                <span className="visually-hidden">Acciones</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -282,7 +354,7 @@ export function BudgetTable({
             const names = getProductNames(budget);
             const { label: productLabel } = getProductLabel(budget);
 
-            const id = toStringValue(budget.dealId);
+            const id = getBudgetId(budget);
             const presupuestoLabel = id ? `#${id}` : '—';
             const presupuestoTitle = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
             const organizationLabel = getOrganizationLabel(budget);
@@ -300,6 +372,19 @@ export function BudgetTable({
                 <td title={budget.title ?? ''}>{titleLabel}</td>
                 <td title={names.join(', ')}>{productLabel}</td>
                 <td>{sedeLabel}</td>
+                {showDeleteAction && (
+                  <td className="text-end">
+                    <button
+                      type="button"
+                      className="btn btn-link text-danger p-0 border-0"
+                      onClick={(event) => handleDelete(event, budget)}
+                      disabled={deletingId === id}
+                      aria-label="Eliminar presupuesto"
+                    >
+                      {deletingId === id ? <Spinner animation="border" size="sm" /> : <TrashIcon />}
+                    </button>
+                  </td>
+                )}
               </tr>
             );
           })}
