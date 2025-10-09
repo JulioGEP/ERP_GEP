@@ -75,6 +75,7 @@ body {
 .pagination .page-item.active .page-link {
   background-color: var(--color-red);
   border-color: var(--color-red);
+  color: #ffffff;
 }
 
 .modal-content {
