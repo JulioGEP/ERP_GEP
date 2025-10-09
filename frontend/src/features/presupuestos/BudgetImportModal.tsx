@@ -90,7 +90,7 @@ export function BudgetImportModal({
             disabled={isLoading}
             autoComplete="off"
           />
-          <small className="text-muted">Ej.: 1234</small>
+          <small className="text-muted">Pon el presupuesto, sin puntos ni comas</small>
         </Modal.Body>
 
         <Modal.Footer className="border-0 pt-0">
