@@ -124,53 +124,63 @@ model comments {
   @@index([deal_id])
 }
 
+/**
+ * Modelo mapeado a la tabla real `public.seassons`
+ * (nombres de columnas preservados con @map)
+ */
 model deal_sessions {
-  session_id            String               @id
-  deal_id               String
-  deal_product_id       String?
-  status                deal_session_status  @default(Borrador)
-  start_at              DateTime?            @db.Timestamptz(6)
-  end_at                DateTime?            @db.Timestamptz(6)
-  sala_id               String?
-  direccion             String?
-  sede                  String?
-  comentarios           String?
-  origen                String?
-  created_at            DateTime             @default(now()) @db.Timestamptz(6)
-  updated_at            DateTime             @updatedAt      @db.Timestamptz(6)
-  deal                  deals                @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
-  deal_product          deal_products?       @relation(fields: [deal_product_id], references: [id], onDelete: SetNull)
-  sala                  salas?               @relation(fields: [sala_id], references: [sala_id], onDelete: SetNull)
-  trainers              deal_session_trainers[]
-  mobile_units          deal_session_mobile_units[]
+  session_id          String              @id @map("seasson_id")
+  deal_id             String
+  deal_product_id     String?
+  deal_product_code   String?
+  deal_product_hours  Int?
+  status              deal_session_status @default(Borrador)
+  start_at            DateTime?           @map("date_start") @db.Timestamp(6)
+  end_at              DateTime?           @map("date_end")   @db.Timestamp(6)
+  sala_id             String?                                     @db.Uuid
+  direccion           String?             @map("seasson_address")
+  sede                String?
+  comentarios         String?             @map("comment_seasson")
+
+  // Relaciones
+  deal         deals          @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+  deal_product deal_products? @relation(fields: [deal_product_id], references: [id], onDelete: SetNull)
+  sala         salas?         @relation(fields: [sala_id], references: [sala_id], onDelete: SetNull)
+
+  // Tablas puente (mapeadas a tablas reales)
+  trainers     seasson_trainers[]
+  vehicles     seasson_vehicles[]
 
   @@index([deal_id])
   @@index([deal_product_id])
   @@index([sala_id])
+  @@map("seassons")
 }
 
-model deal_session_trainers {
+model seasson_trainers {
   session_id String
   trainer_id String
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
   session deal_sessions @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
-  trainer trainers      @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
+  trainer trainers      @relation(fields: [trainer_id], references: [trainer_id], onDelete: Restrict)
 
   @@id([session_id, trainer_id])
   @@index([trainer_id])
+  @@map("seasson_trainers")
 }
 
-model deal_session_mobile_units {
+model seasson_vehicles {
   session_id String
-  unidad_id  String
+  vehicle_id String
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
   session deal_sessions    @relation(fields: [session_id], references: [session_id], onDelete: Cascade)
-  unidad  unidades_moviles @relation(fields: [unidad_id], references: [unidad_id], onDelete: Cascade)
+  vehicle unidades_moviles @relation(fields: [vehicle_id], references: [unidad_id], onDelete: Restrict)
 
-  @@id([session_id, unidad_id])
-  @@index([unidad_id])
+  @@id([session_id, vehicle_id])
+  @@index([vehicle_id])
+  @@map("seasson_vehicles")
 }
 
 enum deal_session_status {
