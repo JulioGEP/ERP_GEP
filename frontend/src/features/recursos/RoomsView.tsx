@@ -1,6 +1,6 @@
 // frontend/src/features/recursos/RoomsView.tsx
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Form, Spinner, Table } from 'react-bootstrap';
+import { useMemo, useState } from 'react';
+import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RoomModal, type RoomFormValues } from './RoomModal';
 import { createRoom, fetchRooms, updateRoom, type RoomPayload } from './rooms.api';
@@ -37,25 +37,11 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      setDebouncedSearch(searchTerm.trim());
-      return;
-    }
-    const handler = window.setTimeout(() => {
-      setDebouncedSearch(searchTerm.trim());
-    }, 300);
-    return () => window.clearTimeout(handler);
-  }, [searchTerm]);
-
   const roomsQuery = useQuery({
-    queryKey: ['rooms', debouncedSearch],
-    queryFn: () => fetchRooms({ search: debouncedSearch }),
+    queryKey: ['rooms'],
+    queryFn: fetchRooms,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -90,7 +76,7 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
   const isLoading = roomsQuery.isLoading;
   const isFetching = roomsQuery.isFetching && !roomsQuery.isLoading;
   const isSaving = createMutation.isPending || updateMutation.isPending;
-  const hasResults = rooms.length > 0;
+  const tableRows = rooms.length;
   const errorMessage = roomsQuery.error ? formatError(roomsQuery.error) : null;
 
   const handleAddRoom = () => {
@@ -128,26 +114,18 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
 
   return (
     <div className="d-grid gap-4">
-      <section className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+      <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
         <div>
           <h1 className="h3 fw-bold mb-1">Salas</h1>
           <p className="text-muted mb-0">{subtitle}</p>
         </div>
-        <div className="d-flex flex-column flex-md-row gap-3 align-items-stretch align-items-md-center w-100 w-lg-auto">
-          <Form.Control
-            type="search"
-            placeholder="Buscar por nombre..."
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-          />
-          <div className="d-flex align-items-center gap-3 justify-content-md-end">
-            {(isFetching || isSaving) && (
-              <Spinner animation="border" role="status" size="sm" className="me-1" />
-            )}
-            <Button onClick={handleAddRoom} disabled={isSaving}>
-              Añadir Sala
-            </Button>
-          </div>
+        <div className="d-flex align-items-center gap-3">
+          {(isFetching || isSaving) && (
+            <Spinner animation="border" role="status" size="sm" className="me-1" />
+          )}
+          <Button onClick={handleAddRoom} disabled={isSaving}>
+            Añadir Sala
+          </Button>
         </div>
       </section>
 
@@ -173,7 +151,7 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
-              ) : hasResults ? (
+              ) : tableRows ? (
                 rooms.map((room) => (
                   <tr
                     key={room.sala_id}
@@ -185,12 +163,6 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
                     <td>{room.sede ?? '—'}</td>
                   </tr>
                 ))
-              ) : debouncedSearch ? (
-                <tr>
-                  <td colSpan={2} className="py-5 text-center text-muted">
-                    No hay salas que coincidan con la búsqueda.
-                  </td>
-                </tr>
               ) : (
                 <tr>
                   <td colSpan={2} className="py-5 text-center text-muted">
