@@ -13,15 +13,16 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  fetchDealSessions,
+  fetchDealSessionsWithResources,
   fetchMobileUnitsAvailability,
   fetchRoomsAvailability,
   fetchTrainersAvailability,
   isApiError,
   normalizeConflictSummaries,
-  updateDealSession,
+  updateDealSessionWithResources,
+  type DealSessionResource,
+  type DealSessionUpdatePayload,
 } from './api';
-import type { DealSession, DealSessionUpdatePayload } from '../../types/deal';
 import type { Room } from '../../types/room';
 import type { Trainer } from '../../types/trainer';
 import type { MobileUnit } from '../../types/mobile-unit';
@@ -99,7 +100,7 @@ function getResourceTypeLabel(type: ResourceConflictSummary['resource_type']): s
 }
 
 type SessionRowProps = {
-  session: DealSession;
+  session: DealSessionResource;
   index: number;
   formState: SessionFormState | null;
   onChange: (sessionId: string, updater: (state: SessionFormState) => SessionFormState) => void;
@@ -555,7 +556,7 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
 
   const sessionsQuery = useQuery({
     queryKey: ['deal', dealId, 'sessions'],
-    queryFn: () => fetchDealSessions(dealId),
+    queryFn: () => fetchDealSessionsWithResources(dealId),
     enabled: dealId.trim().length > 0,
   });
 
@@ -582,13 +583,14 @@ export function SessionPlanner({ dealId, dealTitle }: SessionPlannerProps) {
   }, [sessions]);
 
   const updateSessionMutation = useMutation<
-    DealSession,
+    DealSessionResource,
     unknown,
     { sessionId: string; payload: DealSessionUpdatePayload }
   >({
-    mutationFn: ({ sessionId, payload }) => updateDealSession(sessionId, payload),
+    mutationFn: ({ sessionId, payload }) =>
+      updateDealSessionWithResources(sessionId, payload),
     onSuccess: (updatedSession, variables) => {
-      queryClient.setQueryData<DealSession[]>(
+      queryClient.setQueryData<DealSessionResource[]>(
         ['deal', dealId, 'sessions'],
         (current) =>
           (current ?? []).map((session) =>
