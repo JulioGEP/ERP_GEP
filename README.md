@@ -12,7 +12,6 @@
 - `Deals`
 - `Notes`
 - `Documents`
-- `Sessions`
 - `Trainers`
 - `UnidadesMoviles`
 
