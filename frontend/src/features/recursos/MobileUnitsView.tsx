@@ -9,6 +9,10 @@ import {
   updateMobileUnit,
   type MobileUnitPayload,
 } from "./mobileUnits.api";
+import {
+  MOBILE_UNIT_SEDE_OPTIONS,
+  MOBILE_UNIT_TIPO_OPTIONS,
+} from "./mobileUnits.constants";
 import type { MobileUnit } from "../../types/mobile-unit";
 import { ApiError } from "../presupuestos/api";
 
@@ -21,12 +25,30 @@ type MobileUnitsViewProps = {
   onNotify: (toast: ToastParams) => void;
 };
 
+function sanitizeSelection(values: string[], allowedValues: readonly string[]) {
+  const selections = Array.isArray(values) ? values : [];
+  const normalized = selections
+    .map((value) => value.trim())
+    .filter((value) => value.length);
+
+  const mapped: string[] = [];
+
+  for (const selection of normalized) {
+    const match = allowedValues.find((allowed) => allowed.toLowerCase() === selection.toLowerCase());
+    if (match && !mapped.includes(match)) {
+      mapped.push(match);
+    }
+  }
+
+  return mapped;
+}
+
 function buildPayload(values: MobileUnitFormValues): MobileUnitPayload {
   return {
     name: values.name.trim(),
     matricula: values.matricula.trim(),
-    tipo: values.tipo.trim(),
-    sede: values.sede.trim(),
+    tipo: sanitizeSelection(values.tipo, MOBILE_UNIT_TIPO_OPTIONS),
+    sede: sanitizeSelection(values.sede, MOBILE_UNIT_SEDE_OPTIONS),
   };
 }
 
@@ -179,8 +201,8 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
                   >
                     <td className="fw-semibold">{unit.name}</td>
                     <td>{unit.matricula}</td>
-                    <td>{unit.tipo}</td>
-                    <td>{unit.sede}</td>
+                    <td>{unit.tipo.length ? unit.tipo.join(", ") : "—"}</td>
+                    <td>{unit.sede.length ? unit.sede.join(", ") : "—"}</td>
                   </tr>
                 ))
               ) : (
