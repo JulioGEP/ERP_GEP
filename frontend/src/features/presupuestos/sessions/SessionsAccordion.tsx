@@ -111,6 +111,11 @@ type SessionFormState = {
   unidad_movil_ids: string[];
 };
 
+type IsoRange = {
+  startIso: string;
+  endIso?: string;
+};
+
 type SaveStatus = {
   saving: boolean;
   error: string | null;
@@ -189,6 +194,32 @@ function localInputToUtc(value: string | null): string | null | undefined {
   if (!Number.isFinite(baseDate.getTime())) return undefined;
   const offset = getTimeZoneOffset(baseDate, MADRID_TIMEZONE);
   return new Date(baseDate.getTime() - offset).toISOString();
+}
+
+function buildIsoRangeFromInputs(
+  startInput: string | null,
+  endInput: string | null,
+): IsoRange | null {
+  const startIso = localInputToUtc(startInput ?? null);
+  if (typeof startIso !== 'string') {
+    return null;
+  }
+
+  const endIso = localInputToUtc(endInput ?? null);
+  if (endIso === undefined) {
+    return null;
+  }
+
+  if (typeof endIso === 'string') {
+    const startTime = new Date(startIso).getTime();
+    const endTime = new Date(endIso).getTime();
+    if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) {
+      return null;
+    }
+    return { startIso, endIso };
+  }
+
+  return { startIso };
 }
 
 function addHoursToLocalDateTime(value: string, hours: number): string | null {
@@ -315,6 +346,30 @@ function buildSessionPatchPayload(
 
 function sortOptionsByName<T extends { name: string }>(options: T[]): T[] {
   return [...options].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+}
+
+type SessionTimeRange = {
+  startMs: number;
+  endMs: number;
+};
+
+function getSessionRangeFromForm(form: SessionFormState): SessionTimeRange | null {
+  const range = buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local);
+  if (!range || !range.endIso) {
+    return null;
+  }
+
+  const startMs = new Date(range.startIso).getTime();
+  const endMs = new Date(range.endIso).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+    return null;
+  }
+
+  return { startMs, endMs };
+}
+
+function rangesOverlap(a: SessionTimeRange, b: SessionTimeRange): boolean {
+  return a.startMs <= b.endMs && b.startMs <= a.endMs;
 }
 
 interface SessionsAccordionProps {
@@ -902,6 +957,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                   rooms={rooms}
                   units={units}
                   defaultDurationHours={activeProductHours}
+                  allForms={forms}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
                 />
               ) : (
@@ -922,6 +978,7 @@ interface SessionEditorProps {
   rooms: RoomOption[];
   units: MobileUnitOption[];
   defaultDurationHours: number | null;
+  allForms: Record<string, SessionFormState>;
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
 }
 
@@ -932,6 +989,7 @@ function SessionEditor({
   rooms,
   units,
   defaultDurationHours,
+  allForms,
   onChange,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
