@@ -355,10 +355,50 @@ function normalizeDealNote(raw: Json): DealNote {
   return {
     id: id ?? (raw?.id != null ? String(raw.id) : null),
     deal_id,
-    content: contentValue ?? (raw?.content != null ? String(raw.content) : ""),
+    content: normalizeNoteContent(contentValue ?? (raw?.content != null ? String(raw.content) : null)),
     author,
     created_at,
   };
+}
+
+const NOTE_ENTITY_MAP: Record<string, string> = {
+  "&nbsp;": " ",
+  "&amp;": "&",
+  "&quot;": '"',
+  "&#39;": "'",
+  "&lt;": "<",
+  "&gt;": ">",
+};
+
+const NOTE_ENTITY_REGEX = /&(?:nbsp|amp|quot|#39|lt|gt);/gi;
+
+function decodeNoteEntities(value: string): string {
+  return value.replace(NOTE_ENTITY_REGEX, (match) => NOTE_ENTITY_MAP[match.toLowerCase()] ?? match);
+}
+
+function normalizeNoteContent(value: string | null): string {
+  if (!value) return "";
+
+  const withLineBreaks = value
+    .replace(/<\s*br\s*\/?>(\s*)/gi, "\n")
+    .replace(/<\s*\/?div[^>]*>/gi, "\n")
+    .replace(/<\s*\/?p[^>]*>/gi, "\n");
+
+  const withoutTags = withLineBreaks.replace(/<[^>]+>/g, "");
+  const decoded = decodeNoteEntities(withoutTags).replace(/\u00a0/g, " ");
+
+  const lines = decoded.split(/\r?\n/).map((line) => line.trim());
+  const compacted = lines.reduce<string[]>((acc, line) => {
+    if (!line) {
+      if (!acc.length || acc[acc.length - 1] === "") return acc;
+      acc.push("");
+      return acc;
+    }
+    acc.push(line);
+    return acc;
+  }, []);
+
+  return compacted.join("\n").trim();
 }
 
 function normalizeDealDocument(raw: any): DealDocument {
@@ -994,7 +1034,7 @@ export function buildDealDetailViewModel(
     products: resolveProducts(detail, summary),
     notes: (detail?.notes ?? []).map((n) => ({
       id: n?.id ?? null,
-      content: pickNonEmptyString(n?.content ?? null) ?? "",
+      content: normalizeNoteContent(n?.content ?? null),
       author: pickNonEmptyString(n?.author ?? null),
     })),
   };
