@@ -20,22 +20,22 @@ CREATE INDEX "idx_sesiones_deal_product_id" ON "sesiones" ("deal_product_id");
 CREATE INDEX "idx_sesiones_sala_id" ON "sesiones" ("sala_id");
 
 CREATE TABLE "sesion_trainers" (
-  "session_id" TEXT NOT NULL,
+  "sesion_id" TEXT NOT NULL,
   "trainer_id" TEXT NOT NULL,
   "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT "sesion_trainers_pk" PRIMARY KEY ("session_id", "trainer_id"),
-  CONSTRAINT "sesion_trainers_session_fk" FOREIGN KEY ("session_id") REFERENCES "sesiones"("id") ON DELETE CASCADE,
+  CONSTRAINT "sesion_trainers_pk" PRIMARY KEY ("sesion_id", "trainer_id"),
+  CONSTRAINT "sesion_trainers_session_fk" FOREIGN KEY ("sesion_id") REFERENCES "sesiones"("id") ON DELETE CASCADE,
   CONSTRAINT "sesion_trainers_trainer_fk" FOREIGN KEY ("trainer_id") REFERENCES "trainers"("trainer_id") ON DELETE CASCADE
 );
 
 CREATE INDEX "idx_sesion_trainers_trainer_id" ON "sesion_trainers" ("trainer_id");
 
 CREATE TABLE "sesion_unidades" (
-  "session_id" TEXT NOT NULL,
+  "sesion_id" TEXT NOT NULL,
   "unidad_mov_id" TEXT NOT NULL,
   "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT "sesion_unidades_pk" PRIMARY KEY ("session_id", "unidad_mov_id"),
-  CONSTRAINT "sesion_unidades_session_fk" FOREIGN KEY ("session_id") REFERENCES "sesiones"("id") ON DELETE CASCADE,
+  CONSTRAINT "sesion_unidades_pk" PRIMARY KEY ("sesion_id", "unidad_mov_id"),
+  CONSTRAINT "sesion_unidades_session_fk" FOREIGN KEY ("sesion_id") REFERENCES "sesiones"("id") ON DELETE CASCADE,
   CONSTRAINT "sesion_unidades_unidad_fk" FOREIGN KEY ("unidad_mov_id") REFERENCES "unidades_moviles"("unidad_id") ON DELETE CASCADE
 );
 
