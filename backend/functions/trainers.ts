@@ -27,7 +27,7 @@ type TrainerRecord = {
   especialidad: string | null;
   titulacion: string | null;
   activo: boolean;
-  sede: string[] | null;
+  sede?: string[] | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
 };
