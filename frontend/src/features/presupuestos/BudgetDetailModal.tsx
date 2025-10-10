@@ -791,6 +791,74 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
             </Row>
 
             <hr className="my-4" />
+            {trainingProducts.length ? (
+              <Table size="sm" bordered responsive className="mb-4">
+                <thead>
+                  <tr>
+                    <th>Formación</th>
+                    <th style={{ width: 60 }}>Horas</th>
+                    <th style={{ width: 130 }}>Comentarios</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trainingProducts.map((product, index) => {
+                    const productId = product?.id != null ? String(product.id) : null;
+                    const productLabel = displayOrDash(product?.name ?? product?.code ?? '');
+                    const isEditable = !!productId && trainingProductIds.has(productId);
+                    const hoursValue = isEditable
+                      ? productHours[productId] ?? ''
+                      : formatInitialHours(product?.hours ?? null);
+                    const commentText = (product?.comments ?? '').trim();
+                    const commentPreview = buildCommentPreview(commentText);
+                    return (
+                      <tr key={product?.id ?? `${product?.name ?? 'producto'}-${index}`}>
+                        <td>{productLabel}</td>
+                        <td style={{ width: 60 }}>
+                          {isEditable ? (
+                            <Form.Control
+                              type="text"
+                              size="sm"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={hoursValue}
+                              placeholder="0"
+                              onChange={(event) => handleHoursChange(productId!, event.target.value)}
+                              className="text-center"
+                              aria-label={`Horas de ${productLabel}`}
+                            />
+                          ) : (
+                            <span className="text-muted">{displayOrDash(product?.hours ?? null)}</span>
+                          )}
+                        </td>
+                        <td style={{ width: 130 }}>
+                          {commentPreview ? (
+                            <Button
+                              type="button"
+                              variant="link"
+                              className="p-0 text-start text-decoration-none"
+                              onClick={() => handleOpenProductComment(product)}
+                              aria-label={`Ver comentario de ${productLabel}`}
+                            >
+                              <span
+                                className="d-inline-block text-truncate"
+                                style={{ maxWidth: 130 }}
+                                title={commentText}
+                              >
+                                {commentPreview}
+                              </span>
+                            </Button>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            ) : (
+              <p className="text-muted small mb-4">No hay formaciones asociadas.</p>
+            )}
             <Accordion
               activeKey={openSections}
               onSelect={handleAccordionSelect}
@@ -1026,74 +1094,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               </Accordion.Item>
             </Accordion>
 
-            {trainingProducts.length ? (
-              <Table size="sm" bordered responsive className="mb-4">
-                <thead>
-                  <tr>
-                    <th>Formación</th>
-                    <th style={{ width: 60 }}>Horas</th>
-                    <th style={{ width: 130 }}>Comentarios</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trainingProducts.map((product, index) => {
-                    const productId = product?.id != null ? String(product.id) : null;
-                    const productLabel = displayOrDash(product?.name ?? product?.code ?? '');
-                    const isEditable = !!productId && trainingProductIds.has(productId);
-                    const hoursValue = isEditable
-                      ? productHours[productId] ?? ''
-                      : formatInitialHours(product?.hours ?? null);
-                    const commentText = (product?.comments ?? '').trim();
-                    const commentPreview = buildCommentPreview(commentText);
-                    return (
-                      <tr key={product?.id ?? `${product?.name ?? 'producto'}-${index}`}>
-                        <td>{productLabel}</td>
-                        <td style={{ width: 60 }}>
-                          {isEditable ? (
-                            <Form.Control
-                              type="text"
-                              size="sm"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={hoursValue}
-                              placeholder="0"
-                              onChange={(event) => handleHoursChange(productId!, event.target.value)}
-                              className="text-center"
-                              aria-label={`Horas de ${productLabel}`}
-                            />
-                          ) : (
-                            <span className="text-muted">{displayOrDash(product?.hours ?? null)}</span>
-                          )}
-                        </td>
-                        <td style={{ width: 130 }}>
-                          {commentPreview ? (
-                            <Button
-                              type="button"
-                              variant="link"
-                              className="p-0 text-start text-decoration-none"
-                              onClick={() => handleOpenProductComment(product)}
-                              aria-label={`Ver comentario de ${productLabel}`}
-                            >
-                              <span
-                                className="d-inline-block text-truncate"
-                                style={{ maxWidth: 130 }}
-                                title={commentText}
-                              >
-                                {commentPreview}
-                              </span>
-                            </Button>
-                          ) : (
-                            <span className="text-muted">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
-            ) : (
-              <p className="text-muted small mb-4">No hay formaciones asociadas.</p>
-            )}
           </>
         )}
       </Modal.Body>
