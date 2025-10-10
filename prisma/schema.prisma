@@ -66,19 +66,19 @@ model deals {
 }
 
 model deal_products {
-  id               String   @id
+  id               String     @id
   deal_id          String?
   name             String?
   code             String?
-  quantity         Decimal  @db.Decimal(10, 0)
-  price            Decimal  @db.Decimal(12, 2)
-  created_at       DateTime @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  quantity         Decimal    @db.Decimal(10, 0)
+  price            Decimal    @db.Decimal(12, 2)
+  created_at       DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime   @default(now()) @db.Timestamptz(6)
   type             String?
-  hours            Decimal? @db.Decimal(10, 0)
+  hours            Decimal?   @db.Decimal(10, 0)
   product_comments String?
   category         String?
-  deal             deals?   @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_products_deal_fk")
+  deal             deals?     @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_products_deal_fk")
   sessions         sessions[]
 
   @@index([deal_id], map: "idx_deal_products_deal_id")
@@ -163,14 +163,14 @@ model trainers {
 }
 
 model salas {
-  sala_id    String   @id @map("id")
-  name       String
-  sede       String
+  sala_id String @id @map("id")
+  name    String
+  sede    String
 
   created_at DateTime @default(now()) @db.Timestamptz(6)
-  updated_at DateTime @updatedAt      @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
 
-  sessions   sessions[]
+  sessions sessions[]
 }
 
 model unidades_moviles {
@@ -180,13 +180,13 @@ model unidades_moviles {
   tipo       String[] @default([])
   sede       String[] @default([])
   created_at DateTime @default(now()) @db.Timestamptz(6)
-  updated_at DateTime @updatedAt      @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
 
   session_unidades session_unidades[]
 }
 
 model sessions {
-  id               String   @id @default(uuid())
+  id               String    @id @default(uuid())
   deal_id          String
   deal_product_id  String
   nombre_cache     String
@@ -195,12 +195,12 @@ model sessions {
   sala_id          String?
   direccion        String
   comentarios      String?
-  created_at       DateTime @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime @updatedAt      @db.Timestamptz(6)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @updatedAt @db.Timestamptz(6)
 
-  deal         deals         @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
-  deal_product deal_products @relation(fields: [deal_product_id], references: [id], onDelete: Cascade)
-  sala         salas?        @relation(fields: [sala_id], references: [sala_id])
+  deal         deals              @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
+  deal_product deal_products      @relation(fields: [deal_product_id], references: [id], onDelete: Cascade)
+  sala         salas?             @relation(fields: [sala_id], references: [sala_id])
   trainers     session_trainers[]
   unidades     session_unidades[]
 
@@ -211,7 +211,7 @@ model sessions {
 }
 
 model session_trainers {
-  session_id String
+  session_id String   @map("sesion_id")
   trainer_id String
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
