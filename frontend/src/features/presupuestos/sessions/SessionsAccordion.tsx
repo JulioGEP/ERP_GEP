@@ -1229,7 +1229,7 @@ function SessionEditor({
             {availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
             )}
-            {!availabilityError && roomWarningVisible && (
+            {!availabilityError && roomWarningVisible && !form.sala_id && (
               <div className="text-danger small mt-1">
                 Los recursos en rojo están reservados para estas fechas.
               </div>
