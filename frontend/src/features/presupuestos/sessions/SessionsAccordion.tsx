@@ -44,6 +44,8 @@ const MADRID_TIMEZONE = 'Europe/Madrid';
 
 const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 
+const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
+
 function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} {...props}>
@@ -1102,8 +1104,16 @@ function SessionEditor({
 
   const blockedUnits = useMemo(() => {
     const set = new Set<string>();
-    localLocks.units.forEach((id) => set.add(id));
-    availability?.units?.forEach((id) => set.add(id));
+    localLocks.units.forEach((id) => {
+      if (!ALWAYS_AVAILABLE_UNIT_IDS.has(id)) {
+        set.add(id);
+      }
+    });
+    availability?.units?.forEach((id) => {
+      if (!ALWAYS_AVAILABLE_UNIT_IDS.has(id)) {
+        set.add(id);
+      }
+    });
     return set;
   }, [availability, localLocks]);
 
