@@ -893,9 +893,6 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
             <Modal.Header closeButton closeVariant="white" className="border-0">
               <Modal.Title className="session-modal-title">
                 {activeForm?.nombre_cache?.trim() || `Sesión ${activeSession.displayIndex}`}
-                <div className="session-modal-subtitle">
-                  Sesión {activeSession.displayIndex} · {activeSession.productName}
-                </div>
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
