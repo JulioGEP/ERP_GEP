@@ -817,9 +817,6 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                           <div className="fw-semibold text-truncate">
                             {form.nombre_cache?.trim() || `Sesión ${displayIndex}`}
                           </div>
-                          <div className="text-muted small">
-                            Sesión {displayIndex} · {productName}
-                          </div>
                         </div>
                         <div className="d-flex align-items-center gap-3">
                           <div className="session-item-actions d-inline-flex align-items-center gap-2">
