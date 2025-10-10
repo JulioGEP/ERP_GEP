@@ -43,8 +43,6 @@ import { isApiError } from '../api';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
-const LOCAL_DATETIME_STEP_MINUTES = 5;
-const LOCAL_DATETIME_STEP_SECONDS = LOCAL_DATETIME_STEP_MINUTES * 60;
 
 const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
@@ -188,31 +186,6 @@ function formatDateForInput(iso: string | null): string | null {
   return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
 }
 
-function snapLocalDateTimeToStep(value: string, stepMinutes: number): string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const minutes = Number(stepMinutes);
-  if (!Number.isFinite(minutes) || minutes <= 0) return undefined;
-  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-  if (!match) return undefined;
-  const [, yearStr, monthStr, dayStr, hourStr, minuteStr] = match;
-  const year = Number(yearStr);
-  const monthIndex = Number(monthStr) - 1;
-  const day = Number(dayStr);
-  const hour = Number(hourStr);
-  const minute = Number(minuteStr);
-  const baseDate = new Date(year, monthIndex, day, hour, minute, 0, 0);
-  if (!Number.isFinite(baseDate.getTime())) return undefined;
-  const stepMs = minutes * 60 * 1000;
-  const roundedTime = Math.round(baseDate.getTime() / stepMs) * stepMs;
-  const snapped = new Date(roundedTime);
-  if (!Number.isFinite(snapped.getTime())) return undefined;
-  const pad = (num: number) => String(num).padStart(2, '0');
-  return `${snapped.getFullYear()}-${pad(snapped.getMonth() + 1)}-${pad(snapped.getDate())}T${pad(
-    snapped.getHours(),
-  )}:${pad(snapped.getMinutes())}`;
-}
-
 function getTimeZoneOffset(date: Date, timeZone: string): number {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -302,10 +275,9 @@ function addHoursToLocalDateTime(value: string, hours: number): string | null {
   if (!Number.isFinite(minutesToAdd)) return null;
   baseDate.setMinutes(baseDate.getMinutes() + minutesToAdd);
   const pad = (value: number) => String(value).padStart(2, '0');
-  const formatted = `${baseDate.getFullYear()}-${pad(baseDate.getMonth() + 1)}-${pad(baseDate.getDate())}T${pad(
+  return `${baseDate.getFullYear()}-${pad(baseDate.getMonth() + 1)}-${pad(baseDate.getDate())}T${pad(
     baseDate.getHours(),
   )}:${pad(baseDate.getMinutes())}`;
-  return snapLocalDateTimeToStep(formatted, LOCAL_DATETIME_STEP_MINUTES) ?? formatted;
 }
 
 function mapSessionToForm(session: SessionDTO): SessionFormState {
@@ -1265,15 +1237,11 @@ function SessionEditor({
             <Form.Label>Fecha inicio</Form.Label>
             <Form.Control
               type="datetime-local"
-              step={LOCAL_DATETIME_STEP_SECONDS}
+              step={300}
               value={form.fecha_inicio_local ?? ''}
               onChange={(event) => {
                 const rawValue = event.target.value ?? '';
-                const trimmed = rawValue.trim();
-                const snapped = trimmed
-                  ? snapLocalDateTimeToStep(trimmed, LOCAL_DATETIME_STEP_MINUTES) ?? trimmed
-                  : null;
-                const normalizedValue = snapped ?? null;
+                const normalizedValue = rawValue.trim() ? rawValue : null;
                 const durationHours =
                   typeof defaultDurationHours === 'number' &&
                   Number.isFinite(defaultDurationHours) &&
@@ -1310,17 +1278,10 @@ function SessionEditor({
             <Form.Label>Fecha fin</Form.Label>
             <Form.Control
               type="datetime-local"
-              step={LOCAL_DATETIME_STEP_SECONDS}
+              step={300}
               value={form.fecha_fin_local ?? ''}
               onChange={(event) =>
-                onChange((current) => {
-                  const rawValue = event.target.value ?? '';
-                  const trimmed = rawValue.trim();
-                  const snapped = trimmed
-                    ? snapLocalDateTimeToStep(trimmed, LOCAL_DATETIME_STEP_MINUTES) ?? trimmed
-                    : null;
-                  return { ...current, fecha_fin_local: snapped ?? null };
-                })
+                onChange((current) => ({ ...current, fecha_fin_local: event.target.value || null }))
               }
             />
           </Form.Group>
