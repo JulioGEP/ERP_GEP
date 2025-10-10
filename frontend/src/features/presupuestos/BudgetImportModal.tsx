@@ -84,13 +84,12 @@ export function BudgetImportModal({
           {/* Campo de entrada */}
           <Form.Control
             ref={inputRef}
-            placeholder="Introduce el dealId de Pipedrive"
+            placeholder="Añade el número de presupuesto sin puntos ni comas"
             value={dealId}
             onChange={(e) => setDealId(e.target.value)}
             disabled={isLoading}
             autoComplete="off"
           />
-          <small className="text-muted">Añade el número de presupuesto sin puntos ni comas</small>
         </Modal.Body>
 
         <Modal.Footer className="border-0 pt-0">
