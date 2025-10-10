@@ -1,8 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from 'react';
 import {
   Accordion,
   Alert,
   Button,
+  Collapse,
   Col,
   Form,
   ListGroup,
@@ -34,6 +42,61 @@ const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
 
 const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
+
+function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} {...props}>
+      <rect x={7} y={7} width={11} height={11} rx={2.2} ry={2.2} />
+      <path d="M5.5 15.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.6" />
+    </svg>
+  );
+}
+
+function DeleteIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} {...props}>
+      <path d="M5 7h14" />
+      <path d="M9 7V5.8A1.8 1.8 0 0 1 10.8 4h2.4A1.8 1.8 0 0 1 15 5.8V7" />
+      <path d="M9.5 11.5v5" />
+      <path d="M14.5 11.5v5" />
+      <path d="M7.5 7l.7 11a2 2 0 0 0 2 1.9h3.6a2 2 0 0 0 2-1.9l.7-11" />
+    </svg>
+  );
+}
+
+type SessionActionIconProps = {
+  label: string;
+  onActivate: () => void;
+  children: ReactNode;
+  variant?: 'default' | 'danger';
+};
+
+function SessionActionIcon({ label, onActivate, children, variant = 'default' }: SessionActionIconProps) {
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLSpanElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
+      onActivate();
+    }
+  };
+
+  return (
+    <span
+      role="button"
+      aria-label={label}
+      title={label}
+      tabIndex={0}
+      className={`session-action-icon${variant === 'danger' ? ' danger' : ''}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onActivate();
+      }}
+      onKeyDown={handleKeyDown}
+    >
+      {children}
+    </span>
+  );
+}
 
 type SessionFormState = {
   id: string;
@@ -154,6 +217,7 @@ function buildSessionPatchPayload(
 ): Parameters<typeof patchSession>[1] | null | 'INVALID_DATES' | 'INVALID_START' | 'INVALID_END' {
   if (!saved) {
     return {
+      nombre_cache: form.nombre_cache,
       fecha_inicio_utc: localInputToUtc(form.fecha_inicio_local) ?? null,
       fecha_fin_utc: localInputToUtc(form.fecha_fin_local) ?? null,
       sala_id: form.sala_id,
@@ -212,6 +276,11 @@ function buildSessionPatchPayload(
 
   if (!areStringArraysEqual(form.unidad_movil_ids, saved.unidad_movil_ids)) {
     patch.unidad_movil_ids = [...form.unidad_movil_ids];
+    hasChanges = true;
+  }
+
+  if (form.nombre_cache !== saved.nombre_cache) {
+    patch.nombre_cache = form.nombre_cache;
     hasChanges = true;
   }
 
@@ -684,7 +753,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                         as="li"
                         action
                         value={displayIndex}
-                        className="d-flex justify-content-between align-items-center"
+                        className="session-list-item d-flex justify-content-between align-items-center gap-3"
                         onClick={() =>
                           setActiveSession({
                             sessionId: session.id,
@@ -693,22 +762,46 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                           })
                         }
                       >
-                        <div>
-                          <div className="fw-semibold">Sesión {displayIndex}</div>
-                          <div className="text-muted small">{productName}</div>
+                        <div
+                          className="flex-grow-1 me-3"
+                          title={form.nombre_cache?.trim() || `Sesión ${displayIndex}`}
+                        >
+                          <div className="fw-semibold text-truncate">
+                            {form.nombre_cache?.trim() || `Sesión ${displayIndex}`}
+                          </div>
+                          <div className="text-muted small">
+                            Sesión {displayIndex} · {productName}
+                          </div>
                         </div>
-                        <div className="text-end small">
-                          {status.saving ? (
-                            <span className="text-primary d-inline-flex align-items-center gap-1">
-                              <Spinner animation="border" size="sm" /> Guardando…
-                            </span>
-                          ) : status.error ? (
-                            <span className="text-danger">Error al guardar</span>
-                          ) : status.savedAt ? (
-                            <span className="text-success">Actualizado</span>
-                          ) : (
-                            <span className="text-muted">Sin cambios</span>
-                          )}
+                        <div className="d-flex align-items-center gap-3">
+                          <div className="session-item-actions d-inline-flex align-items-center gap-2">
+                            <SessionActionIcon
+                              label="Duplicar sesión"
+                              onActivate={() => handleDuplicate(session.id)}
+                            >
+                              <DuplicateIcon aria-hidden="true" />
+                            </SessionActionIcon>
+                            <SessionActionIcon
+                              label="Eliminar sesión"
+                              variant="danger"
+                              onActivate={() => handleDelete(session.id)}
+                            >
+                              <DeleteIcon aria-hidden="true" />
+                            </SessionActionIcon>
+                          </div>
+                          <div className="text-end small text-nowrap">
+                            {status.saving ? (
+                              <span className="text-primary d-inline-flex align-items-center gap-1">
+                                <Spinner animation="border" size="sm" /> Guardando…
+                              </span>
+                            ) : status.error ? (
+                              <span className="text-danger">Error al guardar</span>
+                            ) : status.savedAt ? (
+                              <span className="text-success">Actualizado</span>
+                            ) : (
+                              <span className="text-muted">Sin cambios</span>
+                            )}
+                          </div>
                         </div>
                       </ListGroup.Item>
                     );
@@ -747,10 +840,14 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
             size="lg"
             centered
             scrollable
+            contentClassName="session-modal"
           >
-            <Modal.Header closeButton>
-              <Modal.Title>
-                Sesión {activeSession.displayIndex} · {activeSession.productName}
+            <Modal.Header closeButton closeVariant="white" className="border-0">
+              <Modal.Title className="session-modal-title">
+                {activeForm?.nombre_cache?.trim() || `Sesión ${activeSession.displayIndex}`}
+                <div className="session-modal-subtitle">
+                  Sesión {activeSession.displayIndex} · {activeSession.productName}
+                </div>
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -762,8 +859,6 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                   rooms={rooms}
                   units={units}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
-                  onDuplicate={() => handleDuplicate(activeSession.sessionId)}
-                  onDelete={() => handleDelete(activeSession.sessionId)}
                 />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
@@ -783,8 +878,6 @@ interface SessionEditorProps {
   rooms: RoomOption[];
   units: MobileUnitOption[];
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
 }
 
 function SessionEditor({
@@ -794,11 +887,13 @@ function SessionEditor({
   rooms,
   units,
   onChange,
-  onDuplicate,
-  onDelete,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
+  const [trainerListOpen, setTrainerListOpen] = useState(false);
+  const [unitListOpen, setUnitListOpen] = useState(false);
+  const trainerFieldRef = useRef<HTMLDivElement | null>(null);
+  const unitFieldRef = useRef<HTMLDivElement | null>(null);
 
   const filteredTrainers = useMemo(() => {
     const search = trainerFilter.trim().toLowerCase();
@@ -818,13 +913,58 @@ function SessionEditor({
     });
   }, [unitFilter, units]);
 
+  const selectedTrainers = useMemo(() => {
+    const selected = new Set(form.trainer_ids);
+    return trainers.filter((trainer) => selected.has(trainer.trainer_id));
+  }, [form.trainer_ids, trainers]);
+
+  const selectedUnits = useMemo(() => {
+    const selected = new Set(form.unidad_movil_ids);
+    return units.filter((unit) => selected.has(unit.unidad_id));
+  }, [form.unidad_movil_ids, units]);
+
+  const trainerSummary = selectedTrainers
+    .map((trainer) => `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`)
+    .join(', ');
+  const unitSummary = selectedUnits
+    .map((unit) => (unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name))
+    .join(', ');
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (trainerFieldRef.current && !trainerFieldRef.current.contains(target)) {
+        setTrainerListOpen(false);
+      }
+      if (unitFieldRef.current && !unitFieldRef.current.contains(target)) {
+        setUnitListOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    setTrainerListOpen(false);
+    setUnitListOpen(false);
+  }, [form.id]);
+
   return (
-    <div className="border rounded p-3">
+    <div className="session-editor bg-white rounded-3 p-3">
       <Row className="g-3">
         <Col md={6} lg={4}>
           <Form.Group controlId={`session-${form.id}-nombre`}>
             <Form.Label>Nombre</Form.Label>
-            <Form.Control value={form.nombre_cache} readOnly />
+            <Form.Control
+              value={form.nombre_cache}
+              placeholder="Introduce el nombre de la sesión"
+              onChange={(event) =>
+                onChange((current) => ({ ...current, nombre_cache: event.target.value }))
+              }
+            />
           </Form.Group>
         </Col>
         <Col md={6} lg={4}>
@@ -916,100 +1056,141 @@ function SessionEditor({
         <Col md={6}>
           <Form.Group controlId={`session-${form.id}-trainers`}>
             <Form.Label>Formadores / Bomberos</Form.Label>
-            <Form.Control
-              type="search"
-              placeholder="Buscar"
-              value={trainerFilter}
-              onChange={(event) => setTrainerFilter(event.target.value)}
-              className="mb-2"
-            />
-            <div className="border rounded overflow-auto" style={{ maxHeight: 160 }}>
-              <ListGroup variant="flush">
-                {filteredTrainers.map((trainer) => {
-                  const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
-                  const checked = form.trainer_ids.includes(trainer.trainer_id);
-                  return (
-                    <ListGroup.Item key={trainer.trainer_id} className="py-1">
-                      <Form.Check
-                        type="checkbox"
-                        label={label}
-                        checked={checked}
-                        onChange={(event) =>
-                          onChange((current) => {
-                            const set = new Set(current.trainer_ids);
-                            if (event.target.checked) {
-                              set.add(trainer.trainer_id);
-                            } else {
-                              set.delete(trainer.trainer_id);
-                            }
-                            return { ...current, trainer_ids: Array.from(set) };
-                          })
-                        }
-                      />
-                    </ListGroup.Item>
-                  );
-                })}
-                {!filteredTrainers.length && (
-                  <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
-                )}
-              </ListGroup>
+            <div ref={trainerFieldRef} className="session-multiselect">
+              <Form.Control
+                type="text"
+                readOnly
+                placeholder="Selecciona formadores"
+                value={trainerSummary}
+                aria-expanded={trainerListOpen}
+                aria-controls={`session-${form.id}-trainers-options`}
+                className="session-multiselect-summary"
+                onClick={() => setTrainerListOpen((open) => !open)}
+                onFocus={() => setTrainerListOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setTrainerListOpen((open) => !open);
+                  }
+                }}
+              />
+              <Collapse in={trainerListOpen}>
+                <div
+                  id={`session-${form.id}-trainers-options`}
+                  className="session-multiselect-panel mt-2"
+                >
+                  <Form.Control
+                    type="search"
+                    placeholder="Buscar"
+                    value={trainerFilter}
+                    onChange={(event) => setTrainerFilter(event.target.value)}
+                    className="mb-2"
+                  />
+                  <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
+                    <ListGroup variant="flush">
+                      {filteredTrainers.map((trainer) => {
+                        const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
+                        const checked = form.trainer_ids.includes(trainer.trainer_id);
+                        return (
+                          <ListGroup.Item key={trainer.trainer_id} className="py-1">
+                            <Form.Check
+                              type="checkbox"
+                              label={label}
+                              checked={checked}
+                              onChange={(event) =>
+                                onChange((current) => {
+                                  const set = new Set(current.trainer_ids);
+                                  if (event.target.checked) {
+                                    set.add(trainer.trainer_id);
+                                  } else {
+                                    set.delete(trainer.trainer_id);
+                                  }
+                                  return { ...current, trainer_ids: Array.from(set) };
+                                })
+                              }
+                            />
+                          </ListGroup.Item>
+                        );
+                      })}
+                      {!filteredTrainers.length && (
+                        <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
+                      )}
+                    </ListGroup>
+                  </div>
+                </div>
+              </Collapse>
             </div>
           </Form.Group>
         </Col>
         <Col md={6}>
           <Form.Group controlId={`session-${form.id}-units`}>
             <Form.Label>Unidades móviles</Form.Label>
-            <Form.Control
-              type="search"
-              placeholder="Buscar"
-              value={unitFilter}
-              onChange={(event) => setUnitFilter(event.target.value)}
-              className="mb-2"
-            />
-            <div className="border rounded overflow-auto" style={{ maxHeight: 160 }}>
-              <ListGroup variant="flush">
-                {filteredUnits.map((unit) => {
-                  const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
-                  const checked = form.unidad_movil_ids.includes(unit.unidad_id);
-                  return (
-                    <ListGroup.Item key={unit.unidad_id} className="py-1">
-                      <Form.Check
-                        type="checkbox"
-                        label={label}
-                        checked={checked}
-                        onChange={(event) =>
-                          onChange((current) => {
-                            const set = new Set(current.unidad_movil_ids);
-                            if (event.target.checked) {
-                              set.add(unit.unidad_id);
-                            } else {
-                              set.delete(unit.unidad_id);
-                            }
-                            return { ...current, unidad_movil_ids: Array.from(set) };
-                          })
-                        }
-                      />
-                    </ListGroup.Item>
-                  );
-                })}
-                {!filteredUnits.length && (
-                  <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
-                )}
-              </ListGroup>
+            <div ref={unitFieldRef} className="session-multiselect">
+              <Form.Control
+                type="text"
+                readOnly
+                placeholder="Selecciona unidades móviles"
+                value={unitSummary}
+                aria-expanded={unitListOpen}
+                aria-controls={`session-${form.id}-units-options`}
+                className="session-multiselect-summary"
+                onClick={() => setUnitListOpen((open) => !open)}
+                onFocus={() => setUnitListOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setUnitListOpen((open) => !open);
+                  }
+                }}
+              />
+              <Collapse in={unitListOpen}>
+                <div id={`session-${form.id}-units-options`} className="session-multiselect-panel mt-2">
+                  <Form.Control
+                    type="search"
+                    placeholder="Buscar"
+                    value={unitFilter}
+                    onChange={(event) => setUnitFilter(event.target.value)}
+                    className="mb-2"
+                  />
+                  <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
+                    <ListGroup variant="flush">
+                      {filteredUnits.map((unit) => {
+                        const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
+                        const checked = form.unidad_movil_ids.includes(unit.unidad_id);
+                        return (
+                          <ListGroup.Item key={unit.unidad_id} className="py-1">
+                            <Form.Check
+                              type="checkbox"
+                              label={label}
+                              checked={checked}
+                              onChange={(event) =>
+                                onChange((current) => {
+                                  const set = new Set(current.unidad_movil_ids);
+                                  if (event.target.checked) {
+                                    set.add(unit.unidad_id);
+                                  } else {
+                                    set.delete(unit.unidad_id);
+                                  }
+                                  return { ...current, unidad_movil_ids: Array.from(set) };
+                                })
+                              }
+                            />
+                          </ListGroup.Item>
+                        );
+                      })}
+                      {!filteredUnits.length && (
+                        <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
+                      )}
+                    </ListGroup>
+                  </div>
+                </div>
+              </Collapse>
             </div>
           </Form.Group>
         </Col>
       </Row>
 
-      <div className="d-flex justify-content-between align-items-center mt-3">
-        <div className="d-flex align-items-center gap-2">
-          <Button variant="outline-primary" size="sm" onClick={onDuplicate}>
-            Duplicar sesión
-          </Button>
-          <Button variant="outline-danger" size="sm" onClick={onDelete}>
-            Eliminar
-          </Button>
-        </div>
+      <div className="d-flex justify-content-end align-items-center mt-3">
         <div className="text-end">
           {status.saving ? (
             <span className="text-primary d-flex align-items-center gap-2">

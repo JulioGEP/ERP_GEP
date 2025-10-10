@@ -831,6 +831,7 @@ export async function createSession(
 export async function patchSession(
   sessionId: string,
   payload: Partial<{
+    nombre_cache: string;
     fecha_inicio_utc: string | null;
     fecha_fin_utc: string | null;
     sala_id: string | null;
@@ -846,6 +847,9 @@ export async function patchSession(
   }
 
   const body: Record<string, unknown> = {};
+  if (Object.prototype.hasOwnProperty.call(payload, "nombre_cache")) {
+    body.nombre_cache = payload.nombre_cache ?? "";
+  }
   if (Object.prototype.hasOwnProperty.call(payload, "fecha_inicio_utc"))
     body.fecha_inicio_utc = payload.fecha_inicio_utc ?? null;
   if (Object.prototype.hasOwnProperty.call(payload, "fecha_fin_utc"))
