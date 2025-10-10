@@ -214,6 +214,7 @@ model session_trainers {
   session_id String   @map("sesion_id")
   trainer_id String
   created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
 
   session sessions @relation(fields: [session_id], references: [id], onDelete: Cascade)
   trainer trainers @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
@@ -227,6 +228,7 @@ model session_unidades {
   session_id String   @map("sesion_id")
   unidad_id  String   @map("unidad_movil_id")
   created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
 
   session sessions         @relation(fields: [session_id], references: [id], onDelete: Cascade)
   unidad  unidades_moviles @relation(fields: [unidad_id], references: [unidad_id], onDelete: Cascade)
