@@ -1278,11 +1278,6 @@ function SessionEditor({
               <option value="CANCELADA">{SESSION_ESTADO_LABELS.CANCELADA}</option>
               <option value="FINALIZADA">{SESSION_ESTADO_LABELS.FINALIZADA}</option>
             </Form.Select>
-            {form.estado === 'BORRADOR' ? (
-              <Form.Text className="text-muted">
-                Completa fechas, sala, formadores y unidades para planificar la sesión.
-              </Form.Text>
-            ) : null}
           </Form.Group>
         </Col>
       </Row>
