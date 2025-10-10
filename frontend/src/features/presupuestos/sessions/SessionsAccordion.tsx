@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -62,16 +61,6 @@ const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
 };
 const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
 const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
-
-function isSessionPlanificable(form: SessionFormState): boolean {
-  return (
-    Boolean(form.fecha_inicio_local && form.fecha_inicio_local.trim()) &&
-    Boolean(form.fecha_fin_local && form.fecha_fin_local.trim()) &&
-    Boolean(form.sala_id && String(form.sala_id).trim().length) &&
-    form.trainer_ids.length > 0 &&
-    form.unidad_movil_ids.length > 0
-  );
-}
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 
@@ -389,9 +378,6 @@ function buildSessionPatchPayload(
   if (form.estado !== saved.estado) {
     if (MANUAL_SESSION_ESTADO_SET.has(form.estado)) {
       (patch as Record<string, SessionEstado>).estado = form.estado;
-      hasChanges = true;
-    } else if (form.estado === 'PLANIFICADA' && isSessionPlanificable(form)) {
-      (patch as Record<string, SessionEstado>).estado = 'PLANIFICADA';
       hasChanges = true;
     }
   }
@@ -1177,28 +1163,6 @@ function SessionEditor({
 
   const availability = availabilityQuery.data;
 
-  const isEstadoTransitionAllowed = useCallback(
-    (current: SessionFormState, nextEstado: SessionEstado): boolean => {
-      if (nextEstado === 'BORRADOR') return false;
-      if (nextEstado === 'PLANIFICADA') {
-        return isSessionPlanificable(current);
-      }
-      if (nextEstado === 'FINALIZADA') {
-        return current.estado !== 'BORRADOR';
-      }
-      if (nextEstado === 'SUSPENDIDA' || nextEstado === 'CANCELADA') {
-        return true;
-      }
-      return false;
-    },
-    [],
-  );
-
-  const canSelectPlanificada = isEstadoTransitionAllowed(form, 'PLANIFICADA');
-  const canSelectSuspendida = isEstadoTransitionAllowed(form, 'SUSPENDIDA');
-  const canSelectCancelada = isEstadoTransitionAllowed(form, 'CANCELADA');
-  const canSelectFinalizada = isEstadoTransitionAllowed(form, 'FINALIZADA');
-
   const blockedTrainers = useMemo(() => {
     const set = new Set<string>();
     localLocks.trainers.forEach((id) => set.add(id));
@@ -1325,34 +1289,24 @@ function SessionEditor({
             <Form.Label>Estado</Form.Label>
             <Form.Select
               value={form.estado}
+              disabled={form.estado === 'BORRADOR'}
               onChange={(event) => {
                 const nextValue = event.target.value as SessionEstado;
-                onChange((current) => {
-                  if (!isEstadoTransitionAllowed(current, nextValue)) {
-                    return current;
-                  }
-                  if (current.estado === nextValue) {
-                    return current;
-                  }
-                  return { ...current, estado: nextValue };
-                });
+                if (!MANUAL_SESSION_ESTADO_SET.has(nextValue)) {
+                  return;
+                }
+                onChange((current) => ({ ...current, estado: nextValue }));
               }}
             >
               <option value="BORRADOR" disabled>
                 {SESSION_ESTADO_LABELS.BORRADOR}
               </option>
-              <option value="PLANIFICADA" disabled={!canSelectPlanificada}>
+              <option value="PLANIFICADA" disabled>
                 {SESSION_ESTADO_LABELS.PLANIFICADA}
               </option>
-              <option value="SUSPENDIDA" disabled={!canSelectSuspendida}>
-                {SESSION_ESTADO_LABELS.SUSPENDIDA}
-              </option>
-              <option value="CANCELADA" disabled={!canSelectCancelada}>
-                {SESSION_ESTADO_LABELS.CANCELADA}
-              </option>
-              <option value="FINALIZADA" disabled={!canSelectFinalizada}>
-                {SESSION_ESTADO_LABELS.FINALIZADA}
-              </option>
+              <option value="SUSPENDIDA">{SESSION_ESTADO_LABELS.SUSPENDIDA}</option>
+              <option value="CANCELADA">{SESSION_ESTADO_LABELS.CANCELADA}</option>
+              <option value="FINALIZADA">{SESSION_ESTADO_LABELS.FINALIZADA}</option>
             </Form.Select>
           </Form.Group>
         </Col>
