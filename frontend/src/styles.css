@@ -161,6 +161,133 @@ body {
   border-top: none;
 }
 
+.session-modal {
+  border-radius: 18px;
+  border: none;
+  background-color: #f5f5f5;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.session-modal .modal-header {
+  background-color: var(--color-red);
+  color: #ffffff;
+  border-bottom: none;
+  padding: 1.5rem;
+}
+
+.session-modal .modal-header .modal-title {
+  color: inherit;
+  font-weight: 600;
+}
+
+.session-modal .modal-header .btn-close {
+  filter: invert(1);
+  opacity: 1;
+}
+
+.session-modal .modal-body {
+  background-color: #f5f5f5;
+  padding: 2rem;
+}
+
+.session-modal-title {
+  font-size: 1.45rem;
+  line-height: 1.25;
+}
+
+.session-modal-subtitle {
+  font-size: 0.9rem;
+  margin-top: 0.35rem;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 400;
+}
+
+.session-editor {
+  background-color: #ffffff;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.06);
+}
+
+.session-multiselect {
+  position: relative;
+}
+
+.session-multiselect-summary {
+  cursor: pointer;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.session-multiselect-summary:focus {
+  border-color: rgba(232, 71, 77, 0.65);
+  box-shadow: 0 0 0 0.25rem rgba(232, 71, 77, 0.18);
+}
+
+.session-multiselect-panel {
+  background-color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 0.75rem;
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.08);
+}
+
+.session-multiselect-panel .list-group-item {
+  border: none;
+}
+
+.session-list-item {
+  transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.session-list-item:hover {
+  background-color: rgba(232, 71, 77, 0.06);
+}
+
+.session-item-actions {
+  min-width: 80px;
+}
+
+.session-action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.04);
+  color: var(--color-gray-medium);
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.session-action-icon.danger {
+  background-color: rgba(220, 53, 69, 0.12);
+  color: #dc3545;
+}
+
+.session-action-icon:hover,
+.session-action-icon:focus-visible {
+  background-color: rgba(232, 71, 77, 0.18);
+  color: var(--color-red);
+  box-shadow: 0 0 0 2px rgba(232, 71, 77, 0.18);
+  outline: none;
+}
+
+.session-action-icon.danger:hover,
+.session-action-icon.danger:focus-visible {
+  background-color: rgba(220, 53, 69, 0.28);
+  color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25);
+}
+
+.session-action-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .erp-summary-row > [class*='col-'] {
   display: flex;
   flex-direction: column;
