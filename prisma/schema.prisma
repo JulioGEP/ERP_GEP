@@ -224,7 +224,7 @@ model session_trainers {
 }
 
 model session_unidades {
-  session_id String
+  session_id String   @map("sesion_id")
   unidad_id  String   @map("unidad_mov_id")
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
