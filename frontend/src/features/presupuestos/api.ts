@@ -8,6 +8,21 @@ import type {
   DealNote,
 } from "../../types/deal";
 
+export type SessionEstado =
+  | 'BORRADOR'
+  | 'PLANIFICADA'
+  | 'SUSPENDIDA'
+  | 'CANCELADA'
+  | 'FINALIZADA';
+
+const SESSION_ESTADOS: SessionEstado[] = [
+  'BORRADOR',
+  'PLANIFICADA',
+  'SUSPENDIDA',
+  'CANCELADA',
+  'FINALIZADA',
+];
+
 export type SessionDTO = {
   id: string;
   deal_id: string;
@@ -18,6 +33,7 @@ export type SessionDTO = {
   sala_id: string | null;
   direccion: string;
   comentarios: string | null;
+  estado: SessionEstado;
   trainer_ids: string[];
   unidad_movil_ids: string[];
 };
@@ -143,6 +159,15 @@ function toStringArray(value: unknown): string[] {
     if (!out.includes(text)) out.push(text);
   }
   return out;
+}
+
+function toSessionEstadoValue(value: unknown): SessionEstado {
+  const text = toStringValue(value);
+  if (!text) return 'BORRADOR';
+  const normalized = text.toUpperCase();
+  return SESSION_ESTADOS.includes(normalized as SessionEstado)
+    ? (normalized as SessionEstado)
+    : 'BORRADOR';
 }
 
 function buildPersonFullName(person?: {
@@ -448,6 +473,7 @@ function normalizeSession(row: any): SessionDTO {
   const sala_id = toStringValue(row?.sala_id);
   const direccion = toStringValue(row?.direccion) ?? "";
   const comentarios = toStringValue(row?.comentarios);
+  const estado = toSessionEstadoValue(row?.estado);
 
   const trainer_ids = toStringArray(row?.trainer_ids);
   const unidad_movil_ids = toStringArray(row?.unidad_movil_ids);
@@ -462,6 +488,7 @@ function normalizeSession(row: any): SessionDTO {
     sala_id: sala_id ?? null,
     direccion,
     comentarios: comentarios ?? null,
+    estado,
     trainer_ids,
     unidad_movil_ids,
   };
@@ -885,6 +912,7 @@ export async function patchSession(
     comentarios: string | null;
     trainer_ids: string[];
     unidad_movil_ids: string[];
+    estado: SessionEstado;
   }>
 ): Promise<SessionDTO> {
   const normalizedId = String(sessionId ?? "").trim();
@@ -910,6 +938,9 @@ export async function patchSession(
   }
   if (Object.prototype.hasOwnProperty.call(payload, "unidad_movil_ids")) {
     body.unidad_movil_ids = sanitizeStringArray(payload.unidad_movil_ids) ?? [];
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "estado")) {
+    body.estado = payload.estado;
   }
 
   const data = await request(`/sessions/${encodeURIComponent(normalizedId)}`, {
