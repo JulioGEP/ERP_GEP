@@ -90,6 +90,11 @@ function buildCommentPreview(comment: string, maxLength = 120): string {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}…` : normalized;
 }
 
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
 export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
@@ -282,6 +287,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   });
 
   const modalTitle = organizationDisplay || 'Detalle presupuesto';
+  const truncatedModalTitle = truncateText(modalTitle, 60);
+  const modalTitleTooltip = truncatedModalTitle !== modalTitle ? modalTitle : undefined;
 
   const displayOrDash = (value?: string | number | null) => {
     if (value === null || value === undefined) return '—';
@@ -656,7 +663,9 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     >
       <Modal.Header className="erp-modal-header border-0 pb-0">
         <Modal.Title as="div" className="erp-modal-header-main">
-          <div className="erp-modal-title text-truncate">{modalTitle}</div>
+          <div className="erp-modal-title text-truncate" title={modalTitleTooltip}>
+            {truncatedModalTitle}
+          </div>
           {presupuestoDisplay ? (
             <div className="erp-modal-subtitle text-truncate">
               Presupuesto {presupuestoDisplay}
