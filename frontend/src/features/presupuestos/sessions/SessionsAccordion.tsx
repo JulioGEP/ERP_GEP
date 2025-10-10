@@ -1479,11 +1479,6 @@ function SessionEditor({
             {availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
             )}
-            {!availabilityError && roomWarningVisible && !form.sala_id && (
-              <div className="text-danger small mt-1">
-                Los recursos en rojo están reservados para estas fechas.
-              </div>
-            )}
             {hasDateRange && availabilityFetching && !availabilityError && (
               <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
             )}
