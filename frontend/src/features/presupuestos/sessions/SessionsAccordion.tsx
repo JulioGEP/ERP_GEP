@@ -9,6 +9,7 @@ import {
 import {
   Accordion,
   Alert,
+  Badge,
   Button,
   Collapse,
   Col,
@@ -36,6 +37,7 @@ import {
   type TrainerOption,
   type RoomOption,
   type MobileUnitOption,
+  type SessionEstado,
 } from '../api';
 import { isApiError } from '../api';
 
@@ -43,6 +45,22 @@ const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
 
 const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
+const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
+  BORRADOR: 'Borrador',
+  PLANIFICADA: 'Planificada',
+  SUSPENDIDA: 'Suspendida',
+  CANCELADA: 'Cancelada',
+  FINALIZADA: 'Finalizada',
+};
+const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
+  BORRADOR: 'secondary',
+  PLANIFICADA: 'success',
+  SUSPENDIDA: 'warning',
+  CANCELADA: 'danger',
+  FINALIZADA: 'primary',
+};
+const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
+const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
 
 function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -99,6 +117,20 @@ function SessionActionIcon({ label, onActivate, children, variant = 'default' }:
   );
 }
 
+function SessionStateBadge({ estado }: { estado: SessionEstado }) {
+  const label = SESSION_ESTADO_LABELS[estado] ?? estado;
+  const variant = SESSION_ESTADO_VARIANTS[estado] ?? 'secondary';
+  return (
+    <Badge
+      bg={variant}
+      className="text-uppercase session-state-badge"
+      style={{ fontSize: '0.75rem' }}
+    >
+      {label}
+    </Badge>
+  );
+}
+
 type SessionFormState = {
   id: string;
   nombre_cache: string;
@@ -107,6 +139,7 @@ type SessionFormState = {
   sala_id: string | null;
   direccion: string;
   comentarios: string | null;
+  estado: SessionEstado;
   trainer_ids: string[];
   unidad_movil_ids: string[];
 };
@@ -254,6 +287,7 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     sala_id: session.sala_id ?? null,
     direccion: session.direccion ?? '',
     comentarios: session.comentarios ?? null,
+    estado: session.estado,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
   };
@@ -337,6 +371,13 @@ function buildSessionPatchPayload(
   if (form.nombre_cache !== saved.nombre_cache) {
     patch.nombre_cache = form.nombre_cache;
     hasChanges = true;
+  }
+
+  if (form.estado !== saved.estado) {
+    if (MANUAL_SESSION_ESTADO_SET.has(form.estado)) {
+      (patch as Record<string, SessionEstado>).estado = form.estado;
+      hasChanges = true;
+    }
   }
 
   if (!hasChanges) return null;
@@ -873,6 +914,9 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                           <div className="fw-semibold text-truncate">
                             {form.nombre_cache?.trim() || `Sesión ${displayIndex}`}
                           </div>
+                          <div className="mt-1">
+                            <SessionStateBadge estado={form.estado} />
+                          </div>
                         </div>
                         <div className="d-flex align-items-center gap-3">
                           <div className="session-item-actions d-inline-flex align-items-center gap-2">
@@ -944,8 +988,9 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
             contentClassName="session-modal"
           >
             <Modal.Header closeButton closeVariant="white" className="border-0">
-              <Modal.Title className="session-modal-title">
-                {activeForm?.nombre_cache?.trim() || `Sesión ${activeSession.displayIndex}`}
+              <Modal.Title className="session-modal-title d-flex align-items-center justify-content-between gap-3">
+                <span>{activeForm?.nombre_cache?.trim() || `Sesión ${activeSession.displayIndex}`}</span>
+                {activeForm ? <SessionStateBadge estado={activeForm.estado} /> : null}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -1135,7 +1180,7 @@ function SessionEditor({
   return (
     <div className="session-editor bg-white rounded-3 p-3">
       <Row className="g-3">
-        <Col md={6} lg={4}>
+        <Col md={6} lg={3}>
           <Form.Group controlId={`session-${form.id}-nombre`}>
             <Form.Label>Nombre</Form.Label>
             <Form.Control
@@ -1147,7 +1192,7 @@ function SessionEditor({
             />
           </Form.Group>
         </Col>
-        <Col md={6} lg={4}>
+        <Col md={6} lg={3}>
           <Form.Group controlId={`session-${form.id}-inicio`}>
             <Form.Label>Fecha inicio</Form.Label>
             <Form.Control
@@ -1187,7 +1232,7 @@ function SessionEditor({
             />
           </Form.Group>
         </Col>
-        <Col md={6} lg={4}>
+        <Col md={6} lg={3}>
           <Form.Group controlId={`session-${form.id}-fin`}>
             <Form.Label>Fecha fin</Form.Label>
             <Form.Control
@@ -1197,6 +1242,37 @@ function SessionEditor({
                 onChange((current) => ({ ...current, fecha_fin_local: event.target.value || null }))
               }
             />
+          </Form.Group>
+        </Col>
+        <Col md={6} lg={3}>
+          <Form.Group controlId={`session-${form.id}-estado`}>
+            <Form.Label>Estado</Form.Label>
+            <Form.Select
+              value={form.estado}
+              disabled={form.estado === 'BORRADOR'}
+              onChange={(event) => {
+                const nextValue = event.target.value as SessionEstado;
+                if (!MANUAL_SESSION_ESTADO_SET.has(nextValue)) {
+                  return;
+                }
+                onChange((current) => ({ ...current, estado: nextValue }));
+              }}
+            >
+              <option value="BORRADOR" disabled>
+                {SESSION_ESTADO_LABELS.BORRADOR}
+              </option>
+              <option value="PLANIFICADA" disabled>
+                {SESSION_ESTADO_LABELS.PLANIFICADA}
+              </option>
+              <option value="SUSPENDIDA">{SESSION_ESTADO_LABELS.SUSPENDIDA}</option>
+              <option value="CANCELADA">{SESSION_ESTADO_LABELS.CANCELADA}</option>
+              <option value="FINALIZADA">{SESSION_ESTADO_LABELS.FINALIZADA}</option>
+            </Form.Select>
+            {form.estado === 'BORRADOR' ? (
+              <Form.Text className="text-muted">
+                Completa fechas, sala, formadores y unidades para planificar la sesión.
+              </Form.Text>
+            ) : null}
           </Form.Group>
         </Col>
       </Row>

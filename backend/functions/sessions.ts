@@ -7,6 +7,18 @@ import { errorResponse, preflightResponse, successResponse } from './_shared/res
 const APPLICABLE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 30;
+type SessionEstado = 'BORRADOR' | 'PLANIFICADA' | 'SUSPENDIDA' | 'CANCELADA' | 'FINALIZADA';
+
+const SESSION_STATE_VALUES: SessionEstado[] = [
+  'BORRADOR',
+  'PLANIFICADA',
+  'SUSPENDIDA',
+  'CANCELADA',
+  'FINALIZADA',
+];
+const MANUAL_SESSION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCELADA', 'FINALIZADA']);
+
+type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>;
 
 function toTrimmed(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -74,11 +86,99 @@ type SessionRecord = {
   sala_id: string | null;
   direccion: string;
   comentarios: string | null;
+  estado: SessionEstado;
   trainers: Array<{ trainer_id: string }>;
   unidades: Array<{ unidad_id: string }>;
 };
 
+function toSessionEstado(value: unknown): SessionEstado | null {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim().toUpperCase();
+  if (!normalized.length) return null;
+  return SESSION_STATE_VALUES.includes(normalized as SessionEstado)
+    ? (normalized as SessionEstado)
+    : null;
+}
+
+function isManualSessionEstado(value: SessionEstado | null | undefined): boolean {
+  return value ? MANUAL_SESSION_STATES.has(value) : false;
+}
+
+function computeAutomaticSessionEstadoFromValues({
+  fechaInicio,
+  fechaFin,
+  salaId,
+  trainerIds,
+  unidadIds,
+}: {
+  fechaInicio: Date | null | undefined;
+  fechaFin: Date | null | undefined;
+  salaId: string | null | undefined;
+  trainerIds: string[];
+  unidadIds: string[];
+}): AutomaticSessionEstado {
+  if (!fechaInicio || !fechaFin) return 'BORRADOR';
+  if (!salaId || !String(salaId).trim().length) return 'BORRADOR';
+  if (!trainerIds || !trainerIds.length) return 'BORRADOR';
+  if (!unidadIds || !unidadIds.length) return 'BORRADOR';
+  return 'PLANIFICADA';
+}
+
+function resolveAutomaticSessionEstado(
+  row: Pick<SessionRecord, 'fecha_inicio_utc' | 'fecha_fin_utc' | 'sala_id' | 'trainers' | 'unidades'>,
+): AutomaticSessionEstado {
+  const trainerIds = row.trainers.map((trainer) => trainer.trainer_id).filter(Boolean);
+  const unidadIds = row.unidades.map((unidad) => unidad.unidad_id).filter(Boolean);
+  return computeAutomaticSessionEstadoFromValues({
+    fechaInicio: row.fecha_inicio_utc,
+    fechaFin: row.fecha_fin_utc,
+    salaId: row.sala_id,
+    trainerIds,
+    unidadIds,
+  });
+}
+
+function resolveSessionEstado(row: SessionRecord): SessionEstado {
+  if (isManualSessionEstado(row.estado)) {
+    return row.estado;
+  }
+  return resolveAutomaticSessionEstado(row);
+}
+
+async function applyAutomaticSessionState(
+  tx: Prisma.TransactionClient,
+  sessions: SessionRecord[],
+): Promise<void> {
+  const updates: Promise<unknown>[] = [];
+
+  sessions.forEach((session) => {
+    if (isManualSessionEstado(session.estado)) {
+      return;
+    }
+    const autoEstado = resolveAutomaticSessionEstado(session);
+    if (session.estado !== autoEstado) {
+      session.estado = autoEstado;
+      updates.push(
+        tx.sessions.update({
+          where: { id: session.id },
+          data: { estado: autoEstado } as any,
+        }),
+      );
+    } else {
+      session.estado = autoEstado;
+    }
+  });
+
+  if (updates.length) {
+    await Promise.all(updates);
+  }
+}
+
 function normalizeSession(row: SessionRecord) {
+  const trainerIds = row.trainers.map((trainer) => trainer.trainer_id);
+  const unidadIds = row.unidades.map((unidad) => unidad.unidad_id);
+  const estado = resolveSessionEstado(row);
+
   return {
     id: row.id,
     deal_id: row.deal_id,
@@ -89,8 +189,9 @@ function normalizeSession(row: SessionRecord) {
     sala_id: row.sala_id,
     direccion: row.direccion,
     comentarios: row.comentarios,
-    trainer_ids: row.trainers.map((trainer) => trainer.trainer_id),
-    unidad_movil_ids: row.unidades.map((unidad) => unidad.unidad_id),
+    estado,
+    trainer_ids: trainerIds,
+    unidad_movil_ids: unidadIds,
   };
 }
 
@@ -158,7 +259,8 @@ async function syncSessionsForProduct(
           deal_product_id: product.id,
           nombre_cache: `${baseName} #${existing.length + index + 1}`,
           direccion: defaultAddress ?? '',
-        },
+          estado: 'BORRADOR',
+        } as any,
       });
     }
   }
@@ -240,11 +342,14 @@ function ensureArrayOfStrings(value: unknown): string[] | { error: ReturnType<ty
   return items;
 }
 
-type SessionPatchResult = {
-  data: Prisma.sessionsUpdateInput;
-  trainerIds?: string[];
-  unidadIds?: string[];
-} | { error: ReturnType<typeof errorResponse> };
+type SessionPatchResult =
+  | {
+      data: Prisma.sessionsUpdateInput;
+      trainerIds?: string[];
+      unidadIds?: string[];
+      estado?: SessionEstado;
+    }
+  | { error: ReturnType<typeof errorResponse> };
 
 function buildSessionPatch(body: any): SessionPatchResult {
   if (!body || typeof body !== 'object') {
@@ -306,7 +411,16 @@ function buildSessionPatch(body: any): SessionPatchResult {
     unidadIds = unidadIdsResult;
   }
 
-  return { data, trainerIds, unidadIds };
+  let estado: SessionEstado | undefined;
+  if (Object.prototype.hasOwnProperty.call(body, 'estado')) {
+    const parsedEstado = toSessionEstado(body.estado);
+    if (!parsedEstado) {
+      return { error: errorResponse('VALIDATION_ERROR', 'Estado inválido', 400) };
+    }
+    estado = parsedEstado;
+  }
+
+  return { data, trainerIds, unidadIds, estado };
 }
 
 function ensureValidDateRange(start?: Date | null, end?: Date | null) {
@@ -432,6 +546,8 @@ async function fetchSessionsByProduct(
       },
     }),
   ]);
+
+  await applyAutomaticSessionState(prisma, rows as unknown as SessionRecord[]);
 
   return { total, rows };
 }
@@ -572,7 +688,7 @@ export const handler = async (event: any) => {
           filteredProducts.map(async (product) => {
             const { total, rows } = await fetchSessionsByProduct(tx, deal.deal_id, product.id, page, limit);
             const mapped = rows.map((row) =>
-              normalizeSession(row as SessionRecord),
+              normalizeSession(row as unknown as SessionRecord),
             );
             return {
               product: {
@@ -658,6 +774,14 @@ export const handler = async (event: any) => {
           end: fechaFinDate,
         });
 
+        const autoEstado = computeAutomaticSessionEstadoFromValues({
+          fechaInicio: fechaInicioDate,
+          fechaFin: fechaFinDate,
+          salaId: salaId ?? null,
+          trainerIds: trainerIdsResult,
+          unidadIds: unidadIdsResult,
+        });
+
         const created = await tx.sessions.create({
           data: {
             id: randomUUID(),
@@ -675,7 +799,8 @@ export const handler = async (event: any) => {
               fechaFinResult === undefined
                 ? undefined
                 : ((fechaFinDate as Date | null | undefined) ?? null),
-          },
+            estado: autoEstado,
+          } as any,
         });
 
         if (trainerIdsResult.length) {
@@ -706,7 +831,7 @@ export const handler = async (event: any) => {
           },
         });
 
-        return normalizeSession(stored as SessionRecord);
+        return normalizeSession(stored as unknown as SessionRecord);
       });
 
       return successResponse({ session: result }, 201);
@@ -720,15 +845,11 @@ export const handler = async (event: any) => {
       const trainerIds = result.trainerIds;
       const unidadIds = result.unidadIds;
       const data = result.data;
+      const requestedEstado = result.estado;
 
       const stored = await prisma.sessions.findUnique({
         where: { id: sessionIdFromPath },
-        select: {
-          id: true,
-          deal_product_id: true,
-          fecha_inicio_utc: true,
-          fecha_fin_utc: true,
-          sala_id: true,
+        include: {
           trainers: { select: { trainer_id: true } },
           unidades: { select: { unidad_id: true } },
         },
@@ -738,21 +859,23 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
       }
 
+      const storedRecord = stored as unknown as SessionRecord;
+
       const fechaInicio =
         data.fecha_inicio_utc === undefined
-          ? stored.fecha_inicio_utc
+          ? storedRecord.fecha_inicio_utc
           : (data.fecha_inicio_utc as Date | null);
       const fechaFin =
         data.fecha_fin_utc === undefined
-          ? stored.fecha_fin_utc
+          ? storedRecord.fecha_fin_utc
           : (data.fecha_fin_utc as Date | null);
       const rangeError = ensureValidDateRange(fechaInicio, fechaFin);
       if (rangeError) return rangeError;
 
       const nextTrainerIds =
-        trainerIds === undefined ? stored.trainers.map((entry) => entry.trainer_id) : trainerIds;
+        trainerIds === undefined ? storedRecord.trainers.map((entry) => entry.trainer_id) : trainerIds;
       const nextUnidadIds =
-        unidadIds === undefined ? stored.unidades.map((entry) => entry.unidad_id) : unidadIds;
+        unidadIds === undefined ? storedRecord.unidades.map((entry) => entry.unidad_id) : unidadIds;
 
       let nextSalaId = stored.sala_id;
       if (Object.prototype.hasOwnProperty.call(data, 'sala_id')) {
@@ -762,6 +885,34 @@ export const handler = async (event: any) => {
         } else {
           nextSalaId = (rawSala as string | null | undefined) ?? null;
         }
+      }
+
+      const storedEstado = toSessionEstado(storedRecord.estado);
+      const currentEstado = storedEstado ?? 'BORRADOR';
+      const autoEstado = computeAutomaticSessionEstadoFromValues({
+        fechaInicio,
+        fechaFin,
+        salaId: nextSalaId,
+        trainerIds: nextTrainerIds,
+        unidadIds: nextUnidadIds,
+      });
+
+      if (requestedEstado !== undefined) {
+        if (!isManualSessionEstado(requestedEstado)) {
+          return errorResponse('VALIDATION_ERROR', 'Estado no editable', 400);
+        }
+        if (!isManualSessionEstado(currentEstado) && autoEstado !== 'PLANIFICADA') {
+          return errorResponse(
+            'VALIDATION_ERROR',
+            'La sesión debe estar planificada para cambiar el estado',
+            400,
+          );
+        }
+        if (requestedEstado !== currentEstado) {
+          (data as Record<string, SessionEstado>).estado = requestedEstado;
+        }
+      } else if (!isManualSessionEstado(currentEstado) && currentEstado !== autoEstado) {
+        (data as Record<string, SessionEstado>).estado = autoEstado;
       }
 
       const updated = await prisma.$transaction(async (tx) => {
@@ -814,7 +965,7 @@ export const handler = async (event: any) => {
         },
       });
 
-      return successResponse({ session: normalizeSession(refreshed as SessionRecord) });
+      return successResponse({ session: normalizeSession(refreshed as unknown as SessionRecord) });
     }
 
     if (method === 'DELETE' && sessionIdFromPath) {
