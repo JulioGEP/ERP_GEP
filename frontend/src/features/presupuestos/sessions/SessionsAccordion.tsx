@@ -7,6 +7,7 @@ import {
   Col,
   Form,
   ListGroup,
+  Modal,
   Pagination,
   Row,
   Spinner,
@@ -336,6 +337,14 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
   const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const sessionProductRef = useRef<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<Record<string, SaveStatus>>({});
+  const [activeSession, setActiveSession] = useState<
+    | {
+        sessionId: string;
+        productName: string;
+        displayIndex: number;
+      }
+    | null
+  >(null);
 
   useEffect(() => {
     formsRef.current = forms;
@@ -540,6 +549,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
     try {
       await deleteMutation.mutateAsync(sessionId);
       await invalidateProductSessions(productId);
+      setActiveSession((current) => (current?.sessionId === sessionId ? null : current));
     } catch (error) {
       const message = isApiError(error)
         ? error.message
@@ -550,11 +560,22 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
     }
   };
 
+  const activeForm = activeSession ? forms[activeSession.sessionId] ?? null : null;
+
+  useEffect(() => {
+    if (activeSession && !forms[activeSession.sessionId]) {
+      setActiveSession(null);
+    }
+  }, [activeSession, forms]);
+
   if (!shouldShow) return null;
 
   const trainers = trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
   const rooms = roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
   const units = unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
+  const activeStatus = activeSession
+    ? saveStatus[activeSession.sessionId] ?? { saving: false, error: null }
+    : { saving: false, error: null };
 
   return (
     <Accordion.Item eventKey="sessions">
@@ -638,26 +659,51 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
               {!isLoading && !queryError && !sessions.length && (
                 <p className="text-muted">Sin sesiones para este producto.</p>
               )}
-              <div className="d-flex flex-column gap-3">
-                {sessions.map((session) => {
-                  const form = forms[session.id];
-                  const status = saveStatus[session.id] ?? { saving: false, error: null };
-                  if (!form) return null;
-                  return (
-                    <SessionEditor
-                      key={session.id}
-                      form={form}
-                      status={status}
-                      trainers={trainers}
-                      rooms={rooms}
-                      units={units}
-                      onChange={(updater) => handleFieldChange(session.id, updater)}
-                      onDuplicate={() => handleDuplicate(session.id)}
-                      onDelete={() => handleDelete(session.id)}
-                    />
-                  );
-                })}
-              </div>
+              {!!sessions.length && (
+                <ListGroup as="ol" numbered className="mb-0">
+                  {sessions.map((session, sessionIndex) => {
+                    const form = forms[session.id];
+                    const status = saveStatus[session.id] ?? { saving: false, error: null };
+                    if (!form) return null;
+                    const displayIndex = ((pagination.page ?? currentPage) - 1) * SESSION_LIMIT + sessionIndex + 1;
+                    const productName = product.name ?? product.code ?? 'Producto';
+                    return (
+                      <ListGroup.Item
+                        key={session.id}
+                        as="li"
+                        action
+                        value={displayIndex}
+                        className="d-flex justify-content-between align-items-center"
+                        onClick={() =>
+                          setActiveSession({
+                            sessionId: session.id,
+                            productName,
+                            displayIndex,
+                          })
+                        }
+                      >
+                        <div>
+                          <div className="fw-semibold">Sesión {displayIndex}</div>
+                          <div className="text-muted small">{productName}</div>
+                        </div>
+                        <div className="text-end small">
+                          {status.saving ? (
+                            <span className="text-primary d-inline-flex align-items-center gap-1">
+                              <Spinner animation="border" size="sm" /> Guardando…
+                            </span>
+                          ) : status.error ? (
+                            <span className="text-danger">Error al guardar</span>
+                          ) : status.savedAt ? (
+                            <span className="text-success">Actualizado</span>
+                          ) : (
+                            <span className="text-muted">Sin cambios</span>
+                          )}
+                        </div>
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              )}
               {pagination.totalPages > 1 && (
                 <div className="d-flex justify-content-center mt-3">
                   <Pagination size="sm">
@@ -683,6 +729,37 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
             </div>
           );
         })}
+        {activeSession && (
+          <Modal
+            show={Boolean(activeForm)}
+            onHide={() => setActiveSession(null)}
+            size="lg"
+            centered
+            scrollable
+          >
+            <Modal.Header closeButton>
+              <Modal.Title>
+                Sesión {activeSession.displayIndex} · {activeSession.productName}
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {activeForm ? (
+                <SessionEditor
+                  form={activeForm}
+                  status={activeStatus}
+                  trainers={trainers}
+                  rooms={rooms}
+                  units={units}
+                  onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
+                  onDuplicate={() => handleDuplicate(activeSession.sessionId)}
+                  onDelete={() => handleDelete(activeSession.sessionId)}
+                />
+              ) : (
+                <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
+              )}
+            </Modal.Body>
+          </Modal>
+        )}
       </Accordion.Body>
     </Accordion.Item>
   );
