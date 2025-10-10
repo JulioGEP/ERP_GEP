@@ -450,6 +450,8 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
 
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationDone, setGenerationDone] = useState(false);
+  const [mapAddress, setMapAddress] = useState<string | null>(null);
+  const [showMapModal, setShowMapModal] = useState(false);
 
   const generateMutation = useMutation({
     mutationFn: (id: string) => generateSessionsFromDeal(id),
@@ -477,6 +479,18 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
   }, [dealId, shouldShow]);
 
   const [pageByProduct, setPageByProduct] = useState<Record<string, number>>({});
+
+  const handleOpenMap = (address: string) => {
+    const trimmed = address.trim();
+    if (!trimmed) return;
+    setMapAddress(trimmed);
+    setShowMapModal(true);
+  };
+
+  const handleCloseMap = () => {
+    setShowMapModal(false);
+    setMapAddress(null);
+  };
 
   useEffect(() => {
     setPageByProduct((current) => {
@@ -1001,6 +1015,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                   defaultDurationHours={activeProductHours}
                   allForms={forms}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
+                  onOpenMap={handleOpenMap}
                 />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
@@ -1008,6 +1023,24 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
             </Modal.Body>
           </Modal>
         )}
+        <Modal show={showMapModal} onHide={handleCloseMap} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>Ubicación</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {mapAddress ? (
+              <div className="ratio ratio-16x9">
+                <iframe
+                  src={`https://www.google.com/maps?q=${encodeURIComponent(mapAddress)}&output=embed`}
+                  title={`Mapa de ${mapAddress}`}
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <p className="text-muted mb-0">No se ha especificado una dirección.</p>
+            )}
+          </Modal.Body>
+        </Modal>
       </Accordion.Body>
     </Accordion.Item>
   );
@@ -1022,6 +1055,7 @@ interface SessionEditorProps {
   defaultDurationHours: number | null;
   allForms: Record<string, SessionFormState>;
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
+  onOpenMap: (address: string) => void;
 }
 
 function SessionEditor({
@@ -1033,6 +1067,7 @@ function SessionEditor({
   defaultDurationHours,
   allForms,
   onChange,
+  onOpenMap,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
@@ -1493,11 +1528,7 @@ function SessionEditor({
                 variant="outline-primary"
                 onClick={() => {
                   if (form.direccion.trim()) {
-                    window.open(
-                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.direccion)}`,
-                      '_blank',
-                      'noopener,noreferrer',
-                    );
+                    onOpenMap(form.direccion);
                   }
                 }}
                 disabled={!form.direccion.trim()}
