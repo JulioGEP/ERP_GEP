@@ -1169,6 +1169,17 @@ function SessionEditor({
                     if (computedEnd) {
                       next.fecha_fin_local = computedEnd;
                     }
+                  } else if (!normalizedValue) {
+                    const previousStart = current.fecha_inicio_local;
+                    const previousEnd = current.fecha_fin_local;
+                    if (
+                      durationHours !== null &&
+                      previousStart &&
+                      previousEnd &&
+                      addHoursToLocalDateTime(previousStart, durationHours) === previousEnd
+                    ) {
+                      next.fecha_fin_local = null;
+                    }
                   }
                   return next;
                 });
