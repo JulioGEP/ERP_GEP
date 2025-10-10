@@ -127,6 +127,29 @@ function localInputToUtc(value: string | null): string | null | undefined {
   return new Date(baseDate.getTime() - offset).toISOString();
 }
 
+function addHoursToLocalDateTime(value: string, hours: number): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!Number.isFinite(hours)) return null;
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const [, yearStr, monthStr, dayStr, hourStr, minuteStr] = match;
+  const year = Number(yearStr);
+  const monthIndex = Number(monthStr) - 1;
+  const day = Number(dayStr);
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr);
+  const baseDate = new Date(year, monthIndex, day, hour, minute, 0, 0);
+  if (!Number.isFinite(baseDate.getTime())) return null;
+  const minutesToAdd = Math.round(hours * 60);
+  if (!Number.isFinite(minutesToAdd)) return null;
+  baseDate.setMinutes(baseDate.getMinutes() + minutesToAdd);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${baseDate.getFullYear()}-${pad(baseDate.getMonth() + 1)}-${pad(baseDate.getDate())}T${pad(
+    baseDate.getHours(),
+  )}:${pad(baseDate.getMinutes())}`;
+}
+
 function mapSessionToForm(session: SessionDTO): SessionFormState {
   return {
     id: session.id,
@@ -233,19 +256,27 @@ interface SessionsAccordionProps {
 export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAccordionProps) {
   const qc = useQueryClient();
 
-  const applicableProducts = useMemo(() =>
-    products.filter(isApplicableProduct).map((product) => ({
-      id: String(product.id),
-      name: product.name ?? null,
-      code: product.code ?? null,
-      quantity:
-        typeof product.quantity === 'number'
-          ? product.quantity
-          : product.quantity != null
-          ? Number(product.quantity)
-          : 0,
-    })),
-  [products]);
+  const applicableProducts = useMemo(
+    () =>
+      products.filter(isApplicableProduct).map((product) => ({
+        id: String(product.id),
+        name: product.name ?? null,
+        code: product.code ?? null,
+        quantity:
+          typeof product.quantity === 'number'
+            ? product.quantity
+            : product.quantity != null
+            ? Number(product.quantity)
+            : 0,
+        hours:
+          typeof product.hours === 'number'
+            ? product.hours
+            : product.hours != null
+            ? Number(product.hours)
+            : null,
+      })),
+    [products],
+  );
 
   const shouldShow = applicableProducts.length > 0;
 
@@ -339,6 +370,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
   const [activeSession, setActiveSession] = useState<
     | {
         sessionId: string;
+        productId: string;
         productName: string;
         displayIndex: number;
       }
@@ -568,6 +600,21 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
   };
 
   const activeForm = activeSession ? forms[activeSession.sessionId] ?? null : null;
+  const activeProductHours = activeSession
+    ? (() => {
+        const directProduct = applicableProducts.find((product) => product.id === activeSession.productId);
+        if (directProduct && typeof directProduct.hours === 'number' && Number.isFinite(directProduct.hours)) {
+          return directProduct.hours;
+        }
+        const fallbackProductId = sessionProductRef.current[activeSession.sessionId];
+        if (!fallbackProductId) return null;
+        const fallbackProduct = applicableProducts.find((product) => product.id === fallbackProductId);
+        if (fallbackProduct && typeof fallbackProduct.hours === 'number' && Number.isFinite(fallbackProduct.hours)) {
+          return fallbackProduct.hours;
+        }
+        return null;
+      })()
+    : null;
 
   useEffect(() => {
     if (activeSession && !forms[activeSession.sessionId]) {
@@ -688,6 +735,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                         onClick={() =>
                           setActiveSession({
                             sessionId: session.id,
+                            productId: product.id,
                             productName,
                             displayIndex,
                           })
@@ -761,6 +809,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                   trainers={trainers}
                   rooms={rooms}
                   units={units}
+                  defaultDurationHours={activeProductHours}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
                   onDuplicate={() => handleDuplicate(activeSession.sessionId)}
                   onDelete={() => handleDelete(activeSession.sessionId)}
@@ -782,6 +831,7 @@ interface SessionEditorProps {
   trainers: TrainerOption[];
   rooms: RoomOption[];
   units: MobileUnitOption[];
+  defaultDurationHours: number | null;
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -793,6 +843,7 @@ function SessionEditor({
   trainers,
   rooms,
   units,
+  defaultDurationHours,
   onChange,
   onDuplicate,
   onDelete,
@@ -833,9 +884,26 @@ function SessionEditor({
             <Form.Control
               type="datetime-local"
               value={form.fecha_inicio_local ?? ''}
-              onChange={(event) =>
-                onChange((current) => ({ ...current, fecha_inicio_local: event.target.value || null }))
-              }
+              onChange={(event) => {
+                const rawValue = event.target.value ?? '';
+                const normalizedValue = rawValue.trim() ? rawValue : null;
+                const durationHours =
+                  typeof defaultDurationHours === 'number' &&
+                  Number.isFinite(defaultDurationHours) &&
+                  defaultDurationHours > 0
+                    ? defaultDurationHours
+                    : null;
+                onChange((current) => {
+                  const next: SessionFormState = { ...current, fecha_inicio_local: normalizedValue };
+                  if (normalizedValue && durationHours !== null) {
+                    const computedEnd = addHoursToLocalDateTime(normalizedValue, durationHours);
+                    if (computedEnd) {
+                      next.fecha_fin_local = computedEnd;
+                    }
+                  }
+                  return next;
+                });
+              }}
             />
           </Form.Group>
         </Col>
