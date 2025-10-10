@@ -905,18 +905,36 @@ export const handler = async (event: any) => {
       });
 
       if (requestedEstado !== undefined) {
-        if (!isManualSessionEstado(requestedEstado)) {
+        const requestedIsManual = isManualSessionEstado(requestedEstado);
+        const currentIsManual = isManualSessionEstado(currentEstado);
+        const isDraftToManual =
+          currentEstado === 'BORRADOR' &&
+          (requestedEstado === 'SUSPENDIDA' || requestedEstado === 'CANCELADA');
+
+        if (requestedEstado === 'PLANIFICADA') {
+          if (autoEstado !== 'PLANIFICADA') {
+            return errorResponse(
+              'VALIDATION_ERROR',
+              'Completa fecha, sala, formadores y unidad móvil para planificar la sesión',
+              400,
+            );
+          }
+          if (currentEstado !== 'PLANIFICADA') {
+            (data as Record<string, SessionEstado>).estado = 'PLANIFICADA';
+          }
+        } else if (requestedIsManual) {
+          if (!currentIsManual && !isDraftToManual && autoEstado !== 'PLANIFICADA') {
+            return errorResponse(
+              'VALIDATION_ERROR',
+              'La sesión debe estar planificada para cambiar el estado',
+              400,
+            );
+          }
+          if (requestedEstado !== currentEstado) {
+            (data as Record<string, SessionEstado>).estado = requestedEstado;
+          }
+        } else {
           return errorResponse('VALIDATION_ERROR', 'Estado no editable', 400);
-        }
-        if (!isManualSessionEstado(currentEstado) && autoEstado !== 'PLANIFICADA') {
-          return errorResponse(
-            'VALIDATION_ERROR',
-            'La sesión debe estar planificada para cambiar el estado',
-            400,
-          );
-        }
-        if (requestedEstado !== currentEstado) {
-          (data as Record<string, SessionEstado>).estado = requestedEstado;
         }
       } else if (!isManualSessionEstado(currentEstado) && currentEstado !== autoEstado) {
         (data as Record<string, SessionEstado>).estado = autoEstado;
