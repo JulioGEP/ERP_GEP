@@ -940,10 +940,8 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                               </span>
                             ) : status.error ? (
                               <span className="text-danger">Error al guardar</span>
-                            ) : status.savedAt ? (
-                              <SessionStateBadge estado={form.estado} />
                             ) : (
-                              <span className="text-muted">Sin cambios</span>
+                              <SessionStateBadge estado={form.estado} />
                             )}
                           </div>
                         </div>
