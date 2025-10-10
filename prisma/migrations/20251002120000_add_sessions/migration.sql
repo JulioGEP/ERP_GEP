@@ -32,11 +32,11 @@ CREATE INDEX "idx_sesion_trainers_trainer_id" ON "sesion_trainers" ("trainer_id"
 
 CREATE TABLE "sesion_unidades" (
   "sesion_id" TEXT NOT NULL,
-  "unidad_mov_id" TEXT NOT NULL,
+  "unidad_movil_id" TEXT NOT NULL,
   "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CONSTRAINT "sesion_unidades_pk" PRIMARY KEY ("sesion_id", "unidad_mov_id"),
+  CONSTRAINT "sesion_unidades_pk" PRIMARY KEY ("sesion_id", "unidad_movil_id"),
   CONSTRAINT "sesion_unidades_session_fk" FOREIGN KEY ("sesion_id") REFERENCES "sesiones"("id") ON DELETE CASCADE,
-  CONSTRAINT "sesion_unidades_unidad_fk" FOREIGN KEY ("unidad_mov_id") REFERENCES "unidades_moviles"("unidad_id") ON DELETE CASCADE
+  CONSTRAINT "sesion_unidades_unidad_fk" FOREIGN KEY ("unidad_movil_id") REFERENCES "unidades_moviles"("unidad_id") ON DELETE CASCADE
 );
 
-CREATE INDEX "idx_sesion_unidades_unidad_mov_id" ON "sesion_unidades" ("unidad_mov_id");
+CREATE INDEX "idx_sesion_unidades_unidad_movil_id" ON "sesion_unidades" ("unidad_movil_id");
