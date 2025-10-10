@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Accordion,
   Alert,
-  Badge,
   Button,
   Col,
   Form,
@@ -343,6 +342,14 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
 
   const queriesUpdatedKey = sessionQueries.map((query) => query.dataUpdatedAt).join('|');
 
+  const totalSessionsCount = generationDone
+    ? sessionQueries.reduce((total, query) => {
+        const group = (query.data as SessionGroupDTO | null) ?? null;
+        const pagination = group?.pagination;
+        return total + (pagination?.total ?? 0);
+      }, 0)
+    : 0;
+
   useEffect(() => {
     if (!generationDone) return;
     const nextForms: Record<string, SessionFormState> = {};
@@ -560,8 +567,12 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
     <Accordion.Item eventKey="sessions">
       <Accordion.Header>
         <div className="d-flex justify-content-between align-items-center w-100">
-          <span className="erp-accordion-title">Sesiones</span>
-          <Badge bg="secondary">{applicableProducts.length}</Badge>
+          <span className="erp-accordion-title">
+            Sesiones
+            {totalSessionsCount > 0 ? (
+              <span className="erp-accordion-count">{totalSessionsCount}</span>
+            ) : null}
+          </span>
         </div>
       </Accordion.Header>
       <Accordion.Body>
