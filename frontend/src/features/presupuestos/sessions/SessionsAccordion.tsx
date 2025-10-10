@@ -59,7 +59,7 @@ const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
   CANCELADA: 'danger',
   FINALIZADA: 'primary',
 };
-const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
+const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['BORRADOR', 'SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
 const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
@@ -1289,7 +1289,6 @@ function SessionEditor({
             <Form.Label>Estado</Form.Label>
             <Form.Select
               value={form.estado}
-              disabled={form.estado === 'BORRADOR'}
               onChange={(event) => {
                 const nextValue = event.target.value as SessionEstado;
                 if (!MANUAL_SESSION_ESTADO_SET.has(nextValue)) {
@@ -1298,7 +1297,7 @@ function SessionEditor({
                 onChange((current) => ({ ...current, estado: nextValue }));
               }}
             >
-              <option value="BORRADOR" disabled>
+              <option value="BORRADOR">
                 {SESSION_ESTADO_LABELS.BORRADOR}
               </option>
               <option value="PLANIFICADA" disabled>
