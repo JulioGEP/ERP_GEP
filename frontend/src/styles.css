@@ -351,3 +351,433 @@ option.session-option-unavailable {
     right: auto !important;
   }
 }
+
+/* === Calendario === */
+.erp-calendar-surface {
+  background-color: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.08);
+  padding: 1.5rem;
+}
+
+.erp-calendar-toolbar-title {
+  font-weight: 600;
+  font-size: 1.25rem;
+  text-transform: capitalize;
+  color: var(--color-gray-dark);
+  margin-bottom: 1.25rem;
+}
+
+.erp-calendar-wrapper {
+  position: relative;
+}
+
+.erp-calendar-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background-color: rgba(255, 255, 255, 0.85);
+  z-index: 5;
+  border-radius: 14px;
+}
+
+.erp-calendar-nav {
+  display: inline-flex;
+  border: 1px solid var(--color-gray-light);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.erp-calendar-nav .btn {
+  border: none;
+  min-width: 42px;
+  font-weight: 600;
+  color: var(--color-gray-dark);
+}
+
+.erp-calendar-nav .btn:hover,
+.erp-calendar-nav .btn:focus {
+  background-color: rgba(232, 71, 77, 0.08);
+  color: var(--color-red);
+}
+
+.erp-calendar-event {
+  --erp-calendar-accent: var(--color-red);
+  --erp-calendar-status-bg: rgba(232, 71, 77, 0.12);
+  --erp-calendar-status-color: var(--color-red);
+  border: 1px solid transparent;
+  border-left: 4px solid var(--erp-calendar-accent);
+  border-radius: 14px;
+  padding: 0.35rem 0.5rem;
+  background-color: #ffffff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  color: var(--color-gray-dark);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.erp-calendar-event:hover,
+.erp-calendar-event:focus-within {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.erp-calendar-event.estado-borrador {
+  --erp-calendar-accent: var(--color-gray-medium);
+  --erp-calendar-status-bg: rgba(86, 86, 86, 0.12);
+  --erp-calendar-status-color: var(--color-gray-medium);
+}
+
+.erp-calendar-event.estado-planificada {
+  --erp-calendar-accent: #1b9b4d;
+  --erp-calendar-status-bg: rgba(27, 155, 77, 0.15);
+  --erp-calendar-status-color: #1b9b4d;
+  background-color: #ecf9f1;
+}
+
+.erp-calendar-event.estado-suspendida {
+  --erp-calendar-accent: #f0a400;
+  --erp-calendar-status-bg: rgba(240, 164, 0, 0.18);
+  --erp-calendar-status-color: #b07200;
+  background-color: #fff8e6;
+}
+
+.erp-calendar-event.estado-cancelada {
+  --erp-calendar-accent: var(--color-red);
+  --erp-calendar-status-bg: rgba(232, 71, 77, 0.16);
+  --erp-calendar-status-color: var(--color-red);
+  background-color: #fdecee;
+}
+
+.erp-calendar-event.estado-finalizada {
+  --erp-calendar-accent: #3a7bd5;
+  --erp-calendar-status-bg: rgba(58, 123, 213, 0.16);
+  --erp-calendar-status-color: #2f63ad;
+  background-color: #edf3ff;
+}
+
+.erp-calendar-event-content {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.erp-calendar-event-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.erp-calendar-event-time {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--erp-calendar-accent);
+}
+
+.erp-calendar-event-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: inherit;
+}
+
+.erp-calendar-event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.erp-calendar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-gray-dark);
+}
+
+.erp-calendar-chip-icon {
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.erp-calendar-chip-label {
+  line-height: 1.2;
+}
+
+.erp-calendar-event-status {
+  align-self: flex-start;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--erp-calendar-status-color);
+  background-color: var(--erp-calendar-status-bg);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+.erp-calendar-tooltip .tooltip-inner {
+  background-color: rgba(42, 42, 42, 0.92);
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  text-align: left;
+  max-width: 320px;
+}
+
+.erp-calendar-tooltip .tooltip-arrow::before {
+  border-top-color: rgba(42, 42, 42, 0.92);
+  border-bottom-color: rgba(42, 42, 42, 0.92);
+}
+
+.erp-calendar-tooltip-content {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.erp-calendar-tooltip-title {
+  font-weight: 600;
+  color: #ffffff;
+  font-size: 0.95rem;
+}
+
+.erp-calendar-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+
+.erp-calendar-tooltip-label {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.erp-calendar-tooltip-value {
+  color: rgba(255, 255, 255, 0.9);
+  text-align: right;
+}
+
+.erp-calendar-surface .fc-theme-standard td,
+.erp-calendar-surface .fc-theme-standard th {
+  border-color: rgba(232, 71, 77, 0.12);
+}
+
+.erp-calendar-surface .fc .fc-day-today {
+  background-color: rgba(232, 71, 77, 0.08);
+}
+
+.erp-calendar-surface .fc .fc-scrollgrid-section > td,
+.erp-calendar-surface .fc .fc-scrollgrid-section > th {
+  padding: 0.35rem 0;
+}
+
+.erp-calendar-surface .fc .fc-timegrid-slot {
+  height: 3rem;
+}
+
+.erp-calendar-surface .fc .fc-timegrid-axis-cushion,
+.erp-calendar-surface .fc .fc-col-header-cell-cushion {
+  color: var(--color-gray-medium);
+  font-weight: 600;
+}
+
+.erp-calendar-surface .fc .fc-toolbar-title {
+  font-weight: 600;
+}
+
+.erp-calendar-month-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.erp-calendar-month-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--color-gray-medium);
+  text-transform: uppercase;
+  font-size: 0.8rem;
+}
+
+.erp-calendar-month-header-cell {
+  text-align: center;
+}
+
+.erp-calendar-month-body {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+}
+
+.erp-calendar-day-cell {
+  background-color: #ffffff;
+  border-radius: 14px;
+  border: 1px solid rgba(232, 71, 77, 0.12);
+  min-height: 130px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.erp-calendar-day-cell.is-muted {
+  opacity: 0.65;
+}
+
+.erp-calendar-day-cell.is-today {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 2px rgba(232, 71, 77, 0.18);
+}
+
+.erp-calendar-day-label {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.erp-calendar-day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1 1 auto;
+}
+
+.erp-calendar-week-layout {
+  display: grid;
+  grid-template-columns: minmax(60px, 80px) 1fr;
+  gap: 0.75rem;
+  height: 720px;
+}
+
+.erp-calendar-week-hours {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-gray-medium);
+}
+
+.erp-calendar-hour-slot {
+  flex: 1 1 0;
+  display: flex;
+  align-items: flex-start;
+}
+
+.erp-calendar-hour-slot span {
+  position: sticky;
+  top: 0;
+}
+
+.erp-calendar-week-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.erp-calendar-week-column {
+  background-color: #ffffff;
+  border-radius: 16px;
+  border: 1px solid rgba(232, 71, 77, 0.12);
+  display: flex;
+  flex-direction: column;
+}
+
+.erp-calendar-week-column.is-today {
+  border-color: var(--color-red);
+  box-shadow: 0 0 0 2px rgba(232, 71, 77, 0.18);
+}
+
+.erp-calendar-week-column-header {
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(232, 71, 77, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.erp-calendar-weekday {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-gray-medium);
+}
+
+.erp-calendar-weekdate {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.erp-calendar-week-column-body {
+  position: relative;
+  flex: 1 1 auto;
+  padding: 0.5rem;
+  overflow: hidden;
+}
+
+.erp-calendar-week-event {
+  position: absolute;
+  padding: 0.35rem;
+  overflow: hidden;
+}
+
+.erp-calendar-week-event .erp-calendar-event-content {
+  gap: 0.25rem;
+}
+
+.erp-calendar-event-time {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--erp-calendar-accent);
+}
+
+.erp-calendar-tooltip-overlay {
+  position: absolute;
+  transform: translateX(-50%);
+  background-color: rgba(42, 42, 42, 0.92);
+  padding: 0.85rem 1rem;
+  border-radius: 0.75rem;
+  color: #ffffff;
+  z-index: 20;
+  min-width: 240px;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.2);
+}
+
+.erp-calendar-tooltip-content {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.erp-calendar-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+}
+
+.erp-calendar-tooltip-label {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.erp-calendar-tooltip-value {
+  color: rgba(255, 255, 255, 0.9);
+  text-align: right;
+}
+
+@media (max-width: 768px) {
+  .erp-calendar-week-layout {
+    grid-template-columns: 50px 1fr;
+    height: 600px;
+  }
+
+  .erp-calendar-week-columns {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}

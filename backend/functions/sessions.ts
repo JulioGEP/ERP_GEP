@@ -575,6 +575,7 @@ export const handler = async (event: any) => {
     const path = event.path || '';
     const isAvailabilityRequest =
       /\/(?:\.netlify\/functions\/)?sessions\/availability$/i.test(path);
+    const isRangeRequest = /\/(?:\.netlify\/functions\/)?sessions\/range$/i.test(path);
     const sessionIdFromPath = isAvailabilityRequest ? null : parseSessionIdFromPath(path);
 
     if (method === 'POST' && /\/sessions\/generate-from-deal$/i.test(path)) {
@@ -659,6 +660,170 @@ export const handler = async (event: any) => {
           rooms: Array.from(roomLocks),
           units: Array.from(unitLocks),
         },
+      });
+    }
+
+    if (method === 'GET' && isRangeRequest) {
+      const startParam = toTrimmed(event.queryStringParameters?.start);
+      if (!startParam) {
+        return errorResponse('VALIDATION_ERROR', 'El parámetro start es obligatorio', 400);
+      }
+
+      const startResult = parseDateInput(startParam);
+      if (startResult && 'error' in startResult) return startResult.error;
+      const startDate = startResult as Date | null | undefined;
+      if (!startDate) {
+        return errorResponse('VALIDATION_ERROR', 'El parámetro start es inválido', 400);
+      }
+
+      const endParam = toTrimmed(event.queryStringParameters?.end);
+      const endResult = endParam === null ? null : parseDateInput(endParam ?? undefined);
+      if (endResult && typeof endResult === 'object' && 'error' in endResult) {
+        return endResult.error;
+      }
+      const endDate = endResult === undefined ? null : ((endResult as Date | null | undefined) ?? null);
+
+      const range = normalizeDateRange(startDate, endDate ?? startDate);
+      if (!range) {
+        return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
+      }
+
+      const maxRangeMs = 120 * 24 * 60 * 60 * 1000; // 120 días
+      if (range.end.getTime() - range.start.getTime() > maxRangeMs) {
+        return errorResponse('VALIDATION_ERROR', 'El rango máximo permitido es de 120 días', 400);
+      }
+
+      const dealFilter = toTrimmed(event.queryStringParameters?.dealId);
+      const productFilter = toTrimmed(event.queryStringParameters?.productId);
+      const salaFilter = toTrimmed(event.queryStringParameters?.roomId);
+      const trainerFilter = toTrimmed(event.queryStringParameters?.trainerId);
+      const unidadFilter = toTrimmed(event.queryStringParameters?.unitId);
+      const estadoParam = toTrimmed(event.queryStringParameters?.estado);
+
+      let estadoFilters: SessionEstado[] | null = null;
+      if (estadoParam) {
+        const values = estadoParam
+          .split(',')
+          .map((value) => toSessionEstado(value))
+          .filter((value): value is SessionEstado => !!value);
+        estadoFilters = values.length ? values : null;
+      }
+
+      const sessions = await prisma.sessions.findMany({
+        where: {
+          fecha_inicio_utc: { not: null },
+          fecha_fin_utc: { not: null },
+          ...(dealFilter ? { deal_id: dealFilter } : {}),
+          ...(productFilter ? { deal_product_id: productFilter } : {}),
+          ...(salaFilter ? { sala_id: salaFilter } : {}),
+          ...(trainerFilter ? { trainers: { some: { trainer_id: trainerFilter } } } : {}),
+          ...(unidadFilter ? { unidades: { some: { unidad_id: unidadFilter } } } : {}),
+          ...(estadoFilters
+            ? estadoFilters.length === 1
+              ? { estado: estadoFilters[0] }
+              : { estado: { in: estadoFilters } }
+            : {}),
+          AND: [
+            {
+              OR: [
+                { fecha_inicio_utc: { gte: range.start, lte: range.end } },
+                { fecha_fin_utc: { gte: range.start, lte: range.end } },
+                {
+                  AND: [
+                    { fecha_inicio_utc: { lte: range.start } },
+                    { fecha_fin_utc: { gte: range.end } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        include: {
+          deal: { select: { deal_id: true, title: true, training_address: true } },
+          deal_product: { select: { id: true, name: true, code: true } },
+          sala: { select: { sala_id: true, name: true, sede: true } },
+          trainers: {
+            select: {
+              trainer_id: true,
+              trainer: { select: { trainer_id: true, name: true, apellido: true } },
+            },
+          },
+          unidades: {
+            select: {
+              unidad_id: true,
+              unidad: { select: { unidad_id: true, name: true, matricula: true } },
+            },
+          },
+        },
+        orderBy: [
+          { fecha_inicio_utc: 'asc' },
+          { nombre_cache: 'asc' },
+        ],
+      });
+
+      const rowsById = new Map(sessions.map((row) => [row.id, row]));
+
+      const payload = sessions
+        .map((session) => normalizeSession(session as unknown as SessionRecord))
+        .filter((session) => session.fecha_inicio_utc && session.fecha_fin_utc)
+        .map((session) => {
+          const raw = rowsById.get(session.id);
+          const sala = raw?.sala
+            ? {
+                sala_id: raw.sala.sala_id,
+                name: raw.sala.name,
+                sede: raw.sala.sede ?? null,
+              }
+            : null;
+          const trainers = (raw?.trainers ?? [])
+            .map((link) =>
+              link.trainer
+                ? {
+                    trainer_id: link.trainer.trainer_id,
+                    name: link.trainer.name,
+                    apellido: link.trainer.apellido ?? null,
+                  }
+                : null,
+            )
+            .filter((value): value is { trainer_id: string; name: string; apellido: string | null } => !!value);
+          const unidades = (raw?.unidades ?? [])
+            .map((link) =>
+              link.unidad
+                ? {
+                    unidad_id: link.unidad.unidad_id,
+                    name: link.unidad.name,
+                    matricula: link.unidad.matricula ?? null,
+                  }
+                : null,
+            )
+            .filter((value): value is { unidad_id: string; name: string; matricula: string | null } => !!value);
+
+          return {
+            id: session.id,
+            deal_id: session.deal_id,
+            deal_title: raw?.deal?.title ?? null,
+            deal_training_address: raw?.deal?.training_address ?? null,
+            deal_product_id: session.deal_product_id,
+            product_name: raw?.deal_product?.name ?? null,
+            product_code: raw?.deal_product?.code ?? null,
+            nombre_cache: session.nombre_cache,
+            fecha_inicio_utc: session.fecha_inicio_utc,
+            fecha_fin_utc: session.fecha_fin_utc,
+            direccion: session.direccion,
+            comentarios: session.comentarios,
+            estado: session.estado,
+            sala,
+            trainers,
+            unidades,
+          };
+        });
+
+      return successResponse({
+        range: {
+          start: range.start.toISOString(),
+          end: range.end.toISOString(),
+        },
+        sessions: payload,
       });
     }
 

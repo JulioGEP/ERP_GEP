@@ -24,6 +24,7 @@ import logo from './assets/gep-group-logo.png';
 import { TrainersView } from './features/recursos/TrainersView';
 import { RoomsView } from './features/recursos/RoomsView';
 import { MobileUnitsView } from './features/recursos/MobileUnitsView';
+import { CalendarView } from './features/calendar/CalendarView';
 
 type NavView = {
   key: string;
@@ -55,6 +56,7 @@ const VIEW_ITEMS: NavView[] = NAVIGATION_ITEMS.flatMap((item) =>
 const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
   (item) =>
     item.key !== 'Presupuestos' &&
+    item.key !== 'Calendario' &&
     item.key !== 'Recursos/Formadores' &&
     item.key !== 'Recursos/Salas' &&
     item.key !== 'Recursos/Unidades'
@@ -62,7 +64,7 @@ const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
 
 type ToastMessage = {
   id: string;
-  variant: 'success' | 'danger';
+  variant: 'success' | 'danger' | 'info';
   message: string;
 };
 
@@ -133,6 +135,7 @@ export default function App() {
   });
 
   const isBudgetsView = activeView === 'Presupuestos';
+  const isCalendarView = activeView === 'Calendario';
   const isTrainersView = activeView === 'Recursos/Formadores';
   const isRoomsView = activeView === 'Recursos/Salas';
   const isMobileUnitsView = activeView === 'Recursos/Unidades';
@@ -270,6 +273,8 @@ export default function App() {
                 onDelete={handleDeleteBudget}
               />
             </div>
+          ) : isCalendarView ? (
+            <CalendarView onNotify={pushToast} />
           ) : isTrainersView ? (
             <TrainersView onNotify={pushToast} />
           ) : isRoomsView ? (
