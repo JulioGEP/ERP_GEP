@@ -28,6 +28,7 @@ import {
   isApiError
 } from './api';
 import { formatSedeLabel } from './formatSedeLabel';
+import { SessionsAccordion } from './sessions/SessionsAccordion';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
 
@@ -220,6 +221,11 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const detailProducts = detailView.products;
   const detailNotes = detailView.notes;
   const documents = deal?.documents ?? [];
+
+  const defaultSessionAddress =
+    form?.training_address?.trim()?.length
+      ? form.training_address
+      : deal?.training_address ?? summary?.training_address ?? null;
 
   const trainingProducts = useMemo(
     () =>
@@ -865,6 +871,11 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
               alwaysOpen
               className="mb-4"
             >
+              <SessionsAccordion
+                dealId={normalizedDealId}
+                dealAddress={defaultSessionAddress ?? null}
+                products={detailProducts}
+              />
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">
