@@ -11,7 +11,7 @@ import { SortableHeader } from '../../components/table/SortableHeader';
 import { DataTablePagination } from '../../components/table/DataTablePagination';
 
 export type ToastParams = {
-  variant: 'success' | 'danger';
+  variant: 'success' | 'danger' | 'info';
   message: string;
 };
 
