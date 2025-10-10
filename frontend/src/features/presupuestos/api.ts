@@ -8,6 +8,55 @@ import type {
   DealNote,
 } from "../../types/deal";
 
+export type SessionDTO = {
+  id: string;
+  deal_id: string;
+  deal_product_id: string;
+  nombre_cache: string;
+  fecha_inicio_utc: string | null;
+  fecha_fin_utc: string | null;
+  sala_id: string | null;
+  direccion: string;
+  comentarios: string | null;
+  trainer_ids: string[];
+  unidad_movil_ids: string[];
+};
+
+export type SessionGroupDTO = {
+  product: {
+    id: string;
+    code: string | null;
+    name: string | null;
+    quantity: number;
+  };
+  sessions: SessionDTO[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type TrainerOption = {
+  trainer_id: string;
+  name: string;
+  apellido: string | null;
+  activo: boolean;
+};
+
+export type RoomOption = {
+  sala_id: string;
+  name: string;
+  sede: string | null;
+};
+
+export type MobileUnitOption = {
+  unidad_id: string;
+  name: string;
+  matricula: string | null;
+};
+
 type Json = any;
 
 // Netlify Functions base (auto local/Netlify)
@@ -76,6 +125,18 @@ function pickNonEmptyString(
     }
   }
   return null;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value) {
+    if (entry === null || entry === undefined) continue;
+    const text = String(entry).trim();
+    if (!text.length) continue;
+    if (!out.includes(text)) out.push(text);
+  }
+  return out;
 }
 
 function buildPersonFullName(person?: {
@@ -329,6 +390,92 @@ function normalizeDealDocument(raw: any): DealDocument {
     url: rawUrl ?? null,
     created_at: toStringValue(raw?.created_at ?? raw?.added_at),
   };
+}
+
+function normalizeSession(row: any): SessionDTO {
+  const id = toStringValue(row?.id) ?? (row?.id != null ? String(row.id) : "");
+  const deal_id = toStringValue(row?.deal_id) ?? "";
+  const deal_product_id = toStringValue(row?.deal_product_id) ?? "";
+  const nombre_cache = toStringValue(row?.nombre_cache) ?? "Sesión";
+  const fecha_inicio_utc = toStringValue(row?.fecha_inicio_utc);
+  const fecha_fin_utc = toStringValue(row?.fecha_fin_utc);
+  const sala_id = toStringValue(row?.sala_id);
+  const direccion = toStringValue(row?.direccion) ?? "";
+  const comentarios = toStringValue(row?.comentarios);
+
+  const trainer_ids = toStringArray(row?.trainer_ids);
+  const unidad_movil_ids = toStringArray(row?.unidad_movil_ids);
+
+  return {
+    id,
+    deal_id,
+    deal_product_id,
+    nombre_cache,
+    fecha_inicio_utc: fecha_inicio_utc ?? null,
+    fecha_fin_utc: fecha_fin_utc ?? null,
+    sala_id: sala_id ?? null,
+    direccion,
+    comentarios: comentarios ?? null,
+    trainer_ids,
+    unidad_movil_ids,
+  };
+}
+
+function normalizeSessionGroup(raw: any): SessionGroupDTO {
+  const product = raw?.product ?? {};
+  const productId = toStringValue(product?.id) ?? (product?.id != null ? String(product.id) : "");
+  const quantity = toNumber(product?.quantity);
+
+  return {
+    product: {
+      id: productId,
+      code: toStringValue(product?.code),
+      name: toStringValue(product?.name),
+      quantity: quantity != null ? quantity : 0,
+    },
+    sessions: Array.isArray(raw?.sessions) ? raw.sessions.map((row: any) => normalizeSession(row)) : [],
+    pagination: {
+      page: toNumber(raw?.pagination?.page) ?? 1,
+      limit: toNumber(raw?.pagination?.limit) ?? 10,
+      total: toNumber(raw?.pagination?.total) ?? 0,
+      totalPages: toNumber(raw?.pagination?.totalPages) ?? 1,
+    },
+  };
+}
+
+function normalizeTrainerOption(raw: any): TrainerOption | null {
+  const trainer_id = toStringValue(raw?.trainer_id) ?? (raw?.trainer_id != null ? String(raw.trainer_id) : "");
+  if (!trainer_id) return null;
+  const name = toStringValue(raw?.name) ?? null;
+  if (!name) return null;
+  const apellido = toStringValue(raw?.apellido);
+  const activoValue = raw?.activo;
+  const activo = activoValue === undefined ? true : Boolean(activoValue);
+  return { trainer_id, name, apellido: apellido ?? null, activo };
+}
+
+function normalizeRoomOption(raw: any): RoomOption | null {
+  const sala_id = toStringValue(raw?.sala_id) ?? (raw?.sala_id != null ? String(raw.sala_id) : "");
+  if (!sala_id) return null;
+  const name = toStringValue(raw?.name) ?? null;
+  if (!name) return null;
+  return { sala_id, name, sede: toStringValue(raw?.sede) ?? null };
+}
+
+function normalizeMobileUnitOption(raw: any): MobileUnitOption | null {
+  const unidad_id = toStringValue(raw?.unidad_id) ?? (raw?.unidad_id != null ? String(raw.unidad_id) : "");
+  if (!unidad_id) return null;
+  const name = toStringValue(raw?.name) ?? null;
+  if (!name) return null;
+  return { unidad_id, name, matricula: toStringValue(raw?.matricula) ?? null };
+}
+
+function sanitizeStringArray(values: string[] | undefined): string[] | undefined {
+  if (!values) return undefined;
+  const normalized = values
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => value.length);
+  return Array.from(new Set(normalized));
 }
 
 /* =====================
@@ -599,6 +746,174 @@ export async function deleteDocument(dealId: string, docId: string): Promise<voi
     `/deal_documents/${encodeURIComponent(String(dealId))}/${encodeURIComponent(docId)}`,
     { method: "DELETE" }
   );
+}
+
+/* ==================
+ * Sesiones
+ * ================== */
+
+export async function generateSessionsFromDeal(dealId: string): Promise<number> {
+  const normalizedId = String(dealId ?? "").trim();
+  if (!normalizedId) {
+    throw new ApiError("VALIDATION_ERROR", "dealId es obligatorio");
+  }
+  const data = await request(`/sessions/generate-from-deal`, {
+    method: "POST",
+    body: JSON.stringify({ dealId: normalizedId }),
+  });
+  const count = toNumber(data?.count);
+  return count ?? 0;
+}
+
+export async function fetchDealSessions(
+  dealId: string,
+  options?: { productId?: string; page?: number; limit?: number }
+): Promise<SessionGroupDTO[]> {
+  const normalizedId = String(dealId ?? "").trim();
+  if (!normalizedId) {
+    throw new ApiError("VALIDATION_ERROR", "dealId es obligatorio");
+  }
+
+  const params = new URLSearchParams({ dealId: normalizedId });
+  if (options?.productId) params.set("productId", String(options.productId));
+  if (options?.page) params.set("page", String(options.page));
+  if (options?.limit) params.set("limit", String(options.limit));
+
+  const data = await request(`/sessions?${params.toString()}`);
+  const groups = Array.isArray(data?.groups) ? data.groups : [];
+  return groups.map((group: any) => normalizeSessionGroup(group));
+}
+
+export async function createSession(
+  payload: {
+    deal_id: string;
+    deal_product_id: string;
+    nombre_cache?: string;
+    fecha_inicio_utc?: string | null;
+    fecha_fin_utc?: string | null;
+    sala_id?: string | null;
+    direccion?: string | null;
+    comentarios?: string | null;
+    trainer_ids?: string[];
+    unidad_movil_ids?: string[];
+  }
+): Promise<SessionDTO> {
+  const body: Record<string, unknown> = {
+    deal_id: String(payload.deal_id ?? "").trim(),
+    deal_product_id: String(payload.deal_product_id ?? "").trim(),
+  };
+
+  if (!body.deal_id || !body.deal_product_id) {
+    throw new ApiError("VALIDATION_ERROR", "deal_id y deal_product_id son obligatorios");
+  }
+
+  if (payload.nombre_cache !== undefined) body.nombre_cache = payload.nombre_cache;
+  if (payload.fecha_inicio_utc !== undefined) body.fecha_inicio_utc = payload.fecha_inicio_utc;
+  if (payload.fecha_fin_utc !== undefined) body.fecha_fin_utc = payload.fecha_fin_utc;
+  if (payload.sala_id !== undefined) body.sala_id = payload.sala_id;
+  if (payload.direccion !== undefined) body.direccion = payload.direccion;
+  if (payload.comentarios !== undefined) body.comentarios = payload.comentarios;
+
+  const trainerIds = sanitizeStringArray(payload.trainer_ids);
+  if (trainerIds !== undefined) body.trainer_ids = trainerIds;
+
+  const unidadIds = sanitizeStringArray(payload.unidad_movil_ids);
+  if (unidadIds !== undefined) body.unidad_movil_ids = unidadIds;
+
+  const data = await request(`/sessions`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+  return normalizeSession(data?.session ?? {});
+}
+
+export async function patchSession(
+  sessionId: string,
+  payload: Partial<{
+    fecha_inicio_utc: string | null;
+    fecha_fin_utc: string | null;
+    sala_id: string | null;
+    direccion: string | null;
+    comentarios: string | null;
+    trainer_ids: string[];
+    unidad_movil_ids: string[];
+  }>
+): Promise<SessionDTO> {
+  const normalizedId = String(sessionId ?? "").trim();
+  if (!normalizedId) {
+    throw new ApiError("VALIDATION_ERROR", "sessionId es obligatorio");
+  }
+
+  const body: Record<string, unknown> = {};
+  if (Object.prototype.hasOwnProperty.call(payload, "fecha_inicio_utc"))
+    body.fecha_inicio_utc = payload.fecha_inicio_utc ?? null;
+  if (Object.prototype.hasOwnProperty.call(payload, "fecha_fin_utc"))
+    body.fecha_fin_utc = payload.fecha_fin_utc ?? null;
+  if (Object.prototype.hasOwnProperty.call(payload, "sala_id")) body.sala_id = payload.sala_id ?? null;
+  if (Object.prototype.hasOwnProperty.call(payload, "direccion")) body.direccion = payload.direccion ?? "";
+  if (Object.prototype.hasOwnProperty.call(payload, "comentarios"))
+    body.comentarios = payload.comentarios ?? null;
+
+  if (Object.prototype.hasOwnProperty.call(payload, "trainer_ids")) {
+    body.trainer_ids = sanitizeStringArray(payload.trainer_ids) ?? [];
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "unidad_movil_ids")) {
+    body.unidad_movil_ids = sanitizeStringArray(payload.unidad_movil_ids) ?? [];
+  }
+
+  const data = await request(`/sessions/${encodeURIComponent(normalizedId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+
+  return normalizeSession(data?.session ?? {});
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  const normalizedId = String(sessionId ?? "").trim();
+  if (!normalizedId) {
+    throw new ApiError("VALIDATION_ERROR", "sessionId es obligatorio");
+  }
+
+  await request(`/sessions/${encodeURIComponent(normalizedId)}`, {
+    method: "DELETE",
+  });
+}
+
+/* ==================
+ * Catálogos auxiliares
+ * ================== */
+
+export async function fetchActiveTrainers(): Promise<TrainerOption[]> {
+  const data = await request(`/trainers`);
+  const trainers = Array.isArray(data?.trainers) ? (data.trainers as unknown[]) : [];
+  return trainers
+    .map((trainer) => normalizeTrainerOption(trainer))
+    .filter((trainer): trainer is TrainerOption => !!trainer && trainer.activo)
+    .sort((a: TrainerOption, b: TrainerOption) => {
+      const nameA = `${a.name} ${a.apellido ?? ''}`.trim().toLowerCase();
+      const nameB = `${b.name} ${b.apellido ?? ''}`.trim().toLowerCase();
+      return nameA.localeCompare(nameB, 'es');
+    });
+}
+
+export async function fetchRoomsCatalog(): Promise<RoomOption[]> {
+  const data = await request(`/rooms`);
+  const rooms = Array.isArray(data?.rooms) ? (data.rooms as unknown[]) : [];
+  return rooms
+    .map((room) => normalizeRoomOption(room))
+    .filter((room): room is RoomOption => !!room)
+    .sort((a: RoomOption, b: RoomOption) => a.name.localeCompare(b.name, 'es'));
+}
+
+export async function fetchMobileUnitsCatalog(): Promise<MobileUnitOption[]> {
+  const data = await request(`/mobile-units`);
+  const units = Array.isArray(data?.mobileUnits) ? (data.mobileUnits as unknown[]) : [];
+  return units
+    .map((unit) => normalizeMobileUnitOption(unit))
+    .filter((unit): unit is MobileUnitOption => !!unit)
+    .sort((a: MobileUnitOption, b: MobileUnitOption) => a.name.localeCompare(b.name, 'es'));
 }
 
 /* =======================
