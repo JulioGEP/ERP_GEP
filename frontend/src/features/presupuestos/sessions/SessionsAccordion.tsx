@@ -916,9 +916,6 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                           <div className="fw-semibold text-truncate">
                             {form.nombre_cache?.trim() || `Sesión ${displayIndex}`}
                           </div>
-                          <div className="mt-1">
-                            <SessionStateBadge estado={form.estado} />
-                          </div>
                         </div>
                         <div className="d-flex align-items-center gap-3">
                           <div className="session-item-actions d-inline-flex align-items-center gap-2">
@@ -936,7 +933,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                               <DeleteIcon aria-hidden="true" />
                             </SessionActionIcon>
                           </div>
-                          <div className="text-end small text-nowrap">
+                          <div className="text-end text-nowrap">
                             {status.saving ? (
                               <span className="text-primary d-inline-flex align-items-center gap-1">
                                 <Spinner animation="border" size="sm" /> Guardando…
@@ -944,7 +941,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                             ) : status.error ? (
                               <span className="text-danger">Error al guardar</span>
                             ) : status.savedAt ? (
-                              <span className="text-success">Actualizado</span>
+                              <SessionStateBadge estado={form.estado} />
                             ) : (
                               <span className="text-muted">Sin cambios</span>
                             )}
