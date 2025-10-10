@@ -283,6 +283,11 @@ function buildSessionPatch(body: any): SessionPatchResult {
     data.comentarios = value;
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, 'nombre_cache')) {
+    const value = toOptionalText(body.nombre_cache);
+    data.nombre_cache = value ?? 'Sesión';
+  }
+
   let trainerIds: string[] | undefined;
   if (Object.prototype.hasOwnProperty.call(body, 'trainer_ids')) {
     const trainerIdsResult = ensureArrayOfStrings(body.trainer_ids);
