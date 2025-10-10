@@ -290,7 +290,7 @@ export const handler = async (event: any) => {
         prisma.deal_notes.deleteMany({ where: { deal_id: id } }),
         prisma.deal_files.deleteMany({ where: { deal_id: id } }),
         prisma.comments.deleteMany({ where: { deal_id: id } }),
-        prisma.seassons.deleteMany({ where: { deal_id: id } }),
+        prisma.sessions.deleteMany({ where: { deal_id: id } }),
         prisma.deals.delete({ where: { deal_id: id } }),
       ]);
 
