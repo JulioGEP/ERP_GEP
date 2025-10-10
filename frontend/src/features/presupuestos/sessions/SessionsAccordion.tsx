@@ -1199,87 +1199,6 @@ function SessionEditor({
             />
           </Form.Group>
         </Col>
-        <Col md={6} lg={4}>
-          <Form.Group controlId={`session-${form.id}-sala`}>
-            <Form.Label>Sala</Form.Label>
-            <Form.Select
-              value={form.sala_id ?? ''}
-              onChange={(event) =>
-                onChange((current) => ({ ...current, sala_id: event.target.value || null }))
-              }
-            >
-              <option value="">Sin sala asignada</option>
-              {rooms.map((room) => {
-                const label = room.sede ? `${room.name} (${room.sede})` : room.name;
-                const blocked = blockedRooms.has(room.sala_id);
-                const displayLabel = blocked ? `${label} · No disponible` : label;
-                return (
-                  <option
-                    key={room.sala_id}
-                    value={room.sala_id}
-                    disabled={blocked && form.sala_id !== room.sala_id}
-                    className={blocked ? 'session-option-unavailable' : undefined}
-                    style={blocked ? { color: '#dc3545', fontWeight: 600 } : undefined}
-                  >
-                    {displayLabel}
-                  </option>
-                );
-              })}
-            </Form.Select>
-            {availabilityError && (
-              <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
-            )}
-            {!availabilityError && roomWarningVisible && !form.sala_id && (
-              <div className="text-danger small mt-1">
-                Los recursos en rojo están reservados para estas fechas.
-              </div>
-            )}
-            {hasDateRange && availabilityFetching && !availabilityError && (
-              <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
-            )}
-          </Form.Group>
-        </Col>
-        <Col md={12} lg={8}>
-          <Form.Group controlId={`session-${form.id}-direccion`}>
-            <Form.Label>Dirección</Form.Label>
-            <div className="d-flex gap-2">
-              <Form.Control
-                value={form.direccion}
-                onChange={(event) =>
-                  onChange((current) => ({ ...current, direccion: event.target.value ?? '' }))
-                }
-              />
-              <Button
-                variant="outline-primary"
-                onClick={() => {
-                  if (form.direccion.trim()) {
-                    window.open(
-                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.direccion)}`,
-                      '_blank',
-                      'noopener,noreferrer',
-                    );
-                  }
-                }}
-                disabled={!form.direccion.trim()}
-              >
-                Ver
-              </Button>
-            </div>
-          </Form.Group>
-        </Col>
-        <Col md={12}>
-          <Form.Group controlId={`session-${form.id}-comentarios`}>
-            <Form.Label>Comentarios</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={2}
-              value={form.comentarios ?? ''}
-              onChange={(event) =>
-                onChange((current) => ({ ...current, comentarios: event.target.value || null }))
-              }
-            />
-          </Form.Group>
-        </Col>
       </Row>
 
       <Row className="g-3 mt-1">
@@ -1444,6 +1363,90 @@ function SessionEditor({
             {hasDateRange && availabilityFetching && !availabilityError && (
               <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
             )}
+          </Form.Group>
+        </Col>
+      </Row>
+
+      <Row className="g-3 mt-1">
+        <Col md={6} lg={4}>
+          <Form.Group controlId={`session-${form.id}-sala`}>
+            <Form.Label>Sala</Form.Label>
+            <Form.Select
+              value={form.sala_id ?? ''}
+              onChange={(event) =>
+                onChange((current) => ({ ...current, sala_id: event.target.value || null }))
+              }
+            >
+              <option value="">Sin sala asignada</option>
+              {rooms.map((room) => {
+                const label = room.sede ? `${room.name} (${room.sede})` : room.name;
+                const blocked = blockedRooms.has(room.sala_id);
+                const displayLabel = blocked ? `${label} · No disponible` : label;
+                return (
+                  <option
+                    key={room.sala_id}
+                    value={room.sala_id}
+                    disabled={blocked && form.sala_id !== room.sala_id}
+                    className={blocked ? 'session-option-unavailable' : undefined}
+                    style={blocked ? { color: '#dc3545', fontWeight: 600 } : undefined}
+                  >
+                    {displayLabel}
+                  </option>
+                );
+              })}
+            </Form.Select>
+            {availabilityError && (
+              <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
+            )}
+            {!availabilityError && roomWarningVisible && !form.sala_id && (
+              <div className="text-danger small mt-1">
+                Los recursos en rojo están reservados para estas fechas.
+              </div>
+            )}
+            {hasDateRange && availabilityFetching && !availabilityError && (
+              <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
+            )}
+          </Form.Group>
+        </Col>
+        <Col md={12} lg={8}>
+          <Form.Group controlId={`session-${form.id}-direccion`}>
+            <Form.Label>Dirección</Form.Label>
+            <div className="d-flex gap-2">
+              <Form.Control
+                value={form.direccion}
+                onChange={(event) =>
+                  onChange((current) => ({ ...current, direccion: event.target.value ?? '' }))
+                }
+              />
+              <Button
+                variant="outline-primary"
+                onClick={() => {
+                  if (form.direccion.trim()) {
+                    window.open(
+                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.direccion)}`,
+                      '_blank',
+                      'noopener,noreferrer',
+                    );
+                  }
+                }}
+                disabled={!form.direccion.trim()}
+              >
+                Ver
+              </Button>
+            </div>
+          </Form.Group>
+        </Col>
+        <Col md={12}>
+          <Form.Group controlId={`session-${form.id}-comentarios`}>
+            <Form.Label>Comentarios</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={2}
+              value={form.comentarios ?? ''}
+              onChange={(event) =>
+                onChange((current) => ({ ...current, comentarios: event.target.value || null }))
+              }
+            />
           </Form.Group>
         </Col>
       </Row>
