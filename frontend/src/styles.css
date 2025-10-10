@@ -343,3 +343,11 @@ option.session-option-unavailable {
   font-weight: 600;
   line-height: 1;
 }
+
+@media (max-width: 768px) {
+  .navbar .dropdown-menu[aria-labelledby='nav-Recursos'] {
+    left: 50% !important;
+    transform: translate3d(-50%, 0, 0) !important;
+    right: auto !important;
+  }
+}
