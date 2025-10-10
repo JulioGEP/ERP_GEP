@@ -8,6 +8,9 @@ const APPLICABLE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 30;
 
+// Certain unidades móviles act as placeholders and should never block availability checks.
+const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
+
 function toTrimmed(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -364,8 +367,12 @@ async function ensureResourcesAvailable(
     resourceConditions.push({ trainers: { some: { trainer_id: { in: trainerIds } } } });
   }
 
-  if (unidadIds && unidadIds.length) {
-    resourceConditions.push({ unidades: { some: { unidad_id: { in: unidadIds } } } });
+  const filteredUnidadIds = (unidadIds ?? []).filter((unidadId) =>
+    unidadId ? !ALWAYS_AVAILABLE_UNIT_IDS.has(unidadId) : false,
+  );
+
+  if (filteredUnidadIds.length) {
+    resourceConditions.push({ unidades: { some: { unidad_id: { in: filteredUnidadIds } } } });
   }
 
   if (salaId) {
