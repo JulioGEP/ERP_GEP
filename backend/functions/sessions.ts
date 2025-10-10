@@ -17,6 +17,7 @@ const SESSION_STATE_VALUES: SessionEstado[] = [
   'FINALIZADA',
 ];
 const MANUAL_SESSION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCELADA', 'FINALIZADA']);
+const BORRADOR_TRANSITION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCELADA']);
 
 type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>;
 
@@ -105,6 +106,10 @@ function toSessionEstado(value: unknown): SessionEstado | null {
 
 function isManualSessionEstado(value: SessionEstado | null | undefined): boolean {
   return value ? MANUAL_SESSION_STATES.has(value) : false;
+}
+
+function isBorradorTransitionEstado(value: SessionEstado | null | undefined): boolean {
+  return value ? BORRADOR_TRANSITION_STATES.has(value) : false;
 }
 
 function computeAutomaticSessionEstadoFromValues({
@@ -905,10 +910,16 @@ export const handler = async (event: any) => {
       });
 
       if (requestedEstado !== undefined) {
-        if (!isManualSessionEstado(requestedEstado)) {
+        const isCurrentManual = isManualSessionEstado(currentEstado);
+        const allowsBorradorToManual =
+          currentEstado === 'BORRADOR' && isBorradorTransitionEstado(requestedEstado);
+        const allowsManualToBorrador =
+          requestedEstado === 'BORRADOR' && isBorradorTransitionEstado(currentEstado);
+
+        if (!isManualSessionEstado(requestedEstado) && !allowsManualToBorrador) {
           return errorResponse('VALIDATION_ERROR', 'Estado no editable', 400);
         }
-        if (!isManualSessionEstado(currentEstado) && autoEstado !== 'PLANIFICADA') {
+        if (!isCurrentManual && !allowsBorradorToManual && autoEstado !== 'PLANIFICADA') {
           return errorResponse(
             'VALIDATION_ERROR',
             'La sesión debe estar planificada para cambiar el estado',
