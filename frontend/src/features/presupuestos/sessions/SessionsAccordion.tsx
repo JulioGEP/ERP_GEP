@@ -1108,9 +1108,7 @@ function SessionEditor({
   }, [availability, localLocks]);
 
   const hasDateRange = Boolean(availabilityRange);
-  const trainerWarningVisible = hasDateRange && blockedTrainers.size > 0;
   const roomWarningVisible = hasDateRange && blockedRooms.size > 0;
-  const unitWarningVisible = hasDateRange && blockedUnits.size > 0;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1352,11 +1350,6 @@ function SessionEditor({
             {availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
             )}
-            {!availabilityError && trainerWarningVisible && (
-              <div className="text-danger small mt-1">
-                Los recursos en rojo están reservados para estas fechas.
-              </div>
-            )}
             {hasDateRange && availabilityFetching && !availabilityError && (
               <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
             )}
@@ -1436,11 +1429,6 @@ function SessionEditor({
             </div>
             {availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
-            )}
-            {!availabilityError && unitWarningVisible && (
-              <div className="text-danger small mt-1">
-                Los recursos en rojo están reservados para estas fechas.
-              </div>
             )}
             {hasDateRange && availabilityFetching && !availabilityError && (
               <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
