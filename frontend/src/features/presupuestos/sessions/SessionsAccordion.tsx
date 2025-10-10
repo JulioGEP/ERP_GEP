@@ -29,6 +29,7 @@ import {
   fetchDealSessions,
   fetchMobileUnitsCatalog,
   fetchRoomsCatalog,
+  fetchSessionAvailability,
   patchSession,
   createSession,
   deleteSession,
@@ -188,6 +189,37 @@ function localInputToUtc(value: string | null): string | null | undefined {
   if (!Number.isFinite(baseDate.getTime())) return undefined;
   const offset = getTimeZoneOffset(baseDate, MADRID_TIMEZONE);
   return new Date(baseDate.getTime() - offset).toISOString();
+}
+
+type SessionRange = { start: Date; end: Date };
+
+function buildIsoRangeFromInputs(
+  startInput: string | null | undefined,
+  endInput: string | null | undefined,
+): { startIso: string; endIso: string } | null {
+  const startUtc = localInputToUtc(startInput ?? null);
+  const endUtc = localInputToUtc(endInput ?? null);
+  const effectiveStart = startUtc ?? endUtc;
+  const effectiveEnd = endUtc ?? startUtc;
+  if (!effectiveStart || !effectiveEnd) return null;
+  const startDate = new Date(effectiveStart);
+  const endDate = new Date(effectiveEnd);
+  if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime())) return null;
+  if (endDate.getTime() < startDate.getTime()) return null;
+  return { startIso: effectiveStart, endIso: effectiveEnd };
+}
+
+function getSessionRangeFromForm(form: SessionFormState): SessionRange | null {
+  const range = buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local);
+  if (!range) return null;
+  const start = new Date(range.startIso);
+  const end = new Date(range.endIso);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return null;
+  return { start, end };
+}
+
+function rangesOverlap(a: SessionRange, b: SessionRange): boolean {
+  return a.start.getTime() <= b.end.getTime() && b.start.getTime() <= a.end.getTime();
 }
 
 function mapSessionToForm(session: SessionDTO): SessionFormState {
@@ -858,6 +890,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                   trainers={trainers}
                   rooms={rooms}
                   units={units}
+                  allForms={forms}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
                 />
               ) : (
@@ -877,6 +910,7 @@ interface SessionEditorProps {
   trainers: TrainerOption[];
   rooms: RoomOption[];
   units: MobileUnitOption[];
+  allForms: Record<string, SessionFormState>;
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
 }
 
@@ -886,6 +920,7 @@ function SessionEditor({
   trainers,
   rooms,
   units,
+  allForms,
   onChange,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
@@ -929,6 +964,84 @@ function SessionEditor({
   const unitSummary = selectedUnits
     .map((unit) => (unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name))
     .join(', ');
+
+  const availabilityRange = useMemo(
+    () => buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local),
+    [form.fecha_inicio_local, form.fecha_fin_local],
+  );
+
+  const availabilityQuery = useQuery({
+    queryKey: availabilityRange
+      ? ['session-availability', form.id, availabilityRange.startIso, availabilityRange.endIso]
+      : ['session-availability', form.id, 'no-range'],
+    queryFn: () =>
+      fetchSessionAvailability({
+        start: availabilityRange!.startIso,
+        end: availabilityRange!.endIso,
+        excludeSessionId: form.id,
+      }),
+    enabled: Boolean(availabilityRange),
+    staleTime: 60_000,
+  });
+
+  const availabilityError =
+    availabilityQuery.error instanceof Error ? availabilityQuery.error : null;
+  const availabilityFetching = availabilityQuery.isFetching;
+
+  const localLocks = useMemo(() => {
+    const currentRange = getSessionRangeFromForm(form);
+    if (!currentRange) {
+      return {
+        trainers: new Set<string>(),
+        rooms: new Set<string>(),
+        units: new Set<string>(),
+      };
+    }
+
+    const trainerSet = new Set<string>();
+    const roomSet = new Set<string>();
+    const unitSet = new Set<string>();
+
+    for (const [sessionId, otherForm] of Object.entries(allForms)) {
+      if (sessionId === form.id) continue;
+      const otherRange = getSessionRangeFromForm(otherForm);
+      if (!otherRange) continue;
+      if (!rangesOverlap(currentRange, otherRange)) continue;
+      otherForm.trainer_ids.forEach((trainerId) => trainerSet.add(trainerId));
+      if (otherForm.sala_id) roomSet.add(otherForm.sala_id);
+      otherForm.unidad_movil_ids.forEach((unidadId) => unitSet.add(unidadId));
+    }
+
+    return { trainers: trainerSet, rooms: roomSet, units: unitSet };
+  }, [allForms, form.id, form.fecha_fin_local, form.fecha_inicio_local]);
+
+  const availability = availabilityQuery.data;
+
+  const blockedTrainers = useMemo(() => {
+    const set = new Set<string>();
+    localLocks.trainers.forEach((id) => set.add(id));
+    availability?.trainers?.forEach((id) => set.add(id));
+    return set;
+  }, [availability, localLocks]);
+
+  const blockedRooms = useMemo(() => {
+    const set = new Set<string>();
+    localLocks.rooms.forEach((id) => set.add(id));
+    availability?.rooms?.forEach((id) => set.add(id));
+    return set;
+  }, [availability, localLocks]);
+
+  const blockedUnits = useMemo(() => {
+    const set = new Set<string>();
+    localLocks.units.forEach((id) => set.add(id));
+    availability?.units?.forEach((id) => set.add(id));
+    return set;
+  }, [availability, localLocks]);
+
+  const hasDateRange = Boolean(availabilityRange);
+  const trainerWarningVisible = hasDateRange && blockedTrainers.size > 0;
+  const roomWarningVisible = hasDateRange && blockedRooms.size > 0;
+  const unitWarningVisible = hasDateRange && blockedUnits.size > 0;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1001,12 +1114,34 @@ function SessionEditor({
               }
             >
               <option value="">Sin sala asignada</option>
-              {rooms.map((room) => (
-                <option key={room.sala_id} value={room.sala_id}>
-                  {room.name} {room.sede ? `(${room.sede})` : ''}
-                </option>
-              ))}
+              {rooms.map((room) => {
+                const label = room.sede ? `${room.name} (${room.sede})` : room.name;
+                const blocked = blockedRooms.has(room.sala_id);
+                const displayLabel = blocked ? `${label} · No disponible` : label;
+                return (
+                  <option
+                    key={room.sala_id}
+                    value={room.sala_id}
+                    disabled={blocked && form.sala_id !== room.sala_id}
+                    className={blocked ? 'session-option-unavailable' : undefined}
+                    style={blocked ? { color: '#dc3545', fontWeight: 600 } : undefined}
+                  >
+                    {displayLabel}
+                  </option>
+                );
+              })}
             </Form.Select>
+            {availabilityError && (
+              <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
+            )}
+            {!availabilityError && roomWarningVisible && (
+              <div className="text-danger small mt-1">
+                Los recursos en rojo están reservados para estas fechas.
+              </div>
+            )}
+            {hasDateRange && availabilityFetching && !availabilityError && (
+              <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
+            )}
           </Form.Group>
         </Col>
         <Col md={12} lg={8}>
@@ -1091,12 +1226,20 @@ function SessionEditor({
                       {filteredTrainers.map((trainer) => {
                         const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
                         const checked = form.trainer_ids.includes(trainer.trainer_id);
+                        const blocked = blockedTrainers.has(trainer.trainer_id);
+                        const displayLabel = blocked ? `${label} · No disponible` : label;
                         return (
-                          <ListGroup.Item key={trainer.trainer_id} className="py-1">
+                          <ListGroup.Item
+                            key={trainer.trainer_id}
+                            className={`py-1${blocked ? ' session-option-unavailable' : ''}`}
+                          >
                             <Form.Check
                               type="checkbox"
-                              label={label}
+                              id={`session-${form.id}-trainer-${trainer.trainer_id}`}
+                              className={blocked ? 'session-option-unavailable' : undefined}
+                              label={displayLabel}
                               checked={checked}
+                              disabled={blocked && !checked}
                               onChange={(event) =>
                                 onChange((current) => {
                                   const set = new Set(current.trainer_ids);
@@ -1120,6 +1263,17 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
+            {availabilityError && (
+              <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
+            )}
+            {!availabilityError && trainerWarningVisible && (
+              <div className="text-danger small mt-1">
+                Los recursos en rojo están reservados para estas fechas.
+              </div>
+            )}
+            {hasDateRange && availabilityFetching && !availabilityError && (
+              <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
+            )}
           </Form.Group>
         </Col>
         <Col md={6}>
@@ -1157,12 +1311,20 @@ function SessionEditor({
                       {filteredUnits.map((unit) => {
                         const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
                         const checked = form.unidad_movil_ids.includes(unit.unidad_id);
+                        const blocked = blockedUnits.has(unit.unidad_id);
+                        const displayLabel = blocked ? `${label} · No disponible` : label;
                         return (
-                          <ListGroup.Item key={unit.unidad_id} className="py-1">
+                          <ListGroup.Item
+                            key={unit.unidad_id}
+                            className={`py-1${blocked ? ' session-option-unavailable' : ''}`}
+                          >
                             <Form.Check
                               type="checkbox"
-                              label={label}
+                              id={`session-${form.id}-unit-${unit.unidad_id}`}
+                              className={blocked ? 'session-option-unavailable' : undefined}
+                              label={displayLabel}
                               checked={checked}
+                              disabled={blocked && !checked}
                               onChange={(event) =>
                                 onChange((current) => {
                                   const set = new Set(current.unidad_movil_ids);
@@ -1186,6 +1348,17 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
+            {availabilityError && (
+              <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
+            )}
+            {!availabilityError && unitWarningVisible && (
+              <div className="text-danger small mt-1">
+                Los recursos en rojo están reservados para estas fechas.
+              </div>
+            )}
+            {hasDateRange && availabilityFetching && !availabilityError && (
+              <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
+            )}
           </Form.Group>
         </Col>
       </Row>

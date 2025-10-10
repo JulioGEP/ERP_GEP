@@ -238,6 +238,22 @@ body {
   border: none;
 }
 
+.session-option-unavailable,
+.session-option-unavailable .form-check-label,
+.session-option-unavailable .form-check-input:disabled + .form-check-label {
+  color: #dc3545 !important;
+  font-weight: 600;
+}
+
+.session-option-unavailable .form-check-input:disabled {
+  cursor: not-allowed;
+}
+
+option.session-option-unavailable {
+  color: #dc3545 !important;
+  font-weight: 600;
+}
+
 .session-list-item {
   transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
 }

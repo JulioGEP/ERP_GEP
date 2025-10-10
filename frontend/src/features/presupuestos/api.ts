@@ -57,6 +57,12 @@ export type MobileUnitOption = {
   matricula: string | null;
 };
 
+export type SessionAvailability = {
+  trainers: string[];
+  rooms: string[];
+  units: string[];
+};
+
 type Json = any;
 
 // Netlify Functions base (auto local/Netlify)
@@ -958,6 +964,26 @@ export async function fetchMobileUnitsCatalog(): Promise<MobileUnitOption[]> {
     .map((unit) => normalizeMobileUnitOption(unit))
     .filter((unit): unit is MobileUnitOption => !!unit)
     .sort((a: MobileUnitOption, b: MobileUnitOption) => a.name.localeCompare(b.name, 'es'));
+}
+
+export async function fetchSessionAvailability(params: {
+  start: string;
+  end?: string;
+  excludeSessionId?: string;
+}): Promise<SessionAvailability> {
+  const searchParams = new URLSearchParams();
+  searchParams.set('start', params.start);
+  if (params.end) searchParams.set('end', params.end);
+  if (params.excludeSessionId) searchParams.set('excludeSessionId', params.excludeSessionId);
+
+  const data = await request(`/sessions/availability?${searchParams.toString()}`);
+  const availability = data?.availability ?? {};
+
+  return {
+    trainers: toStringArray(availability.trainers),
+    rooms: toStringArray(availability.rooms),
+    units: toStringArray(availability.units),
+  };
 }
 
 /* =======================

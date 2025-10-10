@@ -251,7 +251,7 @@ function buildSessionPatch(body: any): SessionPatchResult {
     return { error: errorResponse('VALIDATION_ERROR', 'Body inválido', 400) };
   }
 
-  const data: Prisma.sessionsUpdateInput = {};
+  const data: Prisma.sessionsUpdateInput & Record<string, any> = {};
 
   if (Object.prototype.hasOwnProperty.call(body, 'fecha_inicio_utc')) {
     const parsed = parseDateInput(body.fecha_inicio_utc);
@@ -311,6 +311,97 @@ function ensureValidDateRange(start?: Date | null, end?: Date | null) {
   return null;
 }
 
+type DateRange = { start: Date; end: Date };
+
+function normalizeDateRange(
+  start: Date | null | undefined,
+  end: Date | null | undefined,
+): DateRange | null {
+  const effectiveStart = start ?? end ?? null;
+  const effectiveEnd = end ?? start ?? null;
+  if (!effectiveStart || !effectiveEnd) return null;
+
+  const startTime = effectiveStart.getTime();
+  const endTime = effectiveEnd.getTime();
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return null;
+  if (endTime < startTime) return null;
+
+  return {
+    start: new Date(startTime),
+    end: new Date(endTime),
+  };
+}
+
+async function ensureResourcesAvailable(
+  tx: Prisma.TransactionClient,
+  {
+    sessionId,
+    trainerIds,
+    unidadIds,
+    salaId,
+    start,
+    end,
+  }: {
+    sessionId?: string;
+    trainerIds?: string[];
+    unidadIds?: string[];
+    salaId?: string | null;
+    start?: Date | null;
+    end?: Date | null;
+  },
+) {
+  const range = normalizeDateRange(start ?? null, end ?? null);
+  if (!range) return;
+
+  const resourceConditions: Prisma.sessionsWhereInput[] = [];
+
+  if (trainerIds && trainerIds.length) {
+    resourceConditions.push({ trainers: { some: { trainer_id: { in: trainerIds } } } });
+  }
+
+  if (unidadIds && unidadIds.length) {
+    resourceConditions.push({ unidades: { some: { unidad_id: { in: unidadIds } } } });
+  }
+
+  if (salaId) {
+    resourceConditions.push({ sala_id: salaId });
+  }
+
+  if (!resourceConditions.length) return;
+
+  const sessions = await tx.sessions.findMany({
+    where: {
+      ...(sessionId ? { id: { not: sessionId } } : {}),
+      OR: resourceConditions,
+    },
+    select: {
+      id: true,
+      fecha_inicio_utc: true,
+      fecha_fin_utc: true,
+      sala_id: true,
+      trainers: { select: { trainer_id: true } },
+      unidades: { select: { unidad_id: true } },
+    },
+  });
+
+  const conflicting = sessions.filter((session) => {
+    const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
+    if (!sessionRange) return false;
+    return (
+      sessionRange.start.getTime() <= range.end.getTime() &&
+      sessionRange.end.getTime() >= range.start.getTime()
+    );
+  });
+
+  if (!conflicting.length) return;
+
+  throw errorResponse(
+    'RESOURCE_UNAVAILABLE',
+    'Algunos recursos ya están asignados en las fechas seleccionadas.',
+    409,
+  );
+}
+
 function parseLimit(value: unknown): number {
   const parsed = toPositiveInt(value, DEFAULT_LIMIT);
   return Math.min(parsed || DEFAULT_LIMIT, MAX_LIMIT);
@@ -349,7 +440,9 @@ export const handler = async (event: any) => {
     const prisma = getPrisma();
     const method = event.httpMethod;
     const path = event.path || '';
-    const sessionIdFromPath = parseSessionIdFromPath(path);
+    const isAvailabilityRequest =
+      /\/(?:\.netlify\/functions\/)?sessions\/availability$/i.test(path);
+    const sessionIdFromPath = isAvailabilityRequest ? null : parseSessionIdFromPath(path);
 
     if (method === 'POST' && /\/sessions\/generate-from-deal$/i.test(path)) {
       const body = parseJson(event.body);
@@ -361,6 +454,79 @@ export const handler = async (event: any) => {
       const result = await prisma.$transaction((tx) => generateSessionsForDeal(tx, dealId));
       if ('error' in result) return result.error;
       return successResponse({ count: result.count ?? 0 });
+    }
+
+    if (method === 'GET' && isAvailabilityRequest) {
+      const startParam = toTrimmed(event.queryStringParameters?.start);
+      if (!startParam) {
+        return errorResponse('VALIDATION_ERROR', 'El parámetro start es obligatorio', 400);
+      }
+
+      const startResult = parseDateInput(startParam);
+      if (startResult && 'error' in startResult) return startResult.error;
+      const startDate = startResult as Date | null | undefined;
+      if (!startDate) {
+        return errorResponse('VALIDATION_ERROR', 'El parámetro start es inválido', 400);
+      }
+
+      const endParam = toTrimmed(event.queryStringParameters?.end);
+      const endResult = endParam === null ? null : parseDateInput(endParam ?? undefined);
+      if (endResult && typeof endResult === 'object' && 'error' in endResult) {
+        return endResult.error;
+      }
+
+      const endDate =
+        endResult === undefined ? null : ((endResult as Date | null | undefined) ?? null);
+      const range = normalizeDateRange(startDate, endDate ?? startDate);
+      if (!range) {
+        return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
+      }
+
+      const excludeSessionId = toTrimmed(event.queryStringParameters?.excludeSessionId);
+
+      const sessions = await prisma.sessions.findMany({
+        where: {
+          ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
+          OR: [
+            { sala_id: { not: null } },
+            { trainers: { some: {} } },
+            { unidades: { some: {} } },
+          ],
+        },
+        select: {
+          id: true,
+          sala_id: true,
+          fecha_inicio_utc: true,
+          fecha_fin_utc: true,
+          trainers: { select: { trainer_id: true } },
+          unidades: { select: { unidad_id: true } },
+        },
+      });
+
+      const trainerLocks = new Set<string>();
+      const roomLocks = new Set<string>();
+      const unitLocks = new Set<string>();
+
+      sessions.forEach((session) => {
+        const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
+        if (!sessionRange) return;
+        if (
+          sessionRange.start.getTime() <= range.end.getTime() &&
+          sessionRange.end.getTime() >= range.start.getTime()
+        ) {
+          session.trainers.forEach((trainer) => trainerLocks.add(trainer.trainer_id));
+          session.unidades.forEach((unit) => unitLocks.add(unit.unidad_id));
+          if (session.sala_id) roomLocks.add(session.sala_id);
+        }
+      });
+
+      return successResponse({
+        availability: {
+          trainers: Array.from(trainerLocks),
+          rooms: Array.from(roomLocks),
+          units: Array.from(unitLocks),
+        },
+      });
     }
 
     if (method === 'GET') {
@@ -454,6 +620,11 @@ export const handler = async (event: any) => {
       if (rangeError) return rangeError;
 
       const direccion = toOptionalText(body.direccion);
+      const fechaInicioDate =
+        fechaInicioResult === undefined ? null : (fechaInicioResult as Date | null);
+      const fechaFinDate =
+        fechaFinResult === undefined ? null : (fechaFinResult as Date | null);
+      const salaId = toTrimmed(body.sala_id);
 
       const result = await prisma.$transaction(async (tx) => {
         const deal = await tx.deals.findUnique({
@@ -473,6 +644,15 @@ export const handler = async (event: any) => {
         }
 
         const baseName = buildNombreBase(product.name, product.code);
+
+        await ensureResourcesAvailable(tx, {
+          trainerIds: trainerIdsResult.length ? trainerIdsResult : undefined,
+          unidadIds: unidadIdsResult.length ? unidadIdsResult : undefined,
+          salaId: salaId ?? null,
+          start: fechaInicioDate,
+          end: fechaFinDate,
+        });
+
         const created = await tx.sessions.create({
           data: {
             id: randomUUID(),
@@ -480,16 +660,16 @@ export const handler = async (event: any) => {
             deal_product_id: product.id,
             nombre_cache: baseName,
             direccion: direccion ?? deal.training_address ?? '',
-            sala_id: toTrimmed(body.sala_id) ?? null,
+            sala_id: salaId ?? null,
             comentarios: body.comentarios === null ? null : toOptionalText(body.comentarios),
             fecha_inicio_utc:
               fechaInicioResult === undefined
                 ? undefined
-                : ((fechaInicioResult as Date | null | undefined) ?? null),
+                : ((fechaInicioDate as Date | null | undefined) ?? null),
             fecha_fin_utc:
               fechaFinResult === undefined
                 ? undefined
-                : ((fechaFinResult as Date | null | undefined) ?? null),
+                : ((fechaFinDate as Date | null | undefined) ?? null),
           },
         });
 
@@ -543,6 +723,9 @@ export const handler = async (event: any) => {
           deal_product_id: true,
           fecha_inicio_utc: true,
           fecha_fin_utc: true,
+          sala_id: true,
+          trainers: { select: { trainer_id: true } },
+          unidades: { select: { unidad_id: true } },
         },
       });
 
@@ -561,7 +744,31 @@ export const handler = async (event: any) => {
       const rangeError = ensureValidDateRange(fechaInicio, fechaFin);
       if (rangeError) return rangeError;
 
+      const nextTrainerIds =
+        trainerIds === undefined ? stored.trainers.map((entry) => entry.trainer_id) : trainerIds;
+      const nextUnidadIds =
+        unidadIds === undefined ? stored.unidades.map((entry) => entry.unidad_id) : unidadIds;
+
+      let nextSalaId = stored.sala_id;
+      if (Object.prototype.hasOwnProperty.call(data, 'sala_id')) {
+        const rawSala = (data as Record<string, any>).sala_id as any;
+        if (rawSala && typeof rawSala === 'object' && Object.prototype.hasOwnProperty.call(rawSala, 'set')) {
+          nextSalaId = (rawSala.set as string | null | undefined) ?? null;
+        } else {
+          nextSalaId = (rawSala as string | null | undefined) ?? null;
+        }
+      }
+
       const updated = await prisma.$transaction(async (tx) => {
+        await ensureResourcesAvailable(tx, {
+          sessionId: sessionIdFromPath,
+          trainerIds: nextTrainerIds,
+          unidadIds: nextUnidadIds,
+          salaId: nextSalaId,
+          start: fechaInicio,
+          end: fechaFin,
+        });
+
         const patch = await tx.sessions.update({
           where: { id: sessionIdFromPath },
           data,
