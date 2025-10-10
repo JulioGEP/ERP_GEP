@@ -1237,6 +1237,7 @@ function SessionEditor({
             <Form.Label>Fecha inicio</Form.Label>
             <Form.Control
               type="datetime-local"
+              step={300}
               value={form.fecha_inicio_local ?? ''}
               onChange={(event) => {
                 const rawValue = event.target.value ?? '';
@@ -1277,6 +1278,7 @@ function SessionEditor({
             <Form.Label>Fecha fin</Form.Label>
             <Form.Control
               type="datetime-local"
+              step={300}
               value={form.fecha_fin_local ?? ''}
               onChange={(event) =>
                 onChange((current) => ({ ...current, fecha_fin_local: event.target.value || null }))
