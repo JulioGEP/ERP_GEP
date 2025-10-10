@@ -204,9 +204,10 @@ model sessions {
   trainers     session_trainers[]
   unidades     session_unidades[]
 
-  @@index([deal_id])
-  @@index([deal_product_id])
-  @@index([sala_id])
+  @@index([deal_id], map: "idx_sesiones_deal_id")
+  @@index([deal_product_id], map: "idx_sesiones_deal_product_id")
+  @@index([sala_id], map: "idx_sesiones_sala_id")
+  @@map("sesiones")
 }
 
 model session_trainers {
@@ -218,19 +219,21 @@ model session_trainers {
   trainer trainers @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
 
   @@id([session_id, trainer_id])
-  @@index([trainer_id])
+  @@index([trainer_id], map: "idx_sesion_trainers_trainer_id")
+  @@map("sesion_trainers")
 }
 
 model session_unidades {
   session_id String
-  unidad_id  String
+  unidad_id  String   @map("unidad_mov_id")
   created_at DateTime @default(now()) @db.Timestamptz(6)
 
   session sessions         @relation(fields: [session_id], references: [id], onDelete: Cascade)
   unidad  unidades_moviles @relation(fields: [unidad_id], references: [unidad_id], onDelete: Cascade)
 
   @@id([session_id, unidad_id])
-  @@index([unidad_id])
+  @@index([unidad_id], map: "idx_sesion_unidades_unidad_mov_id")
+  @@map("sesion_unidades")
 }
 
 enum DocumentOrigin {
