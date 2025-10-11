@@ -650,33 +650,40 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                   >
                     <div className="erp-calendar-day-label">{day.date.day}</div>
                     <div className="erp-calendar-day-events">
-                      {day.sessions.map((session) => (
-                        <div
-                          key={session.id}
-                          className={`erp-calendar-event ${SESSION_CLASSNAMES[session.estado]}`}
-                          role="button"
-                          tabIndex={0}
-                          draggable
-                          onClick={() => onSessionOpen?.(session)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              onSessionOpen?.(session);
-                            }
-                          }}
-                          onDragEnd={handleEventDragEnd}
-                          onMouseEnter={(event) =>
-                            setTooltip({ session, rect: event.currentTarget.getBoundingClientRect() })
-                          }
-                          onMouseLeave={() => setTooltip(null)}
-                          onFocus={(event) =>
-                            setTooltip({ session, rect: event.currentTarget.getBoundingClientRect() })
-                          }
-                          onBlur={() => setTooltip(null)}
-                        >
-                          {renderSessionContent(session)}
-                        </div>
-                      ))}
+                      <ul className="erp-calendar-day-event-list">
+                        {day.sessions.map((session) => {
+                          const pipelineId = session.dealPipelineId ?? 'Sin pipeline';
+                          return (
+                            <li key={session.id} className="erp-calendar-day-event-list-item">
+                              <div
+                                className="erp-calendar-day-event-item"
+                                role="button"
+                                tabIndex={0}
+                                draggable
+                                aria-label={`Abrir sesión ${session.title}`}
+                                onClick={() => onSessionOpen?.(session)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter' || event.key === ' ') {
+                                    event.preventDefault();
+                                    onSessionOpen?.(session);
+                                  }
+                                }}
+                                onDragEnd={handleEventDragEnd}
+                                onMouseEnter={(event) =>
+                                  setTooltip({ session, rect: event.currentTarget.getBoundingClientRect() })
+                                }
+                                onMouseLeave={() => setTooltip(null)}
+                                onFocus={(event) =>
+                                  setTooltip({ session, rect: event.currentTarget.getBoundingClientRect() })
+                                }
+                                onBlur={() => setTooltip(null)}
+                              >
+                                <span className="erp-calendar-day-event-pipeline">{pipelineId}</span>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     </div>
                   </div>
                 ))}
