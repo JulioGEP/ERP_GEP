@@ -383,12 +383,24 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
       const endParts = getMadridDateTime(overlapEnd);
       let startMinutes = startParts.hour * 60 + startParts.minute;
       let endMinutes = endParts.hour * 60 + endParts.minute;
-      if (endMinutes <= startMinutes) {
-        endMinutes = startMinutes + 30;
+
+      if (continuesFromPreviousDay) {
+        startMinutes = 0;
       }
+
+      if (continuesIntoNextDay) {
+        endMinutes = DAY_MINUTES;
+      }
+
+      if (endMinutes <= startMinutes) {
+        endMinutes = Math.min(DAY_MINUTES, startMinutes + 30);
+      }
+
       const duration = Math.max(endMinutes - startMinutes, 30);
       const topPercent = (startMinutes / DAY_MINUTES) * 100;
       const heightPercent = Math.max((duration / DAY_MINUTES) * 100, MIN_EVENT_HEIGHT);
+      const displayStart = continuesFromPreviousDay ? '00:00' : madridTimeFormatter.format(overlapStart);
+      const displayEnd = continuesIntoNextDay ? '24:00' : madridTimeFormatter.format(overlapEnd);
       dayEvents.push({
         session,
         startMinutes,
@@ -397,8 +409,8 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
         heightPercent,
         column: 0,
         columns: 1,
-        displayStart: madridTimeFormatter.format(overlapStart),
-        displayEnd: madridTimeFormatter.format(overlapEnd),
+        displayStart,
+        displayEnd,
         continuesFromPreviousDay,
         continuesIntoNextDay,
       });
