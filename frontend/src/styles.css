@@ -839,3 +839,15 @@ option.session-option-unavailable {
     grid-template-columns: repeat(7, minmax(120px, 1fr));
   }
 }
+
+@media (min-width: 768px) {
+  .budget-field-narrow {
+    flex: 0 0 10% !important;
+    max-width: 10% !important;
+  }
+
+  .budget-field-wide {
+    flex: 0 0 26.6667% !important;
+    max-width: 26.6667% !important;
+  }
+}

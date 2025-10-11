@@ -769,7 +769,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   </Button>
                 </div>
               </Col>
-              <Col md={2}>
+              <Col md={2} className="budget-field-narrow">
                 <Form.Label>CAES</Form.Label>
                 <Form.Control
                   value={form.caes_label}
@@ -777,7 +777,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   style={affirmativeBorder(form.caes_label)}
                 />
               </Col>
-              <Col md={2}>
+              <Col md={2} className="budget-field-narrow">
                 <Form.Label>FUNDAE</Form.Label>
                 <Form.Control
                   value={form.fundae_label}
@@ -785,7 +785,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   style={affirmativeBorder(form.fundae_label)}
                 />
               </Col>
-              <Col md={2}>
+              <Col md={2} className="budget-field-narrow">
                 <Form.Label>Hotel</Form.Label>
                 <Form.Control
                   value={form.hotel_label}
@@ -801,11 +801,11 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   style={affirmativeBorder(deal.transporte ?? null)}
                 />
               </Col>
-              <Col md={2}>
+              <Col md={2} className="budget-field-wide">
                 <Form.Label>PO</Form.Label>
                 <Form.Control value={displayOrDash(deal.po ?? null)} readOnly />
               </Col>
-              <Col md={2}>
+              <Col md={2} className="budget-field-wide">
                 <Form.Label>Mail Factura</Form.Label>
                 <Form.Control value={displayOrDash(deal.mail_invoice ?? null)} readOnly />
               </Col>
