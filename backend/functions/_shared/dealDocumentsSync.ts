@@ -290,9 +290,17 @@ export async function syncDealDocumentsFromPipedrive({
         }
       }
 
-      const download = await withRetry(() => downloadFile(pipedriveFileId), 3, 500);
+      const download = await withRetry(
+        () =>
+          downloadFile({
+            id: pipedriveFileId,
+            file_name: typeof file?.file_name === "string" ? file.file_name : undefined,
+          }),
+        3,
+        500
+      );
       const chosenFileName = resolveFileName(
-        download.file_name_from_header,
+        download.downloadedFileName,
         file?.file_name,
         pipedriveFileId,
         download.mimeType ?? file?.file_type ?? null
