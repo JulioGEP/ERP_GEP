@@ -127,6 +127,7 @@ Las entidades principales gestionadas en la base de datos son:
 
 - Netlify ejecuta `npm run netlify:build`, que genera Prisma Client y compila el frontend.
 - Las funciones se empaquetan automáticamente. `backend.toml` define rutas y timeouts personalizados.
+- **Flujo de trabajo de tareas:** cuando se abre una nueva tarea solo se crea una rama en GitHub. El despliegue en Netlify se produce únicamente después de hacer merge a la rama principal.
 - Para desplegar manualmente:
   ```bash
   netlify deploy
