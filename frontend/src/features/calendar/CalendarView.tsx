@@ -533,6 +533,34 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
     | null
   >(null);
 
+  const tooltipStartLabel = tooltip
+    ? `${madridDateFormatter.format(new Date(tooltip.session.start))} · ${madridTimeFormatter.format(
+        new Date(tooltip.session.start),
+      )}`
+    : '';
+  const tooltipEndLabel = tooltip
+    ? `${madridDateFormatter.format(new Date(tooltip.session.end))} · ${madridTimeFormatter.format(
+        new Date(tooltip.session.end),
+      )}`
+    : '';
+  const tooltipCompanyLabel = tooltip?.session.dealTitle?.trim() || 'Sin empresa';
+  const tooltipAddressLabel =
+    tooltip?.session.dealAddress?.trim() || tooltip?.session.direccion?.trim() || 'Sin dirección';
+  const tooltipTrainersLabel =
+    tooltip && tooltip.session.trainers.length
+      ? tooltip.session.trainers
+          .map((trainer) =>
+            trainer.secondary ? `${trainer.name} ${trainer.secondary}`.trim() : trainer.name,
+          )
+          .join(', ')
+      : 'Sin formador';
+  const tooltipUnitsLabel =
+    tooltip && tooltip.session.units.length
+      ? tooltip.session.units
+          .map((unit) => (unit.secondary ? `${unit.name} ${unit.secondary}`.trim() : unit.name))
+          .join(', ')
+      : 'Sin unidad móvil';
+
   const handleEventDragEnd = useCallback(() => {
     onNotify?.({
       variant: 'info',
@@ -798,48 +826,15 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
             >
               <div className="erp-calendar-tooltip-content">
                 <div className="erp-calendar-tooltip-title">{tooltip.session.title}</div>
-                <div className="erp-calendar-tooltip-row">
-                  <span className="erp-calendar-tooltip-label">Inicio</span>
-                  <span className="erp-calendar-tooltip-value">
-                    {madridDateFormatter.format(new Date(tooltip.session.start))} ·{' '}
-                    {madridTimeFormatter.format(new Date(tooltip.session.start))}
-                  </span>
+                <div className="erp-calendar-tooltip-line">
+                  {tooltipStartLabel} - {tooltipEndLabel}
                 </div>
-                <div className="erp-calendar-tooltip-row">
-                  <span className="erp-calendar-tooltip-label">Fin</span>
-                  <span className="erp-calendar-tooltip-value">
-                    {madridDateFormatter.format(new Date(tooltip.session.end))} ·{' '}
-                    {madridTimeFormatter.format(new Date(tooltip.session.end))}
-                  </span>
+                <div className="erp-calendar-tooltip-line">
+                  {tooltipCompanyLabel} - {tooltipAddressLabel}
                 </div>
-                {tooltip.session.room ? (
-                  <div className="erp-calendar-tooltip-row">
-                    <span className="erp-calendar-tooltip-label">Sala</span>
-                    <span className="erp-calendar-tooltip-value">{tooltip.session.room.name}</span>
-                  </div>
-                ) : null}
-                {tooltip.session.trainers.length ? (
-                  <div className="erp-calendar-tooltip-row">
-                    <span className="erp-calendar-tooltip-label">Formador/es</span>
-                    <span className="erp-calendar-tooltip-value">
-                      {tooltip.session.trainers
-                        .map((trainer) =>
-                          trainer.secondary ? `${trainer.name} ${trainer.secondary}`.trim() : trainer.name,
-                        )
-                        .join(', ')}
-                    </span>
-                  </div>
-                ) : null}
-                {tooltip.session.units.length ? (
-                  <div className="erp-calendar-tooltip-row">
-                    <span className="erp-calendar-tooltip-label">Unidades</span>
-                    <span className="erp-calendar-tooltip-value">
-                      {tooltip.session.units
-                        .map((unit) => (unit.secondary ? `${unit.name} ${unit.secondary}`.trim() : unit.name))
-                        .join(', ')}
-                    </span>
-                  </div>
-                ) : null}
+                <div className="erp-calendar-tooltip-line">
+                  {tooltipTrainersLabel} - {tooltipUnitsLabel}
+                </div>
               </div>
             </div>
           ) : null}
