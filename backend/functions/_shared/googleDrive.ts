@@ -6,12 +6,17 @@ const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
-function getEnv(name: string): string {
-  const value = process.env[name];
-  if (!value || !String(value).trim()) {
-    throw new Error(`Falta ${name} en variables de entorno`);
+function getEnv(...names: string[]): string {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value && String(value).trim()) {
+      return String(value);
+    }
   }
-  return String(value);
+  if (names.length <= 1) {
+    throw new Error(`Falta ${names[0]} en variables de entorno`);
+  }
+  throw new Error(`Falta ${names.join(" o ")} en variables de entorno`);
 }
 
 function normalizePrivateKey(raw: string): string {
@@ -28,7 +33,7 @@ function base64UrlEncode(input: Buffer | string): string {
 }
 
 async function fetchAccessToken(): Promise<string> {
-  const clientEmail = getEnv("GOOGLE_DRIVE_ID_OAUTH2");
+  const clientEmail = getEnv("GOOGLE_DRIVE_CLIENT_EMAIL", "GOOGLE_DRIVE_ID_OAUTH2");
   const privateKey = normalizePrivateKey(getEnv("GOOGLE_DRIVE_PRIVATE_KEY"));
   const now = Math.floor(Date.now() / 1000);
 
