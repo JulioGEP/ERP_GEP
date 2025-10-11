@@ -18,8 +18,10 @@ const KEY_SEDE   = "676d6bd51e52999c582c01f67c99a35ed30bf6ae";
 const KEY_CAES   = "e1971bf3a21d48737b682bf8d864ddc5eb15a351";
 const KEY_FUNDAE = "245d60d4d18aec40ba888998ef92e5d00e494583";
 const KEY_HOTEL  = "c3a6daf8eb5b4e59c3c07cda8e01f43439101269";
-const KEY_TRANSPORTE = "30dccde5faa7c09a3b380f8597d4f9acfe403877";
-const KEY_PO         = "9cf8ccb7ef293494974f98ddbc72ec726486310e";
+const KEY_TRANSPORTE    = "30dccde5faa7c09a3b380f8597d4f9acfe403877";
+const KEY_PO            = "9cf8ccb7ef293494974f98ddbc72ec726486310e";
+const KEY_TIPO_SERVICIO = "1d78d202448ee549a86e0881ec06f3ff7842c5ea";
+const KEY_MAIL_INVOICE  = "8b0652b56fd17d4547149f1ae26b1b74b527eaf0";
 
 // HORAS en la **línea del deal** (si existe ese custom en tu instancia)
 const KEY_PRODUCT_HOURS_IN_LINE = "38f11c8876ecde803a027fbf3c9041fda2ae7eb7";
@@ -114,6 +116,7 @@ export async function resolveDealCustomLabels(deal: any) {
   const fFundae = findFieldDef(dealFields, KEY_FUNDAE);
   const fHotel  = findFieldDef(dealFields, KEY_HOTEL);
   const fTransporte = findFieldDef(dealFields, KEY_TRANSPORTE);
+  const fTipoServicio = findFieldDef(dealFields, KEY_TIPO_SERVICIO);
 
   // Dirección (no es options): prioriza *_formatted_address
   const trainingAddress = resolveAddressFromDeal(deal, KEY_TRAINING_ADDRESS_BASE);
@@ -126,12 +129,26 @@ export async function resolveDealCustomLabels(deal: any) {
   const transporteLabel = fTransporte
     ? optionLabelOf(fTransporte, deal?.[fTransporte.key]) ?? null
     : null;
+  const tipoServicioLabel = fTipoServicio
+    ? optionLabelOf(fTipoServicio, deal?.[fTipoServicio.key]) ?? null
+    : (() => {
+        const raw = deal?.[KEY_TIPO_SERVICIO];
+        if (raw === null || raw === undefined) return null;
+        const value = String(raw).trim();
+        return value.length ? value : null;
+      })();
 
   const poValueRaw = deal?.[KEY_PO];
   const poValue =
     poValueRaw === null || poValueRaw === undefined
       ? null
       : String(poValueRaw).trim() || null;
+
+  const mailInvoiceRaw = deal?.[KEY_MAIL_INVOICE];
+  const mailInvoice =
+    mailInvoiceRaw === null || mailInvoiceRaw === undefined
+      ? null
+      : String(mailInvoiceRaw).trim() || null;
 
   return {
     trainingAddress,
@@ -141,6 +158,8 @@ export async function resolveDealCustomLabels(deal: any) {
     hotelLabel,
     transporteLabel,
     poValue,
+    tipoServicioLabel,
+    mailInvoice,
   };
 }
 
@@ -167,7 +186,17 @@ export async function mapAndUpsertDealTree({
 
   // 1) Labels
   const pipelineLabel = await resolvePipelineLabel(deal?.pipeline_id);
-  const { trainingAddress, sedeLabel, caesLabel, fundaeLabel, hotelLabel, transporteLabel, poValue } =
+  const {
+    trainingAddress,
+    sedeLabel,
+    caesLabel,
+    fundaeLabel,
+    hotelLabel,
+    transporteLabel,
+    poValue,
+    tipoServicioLabel,
+    mailInvoice,
+  } =
     await resolveDealCustomLabels(deal);
 
   // 2) Organización
@@ -230,6 +259,8 @@ export async function mapAndUpsertDealTree({
       hotel_label: hotelLabel ?? null,
       transporte: transporteLabel ?? null,
       po: poValue ?? null,
+      tipo_servicio: tipoServicioLabel ?? null,
+      mail_invoice: mailInvoice ?? null,
       alumnos: 0,
       org_id: orgIdForDeal,
       person_id: dbPersonId,
@@ -244,6 +275,8 @@ export async function mapAndUpsertDealTree({
       hotel_label: keep(current?.hotel_label, hotelLabel),
       transporte: keep(current?.transporte, transporteLabel),
       po: poValue ?? null,
+      tipo_servicio: tipoServicioLabel ?? null,
+      mail_invoice: mailInvoice ?? null,
       alumnos: current?.alumnos ?? 0,
       org_id: orgIdForDeal,
       person_id: dbPersonId,

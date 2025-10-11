@@ -277,6 +277,8 @@ function normalizeDealSummary(row: Json): DealSummary {
     caes_label: toStringValue(row?.caes_label) ?? null,
     fundae_label: toStringValue(row?.fundae_label) ?? null,
     hotel_label: toStringValue(row?.hotel_label) ?? null,
+    tipo_servicio: toStringValue(row?.tipo_servicio) ?? null,
+    mail_invoice: toStringValue(row?.mail_invoice) ?? null,
 
     hours: toNumber(row?.hours) ?? null,
     alumnos: toNumber(row?.alumnos) ?? null,
@@ -319,6 +321,8 @@ function normalizeDealDetail(raw: Json): DealDetail {
         ? null
         : (toStringValue(raw.transporte) as "Si" | "Sí" | "No"),
     po: toStringValue(raw.po) ?? null,
+    tipo_servicio: toStringValue(raw.tipo_servicio) ?? null,
+    mail_invoice: toStringValue(raw.mail_invoice) ?? null,
 
     hours: toNumber(raw.hours) ?? null,
     alumnos: toNumber(raw.alumnos) ?? null,

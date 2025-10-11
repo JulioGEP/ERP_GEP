@@ -796,7 +796,7 @@ export const handler = async (event: any) => {
                   }
                 : null,
             )
-            .filter((value): value is { unidad_id: string; name: string; matricula: string | null } => !!value);
+            .filter((value): value is NonNullable<typeof value> => value != null);
 
           return {
             id: session.id,
