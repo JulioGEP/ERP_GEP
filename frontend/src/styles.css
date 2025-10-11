@@ -797,6 +797,12 @@ option.session-option-unavailable {
   gap: 0.5rem;
 }
 
+.erp-calendar-tooltip-line {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.35;
+}
+
 .erp-calendar-tooltip-row {
   display: flex;
   justify-content: space-between;
