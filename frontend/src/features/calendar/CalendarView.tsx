@@ -518,7 +518,14 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
     setCurrentDate(new Date());
   }, []);
 
-  const [tooltip, setTooltip] = useState<{ session: CalendarSession; rect: DOMRect } | null>(null);
+  const [tooltip, setTooltip] = useState<
+    | {
+        session: CalendarSession;
+        rect: DOMRect;
+        pointer?: { x: number; y: number };
+      }
+    | null
+  >(null);
 
   const handleEventDragEnd = useCallback(() => {
     onNotify?.({
@@ -717,7 +724,22 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                           }}
                           onDragEnd={handleEventDragEnd}
                           onMouseEnter={(evt) =>
-                            setTooltip({ session: event.session, rect: evt.currentTarget.getBoundingClientRect() })
+                            setTooltip({
+                              session: event.session,
+                              rect: evt.currentTarget.getBoundingClientRect(),
+                              pointer: { x: evt.clientX, y: evt.clientY },
+                            })
+                          }
+                          onMouseMove={(evt) =>
+                            setTooltip((current) =>
+                              current && current.session.id === event.session.id
+                                ? {
+                                    session: event.session,
+                                    rect: evt.currentTarget.getBoundingClientRect(),
+                                    pointer: { x: evt.clientX, y: evt.clientY },
+                                  }
+                                : current,
+                            )
                           }
                           onMouseLeave={() => setTooltip(null)}
                           onFocus={(evt) =>
@@ -739,10 +761,17 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
           {tooltip ? (
             <div
               className="erp-calendar-tooltip-overlay"
-              style={{
-                top: `${tooltip.rect.top + window.scrollY + tooltip.rect.height + 8}px`,
-                left: `${tooltip.rect.left + window.scrollX + tooltip.rect.width / 2}px`,
-              }}
+              style={
+                tooltip.pointer
+                  ? {
+                      top: `${tooltip.pointer.y + window.scrollY}px`,
+                      left: `${tooltip.pointer.x + window.scrollX}px`,
+                    }
+                  : {
+                      top: `${tooltip.rect.top + window.scrollY}px`,
+                      left: `${tooltip.rect.left + window.scrollX + tooltip.rect.width / 2}px`,
+                    }
+              }
             >
               <div className="erp-calendar-tooltip-content">
                 <div className="erp-calendar-tooltip-title">{tooltip.session.title}</div>
