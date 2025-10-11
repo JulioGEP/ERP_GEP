@@ -21,6 +21,43 @@ type FetchOpts = {
   body?: any;
 };
 
+function decodeRfc5987Value(str: string): string {
+  const parts = str.split("''");
+  if (parts.length === 2) {
+    try {
+      return decodeURIComponent(parts[1].replace(/\+/g, "%20"));
+    } catch {
+      return parts[1];
+    }
+  }
+  try {
+    return decodeURIComponent(str.replace(/\+/g, "%20"));
+  } catch {
+    return str;
+  }
+}
+
+function parseContentDispositionFilename(header: string | null): string | null {
+  if (!header) return null;
+  const segments = header.split(";").map((seg) => seg.trim());
+  for (const segment of segments) {
+    if (segment.toLowerCase().startsWith("filename*=")) {
+      const value = segment.substring(9).trim();
+      const cleaned = value.replace(/^utf-8''/i, "UTF-8''");
+      const withoutQuotes = cleaned.replace(/^"|"$/g, "");
+      return decodeRfc5987Value(withoutQuotes);
+    }
+  }
+  for (const segment of segments) {
+    if (segment.toLowerCase().startsWith("filename=")) {
+      const value = segment.substring(9).trim();
+      const withoutQuotes = value.replace(/^"|"$/g, "");
+      return withoutQuotes;
+    }
+  }
+  return null;
+}
+
 function qs(obj: Record<string, any>): string {
   const u = new URLSearchParams();
   for (const [k, v] of Object.entries(obj)) {
@@ -81,6 +118,34 @@ export async function getDealNotes(dealId: number | string, limit = 500) {
 export async function getDealFiles(dealId: number | string, limit = 500) {
   const id = encodeURIComponent(String(dealId));
   return pd(`/deals/${id}/files?${qs({ limit })}`);
+}
+
+export async function downloadFile(fileId: number | string) {
+  const token = process.env.PIPEDRIVE_API_TOKEN;
+  if (!token) {
+    throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
+  }
+  const url = `${BASE_URL}/files/${encodeURIComponent(String(fileId))}/download?api_token=${token}`;
+  const res = await fetch(url as any, {
+    method: "GET",
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`[pipedrive] GET /files/${fileId}/download -> ${res.status} ${text}`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  const contentDisposition = res.headers.get("content-disposition");
+  const fileNameFromHeader = parseContentDispositionFilename(contentDisposition);
+  const mimeType = res.headers.get("content-type") ?? undefined;
+
+  return {
+    buffer: Buffer.from(arrayBuffer),
+    file_name_from_header: fileNameFromHeader ?? undefined,
+    content_disposition: contentDisposition ?? undefined,
+    mimeType,
+  };
 }
 
 export async function getPipelines() {

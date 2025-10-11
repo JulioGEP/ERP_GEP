@@ -11,6 +11,7 @@ import {
   getDealFiles,
 } from "./_shared/pipedrive";
 import { mapAndUpsertDealTree } from "./_shared/mappers";
+import { syncDealDocumentsFromPipedrive } from "./_shared/dealDocumentsSync";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -93,8 +94,10 @@ function mapDealFileForApi(file: any) {
   if (!file) return file;
   const id = file.id != null ? String(file.id) : undefined;
   const rawUrl = typeof file.url === "string" ? file.url : null;
+  const rawDriveLink = typeof file.drive_web_view_link === "string" ? file.drive_web_view_link : null;
   const rawFileUrl = typeof file.file_url === "string" ? file.file_url : null;
-  const isHttp = isHttpUrl(rawUrl ?? rawFileUrl);
+  const httpCandidate = rawUrl ?? rawDriveLink ?? rawFileUrl;
+  const isHttp = isHttpUrl(httpCandidate);
 
   const createdAt = file.created_at ?? file.added_at ?? null;
 
@@ -103,7 +106,7 @@ function mapDealFileForApi(file: any) {
     source: isHttp ? "PIPEDRIVE" : "S3",
     name: file.file_name ?? file.name ?? null,
     mime_type: file.file_type ?? file.mime_type ?? null,
-    url: isHttp ? rawUrl ?? rawFileUrl ?? null : null,
+    url: isHttp ? httpCandidate ?? null : null,
     created_at: toMadridISOString(createdAt),
   };
 }
@@ -178,7 +181,14 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     person: person || (personId ? { id: personId } : undefined),
     products,
     notes,
+  });
+
+  const resolvedOrgName = org?.name ?? resolvePipedriveName(d) ?? null;
+  await syncDealDocumentsFromPipedrive({
+    deal: d,
+    dealId: savedDealId,
     files,
+    organizationName: resolvedOrgName,
   });
 
   // 3) Avisos no bloqueantes (warnings)
