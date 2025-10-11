@@ -15,7 +15,6 @@ export type CalendarSession = {
   dealId: string;
   dealTitle: string | null;
   dealAddress: string | null;
-  dealPipelineId: string | null;
   productId: string;
   productName: string | null;
   productCode: string | null;
@@ -135,7 +134,6 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
         dealId: toTrimmed(row?.deal_id) ?? '',
         dealTitle: toOptionalString(row?.deal_title),
         dealAddress: toOptionalString(row?.deal_training_address),
-        dealPipelineId: toOptionalString(row?.deal_pipeline_id),
         productId: toTrimmed(row?.deal_product_id) ?? '',
         productName: toOptionalString(row?.product_name),
         productCode: toOptionalString(row?.product_code),
