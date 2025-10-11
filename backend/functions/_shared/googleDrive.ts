@@ -1,22 +1,11 @@
 import { createSign } from "crypto";
+import { getGoogleDriveClientEmail, getGoogleDrivePrivateKey } from "./env";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3";
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
-
-function getEnv(name: string): string {
-  const value = process.env[name];
-  if (!value || !String(value).trim()) {
-    throw new Error(`Falta ${name} en variables de entorno`);
-  }
-  return String(value);
-}
-
-function normalizePrivateKey(raw: string): string {
-  return raw.includes("\n") ? raw : raw.replace(/\\n/g, "\n");
-}
 
 function base64UrlEncode(input: Buffer | string): string {
   const buffer = typeof input === "string" ? Buffer.from(input) : input;
@@ -28,8 +17,8 @@ function base64UrlEncode(input: Buffer | string): string {
 }
 
 async function fetchAccessToken(): Promise<string> {
-  const clientEmail = getEnv("GOOGLE_DRIVE_ID_OAUTH2");
-  const privateKey = normalizePrivateKey(getEnv("GOOGLE_DRIVE_PRIVATE_KEY"));
+  const clientEmail = getGoogleDriveClientEmail();
+  const privateKey = getGoogleDrivePrivateKey();
   const now = Math.floor(Date.now() / 1000);
 
   const header = { alg: "RS256", typ: "JWT" };
