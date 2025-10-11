@@ -696,6 +696,7 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
         ...current,
         [sessionId]: { saving: false, error: null, savedAt: Date.now() },
       }));
+      await qc.invalidateQueries({ queryKey: ['calendarSessions'] });
     } catch (error) {
       const message = isApiError(error)
         ? error.message
