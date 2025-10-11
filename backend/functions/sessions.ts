@@ -802,6 +802,7 @@ export const handler = async (event: any) => {
             id: session.id,
             deal_id: session.deal_id,
             deal_title: raw?.deal?.title ?? null,
+            deal_pipeline_id: raw?.deal?.pipeline_id ?? null,
             deal_training_address: raw?.deal?.training_address ?? null,
             deal_product_id: session.deal_product_id,
             product_name: raw?.deal_product?.name ?? null,
