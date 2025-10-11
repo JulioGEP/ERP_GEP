@@ -739,7 +739,7 @@ export const handler = async (event: any) => {
           ],
         },
         include: {
-          deal: { select: { deal_id: true, title: true, training_address: true } },
+          deal: { select: { deal_id: true, title: true, training_address: true, pipeline_id: true } },
           deal_product: { select: { id: true, name: true, code: true } },
           sala: { select: { sala_id: true, name: true, sede: true } },
           trainers: {
@@ -812,6 +812,7 @@ export const handler = async (event: any) => {
             direccion: session.direccion,
             comentarios: session.comentarios,
             estado: session.estado,
+            deal_pipeline_id: raw?.deal?.pipeline_id ?? null,
             sala,
             trainers,
             unidades,
