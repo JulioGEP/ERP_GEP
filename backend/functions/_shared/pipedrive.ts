@@ -120,30 +120,11 @@ export async function getDealFiles(dealId: number | string, limit = 500) {
   return pd(`/deals/${id}/files?${qs({ limit })}`);
 }
 
-type DownloadFileInput =
-  | { id: number | string; file_name?: string | null }
-  | { file_id: number | string; file_name?: string | null };
-
-function resolveFileId(input: DownloadFileInput): string {
-  if ("id" in input && input.id !== undefined && input.id !== null) {
-    return String(input.id);
-  }
-  if ("file_id" in input && input.file_id !== undefined && input.file_id !== null) {
-    return String(input.file_id);
-  }
-  throw new Error("downloadFile: falta id de archivo");
-}
-
-export async function downloadFile(file: DownloadFileInput): Promise<{
-  buffer: Buffer;
-  downloadedFileName?: string;
-  mimeType?: string;
-}> {
+export async function downloadFile(fileId: number | string) {
   const token = process.env.PIPEDRIVE_API_TOKEN;
   if (!token) {
     throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
   }
-  const fileId = resolveFileId(file);
   const url = `${BASE_URL}/files/${encodeURIComponent(String(fileId))}/download?api_token=${token}`;
   const res = await fetch(url as any, {
     method: "GET",
@@ -158,14 +139,11 @@ export async function downloadFile(file: DownloadFileInput): Promise<{
   const contentDisposition = res.headers.get("content-disposition");
   const fileNameFromHeader = parseContentDispositionFilename(contentDisposition);
   const mimeType = res.headers.get("content-type") ?? undefined;
-  const fallbackName = typeof file.file_name === "string" ? file.file_name : undefined;
-  const downloadedFileName = [fileNameFromHeader, fallbackName]
-    .map((name) => (typeof name === "string" ? name.trim() : ""))
-    .find((name) => name.length > 0);
 
   return {
     buffer: Buffer.from(arrayBuffer),
-    downloadedFileName: downloadedFileName && downloadedFileName.length ? downloadedFileName : undefined,
+    file_name_from_header: fileNameFromHeader ?? undefined,
+    content_disposition: contentDisposition ?? undefined,
     mimeType,
   };
 }

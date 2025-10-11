@@ -8,9 +8,8 @@ import {
   uploadFile,
 } from "./googleDrive";
 import { downloadFile } from "./pipedrive";
-import { getGoogleDriveSharedDriveId } from "./env";
 
-const SHARED_DRIVE_ID = getGoogleDriveSharedDriveId();
+const SHARED_DRIVE_ID = process.env.GOOGLE_DRIVE_SHARED_ID ?? "0AOXMlUY_16MGUk9PVA";
 const DEFAULT_ORG_FOLDER = "— Sin organización —";
 const SUBFOLDER_SEPARATOR = " – ";
 const MAX_NAME_LENGTH = 200;
@@ -171,6 +170,10 @@ export async function syncDealDocumentsFromPipedrive({
   files: any[];
   organizationName?: string | null;
 }): Promise<void> {
+  if (!SHARED_DRIVE_ID) {
+    console.warn("[deal-import][documents] Falta GOOGLE_DRIVE_SHARED_ID, se omite sincronización de documentos");
+    return;
+  }
   if (!Array.isArray(files) || files.length === 0) return;
 
   const prisma = getPrisma();
@@ -290,17 +293,9 @@ export async function syncDealDocumentsFromPipedrive({
         }
       }
 
-      const download = await withRetry(
-        () =>
-          downloadFile({
-            id: pipedriveFileId,
-            file_name: typeof file?.file_name === "string" ? file.file_name : undefined,
-          }),
-        3,
-        500
-      );
+      const download = await withRetry(() => downloadFile(pipedriveFileId), 3, 500);
       const chosenFileName = resolveFileName(
-        download.downloadedFileName,
+        download.file_name_from_header,
         file?.file_name,
         pipedriveFileId,
         download.mimeType ?? file?.file_type ?? null
