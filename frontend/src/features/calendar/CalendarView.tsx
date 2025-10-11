@@ -1,5 +1,5 @@
 // frontend/src/features/calendar/CalendarView.tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, ButtonGroup, Spinner } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCalendarSessions, type CalendarSession } from './api';
@@ -461,6 +461,7 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState<Date>(stored.date);
   const [visibleRange, setVisibleRange] = useState<VisibleRange>(() => computeVisibleRange(stored.view, stored.date));
   const debouncedRange = useDebouncedValue(visibleRange, DEBOUNCE_MS);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const nextRange = computeVisibleRange(view, currentDate);
@@ -597,6 +598,29 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
           .join(', ')
       : 'Sin unidad móvil';
 
+  const wrapperRect = wrapperRef.current?.getBoundingClientRect() ?? null;
+  const tooltipStyle = tooltip
+    ? wrapperRect
+      ? tooltip.pointer
+        ? {
+            top: `${tooltip.pointer.y - wrapperRect.top}px`,
+            left: `${tooltip.pointer.x - wrapperRect.left}px`,
+          }
+        : {
+            top: `${tooltip.rect.top - wrapperRect.top}px`,
+            left: `${tooltip.rect.left - wrapperRect.left + tooltip.rect.width / 2}px`,
+          }
+      : tooltip.pointer
+        ? {
+            top: `${tooltip.pointer.y + window.scrollY}px`,
+            left: `${tooltip.pointer.x + window.scrollX}px`,
+          }
+        : {
+            top: `${tooltip.rect.top + window.scrollY}px`,
+            left: `${tooltip.rect.left + window.scrollX + tooltip.rect.width / 2}px`,
+          }
+    : undefined;
+
   const handleEventDragEnd = useCallback(() => {
     onNotify?.({
       variant: 'info',
@@ -697,7 +721,7 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
 
       <div className="erp-calendar-surface">
         <div className="erp-calendar-toolbar-title">{formatToolbarLabel(view, visibleRange)}</div>
-        <div className="erp-calendar-wrapper">
+        <div className="erp-calendar-wrapper" ref={wrapperRef}>
           {(isInitialLoading || isFetching) && (
             <div className="erp-calendar-loading" role="status" aria-live="polite">
               <Spinner animation="border" variant="danger" />
@@ -852,20 +876,7 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
           ) : null}
 
           {tooltip ? (
-            <div
-              className="erp-calendar-tooltip-overlay"
-              style={
-                tooltip.pointer
-                  ? {
-                      top: `${tooltip.pointer.y + window.scrollY}px`,
-                      left: `${tooltip.pointer.x + window.scrollX}px`,
-                    }
-                  : {
-                      top: `${tooltip.rect.top + window.scrollY}px`,
-                      left: `${tooltip.rect.left + window.scrollX + tooltip.rect.width / 2}px`,
-                    }
-              }
-            >
+            <div className="erp-calendar-tooltip-overlay" style={tooltipStyle}>
               <div className="erp-calendar-tooltip-content">
                 <div className="erp-calendar-tooltip-title">{tooltip.session.title}</div>
                 <div className="erp-calendar-tooltip-line">
