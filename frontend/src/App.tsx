@@ -19,6 +19,7 @@ import {
   importDeal,
   deleteDeal,
 } from './features/presupuestos/api';
+import type { CalendarSession } from './features/calendar/api';
 import type { DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
 import { TrainersView } from './features/recursos/TrainersView';
@@ -194,6 +195,65 @@ export default function App() {
     setSelectedBudgetId(null);
   }, []);
 
+  const handleOpenCalendarSession = useCallback(
+    (session: CalendarSession) => {
+      const id = session.dealId?.trim();
+      if (!id) {
+        pushToast({ variant: 'danger', message: 'No se pudo determinar el identificador del presupuesto.' });
+        return;
+      }
+
+      const dealTitle = session.dealTitle?.trim() ?? '';
+      const sessionTitle = session.title.trim();
+      const summaryTitle = dealTitle.length
+        ? dealTitle
+        : sessionTitle.length
+        ? sessionTitle
+        : `Presupuesto ${id}`;
+
+      const productId = session.productId.trim();
+      const productName = session.productName?.trim() ?? '';
+      const productCode = session.productCode?.trim() ?? '';
+
+      const hasProductInfo = Boolean(productId.length || productName.length || productCode.length);
+
+      const productNames = productName.length
+        ? [productName]
+        : productCode.length
+        ? [productCode]
+        : undefined;
+
+      const summaryFromSession: DealSummary = {
+        deal_id: id,
+        dealId: id,
+        title: summaryTitle,
+        training_address: session.dealAddress,
+        organization: null,
+        person: null,
+        products: hasProductInfo
+          ? [
+              {
+                id: productId.length ? productId : null,
+                deal_id: id,
+                name: productName.length ? productName : null,
+                code: productCode.length ? productCode : null,
+                comments: session.comentarios ?? null,
+                quantity: null,
+                price: null,
+                type: null,
+                hours: null,
+              },
+            ]
+          : undefined,
+        productNames,
+      };
+
+      setSelectedBudgetSummary(summaryFromSession);
+      setSelectedBudgetId(id);
+    },
+    [pushToast],
+  );
+
   return (
     <div className="min-vh-100 d-flex flex-column">
       <Navbar bg="white" expand="lg" className="shadow-sm py-3">
@@ -274,7 +334,7 @@ export default function App() {
               />
             </div>
           ) : isCalendarView ? (
-            <CalendarView onNotify={pushToast} />
+            <CalendarView onNotify={pushToast} onSessionOpen={handleOpenCalendarSession} />
           ) : isTrainersView ? (
             <TrainersView onNotify={pushToast} />
           ) : isRoomsView ? (
