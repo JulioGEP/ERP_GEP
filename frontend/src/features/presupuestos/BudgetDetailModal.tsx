@@ -801,9 +801,13 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   style={affirmativeBorder(deal.transporte ?? null)}
                 />
               </Col>
-              <Col md={4}>
+              <Col md={2}>
                 <Form.Label>PO</Form.Label>
                 <Form.Control value={displayOrDash(deal.po ?? null)} readOnly />
+              </Col>
+              <Col md={2}>
+                <Form.Label>Mail Factura</Form.Label>
+                <Form.Control value={displayOrDash(deal.mail_invoice ?? null)} readOnly />
               </Col>
             </Row>
 
