@@ -127,6 +127,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         qc.invalidateQueries({ queryKey: detailQueryKey });
       }
       qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+      qc.invalidateQueries({ queryKey: ['calendarSessions'] });
 
       const warnings = Array.isArray(payload?.warnings)
         ? payload.warnings.filter((warning) => typeof warning === 'string' && warning.trim().length)
@@ -556,6 +557,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       );
       await qc.invalidateQueries({ queryKey: detailQueryKey });
       await qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+      await qc.invalidateQueries({ queryKey: ['calendarSessions'] });
       setShowConfirm(false);
     } catch (e: any) {
       alert(e?.message || 'No se pudieron guardar los cambios');
