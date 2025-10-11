@@ -595,9 +595,11 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
       const label = first.secondary ? `${first.name} ${first.secondary}`.trim() : first.name;
       chips.push(buildChipLabel('unit', label, rest.length));
     }
+    const eventTitle = session.dealPipelineId ?? session.title;
+
     return (
       <div className="erp-calendar-event-content">
-        <div className="erp-calendar-event-title">{session.title}</div>
+        <div className="erp-calendar-event-title">{eventTitle}</div>
         <div className="erp-calendar-event-meta">
           {chips.map((chip) => (
             <span key={chip} className="erp-calendar-chip">
