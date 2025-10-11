@@ -650,40 +650,37 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                   >
                     <div className="erp-calendar-day-label">{day.date.day}</div>
                     <div className="erp-calendar-day-events">
-                      <ul className="erp-calendar-day-event-list">
-                        {day.sessions.map((session) => {
-                          const pipelineId = session.dealPipelineId ?? 'Sin pipeline';
-                          return (
-                            <li key={session.id} className="erp-calendar-day-event-list-item">
-                              <div
-                                className="erp-calendar-day-event-item"
-                                role="button"
-                                tabIndex={0}
-                                draggable
-                                aria-label={`Abrir sesión ${session.title}`}
-                                onClick={() => onSessionOpen?.(session)}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    onSessionOpen?.(session);
-                                  }
-                                }}
-                                onDragEnd={handleEventDragEnd}
-                                onMouseEnter={(event) =>
-                                  setTooltip({ session, rect: event.currentTarget.getBoundingClientRect() })
-                                }
-                                onMouseLeave={() => setTooltip(null)}
-                                onFocus={(event) =>
-                                  setTooltip({ session, rect: event.currentTarget.getBoundingClientRect() })
-                                }
-                                onBlur={() => setTooltip(null)}
-                              >
-                                <span className="erp-calendar-day-event-pipeline">{pipelineId}</span>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                      {day.sessions.map((session) => (
+                        <div
+                          key={session.id}
+                          className={`erp-calendar-event ${SESSION_CLASSNAMES[session.estado]}`}
+                          role="button"
+                          tabIndex={0}
+                          draggable
+                          onClick={() => onSessionOpen?.(session)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              onSessionOpen?.(session);
+                            }
+                          }}
+                          onDragEnd={handleEventDragEnd}
+                          onMouseEnter={(event) => {
+                            const target = event.currentTarget;
+                            if (!target) return;
+                            setTooltip({ session, rect: target.getBoundingClientRect() });
+                          }}
+                          onMouseLeave={() => setTooltip(null)}
+                          onFocus={(event) => {
+                            const target = event.currentTarget;
+                            if (!target) return;
+                            setTooltip({ session, rect: target.getBoundingClientRect() });
+                          }}
+                          onBlur={() => setTooltip(null)}
+                        >
+                          {renderSessionContent(session)}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -730,28 +727,34 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                             }
                           }}
                           onDragEnd={handleEventDragEnd}
-                          onMouseEnter={(evt) =>
+                          onMouseEnter={(evt) => {
+                            const target = evt.currentTarget;
+                            if (!target) return;
                             setTooltip({
                               session: event.session,
-                              rect: evt.currentTarget.getBoundingClientRect(),
+                              rect: target.getBoundingClientRect(),
                               pointer: { x: evt.clientX, y: evt.clientY },
-                            })
-                          }
-                          onMouseMove={(evt) =>
+                            });
+                          }}
+                          onMouseMove={(evt) => {
+                            const target = evt.currentTarget;
+                            if (!target) return;
                             setTooltip((current) =>
                               current && current.session.id === event.session.id
                                 ? {
                                     session: event.session,
-                                    rect: evt.currentTarget.getBoundingClientRect(),
+                                    rect: target.getBoundingClientRect(),
                                     pointer: { x: evt.clientX, y: evt.clientY },
                                   }
                                 : current,
-                            )
-                          }
+                            );
+                          }}
                           onMouseLeave={() => setTooltip(null)}
-                          onFocus={(evt) =>
-                            setTooltip({ session: event.session, rect: evt.currentTarget.getBoundingClientRect() })
-                          }
+                          onFocus={(evt) => {
+                            const target = evt.currentTarget;
+                            if (!target) return;
+                            setTooltip({ session: event.session, rect: target.getBoundingClientRect() });
+                          }}
                           onBlur={() => setTooltip(null)}
                         >
                           <div className="erp-calendar-event-time">{event.displayStart} - {event.displayEnd}</div>

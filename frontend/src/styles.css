@@ -721,7 +721,7 @@ option.session-option-unavailable {
 
 .erp-calendar-week-columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(7, minmax(140px, 1fr));
   gap: 0.5rem;
   overflow-x: auto;
   padding-bottom: 0.25rem;
@@ -825,6 +825,6 @@ option.session-option-unavailable {
   }
 
   .erp-calendar-week-columns {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(7, minmax(120px, 1fr));
   }
 }
