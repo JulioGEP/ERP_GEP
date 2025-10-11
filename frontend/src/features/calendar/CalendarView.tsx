@@ -12,6 +12,15 @@ const FETCH_PADDING_DAYS = 14;
 const DEBOUNCE_MS = 220;
 const MIN_EVENT_HEIGHT = 3; // %
 const DAY_MINUTES = 24 * 60;
+const VISIBLE_DAY_START_HOUR = 5;
+const VISIBLE_DAY_END_HOUR = 24;
+const VISIBLE_DAY_START_MINUTES = VISIBLE_DAY_START_HOUR * 60;
+const VISIBLE_DAY_END_MINUTES = VISIBLE_DAY_END_HOUR * 60;
+const VISIBLE_DAY_DURATION_MINUTES = VISIBLE_DAY_END_MINUTES - VISIBLE_DAY_START_MINUTES;
+const VISIBLE_DAY_HOURS = Array.from(
+  { length: VISIBLE_DAY_END_HOUR - VISIBLE_DAY_START_HOUR + 1 },
+  (_, index) => VISIBLE_DAY_START_HOUR + index,
+);
 
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
@@ -396,10 +405,25 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
         endMinutes = Math.min(DAY_MINUTES, startMinutes + 30);
       }
 
-      const duration = Math.max(endMinutes - startMinutes, 30);
-      const topPercent = (startMinutes / DAY_MINUTES) * 100;
-      const heightPercent = Math.max((duration / DAY_MINUTES) * 100, MIN_EVENT_HEIGHT);
-      const displayStart = continuesFromPreviousDay ? '00:00' : madridTimeFormatter.format(overlapStart);
+      const clippedAtStart = startMinutes < VISIBLE_DAY_START_MINUTES;
+      const clippedAtEnd = endMinutes > VISIBLE_DAY_END_MINUTES;
+      const visibleStartMinutes = Math.min(
+        Math.max(startMinutes, VISIBLE_DAY_START_MINUTES),
+        VISIBLE_DAY_END_MINUTES,
+      );
+      const visibleEndMinutes = Math.min(
+        Math.max(endMinutes, visibleStartMinutes),
+        VISIBLE_DAY_END_MINUTES,
+      );
+      const visibleDuration = Math.max(visibleEndMinutes - visibleStartMinutes, 0);
+      const topPercent = ((visibleStartMinutes - VISIBLE_DAY_START_MINUTES) / VISIBLE_DAY_DURATION_MINUTES) * 100;
+      const heightPercent = Math.max(
+        (visibleDuration / VISIBLE_DAY_DURATION_MINUTES) * 100,
+        MIN_EVENT_HEIGHT,
+      );
+      const displayStart = continuesFromPreviousDay
+        ? '00:00'
+        : madridTimeFormatter.format(overlapStart);
       const displayEnd = continuesIntoNextDay ? '24:00' : madridTimeFormatter.format(overlapEnd);
       dayEvents.push({
         session,
@@ -411,8 +435,8 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
         columns: 1,
         displayStart,
         displayEnd,
-        continuesFromPreviousDay,
-        continuesIntoNextDay,
+        continuesFromPreviousDay: continuesFromPreviousDay || clippedAtStart,
+        continuesIntoNextDay: continuesIntoNextDay || clippedAtEnd,
       });
     });
 
@@ -744,9 +768,9 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
           ) : view !== 'month' && weekColumns ? (
             <div className={`erp-calendar-week-layout ${isDayView ? 'is-day-view' : ''}`}>
               <div className="erp-calendar-week-hours">
-                {Array.from({ length: 24 }).map((_, index) => (
-                  <div key={index} className="erp-calendar-hour-slot">
-                    <span>{pad(index)}:00</span>
+                {VISIBLE_DAY_HOURS.map((hour) => (
+                  <div key={hour} className="erp-calendar-hour-slot">
+                    <span>{pad(hour)}:00</span>
                   </div>
                 ))}
               </div>
