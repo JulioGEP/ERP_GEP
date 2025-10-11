@@ -563,7 +563,6 @@ export function CalendarView({ onNotify }: CalendarViewProps) {
       <header className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
         <div>
           <h1 className="h3 fw-bold mb-1">Calendario</h1>
-          <p className="text-muted mb-0">Visualiza las sesiones en horario Europe/Madrid</p>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-2">
           <Button variant="outline-secondary" className="fw-semibold" onClick={handleToday}>
