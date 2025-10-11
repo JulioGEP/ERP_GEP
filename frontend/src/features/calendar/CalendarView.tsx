@@ -612,6 +612,8 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
     );
   };
 
+  const isDayView = view === 'day';
+
   return (
     <section className="d-grid gap-4">
       <header className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
@@ -738,7 +740,7 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
               </div>
             </div>
           ) : view !== 'month' && weekColumns ? (
-            <div className="erp-calendar-week-layout">
+            <div className={`erp-calendar-week-layout ${isDayView ? 'is-day-view' : ''}`}>
               <div className="erp-calendar-week-hours">
                 {Array.from({ length: 24 }).map((_, index) => (
                   <div key={index} className="erp-calendar-hour-slot">
@@ -746,11 +748,13 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                   </div>
                 ))}
               </div>
-              <div className="erp-calendar-week-columns">
+              <div className={`erp-calendar-week-columns ${isDayView ? 'is-day-view' : ''}`}>
                 {weekColumns.map((column) => (
                   <div
                     key={column.iso}
-                    className={`erp-calendar-week-column ${column.isToday ? 'is-today' : ''}`}
+                    className={`erp-calendar-week-column ${column.isToday ? 'is-today' : ''} ${
+                      isDayView ? 'is-day-view' : ''
+                    }`}
                   >
                     <div className="erp-calendar-week-column-header">
                       <span className="erp-calendar-weekday">{column.weekdayLabel}</span>
