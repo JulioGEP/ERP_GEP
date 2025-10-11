@@ -96,23 +96,17 @@ function mapDealFileForApi(file: any) {
   const rawUrl = typeof file.url === "string" ? file.url : null;
   const rawDriveLink = typeof file.drive_web_view_link === "string" ? file.drive_web_view_link : null;
   const rawFileUrl = typeof file.file_url === "string" ? file.file_url : null;
-  const httpCandidate = rawFileUrl ?? rawDriveLink ?? rawUrl;
+  const httpCandidate = rawUrl ?? rawDriveLink ?? rawFileUrl;
   const isHttp = isHttpUrl(httpCandidate);
 
   const createdAt = file.created_at ?? file.added_at ?? null;
-  const resolvedName = file.file_name ?? file.name ?? null;
-  const resolvedType = file.file_type ?? file.mime_type ?? null;
-  const publicLink = isHttp ? httpCandidate ?? null : null;
 
   return {
     id,
     source: isHttp ? "PIPEDRIVE" : "S3",
-    name: resolvedName,
-    file_name: resolvedName,
-    mime_type: resolvedType,
-    file_type: resolvedType,
-    url: publicLink,
-    file_url: publicLink,
+    name: file.file_name ?? file.name ?? null,
+    mime_type: file.file_type ?? file.mime_type ?? null,
+    url: isHttp ? httpCandidate ?? null : null,
     created_at: toMadridISOString(createdAt),
   };
 }
