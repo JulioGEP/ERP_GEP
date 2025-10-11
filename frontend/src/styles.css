@@ -789,9 +789,8 @@ option.session-option-unavailable {
 }
 
 .erp-calendar-tooltip-overlay {
-  --erp-calendar-tooltip-gap: 12px;
   position: absolute;
-  transform: translate(-50%, calc(-100% - var(--erp-calendar-tooltip-gap)));
+  transform: translate(-50%, calc(-100% - 12px));
   background-color: rgba(42, 42, 42, 0.92);
   padding: 0.85rem 1rem;
   border-radius: 0.75rem;
