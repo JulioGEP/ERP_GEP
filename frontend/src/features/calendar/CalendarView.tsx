@@ -665,13 +665,17 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                             }
                           }}
                           onDragEnd={handleEventDragEnd}
-                          onMouseEnter={(event) =>
-                            setTooltip({ session, rect: event.currentTarget.getBoundingClientRect() })
-                          }
+                          onMouseEnter={(event) => {
+                            const target = event.currentTarget;
+                            if (!target) return;
+                            setTooltip({ session, rect: target.getBoundingClientRect() });
+                          }}
                           onMouseLeave={() => setTooltip(null)}
-                          onFocus={(event) =>
-                            setTooltip({ session, rect: event.currentTarget.getBoundingClientRect() })
-                          }
+                          onFocus={(event) => {
+                            const target = event.currentTarget;
+                            if (!target) return;
+                            setTooltip({ session, rect: target.getBoundingClientRect() });
+                          }}
                           onBlur={() => setTooltip(null)}
                         >
                           {renderSessionContent(session)}
@@ -723,28 +727,34 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                             }
                           }}
                           onDragEnd={handleEventDragEnd}
-                          onMouseEnter={(evt) =>
+                          onMouseEnter={(evt) => {
+                            const target = evt.currentTarget;
+                            if (!target) return;
                             setTooltip({
                               session: event.session,
-                              rect: evt.currentTarget.getBoundingClientRect(),
+                              rect: target.getBoundingClientRect(),
                               pointer: { x: evt.clientX, y: evt.clientY },
-                            })
-                          }
-                          onMouseMove={(evt) =>
+                            });
+                          }}
+                          onMouseMove={(evt) => {
+                            const target = evt.currentTarget;
+                            if (!target) return;
                             setTooltip((current) =>
                               current && current.session.id === event.session.id
                                 ? {
                                     session: event.session,
-                                    rect: evt.currentTarget.getBoundingClientRect(),
+                                    rect: target.getBoundingClientRect(),
                                     pointer: { x: evt.clientX, y: evt.clientY },
                                   }
                                 : current,
-                            )
-                          }
+                            );
+                          }}
                           onMouseLeave={() => setTooltip(null)}
-                          onFocus={(evt) =>
-                            setTooltip({ session: event.session, rect: evt.currentTarget.getBoundingClientRect() })
-                          }
+                          onFocus={(evt) => {
+                            const target = evt.currentTarget;
+                            if (!target) return;
+                            setTooltip({ session: event.session, rect: target.getBoundingClientRect() });
+                          }}
                           onBlur={() => setTooltip(null)}
                         >
                           <div className="erp-calendar-event-time">{event.displayStart} - {event.displayEnd}</div>
