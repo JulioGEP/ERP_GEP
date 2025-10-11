@@ -650,37 +650,42 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                   >
                     <div className="erp-calendar-day-label">{day.date.day}</div>
                     <div className="erp-calendar-day-events">
-                      {day.sessions.map((session) => (
-                        <div
-                          key={session.id}
-                          className={`erp-calendar-event ${SESSION_CLASSNAMES[session.estado]}`}
-                          role="button"
-                          tabIndex={0}
-                          draggable
-                          onClick={() => onSessionOpen?.(session)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              onSessionOpen?.(session);
-                            }
-                          }}
-                          onDragEnd={handleEventDragEnd}
-                          onMouseEnter={(event) => {
-                            const target = event.currentTarget;
-                            if (!target) return;
-                            setTooltip({ session, rect: target.getBoundingClientRect() });
-                          }}
-                          onMouseLeave={() => setTooltip(null)}
-                          onFocus={(event) => {
-                            const target = event.currentTarget;
-                            if (!target) return;
-                            setTooltip({ session, rect: target.getBoundingClientRect() });
-                          }}
-                          onBlur={() => setTooltip(null)}
-                        >
-                          {renderSessionContent(session)}
-                        </div>
-                      ))}
+                      {day.sessions.map((session) => {
+                        const monthEventLabel = session.dealPipelineId ?? session.title;
+                        return (
+                          <div
+                            key={session.id}
+                            className={`erp-calendar-event erp-calendar-month-event ${SESSION_CLASSNAMES[session.estado]}`}
+                            role="button"
+                            tabIndex={0}
+                            draggable
+                            title={monthEventLabel}
+                            onClick={() => onSessionOpen?.(session)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                onSessionOpen?.(session);
+                              }
+                            }}
+                            onDragEnd={handleEventDragEnd}
+                            onMouseEnter={(event) => {
+                              const target = event.currentTarget;
+                              if (!target) return;
+                              setTooltip({ session, rect: target.getBoundingClientRect() });
+                            }}
+                            onMouseLeave={() => setTooltip(null)}
+                            onFocus={(event) => {
+                              const target = event.currentTarget;
+                              if (!target) return;
+                              setTooltip({ session, rect: target.getBoundingClientRect() });
+                            }}
+                            onBlur={() => setTooltip(null)}
+                          >
+                            <span className="erp-calendar-month-event-dot" aria-hidden="true" />
+                            <span className="erp-calendar-month-event-text">{monthEventLabel}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

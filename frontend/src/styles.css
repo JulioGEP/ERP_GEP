@@ -419,6 +419,35 @@ option.session-option-unavailable {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+.erp-calendar-month-event {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 10px;
+  box-shadow: none;
+  min-height: 0;
+  line-height: 1.2;
+}
+
+.erp-calendar-month-event .erp-calendar-month-event-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background-color: var(--erp-calendar-accent);
+  flex-shrink: 0;
+}
+
+.erp-calendar-month-event .erp-calendar-month-event-text {
+  flex: 1 1 auto;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .erp-calendar-event:hover,
 .erp-calendar-event:focus-within {
   transform: translateY(-1px);
