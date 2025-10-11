@@ -15,36 +15,7 @@ function getEnv(name: string): string {
 }
 
 function normalizePrivateKey(raw: string): string {
-  if (!raw) return raw;
-
-  const trimmed = raw.trim();
-
-  // If the env var accidentally contains the full service account JSON, try to parse it
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (parsed && typeof parsed === "object" && typeof parsed.private_key === "string") {
-        return normalizePrivateKey(parsed.private_key);
-      }
-    } catch (error) {
-      // Ignore JSON parse errors – fall back to legacy behaviour
-    }
-  }
-
-  // Handle base64 encoded keys (common when storing them as secrets)
-  if (!trimmed.includes("BEGIN")) {
-    try {
-      const decoded = Buffer.from(trimmed, "base64").toString("utf8");
-      if (decoded && decoded.includes("PRIVATE KEY")) {
-        return normalizePrivateKey(decoded);
-      }
-    } catch (error) {
-      // Ignore base64 decoding errors – fall back to legacy behaviour
-    }
-  }
-
-  const withNewLines = trimmed.includes("\n") ? trimmed : trimmed.replace(/\\n/g, "\n");
-  return withNewLines;
+  return raw.includes("\n") ? raw : raw.replace(/\\n/g, "\n");
 }
 
 function base64UrlEncode(input: Buffer | string): string {
