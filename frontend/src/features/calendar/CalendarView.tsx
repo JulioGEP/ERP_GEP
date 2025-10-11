@@ -1,5 +1,5 @@
 // frontend/src/features/calendar/CalendarView.tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Alert, Button, ButtonGroup, Spinner } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCalendarSessions, type CalendarSession } from './api';
@@ -569,6 +569,19 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
     | null
   >(null);
 
+  const tooltipStyle: CSSProperties | undefined = tooltip
+    ? tooltip.pointer
+      ? {
+          top: `${tooltip.pointer.y + window.scrollY}px`,
+          left: `${tooltip.pointer.x + window.scrollX}px`,
+          '--erp-calendar-tooltip-gap': '0px',
+        }
+      : {
+          top: `${tooltip.rect.top + window.scrollY}px`,
+          left: `${tooltip.rect.left + window.scrollX + tooltip.rect.width / 2}px`,
+        }
+    : undefined;
+
   const tooltipStartLabel = tooltip
     ? `${madridDateFormatter.format(new Date(tooltip.session.start))} · ${madridTimeFormatter.format(
         new Date(tooltip.session.start),
@@ -852,20 +865,7 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
           ) : null}
 
           {tooltip ? (
-            <div
-              className="erp-calendar-tooltip-overlay"
-              style={
-                tooltip.pointer
-                  ? {
-                      top: `${tooltip.pointer.y + window.scrollY}px`,
-                      left: `${tooltip.pointer.x + window.scrollX}px`,
-                    }
-                  : {
-                      top: `${tooltip.rect.top + window.scrollY}px`,
-                      left: `${tooltip.rect.left + window.scrollX + tooltip.rect.width / 2}px`,
-                    }
-              }
-            >
+            <div className="erp-calendar-tooltip-overlay" style={tooltipStyle}>
               <div className="erp-calendar-tooltip-content">
                 <div className="erp-calendar-tooltip-title">{tooltip.session.title}</div>
                 <div className="erp-calendar-tooltip-line">
