@@ -38,6 +38,7 @@ type ToastParams = {
 
 type CalendarViewProps = {
   onNotify?: (toast: ToastParams) => void;
+  onSessionOpen?: (session: CalendarSession) => void;
 };
 
 type MadridDate = { year: number; month: number; day: number };
@@ -412,7 +413,7 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   return debounced;
 }
 
-export function CalendarView({ onNotify }: CalendarViewProps) {
+export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
   const stored = useMemo(() => readStoredPreferences(), []);
   const [view, setView] = useState<CalendarViewType>(stored.view);
   const [currentDate, setCurrentDate] = useState<Date>(stored.date);
@@ -646,7 +647,16 @@ export function CalendarView({ onNotify }: CalendarViewProps) {
                         <div
                           key={session.id}
                           className={`erp-calendar-event ${SESSION_CLASSNAMES[session.estado]}`}
+                          role="button"
+                          tabIndex={0}
                           draggable
+                          onClick={() => onSessionOpen?.(session)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              onSessionOpen?.(session);
+                            }
+                          }}
                           onDragEnd={handleEventDragEnd}
                           onMouseEnter={(event) =>
                             setTooltip({ session, rect: event.currentTarget.getBoundingClientRect() })
@@ -689,6 +699,8 @@ export function CalendarView({ onNotify }: CalendarViewProps) {
                         <div
                           key={`${event.session.id}-${event.startMinutes}`}
                           className={`erp-calendar-event erp-calendar-week-event ${SESSION_CLASSNAMES[event.session.estado]}`}
+                          role="button"
+                          tabIndex={0}
                           style={{
                             top: `${event.topPercent}%`,
                             height: `${event.heightPercent}%`,
@@ -696,6 +708,13 @@ export function CalendarView({ onNotify }: CalendarViewProps) {
                             width: `${100 / event.columns}%`,
                           }}
                           draggable
+                          onClick={() => onSessionOpen?.(event.session)}
+                          onKeyDown={(keyboardEvent) => {
+                            if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                              keyboardEvent.preventDefault();
+                              onSessionOpen?.(event.session);
+                            }
+                          }}
                           onDragEnd={handleEventDragEnd}
                           onMouseEnter={(evt) =>
                             setTooltip({ session: event.session, rect: evt.currentTarget.getBoundingClientRect() })
