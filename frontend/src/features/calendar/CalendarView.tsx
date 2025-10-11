@@ -72,6 +72,8 @@ type DayEvent = {
   columns: number;
   displayStart: string;
   displayEnd: string;
+  continuesFromPreviousDay: boolean;
+  continuesIntoNextDay: boolean;
 };
 
 type WeekColumn = {
@@ -373,6 +375,8 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
       const start = new Date(session.start);
       const end = new Date(session.end);
       if (end <= dayStart || start >= dayEnd) return;
+      const continuesFromPreviousDay = start < dayStart;
+      const continuesIntoNextDay = end > dayEnd;
       const overlapStart = new Date(Math.max(start.getTime(), dayStart.getTime()));
       const overlapEnd = new Date(Math.min(end.getTime(), dayEnd.getTime()));
       const startParts = getMadridDateTime(overlapStart);
@@ -395,6 +399,8 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
         columns: 1,
         displayStart: madridTimeFormatter.format(overlapStart),
         displayEnd: madridTimeFormatter.format(overlapEnd),
+        continuesFromPreviousDay,
+        continuesIntoNextDay,
       });
     });
 
@@ -709,7 +715,9 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                       {column.events.map((event) => (
                         <div
                           key={`${event.session.id}-${event.startMinutes}`}
-                          className={`erp-calendar-event erp-calendar-week-event ${SESSION_CLASSNAMES[event.session.estado]}`}
+                          className={`erp-calendar-event erp-calendar-week-event ${SESSION_CLASSNAMES[event.session.estado]} ${
+                            event.continuesFromPreviousDay ? 'is-continued-from-previous-day' : ''
+                          } ${event.continuesIntoNextDay ? 'is-continued-into-next-day' : ''}`}
                           role="button"
                           tabIndex={0}
                           style={{

@@ -409,11 +409,12 @@ option.session-option-unavailable {
   --erp-calendar-accent: var(--color-red);
   --erp-calendar-status-bg: rgba(232, 71, 77, 0.12);
   --erp-calendar-status-color: var(--color-red);
+  --erp-calendar-event-bg: #ffffff;
   border: 1px solid transparent;
   border-left: 4px solid var(--erp-calendar-accent);
   border-radius: 14px;
   padding: 0.35rem 0.5rem;
-  background-color: #ffffff;
+  background-color: var(--erp-calendar-event-bg);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
   color: var(--color-gray-dark);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -435,28 +436,28 @@ option.session-option-unavailable {
   --erp-calendar-accent: #1b9b4d;
   --erp-calendar-status-bg: rgba(27, 155, 77, 0.15);
   --erp-calendar-status-color: #1b9b4d;
-  background-color: #ecf9f1;
+  --erp-calendar-event-bg: #ecf9f1;
 }
 
 .erp-calendar-event.estado-suspendida {
   --erp-calendar-accent: #f0a400;
   --erp-calendar-status-bg: rgba(240, 164, 0, 0.18);
   --erp-calendar-status-color: #b07200;
-  background-color: #fff8e6;
+  --erp-calendar-event-bg: #fff8e6;
 }
 
 .erp-calendar-event.estado-cancelada {
   --erp-calendar-accent: var(--color-red);
   --erp-calendar-status-bg: rgba(232, 71, 77, 0.16);
   --erp-calendar-status-color: var(--color-red);
-  background-color: #fdecee;
+  --erp-calendar-event-bg: #fdecee;
 }
 
 .erp-calendar-event.estado-finalizada {
   --erp-calendar-accent: #3a7bd5;
   --erp-calendar-status-bg: rgba(58, 123, 213, 0.16);
   --erp-calendar-status-color: #2f63ad;
-  background-color: #edf3ff;
+  --erp-calendar-event-bg: #edf3ff;
 }
 
 .erp-calendar-event-content {
@@ -725,6 +726,18 @@ option.session-option-unavailable {
   position: absolute;
   padding: 0.35rem;
   overflow: hidden;
+}
+
+.erp-calendar-week-event.is-continued-from-previous-day {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  padding-top: 0.25rem;
+}
+
+.erp-calendar-week-event.is-continued-into-next-day {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-bottom: 0.25rem;
 }
 
 .erp-calendar-week-event .erp-calendar-event-content {
