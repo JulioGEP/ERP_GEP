@@ -9,10 +9,11 @@ import {
   uploadFile,
 } from "./googleDrive";
 import { downloadFile } from "./pipedrive";
+import { resolveDealCustomLabels } from "./mappers";
 
 const SHARED_DRIVE_ID = getGoogleDriveSharedDriveId();
 const DEFAULT_ORG_FOLDER = "— Sin organización —";
-const SUBFOLDER_SEPARATOR = " – ";
+const SUBFOLDER_SEPARATOR = " - ";
 const MAX_NAME_LENGTH = 200;
 
 function normalizeDriveName(raw: any, fallback: string): string {
@@ -108,10 +109,48 @@ function formatDateLabel(date: Date): string {
   return `${day}-${month}-${year}`;
 }
 
-function toDealFolderLabel(dealId: string, dealTitle: string | null, addTime: Date): string {
-  const titleNormalized = normalizeDriveName(dealTitle, `Deal ${dealId}`);
+type DealFolderMetadata = {
+  budgetNumber: string | null;
+  serviceLabel: string | null;
+};
+
+async function resolveDealFolderMetadata(deal: any): Promise<DealFolderMetadata> {
+  try {
+    const { poValue, tipoServicioLabel } = await resolveDealCustomLabels(deal);
+    return {
+      budgetNumber: poValue ?? null,
+      serviceLabel: tipoServicioLabel ?? null,
+    };
+  } catch (error) {
+    console.warn("[deal-import][document]", {
+      action: "resolve_folder_metadata_failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { budgetNumber: null, serviceLabel: null };
+  }
+}
+
+function toDealFolderLabel({
+  dealId,
+  addTime,
+  budgetNumber,
+  serviceLabel,
+}: {
+  dealId: string;
+  addTime: Date;
+  budgetNumber?: string | null;
+  serviceLabel?: string | null;
+}): string {
   const dateLabel = formatDateLabel(addTime);
-  const rawLabel = `${dateLabel}${SUBFOLDER_SEPARATOR}${dealId}${SUBFOLDER_SEPARATOR}${titleNormalized}`;
+  const budgetLabel = normalizeDriveName(
+    budgetNumber ?? "",
+    `Presupuesto ${dealId}`
+  );
+  const serviceLabelNormalized = normalizeDriveName(
+    serviceLabel ?? "",
+    "Formación"
+  );
+  const rawLabel = `${dateLabel}${SUBFOLDER_SEPARATOR}${budgetLabel}${SUBFOLDER_SEPARATOR}${serviceLabelNormalized}`;
   return normalizeDriveName(rawLabel, rawLabel);
 }
 
@@ -183,16 +222,24 @@ export async function syncDealDocumentsFromPipedrive({
     warnings: [],
   };
 
+  const prisma = getPrisma();
+  const addTime = parsePipedriveDate(deal?.add_time) ?? new Date();
+  const orgFolderName = resolveOrgName(organizationName ?? null);
+  const orgFolderId = await ensureOrgFolder(SHARED_DRIVE_ID, orgFolderName);
+
+  const { budgetNumber, serviceLabel } = await resolveDealFolderMetadata(deal);
+
   if (!Array.isArray(files) || files.length === 0) {
     return summary;
   }
 
-  const prisma = getPrisma();
-  const addTime = parsePipedriveDate(deal?.add_time) ?? new Date();
-  const orgFolderName = resolveOrgName(organizationName ?? null);
-  const dealFolderLabel = toDealFolderLabel(dealId, deal?.title ?? null, addTime);
+  const dealFolderLabel = toDealFolderLabel({
+    dealId,
+    addTime,
+    budgetNumber,
+    serviceLabel,
+  });
 
-  const orgFolderId = await ensureOrgFolder(SHARED_DRIVE_ID, orgFolderName);
   const dealFolderId = await ensureDealSubfolder(SHARED_DRIVE_ID, orgFolderId, dealFolderLabel);
 
   const existingRecords = (await prisma.deal_files.findMany({
