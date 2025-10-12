@@ -8,7 +8,7 @@ import {
   getPerson,
   getDealProducts,
   getDealNotes,
-  getDealFiles,
+  listDealFiles,
 } from "./_shared/pipedrive";
 import { mapAndUpsertDealTree } from "./_shared/mappers";
 import { syncDealDocumentsFromPipedrive } from "./_shared/dealDocumentsSync";
@@ -171,7 +171,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
   const [products, notes, files] = await Promise.all([
     getDealProducts(dealIdNum).then((x) => x ?? []),
     getDealNotes(dealIdNum).then((x) => x ?? []),
-    getDealFiles(dealIdNum).then((x) => x ?? []),
+    listDealFiles(dealIdNum).then((x) => x ?? []),
   ]);
 
   // 2) Mapear + upsert relacional en Neon
@@ -184,20 +184,31 @@ async function importDealFromPipedrive(dealIdRaw: any) {
   });
 
   const resolvedOrgName = org?.name ?? resolvePipedriveName(d) ?? null;
-  await syncDealDocumentsFromPipedrive({
-    deal: d,
-    dealId: savedDealId,
-    files,
-    organizationName: resolvedOrgName,
-  });
+  const warnings: string[] = [];
+
+  let documentsSummary: { imported: number; skipped: number; warnings: string[] } | null = null;
+  try {
+    documentsSummary = await syncDealDocumentsFromPipedrive({
+      deal: d,
+      dealId: savedDealId,
+      files,
+      organizationName: resolvedOrgName,
+    });
+  } catch (error: any) {
+    const message = error?.message ? String(error.message) : String(error);
+    warnings.push(`Sincronización de documentos fallida: ${message}`);
+  }
+
+  if (documentsSummary?.warnings?.length) {
+    warnings.push(...documentsSummary.warnings);
+  }
 
   // 3) Avisos no bloqueantes (warnings)
-  const warnings: string[] = [];
   if (!d.title) warnings.push("Falta título en el deal.");
   if (!d.pipeline_id) warnings.push("No se ha podido resolver el pipeline del deal.");
   if (!products?.length) warnings.push("El deal no tiene productos vinculados en Pipedrive.");
 
-  return { deal_id: savedDealId, warnings };
+  return { deal_id: savedDealId, warnings, documentsSummary };
 }
 
 /* ============================== HANDLER ============================== */
@@ -230,7 +241,7 @@ export const handler = async (event: any) => {
       if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
 
       try {
-        const { deal_id, warnings } = await importDealFromPipedrive(incomingId);
+        const { deal_id, warnings, documentsSummary } = await importDealFromPipedrive(incomingId);
         const dealRaw = await prisma.deals.findUnique({
           where: { deal_id: String(deal_id) },
           include: {
@@ -250,7 +261,23 @@ export const handler = async (event: any) => {
           },
         });
         const deal = mapDealForApi(dealRaw);
-        return successResponse({ ok: true, warnings, deal });
+        const documents = Array.isArray(dealRaw?.deal_files)
+          ? dealRaw.deal_files.map((doc: any) => ({
+              id: doc?.id ?? null,
+              file_name: doc?.file_name ?? null,
+              file_url: doc?.file_url ?? doc?.drive_web_view_link ?? null,
+            }))
+          : [];
+        const documents_count = documents.length;
+        const responseBody: Record<string, any> = {
+          ok: true,
+          warnings,
+          deal,
+          documents_count,
+        };
+        if (documents.length) responseBody.documents = documents;
+        if (documentsSummary) responseBody.documents_sync = documentsSummary;
+        return successResponse(responseBody);
       } catch (e: any) {
         return errorResponse("IMPORT_ERROR", e?.message || "Error importando deal", 502);
       }

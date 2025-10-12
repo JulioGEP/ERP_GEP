@@ -1,7 +1,7 @@
 // backend/functions/_shared/pipedrive.ts
 // Cliente y utilidades para Pipedrive centralizadas
 
-const BASE_URL = process.env.PIPEDRIVE_BASE_URL || "https://api.pipedrive.com/v1";
+const BASE_URL = process.env.PIPEDRIVE_API_BASE || "https://api.pipedrive.com/v1";
 
 // Cache en memoria simple (válida durante la vida de la función)
 const cache = new Map<string, any>();
@@ -115,7 +115,7 @@ export async function getDealNotes(dealId: number | string, limit = 500) {
   return pd(`/notes?${qs({ deal_id: String(dealId), limit, sort: "add_time DESC" })}`);
 }
 
-export async function getDealFiles(dealId: number | string, limit = 500) {
+export async function listDealFiles(dealId: number | string, limit = 500) {
   const id = encodeURIComponent(String(dealId));
   return pd(`/deals/${id}/files?${qs({ limit })}`);
 }
