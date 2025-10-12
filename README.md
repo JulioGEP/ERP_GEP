@@ -69,7 +69,11 @@ Crear un archivo `.env` en la raíz con las siguientes claves mínimas:
 - `ALLOWED_EMAIL_DOMAIN` — Dominio autorizado para iniciar sesión.
 - `DEFAULT_NOTE_AUTHOR` — Autor por defecto para notas importadas (opcional, por defecto `erp_user`).
 - `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` — Credenciales de AWS S3 para documentos.
-- Credenciales/keys necesarias para integrarse con la API de Pipedrive (no versionadas).
+- `PIPEDRIVE_API_TOKEN` — Token de la API de Pipedrive.
+- `PIPEDRIVE_COMPANY_DOMAIN` — Dominio de la cuenta de Pipedrive (ej. `gestionemergencias.pipedrive.com`).
+- `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY`, `GOOGLE_DRIVE_SHARED_DRIVE_ID` — Credenciales y unidad compartida utilizada para sincronizar documentos.
+
+> 📝 Configura las mismas variables en Netlify (Site settings → Build & deploy → Environment) para mantener paridad con el entorno local.
 
 > 🔒 **No** versionar archivos `.env` ni credenciales.
 

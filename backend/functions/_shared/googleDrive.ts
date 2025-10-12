@@ -1,11 +1,17 @@
 import { createSign } from "crypto";
-import { getGoogleDriveClientEmail, getGoogleDrivePrivateKey } from "./env";
+import {
+  getGoogleDriveClientEmail,
+  getGoogleDrivePrivateKey,
+  getGoogleDriveSharedDriveId,
+} from "./env";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3";
 const SCOPES = ["https://www.googleapis.com/auth/drive"];
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
+let validatedSharedDriveId: string | null = null;
+let sharedDriveValidationPromise: Promise<string> | null = null;
 
 function base64UrlEncode(input: Buffer | string): string {
   const buffer = typeof input === "string" ? Buffer.from(input) : input;
@@ -105,6 +111,57 @@ async function authorizedFetch(url: string, init: RequestInit = {}): Promise<Res
   const headers = toHeaders(init.headers as any);
   headers.set("Authorization", `Bearer ${token}`);
   return fetch(url, { ...init, headers });
+}
+
+function buildSharedDriveConfigError(message: string, cause?: unknown): Error {
+  const error = new Error(message);
+  (error as any).code = "GOOGLE_DRIVE_SHARED_DRIVE_CONFIG";
+  if (cause) (error as any).cause = cause;
+  return error;
+}
+
+export async function getValidatedSharedDriveId(): Promise<string> {
+  if (validatedSharedDriveId) return validatedSharedDriveId;
+
+  if (!sharedDriveValidationPromise) {
+    sharedDriveValidationPromise = (async () => {
+      const sharedDriveId = getGoogleDriveSharedDriveId();
+      const params = new URLSearchParams({ supportsAllDrives: "true", fields: "id,name" });
+      const response = await authorizedFetch(
+        `${DRIVE_API_BASE}/drives/${encodeURIComponent(sharedDriveId)}?${params.toString()}`,
+        { method: "GET" }
+      );
+
+      if (response.status === 404) {
+        throw buildSharedDriveConfigError(
+          `Configuración inválida: GOOGLE_DRIVE_SHARED_DRIVE_ID (${sharedDriveId}) no existe o es inaccesible para la service account.`
+        );
+      }
+      if (response.status === 403) {
+        throw buildSharedDriveConfigError(
+          `Configuración inválida: la service account no tiene acceso a la unidad configurada en GOOGLE_DRIVE_SHARED_DRIVE_ID (${sharedDriveId}).`
+        );
+      }
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw buildSharedDriveConfigError(
+          `Error al validar GOOGLE_DRIVE_SHARED_DRIVE_ID (${sharedDriveId}): ${response.status}${text ? ` ${text}` : ""}`
+        );
+      }
+
+      validatedSharedDriveId = sharedDriveId;
+      return sharedDriveId;
+    })();
+  }
+
+  try {
+    const id = await sharedDriveValidationPromise;
+    validatedSharedDriveId = id;
+    return id;
+  } catch (error) {
+    sharedDriveValidationPromise = null;
+    throw error;
+  }
 }
 
 function escapeForQuery(value: string): string {

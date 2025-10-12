@@ -1,7 +1,51 @@
 // backend/functions/_shared/pipedrive.ts
 // Cliente y utilidades para Pipedrive centralizadas
 
-const BASE_URL = process.env.PIPEDRIVE_API_BASE || "https://api.pipedrive.com/v1";
+function normalizeCompanyDomain(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.length) {
+    throw new Error("Falta PIPEDRIVE_COMPANY_DOMAIN en variables de entorno");
+  }
+  const withoutProtocol = trimmed.replace(/^https?:\/\//i, "");
+  return withoutProtocol.replace(/\/+$/g, "");
+}
+
+let cachedBaseUrl: string | null = null;
+let authValidationPromise: Promise<void> | null = null;
+
+function getBaseUrl(): string {
+  if (cachedBaseUrl) return cachedBaseUrl;
+  const domain = process.env.PIPEDRIVE_COMPANY_DOMAIN;
+  if (!domain) {
+    throw new Error("Falta PIPEDRIVE_COMPANY_DOMAIN en variables de entorno");
+  }
+  const normalizedDomain = normalizeCompanyDomain(domain);
+  cachedBaseUrl = `https://${normalizedDomain}/api/v1`;
+  return cachedBaseUrl;
+}
+
+async function ensureAuthValid(baseUrl: string, token: string): Promise<void> {
+  if (authValidationPromise) return authValidationPromise;
+  authValidationPromise = (async () => {
+    const url = `${baseUrl}/users/me?api_token=${token}`;
+    const res = await fetch(url as any, { method: "GET" });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const message = text?.trim().length ? ` ${text.trim()}` : "";
+      const error = new Error(
+        `[pipedrive] Validación de token fallida (${res.status}${message}). Verifica PIPEDRIVE_API_TOKEN y PIPEDRIVE_COMPANY_DOMAIN.`
+      );
+      throw error;
+    }
+  })();
+
+  try {
+    await authValidationPromise;
+  } catch (error) {
+    authValidationPromise = null;
+    throw error;
+  }
+}
 
 // Cache en memoria simple (válida durante la vida de la función)
 const cache = new Map<string, any>();
@@ -72,7 +116,9 @@ async function pd(path: string, opts: FetchOpts = {}) {
   if (!token) {
     throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
   }
-  const url = `${BASE_URL}${path}${path.includes("?") ? "&" : "?"}api_token=${token}`;
+  const baseUrl = getBaseUrl();
+  await ensureAuthValid(baseUrl, token);
+  const url = `${baseUrl}${path}${path.includes("?") ? "&" : "?"}api_token=${token}`;
 
   const res = await fetch(url as any, {
     method: opts.method ?? "GET",
@@ -125,7 +171,9 @@ export async function downloadFile(fileId: number | string) {
   if (!token) {
     throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
   }
-  const url = `${BASE_URL}/files/${encodeURIComponent(String(fileId))}/download?api_token=${token}`;
+  const baseUrl = getBaseUrl();
+  await ensureAuthValid(baseUrl, token);
+  const url = `${baseUrl}/files/${encodeURIComponent(String(fileId))}/download?api_token=${token}`;
   const res = await fetch(url as any, {
     method: "GET",
   });
