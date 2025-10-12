@@ -1,5 +1,4 @@
 import { COMMON_HEADERS, errorResponse, successResponse } from "./_shared/response";
-import { getPrisma } from "./_shared/prisma";
 import { getDeal, listDealFiles } from "./_shared/pipedrive";
 import { syncDealDocumentsFromPipedrive } from "./_shared/dealDocumentsSync";
 
@@ -61,20 +60,12 @@ export const handler = async (event: any) => {
     const { dealIdStr, dealIdNum } = resolvedDealId;
 
     if (route === "list") {
-      const prisma = getPrisma();
-      const documents = await prisma.deal_files.findMany({
-        where: { deal_id: dealIdStr },
-        orderBy: { created_at: "desc" },
-        select: {
-          id: true,
-          file_name: true,
-          file_url: true,
-          pipedrive_file_id: true,
-        },
-      });
+      const files = await listDealFiles(dealIdNum).then((result) =>
+        Array.isArray(result) ? result : []
+      );
       return successResponse({
-        documents,
-        documents_count: documents.length,
+        documents: files,
+        documents_count: files.length,
       });
     }
 
@@ -84,7 +75,17 @@ export const handler = async (event: any) => {
         return errorResponse("NOT_FOUND", "Deal no encontrado en Pipedrive", 404);
       }
 
-      const files = await listDealFiles(dealIdNum).then((result) => (Array.isArray(result) ? result : []));
+      const files = await listDealFiles(dealIdNum).then((result) =>
+        Array.isArray(result) ? result : []
+      );
+      if (!files.length) {
+        return successResponse({
+          message: "no hay archivos que sincronizar",
+          imported: 0,
+          skipped: 0,
+          warnings: [],
+        });
+      }
       const organizationName = resolveOrganizationNameFromDeal(deal);
       const summary = await syncDealDocumentsFromPipedrive({
         deal,
@@ -94,7 +95,6 @@ export const handler = async (event: any) => {
       });
 
       return successResponse({
-        ok: true,
         imported: summary.imported,
         skipped: summary.skipped,
         warnings: summary.warnings,
@@ -104,6 +104,9 @@ export const handler = async (event: any) => {
     return errorResponse("NOT_FOUND", "Ruta no soportada", 404);
   } catch (error: any) {
     const message = error?.message ? String(error.message) : String(error);
+    if (error?.code === "GOOGLE_DRIVE_SHARED_DRIVE_CONFIG") {
+      return errorResponse("CONFIG_ERROR", message, 500);
+    }
     return errorResponse("SYNC_ERROR", message, 500);
   }
 };

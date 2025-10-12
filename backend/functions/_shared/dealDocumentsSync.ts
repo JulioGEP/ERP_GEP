@@ -1,6 +1,6 @@
-import { getGoogleDriveSharedDriveId } from "./env";
 import { getPrisma } from "./prisma";
 import {
+  getValidatedSharedDriveId,
   ensureDealSubfolder,
   ensureOrgFolder,
   findByAppProps,
@@ -11,7 +11,6 @@ import {
 import { downloadFile } from "./pipedrive";
 import { resolveDealCustomLabels } from "./mappers";
 
-const SHARED_DRIVE_ID = getGoogleDriveSharedDriveId();
 const DEFAULT_ORG_FOLDER = "— Sin organización —";
 const SUBFOLDER_SEPARATOR = " - ";
 const MAX_NAME_LENGTH = 200;
@@ -222,16 +221,18 @@ export async function syncDealDocumentsFromPipedrive({
     warnings: [],
   };
 
-  const prisma = getPrisma();
   const addTime = parsePipedriveDate(deal?.add_time) ?? new Date();
   const orgFolderName = resolveOrgName(organizationName ?? null);
-  const orgFolderId = await ensureOrgFolder(SHARED_DRIVE_ID, orgFolderName);
-
-  const { budgetNumber, serviceLabel } = await resolveDealFolderMetadata(deal);
-
-  if (!Array.isArray(files) || files.length === 0) {
+  const normalizedFiles = Array.isArray(files) ? files : [];
+  if (!normalizedFiles.length) {
     return summary;
   }
+
+  const prisma = getPrisma();
+  const sharedDriveId = await getValidatedSharedDriveId();
+  const orgFolderId = await ensureOrgFolder(sharedDriveId, orgFolderName);
+
+  const { budgetNumber, serviceLabel } = await resolveDealFolderMetadata(deal);
 
   const dealFolderLabel = toDealFolderLabel({
     dealId,
@@ -240,7 +241,7 @@ export async function syncDealDocumentsFromPipedrive({
     serviceLabel,
   });
 
-  const dealFolderId = await ensureDealSubfolder(SHARED_DRIVE_ID, orgFolderId, dealFolderLabel);
+  const dealFolderId = await ensureDealSubfolder(sharedDriveId, orgFolderId, dealFolderLabel);
 
   const existingRecords = (await prisma.deal_files.findMany({
     where: { deal_id: dealId },
@@ -306,7 +307,7 @@ export async function syncDealDocumentsFromPipedrive({
     });
   };
 
-  for (const file of files) {
+  for (const file of normalizedFiles) {
     const pipedriveFileIdRaw = file?.id ?? file?.file_id;
     if (pipedriveFileIdRaw === null || pipedriveFileIdRaw === undefined) continue;
     const pipedriveFileId = String(pipedriveFileIdRaw);
