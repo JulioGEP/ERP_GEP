@@ -160,6 +160,12 @@ function resolveOrgName(raw: string | undefined | null): string {
   return normalizeDriveName(raw, DEFAULT_ORG_FOLDER);
 }
 
+export type DealDocumentsSyncResult = {
+  imported: number;
+  skipped: number;
+  warnings: string[];
+};
+
 export async function syncDealDocumentsFromPipedrive({
   deal,
   dealId,
@@ -170,8 +176,16 @@ export async function syncDealDocumentsFromPipedrive({
   dealId: string;
   files: any[];
   organizationName?: string | null;
-}): Promise<void> {
-  if (!Array.isArray(files) || files.length === 0) return;
+}): Promise<DealDocumentsSyncResult> {
+  const summary: DealDocumentsSyncResult = {
+    imported: 0,
+    skipped: 0,
+    warnings: [],
+  };
+
+  if (!Array.isArray(files) || files.length === 0) {
+    return summary;
+  }
 
   const prisma = getPrisma();
   const addTime = parsePipedriveDate(deal?.add_time) ?? new Date();
@@ -185,108 +199,95 @@ export async function syncDealDocumentsFromPipedrive({
     where: { deal_id: dealId },
   })) as any[];
   const existingByPdId = new Map<string, any>();
-  const existingById = new Map<string, any>();
   for (const record of existingRecords) {
-    const recordId = record?.id != null ? String(record.id) : null;
     const pdId = record?.pipedrive_file_id != null ? String(record.pipedrive_file_id) : null;
     if (pdId) existingByPdId.set(pdId, record);
-    if (recordId) existingById.set(recordId, record);
   }
+
+  const ensureRecordFromMetadata = async (
+    pipedriveFileId: string,
+    metadata: { id?: string | null; name?: string | null; webViewLink?: string | null } | null,
+    fallbackFile: any,
+    existing: any
+  ) => {
+    const chosenName = resolveFileName(
+      metadata?.name ?? undefined,
+      fallbackFile?.file_name,
+      pipedriveFileId,
+      fallbackFile?.file_type
+    );
+    const driveFileId = metadata?.id ?? existing?.drive_file_id ?? null;
+    const link = metadata?.webViewLink ?? existing?.drive_web_view_link ?? existing?.file_url ?? null;
+    const recordId = existing?.id ?? pipedriveFileId;
+    const now = new Date();
+    const uploadedAt = existing?.uploaded_at ?? now;
+    await (prisma.deal_files as any).upsert({
+      where: { id: recordId },
+      create: {
+        id: recordId,
+        deal_id: dealId,
+        file_name: chosenName,
+        file_type: fallbackFile?.file_type ?? existing?.file_type ?? null,
+        file_url: link,
+        drive_web_view_link: link,
+        drive_file_id: driveFileId,
+        pipedrive_file_id: pipedriveFileId,
+        added_at: parsePipedriveDate(fallbackFile?.add_time) ?? existing?.added_at ?? null,
+        uploaded_at: uploadedAt,
+      },
+      update: {
+        file_name: chosenName,
+        file_type: fallbackFile?.file_type ?? existing?.file_type ?? null,
+        file_url: link,
+        drive_web_view_link: link,
+        drive_file_id: driveFileId,
+        pipedrive_file_id: pipedriveFileId,
+        added_at: parsePipedriveDate(fallbackFile?.add_time) ?? existing?.added_at ?? null,
+        uploaded_at: uploadedAt,
+        updated_at: now,
+      },
+    });
+    const refreshed = await prisma.deal_files.findUnique({ where: { id: recordId } });
+    if (refreshed) existingByPdId.set(pipedriveFileId, refreshed);
+    summary.skipped += 1;
+    console.log("[deal-import][document]", {
+      dealId,
+      pipedriveFileId,
+      chosenFileName: chosenName,
+      action: "skip-existing",
+      driveFileId: driveFileId,
+    });
+  };
 
   for (const file of files) {
     const pipedriveFileIdRaw = file?.id ?? file?.file_id;
     if (pipedriveFileIdRaw === null || pipedriveFileIdRaw === undefined) continue;
     const pipedriveFileId = String(pipedriveFileIdRaw);
-
-    const existing = existingByPdId.get(pipedriveFileId) ?? existingById.get(pipedriveFileId) ?? null;
-
-    const ensureLinkUpdates = async (
-      recordId: string,
-      data: Partial<{
-        file_url: string | null;
-        drive_web_view_link: string | null;
-        drive_file_id: string | null;
-        file_name: string | null;
-        file_type: string | null;
-        uploaded_at: Date | null;
-      }>
-    ) => {
-      const updateData: Record<string, any> = {};
-      for (const [key, value] of Object.entries(data)) {
-        if (value !== undefined) updateData[key] = value;
-      }
-      if (Object.keys(updateData).length === 0) return;
-      updateData.updated_at = new Date();
-      await (prisma.deal_files as any).update({
-        where: { id: recordId },
-        data: updateData,
-      });
-    };
+    const existing = existingByPdId.get(pipedriveFileId) ?? null;
 
     try {
       if (existing?.drive_file_id) {
         const metadata = await getDriveFileMetadata(existing.drive_file_id);
         if (metadata) {
-          const latestLink = metadata.webViewLink ?? existing.drive_web_view_link ?? existing.file_url ?? null;
-          const latestName = metadata.name ?? existing.file_name ?? null;
-          await ensureLinkUpdates(existing.id, {
-            file_url: latestLink,
-            drive_web_view_link: latestLink,
-            file_name: latestName,
-          });
-          console.log("[deal-import][document]", {
-            dealId,
-            pipedriveFileId,
-            chosenFileName: latestName,
-            action: "skip-existing",
-            driveFileId: existing.drive_file_id,
-          });
+          await ensureRecordFromMetadata(pipedriveFileId, metadata, file, existing);
           continue;
         }
       }
 
-      let driveFileId = existing?.drive_file_id ?? null;
-      if (!driveFileId) {
-        const foundByProps = await findByAppProps(dealFolderId, buildAppProperties(dealId, pipedriveFileId));
-        if (foundByProps) {
-          const metadata = await getDriveFileMetadata(foundByProps);
-          if (metadata) {
-            const link = metadata.webViewLink ?? existing?.drive_web_view_link ?? existing?.file_url ?? null;
-            const recordId = existing?.id ?? pipedriveFileId;
-            await (prisma.deal_files as any).upsert({
-              where: { id: recordId },
-              create: {
-                id: recordId,
-                deal_id: dealId,
-                file_name: metadata.name ?? resolveFileName(undefined, file?.file_name, pipedriveFileId, file?.file_type),
-                file_type: file?.file_type ?? null,
-                file_url: link,
-                drive_web_view_link: link,
-                drive_file_id: foundByProps,
-                pipedrive_file_id: pipedriveFileId,
-                added_at: parsePipedriveDate(file?.add_time) ?? null,
-                uploaded_at: new Date(),
-              },
-              update: {
-                file_name: metadata.name ?? existing?.file_name ?? null,
-                file_type: file?.file_type ?? existing?.file_type ?? null,
-                file_url: link,
-                drive_web_view_link: link,
-                drive_file_id: foundByProps,
-                pipedrive_file_id: pipedriveFileId,
-                uploaded_at: existing?.uploaded_at ?? new Date(),
-                updated_at: new Date(),
-              },
-            });
-            console.log("[deal-import][document]", {
-              dealId,
-              pipedriveFileId,
-              chosenFileName: metadata.name ?? existing?.file_name,
-              action: "relinked-existing",
-              driveFileId: foundByProps,
-            });
-            continue;
-          }
+      const foundByProps = await findByAppProps(
+        dealFolderId,
+        buildAppProperties(dealId, pipedriveFileId)
+      );
+      if (foundByProps) {
+        const metadata = await getDriveFileMetadata(foundByProps);
+        if (metadata) {
+          await ensureRecordFromMetadata(
+            pipedriveFileId,
+            { ...metadata, id: foundByProps },
+            file,
+            existing
+          );
+          continue;
         }
       }
 
@@ -312,7 +313,7 @@ export async function syncDealDocumentsFromPipedrive({
         500
       );
 
-      await withRetry(() => setDomainPermission(uploadResult.driveFileId), 3, 500);
+      await withRetry(() => setDomainPermission(uploadResult.driveFileId, "gepgroup.es", "reader"), 3, 500);
 
       const recordId = existing?.id ?? pipedriveFileId;
       const webViewLink = uploadResult.webViewLink;
@@ -346,6 +347,10 @@ export async function syncDealDocumentsFromPipedrive({
         },
       });
 
+      const refreshed = await prisma.deal_files.findUnique({ where: { id: recordId } });
+      if (refreshed) existingByPdId.set(pipedriveFileId, refreshed);
+
+      summary.imported += 1;
       console.log("[deal-import][document]", {
         dealId,
         pipedriveFileId,
@@ -354,14 +359,20 @@ export async function syncDealDocumentsFromPipedrive({
         driveFileId: uploadResult.driveFileId,
       });
     } catch (error: any) {
+      const message = error?.message ? String(error.message) : String(error);
+      summary.warnings.push(
+        `No se pudo sincronizar el fichero ${pipedriveFileId}: ${message}`
+      );
       console.error("[deal-import][document]", {
         dealId,
         pipedriveFileId,
         chosenFileName: existing?.file_name ?? file?.file_name ?? null,
         action: "document_upload_failed",
         driveFileId: existing?.drive_file_id ?? null,
-        error: error?.message ?? String(error),
+        error: message,
       });
     }
   }
+
+  return summary;
 }
