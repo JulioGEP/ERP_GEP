@@ -168,11 +168,17 @@ async function importDealFromPipedrive(dealIdRaw: any) {
 
   const org = orgId ? await getOrganization(orgId) : null;
   const person = personId ? await getPerson(personId) : null;
-  const [products, notes, files] = await Promise.all([
+  const [products, notes, filesResult] = await Promise.all([
     getDealProducts(dealIdNum).then((x) => x ?? []),
     getDealNotes(dealIdNum).then((x) => x ?? []),
     listDealFiles(dealIdNum).then((x) => x ?? []),
   ]);
+
+  const files = Array.isArray(filesResult)
+    ? filesResult
+    : Array.isArray((filesResult as any)?.data)
+    ? (filesResult as any).data
+    : [];
 
   // 2) Mapear + upsert relacional en Neon
   const savedDealId = await mapAndUpsertDealTree({
