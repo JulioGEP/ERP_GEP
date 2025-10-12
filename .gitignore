@@ -56,3 +56,7 @@ backend/scripts/
 # Local secrets
 .env
 gdrive.key.pem
+
+# Local secrets
+.env
+gdrive.key.pem
