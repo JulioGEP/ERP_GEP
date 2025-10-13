@@ -73,6 +73,13 @@ function isLikelyManualId(id?: string | null): boolean {
   return typeof id === "string" && id.includes("-");
 }
 
+function buildProductFingerprint(name?: string | null, code?: string | null): string | null {
+  const normalizedName = typeof name === "string" ? name.trim().toLowerCase() : "";
+  const normalizedCode = typeof code === "string" ? code.trim().toLowerCase() : "";
+  if (!normalizedName && !normalizedCode) return null;
+  return `${normalizedCode}|${normalizedName}`;
+}
+
 async function resolvePipelineLabel(
   pipeline_id?: number | string | null
 ): Promise<string | undefined> {
@@ -301,7 +308,54 @@ export async function mapAndUpsertDealTree({
     ["category"].includes(f.key)
   );
 
-  await prisma.deal_products.deleteMany({ where: { deal_id: dealId } });
+  type ExistingProductRecord = { id: string; name: string | null; code: string | null };
+
+  const existingProducts = (await prisma.deal_products.findMany({
+    where: { deal_id: dealId },
+    select: { id: true, name: true, code: true },
+  })) as ExistingProductRecord[];
+
+  const existingAutoProducts = existingProducts.filter((product) => !isLikelyManualId(product.id));
+  const existingAutoIds = new Set<string>(existingAutoProducts.map((product) => product.id));
+  const existingAutoByFingerprint = new Map<string, string>();
+
+  for (const product of existingAutoProducts) {
+    const fingerprint = buildProductFingerprint(product.name, product.code);
+    if (fingerprint && !existingAutoByFingerprint.has(fingerprint)) {
+      existingAutoByFingerprint.set(fingerprint, product.id);
+    }
+  }
+
+  const incomingProductIds = new Set<string>();
+
+  const resolveProductId = (dealId: string, source: any, fingerprint: string | null): string => {
+    const candidateIds = [
+      source?.id,
+      source?.deal_product_id,
+      source?.item_id,
+      source?.product_id,
+      source?.product?.id,
+    ];
+
+    for (const candidate of candidateIds) {
+      if (candidate === null || candidate === undefined) continue;
+      const trimmed = String(candidate).trim();
+      if (!trimmed.length) continue;
+      return `${dealId}_${trimmed}`;
+    }
+
+    if (fingerprint) {
+      const reused = existingAutoByFingerprint.get(fingerprint);
+      if (reused) {
+        existingAutoByFingerprint.delete(fingerprint);
+        return reused;
+      }
+    }
+
+    return `${dealId}_${Math.random().toString(36).slice(2)}`;
+  };
+
+  const now = new Date();
 
   for (const p of Array.isArray(products) ? products : []) {
     const baseName = p.name ?? p.product?.name ?? null;
@@ -314,13 +368,13 @@ export async function mapAndUpsertDealTree({
 
     // HORAS en línea (si existiese ese custom en la línea, numérico directo)
     let hours: number | null = null;
-  if (fHoursInLine) {
-  const raw = p?.[fHoursInLine.key];
-  if (raw != null && raw !== "") {
-    const n = Number(String(raw).replace(",", ".").trim());
-    hours = Number.isFinite(n) ? Math.round(n) : null;
-  }
-}
+    if (fHoursInLine) {
+      const raw = p?.[fHoursInLine.key];
+      if (raw != null && raw !== "") {
+        const n = Number(String(raw).replace(",", ".").trim());
+        hours = Number.isFinite(n) ? Math.round(n) : null;
+      }
+    }
 
     // Enriquecimiento por PRODUCTO EMBEBIDO (include_product_data=1)
     const embedded = p.product ?? {};
@@ -350,10 +404,10 @@ export async function mapAndUpsertDealTree({
     }
 
     // Fallback al CATÁLOGO (GET /products/{id}) y sus custom_fields
-    const productId = p.product_id ?? p.id ?? null;
-    if (productId != null) {
+    const productCatalogId = p.product_id ?? p.id ?? null;
+    if (productCatalogId != null) {
       try {
-        const catalog = await getProductCached(productId);
+        const catalog = await getProductCached(productCatalogId);
         const catCF = catalog?.custom_fields ?? {};
 
         code = code ?? catalog?.code ?? null;
@@ -382,19 +436,38 @@ export async function mapAndUpsertDealTree({
       }
     }
 
-    await prisma.deal_products.create({
-      data: {
-        id: `${dealId}_${(p.id ?? p.product_id ?? Math.random().toString(36).slice(2)).toString()}`,
-        deal_id: dealId,
-        name: baseName,
-        code,
-        quantity,           // entero (NUMERIC(10,0) en DB)
-        price,              // decimal(12,2)
-        hours,              // NUMERIC(10,0) en DB (o Int según Prisma)
-        product_comments,   // texto limpio
-        category,           // texto
-        type,               // texto (label de opción única)
-      },
+    const fingerprint = buildProductFingerprint(baseName, code);
+    const productId = resolveProductId(dealId, p, fingerprint);
+    incomingProductIds.add(productId);
+
+    const data = {
+      deal_id: dealId,
+      name: baseName,
+      code,
+      quantity,
+      price,
+      hours,
+      product_comments,
+      category,
+      type,
+    } as Record<string, any>;
+
+    if (existingAutoIds.has(productId)) {
+      await prisma.deal_products.update({
+        where: { id: productId },
+        data: { ...data, updated_at: now },
+      });
+    } else {
+      await prisma.deal_products.create({
+        data: { id: productId, ...data, updated_at: now },
+      });
+    }
+  }
+
+  const idsToDelete = Array.from(existingAutoIds).filter((id) => !incomingProductIds.has(id));
+  if (idsToDelete.length) {
+    await prisma.deal_products.deleteMany({
+      where: { deal_id: dealId, id: { in: idsToDelete } },
     });
   }
 

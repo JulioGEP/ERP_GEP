@@ -448,6 +448,14 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
 
   const shouldShow = applicableProducts.length > 0;
 
+  const generationKey = useMemo(
+    () =>
+      applicableProducts
+        .map((product) => `${product.id}|${Number.isFinite(product.quantity) ? product.quantity : 0}`)
+        .join('|'),
+    [applicableProducts],
+  );
+
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationDone, setGenerationDone] = useState(false);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
@@ -472,11 +480,13 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
 
   useEffect(() => {
     setGenerationError(null);
-    setGenerationDone(false);
-    if (shouldShow && dealId) {
-      generateMutation.mutate(dealId);
+    if (!dealId) {
+      setGenerationDone(true);
+      return;
     }
-  }, [dealId, shouldShow]);
+    setGenerationDone(false);
+    generateMutation.mutate(dealId);
+  }, [dealId, generationKey]);
 
   const [pageByProduct, setPageByProduct] = useState<Record<string, number>>({});
 
