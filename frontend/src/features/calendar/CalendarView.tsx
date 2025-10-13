@@ -233,20 +233,20 @@ function formatToolbarLabel(view: CalendarViewType, range: VisibleRange): string
 }
 
 function readStoredPreferences(): { view: CalendarViewType; date: Date } {
+  const today = new Date();
   if (typeof window === 'undefined') {
-    return { view: 'month', date: new Date() };
+    return { view: 'month', date: today };
   }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return { view: 'month', date: new Date() };
+      return { view: 'month', date: today };
     }
     const parsed = JSON.parse(raw);
     const view = parsed?.view === 'week' || parsed?.view === 'day' ? parsed.view : 'month';
-    const date = parsed?.date ? new Date(parsed.date) : new Date();
-    return Number.isFinite(date.getTime()) ? { view, date } : { view, date: new Date() };
+    return { view, date: today };
   } catch {
-    return { view: 'month', date: new Date() };
+    return { view: 'month', date: today };
   }
 }
 
