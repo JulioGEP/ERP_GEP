@@ -80,6 +80,21 @@ function sanitizeFileName(name: string): string {
   return name.replace(/[\r\n\t]+/g, " ").replace(/[\\/:*?"<>|]+/g, "_");
 }
 
+function normalizeIncomingFileName(name: string): string {
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (!trimmed) return trimmed;
+
+  if (!trimmed.includes("%")) {
+    return trimmed;
+  }
+
+  try {
+    return decodeURIComponent(trimmed);
+  } catch {
+    return trimmed;
+  }
+}
+
 function buildContentDisposition(filename: string): string {
   const safe = sanitizeFileName(filename.trim() || "documento");
   const quoted = safe.replace(/"/g, "'");
@@ -200,12 +215,14 @@ export const handler = async (event: any) => {
         return errorResponse("VALIDATION_ERROR", "file_name y storage_key requeridos", 400);
       }
 
+      const normalizedFileName = normalizeIncomingFileName(file_name);
+
       const id = randomUUID();
       await prisma.deal_files.create({
         data: {
           id,
           deal_id: dealIdStr,
-          file_name: file_name,
+          file_name: normalizedFileName,
           file_type: mime_type ?? null,
           file_url: storage_key, // guardamos la clave S3 (no es URL pública)
           added_at: nowInMadridISO(), // opcional: marca de alta en hora local de Madrid
@@ -230,11 +247,12 @@ export const handler = async (event: any) => {
       });
 
       const documents = docsRaw.map((d: any) => {
+        const normalizedName = typeof d.file_name === "string" ? normalizeIncomingFileName(d.file_name) : null;
         const isHttp = isHttpUrl(d.file_url);
         return {
           id: d.id,
           source: isHttp ? "PIPEDRIVE" : "S3",
-          name: d.file_name ?? null,
+          name: normalizedName ?? d.file_name ?? null,
           mime_type: d.file_type ?? null,
           url: isHttp ? d.file_url ?? null : null,
           // no tenemos `size` en el esquema → lo omitimos
@@ -256,11 +274,13 @@ export const handler = async (event: any) => {
       }
 
       // Si es http(s), devolvemos directamente (documento tipo Pipedrive u origen externo)
+      const normalizedName = typeof doc.file_name === "string" ? normalizeIncomingFileName(doc.file_name) : undefined;
+
       if (isHttpUrl(doc.file_url)) {
         return successResponse({
           ok: true,
           url: String(doc.file_url),
-          name: doc.file_name ?? undefined,
+          name: normalizedName ?? doc.file_name ?? undefined,
           mime_type: doc.file_type ?? undefined,
         });
       }
@@ -271,7 +291,12 @@ export const handler = async (event: any) => {
       }
       const getCmd = new GetObjectCommand({ Bucket: BUCKET, Key: String(doc.file_url) });
       const url = await getSignedUrl(s3, getCmd, { expiresIn: 60 * 5 });
-      return successResponse({ ok: true, url, name: doc.file_name ?? undefined, mime_type: doc.file_type ?? undefined });
+      return successResponse({
+        ok: true,
+        url,
+        name: normalizedName ?? doc.file_name ?? undefined,
+        mime_type: doc.file_type ?? undefined,
+      });
     }
 
     // 5) Descarga directa (Pipedrive proxy o S3 binario)
@@ -303,7 +328,8 @@ export const handler = async (event: any) => {
 
         const download = await downloadPipedriveFile(pipedriveId);
         const buffer = download.data;
-        const fileName = doc.file_name ?? download.fileName ?? `pipedrive_file_${doc.id}`;
+        const normalizedName = typeof doc.file_name === "string" ? normalizeIncomingFileName(doc.file_name) : undefined;
+        const fileName = normalizedName ?? doc.file_name ?? download.fileName ?? `pipedrive_file_${doc.id}`;
         const mimeType = doc.file_type ?? download.mimeType ?? "application/octet-stream";
 
         return {
@@ -328,7 +354,8 @@ export const handler = async (event: any) => {
       const object = await s3.send(getCmd);
       const buffer = await streamToBuffer(object.Body);
       const mimeType = doc.file_type ?? object.ContentType ?? "application/octet-stream";
-      const fileName = doc.file_name ?? `documento_${doc.id}`;
+      const normalizedName = typeof doc.file_name === "string" ? normalizeIncomingFileName(doc.file_name) : undefined;
+      const fileName = normalizedName ?? doc.file_name ?? `documento_${doc.id}`;
 
       return {
         statusCode: 200,
