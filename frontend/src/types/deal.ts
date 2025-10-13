@@ -47,8 +47,8 @@ export interface DealProduct {
   categoryLabel?: string | null;
 }
 
-/* Documentos unificados (Pipedrive + S3) */
-export type DocumentSource = "PIPEDRIVE" | "S3";
+/* Documentos unificados (Pipedrive + S3 + Manual) */
+export type DocumentSource = "PIPEDRIVE" | "S3" | "MANUAL";
 
 export interface DealDocument {
   id: string;

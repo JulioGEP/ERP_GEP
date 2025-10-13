@@ -455,11 +455,11 @@ export async function mapAndUpsertDealTree({
     if (existingAutoIds.has(productId)) {
       await prisma.deal_products.update({
         where: { id: productId },
-        data: { ...data, updated_at: now },
+        data: { ...data, updated_at: now } as any,
       });
     } else {
       await prisma.deal_products.create({
-        data: { id: productId, ...data, updated_at: now },
+        data: { id: productId, ...data, updated_at: now } as any,
       });
     }
   }

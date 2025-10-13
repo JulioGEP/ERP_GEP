@@ -1,4 +1,5 @@
 // frontend/src/features/presupuestos/api.ts
+import { Buffer } from "buffer";
 import type {
   DealDetail,
   DealDetailViewModel,
@@ -453,9 +454,13 @@ function normalizeDealDocument(raw: any): DealDocument {
   const fileUrl = toStringValue(isHttpUrl(raw?.file_url) ? raw?.file_url : null);
   const resolvedUrl = driveWebViewLink ?? apiUrl ?? fileUrl ?? null;
   const sourceValue = toStringValue(raw?.source);
+  const hasManualSignature =
+    (!toStringValue(raw?.file_url) || !String(raw?.file_url).trim().length) && !!driveWebViewLink;
   const source =
-    sourceValue === "S3" || sourceValue === "PIPEDRIVE"
-      ? sourceValue
+    sourceValue === "S3" || sourceValue === "PIPEDRIVE" || sourceValue === "MANUAL"
+      ? (sourceValue as "S3" | "PIPEDRIVE" | "MANUAL")
+      : hasManualSignature
+      ? "MANUAL"
       : isHttpUrl(resolvedUrl)
       ? "PIPEDRIVE"
       : "S3";
@@ -791,36 +796,42 @@ export async function getDocPreviewUrl(
   };
 }
 
-export async function getUploadUrl(
-  dealId: string,
-  file: File
-): Promise<{ uploadUrl: string; storageKey: string }> {
-  return await request(
-    `/deal_documents/${encodeURIComponent(String(dealId))}/upload-url`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        fileName: file.name,
-        mimeType: file.type,
-        fileSize: file.size,
-      }),
-    }
-  );
+async function fileToBase64(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(arrayBuffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return typeof window !== "undefined" ? window.btoa(binary) : Buffer.from(binary, "binary").toString("base64");
 }
 
-export async function createDocumentMeta(
+export async function uploadManualDocument(
   dealId: string,
-  meta: { file_name: string; file_size: number; mime_type?: string; storage_key: string },
+  file: File,
   user?: { id: string; name?: string }
 ): Promise<void> {
+  const normalizedId = String(dealId ?? "").trim();
+  if (!normalizedId) {
+    throw new ApiError("VALIDATION_ERROR", "Falta dealId para subir el documento");
+  }
+
+  const base64 = await fileToBase64(file);
   const headers: Record<string, string> = {};
   if (user?.id) headers["X-User-Id"] = user.id;
   if (user?.name) headers["X-User-Name"] = user.name;
 
-  await request(`/deal_documents/${encodeURIComponent(String(dealId))}`, {
+  await request(`/deal_documents/${encodeURIComponent(normalizedId)}/manual`, {
     method: "POST",
     headers,
-    body: JSON.stringify(meta),
+    body: JSON.stringify({
+      fileName: file.name,
+      mimeType: file.type,
+      fileSize: file.size,
+      contentBase64: base64,
+    }),
   });
 }
 

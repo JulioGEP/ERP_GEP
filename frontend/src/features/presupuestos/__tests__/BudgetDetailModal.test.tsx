@@ -110,8 +110,7 @@ vi.mock('../api', () => {
     patchDealEditable: vi.fn(),
     importDeal: vi.fn(),
     getDocPreviewUrl: vi.fn(),
-    getUploadUrl: vi.fn(),
-    createDocumentMeta: vi.fn(),
+    uploadManualDocument: vi.fn(),
     deleteDocument: vi.fn(),
     buildDealDetailViewModel: vi.fn(
       (deal: DealDetail | null, summary: DealSummary | null): DealDetailViewModel => {

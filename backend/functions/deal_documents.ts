@@ -6,6 +6,7 @@ import { getPrisma } from "./_shared/prisma";
 import { nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { downloadFile as downloadPipedriveFile } from "./_shared/pipedrive";
+import { uploadDealDocumentToGoogleDrive } from "./_shared/googleDrive";
 
 const BUCKET = process.env.S3_BUCKET!;
 const REGION = process.env.S3_REGION!;
@@ -37,6 +38,7 @@ type ParsedPath = {
   isUploadUrl: boolean;
   isGetUrl: boolean;
   isDownload: boolean;
+  isManualUpload: boolean;
 };
 
 function parsePath(rawPath: string): ParsedPath {
@@ -45,7 +47,14 @@ function parsePath(rawPath: string): ParsedPath {
   const segments = withoutPrefix.split("/").filter(Boolean);
 
   if (segments[0] !== "deal_documents") {
-    return { dealId: null, docId: null, isUploadUrl: false, isGetUrl: false, isDownload: false };
+    return {
+      dealId: null,
+      docId: null,
+      isUploadUrl: false,
+      isGetUrl: false,
+      isDownload: false,
+      isManualUpload: false,
+    };
   }
 
   const dealId = segments[1] ? decodeURIComponent(segments[1]) : null;
@@ -54,13 +63,13 @@ function parsePath(rawPath: string): ParsedPath {
 
   if (segments.length >= 3) {
     const maybeDocOrAction = decodeURIComponent(segments[2]);
-    if (["upload-url", "url", "download"].includes(maybeDocOrAction)) {
+    if (["upload-url", "url", "download", "manual"].includes(maybeDocOrAction)) {
       action = maybeDocOrAction;
     } else {
       docId = maybeDocOrAction;
       if (segments.length >= 4) {
         const maybeAction = decodeURIComponent(segments[3]);
-        if (["upload-url", "url", "download"].includes(maybeAction)) {
+        if (["upload-url", "url", "download", "manual"].includes(maybeAction)) {
           action = maybeAction;
         }
       }
@@ -73,6 +82,7 @@ function parsePath(rawPath: string): ParsedPath {
     isUploadUrl: action === "upload-url",
     isGetUrl: action === "url",
     isDownload: action === "download",
+    isManualUpload: action === "manual",
   };
 }
 
@@ -167,7 +177,7 @@ export const handler = async (event: any) => {
 
     const method = event.httpMethod;
     const path = event.path || "";
-    const { dealId, docId, isUploadUrl, isGetUrl, isDownload } = parsePath(path);
+    const { dealId, docId, isUploadUrl, isGetUrl, isDownload, isManualUpload } = parsePath(path);
     if (!dealId) return errorResponse("VALIDATION_ERROR", "deal_id requerido en path", 400);
 
     const prisma = getPrisma();
@@ -205,6 +215,105 @@ export const handler = async (event: any) => {
     //    Para S3: guardamos file_url = storage_key (clave interna S3), file_type = mime_type
     //    Para Pipedrive (si algún día llega): file_url deberá ser http(s)
     if (method === "POST" && !isUploadUrl) {
+      if (isManualUpload) {
+        if (!event.body) return errorResponse("VALIDATION_ERROR", "Body requerido", 400);
+        let payload: any = null;
+        try {
+          payload = JSON.parse(event.body || "{}");
+        } catch {
+          return errorResponse("VALIDATION_ERROR", "JSON inválido", 400);
+        }
+
+        const { fileName, mimeType, fileSize, contentBase64 } = payload as {
+          fileName?: string;
+          mimeType?: string;
+          fileSize?: number;
+          contentBase64?: string;
+        };
+
+        if (!fileName || !contentBase64) {
+          return errorResponse(
+            "VALIDATION_ERROR",
+            "fileName y contentBase64 son requeridos para la subida manual",
+            400
+          );
+        }
+
+        let buffer: Buffer;
+        try {
+          buffer = Buffer.from(String(contentBase64), "base64");
+        } catch {
+          return errorResponse("VALIDATION_ERROR", "contentBase64 no es válido", 400);
+        }
+
+        if (!buffer || !buffer.length) {
+          return errorResponse("VALIDATION_ERROR", "Archivo vacío o no válido", 400);
+        }
+
+        if (typeof fileSize === "number" && Number.isFinite(fileSize) && fileSize > 0) {
+          const delta = Math.abs(buffer.length - fileSize);
+          if (delta > Math.max(512, fileSize * 0.01)) {
+            return errorResponse(
+              "VALIDATION_ERROR",
+              "El tamaño del archivo no coincide con el contenido recibido",
+              400
+            );
+          }
+        }
+
+        const deal = await prisma.deals.findUnique({
+          where: { deal_id: dealIdStr },
+          include: { organization: { select: { name: true } } },
+        });
+        if (!deal) {
+          return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
+        }
+
+        let uploadResult: { driveFileName: string; driveWebViewLink: string | null };
+        try {
+          uploadResult = await uploadDealDocumentToGoogleDrive({
+            deal,
+            organizationName: deal.organization?.name ?? null,
+            fileName: normalizeIncomingFileName(fileName) || fileName,
+            mimeType: mimeType || "application/octet-stream",
+            data: buffer,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err ?? "Error subiendo a Drive");
+          return errorResponse("UPLOAD_ERROR", message, 502);
+        }
+
+        const sanitizedName = normalizeIncomingFileName(fileName) || fileName;
+        const extension = (() => {
+          const parts = sanitizedName.split(".");
+          if (parts.length <= 1) return null;
+          const ext = parts.pop();
+          return ext ? ext.trim().toLowerCase() : null;
+        })();
+
+        const id = randomUUID();
+        const now = nowInMadridISO();
+        await prisma.deal_files.create({
+          data: {
+            id,
+            deal_id: dealIdStr,
+            file_name: "",
+            file_url: "",
+            file_type: extension ?? null,
+            drive_file_name: uploadResult.driveFileName,
+            drive_web_view_link: uploadResult.driveWebViewLink,
+            added_at: now,
+          },
+        });
+
+        return successResponse({
+          ok: true,
+          id,
+          drive_file_name: uploadResult.driveFileName,
+          drive_web_view_link: uploadResult.driveWebViewLink,
+        });
+      }
+
       if (!event.body) return errorResponse("VALIDATION_ERROR", "Body requerido", 400);
       const { file_name, storage_key, mime_type } = JSON.parse(event.body || "{}") as {
         file_name?: string;
@@ -242,6 +351,8 @@ export const handler = async (event: any) => {
           file_name: true,
           file_type: true,
           file_url: true,
+          drive_file_name: true,
+          drive_web_view_link: true,
           created_at: true,
         },
       });
@@ -249,12 +360,16 @@ export const handler = async (event: any) => {
       const documents = docsRaw.map((d: any) => {
         const normalizedName = typeof d.file_name === "string" ? normalizeIncomingFileName(d.file_name) : null;
         const isHttp = isHttpUrl(d.file_url);
+        const hasDriveLink = typeof d.drive_web_view_link === "string" && d.drive_web_view_link.trim().length > 0;
+        const isManual = hasDriveLink && (!d.file_url || !d.file_url.trim());
         return {
           id: d.id,
-          source: isHttp ? "PIPEDRIVE" : "S3",
+          source: isManual ? "MANUAL" : isHttp ? "PIPEDRIVE" : "S3",
           name: normalizedName ?? d.file_name ?? null,
           mime_type: d.file_type ?? null,
           url: isHttp ? d.file_url ?? null : null,
+          drive_file_name: d.drive_file_name ?? null,
+          drive_web_view_link: d.drive_web_view_link ?? null,
           // no tenemos `size` en el esquema → lo omitimos
           created_at: toMadridISOString(d.created_at),
         };
@@ -322,7 +437,7 @@ export const handler = async (event: any) => {
       // Documentos de Pipedrive → descargamos con el token del backend
       if (isHttpUrl(doc.file_url)) {
         const pipedriveId = resolvePipedriveFileId(doc);
-        if (!Number.isFinite(pipedriveId)) {
+        if (typeof pipedriveId !== "number" || !Number.isFinite(pipedriveId)) {
           return errorResponse("VALIDATION_ERROR", "Documento Pipedrive con identificador inválido", 400);
         }
 
