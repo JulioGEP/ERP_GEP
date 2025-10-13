@@ -9,39 +9,3 @@ export function requireEnv(name: string): string {
   }
   return String(v);
 }
-
-function normalizeGoogleDrivePrivateKey(raw: string): string {
-  return raw.includes('\n') ? raw : raw.replace(/\\n/g, '\n');
-}
-
-function wrapMissingEnvError(originalError: unknown, message: string): never {
-  const err = new Error(message);
-  (err as any).cause = originalError;
-  throw err;
-}
-
-export function getGoogleDriveClientEmail(): string {
-  try {
-    return requireEnv('GOOGLE_DRIVE_CLIENT_EMAIL');
-  } catch (error) {
-    return wrapMissingEnvError(error, 'Falta GOOGLE_DRIVE_CLIENT_EMAIL');
-  }
-}
-
-export function getGoogleDrivePrivateKey(): string {
-  let raw: string;
-  try {
-    raw = requireEnv('GOOGLE_DRIVE_PRIVATE_KEY');
-  } catch (error) {
-    return wrapMissingEnvError(error, 'Falta GOOGLE_DRIVE_PRIVATE_KEY');
-  }
-  return normalizeGoogleDrivePrivateKey(raw);
-}
-
-export function getGoogleDriveSharedDriveId(): string {
-  try {
-    return requireEnv('GOOGLE_DRIVE_SHARED_DRIVE_ID');
-  } catch (error) {
-    return wrapMissingEnvError(error, 'Falta GOOGLE_DRIVE_SHARED_DRIVE_ID');
-  }
-}

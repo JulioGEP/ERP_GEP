@@ -1,51 +1,7 @@
 // backend/functions/_shared/pipedrive.ts
 // Cliente y utilidades para Pipedrive centralizadas
 
-function normalizeCompanyDomain(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed.length) {
-    throw new Error("Falta PIPEDRIVE_COMPANY_DOMAIN en variables de entorno");
-  }
-  const withoutProtocol = trimmed.replace(/^https?:\/\//i, "");
-  return withoutProtocol.replace(/\/+$/g, "");
-}
-
-let cachedBaseUrl: string | null = null;
-let authValidationPromise: Promise<void> | null = null;
-
-function getBaseUrl(): string {
-  if (cachedBaseUrl) return cachedBaseUrl;
-  const domain = process.env.PIPEDRIVE_COMPANY_DOMAIN;
-  if (!domain) {
-    throw new Error("Falta PIPEDRIVE_COMPANY_DOMAIN en variables de entorno");
-  }
-  const normalizedDomain = normalizeCompanyDomain(domain);
-  cachedBaseUrl = `https://${normalizedDomain}/api/v1`;
-  return cachedBaseUrl;
-}
-
-async function ensureAuthValid(baseUrl: string, token: string): Promise<void> {
-  if (authValidationPromise) return authValidationPromise;
-  authValidationPromise = (async () => {
-    const url = `${baseUrl}/users/me?api_token=${token}`;
-    const res = await fetch(url as any, { method: "GET" });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      const message = text?.trim().length ? ` ${text.trim()}` : "";
-      const error = new Error(
-        `[pipedrive] Validación de token fallida (${res.status}${message}). Verifica PIPEDRIVE_API_TOKEN y PIPEDRIVE_COMPANY_DOMAIN.`
-      );
-      throw error;
-    }
-  })();
-
-  try {
-    await authValidationPromise;
-  } catch (error) {
-    authValidationPromise = null;
-    throw error;
-  }
-}
+const BASE_URL = process.env.PIPEDRIVE_BASE_URL || "https://api.pipedrive.com/v1";
 
 // Cache en memoria simple (válida durante la vida de la función)
 const cache = new Map<string, any>();
@@ -65,43 +21,6 @@ type FetchOpts = {
   body?: any;
 };
 
-function decodeRfc5987Value(str: string): string {
-  const parts = str.split("''");
-  if (parts.length === 2) {
-    try {
-      return decodeURIComponent(parts[1].replace(/\+/g, "%20"));
-    } catch {
-      return parts[1];
-    }
-  }
-  try {
-    return decodeURIComponent(str.replace(/\+/g, "%20"));
-  } catch {
-    return str;
-  }
-}
-
-function parseContentDispositionFilename(header: string | null): string | null {
-  if (!header) return null;
-  const segments = header.split(";").map((seg) => seg.trim());
-  for (const segment of segments) {
-    if (segment.toLowerCase().startsWith("filename*=")) {
-      const value = segment.substring(9).trim();
-      const cleaned = value.replace(/^utf-8''/i, "UTF-8''");
-      const withoutQuotes = cleaned.replace(/^"|"$/g, "");
-      return decodeRfc5987Value(withoutQuotes);
-    }
-  }
-  for (const segment of segments) {
-    if (segment.toLowerCase().startsWith("filename=")) {
-      const value = segment.substring(9).trim();
-      const withoutQuotes = value.replace(/^"|"$/g, "");
-      return withoutQuotes;
-    }
-  }
-  return null;
-}
-
 function qs(obj: Record<string, any>): string {
   const u = new URLSearchParams();
   for (const [k, v] of Object.entries(obj)) {
@@ -116,9 +35,7 @@ async function pd(path: string, opts: FetchOpts = {}) {
   if (!token) {
     throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
   }
-  const baseUrl = getBaseUrl();
-  await ensureAuthValid(baseUrl, token);
-  const url = `${baseUrl}${path}${path.includes("?") ? "&" : "?"}api_token=${token}`;
+  const url = `${BASE_URL}${path}${path.includes("?") ? "&" : "?"}api_token=${token}`;
 
   const res = await fetch(url as any, {
     method: opts.method ?? "GET",
@@ -161,39 +78,9 @@ export async function getDealNotes(dealId: number | string, limit = 500) {
   return pd(`/notes?${qs({ deal_id: String(dealId), limit, sort: "add_time DESC" })}`);
 }
 
-export async function listDealFiles(dealId: number | string, limit = 500) {
+export async function getDealFiles(dealId: number | string, limit = 500) {
   const id = encodeURIComponent(String(dealId));
   return pd(`/deals/${id}/files?${qs({ limit })}`);
-}
-
-export async function downloadFile(fileId: number | string) {
-  const token = process.env.PIPEDRIVE_API_TOKEN;
-  if (!token) {
-    throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
-  }
-  const baseUrl = getBaseUrl();
-  await ensureAuthValid(baseUrl, token);
-  const url = `${baseUrl}/files/${encodeURIComponent(String(fileId))}/download?api_token=${token}`;
-  const res = await fetch(url as any, {
-    method: "GET",
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`[pipedrive] GET /files/${fileId}/download -> ${res.status} ${text}`);
-  }
-
-  const arrayBuffer = await res.arrayBuffer();
-  const contentDisposition = res.headers.get("content-disposition");
-  const fileNameFromHeader = parseContentDispositionFilename(contentDisposition);
-  const mimeType = res.headers.get("content-type") ?? undefined;
-
-  return {
-    buffer: Buffer.from(arrayBuffer),
-    file_name_from_header: fileNameFromHeader ?? undefined,
-    content_disposition: contentDisposition ?? undefined,
-    mimeType,
-  };
 }
 
 export async function getPipelines() {

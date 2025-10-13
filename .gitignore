@@ -52,11 +52,3 @@ backend/dist/
 # Limpieza import puntual trainers
 backend/data/
 backend/scripts/
-
-# Local secrets
-.env
-gdrive.key.pem
-
-# Local secrets
-.env
-gdrive.key.pem

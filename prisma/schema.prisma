@@ -106,17 +106,12 @@ model deal_files {
   file_name  String?
   file_url   String?
   file_type  String?
-  pipedrive_file_id   String?
-  drive_file_id       String?
-  drive_web_view_link String?
   added_at   DateTime? @db.Timestamptz(6)
-  uploaded_at DateTime? @db.Timestamptz(6)
   created_at DateTime  @default(now()) @db.Timestamptz(6)
   updated_at DateTime  @default(now()) @db.Timestamptz(6)
   deal       deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_files_deal_fk")
 
   @@index([deal_id], map: "idx_deal_files_deal_id")
-  @@unique([deal_id, pipedrive_file_id], map: "deal_files_deal_id_pipedrive_file_id_key")
 }
 
 model comments {
