@@ -63,7 +63,17 @@ const detailFixtures: Record<string, DealDetail> = {
     },
     products: [],
     notes: [],
-    documents: []
+    documents: [
+      {
+        id: 'doc-a-1',
+        source: 'PIPEDRIVE',
+        name: 'Nombre antiguo.pdf',
+        drive_file_name: 'Presupuesto firmado.pdf',
+        drive_web_view_link: 'https://docs.example.com/drive/doc-a-1',
+        mime_type: 'application/pdf',
+        url: 'https://s3.example.com/doc-a-1'
+      }
+    ]
   },
   B: {
     deal_id: 'B',
@@ -228,6 +238,21 @@ describe('BudgetDetailModal unsaved warning', () => {
     expect(screen.queryByRole('button', { name: 'Guardar Cambios' })).toBeNull();
 
     queryClient.clear();
+  });
+
+  it('uses Google Drive metadata for document labels and links', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Wrapper />);
+
+    await user.click(screen.getByRole('button', { name: 'Abrir A' }));
+
+    await waitFor(() => expect(screen.queryByText('Cargando…')).not.toBeInTheDocument());
+
+    const documentsToggle = await screen.findByRole('button', { name: /Documentos/ });
+    await user.click(documentsToggle);
+
+    const docLink = await screen.findByRole('link', { name: 'Presupuesto firmado.pdf' });
+    expect(docLink).toHaveAttribute('href', 'https://docs.example.com/drive/doc-a-1');
   });
 
   it('resets dirty state when switching to another budget while the modal is open', async () => {

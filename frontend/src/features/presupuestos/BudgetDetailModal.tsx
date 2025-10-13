@@ -208,9 +208,10 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
   const getDocumentDisplayName = (doc: DealDocument | null | undefined): string => {
     if (!doc) return 'Documento';
-    const { drive_file_name, name } = doc;
-    const resolvedName = (drive_file_name ?? name ?? '').trim();
-    return resolvedName.length ? resolvedName : 'Documento';
+    const driveName = (doc.drive_file_name ?? '').trim();
+    if (driveName.length) return driveName;
+    const fallback = (doc.name ?? '').trim();
+    return fallback.length ? fallback : 'Documento';
   };
 
   const getDocumentHref = (doc: DealDocument): string | null => {
