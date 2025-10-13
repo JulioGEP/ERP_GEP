@@ -1,8 +1,10 @@
 // backend/functions/_shared/googleDrive.ts
 import { createSign } from "crypto";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import type { PrismaClient } from "@prisma/client";
 import { downloadFile as downloadPipedriveFile } from "./pipedrive";
 import { toMadridISOString } from "./timezone";
+import { getPrisma } from "./prisma";
 
 const DEFAULT_BASE_FOLDER_NAME = "Documentos ERP";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
@@ -456,7 +458,14 @@ function buildDealFolderName(deal: any): string {
   return `${id} - ${date} - ${title}`;
 }
 
-async function uploadBufferToDrive(params: { parentId: string; name: string; mimeType: string; data: Buffer }): Promise<void> {
+type DriveUploadResult = { id: string; name: string; webViewLink: string | null };
+
+async function uploadBufferToDrive(params: {
+  parentId: string;
+  name: string;
+  mimeType: string;
+  data: Buffer;
+}): Promise<DriveUploadResult> {
   const boundary = `----erp-gep-${Math.random().toString(36).slice(2)}`;
   const metadata = JSON.stringify({
     name: params.name,
@@ -471,7 +480,7 @@ async function uploadBufferToDrive(params: { parentId: string; name: string; mim
   const body = Buffer.concat([preamble, fileHeader, params.data, closing]);
 
   const response = await authorizedFetch(
-    `${DRIVE_UPLOAD_BASE}/files?uploadType=multipart&supportsAllDrives=true`,
+    `${DRIVE_UPLOAD_BASE}/files?uploadType=multipart&supportsAllDrives=true&fields=id,name,webViewLink`,
     {
       method: "POST",
       headers: {
@@ -485,6 +494,79 @@ async function uploadBufferToDrive(params: { parentId: string; name: string; mim
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     throw new Error(`[google-drive-sync] Upload failed: ${response.status} ${text}`.trim());
+  }
+
+  const json: any = await response.json().catch(() => ({}));
+  if (!json?.id) {
+    throw new Error("[google-drive-sync] Respuesta de subida sin id");
+  }
+
+  return {
+    id: String(json.id),
+    name: typeof json.name === "string" && json.name.trim() ? json.name : params.name,
+    webViewLink: typeof json.webViewLink === "string" && json.webViewLink ? json.webViewLink : null,
+  };
+}
+
+async function ensureFilePublicWebViewLink(fileId: string): Promise<string | null> {
+  const permissionUrl = `${DRIVE_API_BASE}/files/${encodeURIComponent(
+    fileId
+  )}/permissions?supportsAllDrives=true&sendNotificationEmails=false`;
+
+  const permissionBody = {
+    role: "reader",
+    type: "anyone",
+    allowFileDiscovery: false,
+  };
+
+  const permissionResponse = await authorizedFetch(permissionUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(permissionBody),
+  });
+
+  if (!permissionResponse.ok && permissionResponse.status !== 409) {
+    const text = await permissionResponse.text().catch(() => "");
+    throw new Error(`[google-drive-sync] Permission failed: ${permissionResponse.status} ${text}`.trim());
+  }
+
+  const metadataUrl = `${DRIVE_API_BASE}/files/${encodeURIComponent(
+    fileId
+  )}?supportsAllDrives=true&fields=webViewLink`;
+  const metadataResponse = await authorizedFetch(metadataUrl, { method: "GET" });
+
+  if (!metadataResponse.ok) {
+    const text = await metadataResponse.text().catch(() => "");
+    throw new Error(`[google-drive-sync] Metadata fetch failed: ${metadataResponse.status} ${text}`.trim());
+  }
+
+  const metadata: any = await metadataResponse.json().catch(() => ({}));
+  return typeof metadata?.webViewLink === "string" ? metadata.webViewLink : null;
+}
+
+async function updateDealFileDriveMetadata(
+  prisma: PrismaClient,
+  doc: any,
+  metadata: { driveFileName: string; driveWebViewLink: string | null }
+): Promise<void> {
+  const rawId = doc?.id;
+  if (rawId === null || rawId === undefined) return;
+  const id = String(rawId);
+  if (!id.trim()) return;
+
+  try {
+    await prisma.deal_files.update({
+      where: { id },
+      data: {
+        drive_file_name: metadata.driveFileName,
+        drive_web_view_link: metadata.driveWebViewLink,
+      },
+    });
+  } catch (err) {
+    console.error("[google-drive-sync] No se pudo actualizar drive metadata en BD", {
+      docId: id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -501,6 +583,7 @@ export async function syncDealDocumentsToGoogleDrive(params: {
       return;
     }
 
+    const prisma = getPrisma();
     const documents = Array.isArray(params.documents) ? params.documents : [];
     if (!documents.length) {
       console.log("[google-drive-sync] Deal sin documentos, no se crea carpeta en Drive");
@@ -533,11 +616,28 @@ export async function syncDealDocumentsToGoogleDrive(params: {
       try {
         const { data, fileName, mimeType } = await fetchDocumentData(doc);
         const safeName = sanitizeName(fileName || `documento_${doc?.id ?? successCount + 1}`) || "documento";
-        await uploadBufferToDrive({
+        const uploadResult = await uploadBufferToDrive({
           parentId: dealFolderId,
           name: safeName,
           mimeType: mimeType || "application/octet-stream",
           data,
+        });
+
+        let publicLink = uploadResult.webViewLink;
+        try {
+          publicLink = await ensureFilePublicWebViewLink(uploadResult.id);
+        } catch (permissionError) {
+          console.warn("[google-drive-sync] No se pudo generar enlace público de Drive", {
+            dealId: params.deal?.deal_id ?? params.deal?.id,
+            documentId: doc?.id,
+            fileId: uploadResult.id,
+            error: permissionError instanceof Error ? permissionError.message : String(permissionError),
+          });
+        }
+
+        await updateDealFileDriveMetadata(prisma, doc, {
+          driveFileName: uploadResult.name || safeName,
+          driveWebViewLink: publicLink ?? null,
         });
         successCount += 1;
       } catch (err) {
