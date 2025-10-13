@@ -11,6 +11,7 @@ import {
   getDealFiles,
 } from "./_shared/pipedrive";
 import { mapAndUpsertDealTree } from "./_shared/mappers";
+import { syncDealDocumentsToGoogleDrive } from "./_shared/googleDrive";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -410,6 +411,20 @@ export const handler = async (event: any) => {
             deal_files: true,
           },
         });
+        if (dealRaw) {
+          try {
+            await syncDealDocumentsToGoogleDrive({
+              deal: dealRaw,
+              documents: dealRaw.deal_files ?? [],
+              organizationName: dealRaw.organization?.name ?? null,
+            });
+          } catch (driveError) {
+            console.warn("[google-drive-sync] Error no bloqueante", {
+              dealId: dealRaw?.deal_id,
+              error: driveError instanceof Error ? driveError.message : String(driveError),
+            });
+          }
+        }
         const deal = mapDealForApi(dealRaw);
         return successResponse({ ok: true, warnings, deal });
       } catch (e: any) {
