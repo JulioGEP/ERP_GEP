@@ -57,6 +57,8 @@ export interface DealDocument {
   mime_type?: string | null;
   size?: number | null;
   url?: string | null;          // si S3 → firmada al pedirla; si Pipedrive → directa si se guardó
+  drive_file_name?: string | null;
+  drive_web_view_link?: string | null;
   created_at?: string | null;   // ISO
 }
 

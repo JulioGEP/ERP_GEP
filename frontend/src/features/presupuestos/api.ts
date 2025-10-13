@@ -438,21 +438,25 @@ function normalizeNoteContent(value: string | null): string {
 
 function normalizeDealDocument(raw: any): DealDocument {
   const id = toStringValue(raw?.id) ?? (raw?.id != null ? String(raw.id) : "");
+  const driveFileName = toStringValue(raw?.drive_file_name);
   const name =
-    toStringValue(raw?.name) ??
-    toStringValue(raw?.file_name) ??
-    (raw?.name != null ? String(raw.name) : "Documento");
+    pickNonEmptyString(
+      driveFileName,
+      toStringValue(raw?.name),
+      toStringValue(raw?.file_name)
+    ) ?? (raw?.name != null ? String(raw.name) : "Documento");
   const mime = toStringValue(raw?.mime_type ?? raw?.file_type);
   const size = raw?.size ?? raw?.file_size;
   const normalizedSize = typeof size === "number" ? size : toNumber(size);
-  const rawUrl =
-    toStringValue(raw?.url) ??
-    toStringValue(isHttpUrl(raw?.file_url) ? raw?.file_url : null);
+  const driveWebViewLink = toStringValue(raw?.drive_web_view_link);
+  const apiUrl = toStringValue(raw?.url);
+  const fileUrl = toStringValue(isHttpUrl(raw?.file_url) ? raw?.file_url : null);
+  const resolvedUrl = driveWebViewLink ?? apiUrl ?? fileUrl ?? null;
   const sourceValue = toStringValue(raw?.source);
   const source =
     sourceValue === "S3" || sourceValue === "PIPEDRIVE"
       ? sourceValue
-      : isHttpUrl(rawUrl)
+      : isHttpUrl(resolvedUrl)
       ? "PIPEDRIVE"
       : "S3";
 
@@ -462,7 +466,9 @@ function normalizeDealDocument(raw: any): DealDocument {
     name: name && name.length ? name : "Documento",
     mime_type: mime,
     size: normalizedSize ?? null,
-    url: rawUrl ?? null,
+    url: resolvedUrl,
+    drive_file_name: driveFileName ?? null,
+    drive_web_view_link: driveWebViewLink ?? null,
     created_at: toStringValue(raw?.created_at ?? raw?.added_at),
   };
 }
