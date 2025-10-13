@@ -11,7 +11,10 @@ import {
   getDealFiles,
 } from "./_shared/pipedrive";
 import { mapAndUpsertDealTree } from "./_shared/mappers";
-import { syncDealDocumentsToGoogleDrive } from "./_shared/googleDrive";
+import {
+  syncDealDocumentsToGoogleDrive,
+  deleteDealFolderFromGoogleDrive,
+} from "./_shared/googleDrive";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -467,7 +470,9 @@ export const handler = async (event: any) => {
 
       const existing = await prisma.deals.findUnique({
         where: { deal_id: id },
-        select: { deal_id: true },
+        include: {
+          organization: { select: { name: true } },
+        },
       });
 
       if (!existing) {
@@ -482,6 +487,18 @@ export const handler = async (event: any) => {
         prisma.sessions.deleteMany({ where: { deal_id: id } }),
         prisma.deals.delete({ where: { deal_id: id } }),
       ]);
+
+      try {
+        await deleteDealFolderFromGoogleDrive({
+          deal: existing,
+          organizationName: existing.organization?.name ?? null,
+        });
+      } catch (driveError) {
+        console.warn("[google-drive-sync] Error no bloqueante eliminando carpeta del deal", {
+          dealId: existing.deal_id,
+          error: driveError instanceof Error ? driveError.message : String(driveError),
+        });
+      }
 
       return successResponse({ ok: true });
     }

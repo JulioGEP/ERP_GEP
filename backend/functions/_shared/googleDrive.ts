@@ -214,6 +214,40 @@ async function driveDelete(fileId: string): Promise<void> {
   }
 }
 
+async function findFolder(params: { name: string; parentId: string; driveId: string }): Promise<string | null> {
+  const name = sanitizeName(params.name || "carpeta");
+  const key = cacheKey(params.parentId, name);
+  if (driveFolderCache.has(key)) {
+    return driveFolderCache.get(key)!;
+  }
+
+  const query = [
+    `'${params.parentId}' in parents`,
+    "mimeType = 'application/vnd.google-apps.folder'",
+    "trashed = false",
+    `name = '${name.replace(/'/g, "\\'")}'`,
+  ].join(" and ");
+
+  const list = await driveFilesList({
+    corpora: "drive",
+    driveId: params.driveId,
+    includeItemsFromAllDrives: "true",
+    supportsAllDrives: "true",
+    q: query,
+    fields: "files(id, name)",
+    pageSize: "1",
+  });
+
+  const existing = Array.isArray(list.files) ? list.files[0] : null;
+  if (existing?.id) {
+    const id = String(existing.id);
+    driveFolderCache.set(key, id);
+    return id;
+  }
+
+  return null;
+}
+
 async function ensureFolder(params: { name: string; parentId: string; driveId: string }): Promise<string> {
   const name = sanitizeName(params.name || "carpeta");
   const key = cacheKey(params.parentId, name);
@@ -673,5 +707,86 @@ export async function syncDealDocumentsToGoogleDrive(params: {
     );
   } catch (err) {
     console.error("[google-drive-sync] Error inesperado en la sincronización", err);
+  }
+}
+
+function removeFolderFromCache(parentId: string, name: string): void {
+  const sanitized = sanitizeName(name || "carpeta");
+  driveFolderCache.delete(cacheKey(parentId, sanitized));
+}
+
+export async function deleteDealFolderFromGoogleDrive(params: {
+  deal: any;
+  organizationName?: string | null;
+}): Promise<void> {
+  try {
+    const driveId = resolveDriveSharedId();
+    if (!driveId) return;
+
+    if (!getServiceAccount()) {
+      return;
+    }
+
+    const baseFolderName = resolveDriveBaseFolderName();
+    const baseFolderId = await findFolder({
+      name: baseFolderName,
+      parentId: driveId,
+      driveId,
+    });
+    if (!baseFolderId) {
+      console.warn("[google-drive-sync] Carpeta base no encontrada, no se borra carpeta del deal");
+      return;
+    }
+
+    const organizationDisplayName = params.organizationName?.trim()
+      ? params.organizationName
+      : "Sin organización";
+    const organizationFolderName = sanitizeName(organizationDisplayName) || "Sin organización";
+    const organizationFolderId = await findFolder({
+      name: organizationFolderName,
+      parentId: baseFolderId,
+      driveId,
+    });
+    if (!organizationFolderId) {
+      console.warn(
+        "[google-drive-sync] Carpeta de organización no encontrada, no se borra carpeta del deal",
+        { organizationName: organizationDisplayName }
+      );
+      return;
+    }
+
+    const dealFolderName = sanitizeName(buildDealFolderName(params.deal));
+    const dealFolderId = await findFolder({
+      name: dealFolderName,
+      parentId: organizationFolderId,
+      driveId,
+    });
+    if (!dealFolderId) {
+      console.warn("[google-drive-sync] Carpeta del deal no encontrada, no se borra en Drive", {
+        dealId: params.deal?.deal_id ?? params.deal?.id,
+      });
+      return;
+    }
+
+    try {
+      await driveDelete(dealFolderId);
+    } catch (err) {
+      console.error("[google-drive-sync] Error eliminando carpeta del deal en Drive", {
+        dealId: params.deal?.deal_id ?? params.deal?.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
+
+    removeFolderFromCache(baseFolderId, organizationFolderName);
+    removeFolderFromCache(organizationFolderId, dealFolderName);
+
+    console.log("[google-drive-sync] Carpeta del deal eliminada en Drive", {
+      dealId: params.deal?.deal_id ?? params.deal?.id,
+      organizationName: organizationDisplayName,
+    });
+  } catch (err) {
+    console.error("[google-drive-sync] Error inesperado eliminando carpeta del deal", err);
+    throw err;
   }
 }
