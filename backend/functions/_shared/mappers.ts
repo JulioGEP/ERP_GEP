@@ -173,12 +173,14 @@ export async function mapAndUpsertDealTree({
   person,
   products,
   notes,
+  files,
 }: {
   deal: any;
   org: any;
   person?: any;
   products: any[];
   notes: any[];
+  files: any[];
 }) {
   const prisma = getPrisma();
 
@@ -244,7 +246,7 @@ export async function mapAndUpsertDealTree({
   // 5) Upsert deal (sin 'hours' en deals)
   const orgIdForDeal = org?.id != null ? String(org.id) : null;
 
-  const dbDeal = await (prisma.deals as any).upsert({
+  const dbDeal = await prisma.deals.upsert({
     where: { deal_id: String(deal.id) },
     create: {
       deal_id: String(deal.id),
@@ -435,6 +437,45 @@ export async function mapAndUpsertDealTree({
         author: n?.user?.name ?? n?.author ?? null,
         created_at: createdAt,
         updated_at: updatedAt,
+      },
+    });
+  }
+
+  // 8) Ficheros
+  const existingDocIds = await prisma.deal_files.findMany({
+    where: { deal_id: dealId },
+    select: { id: true },
+  });
+  const preservedDocIds = existingDocIds
+    .map((d: { id: string | null }) => d.id)
+    .filter((id: string | null): id is string => isLikelyManualId(id));
+
+  if (preservedDocIds.length) {
+    await prisma.deal_files.deleteMany({
+      where: { deal_id: dealId, id: { notIn: preservedDocIds } },
+    });
+  } else {
+    await prisma.deal_files.deleteMany({ where: { deal_id: dealId } });
+  }
+
+  for (const f of Array.isArray(files) ? files : []) {
+    const id = String(f.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`);
+    await prisma.deal_files.upsert({
+      where: { id },
+      create: {
+        id,
+        deal_id: dealId,
+        file_name: f.file_name ?? f.name ?? "documento",
+        file_url: f.file_url ?? f.url ?? null,
+        file_type: f.file_type ?? f.mime_type ?? null,
+        ...(f.add_time ? { added_at: new Date(f.add_time) } : {}),
+      },
+      update: {
+        deal_id: dealId,
+        file_name: f.file_name ?? f.name ?? "documento",
+        file_url: f.file_url ?? f.url ?? null,
+        file_type: f.file_type ?? f.mime_type ?? null,
+        ...(f.add_time ? { added_at: new Date(f.add_time) } : {}),
       },
     });
   }
