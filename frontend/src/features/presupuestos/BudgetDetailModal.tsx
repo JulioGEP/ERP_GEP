@@ -351,6 +351,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const detailProducts = detailView.products;
   const detailNotes = detailView.notes;
   const documents = deal?.documents ?? [];
+  const driveFolderLink = detailView.driveFolderWebViewLink ?? null;
 
   const defaultSessionAddress =
     form?.training_address?.trim()?.length
@@ -1150,15 +1151,25 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   </div>
                 </Accordion.Header>
                 <Accordion.Body>
-                  <Button
-                    type="button"
-                    variant="outline-primary"
-                    className="mb-3"
-                    onClick={openUploadDialog}
-                    disabled={!canUploadDocument}
-                  >
-                    Seleccionar archivo
-                  </Button>
+                  <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
+                    <Button
+                      type="button"
+                      variant="outline-primary"
+                      onClick={openUploadDialog}
+                      disabled={!canUploadDocument}
+                    >
+                      Subir Documento
+                    </Button>
+                    <Button
+                      variant="outline-secondary"
+                      href={driveFolderLink ?? undefined}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      disabled={!driveFolderLink}
+                    >
+                      Ir a G.Drive
+                    </Button>
+                  </div>
                   {documents.length ? (
                     <ListGroup>
                       {documents.map((d) => {

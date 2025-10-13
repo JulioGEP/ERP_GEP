@@ -17,6 +17,7 @@ const summaryFixtures: Record<string, DealSummary> = {
     fundae_label: 'FUNDAE A',
     hotel_label: 'Hotel A',
     alumnos: 10,
+    drive_folder_web_view_link: 'https://drive.example.com/folders/deal-a',
     organization: { name: 'Organización A' },
     person: {
       first_name: 'Ana',
@@ -54,6 +55,7 @@ const detailFixtures: Record<string, DealDetail> = {
     fundae_label: 'FUNDAE A',
     hotel_label: 'Hotel A',
     alumnos: 10,
+    drive_folder_web_view_link: 'https://drive.example.com/folders/deal-a',
     organization: { name: 'Organización A' },
     person: {
       first_name: 'Ana',
@@ -145,6 +147,8 @@ vi.mock('../api', () => {
         return {
           dealId: source.deal_id,
           title: source.title ?? null,
+          driveFolderWebViewLink:
+            deal?.drive_folder_web_view_link ?? summary?.drive_folder_web_view_link ?? null,
           organizationName: source.organization?.name ?? null,
           clientName,
           clientEmail: person?.email ?? null,
@@ -252,6 +256,37 @@ describe('BudgetDetailModal unsaved warning', () => {
 
     const docLink = await screen.findByRole('link', { name: 'Presupuesto firmado.pdf' });
     expect(docLink).toHaveAttribute('href', 'https://docs.example.com/drive/doc-a-1');
+  });
+
+  it('shows a shortcut to the Google Drive folder when available', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Wrapper />);
+
+    await user.click(screen.getByRole('button', { name: 'Abrir A' }));
+
+    await waitFor(() => expect(screen.queryByText('Cargando…')).not.toBeInTheDocument());
+
+    const documentsToggle = await screen.findByRole('button', { name: /Documentos/ });
+    await user.click(documentsToggle);
+
+    await screen.findByRole('button', { name: 'Subir Documento' });
+    const driveLink = await screen.findByRole('link', { name: 'Ir a G.Drive' });
+    expect(driveLink).toHaveAttribute('href', 'https://drive.example.com/folders/deal-a');
+  });
+
+  it('disables the Google Drive shortcut when the folder link is unavailable', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<Wrapper />);
+
+    await user.click(screen.getByRole('button', { name: 'Abrir B' }));
+
+    await waitFor(() => expect(screen.queryByText('Cargando…')).not.toBeInTheDocument());
+
+    const documentsToggle = await screen.findByRole('button', { name: /Documentos/ });
+    await user.click(documentsToggle);
+
+    const driveButton = await screen.findByRole('button', { name: 'Ir a G.Drive' });
+    expect(driveButton).toBeDisabled();
   });
 
   it('resets dirty state when switching to another budget while the modal is open', async () => {
