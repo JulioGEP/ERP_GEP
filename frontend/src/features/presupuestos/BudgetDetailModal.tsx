@@ -95,6 +95,35 @@ function truncateText(value: string, maxLength: number): string {
   return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
+function resolveDocumentPreviewUrl(url: string): string {
+  try {
+    const parsedUrl = new URL(url);
+    const host = parsedUrl.hostname.toLowerCase();
+
+    if (host === 'drive.google.com' || host.endsWith('.drive.google.com')) {
+      const fileIdMatch = parsedUrl.pathname.match(/\/file\/d\/([^/]+)/);
+      const searchId = parsedUrl.searchParams.get('id');
+
+      const fileId = fileIdMatch?.[1] ?? searchId ?? null;
+      if (fileId) {
+        return `https://drive.google.com/file/d/${fileId}/preview`;
+      }
+    }
+
+    if (host === 'docs.google.com' || host.endsWith('.docs.google.com')) {
+      const docMatch = parsedUrl.pathname.match(/\/(document|presentation|spreadsheets|forms)\/d\/([^/]+)/);
+      if (docMatch) {
+        const [, type, id] = docMatch;
+        return `https://docs.google.com/${type}/d/${id}/preview`;
+      }
+    }
+  } catch (error) {
+    // Ignore URL parsing issues and fall back to original URL
+  }
+
+  return url;
+}
+
 export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
@@ -581,7 +610,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
   async function handleView(doc: DealDocument) {
     if (!deal?.deal_id) return;
-    const directUrl = doc.url ?? null;
+    const directUrl = doc.url ? resolveDocumentPreviewUrl(doc.url) : null;
 
     setPreviewLoading(!directUrl);
     setPreviewError(null);
@@ -663,8 +692,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     setPreviewLoading(false);
     setPreviewError(null);
   }
-
-  const previewDownloadName = previewMeta?.name ?? getDocumentDisplayName(previewDocument) ?? undefined;
 
   return (
     <>
@@ -1210,17 +1237,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           {previewUrl ? (
             <Button variant="outline-primary" onClick={() => window.open(previewUrl, '_blank', 'noopener')}>
               Abrir en nueva pestaña
-            </Button>
-          ) : null}
-          {previewUrl ? (
-            <Button
-              as="a"
-              href={previewUrl}
-              target="_blank"
-              rel="noopener"
-              download={previewDownloadName || undefined}
-            >
-              Descargar
             </Button>
           ) : null}
         </div>
