@@ -16,6 +16,8 @@ import { resolveDealCustomLabels } from "./mappers";
 const DEFAULT_ORG_FOLDER = "— Sin organización —";
 const SUBFOLDER_SEPARATOR = " - ";
 const MAX_NAME_LENGTH = 200;
+const DRIVE_ACCESS_WARNING =
+  "DRIVE_DISABLED or DRIVE_NOT_ACCESSIBLE: revisa variables y permisos del Service Account sobre la Unidad Compartida";
 
 function normalizeDriveName(raw: any, fallback: string): string {
   const base = (raw ?? "").toString().normalize("NFC");
@@ -233,9 +235,7 @@ export async function syncDealDocumentsFromPipedrive({
 
   if (isGoogleDriveDisabled()) {
     summary.skipped = filesCount;
-    summary.warnings.push(
-      "DRIVE_DISABLED: revisa variables y permisos del Service Account sobre la Unidad Compartida"
-    );
+    summary.warnings.push(DRIVE_ACCESS_WARNING);
     return summary;
   }
 
@@ -247,16 +247,17 @@ export async function syncDealDocumentsFromPipedrive({
     if (error instanceof GoogleDriveError) {
       const code = error.code;
       const baseMessage =
-        code === "DRIVE_NOT_ACCESSIBLE"
-          ? `${code}: revisa variables y permisos del Service Account sobre la Unidad Compartida`
+        code === "DRIVE_NOT_ACCESSIBLE" || code === "DRIVE_DISABLED"
+          ? DRIVE_ACCESS_WARNING
           : `${code}: ${error.message}`;
       summary.skipped = filesCount;
       summary.warnings.push(baseMessage);
       console.warn("[deal-import][document]", {
         action: "shared_drive_validation_failed",
         dealId,
-        error: error.message,
         code: error.code,
+        error: error.message,
+        warning: baseMessage,
       });
       return summary;
     }

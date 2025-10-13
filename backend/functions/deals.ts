@@ -286,7 +286,7 @@ export const handler = async (event: any) => {
           warnings,
           deal,
           documents_count,
-          documents_sync: documentsSummary,
+          documentsSummary,
         };
         if (documents.length) responseBody.documents = documents;
         return successResponse(responseBody);

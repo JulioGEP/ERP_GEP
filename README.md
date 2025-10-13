@@ -81,7 +81,7 @@ Crear un archivo `.env` en la raíz con las siguientes claves mínimas:
 
 - Asegúrate de definir **tres variables imprescindibles**: `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY` (respeta los saltos de línea, reemplaza `\n` por saltos reales si es necesario) y `GOOGLE_DRIVE_SHARED_DRIVE_ID`.
 - Comparte la Unidad con la *service account* (`GOOGLE_DRIVE_CLIENT_EMAIL`) con permisos de al menos *Content manager*. Si la cuenta no ve la unidad compartida, la sincronización devolverá un warning `DRIVE_NOT_ACCESSIBLE`.
-- Si falta cualquiera de las variables o el JSON de credenciales es incorrecto, la importación no fallará, pero `documents_sync.warnings` incluirá un aviso `DRIVE_DISABLED`. Corrige las variables y repite la importación.
+- Si falta cualquiera de las variables o el JSON de credenciales es incorrecto, la importación no fallará, pero `documentsSummary.warnings` incluirá un aviso `DRIVE_DISABLED`. Corrige las variables y repite la importación.
 - Consulta los logs de Netlify (`[deal-import][document]`) para detalles adicionales cuando aparezcan `DRIVE_AUTH_ERROR` o errores de validación de la unidad.
 
 ## 🗄️ Modelo de datos
