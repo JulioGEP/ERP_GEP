@@ -87,6 +87,37 @@ function buildContentDisposition(filename: string): string {
   return `attachment; filename="${quoted}"; filename*=UTF-8''${encoded}`;
 }
 
+function resolvePipedriveFileId(doc: { id?: unknown; file_url?: unknown }): number | null {
+  const id = typeof doc?.id === "number" ? doc.id : Number(doc?.id);
+  if (Number.isFinite(id)) {
+    return id as number;
+  }
+
+  const url = typeof doc?.file_url === "string" ? doc.file_url : null;
+  if (!url) return null;
+
+  try {
+    const parsed = new URL(url);
+    const fromQuery = parsed.searchParams.get("id") ?? parsed.searchParams.get("file_id");
+    if (fromQuery) {
+      const asNumber = Number(fromQuery);
+      if (Number.isFinite(asNumber)) return asNumber;
+    }
+  } catch {
+    // ignoramos errores de URL y probamos con expresiones regulares
+  }
+
+  const match = url.match(/\/files\/(\d+)/i);
+  if (match && match[1]) {
+    const asNumber = Number(match[1]);
+    if (Number.isFinite(asNumber)) {
+      return asNumber;
+    }
+  }
+
+  return null;
+}
+
 async function streamToBuffer(body: any): Promise<Buffer> {
   if (!body) return Buffer.alloc(0);
   if (Buffer.isBuffer(body)) return body;
@@ -265,7 +296,7 @@ export const handler = async (event: any) => {
 
       // Documentos de Pipedrive → descargamos con el token del backend
       if (isHttpUrl(doc.file_url)) {
-        const pipedriveId = Number(doc.id);
+        const pipedriveId = resolvePipedriveFileId(doc);
         if (!Number.isFinite(pipedriveId)) {
           return errorResponse("VALIDATION_ERROR", "Documento Pipedrive con identificador inválido", 400);
         }
@@ -285,6 +316,7 @@ export const handler = async (event: any) => {
           body: buffer.toString("base64"),
           isBase64Encoded: true,
         };
+
       }
 
       // Documentos S3 → descargamos el objeto y devolvemos binario
