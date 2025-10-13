@@ -399,23 +399,25 @@ export const handler = async (event: any) => {
 
       try {
         const { deal_id, warnings } = await importDealFromPipedrive(incomingId);
-        const dealRaw = await prisma.deals.findUnique({
-          where: { deal_id: String(deal_id) },
-          include: {
-            organization: { select: { org_id: true, name: true } },
-            person: {
-              select: {
-                person_id: true,
-                first_name: true,
-                last_name: true,
-                email: true,
-                phone: true,
-              },
+        const dealInclude = {
+          organization: { select: { org_id: true, name: true } },
+          person: {
+            select: {
+              person_id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
             },
-            deal_products: true,
-            deal_notes: true,
-            deal_files: true,
           },
+          deal_products: true,
+          deal_notes: true,
+          deal_files: true,
+        } as const;
+
+        let dealRaw = await prisma.deals.findUnique({
+          where: { deal_id: String(deal_id) },
+          include: dealInclude,
         });
         if (dealRaw) {
           try {
@@ -424,6 +426,13 @@ export const handler = async (event: any) => {
               documents: dealRaw.deal_files ?? [],
               organizationName: dealRaw.organization?.name ?? null,
             });
+            const refreshed = await prisma.deals.findUnique({
+              where: { deal_id: String(deal_id) },
+              include: dealInclude,
+            });
+            if (refreshed) {
+              dealRaw = refreshed;
+            }
           } catch (driveError) {
             console.warn("[google-drive-sync] Error no bloqueante", {
               dealId: dealRaw?.deal_id,
