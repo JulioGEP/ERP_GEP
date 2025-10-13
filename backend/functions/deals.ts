@@ -109,6 +109,8 @@ function mapDealFileForApi(file: any) {
       (typeof file.title === "string" ? file.title : null),
     mime_type: file.file_type ?? file.mime_type ?? null,
     url: isHttp ? rawUrl ?? rawFileUrl ?? null : null,
+    drive_file_name: file.drive_file_name ?? null,
+    drive_web_view_link: file.drive_web_view_link ?? null,
     created_at: toMadridISOString(createdAt),
   };
 }
