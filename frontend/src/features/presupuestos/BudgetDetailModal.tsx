@@ -31,6 +31,8 @@ import { SessionsAccordion } from './sessions/SessionsAccordion';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
 
+const EMPTY_DOCUMENTS: DealDocument[] = [];
+
 interface Props {
   dealId: string | null;
   summary?: DealSummary | null;
@@ -350,8 +352,35 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
 
   const detailProducts = detailView.products;
   const detailNotes = detailView.notes;
-  const documents = deal?.documents ?? [];
-  const driveFolderLink = detailView.driveFolderWebViewLink ?? null;
+  const documents = deal?.documents ?? EMPTY_DOCUMENTS;
+  const driveFolderLink = useMemo(() => {
+    const candidateLinks = [
+      detailView.driveFolderWebViewLink,
+      deal?.drive_folder_web_view_link,
+      summary?.drive_folder_web_view_link,
+    ];
+
+    for (const candidate of candidateLinks) {
+      const trimmed = typeof candidate === 'string' ? candidate.trim() : '';
+      if (trimmed.length) return trimmed;
+    }
+
+    for (const document of documents) {
+      if (!document) continue;
+      const link =
+        typeof document.drive_web_view_link === 'string'
+          ? document.drive_web_view_link.trim()
+          : '';
+      if (!link.length) continue;
+
+      const mime = typeof document.mime_type === 'string' ? document.mime_type.toLowerCase() : '';
+      if (mime === 'application/vnd.google-apps.folder' || link.includes('/folders/')) {
+        return link;
+      }
+    }
+
+    return null;
+  }, [detailView.driveFolderWebViewLink, deal?.drive_folder_web_view_link, summary?.drive_folder_web_view_link, documents]);
 
   const defaultSessionAddress =
     form?.training_address?.trim()?.length
