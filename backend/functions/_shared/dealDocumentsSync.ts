@@ -157,20 +157,47 @@ async function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function withRetry<T>(fn: () => Promise<T>, attempts = 3, baseDelayMs = 400): Promise<T> {
+async function retryWithBackoff<T>(fn: () => Promise<T>, delaysMs: number[]): Promise<T> {
   let lastError: unknown;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  for (let attempt = 0; attempt <= delaysMs.length; attempt += 1) {
     try {
       return await fn();
     } catch (error) {
       lastError = error;
-      if (attempt === attempts) break;
-      const waitMs = baseDelayMs * 2 ** (attempt - 1);
+      if (attempt === delaysMs.length) break;
+      const waitMs = delaysMs[Math.min(attempt, delaysMs.length - 1)];
       await delay(waitMs);
     }
   }
   throw lastError instanceof Error ? lastError : new Error("Operación fallida tras reintentos");
 }
+
+async function runWithConcurrencyLimit<T>(
+  items: T[],
+  limit: number,
+  handler: (item: T, index: number) => Promise<void>
+): Promise<void> {
+  if (!items.length) return;
+  const safeLimit = Math.max(1, Math.min(limit, items.length));
+  let currentIndex = 0;
+
+  const worker = async () => {
+    while (true) {
+      if (currentIndex >= items.length) return;
+      const index = currentIndex;
+      currentIndex += 1;
+      await handler(items[index], index);
+    }
+  };
+
+  const workers = Array.from({ length: safeLimit }, () => worker());
+
+  await Promise.all(workers);
+}
+
+const DOWNLOAD_UPLOAD_RETRY_DELAYS_MS = [500, 2000, 5000];
+const PERMISSION_RETRY_DELAYS_MS = [500, 1000, 2000];
+const CONCURRENCY_LIMIT = 3;
 
 function buildAppProperties(dealId: string, pipedriveFileId: string) {
   return {
@@ -307,18 +334,20 @@ export async function syncDealDocumentsFromPipedrive({
     });
   };
 
-  for (const file of normalizedFiles) {
+  await runWithConcurrencyLimit(normalizedFiles, CONCURRENCY_LIMIT, async (file) => {
     const pipedriveFileIdRaw = file?.id ?? file?.file_id;
-    if (pipedriveFileIdRaw === null || pipedriveFileIdRaw === undefined) continue;
+    if (pipedriveFileIdRaw === null || pipedriveFileIdRaw === undefined) return;
+
     const pipedriveFileId = String(pipedriveFileIdRaw);
     const existing = existingByPdId.get(pipedriveFileId) ?? null;
+    let chosenFileName: string | null = existing?.file_name ?? file?.file_name ?? null;
 
     try {
       if (existing?.drive_file_id) {
         const metadata = await getDriveFileMetadata(existing.drive_file_id);
         if (metadata) {
           await ensureRecordFromMetadata(pipedriveFileId, metadata, file, existing);
-          continue;
+          return;
         }
       }
 
@@ -335,33 +364,39 @@ export async function syncDealDocumentsFromPipedrive({
             file,
             existing
           );
-          continue;
+          return;
         }
       }
 
-      const download = await withRetry(() => downloadFile(pipedriveFileId), 3, 500);
-      const chosenFileName = resolveFileName(
+      const download = await retryWithBackoff(
+        () => downloadFile(pipedriveFileId),
+        DOWNLOAD_UPLOAD_RETRY_DELAYS_MS
+      );
+      const resolvedFileName = resolveFileName(
         download.file_name_from_header,
         file?.file_name,
         pipedriveFileId,
         download.mimeType ?? file?.file_type ?? null
       );
+      chosenFileName = resolvedFileName;
       const mimeType = download.mimeType ?? file?.file_type ?? undefined;
 
-      const uploadResult = await withRetry(
+      const uploadResult = await retryWithBackoff(
         () =>
           uploadFile(
             dealFolderId,
-            chosenFileName,
+            resolvedFileName,
             mimeType,
             download.buffer,
             buildAppProperties(dealId, pipedriveFileId)
           ),
-        3,
-        500
+        DOWNLOAD_UPLOAD_RETRY_DELAYS_MS
       );
 
-      await withRetry(() => setDomainPermission(uploadResult.driveFileId, "gepgroup.es", "reader"), 3, 500);
+      await retryWithBackoff(
+        () => setDomainPermission(uploadResult.driveFileId, "gepgroup.es", "reader"),
+        PERMISSION_RETRY_DELAYS_MS
+      );
 
       const recordId = existing?.id ?? pipedriveFileId;
       const webViewLink = uploadResult.webViewLink;
@@ -373,7 +408,7 @@ export async function syncDealDocumentsFromPipedrive({
         create: {
           id: recordId,
           deal_id: dealId,
-          file_name: chosenFileName,
+          file_name: resolvedFileName,
           file_type: mimeType ?? null,
           file_url: webViewLink,
           drive_web_view_link: webViewLink,
@@ -383,7 +418,7 @@ export async function syncDealDocumentsFromPipedrive({
           uploaded_at: now,
         },
         update: {
-          file_name: chosenFileName,
+          file_name: resolvedFileName,
           file_type: mimeType ?? null,
           file_url: webViewLink,
           drive_web_view_link: webViewLink,
@@ -402,25 +437,27 @@ export async function syncDealDocumentsFromPipedrive({
       console.log("[deal-import][document]", {
         dealId,
         pipedriveFileId,
-        chosenFileName,
+        chosenFileName: resolvedFileName,
         action: existing ? "reuploaded" : "uploaded",
         driveFileId: uploadResult.driveFileId,
       });
     } catch (error: any) {
       const message = error?.message ? String(error.message) : String(error);
+      const warningName = chosenFileName ?? file?.file_name ?? `Documento ${pipedriveFileId}`;
+      summary.skipped += 1;
       summary.warnings.push(
-        `No se pudo sincronizar el fichero ${pipedriveFileId}: ${message}`
+        `No se pudo sincronizar el fichero "${warningName}" (ID ${pipedriveFileId}): ${message}`
       );
       console.error("[deal-import][document]", {
         dealId,
         pipedriveFileId,
-        chosenFileName: existing?.file_name ?? file?.file_name ?? null,
+        chosenFileName: warningName,
         action: "document_upload_failed",
         driveFileId: existing?.drive_file_id ?? null,
         error: message,
       });
     }
-  }
+  });
 
   return summary;
 }
