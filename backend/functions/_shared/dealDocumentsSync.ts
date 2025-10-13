@@ -7,7 +7,9 @@ import {
   getDriveFileMetadata,
   setDomainPermission,
   uploadFile,
+  GoogleDriveError,
 } from "./googleDrive";
+import { isGoogleDriveDisabled } from "./env";
 import { downloadFile } from "./pipedrive";
 import { resolveDealCustomLabels } from "./mappers";
 
@@ -224,12 +226,42 @@ export async function syncDealDocumentsFromPipedrive({
   const addTime = parsePipedriveDate(deal?.add_time) ?? new Date();
   const orgFolderName = resolveOrgName(organizationName ?? null);
   const normalizedFiles = Array.isArray(files) ? files : [];
-  if (!normalizedFiles.length) {
+  const filesCount = normalizedFiles.length;
+  if (!filesCount) {
+    return summary;
+  }
+
+  if (isGoogleDriveDisabled()) {
+    summary.skipped = filesCount;
+    summary.warnings.push(
+      "DRIVE_DISABLED: revisa variables y permisos del Service Account sobre la Unidad Compartida"
+    );
     return summary;
   }
 
   const prisma = getPrisma();
-  const sharedDriveId = await getValidatedSharedDriveId();
+  let sharedDriveId: string;
+  try {
+    sharedDriveId = await getValidatedSharedDriveId();
+  } catch (error: any) {
+    if (error instanceof GoogleDriveError) {
+      const code = error.code;
+      const baseMessage =
+        code === "DRIVE_NOT_ACCESSIBLE"
+          ? `${code}: revisa variables y permisos del Service Account sobre la Unidad Compartida`
+          : `${code}: ${error.message}`;
+      summary.skipped = filesCount;
+      summary.warnings.push(baseMessage);
+      console.warn("[deal-import][document]", {
+        action: "shared_drive_validation_failed",
+        dealId,
+        error: error.message,
+        code: error.code,
+      });
+      return summary;
+    }
+    throw error;
+  }
   const orgFolderId = await ensureOrgFolder(sharedDriveId, orgFolderName);
 
   const { budgetNumber, serviceLabel } = await resolveDealFolderMetadata(deal);

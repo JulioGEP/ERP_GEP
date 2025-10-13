@@ -12,6 +12,7 @@ import {
 } from "./_shared/pipedrive";
 import { mapAndUpsertDealTree } from "./_shared/mappers";
 import { syncDealDocumentsFromPipedrive } from "./_shared/dealDocumentsSync";
+import type { DealDocumentsSyncResult } from "./_shared/dealDocumentsSync";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -192,7 +193,11 @@ async function importDealFromPipedrive(dealIdRaw: any) {
   const resolvedOrgName = org?.name ?? resolvePipedriveName(d) ?? null;
   const warnings: string[] = [];
 
-  let documentsSummary: { imported: number; skipped: number; warnings: string[] } | null = null;
+  let documentsSummary: DealDocumentsSyncResult = {
+    imported: 0,
+    skipped: files.length,
+    warnings: [],
+  };
   try {
     documentsSummary = await syncDealDocumentsFromPipedrive({
       deal: d,
@@ -202,7 +207,8 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     });
   } catch (error: any) {
     const message = error?.message ? String(error.message) : String(error);
-    warnings.push(`Sincronización de documentos fallida: ${message}`);
+    const warningMessage = `Sincronización de documentos fallida: ${message}`;
+    documentsSummary.warnings.push(warningMessage);
   }
 
   if (documentsSummary?.warnings?.length) {
@@ -280,9 +286,9 @@ export const handler = async (event: any) => {
           warnings,
           deal,
           documents_count,
+          documents_sync: documentsSummary,
         };
         if (documents.length) responseBody.documents = documents;
-        if (documentsSummary) responseBody.documents_sync = documentsSummary;
         return successResponse(responseBody);
       } catch (e: any) {
         return errorResponse("IMPORT_ERROR", e?.message || "Error importando deal", 502);

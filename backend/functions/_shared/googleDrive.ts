@@ -1,6 +1,7 @@
 import { createSign } from "crypto";
 import {
   getGoogleDriveClientEmail,
+  getGoogleDriveConfig,
   getGoogleDrivePrivateKey,
   getGoogleDriveSharedDriveId,
 } from "./env";
@@ -13,6 +14,39 @@ let cachedToken: { token: string; expiresAt: number } | null = null;
 let validatedSharedDriveId: string | null = null;
 let sharedDriveValidationPromise: Promise<string> | null = null;
 
+export type GoogleDriveErrorCode =
+  | "DRIVE_DISABLED"
+  | "DRIVE_AUTH_ERROR"
+  | "DRIVE_NOT_ACCESSIBLE"
+  | "DRIVE_VALIDATION_FAILED"
+  | "DRIVE_REQUEST_FAILED";
+
+export class GoogleDriveError extends Error {
+  code: GoogleDriveErrorCode;
+
+  constructor(code: GoogleDriveErrorCode, message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = "GoogleDriveError";
+    this.code = code;
+    if (options?.cause !== undefined) {
+      (this as any).cause = options.cause;
+    }
+  }
+}
+
+function assertDriveConfigured(): void {
+  const config = getGoogleDriveConfig();
+  if (config.driveDisabled) {
+    const missing = config.missingVariables.join(", ");
+    throw new GoogleDriveError(
+      "DRIVE_DISABLED",
+      missing.length
+        ? `Google Drive deshabilitado. Faltan variables: ${missing}.`
+        : "Google Drive deshabilitado por configuración incompleta."
+    );
+  }
+}
+
 function base64UrlEncode(input: Buffer | string): string {
   const buffer = typeof input === "string" ? Buffer.from(input) : input;
   return buffer
@@ -23,6 +57,7 @@ function base64UrlEncode(input: Buffer | string): string {
 }
 
 async function fetchAccessToken(): Promise<string> {
+  assertDriveConfigured();
   const clientEmail = getGoogleDriveClientEmail();
   const privateKey = getGoogleDrivePrivateKey();
   const now = Math.floor(Date.now() / 1000);
@@ -43,11 +78,11 @@ async function fetchAccessToken(): Promise<string> {
   try {
     signature = signer.sign(privateKey);
   } catch (error) {
-    const err = new Error(
-      "GOOGLE_DRIVE_PRIVATE_KEY_INVALID: PEM inválido o no corresponde a GOOGLE_DRIVE_CLIENT_EMAIL."
+    throw new GoogleDriveError(
+      "DRIVE_AUTH_ERROR",
+      "GOOGLE_DRIVE_PRIVATE_KEY_INVALID: PEM inválido o no corresponde a GOOGLE_DRIVE_CLIENT_EMAIL.",
+      { cause: error }
     );
-    (err as any).cause = error;
-    throw err;
   }
   const assertion = `${signingInput}.${base64UrlEncode(signature)}`;
 
@@ -64,7 +99,10 @@ async function fetchAccessToken(): Promise<string> {
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(`Error obteniendo token de Google Drive: ${response.status} ${text}`);
+    throw new GoogleDriveError(
+      "DRIVE_AUTH_ERROR",
+      `Error obteniendo token de Google Drive: ${response.status}${text ? ` ${text}` : ""}`
+    );
   }
 
   const json: any = await response.json();
@@ -113,18 +151,12 @@ async function authorizedFetch(url: string, init: RequestInit = {}): Promise<Res
   return fetch(url, { ...init, headers });
 }
 
-function buildSharedDriveConfigError(message: string, cause?: unknown): Error {
-  const error = new Error(message);
-  (error as any).code = "GOOGLE_DRIVE_SHARED_DRIVE_CONFIG";
-  if (cause) (error as any).cause = cause;
-  return error;
-}
-
 export async function getValidatedSharedDriveId(): Promise<string> {
   if (validatedSharedDriveId) return validatedSharedDriveId;
 
   if (!sharedDriveValidationPromise) {
     sharedDriveValidationPromise = (async () => {
+      assertDriveConfigured();
       const sharedDriveId = getGoogleDriveSharedDriveId();
       const params = new URLSearchParams({ supportsAllDrives: "true", fields: "id,name" });
       const response = await authorizedFetch(
@@ -133,18 +165,21 @@ export async function getValidatedSharedDriveId(): Promise<string> {
       );
 
       if (response.status === 404) {
-        throw buildSharedDriveConfigError(
+        throw new GoogleDriveError(
+          "DRIVE_NOT_ACCESSIBLE",
           `Configuración inválida: GOOGLE_DRIVE_SHARED_DRIVE_ID (${sharedDriveId}) no existe o es inaccesible para la service account.`
         );
       }
       if (response.status === 403) {
-        throw buildSharedDriveConfigError(
+        throw new GoogleDriveError(
+          "DRIVE_NOT_ACCESSIBLE",
           `Configuración inválida: la service account no tiene acceso a la unidad configurada en GOOGLE_DRIVE_SHARED_DRIVE_ID (${sharedDriveId}).`
         );
       }
       if (!response.ok) {
         const text = await response.text().catch(() => "");
-        throw buildSharedDriveConfigError(
+        throw new GoogleDriveError(
+          "DRIVE_VALIDATION_FAILED",
           `Error al validar GOOGLE_DRIVE_SHARED_DRIVE_ID (${sharedDriveId}): ${response.status}${text ? ` ${text}` : ""}`
         );
       }
