@@ -198,6 +198,24 @@ function resolveOrgName(raw: string | undefined | null): string {
   return normalizeDriveName(raw, DEFAULT_ORG_FOLDER);
 }
 
+type UploadVisibilityAssessment = {
+  inheritsFromSharedDrive: boolean;
+  inExpectedDealFolder: boolean;
+};
+
+function assessUploadVisibility(
+  upload: { driveId: string | null; parents: string[] },
+  sharedDriveId: string,
+  dealFolderId: string
+): UploadVisibilityAssessment {
+  const parents = Array.isArray(upload.parents) ? upload.parents : [];
+  const inExpectedDealFolder = parents.includes(dealFolderId);
+  const inheritsFromSharedDrive = Boolean(
+    inExpectedDealFolder || (upload.driveId != null && upload.driveId === sharedDriveId)
+  );
+  return { inheritsFromSharedDrive, inExpectedDealFolder };
+}
+
 export type DealDocumentsSyncResult = {
   imported: number;
   skipped: number;
@@ -361,7 +379,49 @@ export async function syncDealDocumentsFromPipedrive({
         500
       );
 
-      await withRetry(() => setDomainPermission(uploadResult.driveFileId, "gepgroup.es", "reader"), 3, 500);
+      const visibility = assessUploadVisibility(uploadResult, sharedDriveId, dealFolderId);
+      if (!visibility.inExpectedDealFolder) {
+        console.warn("[deal-import][document]", {
+          dealId,
+          pipedriveFileId,
+          driveFileId: uploadResult.driveFileId,
+          action: "deal_folder_visibility_warning",
+          message: "El fichero no aparece con la carpeta del deal como padre inmediato.",
+          parents: uploadResult.parents,
+        });
+      }
+
+      if (!visibility.inheritsFromSharedDrive) {
+        console.warn("[deal-import][document]", {
+          dealId,
+          pipedriveFileId,
+          driveFileId: uploadResult.driveFileId,
+          action: "fallback_domain_permission",
+          message:
+            "El fichero no parece heredar permisos de la unidad compartida. Se intentará conceder acceso al dominio.",
+          driveId: uploadResult.driveId,
+        });
+        try {
+          await withRetry(
+            () => setDomainPermission(uploadResult.driveFileId, "gepgroup.es", "reader"),
+            3,
+            500
+          );
+        } catch (permissionError: any) {
+          const permMessage =
+            permissionError?.message ? String(permissionError.message) : String(permissionError);
+          summary.warnings.push(
+            `El fichero ${pipedriveFileId} se subió pero no se pudo garantizar el acceso para el dominio: ${permMessage}`
+          );
+          console.warn("[deal-import][document]", {
+            dealId,
+            pipedriveFileId,
+            driveFileId: uploadResult.driveFileId,
+            action: "fallback_domain_permission_failed",
+            error: permMessage,
+          });
+        }
+      }
 
       const recordId = existing?.id ?? pipedriveFileId;
       const webViewLink = uploadResult.webViewLink;

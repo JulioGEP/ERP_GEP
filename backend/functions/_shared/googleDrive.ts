@@ -254,13 +254,20 @@ function buildMultipartBody(
   return { body, boundary };
 }
 
+export type UploadFileResult = {
+  driveFileId: string;
+  webViewLink: string | null;
+  parents: string[];
+  driveId: string | null;
+};
+
 export async function uploadFile(
   parentId: string,
   filename: string,
   mimeType: string | undefined,
   buffer: Buffer,
   appProperties?: Record<string, string>
-): Promise<{ driveFileId: string; webViewLink: string | null }> {
+): Promise<UploadFileResult> {
   const effectiveMime = mimeType || "application/octet-stream";
   const metadata: Record<string, any> = {
     name: filename,
@@ -274,7 +281,7 @@ export async function uploadFile(
   const params = new URLSearchParams({
     uploadType: "multipart",
     supportsAllDrives: "true",
-    fields: "id,webViewLink",
+    fields: "id,webViewLink,driveId,parents",
   });
   const response = await authorizedFetch(`${DRIVE_API_BASE}/files?${params.toString()}`, {
     method: "POST",
@@ -291,7 +298,16 @@ export async function uploadFile(
   const json: any = await response.json();
   const id = json?.id;
   if (!id) throw new Error("Upload sin id");
-  return { driveFileId: String(id), webViewLink: json?.webViewLink ?? null };
+  const parents = Array.isArray(json?.parents)
+    ? json.parents.map((parent: any) => String(parent))
+    : [];
+  const driveId = json?.driveId != null ? String(json.driveId) : null;
+  return {
+    driveFileId: String(id),
+    webViewLink: json?.webViewLink ?? null,
+    parents,
+    driveId,
+  };
 }
 
 export async function setDomainPermission(
