@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { getPrisma } from "./_shared/prisma";
 import { nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
+import { downloadFile as downloadPipedriveFile } from "./_shared/pipedrive";
 
 const BUCKET = process.env.S3_BUCKET!;
 const REGION = process.env.S3_REGION!;
@@ -27,23 +28,83 @@ const s3 = new S3Client({
 // 2) POST   /deal_documents/:dealId               -> guarda metadatos en deal_files (source implícito)
 // 3) GET    /deal_documents/:dealId               -> lista documentos (mapeo a {name,mime_type,...})
 // 4) GET    /deal_documents/:dealId/:docId/url    -> { url } (presign si S3, directa si http(s))
-// 5) DELETE /deal_documents/:dealId/:docId        -> borra (S3+BD si S3; si http(s) solo BD)
+// 5) GET    /deal_documents/:dealId/:docId/download -> binario (Pipedrive proxy o S3 directo)
+// 6) DELETE /deal_documents/:dealId/:docId        -> borra (S3+BD si S3; si http(s) solo BD)
 
-function parsePath(path: string) {
-  const p = String(path || "");
-  const m = p.match(
-    /\/(?:\.netlify\/functions\/)?deal_documents\/([^/]+)(?:\/([^/]+))?(?:\/(upload-url|url))?$/i
-  );
-  const dealId = m?.[1] ? decodeURIComponent(m[1]) : null;
-  const second = m?.[2] ? decodeURIComponent(m[2]) : null;
-  const tail = m?.[3] ? String(m[3]) : null;
+type ParsedPath = {
+  dealId: string | null;
+  docId: string | null;
+  isUploadUrl: boolean;
+  isGetUrl: boolean;
+  isDownload: boolean;
+};
+
+function parsePath(rawPath: string): ParsedPath {
+  const path = String(rawPath || "");
+  const withoutPrefix = path.replace(/^\/?\.netlify\/functions\//i, "/");
+  const segments = withoutPrefix.split("/").filter(Boolean);
+
+  if (segments[0] !== "deal_documents") {
+    return { dealId: null, docId: null, isUploadUrl: false, isGetUrl: false, isDownload: false };
+  }
+
+  const dealId = segments[1] ? decodeURIComponent(segments[1]) : null;
+  let docId: string | null = null;
+  let action: string | null = null;
+
+  if (segments.length >= 3) {
+    const maybeDocOrAction = decodeURIComponent(segments[2]);
+    if (["upload-url", "url", "download"].includes(maybeDocOrAction)) {
+      action = maybeDocOrAction;
+    } else {
+      docId = maybeDocOrAction;
+      if (segments.length >= 4) {
+        const maybeAction = decodeURIComponent(segments[3]);
+        if (["upload-url", "url", "download"].includes(maybeAction)) {
+          action = maybeAction;
+        }
+      }
+    }
+  }
 
   return {
     dealId,
-    docId: second && second !== "upload-url" && second !== "url" ? second : second,
-    isUploadUrl: tail === "upload-url",
-    isGetUrl: tail === "url",
+    docId,
+    isUploadUrl: action === "upload-url",
+    isGetUrl: action === "url",
+    isDownload: action === "download",
   };
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[\r\n\t]+/g, " ").replace(/[\\/:*?"<>|]+/g, "_");
+}
+
+function buildContentDisposition(filename: string): string {
+  const safe = sanitizeFileName(filename.trim() || "documento");
+  const quoted = safe.replace(/"/g, "'");
+  const encoded = encodeURIComponent(safe);
+  return `attachment; filename="${quoted}"; filename*=UTF-8''${encoded}`;
+}
+
+async function streamToBuffer(body: any): Promise<Buffer> {
+  if (!body) return Buffer.alloc(0);
+  if (Buffer.isBuffer(body)) return body;
+  if (body instanceof Uint8Array) return Buffer.from(body);
+  if (typeof body === "string") return Buffer.from(body);
+  if (body instanceof ArrayBuffer) return Buffer.from(body);
+  if (ArrayBuffer.isView(body)) return Buffer.from(body.buffer);
+
+  if (typeof (body as any)[Symbol.asyncIterator] === "function") {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body as AsyncIterable<any>) {
+      if (chunk === undefined || chunk === null) continue;
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  return Buffer.alloc(0);
 }
 
 function isHttpUrl(u?: string | null): boolean {
@@ -60,7 +121,7 @@ export const handler = async (event: any) => {
 
     const method = event.httpMethod;
     const path = event.path || "";
-    const { dealId, docId, isUploadUrl, isGetUrl } = parsePath(path);
+    const { dealId, docId, isUploadUrl, isGetUrl, isDownload } = parsePath(path);
     if (!dealId) return errorResponse("VALIDATION_ERROR", "deal_id requerido en path", 400);
 
     const prisma = getPrisma();
@@ -182,7 +243,74 @@ export const handler = async (event: any) => {
       return successResponse({ ok: true, url, name: doc.file_name ?? undefined, mime_type: doc.file_type ?? undefined });
     }
 
-    // 5) Borrado (si es S3 → borra objeto; si es http(s) → borra solo de BD)
+    // 5) Descarga directa (Pipedrive proxy o S3 binario)
+    if (method === "GET" && docId && isDownload) {
+      const doc = await prisma.deal_files.findUnique({
+        where: { id: String(docId) },
+        select: {
+          id: true,
+          deal_id: true,
+          file_url: true,
+          file_type: true,
+          file_name: true,
+        },
+      });
+
+      if (!doc || doc.deal_id !== dealIdStr) {
+        return errorResponse("NOT_FOUND", "Documento no encontrado", 404);
+      }
+
+      const baseHeaders = { ...COMMON_HEADERS } as Record<string, string>;
+      delete baseHeaders["Content-Type"];
+
+      // Documentos de Pipedrive → descargamos con el token del backend
+      if (isHttpUrl(doc.file_url)) {
+        const pipedriveId = Number(doc.id);
+        if (!Number.isFinite(pipedriveId)) {
+          return errorResponse("VALIDATION_ERROR", "Documento Pipedrive con identificador inválido", 400);
+        }
+
+        const download = await downloadPipedriveFile(pipedriveId);
+        const buffer = download.data;
+        const fileName = doc.file_name ?? download.fileName ?? `pipedrive_file_${doc.id}`;
+        const mimeType = doc.file_type ?? download.mimeType ?? "application/octet-stream";
+
+        return {
+          statusCode: 200,
+          headers: {
+            ...baseHeaders,
+            "Content-Type": mimeType,
+            "Content-Disposition": buildContentDisposition(fileName),
+          },
+          body: buffer.toString("base64"),
+          isBase64Encoded: true,
+        };
+      }
+
+      // Documentos S3 → descargamos el objeto y devolvemos binario
+      if (!doc.file_url) {
+        return errorResponse("VALIDATION_ERROR", "Documento sin referencia de ubicación", 400);
+      }
+
+      const getCmd = new GetObjectCommand({ Bucket: BUCKET, Key: String(doc.file_url) });
+      const object = await s3.send(getCmd);
+      const buffer = await streamToBuffer(object.Body);
+      const mimeType = doc.file_type ?? object.ContentType ?? "application/octet-stream";
+      const fileName = doc.file_name ?? `documento_${doc.id}`;
+
+      return {
+        statusCode: 200,
+        headers: {
+          ...baseHeaders,
+          "Content-Type": mimeType,
+          "Content-Disposition": buildContentDisposition(fileName),
+        },
+        body: buffer.toString("base64"),
+        isBase64Encoded: true,
+      };
+    }
+
+    // 6) Borrado (si es S3 → borra objeto; si es http(s) → borra solo de BD)
     if (method === "DELETE" && docId) {
       const doc = await prisma.deal_files.findUnique({
         where: { id: String(docId) },

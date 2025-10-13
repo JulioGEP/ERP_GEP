@@ -101,7 +101,11 @@ function mapDealFileForApi(file: any) {
   return {
     id,
     source: isHttp ? "PIPEDRIVE" : "S3",
-    name: file.file_name ?? file.name ?? null,
+    name:
+      file.original_file_name ??
+      file.file_name ??
+      file.name ??
+      (typeof file.title === "string" ? file.title : null),
     mime_type: file.file_type ?? file.mime_type ?? null,
     url: isHttp ? rawUrl ?? rawFileUrl ?? null : null,
     created_at: toMadridISOString(createdAt),
