@@ -30,6 +30,27 @@ function qs(obj: Record<string, any>): string {
   return u.toString();
 }
 
+function extractFileNameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+
+  // RFC 5987 encoding: filename*=UTF-8''...
+  const starMatch = header.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
+  if (starMatch && starMatch[1]) {
+    try {
+      return decodeURIComponent(starMatch[1].trim().replace(/^"|"$/g, ""));
+    } catch {
+      return starMatch[1].trim().replace(/^"|"$/g, "");
+    }
+  }
+
+  const filenameMatch = header.match(/filename\s*=\s*"?([^";]+)"?/i);
+  if (filenameMatch && filenameMatch[1]) {
+    return filenameMatch[1].trim();
+  }
+
+  return null;
+}
+
 async function pd(path: string, opts: FetchOpts = {}) {
   const token = process.env.PIPEDRIVE_API_TOKEN;
   if (!token) {
@@ -81,6 +102,38 @@ export async function getDealNotes(dealId: number | string, limit = 500) {
 export async function getDealFiles(dealId: number | string, limit = 500) {
   const id = encodeURIComponent(String(dealId));
   return pd(`/deals/${id}/files?${qs({ limit })}`);
+}
+
+export async function downloadFile(fileId: number | string): Promise<{
+  data: Buffer;
+  fileName: string | null;
+  mimeType: string | null;
+}> {
+  const token = process.env.PIPEDRIVE_API_TOKEN;
+  if (!token) {
+    throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
+  }
+
+  const url = `${BASE_URL}/files/${encodeURIComponent(String(fileId))}/download`;
+  const res = await fetch(url as any, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`[pipedrive] download ${url} -> ${res.status} ${text}`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const disposition = res.headers.get("content-disposition");
+  const fileName = extractFileNameFromContentDisposition(disposition);
+  const mimeType = res.headers.get("content-type");
+
+  return { data: buffer, fileName, mimeType };
 }
 
 export async function getPipelines() {

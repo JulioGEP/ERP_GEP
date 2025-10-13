@@ -460,19 +460,25 @@ export async function mapAndUpsertDealTree({
 
   for (const f of Array.isArray(files) ? files : []) {
     const id = String(f.id ?? `${dealId}_${Math.random().toString(36).slice(2)}`);
+    const fileName =
+      f?.original_file_name ??
+      f?.file_name ??
+      f?.name ??
+      (typeof f?.title === "string" ? f.title : "documento");
+
     await prisma.deal_files.upsert({
       where: { id },
       create: {
         id,
         deal_id: dealId,
-        file_name: f.file_name ?? f.name ?? "documento",
+        file_name: fileName,
         file_url: f.file_url ?? f.url ?? null,
         file_type: f.file_type ?? f.mime_type ?? null,
         ...(f.add_time ? { added_at: new Date(f.add_time) } : {}),
       },
       update: {
         deal_id: dealId,
-        file_name: f.file_name ?? f.name ?? "documento",
+        file_name: fileName,
         file_url: f.file_url ?? f.url ?? null,
         file_type: f.file_type ?? f.mime_type ?? null,
         ...(f.add_time ? { added_at: new Date(f.add_time) } : {}),
