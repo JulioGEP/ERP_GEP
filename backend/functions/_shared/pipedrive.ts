@@ -114,8 +114,12 @@ export async function downloadFile(fileId: number | string): Promise<{
     throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
   }
 
-  const url = `${BASE_URL}/files/${encodeURIComponent(String(fileId))}/download`;
-  const res = await fetch(url as any, {
+  const url = new URL(`${BASE_URL}/files/${encodeURIComponent(String(fileId))}/download`);
+  if (!url.searchParams.has("api_token")) {
+    url.searchParams.set("api_token", token);
+  }
+
+  const res = await fetch(url.toString() as any, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
