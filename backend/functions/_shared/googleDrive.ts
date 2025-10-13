@@ -790,3 +790,67 @@ export async function deleteDealFolderFromGoogleDrive(params: {
     throw err;
   }
 }
+
+export async function uploadDealDocumentToGoogleDrive(params: {
+  deal: any;
+  organizationName?: string | null;
+  fileName: string;
+  mimeType?: string | null;
+  data: Buffer;
+}): Promise<{ driveFileName: string; driveWebViewLink: string | null }> {
+  const driveId = resolveDriveSharedId();
+  if (!driveId) {
+    throw new Error("Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)");
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error("Credenciales de Google Drive no configuradas");
+  }
+
+  const baseFolderId = await ensureFolder({
+    name: resolveDriveBaseFolderName(),
+    parentId: driveId,
+    driveId,
+  });
+
+  const organizationDisplayName = sanitizeName(params.organizationName || "Sin organización") ||
+    "Sin organización";
+  const organizationFolderId = await ensureFolder({
+    name: organizationDisplayName,
+    parentId: baseFolderId,
+    driveId,
+  });
+
+  const dealFolderName = sanitizeName(buildDealFolderName(params.deal));
+  const dealFolderId = await ensureFolder({
+    name: dealFolderName,
+    parentId: organizationFolderId,
+    driveId,
+  });
+
+  const safeName = sanitizeName(params.fileName || "documento") || "documento";
+  const mimeType = params.mimeType?.trim() || "application/octet-stream";
+
+  const uploadResult = await uploadBufferToDrive({
+    parentId: dealFolderId,
+    name: safeName,
+    mimeType,
+    data: params.data,
+  });
+
+  let publicLink = uploadResult.webViewLink;
+  try {
+    publicLink = await ensureFilePublicWebViewLink(uploadResult.id);
+  } catch (permissionError) {
+    console.warn("[google-drive-sync] No se pudo generar enlace público de Drive", {
+      dealId: params.deal?.deal_id ?? params.deal?.id,
+      fileId: uploadResult.id,
+      error: permissionError instanceof Error ? permissionError.message : String(permissionError),
+    });
+  }
+
+  return {
+    driveFileName: uploadResult.name || safeName,
+    driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
+  };
+}

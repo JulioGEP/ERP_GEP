@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import type { ChangeEvent, DragEvent } from 'react';
 import {
   Modal,
   Button,
@@ -9,7 +10,6 @@ import {
   Alert,
   Spinner,
   Table,
-  Badge,
   Accordion
 } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,8 +18,7 @@ import {
   patchDealEditable,
   importDeal,
   getDocPreviewUrl,
-  getUploadUrl,
-  createDocumentMeta,
+  uploadManualDocument,
   deleteDocument,
   buildDealDetailViewModel,
   createDealNote,
@@ -205,6 +204,11 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   );
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
 
   const getDocumentDisplayName = (doc: DealDocument | null | undefined): string => {
     if (!doc) return 'Documento';
@@ -217,6 +221,83 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     const rawLink = doc.drive_web_view_link ?? '';
     const trimmed = rawLink.trim();
     return trimmed.length ? trimmed : null;
+  };
+
+  const canUploadDocument = Boolean(deal?.deal_id);
+
+  const openUploadDialog = () => {
+    if (!canUploadDocument) return;
+    setPendingUploadFile(null);
+    setIsDragActive(false);
+    setShowUploadDialog(true);
+  };
+
+  const closeUploadDialog = () => {
+    if (uploadingDocument) return;
+    setShowUploadDialog(false);
+    setPendingUploadFile(null);
+    setIsDragActive(false);
+  };
+
+  const handleSelectUploadFile = (files: FileList | null | undefined) => {
+    if (!files || !files.length) {
+      setPendingUploadFile(null);
+      return;
+    }
+    const [file] = Array.from(files);
+    setPendingUploadFile(file);
+  };
+
+  const handleUploadInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    handleSelectUploadFile(event.target.files);
+    if (event.target) {
+      event.target.value = '';
+    }
+  };
+
+  const handleBrowseClick = () => {
+    uploadInputRef.current?.click();
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (uploadingDocument) return;
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+    setIsDragActive(false);
+  };
+
+  const handleDropFile = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (uploadingDocument) return;
+    setIsDragActive(false);
+    handleSelectUploadFile(event.dataTransfer?.files ?? null);
+  };
+
+  const handleUploadDocument = async () => {
+    if (!deal?.deal_id || !pendingUploadFile) return;
+    try {
+      setUploadingDocument(true);
+      await uploadManualDocument(deal.deal_id, pendingUploadFile, { id: userId, name: userName });
+      await qc.invalidateQueries({ queryKey: detailQueryKey });
+      setShowUploadDialog(false);
+      setPendingUploadFile(null);
+      setIsDragActive(false);
+    } catch (error: any) {
+      alert(error?.message || 'No se pudo subir el documento');
+    } finally {
+      setUploadingDocument(false);
+    }
   };
 
   const updateForm = (field: keyof EditableDealForm, value: string) => {
@@ -652,25 +733,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     }
   }
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !deal?.deal_id) return;
-    try {
-      const { uploadUrl, storageKey } = await getUploadUrl(deal.deal_id, file);
-      await fetch(uploadUrl, { method: 'PUT', body: file }); // subida directa a S3
-      await createDocumentMeta(
-        deal.deal_id,
-        { file_name: file.name, file_size: file.size, mime_type: file.type, storage_key: storageKey },
-        { id: userId, name: userName }
-      );
-      await qc.invalidateQueries({ queryKey: detailQueryKey });
-    } catch (e: any) {
-      alert(e?.message || 'No se pudo subir el documento');
-    } finally {
-      (e.target as HTMLInputElement).value = '';
-    }
-  }
-
   function requestClose() {
     if (isDirty) {
       setShowConfirm(true);
@@ -1087,7 +1149,15 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   </div>
                 </Accordion.Header>
                 <Accordion.Body>
-                  <Form.Control type="file" onChange={handleFile} className="mb-3" />
+                  <Button
+                    type="button"
+                    variant="outline-primary"
+                    className="mb-3"
+                    onClick={openUploadDialog}
+                    disabled={!canUploadDocument}
+                  >
+                    Seleccionar archivo
+                  </Button>
                   {documents.length ? (
                     <ListGroup>
                       {documents.map((d) => {
@@ -1097,6 +1167,12 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                           typeof d.size === 'number' && Number.isFinite(d.size) && d.size > 0
                             ? `${Math.round((d.size / 1024) * 10) / 10} KB`
                             : null;
+                        const sourceLabel =
+                          d.source === 'PIPEDRIVE'
+                            ? 'Pipedrive'
+                            : d.source === 'MANUAL'
+                            ? 'Manual'
+                            : 'Interno';
                         return (
                           <ListGroup.Item
                             key={d.id}
@@ -1125,10 +1201,10 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                               )}
                               <div className="text-muted small d-flex align-items-center gap-2 flex-wrap">
                                 {sizeLabel ? <span>{sizeLabel}</span> : null}
-                                <Badge bg={d.source === 'S3' ? 'primary' : 'secondary'}>{d.source}</Badge>
+                                <span>({sourceLabel})</span>
                               </div>
                             </div>
-                            {d.source === 'S3' ? (
+                            {d.source !== 'PIPEDRIVE' ? (
                               <div className="d-flex gap-2">
                                 <Button size="sm" variant="outline-danger" onClick={() => handleDelete(d.id)}>
                                   Eliminar
@@ -1190,12 +1266,95 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       </Modal.Footer>
     </Modal>
 
+    <Modal
+      show={showUploadDialog}
+      onHide={closeUploadDialog}
+      centered
+      backdrop={uploadingDocument ? 'static' : true}
+      keyboard={!uploadingDocument}
+    >
+      <Modal.Header closeButton={!uploadingDocument}>
+        <Modal.Title>Subir documento</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <input
+          ref={uploadInputRef}
+          type="file"
+          className="d-none"
+          onChange={handleUploadInputChange}
+        />
+        <div
+          className={`border border-2 rounded-3 p-4 text-center ${
+            isDragActive ? 'border-primary bg-light' : 'border-secondary-subtle'
+          }`}
+          style={{ borderStyle: 'dashed' }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDropFile}
+        >
+          <p className="fw-semibold mb-2">Arrastra un archivo aquí</p>
+          <p className="text-muted small mb-3">o</p>
+          <Button
+            type="button"
+            variant="outline-primary"
+            onClick={handleBrowseClick}
+            disabled={uploadingDocument}
+          >
+            Buscar archivo
+          </Button>
+          <div className="mt-3">
+            {pendingUploadFile ? (
+              <div className="small">
+                <div className="fw-semibold text-break">{pendingUploadFile.name}</div>
+                <div className="text-muted">
+                  {pendingUploadFile.size >= 1024 * 1024
+                    ? `${Math.round((pendingUploadFile.size / (1024 * 1024)) * 100) / 100} MB`
+                    : `${Math.round((pendingUploadFile.size / 1024) * 10) / 10} KB`}
+                </div>
+              </div>
+            ) : (
+              <div className="text-muted small">Ningún archivo seleccionado</div>
+            )}
+          </div>
+        </div>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button
+          type="button"
+          variant="outline-secondary"
+          onClick={closeUploadDialog}
+          disabled={uploadingDocument}
+        >
+          Cancelar
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          onClick={handleUploadDocument}
+          disabled={!pendingUploadFile || uploadingDocument}
+        >
+          {uploadingDocument ? (
+            <>
+              <Spinner as="span" animation="border" size="sm" role="status" className="me-2" />
+              Subiendo...
+            </>
+          ) : (
+            'Subir documento'
+          )}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+
     <Modal show={!!previewDocument} onHide={closePreview} size="lg" centered>
       <Modal.Header closeButton>
         <Modal.Title as="div">
           <div className="fw-semibold">{getDocumentDisplayName(previewDocument)}</div>
           <div className="text-muted small">
-            {previewDocument?.source === 'S3' ? 'Documento interno' : 'Documento de Pipedrive'}
+            {previewDocument?.source === 'PIPEDRIVE'
+              ? 'Documento de Pipedrive'
+              : previewDocument?.source === 'MANUAL'
+              ? 'Documento subido manualmente'
+              : 'Documento interno'}
           </div>
         </Modal.Title>
       </Modal.Header>
