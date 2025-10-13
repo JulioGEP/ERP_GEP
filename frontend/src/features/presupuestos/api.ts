@@ -240,6 +240,8 @@ function normalizeDealSummary(row: Json): DealSummary {
     toStringValue(row?.title ?? row?.deal_title) ??
     (resolvedDealId ? `Presupuesto #${resolvedDealId}` : "Presupuesto");
 
+  const driveFolderLink = toStringValue(row?.drive_folder_web_view_link);
+
   const organization =
     row?.organization || row?.organizations
       ? {
@@ -270,6 +272,8 @@ function normalizeDealSummary(row: Json): DealSummary {
     deal_id: resolvedDealId,
     dealId: resolvedDealId, // compat
     title,
+
+    drive_folder_web_view_link: driveFolderLink ?? null,
 
     pipeline_label: toStringValue(row?.pipeline_label) ?? null,
     training_address: toStringValue(row?.training_address) ?? null,
@@ -308,6 +312,8 @@ function normalizeDealDetail(raw: Json): DealDetail {
   const detail: DealDetail = {
     deal_id: detailId,
     title: toStringValue(raw.title ?? raw.deal_title) ?? null,
+
+    drive_folder_web_view_link: toStringValue(raw.drive_folder_web_view_link) ?? null,
 
     pipeline_label: toStringValue(raw.pipeline_label) ?? null,
     training_address:
@@ -1068,6 +1074,10 @@ export function buildDealDetailViewModel(
   const dealId = pickNonEmptyString(detail?.deal_id, summary?.deal_id, summary?.dealId);
 
   const title = pickNonEmptyString(detail?.title ?? null, summary?.title ?? null);
+  const driveFolderWebViewLink = pickNonEmptyString(
+    detail?.drive_folder_web_view_link ?? null,
+    summary?.drive_folder_web_view_link ?? null
+  );
   const organizationName = pickNonEmptyString(
     detail?.organization?.name ?? null,
     summary?.organization?.name ?? null
@@ -1099,6 +1109,7 @@ export function buildDealDetailViewModel(
   return {
     dealId: dealId ?? "",
     title: title ?? null,
+    driveFolderWebViewLink: driveFolderWebViewLink ?? null,
     organizationName: organizationName ?? null,
     clientName: clientName ?? null,
     clientEmail: clientEmail ?? null,

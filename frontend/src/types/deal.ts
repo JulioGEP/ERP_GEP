@@ -74,6 +74,8 @@ export interface DealSummary {
 
   title: string;
 
+  drive_folder_web_view_link?: string | null;
+
   pipeline_label?: string | null;     // label (no ID)
   training_address?: string | null;   // <-- schema vigente
 
@@ -99,6 +101,8 @@ export interface DealSummary {
 export interface DealDetail {
   deal_id: string;
   title?: string | null;
+
+  drive_folder_web_view_link?: string | null;
 
   pipeline_label?: string | null;     // label (no ID)
   training_address?: string | null;   // <-- schema vigente
@@ -137,6 +141,8 @@ export interface DealDetailViewNote {
 export interface DealDetailViewModel {
   dealId: string;
   title: string | null;
+
+  driveFolderWebViewLink: string | null;
 
   organizationName: string | null;
   clientName: string | null;
