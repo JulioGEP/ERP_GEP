@@ -206,6 +206,19 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
+  const getDocumentDisplayName = (doc: DealDocument | null | undefined): string => {
+    if (!doc) return 'Documento';
+    const { drive_file_name, name } = doc;
+    const resolvedName = (drive_file_name ?? name ?? '').trim();
+    return resolvedName.length ? resolvedName : 'Documento';
+  };
+
+  const getDocumentHref = (doc: DealDocument): string | null => {
+    const rawLink = doc.drive_web_view_link ?? '';
+    const trimmed = rawLink.trim();
+    return trimmed.length ? trimmed : null;
+  };
+
   const updateForm = (field: keyof EditableDealForm, value: string) => {
     setForm((current) => (current ? { ...current, [field]: value } : current));
   };
@@ -602,7 +615,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     setPreviewLoading(!directUrl);
     setPreviewError(null);
     setPreviewUrl(directUrl);
-    setPreviewMeta({ name: doc.name, mime_type: doc.mime_type ?? null });
+    setPreviewMeta({ name: getDocumentDisplayName(doc), mime_type: doc.mime_type ?? null });
     setPreviewDocument(doc);
 
     if (directUrl) return;
@@ -614,7 +627,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       }
       setPreviewUrl(response.url);
       setPreviewMeta((current) => ({
-        name: response.name ?? current?.name ?? doc.name,
+        name: response.name ?? current?.name ?? getDocumentDisplayName(doc),
         mime_type: response.mime_type ?? current?.mime_type ?? doc.mime_type ?? null,
       }));
     } catch (e: any) {
@@ -1078,6 +1091,8 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                   {documents.length ? (
                     <ListGroup>
                       {documents.map((d) => {
+                        const displayName = getDocumentDisplayName(d);
+                        const documentHref = getDocumentHref(d);
                         const sizeLabel =
                           typeof d.size === 'number' && Number.isFinite(d.size) && d.size > 0
                             ? `${Math.round((d.size / 1024) * 10) / 10} KB`
@@ -1088,13 +1103,26 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
                             className="d-flex justify-content-between align-items-start flex-column flex-md-row gap-2"
                           >
                             <div className="d-flex flex-column">
-                              <button
-                                type="button"
-                                className="btn btn-link p-0 text-start align-baseline fw-semibold"
-                                onClick={() => handleView(d)}
-                              >
-                                {d.name || 'Documento'}
-                              </button>
+                              {documentHref ? (
+                                <a
+                                  className="btn btn-link p-0 text-start align-baseline fw-semibold"
+                                  href={documentHref}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                  title={displayName}
+                                >
+                                  {displayName}
+                                </a>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-link p-0 text-start align-baseline fw-semibold"
+                                  onClick={() => handleView(d)}
+                                  title={displayName}
+                                >
+                                  {displayName}
+                                </button>
+                              )}
                               <div className="text-muted small d-flex align-items-center gap-2 flex-wrap">
                                 {sizeLabel ? <span>{sizeLabel}</span> : null}
                                 <Badge bg={d.source === 'S3' ? 'primary' : 'secondary'}>{d.source}</Badge>
@@ -1165,7 +1193,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     <Modal show={!!previewDocument} onHide={closePreview} size="lg" centered>
       <Modal.Header closeButton>
         <Modal.Title as="div">
-          <div className="fw-semibold">{previewDocument?.name ?? 'Documento'}</div>
+          <div className="fw-semibold">{getDocumentDisplayName(previewDocument)}</div>
           <div className="text-muted small">
             {previewDocument?.source === 'S3' ? 'Documento interno' : 'Documento de Pipedrive'}
           </div>
@@ -1193,7 +1221,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
           <div className="border rounded overflow-hidden" style={{ minHeight: '60vh' }}>
             <iframe
               src={previewUrl}
-              title={previewDocument?.name ?? 'Documento'}
+              title={getDocumentDisplayName(previewDocument)}
               style={{ border: 0, width: '100%', height: '100%' }}
             />
           </div>
