@@ -23,6 +23,30 @@ const EDITABLE_FIELDS = new Set([
   "alumnos",
 ]);
 
+const PARALLEL_FETCH_TIMEOUT_MS = (() => {
+  const raw = process.env.PIPEDRIVE_TIMEOUT_MS;
+  if (!raw) return 0;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+})();
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  if (!timeoutMs || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+
+  let timer: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /* -------------------- Helpers -------------------- */
 function parsePathId(path: any): string | null {
   if (!path) return null;
@@ -159,62 +183,187 @@ async function importDealFromPipedrive(dealIdRaw: any) {
   const dealIdNum = Number(dealIdStr);
   if (!Number.isFinite(dealIdNum)) throw new Error("dealId inválido");
 
-  // 1) Traer árbol completo desde Pipedrive
-  const d = await getDeal(dealIdNum);
-  if (!d) throw new Error("Deal no encontrado en Pipedrive");
-
-  const orgId = resolvePipedriveId(d.org_id);
-  const personId = resolvePipedriveId(d.person_id);
-
-  const org = orgId ? await getOrganization(orgId) : null;
-  const person = personId ? await getPerson(personId) : null;
-  const [products, notes, filesResult] = await Promise.all([
-    getDealProducts(dealIdNum).then((x) => x ?? []),
-    getDealNotes(dealIdNum).then((x) => x ?? []),
-    listDealFiles(dealIdNum).then((x) => x ?? []),
-  ]);
-
-  const files = Array.isArray(filesResult)
-    ? filesResult
-    : Array.isArray((filesResult as any)?.data)
-    ? (filesResult as any).data
-    : [];
-
-  // 2) Mapear + upsert relacional en Neon
-  const savedDealId = await mapAndUpsertDealTree({
-    deal: d,
-    org: org || (orgId ? { id: orgId, name: resolvePipedriveName(d) ?? "—" } : undefined),
-    person: person || (personId ? { id: personId } : undefined),
-    products,
-    notes,
-  });
-
-  const resolvedOrgName = org?.name ?? resolvePipedriveName(d) ?? null;
   const warnings: string[] = [];
+  const timings = { getDeal: 0, parallelFetch: 0, persist: 0, documentsSync: 0 };
+  const counts = { productsCount: 0, notesCount: 0, filesCount: 0 };
+  const telemetry: Record<string, any> = {
+    action: "deal_import",
+    dealId: dealIdNum,
+    timings,
+    counts,
+    warningsCount: 0,
+  };
 
-  let documentsSummary: { imported: number; skipped: number; warnings: string[] } | null = null;
+  let d: any = null;
+  let org: any = null;
+  let person: any = null;
+  let products: any[] = [];
+  let notes: any[] = [];
+  let files: any[] = [];
+
   try {
-    documentsSummary = await syncDealDocumentsFromPipedrive({
-      deal: d,
-      dealId: savedDealId,
-      files,
-      organizationName: resolvedOrgName,
-    });
-  } catch (error: any) {
-    const message = error?.message ? String(error.message) : String(error);
-    warnings.push(`Sincronización de documentos fallida: ${message}`);
+    const getDealStart = Date.now();
+    d = await getDeal(dealIdNum);
+    timings.getDeal = Date.now() - getDealStart;
+    if (!d) throw new Error("Deal no encontrado en Pipedrive");
+
+    const orgId = resolvePipedriveId(d.org_id);
+    const personId = resolvePipedriveId(d.person_id);
+
+    const parallelStart = Date.now();
+    const parallelResults = await withTimeout(
+      Promise.allSettled([
+        orgId ? getOrganization(orgId) : Promise.resolve(null),
+        personId ? getPerson(personId) : Promise.resolve(null),
+        getDealProducts(dealIdNum),
+        getDealNotes(dealIdNum),
+        listDealFiles(dealIdNum),
+      ]),
+      PARALLEL_FETCH_TIMEOUT_MS,
+      "parallelFetch"
+    );
+    timings.parallelFetch = Date.now() - parallelStart;
+
+    const [orgResult, personResult, productsResult, notesResult, filesResult] = parallelResults;
+
+    if (orgResult.status === "fulfilled") {
+      org = orgResult.value;
+    } else if (orgId) {
+      const message =
+        orgResult.reason instanceof Error ? orgResult.reason.message : String(orgResult.reason);
+      warnings.push(`No se pudo obtener la organización del deal (${message}).`);
+      console.warn("[deal-import]", {
+        action: "organization_fetch_failed",
+        dealId: dealIdNum,
+        error: message,
+      });
+    }
+
+    if (personResult.status === "fulfilled") {
+      person = personResult.value;
+    } else if (personId) {
+      const message =
+        personResult.reason instanceof Error ? personResult.reason.message : String(personResult.reason);
+      warnings.push(`No se pudo obtener la persona del deal (${message}).`);
+      console.warn("[deal-import]", {
+        action: "person_fetch_failed",
+        dealId: dealIdNum,
+        error: message,
+      });
+    }
+
+    if (productsResult.status === "fulfilled") {
+      const value = productsResult.value ?? [];
+      products = Array.isArray(value)
+        ? value
+        : Array.isArray((value as any)?.data)
+        ? (value as any).data
+        : [];
+    } else {
+      const message =
+        productsResult.reason instanceof Error
+          ? productsResult.reason.message
+          : String(productsResult.reason);
+      telemetry.error = message;
+      throw new Error(`No se pudieron obtener los productos del deal (${message}).`);
+    }
+    counts.productsCount = Array.isArray(products) ? products.length : 0;
+
+    if (notesResult.status === "fulfilled") {
+      const value = notesResult.value ?? [];
+      notes = Array.isArray(value)
+        ? value
+        : Array.isArray((value as any)?.data)
+        ? (value as any).data
+        : [];
+    } else {
+      const message =
+        notesResult.reason instanceof Error ? notesResult.reason.message : String(notesResult.reason);
+      warnings.push(`No se pudieron obtener las notas del deal (${message}).`);
+      console.warn("[deal-import]", {
+        action: "notes_fetch_failed",
+        dealId: dealIdNum,
+        error: message,
+      });
+      notes = [];
+    }
+    counts.notesCount = Array.isArray(notes) ? notes.length : 0;
+
+    if (filesResult.status === "fulfilled") {
+      const value = filesResult.value ?? [];
+      files = Array.isArray(value)
+        ? value
+        : Array.isArray((value as any)?.data)
+        ? (value as any).data
+        : [];
+    } else {
+      const message =
+        filesResult.reason instanceof Error ? filesResult.reason.message : String(filesResult.reason);
+      warnings.push(`No se pudieron obtener los documentos del deal (${message}).`);
+      console.warn("[deal-import]", {
+        action: "files_fetch_failed",
+        dealId: dealIdNum,
+        error: message,
+      });
+      files = [];
+    }
+    counts.filesCount = Array.isArray(files) ? files.length : 0;
+
+    const savedDealId = await (async () => {
+      const persistStart = Date.now();
+      try {
+        return await mapAndUpsertDealTree({
+          deal: d,
+          org: org || (orgId ? { id: orgId, name: resolvePipedriveName(d) ?? "—" } : undefined),
+          person: person || (personId ? { id: personId } : undefined),
+          products,
+          notes,
+        });
+      } finally {
+        timings.persist = Date.now() - persistStart;
+      }
+    })();
+
+    const resolvedOrgName = org?.name ?? resolvePipedriveName(d) ?? null;
+
+    let documentsSummary: { imported: number; skipped: number; warnings: string[] } | null = null;
+    const documentsStart = Date.now();
+    try {
+      documentsSummary = await syncDealDocumentsFromPipedrive({
+        deal: d,
+        dealId: savedDealId,
+        files,
+        organizationName: resolvedOrgName,
+      });
+    } catch (error: any) {
+      const message = error?.message ? String(error.message) : String(error);
+      warnings.push(`Sincronización de documentos fallida: ${message}`);
+    } finally {
+      timings.documentsSync = Date.now() - documentsStart;
+    }
+
+    if (documentsSummary?.warnings?.length) {
+      warnings.push(...documentsSummary.warnings);
+    }
+
+    // 3) Avisos no bloqueantes (warnings)
+    if (!d.title) warnings.push("Falta título en el deal.");
+    if (!d.pipeline_id) warnings.push("No se ha podido resolver el pipeline del deal.");
+    if (!products?.length) warnings.push("El deal no tiene productos vinculados en Pipedrive.");
+
+    telemetry.warningsCount = warnings.length;
+    telemetry.status = "success";
+    telemetry.savedDealId = savedDealId;
+
+    return { deal_id: savedDealId, warnings, documentsSummary };
+  } catch (error) {
+    telemetry.warningsCount = warnings.length;
+    telemetry.status = "error";
+    telemetry.error = error instanceof Error ? error.message : String(error);
+    throw error;
+  } finally {
+    console.log("[deal-import]", telemetry);
   }
-
-  if (documentsSummary?.warnings?.length) {
-    warnings.push(...documentsSummary.warnings);
-  }
-
-  // 3) Avisos no bloqueantes (warnings)
-  if (!d.title) warnings.push("Falta título en el deal.");
-  if (!d.pipeline_id) warnings.push("No se ha podido resolver el pipeline del deal.");
-  if (!products?.length) warnings.push("El deal no tiene productos vinculados en Pipedrive.");
-
-  return { deal_id: savedDealId, warnings, documentsSummary };
 }
 
 /* ============================== HANDLER ============================== */
