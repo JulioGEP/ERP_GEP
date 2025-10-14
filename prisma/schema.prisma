@@ -61,7 +61,7 @@ model deals {
   person           persons?           @relation(fields: [person_id], references: [person_id], map: "deals_person_fk")
   seassons         seassons[]
   sessions         sessions[]
-  session_comments session_comments[]
+  session_comments sesiones_comentarios[]
 
   @@index([org_id], map: "idx_deals_org_id")
   @@index([person_id], map: "idx_deals_person_id")
@@ -208,7 +208,7 @@ model sessions {
   sala         salas?             @relation(fields: [sala_id], references: [sala_id])
   trainers     session_trainers[]
   unidades     session_unidades[]
-  comments     session_comments[]
+  comments     sesiones_comentarios[]
 
   @@index([deal_id], map: "idx_sesiones_deal_id")
   @@index([deal_product_id], map: "idx_sesiones_deal_product_id")
@@ -216,17 +216,17 @@ model sessions {
   @@map("sesiones")
 }
 
-model session_comments {
-  id         String    @id @default(uuid())
+model sesiones_comentarios {
+  id         BigInt   @id @default(autoincrement())
   deal_id    String
-  sesion_id  String
+  sesion_id  String   @db.Uuid
   content    String
-  author     String?
-  created_at DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+  author     String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
 
-  deal    deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "session_comments_deal_fk")
-  session sessions @relation(fields: [sesion_id], references: [id], onDelete: Cascade, map: "session_comments_session_fk")
+  deal    deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "session_comments_deal_fk")
+  session sessions? @relation(fields: [sesion_id], references: [id], onDelete: Cascade, map: "session_comments_session_fk")
 
   @@index([deal_id], map: "idx_session_comments_deal_id")
   @@index([sesion_id], map: "idx_session_comments_sesion_id")

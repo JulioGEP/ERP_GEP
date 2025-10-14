@@ -1,5 +1,5 @@
 // backend/functions/session_comments.ts
-import { randomUUID } from 'crypto';
+import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
@@ -25,14 +25,25 @@ function headerValue(event: any, key: string): string | null {
 function mapCommentForResponse(comment: any) {
   if (!comment) return comment;
   return {
-    id: comment.id,
+    id: typeof comment.id === 'bigint' ? comment.id.toString() : comment.id,
     deal_id: comment.deal_id,
     sesion_id: comment.sesion_id,
     content: comment.content,
-    author: comment.author,
+    author: comment.author ?? DEFAULT_AUTHOR,
     created_at: toMadridISOString(comment.created_at),
     updated_at: toMadridISOString(comment.updated_at),
   };
+}
+
+function parseCommentId(value: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!/^[0-9]+$/.test(trimmed)) return null;
+  try {
+    return BigInt(trimmed);
+  } catch (error) {
+    return null;
+  }
 }
 
 export const handler = async (event: any) => {
@@ -48,8 +59,8 @@ export const handler = async (event: any) => {
 
     const prisma = getPrisma();
     const sessionIdStr = String(sessionId).trim();
-    if (!sessionIdStr) {
-      return errorResponse('VALIDATION_ERROR', 'session_id inválido', 400);
+    if (!sessionIdStr || !isUUID(sessionIdStr)) {
+      return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
     }
 
     const method = event.httpMethod;
@@ -65,7 +76,7 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
       }
 
-      const comments = await prisma.session_comments.findMany({
+      const comments = await prisma.sesiones_comentarios.findMany({
         where: { sesion_id: sessionIdStr },
         orderBy: { created_at: 'desc' },
       });
@@ -102,9 +113,8 @@ export const handler = async (event: any) => {
         );
       }
 
-      const created = await prisma.session_comments.create({
+      const created = await prisma.sesiones_comentarios.create({
         data: {
-          id: randomUUID(),
           deal_id: dealId,
           sesion_id: sessionUuid,
           content: trimmedContent,
@@ -120,7 +130,12 @@ export const handler = async (event: any) => {
     if (method === 'PATCH' && commentId) {
       if (!event.body) return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
 
-      const existing = await prisma.session_comments.findUnique({ where: { id: String(commentId) } });
+      const parsedCommentId = parseCommentId(commentId);
+      if (parsedCommentId === null) {
+        return errorResponse('VALIDATION_ERROR', 'comment_id inválido', 400);
+      }
+
+      const existing = await prisma.sesiones_comentarios.findUnique({ where: { id: parsedCommentId } });
       if (!existing || existing.sesion_id !== sessionIdStr) {
         return errorResponse('NOT_FOUND', 'Comentario no encontrado', 404);
       }
@@ -135,8 +150,8 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'content requerido', 400);
       }
 
-      const updated = await prisma.session_comments.update({
-        where: { id: String(commentId) },
+      const updated = await prisma.sesiones_comentarios.update({
+        where: { id: parsedCommentId },
         data: {
           content: trimmedContent,
           updated_at: nowInMadridDate(),
@@ -147,7 +162,12 @@ export const handler = async (event: any) => {
     }
 
     if (method === 'DELETE' && commentId) {
-      const existing = await prisma.session_comments.findUnique({ where: { id: String(commentId) } });
+      const parsedCommentId = parseCommentId(commentId);
+      if (parsedCommentId === null) {
+        return errorResponse('VALIDATION_ERROR', 'comment_id inválido', 400);
+      }
+
+      const existing = await prisma.sesiones_comentarios.findUnique({ where: { id: parsedCommentId } });
       if (!existing || existing.sesion_id !== sessionIdStr) {
         return errorResponse('NOT_FOUND', 'Comentario no encontrado', 404);
       }
@@ -156,7 +176,7 @@ export const handler = async (event: any) => {
         return errorResponse('FORBIDDEN', 'No puedes eliminar este comentario', 403);
       }
 
-      await prisma.session_comments.delete({ where: { id: String(commentId) } });
+      await prisma.sesiones_comentarios.delete({ where: { id: parsedCommentId } });
 
       return successResponse({ deleted: true });
     }
