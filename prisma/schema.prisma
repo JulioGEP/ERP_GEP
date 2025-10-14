@@ -54,6 +54,7 @@ model deals {
   po               String?         @db.VarChar(191)
   tipo_servicio    String?         @db.VarChar(50)
   mail_invoice     String?         @db.VarChar(255)
+  drive_folder_web_view_link String?
   comments         comments[]
   deal_files       deal_files[]
   deal_notes       deal_notes[]

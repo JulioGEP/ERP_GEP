@@ -492,6 +492,17 @@ function buildDealFolderName(deal: any): string {
   return `${id} - ${date} - ${title}`;
 }
 
+function resolveDealId(deal: any): string | null {
+  if (!deal) return null;
+  const candidates = [deal.deal_id, deal.id];
+  for (const candidate of candidates) {
+    if (candidate === null || candidate === undefined) continue;
+    const value = String(candidate).trim();
+    if (value.length) return value;
+  }
+  return null;
+}
+
 type DriveUploadResult = { id: string; name: string; webViewLink: string | null };
 
 async function uploadBufferToDrive(params: {
@@ -578,6 +589,59 @@ async function ensureFilePublicWebViewLink(fileId: string): Promise<string | nul
   return typeof metadata?.webViewLink === "string" ? metadata.webViewLink : null;
 }
 
+async function updateDealFolderLink({
+  deal,
+  link,
+  prisma,
+}: {
+  deal: any;
+  link: string | null;
+  prisma?: PrismaClient;
+}): Promise<void> {
+  const dealId = resolveDealId(deal);
+  if (!dealId) return;
+
+  try {
+    const client = prisma ?? getPrisma();
+    await client.deals.update({
+      where: { deal_id: dealId },
+      data: { drive_folder_web_view_link: link },
+    });
+  } catch (err) {
+    console.warn("[google-drive-sync] No se pudo guardar enlace de carpeta en BD", {
+      dealId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+async function ensureDealFolderPublicLink({
+  deal,
+  folderId,
+  prisma,
+}: {
+  deal: any;
+  folderId: string;
+  prisma?: PrismaClient;
+}): Promise<string | null> {
+  const dealId = resolveDealId(deal);
+  if (!dealId) return null;
+
+  let publicLink: string | null = null;
+  try {
+    publicLink = await ensureFilePublicWebViewLink(folderId);
+  } catch (err) {
+    console.warn("[google-drive-sync] No se pudo generar enlace público de la carpeta", {
+      dealId,
+      folderId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  await updateDealFolderLink({ deal, link: publicLink ?? null, prisma });
+  return publicLink ?? null;
+}
+
 async function updateDealFileDriveMetadata(
   prisma: PrismaClient,
   doc: any,
@@ -642,6 +706,8 @@ export async function syncDealDocumentsToGoogleDrive(params: {
       parentId: organizationFolderId,
       driveId,
     });
+
+    await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolderId, prisma });
 
     await clearFolder(dealFolderId, driveId);
 
@@ -727,6 +793,7 @@ export async function deleteDealFolderFromGoogleDrive(params: {
       return;
     }
 
+    const prisma = getPrisma();
     const baseFolderName = resolveDriveBaseFolderName();
     const baseFolderId = await findFolder({
       name: baseFolderName,
@@ -770,6 +837,7 @@ export async function deleteDealFolderFromGoogleDrive(params: {
 
     try {
       await driveDelete(dealFolderId);
+      await updateDealFolderLink({ deal: params.deal, link: null, prisma });
     } catch (err) {
       console.error("[google-drive-sync] Error eliminando carpeta del deal en Drive", {
         dealId: params.deal?.deal_id ?? params.deal?.id,
@@ -827,6 +895,8 @@ export async function uploadDealDocumentToGoogleDrive(params: {
     parentId: organizationFolderId,
     driveId,
   });
+
+  await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolderId });
 
   const safeName = sanitizeName(params.fileName || "documento") || "documento";
   const mimeType = params.mimeType?.trim() || "application/octet-stream";

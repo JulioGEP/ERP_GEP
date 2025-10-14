@@ -638,6 +638,7 @@ export const handler = async (event: any) => {
           org_id: true,
           person_id: true,
           created_at: true,
+          drive_folder_web_view_link: true,
           organization: { select: { org_id: true, name: true } },
           person: {
             select: {
