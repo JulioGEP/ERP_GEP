@@ -255,7 +255,7 @@ model session_files {
   @@index([deal_id], map: "idx_session_files_deal_id")
   @@index([sesion_id], map: "idx_session_files_sesion_id")
   @@index([added_at], map: "idx_session_files_added_at")
-  @@map("session_files")
+  @@map("sesion_files")
 }
 
 model alumnos {
@@ -273,10 +273,10 @@ model alumnos {
   deal    deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "alumnos_deal_fk")
   session sessions? @relation(fields: [sesion_id], references: [id], onDelete: Cascade, map: "alumnos_session_fk")
 
+  @@unique([sesion_id, dni], map: "ux_alumnos_sesion_dni")
   @@index([deal_id], map: "idx_alumnos_deal_id")
   @@index([apellido], map: "idx_alumnos_apellido")
   @@index([dni], map: "idx_alumnos_dni")
-  @@unique([sesion_id, dni], map: "ux_alumnos_sesion_dni")
   @@map("alumnos")
 }
 
