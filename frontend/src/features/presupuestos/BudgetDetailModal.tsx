@@ -37,6 +37,7 @@ interface Props {
   dealId: string | null;
   summary?: DealSummary | null;
   onClose: () => void;
+  onShowProductComment?: (payload: { productName: string; comment: string }) => void;
 }
 
 function useAuth() {
@@ -124,7 +125,7 @@ function resolveDocumentPreviewUrl(url: string): string {
   return url;
 }
 
-export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
+export function BudgetDetailModal({ dealId, summary, onClose, onShowProductComment }: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 
@@ -458,10 +459,15 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     const rawComment = (product?.comments ?? '').trim();
     if (!rawComment.length) return;
     const productName = displayOrDash(product?.name ?? product?.code ?? '');
+    if (onShowProductComment) {
+      onShowProductComment({ productName, comment: rawComment });
+      return;
+    }
     setViewingComment({ productName, comment: rawComment });
   };
 
   const handleCloseCommentModal = () => {
+    if (onShowProductComment) return;
     setViewingComment(null);
   };
 
@@ -1444,19 +1450,21 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       </Modal.Body>
     </Modal>
 
-    <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
-      <Modal.Header closeButton>
-        <Modal.Title>Comentario de la formación</Modal.Title>
-      </Modal.Header>
-      <Modal.Body>
-        {viewingComment?.productName ? (
-          <div className="mb-2">
-            <strong>Formación:</strong> {viewingComment.productName}
-          </div>
-        ) : null}
-        <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
-      </Modal.Body>
-    </Modal>
+    {!onShowProductComment ? (
+      <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Comentario de la formación</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {viewingComment?.productName ? (
+            <div className="mb-2">
+              <strong>Formación:</strong> {viewingComment.productName}
+            </div>
+          ) : null}
+          <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
+        </Modal.Body>
+      </Modal>
+    ) : null}
 
     {/* Confirmación cambios pendientes */}
     <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>

@@ -13,6 +13,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetTable } from './features/presupuestos/BudgetTable';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
+import { ProductCommentWindow } from './features/presupuestos/ProductCommentWindow';
+import type { ProductCommentPayload } from './features/presupuestos/ProductCommentWindow';
 import {
   ApiError,
   fetchDealsWithoutSessions,
@@ -75,6 +77,7 @@ export default function App() {
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
   const [activeView, setActiveView] = useState('Presupuestos');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [productComment, setProductComment] = useState<ProductCommentPayload | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -193,6 +196,14 @@ export default function App() {
   const handleCloseDetail = useCallback(() => {
     setSelectedBudgetSummary(null);
     setSelectedBudgetId(null);
+  }, []);
+
+  const handleShowProductComment = useCallback((payload: ProductCommentPayload) => {
+    setProductComment(payload);
+  }, []);
+
+  const handleCloseProductComment = useCallback(() => {
+    setProductComment(null);
   }, []);
 
   const handleOpenCalendarSession = useCallback(
@@ -374,7 +385,19 @@ export default function App() {
         onSubmit={(dealId) => importMutation.mutate(dealId)}
       />
 
-      <BudgetDetailModal dealId={selectedBudgetId} summary={selectedBudgetSummary} onClose={handleCloseDetail} />
+      <BudgetDetailModal
+        dealId={selectedBudgetId}
+        summary={selectedBudgetSummary}
+        onClose={handleCloseDetail}
+        onShowProductComment={handleShowProductComment}
+      />
+
+      <ProductCommentWindow
+        show={!!productComment}
+        productName={productComment?.productName ?? null}
+        comment={productComment?.comment ?? null}
+        onClose={handleCloseProductComment}
+      />
 
       <ToastContainer position="bottom-end" className="p-3">
         {toasts.map((toast) => (
