@@ -89,7 +89,6 @@ type SessionRecord = {
   fecha_fin_utc: Date | null;
   sala_id: string | null;
   direccion: string;
-  comentarios: string | null;
   estado: SessionEstado;
   trainers: Array<{ trainer_id: string }>;
   unidades: Array<{ unidad_id: string }>;
@@ -196,7 +195,6 @@ function normalizeSession(row: SessionRecord) {
     fecha_fin_utc: toIsoOrNull(row.fecha_fin_utc),
     sala_id: row.sala_id,
     direccion: row.direccion,
-    comentarios: row.comentarios,
     estado,
     trainer_ids: trainerIds,
     unidad_movil_ids: unidadIds,
@@ -389,11 +387,6 @@ function buildSessionPatch(body: any): SessionPatchResult {
       return { error: errorResponse('VALIDATION_ERROR', 'La dirección es obligatoria', 400) };
     }
     data.direccion = value;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'comentarios')) {
-    const value = body.comentarios === null ? null : String(body.comentarios);
-    data.comentarios = value;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'nombre_cache')) {
@@ -810,7 +803,6 @@ export const handler = async (event: any) => {
             fecha_inicio_utc: session.fecha_inicio_utc,
             fecha_fin_utc: session.fecha_fin_utc,
             direccion: session.direccion,
-            comentarios: session.comentarios,
             estado: session.estado,
             deal_pipeline_id: raw?.deal?.pipeline_id ?? null,
             sala,
@@ -968,7 +960,6 @@ export const handler = async (event: any) => {
             nombre_cache: baseName,
             direccion: direccion ?? deal.training_address ?? '',
             sala_id: salaId ?? null,
-            comentarios: body.comentarios === null ? null : toOptionalText(body.comentarios),
             fecha_inicio_utc:
               fechaInicioResult === undefined
                 ? undefined

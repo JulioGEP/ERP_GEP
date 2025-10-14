@@ -208,11 +208,29 @@ model sessions {
   sala         salas?             @relation(fields: [sala_id], references: [sala_id])
   trainers     session_trainers[]
   unidades     session_unidades[]
+  comments     session_comments[]
 
   @@index([deal_id], map: "idx_sesiones_deal_id")
   @@index([deal_product_id], map: "idx_sesiones_deal_product_id")
   @@index([sala_id], map: "idx_sesiones_sala_id")
   @@map("sesiones")
+}
+
+model session_comments {
+  id         String   @id @default(uuid())
+  deal_id    String
+  sesion_id  String
+  content    String
+  author     String?
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+
+  deal    deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "session_comments_deal_fk")
+  session sessions @relation(fields: [sesion_id], references: [id], onDelete: Cascade, map: "session_comments_session_fk")
+
+  @@index([deal_id], map: "idx_session_comments_deal_id")
+  @@index([sesion_id], map: "idx_session_comments_sesion_id")
+  @@map("sesiones_comentarios")
 }
 
 enum SessionEstado {

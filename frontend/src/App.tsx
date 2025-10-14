@@ -237,7 +237,7 @@ export default function App() {
                 deal_id: id,
                 name: productName.length ? productName : null,
                 code: productCode.length ? productCode : null,
-                comments: session.comentarios ?? null,
+                comments: null,
                 quantity: null,
                 price: null,
                 type: null,
