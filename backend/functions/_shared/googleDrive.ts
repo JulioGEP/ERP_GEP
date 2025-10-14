@@ -492,6 +492,26 @@ function buildDealFolderName(deal: any): string {
   return `${id} - ${date} - ${title}`;
 }
 
+function resolveSessionFolderNames(params: {
+  sessionNumber: string;
+  sessionName?: string | null;
+  session?: any;
+}): { sessionNumberLabel: string; baseSessionName: string; folderName: string } {
+  const sessionNumberLabel =
+    sanitizeName(params.sessionNumber || "") || params.sessionNumber || "1";
+  const baseSessionName =
+    sanitizeName(
+      params.sessionName ||
+        params.session?.nombre_cache ||
+        params.session?.name ||
+        `Sesión ${sessionNumberLabel}`,
+    ) || `Sesión ${sessionNumberLabel}`;
+  const folderName =
+    sanitizeName(`${sessionNumberLabel} - ${baseSessionName}`) || baseSessionName;
+
+  return { sessionNumberLabel, baseSessionName, folderName };
+}
+
 function resolveDealId(deal: any): string | null {
   if (!deal) return null;
   const candidates = [deal.deal_id, deal.id];
@@ -957,17 +977,11 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
 
   await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolderId });
 
-  const sessionNumberLabel =
-    sanitizeName(params.sessionNumber || "") || params.sessionNumber || "1";
-  const baseSessionName =
-    sanitizeName(
-      params.sessionName ||
-        params.session?.nombre_cache ||
-        params.session?.name ||
-        `Sesión ${sessionNumberLabel}`,
-    ) || `Sesión ${sessionNumberLabel}`;
-  const sessionFolderName =
-    sanitizeName(`${sessionNumberLabel} - ${baseSessionName}`) || baseSessionName;
+  const { folderName: sessionFolderName } = resolveSessionFolderNames({
+    sessionNumber: params.sessionNumber,
+    sessionName: params.sessionName,
+    session: params.session,
+  });
 
   const sessionFolderId = await ensureFolder({
     name: sessionFolderName,
@@ -1001,4 +1015,212 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
     driveFileName: uploadResult.name || safeName,
     driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
   };
+}
+
+function extractDriveFileId(link?: string | null): string | null {
+  if (!link) return null;
+  const normalized = String(link);
+  const byPath = normalized.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (byPath?.[1]) {
+    return byPath[1];
+  }
+  const byQuery = normalized.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (byQuery?.[1]) {
+    return byQuery[1];
+  }
+  return null;
+}
+
+async function findFileIdInFolder(params: {
+  folderId: string;
+  driveId: string;
+  name: string | null | undefined;
+}): Promise<string | null> {
+  const safeName = sanitizeName(params.name || "");
+  if (!safeName) {
+    return null;
+  }
+
+  const query = [
+    `'${params.folderId}' in parents`,
+    "trashed = false",
+    `name = '${safeName.replace(/'/g, "\\'")}'`,
+  ].join(" and ");
+
+  const list = await driveFilesList({
+    corpora: "drive",
+    driveId: params.driveId,
+    includeItemsFromAllDrives: "true",
+    supportsAllDrives: "true",
+    q: query,
+    fields: "files(id, name)",
+    pageSize: "1",
+  });
+
+  const file = Array.isArray(list.files) ? list.files[0] : null;
+  return file?.id ? String(file.id) : null;
+}
+
+export async function deleteSessionDocumentFromGoogleDrive(params: {
+  deal: any;
+  session: any;
+  organizationName?: string | null;
+  sessionNumber: string;
+  sessionName?: string | null;
+  driveFileName?: string | null;
+  driveWebViewLink?: string | null;
+  removeSessionFolder?: boolean;
+}): Promise<{ fileDeleted: boolean; sessionFolderDeleted: boolean }> {
+  const driveId = resolveDriveSharedId();
+  if (!driveId) {
+    throw new Error(
+      "Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)",
+    );
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error("Credenciales de Google Drive no configuradas");
+  }
+
+  const baseFolderName = resolveDriveBaseFolderName();
+  const baseFolderId = await findFolder({
+    name: baseFolderName,
+    parentId: driveId,
+    driveId,
+  });
+  if (!baseFolderId) {
+    console.warn(
+      "[google-drive-sync] Carpeta base no encontrada al eliminar documento de sesión",
+    );
+    return { fileDeleted: false, sessionFolderDeleted: false };
+  }
+
+  const organizationDisplayName =
+    sanitizeName(params.organizationName || "Sin organización") ||
+    "Sin organización";
+  const organizationFolderId = await findFolder({
+    name: organizationDisplayName,
+    parentId: baseFolderId,
+    driveId,
+  });
+  if (!organizationFolderId) {
+    console.warn(
+      "[google-drive-sync] Carpeta de organización no encontrada al eliminar documento de sesión",
+      { organizationName: organizationDisplayName },
+    );
+    return { fileDeleted: false, sessionFolderDeleted: false };
+  }
+
+  const dealFolderName = sanitizeName(buildDealFolderName(params.deal));
+  const dealFolderId = await findFolder({
+    name: dealFolderName,
+    parentId: organizationFolderId,
+    driveId,
+  });
+  if (!dealFolderId) {
+    console.warn(
+      "[google-drive-sync] Carpeta del deal no encontrada al eliminar documento de sesión",
+      { dealId: params.deal?.deal_id ?? params.deal?.id },
+    );
+    return { fileDeleted: false, sessionFolderDeleted: false };
+  }
+
+  const { folderName: sessionFolderName } = resolveSessionFolderNames({
+    sessionNumber: params.sessionNumber,
+    sessionName: params.sessionName,
+    session: params.session,
+  });
+
+  const sessionFolderId = await findFolder({
+    name: sessionFolderName,
+    parentId: dealFolderId,
+    driveId,
+  });
+  if (!sessionFolderId) {
+    console.warn(
+      "[google-drive-sync] Carpeta de sesión no encontrada al eliminar documento",
+      { sessionId: params.session?.id, sessionFolderName },
+    );
+    return { fileDeleted: false, sessionFolderDeleted: false };
+  }
+
+  let fileDeleted = false;
+  let fileId = extractDriveFileId(params.driveWebViewLink);
+  if (!fileId) {
+    try {
+      fileId = await findFileIdInFolder({
+        folderId: sessionFolderId,
+        driveId,
+        name: params.driveFileName,
+      });
+    } catch (err) {
+      console.warn(
+        "[google-drive-sync] Error buscando archivo de sesión por nombre",
+        {
+          sessionId: params.session?.id,
+          sessionFolderId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      );
+    }
+  }
+
+  if (fileId) {
+    try {
+      await driveDelete(fileId);
+      fileDeleted = true;
+    } catch (err) {
+      console.error(
+        "[google-drive-sync] Error eliminando documento de sesión en Drive",
+        {
+          fileId,
+          sessionId: params.session?.id,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      );
+      throw err;
+    }
+  } else {
+    console.warn(
+      "[google-drive-sync] No se encontró el archivo de sesión a eliminar en Drive",
+      {
+        sessionId: params.session?.id,
+        driveFileName: params.driveFileName,
+        driveWebViewLink: params.driveWebViewLink,
+      },
+    );
+  }
+
+  let sessionFolderDeleted = false;
+  if (params.removeSessionFolder) {
+    try {
+      const list = await driveFilesList({
+        corpora: "drive",
+        driveId,
+        includeItemsFromAllDrives: "true",
+        supportsAllDrives: "true",
+        q: `'${sessionFolderId}' in parents and trashed = false`,
+        fields: "files(id)",
+        pageSize: "1",
+      });
+      const hasRemainingItems = Array.isArray(list.files) && list.files.length > 0;
+      if (!hasRemainingItems) {
+        await driveDelete(sessionFolderId);
+        removeFolderFromCache(dealFolderId, sessionFolderName);
+        sessionFolderDeleted = true;
+      }
+    } catch (err) {
+      console.error(
+        "[google-drive-sync] Error comprobando o eliminando carpeta de sesión en Drive",
+        {
+          sessionId: params.session?.id,
+          sessionFolderId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      );
+      throw err;
+    }
+  }
+
+  return { fileDeleted, sessionFolderDeleted };
 }

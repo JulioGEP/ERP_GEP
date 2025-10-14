@@ -1315,6 +1315,28 @@ export async function updateSessionDocumentShare(
   return normalizeSessionDocument(data?.document ?? {});
 }
 
+export async function deleteSessionDocument(
+  dealId: string,
+  sessionId: string,
+  documentId: string,
+): Promise<void> {
+  const normalizedDealId = String(dealId ?? '').trim();
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  const normalizedDocumentId = String(documentId ?? '').trim();
+
+  if (!normalizedDealId || !normalizedSessionId || !normalizedDocumentId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId, sessionId y documentId son obligatorios');
+  }
+
+  await request(`/session_documents/${encodeURIComponent(normalizedDocumentId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({
+      deal_id: normalizedDealId,
+      sesion_id: normalizedSessionId,
+    }),
+  });
+}
+
 /* =========================
  * Alumnos de sesión
  * ========================= */
