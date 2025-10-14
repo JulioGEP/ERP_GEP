@@ -63,6 +63,7 @@ model deals {
   sessions         sessions[]
   session_comments sesiones_comentarios[]
   session_files    session_files[]
+  alumnos          alumnos[]
 
   @@index([org_id], map: "idx_deals_org_id")
   @@index([person_id], map: "idx_deals_person_id")
@@ -211,6 +212,7 @@ model sessions {
   unidades      session_unidades[]
   comments      sesiones_comentarios[]
   session_files session_files[]
+  alumnos       alumnos[]
 
   @@index([deal_id], map: "idx_sesiones_deal_id")
   @@index([deal_product_id], map: "idx_sesiones_deal_product_id")
@@ -254,6 +256,28 @@ model session_files {
   @@index([sesion_id], map: "idx_session_files_sesion_id")
   @@index([added_at], map: "idx_session_files_added_at")
   @@map("session_files")
+}
+
+model alumnos {
+  id          String   @id @default(uuid()) @db.Uuid
+  deal_id     String
+  sesion_id   String   @db.Uuid
+  nombre      String
+  apellido    String
+  dni         String
+  apto        Boolean  @default(false)
+  certificado Boolean  @default(false)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @updatedAt @db.Timestamptz(6)
+
+  deal    deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "alumnos_deal_fk")
+  session sessions? @relation(fields: [sesion_id], references: [id], onDelete: Cascade, map: "alumnos_session_fk")
+
+  @@index([deal_id], map: "idx_alumnos_deal_id")
+  @@index([apellido], map: "idx_alumnos_apellido")
+  @@index([dni], map: "idx_alumnos_dni")
+  @@unique([sesion_id, dni], map: "ux_alumnos_sesion_dni")
+  @@map("alumnos")
 }
 
 enum SessionEstado {

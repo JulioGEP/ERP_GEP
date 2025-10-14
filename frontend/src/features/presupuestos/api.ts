@@ -76,6 +76,19 @@ export type SessionDocument = {
   drive_web_view_link: string | null;
 };
 
+export type SessionStudent = {
+  id: string;
+  deal_id: string;
+  sesion_id: string;
+  nombre: string;
+  apellido: string;
+  dni: string;
+  apto: boolean;
+  certificado: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type TrainerOption = {
   trainer_id: string;
   name: string;
@@ -588,6 +601,32 @@ function normalizeSessionDocument(raw: any): SessionDocument {
     updated_at: updatedAt ?? null,
     drive_file_name: driveFileName ?? null,
     drive_web_view_link: driveLink ?? null,
+  };
+}
+
+function normalizeSessionStudent(raw: any): SessionStudent {
+  const id = toStringValue(raw?.id) ?? (raw?.id != null ? String(raw.id) : '');
+  const dealId = toStringValue(raw?.deal_id) ?? '';
+  const sessionId = toStringValue(raw?.sesion_id) ?? '';
+  const nombre = toStringValue(raw?.nombre) ?? '';
+  const apellido = toStringValue(raw?.apellido) ?? '';
+  const dni = toStringValue(raw?.dni) ?? '';
+  const apto = Boolean(raw?.apto);
+  const certificado = Boolean(raw?.certificado);
+  const createdAt = toStringValue(raw?.created_at);
+  const updatedAt = toStringValue(raw?.updated_at);
+
+  return {
+    id,
+    deal_id: dealId,
+    sesion_id: sessionId,
+    nombre,
+    apellido,
+    dni,
+    apto,
+    certificado,
+    created_at: createdAt ?? null,
+    updated_at: updatedAt ?? null,
   };
 }
 
@@ -1274,6 +1313,113 @@ export async function updateSessionDocumentShare(
   });
 
   return normalizeSessionDocument(data?.document ?? {});
+}
+
+/* =========================
+ * Alumnos de sesión
+ * ========================= */
+
+export async function fetchSessionStudents(
+  dealId: string,
+  sessionId: string,
+): Promise<SessionStudent[]> {
+  const normalizedDealId = String(dealId ?? '').trim();
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  if (!normalizedDealId || !normalizedSessionId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId y sessionId son obligatorios');
+  }
+
+  const params = new URLSearchParams({
+    deal_id: normalizedDealId,
+    sesion_id: normalizedSessionId,
+  });
+
+  const data = await request(`/alumnos?${params.toString()}`);
+  const students: any[] = Array.isArray(data?.students) ? data.students : [];
+  return students.map((student) => normalizeSessionStudent(student));
+}
+
+export type CreateSessionStudentInput = {
+  dealId: string;
+  sessionId: string;
+  nombre: string;
+  apellido: string;
+  dni: string;
+  apto?: boolean;
+  certificado?: boolean;
+};
+
+export async function createSessionStudent(input: CreateSessionStudentInput): Promise<SessionStudent> {
+  const normalizedDealId = String(input.dealId ?? '').trim();
+  const normalizedSessionId = String(input.sessionId ?? '').trim();
+  const nombre = String(input.nombre ?? '').trim();
+  const apellido = String(input.apellido ?? '').trim();
+  const dni = String(input.dni ?? '').trim();
+  const apto = Boolean(input.apto);
+  const certificado = Boolean(input.certificado);
+
+  if (!normalizedDealId || !normalizedSessionId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId y sessionId son obligatorios');
+  }
+  if (!nombre.length || !apellido.length || !dni.length) {
+    throw new ApiError('VALIDATION_ERROR', 'Nombre, apellidos y DNI son obligatorios');
+  }
+
+  const data = await request('/alumnos', {
+    method: 'POST',
+    body: JSON.stringify({
+      deal_id: normalizedDealId,
+      sesion_id: normalizedSessionId,
+      nombre,
+      apellido,
+      dni,
+      apto,
+      certificado,
+    }),
+  });
+
+  return normalizeSessionStudent(data?.student ?? {});
+}
+
+export type UpdateSessionStudentInput = {
+  nombre?: string;
+  apellido?: string;
+  dni?: string;
+  apto?: boolean;
+  certificado?: boolean;
+};
+
+export async function updateSessionStudent(
+  studentId: string,
+  input: UpdateSessionStudentInput,
+): Promise<SessionStudent> {
+  const normalizedId = String(studentId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'studentId es obligatorio');
+  }
+
+  const payload: Record<string, unknown> = {};
+  if (input.nombre !== undefined) payload.nombre = String(input.nombre ?? '').trim();
+  if (input.apellido !== undefined) payload.apellido = String(input.apellido ?? '').trim();
+  if (input.dni !== undefined) payload.dni = String(input.dni ?? '').trim();
+  if (input.apto !== undefined) payload.apto = Boolean(input.apto);
+  if (input.certificado !== undefined) payload.certificado = Boolean(input.certificado);
+
+  const data = await request(`/alumnos/${encodeURIComponent(normalizedId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return normalizeSessionStudent(data?.student ?? {});
+}
+
+export async function deleteSessionStudent(studentId: string): Promise<void> {
+  const normalizedId = String(studentId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'studentId es obligatorio');
+  }
+
+  await request(`/alumnos/${encodeURIComponent(normalizedId)}`, { method: 'DELETE' });
 }
 
 /* =======================

@@ -44,12 +44,17 @@ import {
   fetchSessionDocuments,
   uploadSessionDocuments,
   updateSessionDocumentShare,
+  fetchSessionStudents,
+  createSessionStudent,
+  updateSessionStudent,
+  deleteSessionStudent,
   type TrainerOption,
   type RoomOption,
   type MobileUnitOption,
   type SessionEstado,
   type SessionComment,
   type SessionDocument,
+  type SessionStudent,
 } from '../api';
 import { isApiError } from '../api';
 
@@ -87,6 +92,479 @@ function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
       <rect x={7} y={7} width={11} height={11} rx={2.2} ry={2.2} />
       <path d="M5.5 15.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.6" />
     </svg>
+  );
+}
+
+type StudentDraft = {
+  nombre: string;
+  apellido: string;
+  dni: string;
+  apto: boolean;
+  certificado: boolean;
+};
+
+const EMPTY_STUDENT_DRAFT: StudentDraft = {
+  nombre: '',
+  apellido: '',
+  dni: '',
+  apto: false,
+  certificado: false,
+};
+
+function normalizeStudentDniInput(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+}
+
+function validateStudentDraft(draft: StudentDraft): string | null {
+  const nombre = draft.nombre.trim();
+  const apellido = draft.apellido.trim();
+  const dni = normalizeStudentDniInput(draft.dni);
+
+  if (!nombre.length || !apellido.length || !dni.length) {
+    return 'Nombre, apellidos y DNI son obligatorios';
+  }
+
+  if (dni.length < 7 || dni.length > 12 || !/^[A-Z0-9]+$/.test(dni)) {
+    return 'El DNI debe tener entre 7 y 12 caracteres alfanuméricos';
+  }
+
+  return null;
+}
+
+function SessionStudentsAccordionItem({
+  dealId,
+  sessionId,
+  onNotify,
+}: {
+  dealId: string;
+  sessionId: string;
+  onNotify?: (toast: ToastParams) => void;
+}) {
+  const qc = useQueryClient();
+  const [editingId, setEditingId] = useState<'new' | string | null>(null);
+  const [draft, setDraft] = useState<StudentDraft>(EMPTY_STUDENT_DRAFT);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [duplicateTarget, setDuplicateTarget] = useState<SessionStudent | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const studentsQuery = useQuery({
+    queryKey: ['session-students', dealId, sessionId],
+    queryFn: () => fetchSessionStudents(dealId, sessionId),
+    enabled: Boolean(dealId && sessionId),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    setEditingId(null);
+    setDraft(EMPTY_STUDENT_DRAFT);
+    setFormError(null);
+    setDuplicateTarget(null);
+    setSaving(false);
+    setUpdatingId(null);
+    setDeletingId(null);
+  }, [dealId, sessionId]);
+
+  const students = studentsQuery.data ?? [];
+  const studentsLoading = studentsQuery.isLoading;
+  const studentsFetching = studentsQuery.isFetching;
+  const queryError = studentsQuery.error
+    ? studentsQuery.error instanceof Error
+      ? studentsQuery.error.message
+      : 'No se pudieron cargar los alumnos'
+    : null;
+
+  const studentCount = students.length;
+  const editingStudentId = editingId && editingId !== 'new' ? editingId : null;
+  const isNewRow = editingId === 'new';
+
+  const resetDraft = () => {
+    setDraft(EMPTY_STUDENT_DRAFT);
+    setFormError(null);
+    setDuplicateTarget(null);
+  };
+
+  const handleAdd = () => {
+    resetDraft();
+    setEditingId('new');
+  };
+
+  const handleEdit = (student: SessionStudent) => {
+    setDraft({
+      nombre: student.nombre,
+      apellido: student.apellido,
+      dni: student.dni,
+      apto: student.apto,
+      certificado: student.certificado,
+    });
+    setFormError(null);
+    setDuplicateTarget(null);
+    setEditingId(student.id);
+  };
+
+  const handleCancel = () => {
+    setEditingId(null);
+    resetDraft();
+  };
+
+  const handleDraftChange = (field: keyof StudentDraft, value: string | boolean) => {
+    setDraft((current) => {
+      if (field === 'dni' && typeof value === 'string') {
+        return { ...current, dni: normalizeStudentDniInput(value) };
+      }
+      if ((field === 'apto' || field === 'certificado') && typeof value === 'boolean') {
+        return { ...current, [field]: value } as StudentDraft;
+      }
+      if (typeof value === 'string') {
+        return { ...current, [field]: value } as StudentDraft;
+      }
+      return current;
+    });
+    if (formError) {
+      setFormError(null);
+      setDuplicateTarget(null);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!dealId || !sessionId || !editingId) return;
+    const validation = validateStudentDraft(draft);
+    const normalizedDni = normalizeStudentDniInput(draft.dni);
+    if (validation) {
+      setFormError(validation);
+      setDuplicateTarget(null);
+      return;
+    }
+
+    const currentId = editingId === 'new' ? null : editingId;
+    const duplicate = students.find(
+      (student) => student.dni.toUpperCase() === normalizedDni && student.id !== currentId,
+    );
+    if (duplicate) {
+      setFormError('Ya existe un alumno con este DNI en la sesión.');
+      setDuplicateTarget(duplicate);
+      return;
+    }
+
+    setSaving(true);
+    setFormError(null);
+    setDuplicateTarget(null);
+
+    try {
+      if (editingId === 'new') {
+        await createMutation.mutateAsync({
+          dealId,
+          sessionId,
+          nombre: draft.nombre.trim(),
+          apellido: draft.apellido.trim(),
+          dni: normalizedDni,
+          apto: draft.apto,
+          certificado: draft.certificado,
+        });
+        onNotify?.({ variant: 'success', message: 'Alumno añadido correctamente' });
+      } else {
+        await updateMutation.mutateAsync({
+          id: editingId,
+          data: {
+            nombre: draft.nombre.trim(),
+            apellido: draft.apellido.trim(),
+            dni: normalizedDni,
+            apto: draft.apto,
+            certificado: draft.certificado,
+          },
+        });
+        onNotify?.({ variant: 'success', message: 'Alumno actualizado correctamente' });
+      }
+      await qc.invalidateQueries({ queryKey: ['session-students', dealId, sessionId] });
+      handleCancel();
+    } catch (error: unknown) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo guardar el alumno';
+      setFormError(message);
+      onNotify?.({ variant: 'danger', message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const createMutation = useMutation({
+    mutationFn: createSessionStudent,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (input: { id: string; data: Parameters<typeof updateSessionStudent>[1] }) =>
+      updateSessionStudent(input.id, input.data),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (studentId: string) => deleteSessionStudent(studentId),
+  });
+
+  const handleToggleBoolean = async (
+    student: SessionStudent,
+    field: 'apto' | 'certificado',
+    value: boolean,
+  ) => {
+    setFormError(null);
+    setDuplicateTarget(null);
+    setUpdatingId(student.id);
+    try {
+      await updateMutation.mutateAsync({ id: student.id, data: { [field]: value } });
+      await qc.invalidateQueries({ queryKey: ['session-students', dealId, sessionId] });
+    } catch (error: unknown) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo actualizar el alumno';
+      setFormError(message);
+      onNotify?.({ variant: 'danger', message });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleDelete = async (student: SessionStudent) => {
+    if (!window.confirm('¿Seguro que quieres eliminar a este alumno?')) {
+      return;
+    }
+    setFormError(null);
+    setDuplicateTarget(null);
+    setDeletingId(student.id);
+    try {
+      await deleteMutation.mutateAsync(student.id);
+      onNotify?.({ variant: 'success', message: 'Alumno eliminado correctamente' });
+      if (editingStudentId === student.id) {
+        handleCancel();
+      }
+      await qc.invalidateQueries({ queryKey: ['session-students', dealId, sessionId] });
+    } catch (error: unknown) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo eliminar el alumno';
+      setFormError(message);
+      onNotify?.({ variant: 'danger', message });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const renderEditingRow = (key: string) => {
+    const disableInputs = saving;
+    const canSave = !validateStudentDraft(draft) && !saving;
+
+    return (
+      <tr key={key}>
+        <td className="align-middle">
+          <Form.Control
+            type="text"
+            value={draft.nombre}
+            onChange={(event) => handleDraftChange('nombre', event.target.value)}
+            placeholder="Nombre"
+            disabled={disableInputs}
+          />
+        </td>
+        <td className="align-middle">
+          <Form.Control
+            type="text"
+            value={draft.apellido}
+            onChange={(event) => handleDraftChange('apellido', event.target.value)}
+            placeholder="Apellidos"
+            disabled={disableInputs}
+          />
+        </td>
+        <td className="align-middle">
+          <Form.Control
+            type="text"
+            value={draft.dni}
+            onChange={(event) => handleDraftChange('dni', event.target.value)}
+            placeholder="DNI"
+            disabled={disableInputs}
+          />
+        </td>
+        <td className="align-middle text-center">
+          <Form.Check
+            type="checkbox"
+            label=""
+            checked={draft.apto}
+            onChange={(event) => handleDraftChange('apto', event.target.checked)}
+            disabled={disableInputs}
+            aria-label="Marcar alumno como apto"
+          />
+        </td>
+        <td className="align-middle text-center">
+          <Form.Check
+            type="checkbox"
+            label=""
+            checked={draft.certificado}
+            onChange={(event) => handleDraftChange('certificado', event.target.checked)}
+            disabled={disableInputs}
+            aria-label="Marcar alumno como certificado"
+          />
+        </td>
+        <td className="align-middle text-nowrap">
+          <div className="d-flex gap-2 justify-content-end">
+            <Button
+              size="sm"
+              variant="outline-secondary"
+              onClick={handleCancel}
+              disabled={disableInputs}
+            >
+              Cancelar
+            </Button>
+            <Button size="sm" variant="primary" onClick={handleSave} disabled={!canSave}>
+              {saving ? <Spinner animation="border" size="sm" role="status" /> : 'Guardar'}
+            </Button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  const renderStudentRow = (student: SessionStudent) => {
+    const rowDisabled = Boolean(editingId && editingId !== student.id);
+    const isUpdating = updatingId === student.id && updateMutation.isPending;
+    const isDeleting = deletingId === student.id && deleteMutation.isPending;
+
+    return (
+      <tr key={student.id}>
+        <td className="align-middle">{student.nombre}</td>
+        <td className="align-middle">{student.apellido}</td>
+        <td className="align-middle text-uppercase">{student.dni}</td>
+        <td className="align-middle text-center">
+          <Form.Check
+            type="checkbox"
+            label=""
+            checked={student.apto}
+            disabled={rowDisabled || isUpdating || isDeleting}
+            onChange={(event) => handleToggleBoolean(student, 'apto', event.target.checked)}
+            aria-label={`Cambiar estado apto de ${student.nombre} ${student.apellido}`}
+          />
+        </td>
+        <td className="align-middle text-center">
+          <Form.Check
+            type="checkbox"
+            label=""
+            checked={student.certificado}
+            disabled={rowDisabled || isUpdating || isDeleting}
+            onChange={(event) => handleToggleBoolean(student, 'certificado', event.target.checked)}
+            aria-label={`Cambiar certificado de ${student.nombre} ${student.apellido}`}
+          />
+        </td>
+        <td className="align-middle text-nowrap">
+          <div className="d-flex gap-2 justify-content-end">
+            <Button
+              size="sm"
+              variant="outline-primary"
+              onClick={() => handleEdit(student)}
+              disabled={Boolean(editingId)}
+            >
+              Editar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline-danger"
+              onClick={() => handleDelete(student)}
+              disabled={rowDisabled || isDeleting || isUpdating}
+            >
+              {isDeleting ? <Spinner animation="border" size="sm" role="status" /> : 'Eliminar'}
+            </Button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  return (
+    <Accordion.Item eventKey={`session-students-${sessionId}`}>
+      <Accordion.Header>
+        <div className="d-flex justify-content-between align-items-center w-100">
+          <span className="erp-accordion-title">
+            Alumnos
+            {studentCount > 0 ? <span className="erp-accordion-count">{studentCount}</span> : null}
+          </span>
+        </div>
+      </Accordion.Header>
+      <Accordion.Body>
+        <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
+          <Button
+            variant="outline-primary"
+            size="sm"
+            onClick={handleAdd}
+            disabled={isNewRow || Boolean(editingStudentId) || saving || studentsLoading}
+          >
+            Agregar alumno
+          </Button>
+          {!studentsLoading && studentsFetching ? (
+            <span className="text-muted small">Actualizando alumnos…</span>
+          ) : null}
+        </div>
+
+        {queryError ? (
+          <Alert variant="danger" className="mb-3">
+            {queryError}
+          </Alert>
+        ) : null}
+
+        {formError ? (
+          <Alert
+            variant={duplicateTarget ? 'warning' : 'danger'}
+            className="mb-3 d-flex flex-column flex-sm-row align-items-sm-center gap-2"
+          >
+            <span className="flex-grow-1">{formError}</span>
+            {duplicateTarget ? (
+              <Button
+                size="sm"
+                variant="outline-primary"
+                onClick={() => handleEdit(duplicateTarget)}
+              >
+                Editar alumno existente
+              </Button>
+            ) : null}
+          </Alert>
+        ) : null}
+
+        {studentsLoading ? (
+          <div className="d-flex align-items-center gap-2 mb-3">
+            <Spinner animation="border" size="sm" /> Cargando alumnos…
+          </div>
+        ) : null}
+
+        <div className="table-responsive">
+          <Table striped bordered hover size="sm" className="mb-0">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Apellidos</th>
+                <th>DNI</th>
+                <th className="text-center">APTO</th>
+                <th className="text-center">Certificado</th>
+                <th className="text-end">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isNewRow ? renderEditingRow('new-student') : null}
+              {students.map((student) =>
+                editingStudentId === student.id ? renderEditingRow(student.id) : renderStudentRow(student),
+              )}
+              {!isNewRow && !students.length && !studentsLoading ? (
+                <tr>
+                  <td colSpan={6} className="text-center text-muted py-4">
+                    Sin alumnos registrados
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </Table>
+        </div>
+      </Accordion.Body>
+    </Accordion.Item>
   );
 }
 
@@ -2181,6 +2659,11 @@ function SessionCommentsSection({
         <SessionDocumentsAccordionItem
           sessionId={sessionId}
           dealId={dealId}
+          onNotify={onNotify}
+        />
+        <SessionStudentsAccordionItem
+          dealId={dealId}
+          sessionId={sessionId}
           onNotify={onNotify}
         />
       </Accordion>
