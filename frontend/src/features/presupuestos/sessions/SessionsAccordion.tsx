@@ -44,6 +44,7 @@ import {
   fetchSessionDocuments,
   uploadSessionDocuments,
   updateSessionDocumentShare,
+  deleteSessionDocument,
   fetchSessionStudents,
   createSessionStudent,
   updateSessionStudent,
@@ -582,6 +583,7 @@ function SessionDocumentsAccordionItem({
   const [shareWithTrainer, setShareWithTrainer] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [updatingDocumentId, setUpdatingDocumentId] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
 
   const documentsQuery = useQuery({
     queryKey: ['session-documents', dealId, sessionId],
@@ -606,12 +608,18 @@ function SessionDocumentsAccordionItem({
       updateSessionDocumentShare(dealId, sessionId, input.documentId, input.share),
   });
 
+  const deleteDocumentMutation = useMutation({
+    mutationFn: (documentId: string) => deleteSessionDocument(dealId, sessionId, documentId),
+  });
+
   useEffect(() => {
     setDocumentError(null);
     setShareWithTrainer(false);
     setUpdatingDocumentId(null);
+    setDeletingDocumentId(null);
     uploadMutation.reset();
     updateShareMutation.reset();
+    deleteDocumentMutation.reset();
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -628,6 +636,7 @@ function SessionDocumentsAccordionItem({
 
   const uploadPending = uploadMutation.isPending;
   const updateSharePending = updateShareMutation.isPending;
+  const deletePending = deleteDocumentMutation.isPending;
 
   const formatAddedAt = (iso: string | null | undefined) => {
     if (!iso) return '—';
@@ -711,6 +720,31 @@ function SessionDocumentsAccordionItem({
     }
   };
 
+  const handleDeleteDocument = async (doc: SessionDocument) => {
+    if (deletePending) return;
+    const confirmed = confirm('¿Eliminar documento?');
+    if (!confirmed) return;
+
+    setDocumentError(null);
+    setDeletingDocumentId(doc.id);
+
+    try {
+      await deleteDocumentMutation.mutateAsync(doc.id);
+      onNotify?.({ variant: 'success', message: 'Documento eliminado correctamente' });
+    } catch (error: unknown) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo eliminar el documento';
+      setDocumentError(message);
+      onNotify?.({ variant: 'danger', message });
+    } finally {
+      setDeletingDocumentId(null);
+      await qc.invalidateQueries({ queryKey: ['session-documents', dealId, sessionId] });
+    }
+  };
+
   return (
     <Accordion.Item eventKey={`session-documents-${sessionId}`}>
       <Accordion.Header>
@@ -783,6 +817,7 @@ function SessionDocumentsAccordionItem({
                   <th>Fecha de alta</th>
                   <th>Enlace Drive</th>
                   <th className="text-center">Compartir con formador/a</th>
+                  <th className="text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -791,6 +826,7 @@ function SessionDocumentsAccordionItem({
                   const typeLabel = (doc.file_type ?? '').toUpperCase() || '—';
                   const driveLink = (doc.drive_web_view_link ?? '').trim();
                   const isUpdating = updateSharePending && updatingDocumentId === doc.id;
+                  const isDeleting = deletePending && deletingDocumentId === doc.id;
 
                   return (
                     <tr key={doc.id}>
@@ -830,6 +866,22 @@ function SessionDocumentsAccordionItem({
                           />
                           <span className="small text-muted">{doc.compartir_formador ? 'Sí' : 'No'}</span>
                         </div>
+                      </td>
+                      <td className="align-middle text-center">
+                        <button
+                          type="button"
+                          className="btn btn-link text-danger p-0"
+                          title="Eliminar documento"
+                          aria-label="Eliminar documento"
+                          disabled={deletePending}
+                          onClick={() => handleDeleteDocument(doc)}
+                        >
+                          {isDeleting ? (
+                            <Spinner animation="border" size="sm" role="status" />
+                          ) : (
+                            <DeleteIcon width={18} height={18} />
+                          )}
+                        </button>
                       </td>
                     </tr>
                   );

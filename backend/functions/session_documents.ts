@@ -10,7 +10,10 @@ import {
   successResponse,
 } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
-import { uploadSessionDocumentToGoogleDrive } from './_shared/googleDrive';
+import {
+  uploadSessionDocumentToGoogleDrive,
+  deleteSessionDocumentFromGoogleDrive,
+} from './_shared/googleDrive';
 
 type ParsedPath = {
   docId: string | null;
@@ -415,6 +418,79 @@ export const handler = async (event: any) => {
       });
 
       return successResponse({ document: mapSessionFile(updated) });
+    }
+
+    if (method === 'DELETE' && docId) {
+      let payload: any = null;
+      if (event.body) {
+        try {
+          payload = JSON.parse(event.body);
+        } catch {
+          return errorResponse('VALIDATION_ERROR', 'JSON inválido', 400);
+        }
+      }
+
+      const params = event.queryStringParameters || {};
+      const dealId = toStringOrNull(
+        payload?.deal_id ?? payload?.dealId ?? params.dealId ?? params.deal_id,
+      );
+      const sessionId = toStringOrNull(
+        payload?.sesion_id ??
+          payload?.sessionId ??
+          params.sessionId ??
+          params.sesion_id,
+      );
+
+      if (!dealId || !sessionId) {
+        return errorResponse('VALIDATION_ERROR', 'dealId y sessionId son requeridos', 400);
+      }
+      if (!isUUID(sessionId)) {
+        return errorResponse('VALIDATION_ERROR', 'sessionId inválido (UUID)', 400);
+      }
+
+      const existing = await prisma.session_files.findUnique({ where: { id: docId } });
+      if (!existing || existing.deal_id !== dealId || existing.sesion_id !== sessionId) {
+        return errorResponse('NOT_FOUND', 'Documento no encontrado', 404);
+      }
+
+      const context = await ensureSessionContext(prisma, dealId, sessionId);
+      if (context.error) return context.error;
+      const session = context.session!;
+      const deal = session.deal;
+      if (!deal) {
+        return errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
+      }
+
+      const sessionNumber = await resolveSessionNumber(prisma, session);
+      const sessionName = toStringOrNull(session?.nombre_cache) ?? `Sesión ${sessionNumber}`;
+
+      const remainingCount = await prisma.session_files.count({
+        where: {
+          deal_id: dealId,
+          sesion_id: sessionId,
+          NOT: { id: docId },
+        },
+      });
+
+      try {
+        await deleteSessionDocumentFromGoogleDrive({
+          deal,
+          session,
+          organizationName: deal.organization?.name ?? null,
+          sessionNumber,
+          sessionName,
+          driveFileName: existing.drive_file_name,
+          driveWebViewLink: existing.drive_web_view_link,
+          removeSessionFolder: remainingCount === 0,
+        });
+      } catch (err: any) {
+        const message = err?.message || 'No se pudo eliminar el archivo de Drive';
+        return errorResponse('UPLOAD_ERROR', message, 502);
+      }
+
+      await prisma.session_files.delete({ where: { id: docId } });
+
+      return successResponse({ ok: true });
     }
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
