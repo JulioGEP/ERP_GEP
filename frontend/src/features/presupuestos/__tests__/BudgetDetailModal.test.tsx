@@ -16,7 +16,6 @@ const summaryFixtures: Record<string, DealSummary> = {
     caes_label: 'CAES A',
     fundae_label: 'FUNDAE A',
     hotel_label: 'Hotel A',
-    drive_folder_web_view_link: 'https://drive.example.com/folders/deal-a',
     organization: { name: 'Organización A' },
     person: {
       first_name: 'Ana',
@@ -52,7 +51,6 @@ const detailFixtures: Record<string, DealDetail> = {
     caes_label: 'CAES A',
     fundae_label: 'FUNDAE A',
     hotel_label: 'Hotel A',
-    drive_folder_web_view_link: 'https://drive.example.com/folders/deal-a',
     organization: { name: 'Organización A' },
     person: {
       first_name: 'Ana',
@@ -122,9 +120,9 @@ vi.mock('../api', () => {
             clientEmail: null,
             clientPhone: null,
             pipelineLabel: null,
-          trainingAddress: null,
-          productName: null,
-          hours: null,
+            trainingAddress: null,
+            productName: null,
+            hours: null,
             sedeLabel: null,
             caesLabel: null,
             fundaeLabel: null,
@@ -142,8 +140,6 @@ vi.mock('../api', () => {
         return {
           dealId: source.deal_id,
           title: source.title ?? null,
-          driveFolderWebViewLink:
-            deal?.drive_folder_web_view_link ?? summary?.drive_folder_web_view_link ?? null,
           organizationName: source.organization?.name ?? null,
           clientName,
           clientEmail: person?.email ?? null,

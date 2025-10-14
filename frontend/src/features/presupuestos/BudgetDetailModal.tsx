@@ -351,17 +351,6 @@ export function BudgetDetailModal({ dealId, summary, onClose, onShowProductComme
   const detailNotes = detailView.notes;
   const documents = deal?.documents ?? EMPTY_DOCUMENTS;
   const driveFolderLink = useMemo(() => {
-    const candidateLinks = [
-      detailView.driveFolderWebViewLink,
-      deal?.drive_folder_web_view_link,
-      summary?.drive_folder_web_view_link,
-    ];
-
-    for (const candidate of candidateLinks) {
-      const trimmed = typeof candidate === 'string' ? candidate.trim() : '';
-      if (trimmed.length) return trimmed;
-    }
-
     for (const document of documents) {
       if (!document) continue;
       const link =
@@ -377,7 +366,7 @@ export function BudgetDetailModal({ dealId, summary, onClose, onShowProductComme
     }
 
     return null;
-  }, [detailView.driveFolderWebViewLink, deal?.drive_folder_web_view_link, summary?.drive_folder_web_view_link, documents]);
+  }, [documents]);
 
   const defaultSessionAddress =
     form?.training_address?.trim()?.length
