@@ -1,7 +1,8 @@
 // backend/functions/session_comments.ts
+import { randomUUID } from 'crypto';
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
-import { nowInMadridDate, nowInMadridISO, toMadridISOString } from './_shared/timezone';
+import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
 
 const DEFAULT_AUTHOR = process.env.DEFAULT_NOTE_AUTHOR || 'erp_user';
 
@@ -91,11 +92,21 @@ export const handler = async (event: any) => {
 
       const author = requestUser && requestUser.length ? requestUser : DEFAULT_AUTHOR;
       const now = nowInMadridDate();
+      const dealId = typeof session.deal_id === 'string' ? session.deal_id.trim() : '';
+      const sessionUuid = typeof session.id === 'string' ? session.id.trim() : '';
+      if (!dealId.length || !sessionUuid.length) {
+        return errorResponse(
+          'VALIDATION_ERROR',
+          'Sesión sin información de deal o identificador inválido',
+          400,
+        );
+      }
 
       const created = await prisma.session_comments.create({
         data: {
-          deal_id: session.deal_id,
-          sesion_id: session.id,
+          id: randomUUID(),
+          deal_id: dealId,
+          sesion_id: sessionUuid,
           content: trimmedContent,
           author,
           created_at: now,
