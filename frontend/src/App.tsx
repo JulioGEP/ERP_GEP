@@ -28,6 +28,7 @@ import { TrainersView } from './features/recursos/TrainersView';
 import { RoomsView } from './features/recursos/RoomsView';
 import { MobileUnitsView } from './features/recursos/MobileUnitsView';
 import { CalendarView } from './features/calendar/CalendarView';
+import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 
 type NavView = {
   key: string;
@@ -72,6 +73,13 @@ type ToastMessage = {
 };
 
 export default function App() {
+  const isPublicStudentsPage =
+    typeof window !== 'undefined' && /\/public\/sesiones\/[^/]+\/alumnos/i.test(window.location.pathname);
+
+  if (isPublicStudentsPage) {
+    return <PublicSessionStudentsPage />;
+  }
+
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);

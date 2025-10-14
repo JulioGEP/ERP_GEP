@@ -50,6 +50,8 @@ import {
   createSessionStudent,
   updateSessionStudent,
   deleteSessionStudent,
+  fetchSessionPublicLink,
+  createSessionPublicLink,
   type TrainerOption,
   type RoomOption,
   type MobileUnitOption,
@@ -168,6 +170,21 @@ function SessionStudentsAccordionItem({
     staleTime: 30_000,
   });
 
+  const publicLinkQuery = useQuery({
+    queryKey: ['session-public-link', dealId, sessionId],
+    queryFn: () => fetchSessionPublicLink(dealId, sessionId),
+    enabled: Boolean(dealId && sessionId),
+    staleTime: 300_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const createPublicLinkMutation = useMutation({
+    mutationFn: () => createSessionPublicLink(dealId, sessionId),
+    onSuccess: (link) => {
+      qc.setQueryData(['session-public-link', dealId, sessionId], link);
+    },
+  });
+
   useEffect(() => {
     setEditingId(null);
     setDraft(EMPTY_STUDENT_DRAFT);
@@ -176,7 +193,8 @@ function SessionStudentsAccordionItem({
     setSaving(false);
     setUpdatingId(null);
     setDeletingId(null);
-  }, [dealId, sessionId]);
+    createPublicLinkMutation.reset();
+  }, [dealId, sessionId, createPublicLinkMutation]);
 
   const students = studentsQuery.data ?? [];
   const studentsLoading = studentsQuery.isLoading;
@@ -190,6 +208,90 @@ function SessionStudentsAccordionItem({
   const studentCount = students.length;
   const editingStudentId = editingId && editingId !== 'new' ? editingId : null;
   const isNewRow = editingId === 'new';
+
+  const publicLink = publicLinkQuery.data ?? null;
+  const publicLinkLoading = publicLinkQuery.isLoading;
+  const publicLinkFetching = publicLinkQuery.isFetching;
+  const publicLinkError = publicLinkQuery.error
+    ? publicLinkQuery.error instanceof Error
+      ? publicLinkQuery.error.message
+      : 'No se pudo cargar la URL pública'
+    : null;
+  const publicLinkGenerating = createPublicLinkMutation.isPending;
+
+  const publicLinkUrl = useMemo(() => {
+    if (!publicLink) return null;
+    if (publicLink.public_url && publicLink.public_url.trim().length) {
+      return publicLink.public_url;
+    }
+    if (publicLink.public_path && publicLink.public_path.trim().length && typeof window !== 'undefined') {
+      return `${window.location.origin}${publicLink.public_path}`;
+    }
+    return publicLink.public_path ?? null;
+  }, [publicLink]);
+
+  const publicLinkCreatedAt = useMemo(() => {
+    if (!publicLink?.created_at) return null;
+    try {
+      const dt = new Date(publicLink.created_at);
+      if (!Number.isFinite(dt.getTime())) return null;
+      return new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(dt);
+    } catch {
+      return null;
+    }
+  }, [publicLink?.created_at]);
+
+  const handleOpenPublicLink = async () => {
+    if (!dealId || !sessionId) return;
+
+    const openLinkInTab = (target: string | null) => {
+      if (!target) return;
+      window.open(target, '_blank', 'noopener,noreferrer');
+    };
+
+    const existingUrl = publicLinkUrl;
+    if (existingUrl) {
+      openLinkInTab(existingUrl);
+      return;
+    }
+
+    const pendingWindow = window.open('', '_blank', 'noopener,noreferrer');
+    try {
+      const link = await createPublicLinkMutation.mutateAsync();
+      const targetUrl = link.public_url && link.public_url.trim().length
+        ? link.public_url
+        : link.public_path && link.public_path.trim().length && typeof window !== 'undefined'
+          ? `${window.location.origin}${link.public_path}`
+          : link.public_path ?? null;
+      if (targetUrl) {
+        if (pendingWindow) {
+          pendingWindow.location.href = targetUrl;
+        } else {
+          openLinkInTab(targetUrl);
+        }
+      } else if (pendingWindow) {
+        pendingWindow.close();
+      }
+      onNotify?.({ variant: 'success', message: 'URL pública generada correctamente' });
+    } catch (error: any) {
+      if (pendingWindow) pendingWindow.close();
+      const message = isApiError(error)
+        ? error.message
+        : 'No se pudo generar la URL pública, inténtalo de nuevo';
+      onNotify?.({ variant: 'danger', message });
+    }
+  };
+
+  const handleCopyPublicLink = async () => {
+    const url = publicLinkUrl;
+    if (!url || typeof navigator === 'undefined') return;
+    try {
+      await navigator.clipboard.writeText(url);
+      onNotify?.({ variant: 'success', message: 'URL de alumnos copiada al portapapeles' });
+    } catch {
+      onNotify?.({ variant: 'danger', message: 'No se pudo copiar la URL, copia manualmente' });
+    }
+  };
 
   const resetDraft = () => {
     setDraft(EMPTY_STUDENT_DRAFT);
@@ -504,17 +606,63 @@ function SessionStudentsAccordionItem({
         </div>
       </Accordion.Header>
       <Accordion.Body>
-        <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
-          <Button
-            variant="outline-primary"
-            size="sm"
-            onClick={handleAdd}
-            disabled={isNewRow || Boolean(editingStudentId) || saving || studentsLoading}
-          >
-            Agregar alumno
-          </Button>
-          {!studentsLoading && studentsFetching ? (
-            <span className="text-muted small">Actualizando alumnos…</span>
+        <div className="d-flex flex-column gap-3 mb-3">
+          <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2">
+            <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2">
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={handleAdd}
+                disabled={isNewRow || Boolean(editingStudentId) || saving || studentsLoading}
+              >
+                Agregar alumno
+              </Button>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={handleOpenPublicLink}
+                disabled={publicLinkGenerating || publicLinkLoading}
+              >
+                {publicLinkGenerating ? 'Generando…' : 'URL Alumnos'}
+              </Button>
+            </div>
+            <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2 text-muted small">
+              {!studentsLoading && studentsFetching ? <span>Actualizando alumnos…</span> : null}
+              {publicLinkFetching && !publicLinkLoading ? <span>Actualizando enlace…</span> : null}
+            </div>
+          </div>
+
+          {publicLinkLoading ? (
+            <div className="d-flex align-items-center gap-2 text-muted small">
+              <Spinner animation="border" size="sm" role="status" /> Cargando URL pública…
+            </div>
+          ) : null}
+
+          {publicLinkError ? (
+            <Alert variant="warning" className="mb-0">
+              {publicLinkError}
+            </Alert>
+          ) : null}
+
+          {publicLink && publicLinkUrl ? (
+            <div className="d-flex flex-column flex-lg-row align-items-lg-center gap-2">
+              <a
+                href={publicLink.public_url ?? publicLink.public_path ?? '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-break"
+              >
+                {publicLinkUrl}
+              </a>
+              <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2">
+                <Button variant="outline-secondary" size="sm" onClick={handleCopyPublicLink}>
+                  Copiar
+                </Button>
+                {publicLinkCreatedAt ? (
+                  <span className="text-muted small">Creada {publicLinkCreatedAt}</span>
+                ) : null}
+              </div>
+            </div>
           ) : null}
         </div>
 
