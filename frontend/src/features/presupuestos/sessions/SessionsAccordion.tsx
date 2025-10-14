@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from 'react';
@@ -34,10 +35,15 @@ import {
   patchSession,
   createSession,
   deleteSession,
+  fetchSessionComments,
+  createSessionComment,
+  updateSessionComment,
+  deleteSessionComment,
   type TrainerOption,
   type RoomOption,
   type MobileUnitOption,
   type SessionEstado,
+  type SessionComment,
 } from '../api';
 import { isApiError } from '../api';
 
@@ -140,7 +146,6 @@ type SessionFormState = {
   fecha_fin_local: string | null;
   sala_id: string | null;
   direccion: string;
-  comentarios: string | null;
   estado: SessionEstado;
   trainer_ids: string[];
   unidad_movil_ids: string[];
@@ -288,7 +293,6 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     fecha_fin_local: formatDateForInput(session.fecha_fin_utc),
     sala_id: session.sala_id ?? null,
     direccion: session.direccion ?? '',
-    comentarios: session.comentarios ?? null,
     estado: session.estado,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
@@ -313,7 +317,6 @@ function buildSessionPatchPayload(
       fecha_fin_utc: localInputToUtc(form.fecha_fin_local) ?? null,
       sala_id: form.sala_id,
       direccion: form.direccion,
-      comentarios: form.comentarios,
       trainer_ids: form.trainer_ids,
       unidad_movil_ids: form.unidad_movil_ids,
     };
@@ -352,11 +355,6 @@ function buildSessionPatchPayload(
 
   if (form.direccion !== saved.direccion) {
     patch.direccion = form.direccion ?? '';
-    hasChanges = true;
-  }
-
-  if (form.comentarios !== saved.comentarios) {
-    patch.comentarios = form.comentarios ?? null;
     hasChanges = true;
   }
 
@@ -634,7 +632,6 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
       deal_id: string;
       deal_product_id: string;
       direccion?: string | null;
-      comentarios?: string | null;
       trainer_ids?: string[];
       unidad_movil_ids?: string[];
       sala_id?: string | null;
@@ -758,7 +755,6 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
         deal_id: dealId,
         deal_product_id: productId,
         direccion: session.direccion ?? dealAddress ?? '',
-        comentarios: session.comentarios ?? null,
         trainer_ids: session.trainer_ids,
         unidad_movil_ids: session.unidad_movil_ids,
         sala_id: session.sala_id,
@@ -1550,19 +1546,6 @@ function SessionEditor({
             </div>
           </Form.Group>
         </Col>
-        <Col md={12}>
-          <Form.Group controlId={`session-${form.id}-comentarios`}>
-            <Form.Label>Comentarios</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={2}
-              value={form.comentarios ?? ''}
-              onChange={(event) =>
-                onChange((current) => ({ ...current, comentarios: event.target.value || null }))
-              }
-            />
-          </Form.Group>
-        </Col>
       </Row>
 
       <div className="d-flex justify-content-end align-items-center mt-3">
@@ -1578,6 +1561,335 @@ function SessionEditor({
           ) : null}
         </div>
       </div>
+
+      <SessionCommentsSection sessionId={form.id} />
     </div>
+  );
+}
+
+function SessionCommentsSection({ sessionId }: { sessionId: string }) {
+  const fallbackUser = 'erp_user';
+  const userId =
+    typeof window !== 'undefined' ? localStorage.getItem('userId') || fallbackUser : fallbackUser;
+  const userName =
+    typeof window !== 'undefined' ? localStorage.getItem('userName') || fallbackUser : fallbackUser;
+
+  const qc = useQueryClient();
+
+  const [newCommentContent, setNewCommentContent] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentContent, setEditingCommentContent] = useState('');
+  const [viewingComment, setViewingComment] = useState<SessionComment | null>(null);
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const [updatingCommentId, setUpdatingCommentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditingCommentId(null);
+    setEditingCommentContent('');
+    setViewingComment(null);
+    setCommentError(null);
+    setDeletingCommentId(null);
+    setUpdatingCommentId(null);
+    setNewCommentContent('');
+  }, [sessionId]);
+
+  const commentsQuery = useQuery({
+    queryKey: ['session-comments', sessionId],
+    queryFn: () => fetchSessionComments(sessionId),
+    enabled: Boolean(sessionId),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+
+  const comments = commentsQuery.data ?? [];
+  const commentsLoading = commentsQuery.isLoading;
+  const commentsFetching = commentsQuery.isFetching;
+  const queryError =
+    commentsQuery.error instanceof Error ? commentsQuery.error.message : commentsQuery.error ? 'No se pudieron cargar los comentarios' : null;
+
+  const createCommentMutation = useMutation({
+    mutationFn: (content: string) =>
+      createSessionComment(sessionId, content, { id: userId, name: userName }),
+  });
+
+  const updateCommentMutation = useMutation({
+    mutationFn: (input: { commentId: string; content: string }) =>
+      updateSessionComment(sessionId, input.commentId, input.content, {
+        id: userId,
+        name: userName,
+      }),
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: (commentId: string) =>
+      deleteSessionComment(sessionId, commentId, { id: userId, name: userName }),
+  });
+
+  const displayOrDash = (value?: string | null) => {
+    const text = typeof value === 'string' ? value.trim() : '';
+    return text.length ? text : '—';
+  };
+
+  const handleCreateComment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = newCommentContent.trim();
+    if (!trimmed) return;
+    setCommentError(null);
+    try {
+      await createCommentMutation.mutateAsync(trimmed);
+      setNewCommentContent('');
+      await qc.invalidateQueries({ queryKey: ['session-comments', sessionId] });
+    } catch (error) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo guardar el comentario';
+      setCommentError(message);
+    }
+  };
+
+  const startEditingComment = (comment: SessionComment) => {
+    if (!comment?.id) return;
+    setEditingCommentId(comment.id);
+    setEditingCommentContent(comment.content ?? '');
+    setCommentError(null);
+  };
+
+  const cancelEditingComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentContent('');
+    setUpdatingCommentId(null);
+  };
+
+  const handleUpdateComment = async (comment: SessionComment) => {
+    if (!comment?.id) return;
+    const trimmed = editingCommentContent.trim();
+    if (!trimmed) return;
+    setCommentError(null);
+    setUpdatingCommentId(comment.id);
+    try {
+      await updateCommentMutation.mutateAsync({ commentId: comment.id, content: trimmed });
+      cancelEditingComment();
+      await qc.invalidateQueries({ queryKey: ['session-comments', sessionId] });
+    } catch (error) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo actualizar el comentario';
+      setCommentError(message);
+    } finally {
+      setUpdatingCommentId(null);
+    }
+  };
+
+  const handleDeleteComment = async (comment: SessionComment) => {
+    if (!comment?.id) return;
+    setCommentError(null);
+    setDeletingCommentId(comment.id);
+    try {
+      await deleteCommentMutation.mutateAsync(comment.id);
+      if (viewingComment?.id === comment.id) {
+        setViewingComment(null);
+      }
+      await qc.invalidateQueries({ queryKey: ['session-comments', sessionId] });
+    } catch (error) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo eliminar el comentario';
+      setCommentError(message);
+    } finally {
+      setDeletingCommentId(null);
+    }
+  };
+
+  const commentCount = comments.length;
+
+  return (
+    <>
+      <Accordion defaultActiveKey={[`session-comments-${sessionId}`]} alwaysOpen className="mt-4">
+        <Accordion.Item eventKey={`session-comments-${sessionId}`}>
+          <Accordion.Header>
+            <div className="d-flex justify-content-between align-items-center w-100">
+              <span className="erp-accordion-title">
+                Comentarios
+                {commentCount > 0 ? <span className="erp-accordion-count">{commentCount}</span> : null}
+              </span>
+            </div>
+          </Accordion.Header>
+          <Accordion.Body>
+            {queryError ? (
+              <Alert variant="danger" className="mb-3">
+                {queryError}
+              </Alert>
+            ) : null}
+            {commentError ? (
+              <Alert variant="danger" className="mb-3">
+                {commentError}
+              </Alert>
+            ) : null}
+            {commentsLoading ? (
+              <div className="d-flex align-items-center gap-2 mb-3">
+                <Spinner animation="border" size="sm" /> Cargando comentarios…
+              </div>
+            ) : null}
+            {!commentsLoading && commentsFetching ? (
+              <div className="text-muted small mb-3">Actualizando comentarios…</div>
+            ) : null}
+            {comments.length ? (
+              <ListGroup className="mb-3">
+                {comments.map((comment, index) => {
+                  const key = comment.id ?? `session-comment-${index}`;
+                  const authorName = comment.author ?? '';
+                  const normalizedAuthor = authorName.trim().toLowerCase();
+                  const normalizedUser = userName.trim().toLowerCase();
+                  const canEdit = normalizedAuthor.length && normalizedAuthor === normalizedUser;
+                  const isEditing = editingCommentId === comment.id;
+                  const isDeleting = deletingCommentId === comment.id;
+                  const isUpdating = updatingCommentId === comment.id && updateCommentMutation.isPending;
+                  const canOpen = !isEditing && !isDeleting;
+
+                  return (
+                    <ListGroup.Item
+                      key={key}
+                      action={canOpen}
+                      disabled={isDeleting}
+                      onClick={canOpen ? () => setViewingComment(comment) : undefined}
+                    >
+                      {isEditing ? (
+                        <>
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            value={editingCommentContent}
+                            onChange={(event) => setEditingCommentContent(event.target.value)}
+                            disabled={isUpdating}
+                          />
+                          <div className="d-flex justify-content-end gap-2 mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                cancelEditingComment();
+                              }}
+                              disabled={isUpdating}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleUpdateComment(comment);
+                              }}
+                              disabled={isUpdating || !editingCommentContent.trim().length}
+                            >
+                              {isUpdating ? <Spinner animation="border" size="sm" role="status" /> : 'Guardar'}
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="mb-2 text-break" style={{ whiteSpace: 'pre-line' }}>
+                            {displayOrDash(comment.content)}
+                          </p>
+                          <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                            <small className="text-muted mb-0">Autor: {displayOrDash(comment.author)}</small>
+                            {canEdit ? (
+                              <div className="d-flex align-items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline-primary"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    startEditingComment(comment);
+                                  }}
+                                  disabled={isDeleting}
+                                >
+                                  Editar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline-danger"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    handleDeleteComment(comment);
+                                  }}
+                                  disabled={isDeleting}
+                                >
+                                  {isDeleting ? (
+                                    <Spinner animation="border" size="sm" role="status" />
+                                  ) : (
+                                    'Eliminar'
+                                  )}
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </>
+                      )}
+                    </ListGroup.Item>
+                  );
+                })}
+              </ListGroup>
+            ) : null}
+
+            <Form onSubmit={handleCreateComment} className="mb-3">
+              <Form.Group controlId={`session-${sessionId}-comment-content`}>
+                <Form.Label className="fw-semibold">Añadir comentario</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={3}
+                  value={newCommentContent}
+                  onChange={(event) => setNewCommentContent(event.target.value)}
+                  disabled={createCommentMutation.isPending}
+                  placeholder="Escribe un comentario"
+                />
+              </Form.Group>
+              <div className="d-flex justify-content-end align-items-center gap-2 mt-2">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={createCommentMutation.isPending || !newCommentContent.trim().length}
+                >
+                  {createCommentMutation.isPending ? (
+                    <Spinner size="sm" animation="border" role="status" />
+                  ) : (
+                    'Guardar comentario'
+                  )}
+                </Button>
+              </div>
+            </Form>
+
+            {commentCount === 0 && !commentsLoading ? (
+              <>
+                <hr className="text-muted" />
+                <p className="text-muted small mb-0">Sin comentarios</p>
+              </>
+            ) : null}
+          </Accordion.Body>
+        </Accordion.Item>
+      </Accordion>
+
+      <Modal show={!!viewingComment} onHide={() => setViewingComment(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Comentario</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">
+            <strong>Autor:</strong> {displayOrDash(viewingComment?.author ?? null)}
+          </p>
+          <p className="mb-0 text-break" style={{ whiteSpace: 'pre-line' }}>
+            {displayOrDash(viewingComment?.content ?? null)}
+          </p>
+        </Modal.Body>
+      </Modal>
+    </>
   );
 }

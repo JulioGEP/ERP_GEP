@@ -33,7 +33,6 @@ export type SessionDTO = {
   fecha_fin_utc: string | null;
   sala_id: string | null;
   direccion: string;
-  comentarios: string | null;
   estado: SessionEstado;
   trainer_ids: string[];
   unidad_movil_ids: string[];
@@ -53,6 +52,16 @@ export type SessionGroupDTO = {
     total: number;
     totalPages: number;
   };
+};
+
+export type SessionComment = {
+  id: string;
+  deal_id: string;
+  sesion_id: string;
+  content: string;
+  author: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type TrainerOption = {
@@ -491,7 +500,6 @@ function normalizeSession(row: any): SessionDTO {
   const fecha_fin_utc = toStringValue(row?.fecha_fin_utc);
   const sala_id = toStringValue(row?.sala_id);
   const direccion = toStringValue(row?.direccion) ?? "";
-  const comentarios = toStringValue(row?.comentarios);
   const estado = toSessionEstadoValue(row?.estado);
 
   const trainer_ids = toStringArray(row?.trainer_ids);
@@ -506,7 +514,6 @@ function normalizeSession(row: any): SessionDTO {
     fecha_fin_utc: fecha_fin_utc ?? null,
     sala_id: sala_id ?? null,
     direccion,
-    comentarios: comentarios ?? null,
     estado,
     trainer_ids,
     unidad_movil_ids,
@@ -532,6 +539,26 @@ function normalizeSessionGroup(raw: any): SessionGroupDTO {
       total: toNumber(raw?.pagination?.total) ?? 0,
       totalPages: toNumber(raw?.pagination?.totalPages) ?? 1,
     },
+  };
+}
+
+function normalizeSessionComment(raw: any): SessionComment {
+  const id = toStringValue(raw?.id) ?? (raw?.id != null ? String(raw.id) : '');
+  const dealId = toStringValue(raw?.deal_id) ?? '';
+  const sessionId = toStringValue(raw?.sesion_id) ?? '';
+  const content = toStringValue(raw?.content) ?? '';
+  const author = toStringValue(raw?.author);
+  const createdAt = toStringValue(raw?.created_at);
+  const updatedAt = toStringValue(raw?.updated_at);
+
+  return {
+    id,
+    deal_id: dealId,
+    sesion_id: sessionId,
+    content,
+    author: author ?? null,
+    created_at: createdAt ?? null,
+    updated_at: updatedAt ?? null,
   };
 }
 
@@ -890,7 +917,6 @@ export async function createSession(
     fecha_fin_utc?: string | null;
     sala_id?: string | null;
     direccion?: string | null;
-    comentarios?: string | null;
     trainer_ids?: string[];
     unidad_movil_ids?: string[];
   }
@@ -909,8 +935,6 @@ export async function createSession(
   if (payload.fecha_fin_utc !== undefined) body.fecha_fin_utc = payload.fecha_fin_utc;
   if (payload.sala_id !== undefined) body.sala_id = payload.sala_id;
   if (payload.direccion !== undefined) body.direccion = payload.direccion;
-  if (payload.comentarios !== undefined) body.comentarios = payload.comentarios;
-
   const trainerIds = sanitizeStringArray(payload.trainer_ids);
   if (trainerIds !== undefined) body.trainer_ids = trainerIds;
 
@@ -933,7 +957,6 @@ export async function patchSession(
     fecha_fin_utc: string | null;
     sala_id: string | null;
     direccion: string | null;
-    comentarios: string | null;
     trainer_ids: string[];
     unidad_movil_ids: string[];
     estado: SessionEstado;
@@ -954,9 +977,6 @@ export async function patchSession(
     body.fecha_fin_utc = payload.fecha_fin_utc ?? null;
   if (Object.prototype.hasOwnProperty.call(payload, "sala_id")) body.sala_id = payload.sala_id ?? null;
   if (Object.prototype.hasOwnProperty.call(payload, "direccion")) body.direccion = payload.direccion ?? "";
-  if (Object.prototype.hasOwnProperty.call(payload, "comentarios"))
-    body.comentarios = payload.comentarios ?? null;
-
   if (Object.prototype.hasOwnProperty.call(payload, "trainer_ids")) {
     body.trainer_ids = sanitizeStringArray(payload.trainer_ids) ?? [];
   }
@@ -1039,6 +1059,106 @@ export async function fetchSessionAvailability(params: {
     rooms: toStringArray(availability.rooms),
     units: toStringArray(availability.units),
   };
+}
+
+/* =========================
+ * Comentarios de sesión
+ * ========================= */
+
+export async function fetchSessionComments(sessionId: string): Promise<SessionComment[]> {
+  const normalizedId = String(sessionId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId es obligatorio');
+  }
+
+  const data = await request(`/session_comments/${encodeURIComponent(normalizedId)}`);
+  const comments = Array.isArray(data?.comments) ? data.comments : [];
+  return comments.map((comment: any) => normalizeSessionComment(comment));
+}
+
+export async function createSessionComment(
+  sessionId: string,
+  content: string,
+  user?: { id: string; name?: string },
+): Promise<SessionComment> {
+  const normalizedId = String(sessionId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId es obligatorio');
+  }
+
+  const trimmedContent = typeof content === 'string' ? content.trim() : '';
+  if (!trimmedContent.length) {
+    throw new ApiError('VALIDATION_ERROR', 'content requerido');
+  }
+
+  const headers: Record<string, string> = {};
+  if (user?.id) headers['X-User-Id'] = user.id;
+  if (user?.name) headers['X-User-Name'] = user.name;
+
+  const data = await request(`/session_comments/${encodeURIComponent(normalizedId)}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ content: trimmedContent }),
+  });
+
+  return normalizeSessionComment(data?.comment ?? {});
+}
+
+export async function updateSessionComment(
+  sessionId: string,
+  commentId: string,
+  content: string,
+  user?: { id: string; name?: string },
+): Promise<SessionComment> {
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  const normalizedCommentId = String(commentId ?? '').trim();
+  if (!normalizedSessionId || !normalizedCommentId) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId y commentId son obligatorios');
+  }
+
+  const trimmedContent = typeof content === 'string' ? content.trim() : '';
+  if (!trimmedContent.length) {
+    throw new ApiError('VALIDATION_ERROR', 'content requerido');
+  }
+
+  const headers: Record<string, string> = {};
+  if (user?.id) headers['X-User-Id'] = user.id;
+  if (user?.name) headers['X-User-Name'] = user.name;
+
+  const data = await request(
+    `/session_comments/${encodeURIComponent(normalizedSessionId)}/${encodeURIComponent(normalizedCommentId)}`,
+    {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ content: trimmedContent }),
+    },
+  );
+
+  return normalizeSessionComment(data?.comment ?? {});
+}
+
+export async function deleteSessionComment(
+  sessionId: string,
+  commentId: string,
+  user?: { id: string; name?: string },
+): Promise<void> {
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  const normalizedCommentId = String(commentId ?? '').trim();
+  if (!normalizedSessionId || !normalizedCommentId) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId y commentId son obligatorios');
+  }
+
+  const headers: Record<string, string> = {};
+  if (user?.id) headers['X-User-Id'] = user.id;
+  if (user?.name) headers['X-User-Name'] = user.name;
+
+  await request(
+    `/session_comments/${encodeURIComponent(normalizedSessionId)}/${encodeURIComponent(normalizedCommentId)}`,
+    {
+      method: 'DELETE',
+      headers,
+    },
+  );
 }
 
 /* =======================
