@@ -592,25 +592,17 @@ async function ensureFilePublicWebViewLink(fileId: string): Promise<string | nul
 async function updateDealFolderLink({
   deal,
   link,
-  prisma,
 }: {
   deal: any;
   link: string | null;
-  prisma?: PrismaClient;
 }): Promise<void> {
   const dealId = resolveDealId(deal);
   if (!dealId) return;
 
-  try {
-    const client = prisma ?? getPrisma();
-    await client.deals.update({
-      where: { deal_id: dealId },
-      data: { drive_folder_web_view_link: link },
-    });
-  } catch (err) {
-    console.warn("[google-drive-sync] No se pudo guardar enlace de carpeta en BD", {
+  if (link) {
+    console.info("[google-drive-sync] Enlace de carpeta ignorado (columna eliminada)", {
       dealId,
-      error: err instanceof Error ? err.message : String(err),
+      link,
     });
   }
 }
@@ -618,11 +610,9 @@ async function updateDealFolderLink({
 async function ensureDealFolderPublicLink({
   deal,
   folderId,
-  prisma,
 }: {
   deal: any;
   folderId: string;
-  prisma?: PrismaClient;
 }): Promise<string | null> {
   const dealId = resolveDealId(deal);
   if (!dealId) return null;
@@ -638,7 +628,7 @@ async function ensureDealFolderPublicLink({
     });
   }
 
-  await updateDealFolderLink({ deal, link: publicLink ?? null, prisma });
+  await updateDealFolderLink({ deal, link: publicLink ?? null });
   return publicLink ?? null;
 }
 
@@ -707,7 +697,7 @@ export async function syncDealDocumentsToGoogleDrive(params: {
       driveId,
     });
 
-    await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolderId, prisma });
+    await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolderId });
 
     await clearFolder(dealFolderId, driveId);
 
@@ -837,7 +827,7 @@ export async function deleteDealFolderFromGoogleDrive(params: {
 
     try {
       await driveDelete(dealFolderId);
-      await updateDealFolderLink({ deal: params.deal, link: null, prisma });
+      await updateDealFolderLink({ deal: params.deal, link: null });
     } catch (err) {
       console.error("[google-drive-sync] Error eliminando carpeta del deal en Drive", {
         dealId: params.deal?.deal_id ?? params.deal?.id,
