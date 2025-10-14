@@ -591,7 +591,6 @@ function SessionDocumentsAccordionItem({
 }) {
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [shareWithTrainer, setShareWithTrainer] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [updatingDocumentId, setUpdatingDocumentId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
@@ -625,7 +624,6 @@ function SessionDocumentsAccordionItem({
 
   useEffect(() => {
     setDocumentError(null);
-    setShareWithTrainer(false);
     setUpdatingDocumentId(null);
     setDeletingDocumentId(null);
     uploadMutation.reset();
@@ -670,7 +668,7 @@ function SessionDocumentsAccordionItem({
     if (!files.length) return;
     setDocumentError(null);
     try {
-      await uploadMutation.mutateAsync({ files, shareWithTrainer });
+      await uploadMutation.mutateAsync({ files, shareWithTrainer: false });
       onNotify?.({
         variant: 'success',
         message:
@@ -786,14 +784,6 @@ function SessionDocumentsAccordionItem({
           >
             {uploadPending ? <Spinner animation="border" size="sm" role="status" /> : 'Subir documentos'}
           </Button>
-          <Form.Check
-            type="checkbox"
-            id={`session-${sessionId}-share-trainer`}
-            label="Compartir con formador/a"
-            checked={shareWithTrainer}
-            disabled={uploadPending}
-            onChange={(event) => setShareWithTrainer(event.target.checked)}
-          />
         </div>
 
         {queryError ? (
