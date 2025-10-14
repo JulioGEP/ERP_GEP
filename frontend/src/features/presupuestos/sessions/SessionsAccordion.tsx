@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type ChangeEvent,
+  type DragEvent,
 } from 'react';
 import {
   Accordion,
@@ -577,6 +578,7 @@ function SessionStudentsAccordionItem({
         </div>
       </Accordion.Body>
     </Accordion.Item>
+
   );
 }
 
@@ -594,6 +596,9 @@ function SessionDocumentsAccordionItem({
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [updatingDocumentId, setUpdatingDocumentId] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
+  const [isDragActive, setIsDragActive] = useState(false);
 
   const documentsQuery = useQuery({
     queryKey: ['session-documents', dealId, sessionId],
@@ -662,9 +667,38 @@ function SessionDocumentsAccordionItem({
     }
   };
 
-  const handleUploadFiles = async (filesList: FileList | null | undefined) => {
-    if (!filesList || !filesList.length || uploadPending) return;
+  const openUploadDialog = () => {
+    if (uploadPending) return;
+    setPendingUploadFiles([]);
+    setIsDragActive(false);
+    setShowUploadDialog(true);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const closeUploadDialog = () => {
+    if (uploadPending) return;
+    setShowUploadDialog(false);
+    setPendingUploadFiles([]);
+    setIsDragActive(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSelectUploadFiles = (filesList: FileList | null | undefined) => {
+    if (!filesList || !filesList.length) {
+      setPendingUploadFiles([]);
+      return;
+    }
     const files = Array.from(filesList).filter(Boolean);
+    setPendingUploadFiles(files);
+  };
+
+  const handleUploadFiles = async (filesInput: File[] | FileList | null | undefined) => {
+    if (!filesInput || uploadPending) return;
+    const files = (Array.isArray(filesInput) ? filesInput : Array.from(filesInput)).filter(Boolean);
     if (!files.length) return;
     setDocumentError(null);
     try {
@@ -676,6 +710,9 @@ function SessionDocumentsAccordionItem({
             ? 'Documentos subidos correctamente'
             : 'Documento subido correctamente',
       });
+      setShowUploadDialog(false);
+      setPendingUploadFiles([]);
+      setIsDragActive(false);
     } catch (error: unknown) {
       const message = isApiError(error)
         ? error.message
@@ -693,15 +730,48 @@ function SessionDocumentsAccordionItem({
   };
 
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    handleUploadFiles(event.target.files);
+    handleSelectUploadFiles(event.target.files);
     if (event.target) {
       event.target.value = '';
     }
   };
 
   const handleUploadClick = () => {
+    openUploadDialog();
+  };
+
+  const handleBrowseClick = () => {
     if (uploadPending) return;
     fileInputRef.current?.click();
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (uploadPending) return;
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+    setIsDragActive(false);
+  };
+
+  const handleDropFiles = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (uploadPending) return;
+    setIsDragActive(false);
+    handleSelectUploadFiles(event.dataTransfer?.files ?? null);
+  };
+
+  const handleUploadConfirm = () => {
+    void handleUploadFiles(pendingUploadFiles);
   };
 
   const handleToggleShare = async (doc: SessionDocument, share: boolean) => {
@@ -755,26 +825,19 @@ function SessionDocumentsAccordionItem({
   };
 
   return (
-    <Accordion.Item eventKey={`session-documents-${sessionId}`}>
-      <Accordion.Header>
-        <div className="d-flex justify-content-between align-items-center w-100">
-          <span className="erp-accordion-title">
-            Documentos
-            {documents.length > 0 ? (
-              <span className="erp-accordion-count">{documents.length}</span>
-            ) : null}
-          </span>
-        </div>
-      </Accordion.Header>
+    <>
+      <Accordion.Item eventKey={`session-documents-${sessionId}`}>
+        <Accordion.Header>
+          <div className="d-flex justify-content-between align-items-center w-100">
+            <span className="erp-accordion-title">
+              Documentos
+              {documents.length > 0 ? (
+                <span className="erp-accordion-count">{documents.length}</span>
+              ) : null}
+            </span>
+          </div>
+        </Accordion.Header>
       <Accordion.Body>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          hidden
-          onChange={handleFileInputChange}
-        />
-
         <div className="d-flex flex-column flex-md-row align-items-md-center gap-3 mb-3">
           <Button
             type="button"
@@ -895,6 +958,95 @@ function SessionDocumentsAccordionItem({
         ) : null}
       </Accordion.Body>
     </Accordion.Item>
+
+    <Modal
+      show={showUploadDialog}
+      onHide={closeUploadDialog}
+      centered
+      backdrop={uploadPending ? 'static' : true}
+      keyboard={!uploadPending}
+    >
+      <Modal.Header closeButton={!uploadPending}>
+        <Modal.Title>Subir documento</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="d-none"
+          onChange={handleFileInputChange}
+        />
+        <div
+          className={`border border-2 rounded-3 p-4 text-center ${
+            isDragActive ? 'border-primary bg-light' : 'border-secondary-subtle'
+          }`}
+          style={{ borderStyle: 'dashed' }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDropFiles}
+        >
+          <p className="fw-semibold mb-2">Arrastra un archivo aquí</p>
+          <p className="text-muted small mb-3">o</p>
+          <Button
+            type="button"
+            variant="outline-primary"
+            onClick={handleBrowseClick}
+            disabled={uploadPending}
+          >
+            Buscar archivo
+          </Button>
+          <div className="mt-3">
+            {pendingUploadFiles.length ? (
+              <div className="d-flex flex-column gap-2 small text-start text-md-center">
+                {pendingUploadFiles.map((file) => {
+                  const sizeLabel =
+                    file.size >= 1024 * 1024
+                      ? `${Math.round((file.size / (1024 * 1024)) * 100) / 100} MB`
+                      : `${Math.round((file.size / 1024) * 10) / 10} KB`;
+                  return (
+                    <div key={`${file.name}-${file.size}-${file.lastModified}`} className="text-break">
+                      <div className="fw-semibold">{file.name}</div>
+                      <div className="text-muted">{sizeLabel}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-muted small">Ningún archivo seleccionado</div>
+            )}
+          </div>
+        </div>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button
+          type="button"
+          variant="outline-secondary"
+          onClick={closeUploadDialog}
+          disabled={uploadPending}
+        >
+          Cancelar
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          onClick={handleUploadConfirm}
+          disabled={!pendingUploadFiles.length || uploadPending}
+        >
+          {uploadPending ? (
+            <>
+              <Spinner as="span" animation="border" size="sm" role="status" className="me-2" />
+              Subiendo...
+            </>
+          ) : pendingUploadFiles.length > 1 ? (
+            'Subir documentos'
+          ) : (
+            'Subir documento'
+          )}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  </>
   );
 }
 
