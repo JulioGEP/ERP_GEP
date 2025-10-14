@@ -96,6 +96,10 @@ export function nowInMadridISO(): string {
   return formatDateToTimeZoneISO(new Date(), MADRID_TIME_ZONE);
 }
 
+export function nowInMadridDate(): Date {
+  return new Date(nowInMadridISO());
+}
+
 export function toMadridISOString(value: Date | string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
 

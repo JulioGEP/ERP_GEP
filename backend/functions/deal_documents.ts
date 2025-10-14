@@ -3,7 +3,7 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } fro
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomUUID } from "crypto";
 import { getPrisma } from "./_shared/prisma";
-import { nowInMadridISO, toMadridISOString } from "./_shared/timezone";
+import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { downloadFile as downloadPipedriveFile } from "./_shared/pipedrive";
 import { uploadDealDocumentToGoogleDrive } from "./_shared/googleDrive";
@@ -292,7 +292,7 @@ export const handler = async (event: any) => {
         })();
 
         const id = randomUUID();
-        const now = nowInMadridISO();
+        const now = nowInMadridDate();
         await prisma.deal_files.create({
           data: {
             id,
@@ -334,7 +334,7 @@ export const handler = async (event: any) => {
           file_name: normalizedFileName,
           file_type: mime_type ?? null,
           file_url: storage_key, // guardamos la clave S3 (no es URL pública)
-          added_at: nowInMadridISO(), // opcional: marca de alta en hora local de Madrid
+          added_at: nowInMadridDate(), // opcional: marca de alta en hora local de Madrid
         },
       });
 

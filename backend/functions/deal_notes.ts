@@ -2,7 +2,7 @@
 import { randomUUID } from "crypto";
 import { getPrisma } from "./_shared/prisma";
 import { COMMON_HEADERS, errorResponse, successResponse } from "./_shared/response";
-import { nowInMadridISO, toMadridISOString } from "./_shared/timezone";
+import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 
 const DEFAULT_AUTHOR = process.env.DEFAULT_NOTE_AUTHOR || "erp_user";
 
@@ -65,7 +65,7 @@ export const handler = async (event: any) => {
       }
 
       const author = requestUser && requestUser.length ? requestUser : DEFAULT_AUTHOR;
-      const now = nowInMadridISO();
+      const now = nowInMadridDate();
 
       const created = await prisma.deal_notes.create({
         data: {
@@ -98,7 +98,7 @@ export const handler = async (event: any) => {
         return errorResponse("VALIDATION_ERROR", "content requerido", 400);
       }
 
-      const updatedNow = nowInMadridISO();
+      const updatedNow = nowInMadridDate();
 
       const updated = await prisma.deal_notes.update({
         where: { id: String(noteId) },

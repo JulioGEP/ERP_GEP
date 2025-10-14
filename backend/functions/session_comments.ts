@@ -1,7 +1,7 @@
 // backend/functions/session_comments.ts
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
-import { nowInMadridISO, toMadridISOString } from './_shared/timezone';
+import { nowInMadridDate, nowInMadridISO, toMadridISOString } from './_shared/timezone';
 
 const DEFAULT_AUTHOR = process.env.DEFAULT_NOTE_AUTHOR || 'erp_user';
 
@@ -90,7 +90,7 @@ export const handler = async (event: any) => {
       }
 
       const author = requestUser && requestUser.length ? requestUser : DEFAULT_AUTHOR;
-      const now = nowInMadridISO();
+      const now = nowInMadridDate();
 
       const created = await prisma.session_comments.create({
         data: {
@@ -128,7 +128,7 @@ export const handler = async (event: any) => {
         where: { id: String(commentId) },
         data: {
           content: trimmedContent,
-          updated_at: nowInMadridISO(),
+          updated_at: nowInMadridDate(),
         },
       });
 
