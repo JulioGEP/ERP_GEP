@@ -11,7 +11,6 @@ const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 const TOKEN_AUDIENCE = "https://oauth2.googleapis.com/token";
 const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3";
-const SESSION_DOCUMENTS_FOLDER_NAME = "Documentos de la sesión";
 
 const driveFolderCache = new Map<string, string>();
 let s3Client: S3Client | null = null;
@@ -976,17 +975,11 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
     driveId,
   });
 
-  const documentsFolderId = await ensureFolder({
-    name: SESSION_DOCUMENTS_FOLDER_NAME,
-    parentId: sessionFolderId,
-    driveId,
-  });
-
   const safeName = sanitizeName(params.fileName || "documento") || "documento";
   const mimeType = params.mimeType?.trim() || "application/octet-stream";
 
   const uploadResult = await uploadBufferToDrive({
-    parentId: documentsFolderId,
+    parentId: sessionFolderId,
     name: safeName,
     mimeType,
     data: params.data,
