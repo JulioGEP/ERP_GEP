@@ -1,5 +1,4 @@
 // backend/functions/session_comments.ts
-import { randomUUID } from 'crypto';
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridISO, toMadridISOString } from './_shared/timezone';
@@ -95,7 +94,6 @@ export const handler = async (event: any) => {
 
       const created = await prisma.session_comments.create({
         data: {
-          id: randomUUID(),
           deal_id: session.deal_id,
           sesion_id: session.id,
           content: trimmedContent,
