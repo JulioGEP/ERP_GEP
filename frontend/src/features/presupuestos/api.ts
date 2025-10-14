@@ -64,6 +64,18 @@ export type SessionComment = {
   updated_at: string | null;
 };
 
+export type SessionDocument = {
+  id: string;
+  deal_id: string;
+  sesion_id: string;
+  file_type: string | null;
+  compartir_formador: boolean;
+  added_at: string | null;
+  updated_at: string | null;
+  drive_file_name: string | null;
+  drive_web_view_link: string | null;
+};
+
 export type TrainerOption = {
   trainer_id: string;
   name: string;
@@ -553,6 +565,29 @@ function normalizeSessionComment(raw: any): SessionComment {
     author: author ?? null,
     created_at: createdAt ?? null,
     updated_at: updatedAt ?? null,
+  };
+}
+
+function normalizeSessionDocument(raw: any): SessionDocument {
+  const id = toStringValue(raw?.id) ?? (raw?.id != null ? String(raw.id) : '');
+  const dealId = toStringValue(raw?.deal_id) ?? '';
+  const sessionId = toStringValue(raw?.sesion_id) ?? '';
+  const fileType = toStringValue(raw?.file_type);
+  const driveFileName = toStringValue(raw?.drive_file_name);
+  const driveLink = toStringValue(raw?.drive_web_view_link);
+  const createdAt = toStringValue(raw?.added_at ?? raw?.created_at);
+  const updatedAt = toStringValue(raw?.updated_at);
+
+  return {
+    id,
+    deal_id: dealId,
+    sesion_id: sessionId,
+    file_type: fileType,
+    compartir_formador: Boolean(raw?.compartir_formador),
+    added_at: createdAt ?? null,
+    updated_at: updatedAt ?? null,
+    drive_file_name: driveFileName ?? null,
+    drive_web_view_link: driveLink ?? null,
   };
 }
 
@@ -1153,6 +1188,92 @@ export async function deleteSessionComment(
       headers,
     },
   );
+}
+
+/* =========================
+ * Documentos de sesión
+ * ========================= */
+
+export async function fetchSessionDocuments(
+  dealId: string,
+  sessionId: string,
+): Promise<SessionDocument[]> {
+  const normalizedDealId = String(dealId ?? '').trim();
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  if (!normalizedDealId || !normalizedSessionId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId y sessionId son obligatorios');
+  }
+
+  const params = new URLSearchParams({ dealId: normalizedDealId, sessionId: normalizedSessionId });
+  const data = await request(`/session_documents?${params.toString()}`);
+  const docs: any[] = Array.isArray(data?.documents) ? data.documents : [];
+  return docs.map((doc) => normalizeSessionDocument(doc));
+}
+
+export async function uploadSessionDocuments(params: {
+  dealId: string;
+  sessionId: string;
+  files: File[];
+  shareWithTrainer: boolean;
+}): Promise<SessionDocument[]> {
+  const normalizedDealId = String(params.dealId ?? '').trim();
+  const normalizedSessionId = String(params.sessionId ?? '').trim();
+  if (!normalizedDealId || !normalizedSessionId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId y sessionId son obligatorios');
+  }
+
+  const files = Array.isArray(params.files) ? params.files : [];
+  if (!files.length) {
+    throw new ApiError('VALIDATION_ERROR', 'Selecciona al menos un archivo');
+  }
+
+  const payloadFiles = await Promise.all(
+    files.map(async (file) => ({
+      fileName: file.name,
+      mimeType: file.type,
+      fileSize: file.size,
+      contentBase64: await fileToBase64(file),
+    })),
+  );
+
+  const data = await request(`/session_documents`, {
+    method: 'POST',
+    body: JSON.stringify({
+      deal_id: normalizedDealId,
+      sesion_id: normalizedSessionId,
+      compartir_formador: params.shareWithTrainer,
+      files: payloadFiles,
+    }),
+  });
+
+  const docs: any[] = Array.isArray(data?.documents) ? data.documents : [];
+  return docs.map((doc) => normalizeSessionDocument(doc));
+}
+
+export async function updateSessionDocumentShare(
+  dealId: string,
+  sessionId: string,
+  documentId: string,
+  shareWithTrainer: boolean,
+): Promise<SessionDocument> {
+  const normalizedDealId = String(dealId ?? '').trim();
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  const normalizedDocumentId = String(documentId ?? '').trim();
+
+  if (!normalizedDealId || !normalizedSessionId || !normalizedDocumentId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId, sessionId y documentId son obligatorios');
+  }
+
+  const data = await request(`/session_documents/${encodeURIComponent(normalizedDocumentId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      deal_id: normalizedDealId,
+      sesion_id: normalizedSessionId,
+      compartir_formador: shareWithTrainer,
+    }),
+  });
+
+  return normalizeSessionDocument(data?.document ?? {});
 }
 
 /* =======================

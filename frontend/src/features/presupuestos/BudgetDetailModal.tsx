@@ -38,6 +38,7 @@ interface Props {
   summary?: DealSummary | null;
   onClose: () => void;
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
+  onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
 }
 
 function useAuth() {
@@ -125,7 +126,13 @@ function resolveDocumentPreviewUrl(url: string): string {
   return url;
 }
 
-export function BudgetDetailModal({ dealId, summary, onClose, onShowProductComment }: Props) {
+export function BudgetDetailModal({
+  dealId,
+  summary,
+  onClose,
+  onShowProductComment,
+  onNotify,
+}: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 
@@ -1005,6 +1012,7 @@ export function BudgetDetailModal({ dealId, summary, onClose, onShowProductComme
                 dealId={normalizedDealId}
                 dealAddress={defaultSessionAddress ?? null}
                 products={detailProducts}
+                onNotify={onNotify}
               />
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>

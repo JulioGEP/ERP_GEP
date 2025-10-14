@@ -11,6 +11,7 @@ const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 const TOKEN_AUDIENCE = "https://oauth2.googleapis.com/token";
 const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3";
 const DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3";
+const SESSION_DOCUMENTS_FOLDER_NAME = "Documentos de la sesión";
 
 const driveFolderCache = new Map<string, string>();
 let s3Client: S3Client | null = null;
@@ -904,6 +905,100 @@ export async function uploadDealDocumentToGoogleDrive(params: {
   } catch (permissionError) {
     console.warn("[google-drive-sync] No se pudo generar enlace público de Drive", {
       dealId: params.deal?.deal_id ?? params.deal?.id,
+      fileId: uploadResult.id,
+      error: permissionError instanceof Error ? permissionError.message : String(permissionError),
+    });
+  }
+
+  return {
+    driveFileName: uploadResult.name || safeName,
+    driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
+  };
+}
+
+export async function uploadSessionDocumentToGoogleDrive(params: {
+  deal: any;
+  session: any;
+  organizationName?: string | null;
+  sessionNumber: string;
+  sessionName?: string | null;
+  fileName: string;
+  mimeType?: string | null;
+  data: Buffer;
+}): Promise<{ driveFileName: string; driveWebViewLink: string | null }> {
+  const driveId = resolveDriveSharedId();
+  if (!driveId) {
+    throw new Error("Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)");
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error("Credenciales de Google Drive no configuradas");
+  }
+
+  const baseFolderId = await ensureFolder({
+    name: resolveDriveBaseFolderName(),
+    parentId: driveId,
+    driveId,
+  });
+
+  const organizationDisplayName =
+    sanitizeName(params.organizationName || "Sin organización") || "Sin organización";
+  const organizationFolderId = await ensureFolder({
+    name: organizationDisplayName,
+    parentId: baseFolderId,
+    driveId,
+  });
+
+  const dealFolderName = sanitizeName(buildDealFolderName(params.deal));
+  const dealFolderId = await ensureFolder({
+    name: dealFolderName,
+    parentId: organizationFolderId,
+    driveId,
+  });
+
+  await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolderId });
+
+  const sessionNumberLabel =
+    sanitizeName(params.sessionNumber || "") || params.sessionNumber || "1";
+  const baseSessionName =
+    sanitizeName(
+      params.sessionName ||
+        params.session?.nombre_cache ||
+        params.session?.name ||
+        `Sesión ${sessionNumberLabel}`,
+    ) || `Sesión ${sessionNumberLabel}`;
+  const sessionFolderName =
+    sanitizeName(`${sessionNumberLabel} - ${baseSessionName}`) || baseSessionName;
+
+  const sessionFolderId = await ensureFolder({
+    name: sessionFolderName,
+    parentId: dealFolderId,
+    driveId,
+  });
+
+  const documentsFolderId = await ensureFolder({
+    name: SESSION_DOCUMENTS_FOLDER_NAME,
+    parentId: sessionFolderId,
+    driveId,
+  });
+
+  const safeName = sanitizeName(params.fileName || "documento") || "documento";
+  const mimeType = params.mimeType?.trim() || "application/octet-stream";
+
+  const uploadResult = await uploadBufferToDrive({
+    parentId: documentsFolderId,
+    name: safeName,
+    mimeType,
+    data: params.data,
+  });
+
+  let publicLink = uploadResult.webViewLink;
+  try {
+    publicLink = await ensureFilePublicWebViewLink(uploadResult.id);
+  } catch (permissionError) {
+    console.warn("[google-drive-sync] No se pudo generar enlace público de documento de sesión", {
+      dealId: params.deal?.deal_id ?? params.deal?.id,
+      sessionId: params.session?.id,
       fileId: uploadResult.id,
       error: permissionError instanceof Error ? permissionError.message : String(permissionError),
     });
