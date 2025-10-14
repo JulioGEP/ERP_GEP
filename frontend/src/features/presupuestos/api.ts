@@ -89,6 +89,12 @@ export type SessionStudent = {
   updated_at: string | null;
 };
 
+export type SessionCounts = {
+  comentarios: number;
+  documentos: number;
+  alumnos: number;
+};
+
 export type TrainerOption = {
   trainer_id: string;
   name: string;
@@ -154,6 +160,13 @@ function toNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isNaN(value) ? null : value;
   const parsed = Number(value);
   return Number.isNaN(parsed) ? null : parsed;
+}
+
+function toNonNegativeInteger(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.floor(parsed);
 }
 
 function toStringValue(value: unknown): string | null {
@@ -1061,6 +1074,21 @@ export async function patchSession(
   });
 
   return normalizeSession(data?.session ?? {});
+}
+
+export async function fetchSessionCounts(sessionId: string): Promise<SessionCounts> {
+  const normalizedId = String(sessionId ?? "").trim();
+  if (!normalizedId) {
+    throw new ApiError("VALIDATION_ERROR", "sessionId es obligatorio");
+  }
+
+  const data = await request(`/sessions/${encodeURIComponent(normalizedId)}/counts`);
+
+  return {
+    comentarios: toNonNegativeInteger(data?.comentarios),
+    documentos: toNonNegativeInteger(data?.documentos),
+    alumnos: toNonNegativeInteger(data?.alumnos),
+  };
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
