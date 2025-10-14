@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Container,
   Nav,
@@ -80,6 +80,12 @@ export default function App() {
   const [productComment, setProductComment] = useState<ProductCommentPayload | null>(null);
 
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!selectedBudgetId) {
+      setProductComment(null);
+    }
+  }, [selectedBudgetId]);
 
   const budgetsQuery = useQuery({
     queryKey: ['deals', 'noSessions'],
