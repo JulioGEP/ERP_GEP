@@ -569,6 +569,8 @@ export const handler = async (event: any) => {
     const isAvailabilityRequest =
       /\/(?:\.netlify\/functions\/)?sessions\/availability$/i.test(path);
     const isRangeRequest = /\/(?:\.netlify\/functions\/)?sessions\/range$/i.test(path);
+    const isCountsRequest =
+      /\/(?:\.netlify\/functions\/)?sessions\/[^/]+\/counts$/i.test(path);
     const sessionIdFromPath = isAvailabilityRequest ? null : parseSessionIdFromPath(path);
 
     if (method === 'POST' && /\/sessions\/generate-from-deal$/i.test(path)) {
@@ -818,6 +820,25 @@ export const handler = async (event: any) => {
         },
         sessions: payload,
       });
+    }
+
+    if (method === 'GET' && isCountsRequest && sessionIdFromPath) {
+      const existing = await prisma.sessions.findUnique({
+        where: { id: sessionIdFromPath },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
+      }
+
+      const [comentarios, documentos, alumnos] = await prisma.$transaction([
+        prisma.sesiones_comentarios.count({ where: { sesion_id: sessionIdFromPath } }),
+        prisma.session_files.count({ where: { sesion_id: sessionIdFromPath } }),
+        prisma.alumnos.count({ where: { sesion_id: sessionIdFromPath } }),
+      ]);
+
+      return successResponse({ comentarios, documentos, alumnos });
     }
 
     if (method === 'GET') {
@@ -1163,7 +1184,7 @@ export const handler = async (event: any) => {
         }
       });
 
-      return successResponse({}, 204);
+      return successResponse({});
     }
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
