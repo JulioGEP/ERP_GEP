@@ -10,8 +10,8 @@
     "postinstall": "prisma generate --schema ../../prisma/schema.prisma"
   },
   "dependencies": {
-    "@prisma/client": "^5.17.0",
-    "prisma": "^5.17.0",
+    "@prisma/client": "^5.22.0",
+    "prisma": "^5.22.0",
     "uuid": "^9.0.1"
   }
 }

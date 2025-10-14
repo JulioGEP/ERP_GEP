@@ -6,6 +6,7 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type ChangeEvent,
 } from 'react';
 import {
   Accordion,
@@ -20,6 +21,7 @@ import {
   Pagination,
   Row,
   Spinner,
+  Table,
 } from 'react-bootstrap';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { DealProduct } from '../../../types/deal';
@@ -39,16 +41,25 @@ import {
   createSessionComment,
   updateSessionComment,
   deleteSessionComment,
+  fetchSessionDocuments,
+  uploadSessionDocuments,
+  updateSessionDocumentShare,
   type TrainerOption,
   type RoomOption,
   type MobileUnitOption,
   type SessionEstado,
   type SessionComment,
+  type SessionDocument,
 } from '../api';
 import { isApiError } from '../api';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
+
+type ToastParams = {
+  variant: 'success' | 'danger' | 'info';
+  message: string;
+};
 
 const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
@@ -76,6 +87,283 @@ function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
       <rect x={7} y={7} width={11} height={11} rx={2.2} ry={2.2} />
       <path d="M5.5 15.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.6" />
     </svg>
+  );
+}
+
+function SessionDocumentsAccordionItem({
+  sessionId,
+  dealId,
+  onNotify,
+}: {
+  sessionId: string;
+  dealId: string;
+  onNotify?: (toast: ToastParams) => void;
+}) {
+  const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [shareWithTrainer, setShareWithTrainer] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const [updatingDocumentId, setUpdatingDocumentId] = useState<string | null>(null);
+
+  const documentsQuery = useQuery({
+    queryKey: ['session-documents', dealId, sessionId],
+    queryFn: () => fetchSessionDocuments(dealId, sessionId),
+    enabled: Boolean(dealId && sessionId),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: (input: { files: File[]; shareWithTrainer: boolean }) =>
+      uploadSessionDocuments({
+        dealId,
+        sessionId,
+        files: input.files,
+        shareWithTrainer: input.shareWithTrainer,
+      }),
+  });
+
+  const updateShareMutation = useMutation({
+    mutationFn: (input: { documentId: string; share: boolean }) =>
+      updateSessionDocumentShare(dealId, sessionId, input.documentId, input.share),
+  });
+
+  useEffect(() => {
+    setDocumentError(null);
+    setShareWithTrainer(false);
+    setUpdatingDocumentId(null);
+    uploadMutation.reset();
+    updateShareMutation.reset();
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, [dealId, sessionId]);
+
+  const documents = documentsQuery.data ?? [];
+  const documentsLoading = documentsQuery.isLoading;
+  const documentsFetching = documentsQuery.isFetching;
+  const queryError = documentsQuery.error
+    ? documentsQuery.error instanceof Error
+      ? documentsQuery.error.message
+      : 'No se pudieron cargar los documentos'
+    : null;
+
+  const uploadPending = uploadMutation.isPending;
+  const updateSharePending = updateShareMutation.isPending;
+
+  const formatAddedAt = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    if (!Number.isFinite(date.getTime())) return '—';
+    try {
+      return new Intl.DateTimeFormat('es-ES', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+        timeZone: MADRID_TIMEZONE,
+      }).format(date);
+    } catch {
+      return date.toLocaleString('es-ES');
+    }
+  };
+
+  const handleUploadFiles = async (filesList: FileList | null | undefined) => {
+    if (!filesList || !filesList.length || uploadPending) return;
+    const files = Array.from(filesList).filter(Boolean);
+    if (!files.length) return;
+    setDocumentError(null);
+    try {
+      await uploadMutation.mutateAsync({ files, shareWithTrainer });
+      onNotify?.({
+        variant: 'success',
+        message:
+          files.length > 1
+            ? 'Documentos subidos correctamente'
+            : 'Documento subido correctamente',
+      });
+    } catch (error: unknown) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo subir el documento';
+      setDocumentError(message);
+      onNotify?.({ variant: 'danger', message });
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      await qc.invalidateQueries({ queryKey: ['session-documents', dealId, sessionId] });
+    }
+  };
+
+  const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    handleUploadFiles(event.target.files);
+    if (event.target) {
+      event.target.value = '';
+    }
+  };
+
+  const handleUploadClick = () => {
+    if (uploadPending) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleToggleShare = async (doc: SessionDocument, share: boolean) => {
+    setDocumentError(null);
+    setUpdatingDocumentId(doc.id);
+    try {
+      await updateShareMutation.mutateAsync({ documentId: doc.id, share });
+      onNotify?.({
+        variant: 'success',
+        message: share
+          ? 'Documento marcado para compartir con formador/a'
+          : 'Documento marcado como no compartido',
+      });
+    } catch (error: unknown) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo actualizar el estado de compartición';
+      setDocumentError(message);
+      onNotify?.({ variant: 'danger', message });
+    } finally {
+      setUpdatingDocumentId(null);
+      await qc.invalidateQueries({ queryKey: ['session-documents', dealId, sessionId] });
+    }
+  };
+
+  return (
+    <Accordion.Item eventKey={`session-documents-${sessionId}`}>
+      <Accordion.Header>
+        <div className="d-flex justify-content-between align-items-center w-100">
+          <span className="erp-accordion-title">
+            Documentos
+            {documents.length > 0 ? (
+              <span className="erp-accordion-count">{documents.length}</span>
+            ) : null}
+          </span>
+        </div>
+      </Accordion.Header>
+      <Accordion.Body>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          onChange={handleFileInputChange}
+        />
+
+        <div className="d-flex flex-column flex-md-row align-items-md-center gap-3 mb-3">
+          <Button
+            type="button"
+            variant="outline-primary"
+            onClick={handleUploadClick}
+            disabled={uploadPending}
+          >
+            {uploadPending ? <Spinner animation="border" size="sm" role="status" /> : 'Subir documentos'}
+          </Button>
+          <Form.Check
+            type="checkbox"
+            id={`session-${sessionId}-share-trainer`}
+            label="Compartir con formador/a"
+            checked={shareWithTrainer}
+            disabled={uploadPending}
+            onChange={(event) => setShareWithTrainer(event.target.checked)}
+          />
+        </div>
+
+        {queryError ? (
+          <Alert variant="danger" className="mb-3">
+            {queryError}
+          </Alert>
+        ) : null}
+
+        {documentError ? (
+          <Alert variant="danger" className="mb-3">
+            {documentError}
+          </Alert>
+        ) : null}
+
+        {documentsLoading ? (
+          <div className="d-flex align-items-center gap-2 mb-3">
+            <Spinner animation="border" size="sm" /> Cargando documentos…
+          </div>
+        ) : null}
+
+        {!documentsLoading && documentsFetching ? (
+          <div className="text-muted small mb-3">Actualizando documentos…</div>
+        ) : null}
+
+        {documents.length ? (
+          <div className="table-responsive">
+            <Table striped bordered hover size="sm" className="mb-0">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Tipo</th>
+                  <th>Fecha de alta</th>
+                  <th>Enlace Drive</th>
+                  <th className="text-center">Compartir con formador/a</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documents.map((doc) => {
+                  const displayName = (doc.drive_file_name ?? '').trim() || 'Documento';
+                  const typeLabel = (doc.file_type ?? '').toUpperCase() || '—';
+                  const driveLink = (doc.drive_web_view_link ?? '').trim();
+                  const isUpdating = updateSharePending && updatingDocumentId === doc.id;
+
+                  return (
+                    <tr key={doc.id}>
+                      <td className="align-middle">{displayName}</td>
+                      <td className="align-middle">{typeLabel}</td>
+                      <td className="align-middle">{formatAddedAt(doc.added_at)}</td>
+                      <td className="align-middle">
+                        {driveLink ? (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0"
+                            href={driveLink}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                          >
+                            Abrir
+                          </Button>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      <td className="align-middle">
+                        <div className="d-flex align-items-center justify-content-center gap-2">
+                          <Form.Check
+                            type="switch"
+                            id={`session-${sessionId}-doc-share-${doc.id}`}
+                            label=""
+                            title={
+                              doc.compartir_formador
+                                ? 'Compartido con formador/a'
+                                : 'No compartido con formador/a'
+                            }
+                            checked={doc.compartir_formador}
+                            disabled={isUpdating}
+                            onChange={(event) => handleToggleShare(doc, event.target.checked)}
+                          />
+                          <span className="small text-muted">{doc.compartir_formador ? 'Sí' : 'No'}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </div>
+        ) : !documentsLoading && !queryError ? (
+          <p className="text-muted small mb-0">Sin documentos</p>
+        ) : null}
+      </Accordion.Body>
+    </Accordion.Item>
   );
 }
 
@@ -417,9 +705,10 @@ interface SessionsAccordionProps {
   dealId: string;
   dealAddress: string | null;
   products: DealProduct[];
+  onNotify?: (toast: ToastParams) => void;
 }
 
-export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAccordionProps) {
+export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: SessionsAccordionProps) {
   const qc = useQueryClient();
 
   const applicableProducts = useMemo(
@@ -1023,6 +1312,8 @@ export function SessionsAccordion({ dealId, dealAddress, products }: SessionsAcc
                   allForms={forms}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
                   onOpenMap={handleOpenMap}
+                  dealId={dealId}
+                  onNotify={onNotify}
                 />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
@@ -1063,6 +1354,8 @@ interface SessionEditorProps {
   allForms: Record<string, SessionFormState>;
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
   onOpenMap: (address: string) => void;
+  dealId: string;
+  onNotify?: (toast: ToastParams) => void;
 }
 
 function SessionEditor({
@@ -1075,6 +1368,8 @@ function SessionEditor({
   allForms,
   onChange,
   onOpenMap,
+  dealId,
+  onNotify,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
@@ -1562,12 +1857,20 @@ function SessionEditor({
         </div>
       </div>
 
-      <SessionCommentsSection sessionId={form.id} />
+      <SessionCommentsSection sessionId={form.id} dealId={dealId} onNotify={onNotify} />
     </div>
   );
 }
 
-function SessionCommentsSection({ sessionId }: { sessionId: string }) {
+function SessionCommentsSection({
+  sessionId,
+  dealId,
+  onNotify,
+}: {
+  sessionId: string;
+  dealId: string;
+  onNotify?: (toast: ToastParams) => void;
+}) {
   const fallbackUser = 'erp_user';
   const userId =
     typeof window !== 'undefined' ? localStorage.getItem('userId') || fallbackUser : fallbackUser;
@@ -1875,6 +2178,11 @@ function SessionCommentsSection({ sessionId }: { sessionId: string }) {
             ) : null}
           </Accordion.Body>
         </Accordion.Item>
+        <SessionDocumentsAccordionItem
+          sessionId={sessionId}
+          dealId={dealId}
+          onNotify={onNotify}
+        />
       </Accordion>
 
       <Modal show={!!viewingComment} onHide={() => setViewingComment(null)} centered>

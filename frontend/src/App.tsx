@@ -396,6 +396,7 @@ export default function App() {
         summary={selectedBudgetSummary}
         onClose={handleCloseDetail}
         onShowProductComment={handleShowProductComment}
+        onNotify={pushToast}
       />
 
       <ProductCommentWindow
