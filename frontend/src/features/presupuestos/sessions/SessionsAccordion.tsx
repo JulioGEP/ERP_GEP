@@ -1711,7 +1711,7 @@ function SessionCommentsSection({ sessionId }: { sessionId: string }) {
 
   return (
     <>
-      <Accordion defaultActiveKey={[`session-comments-${sessionId}`]} alwaysOpen className="mt-4">
+      <Accordion defaultActiveKey={[]} alwaysOpen className="mt-4">
         <Accordion.Item eventKey={`session-comments-${sessionId}`}>
           <Accordion.Header>
             <div className="d-flex justify-content-between align-items-center w-100">
