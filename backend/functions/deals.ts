@@ -1,7 +1,7 @@
 // backend/functions/deals.ts
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { getPrisma } from "./_shared/prisma";
-import { nowInMadridISO, toMadridISOString } from "./_shared/timezone";
+import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import {
   getDeal,
   getOrganization,
@@ -568,7 +568,7 @@ export const handler = async (event: any) => {
       }
 
       if (productPatches.length) {
-        const timestamp = nowInMadridISO();
+        const timestamp = nowInMadridDate();
         await Promise.all(
           productPatches.map((product) =>
             prisma.deal_products.updateMany({
