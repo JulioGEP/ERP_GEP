@@ -9,7 +9,6 @@ type SedeOption = (typeof SEDE_OPTIONS)[number];
 export type BudgetFilters = {
   title?: string | null;
   training_address?: string | null;
-  alumnos?: number | null;
   org_id?: string | null;
   pipeline_id?: string | null;
   sede_label?: SedeOption | null;
@@ -32,7 +31,6 @@ export type ActiveBudgetFilter = {
 const FIELD_LABELS: Record<BudgetFilterKey, string> = {
   title: 'Título',
   training_address: 'Dirección',
-  alumnos: 'Alumnos',
   org_id: 'Organización',
   pipeline_id: 'Pipeline',
   sede_label: 'Sede',
@@ -111,10 +109,6 @@ export function cleanBudgetFilters(filters: BudgetFilters): BudgetFilters {
     if (value.length) cleaned.training_address = value;
   }
 
-  if (typeof filters.alumnos === 'number' && !Number.isNaN(filters.alumnos)) {
-    cleaned.alumnos = filters.alumnos;
-  }
-
   if (typeof filters.org_id === 'string') {
     const value = filters.org_id.trim();
     if (value.length) cleaned.org_id = value;
@@ -171,10 +165,6 @@ export function applyBudgetFilters(budgets: DealSummary[], filters: BudgetFilter
     if (!matchesTextFilter(budget.title, filters.title ?? null)) return false;
     if (!matchesTextFilter(budget.training_address ?? null, filters.training_address ?? null)) return false;
 
-    if (filters.alumnos !== null && filters.alumnos !== undefined) {
-      if ((budget.alumnos ?? null) !== filters.alumnos) return false;
-    }
-
     if (!matchesTextFilter(budget.organization?.org_id ?? null, filters.org_id ?? null)) return false;
     if (!matchesTextFilter(budget.pipeline_id ?? null, filters.pipeline_id ?? null)) return false;
 
@@ -201,11 +191,6 @@ export function getActiveBudgetFilters(filters: BudgetFilters): ActiveBudgetFilt
     if (typeof value === 'string' && value.trim().length === 0) return;
 
     const label = FIELD_LABELS[key];
-
-    if (key === 'alumnos' && typeof value === 'number') {
-      active.push({ key, label, value: String(value) });
-      return;
-    }
 
     if (
       (key === 'caes_label' ||

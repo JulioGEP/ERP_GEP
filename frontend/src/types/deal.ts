@@ -87,7 +87,6 @@ export interface DealSummary {
   mail_invoice?: string | null;
 
   hours?: number | null;    // editable en ERP (no autocalculado)
-  alumnos?: number | null;  // editable en ERP
 
   organization?: DealOrganization | null;
   person?: DealPerson | null;
@@ -117,7 +116,6 @@ export interface DealDetail {
   mail_invoice?: string | null;
 
   hours?: number | null;    // editable en ERP
-  alumnos?: number | null;  // editable en ERP
 
   organization?: DealOrganization | null;
   person?: DealPerson | null;
@@ -154,7 +152,6 @@ export interface DealDetailViewModel {
 
   productName: string | null;      // si la vista necesita destacar uno
   hours: number | null;
-  alumnos: number | null;
 
   sedeLabel: string | null;
   caesLabel: string | null;

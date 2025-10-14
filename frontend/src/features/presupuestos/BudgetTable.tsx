@@ -106,7 +106,6 @@ function normalizeRowMinimal(row: any) {
     pipeline_id: toStringValue(row?.pipeline_id) ?? null,
     training_address: toStringValue(row?.training_address) ?? null, // schema vigente
     hours: typeof row?.hours === 'number' ? row.hours : Number(row?.hours) || null,
-    alumnos: typeof row?.alumnos === 'number' ? row.alumnos : Number(row?.alumnos) || null,
     caes_label: toStringValue(row?.caes_label) ?? null,
     fundae_label: toStringValue(row?.fundae_label) ?? null,
     hotel_label: toStringValue(row?.hotel_label) ?? null,

@@ -16,7 +16,6 @@ const summaryFixtures: Record<string, DealSummary> = {
     caes_label: 'CAES A',
     fundae_label: 'FUNDAE A',
     hotel_label: 'Hotel A',
-    alumnos: 10,
     drive_folder_web_view_link: 'https://drive.example.com/folders/deal-a',
     organization: { name: 'Organización A' },
     person: {
@@ -34,7 +33,6 @@ const summaryFixtures: Record<string, DealSummary> = {
     caes_label: 'CAES B',
     fundae_label: 'FUNDAE B',
     hotel_label: 'Hotel B',
-    alumnos: 8,
     organization: { name: 'Organización B' },
     person: {
       first_name: 'Bruno',
@@ -54,7 +52,6 @@ const detailFixtures: Record<string, DealDetail> = {
     caes_label: 'CAES A',
     fundae_label: 'FUNDAE A',
     hotel_label: 'Hotel A',
-    alumnos: 10,
     drive_folder_web_view_link: 'https://drive.example.com/folders/deal-a',
     organization: { name: 'Organización A' },
     person: {
@@ -85,7 +82,6 @@ const detailFixtures: Record<string, DealDetail> = {
     caes_label: 'CAES B',
     fundae_label: 'FUNDAE B',
     hotel_label: 'Hotel B',
-    alumnos: 8,
     organization: { name: 'Organización B' },
     person: {
       first_name: 'Bruno',
@@ -126,10 +122,9 @@ vi.mock('../api', () => {
             clientEmail: null,
             clientPhone: null,
             pipelineLabel: null,
-            trainingAddress: null,
-            productName: null,
-            hours: null,
-            alumnos: null,
+          trainingAddress: null,
+          productName: null,
+          hours: null,
             sedeLabel: null,
             caesLabel: null,
             fundaeLabel: null,
@@ -157,7 +152,6 @@ vi.mock('../api', () => {
           trainingAddress: source.training_address ?? null,
           productName: null,
           hours: source.hours ?? null,
-          alumnos: source.alumnos ?? null,
           sedeLabel: source.sede_label ?? null,
           caesLabel: source.caes_label ?? null,
           fundaeLabel: source.fundae_label ?? null,
