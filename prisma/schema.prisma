@@ -37,9 +37,9 @@ model persons {
 }
 
 model deals {
-  deal_id          String          @id
-  created_at       DateTime        @default(now())
-  updated_at       DateTime        @default(now())
+  deal_id          String             @id
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @default(now())
   title            String?
   org_id           String?
   pipeline_id      String?
@@ -49,18 +49,19 @@ model deals {
   fundae_label     String?
   hotel_label      String?
   person_id        String?
-  transporte       String?         @db.VarChar(10)
-  po               String?         @db.VarChar(191)
-  tipo_servicio    String?         @db.VarChar(50)
-  mail_invoice     String?         @db.VarChar(255)
+  transporte       String?            @db.VarChar(10)
+  po               String?            @db.VarChar(191)
+  tipo_servicio    String?            @db.VarChar(50)
+  mail_invoice     String?            @db.VarChar(255)
   comments         comments[]
   deal_files       deal_files[]
   deal_notes       deal_notes[]
   deal_products    deal_products[]
-  organization     organizations?  @relation(fields: [org_id], references: [org_id], map: "deals_org_fk")
-  person           persons?        @relation(fields: [person_id], references: [person_id], map: "deals_person_fk")
+  organization     organizations?     @relation(fields: [org_id], references: [org_id], map: "deals_org_fk")
+  person           persons?           @relation(fields: [person_id], references: [person_id], map: "deals_person_fk")
   seassons         seassons[]
   sessions         sessions[]
+  session_comments session_comments[]
 
   @@index([org_id], map: "idx_deals_org_id")
   @@index([person_id], map: "idx_deals_person_id")
@@ -100,17 +101,17 @@ model deal_notes {
 }
 
 model deal_files {
-  id         String    @id
-  deal_id    String?
-  file_name  String?
-  file_url   String?
-  file_type  String?
+  id                  String    @id
+  deal_id             String?
+  file_name           String?
+  file_url            String?
+  file_type           String?
   drive_file_name     String?
   drive_web_view_link String?
-  added_at   DateTime? @db.Timestamptz(6)
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at DateTime  @default(now()) @db.Timestamptz(6)
-  deal       deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_files_deal_fk")
+  added_at            DateTime? @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime  @default(now()) @db.Timestamptz(6)
+  deal                deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_files_deal_fk")
 
   @@index([deal_id], map: "idx_deal_files_deal_id")
 }
@@ -189,17 +190,17 @@ model unidades_moviles {
 }
 
 model sessions {
-  id               String    @id @default(uuid())
+  id               String        @id @default(uuid())
   deal_id          String
   deal_product_id  String
   nombre_cache     String
-  fecha_inicio_utc DateTime? @db.Timestamptz(6)
-  fecha_fin_utc    DateTime? @db.Timestamptz(6)
+  fecha_inicio_utc DateTime?     @db.Timestamptz(6)
+  fecha_fin_utc    DateTime?     @db.Timestamptz(6)
   sala_id          String?
   direccion        String
   comentarios      String?
-  created_at       DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime  @updatedAt @db.Timestamptz(6)
+  created_at       DateTime      @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime      @updatedAt @db.Timestamptz(6)
   estado           SessionEstado @default(BORRADOR)
 
   deal         deals              @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade)
@@ -216,7 +217,7 @@ model sessions {
 }
 
 model session_comments {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   deal_id    String
   sesion_id  String
   content    String
