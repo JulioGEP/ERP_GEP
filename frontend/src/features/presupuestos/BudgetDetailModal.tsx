@@ -53,7 +53,6 @@ type EditableDealForm = {
   caes_label: string;
   fundae_label: string;
   hotel_label: string;
-  alumnos: string;
 };
 
 type DealNoteView = DealDetailViewModel['notes'][number];
@@ -315,8 +314,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         training_address: deal.training_address ?? '', // <- aquí
         caes_label: deal.caes_label ?? '',
         fundae_label: deal.fundae_label ?? '',
-        hotel_label: deal.hotel_label ?? '',
-        alumnos: deal.alumnos != null ? String(deal.alumnos) : ''
+        hotel_label: deal.hotel_label ?? ''
       });
     } else if (summary) {
       setForm({
@@ -324,8 +322,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
         training_address: summary.training_address ?? '', // <- aquí
         caes_label: summary.caes_label ?? '',
         fundae_label: summary.fundae_label ?? '',
-        hotel_label: summary.hotel_label ?? '',
-        alumnos: summary.alumnos != null ? String(summary.alumnos) : ''
+        hotel_label: summary.hotel_label ?? ''
       });
     } else {
       setForm(null);
@@ -345,8 +342,7 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       training_address: source.training_address ?? '', // <- aquí
       caes_label: source.caes_label ?? '',
       fundae_label: source.fundae_label ?? '',
-      hotel_label: source.hotel_label ?? '',
-      alumnos: source.alumnos != null ? String(source.alumnos) : ''
+      hotel_label: source.hotel_label ?? ''
     };
   }, [deal, summary]);
 
@@ -642,12 +638,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
       const trimmed = normalizeString(value);
       return trimmed.length ? trimmed : null;
     };
-    const toNullableNumber = (value: string | undefined | null) => {
-      const trimmed = normalizeString(value);
-      if (!trimmed.length) return null;
-      const parsed = Number(trimmed);
-      return Number.isNaN(parsed) ? null : parsed;
-    };
 
     if (normalizeString(form?.sede_label) !== normalizeString(initialEditable?.sede_label)) {
       patch.sede_label = toNullableString(form?.sede_label);
@@ -663,9 +653,6 @@ export function BudgetDetailModal({ dealId, summary, onClose }: Props) {
     }
     if (normalizeString(form?.hotel_label) !== normalizeString(initialEditable?.hotel_label)) {
       patch.hotel_label = toNullableString(form?.hotel_label);
-    }
-    if (normalizeString(form?.alumnos) !== normalizeString(initialEditable?.alumnos)) {
-      patch.alumnos = toNullableNumber(form?.alumnos);
     }
 
     const productPatches: DealProductEditablePatch[] = [];

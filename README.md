@@ -112,7 +112,7 @@ Las entidades principales gestionadas en la base de datos son:
 | `/deals/import` | `POST` | Importación de deals desde Pipedrive |
 | `/deals?noSessions=true` | `GET` | Listado de deals sin sesiones planificadas |
 | `/deals/:dealId` | `GET` | Detalle de un deal específico |
-| `/deals/:dealId` | `PATCH` | Actualización de campos operativos (sede, horas, alumnos, etc.) |
+| `/deals/:dealId` | `PATCH` | Actualización de campos operativos (sede, horas, etc.) |
 | `/deal_documents` | `POST` | Solicita URL firmada para subida de documentos |
 | `/deal_notes` | `POST` | Inserta o actualiza notas vinculadas al deal |
 | `/trainers`, `/rooms`, `/mobile-units` | `GET` | Catálogos de recursos operativos |

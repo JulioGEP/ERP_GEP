@@ -286,7 +286,6 @@ function normalizeDealSummary(row: Json): DealSummary {
     mail_invoice: toStringValue(row?.mail_invoice) ?? null,
 
     hours: toNumber(row?.hours) ?? null,
-    alumnos: toNumber(row?.alumnos) ?? null,
 
     organization: organization ?? null,
     person: person ?? null,
@@ -332,7 +331,6 @@ function normalizeDealDetail(raw: Json): DealDetail {
     mail_invoice: toStringValue(raw.mail_invoice) ?? null,
 
     hours: toNumber(raw.hours) ?? null,
-    alumnos: toNumber(raw.alumnos) ?? null,
 
     organization: null,
     person: null,
@@ -657,7 +655,6 @@ export type DealEditablePatch = {
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
-  alumnos?: number | null;
 };
 
 export type DealProductEditablePatch = {
@@ -1099,8 +1096,6 @@ export function buildDealDetailViewModel(
   const productName = resolveProductName(detail ?? null, summary ?? null);
 
   const hours = detail?.hours ?? summary?.hours ?? null;
-  const alumnos = detail?.alumnos ?? summary?.alumnos ?? null;
-
   const sedeLabel = pickNonEmptyString(detail?.sede_label ?? null, summary?.sede_label ?? null);
   const caesLabel = pickNonEmptyString(detail?.caes_label ?? null, summary?.caes_label ?? null);
   const fundaeLabel = pickNonEmptyString(detail?.fundae_label ?? null, summary?.fundae_label ?? null);
@@ -1118,7 +1113,6 @@ export function buildDealDetailViewModel(
     trainingAddress: trainingAddress ?? null,
     productName: productName ?? null,
     hours,
-    alumnos,
     sedeLabel: sedeLabel ?? null,
     caesLabel: caesLabel ?? null,
     fundaeLabel: fundaeLabel ?? null,

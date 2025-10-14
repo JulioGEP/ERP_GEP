@@ -23,7 +23,6 @@ const EDITABLE_FIELDS = new Set([
   "caes_label",
   "fundae_label",
   "hotel_label",
-  "alumnos",
 ]);
 
 /* -------------------- Helpers -------------------- */
@@ -32,13 +31,6 @@ function parsePathId(path: any): string | null {
   // admite .../deals/:id
   const m = String(path).match(/\/deals\/([^/?#]+)/i);
   return m ? decodeURIComponent(m[1]) : null;
-}
-
-function toIntOrNull(v: any): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  if (!Number.isFinite(n) || n < 0) return null;
-  return Math.trunc(n);
 }
 
 function normalizeProductId(raw: any): string | null {
@@ -531,16 +523,6 @@ export const handler = async (event: any) => {
         delete patch.training_address_label;
       }
 
-      // Coerciones y validaciones
-      if ("alumnos" in patch) {
-        const v = patch.alumnos;
-        const n = toIntOrNull(v);
-        if (v !== null && v !== undefined && n === null) {
-          return errorResponse("VALIDATION_ERROR", "alumnos inválido", 400);
-        }
-        patch.alumnos = n;
-      }
-
       const productPatches: Array<{ id: string; data: Record<string, any> }> = [];
       if (Array.isArray(body.products)) {
         for (const entry of body.products) {
@@ -629,7 +611,6 @@ export const handler = async (event: any) => {
           title: true,
           sede_label: true,
           training_address: true,
-          alumnos: true,
           caes_label: true,
           fundae_label: true,
           hotel_label: true,

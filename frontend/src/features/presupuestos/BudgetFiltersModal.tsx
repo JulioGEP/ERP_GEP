@@ -23,7 +23,6 @@ interface BudgetFiltersModalProps {
 type FormState = {
   title: string;
   training_address: string;
-  alumnos: string;
   org_id: string;
   pipeline_id: string;
   sede_label: string;
@@ -38,7 +37,6 @@ type FormState = {
 const EMPTY_STATE: FormState = {
   title: '',
   training_address: '',
-  alumnos: '',
   org_id: '',
   pipeline_id: '',
   sede_label: '',
@@ -50,16 +48,10 @@ const EMPTY_STATE: FormState = {
   po: '',
 };
 
-function numberToString(value: number | null | undefined): string {
-  if (typeof value !== 'number' || Number.isNaN(value)) return '';
-  return String(value);
-}
-
 function filtersToFormState(filters: BudgetFilters): FormState {
   return {
     title: filters.title ?? '',
     training_address: filters.training_address ?? '',
-    alumnos: numberToString(filters.alumnos ?? null),
     org_id: filters.org_id ?? '',
     pipeline_id: filters.pipeline_id ?? '',
     sede_label: filters.sede_label ?? '',
@@ -77,10 +69,6 @@ function parseFormState(state: FormState): BudgetFilters {
 
   if (state.title.trim().length) parsed.title = state.title;
   if (state.training_address.trim().length) parsed.training_address = state.training_address;
-  if (state.alumnos.trim().length) {
-    const value = Number(state.alumnos.trim());
-    if (!Number.isNaN(value)) parsed.alumnos = value;
-  }
   if (state.org_id.trim().length) parsed.org_id = state.org_id;
   if (state.pipeline_id.trim().length) parsed.pipeline_id = state.pipeline_id;
   if (state.sede_label.trim().length) parsed.sede_label = state.sede_label as BudgetFilters['sede_label'];
@@ -193,20 +181,7 @@ export function BudgetFiltersModal({
             </Row>
 
             <Row className="g-3">
-              <Col md={4}>
-                <Form.Group controlId="filter-alumnos">
-                  <Form.Label>Alumnos</Form.Label>
-                  <Form.Control
-                    type="number"
-                    inputMode="numeric"
-                    value={formState.alumnos}
-                    onChange={handleChange('alumnos')}
-                    placeholder="Número exacto"
-                    min={0}
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={4}>
+              <Col md={6}>
                 <Form.Group controlId="filter-org">
                   <Form.Label>Organización (ID)</Form.Label>
                   <Form.Control
@@ -217,7 +192,7 @@ export function BudgetFiltersModal({
                   />
                 </Form.Group>
               </Col>
-              <Col md={4}>
+              <Col md={6}>
                 <Form.Group controlId="filter-pipeline">
                   <Form.Label>Pipeline (ID)</Form.Label>
                   <Form.Control
