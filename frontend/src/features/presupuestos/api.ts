@@ -89,6 +89,30 @@ export type SessionStudent = {
   updated_at: string | null;
 };
 
+export type SessionPublicLink = {
+  id: string;
+  deal_id: string;
+  sesion_id: string;
+  token: string;
+  public_path: string | null;
+  public_url: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  last_access_at: string | null;
+  last_access_ip: string | null;
+  last_access_ua: string | null;
+};
+
+export type PublicSessionInfo = {
+  deal_id: string | null;
+  sesion_id: string | null;
+  session_name: string | null;
+  formation_name: string | null;
+  title: string | null;
+};
+
 export type SessionCounts = {
   comentarios: number;
   documentos: number;
@@ -640,6 +664,48 @@ function normalizeSessionStudent(raw: any): SessionStudent {
     certificado,
     created_at: createdAt ?? null,
     updated_at: updatedAt ?? null,
+  };
+}
+
+function normalizeSessionPublicLink(raw: any): SessionPublicLink {
+  const id = toStringValue(raw?.id) ?? (raw?.id != null ? String(raw.id) : '');
+  const dealId = toStringValue(raw?.deal_id) ?? '';
+  const sessionId = toStringValue(raw?.sesion_id) ?? '';
+  const token = toStringValue(raw?.token) ?? '';
+  const publicPath = toStringValue(raw?.public_path) ?? null;
+  const publicUrl = toStringValue(raw?.public_url) ?? null;
+  const createdAt = toStringValue(raw?.created_at) ?? null;
+  const updatedAt = toStringValue(raw?.updated_at) ?? null;
+  const expiresAt = toStringValue(raw?.expires_at) ?? null;
+  const revokedAt = toStringValue(raw?.revoked_at) ?? null;
+  const lastAccessAt = toStringValue(raw?.last_access_at) ?? null;
+  const lastAccessIp = toStringValue(raw?.last_access_ip) ?? null;
+  const lastAccessUa = toStringValue(raw?.last_access_ua) ?? null;
+
+  return {
+    id,
+    deal_id: dealId,
+    sesion_id: sessionId,
+    token,
+    public_path: publicPath,
+    public_url: publicUrl,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    expires_at: expiresAt,
+    revoked_at: revokedAt,
+    last_access_at: lastAccessAt,
+    last_access_ip: lastAccessIp,
+    last_access_ua: lastAccessUa,
+  };
+}
+
+function normalizePublicSessionInfo(raw: any): PublicSessionInfo {
+  return {
+    deal_id: toStringValue(raw?.deal_id) ?? null,
+    sesion_id: toStringValue(raw?.sesion_id) ?? null,
+    session_name: toStringValue(raw?.session_name) ?? null,
+    formation_name: toStringValue(raw?.formation_name) ?? null,
+    title: toStringValue(raw?.title) ?? null,
   };
 }
 
@@ -1470,6 +1536,137 @@ export async function deleteSessionStudent(studentId: string): Promise<void> {
   }
 
   await request(`/alumnos/${encodeURIComponent(normalizedId)}`, { method: 'DELETE' });
+}
+
+export async function fetchSessionPublicLink(
+  dealId: string,
+  sessionId: string,
+): Promise<SessionPublicLink | null> {
+  const normalizedDealId = String(dealId ?? '').trim();
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  if (!normalizedDealId || !normalizedSessionId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId y sessionId son obligatorios');
+  }
+
+  const params = new URLSearchParams({
+    deal_id: normalizedDealId,
+    sesion_id: normalizedSessionId,
+  });
+
+  const data = await request(`/session_public_links?${params.toString()}`);
+  if (!data?.link) return null;
+  return normalizeSessionPublicLink(data.link);
+}
+
+export async function createSessionPublicLink(
+  dealId: string,
+  sessionId: string,
+  options?: { regenerate?: boolean },
+): Promise<SessionPublicLink> {
+  const normalizedDealId = String(dealId ?? '').trim();
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  if (!normalizedDealId || !normalizedSessionId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId y sessionId son obligatorios');
+  }
+
+  const payload: Record<string, unknown> = {
+    deal_id: normalizedDealId,
+    sesion_id: normalizedSessionId,
+  };
+  if (options?.regenerate !== undefined) {
+    payload.regenerate = options.regenerate;
+  }
+
+  const data = await request('/session_public_links', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return normalizeSessionPublicLink(data?.link ?? {});
+}
+
+export async function fetchPublicSessionStudents(token: string): Promise<{
+  session: PublicSessionInfo;
+  students: SessionStudent[];
+}> {
+  const normalizedToken = String(token ?? '').trim();
+  if (!normalizedToken) {
+    throw new ApiError('VALIDATION_ERROR', 'token es obligatorio');
+  }
+
+  const params = new URLSearchParams({ token: normalizedToken });
+  const data = await request(`/public-session-students?${params.toString()}`);
+  const sessionInfo = normalizePublicSessionInfo(data?.session ?? {});
+  const students: any[] = Array.isArray(data?.students) ? data.students : [];
+  return {
+    session: sessionInfo,
+    students: students.map((row) => normalizeSessionStudent(row)),
+  };
+}
+
+export type PublicStudentInput = {
+  token: string;
+  nombre: string;
+  apellido: string;
+  dni: string;
+};
+
+export async function createPublicSessionStudent(input: PublicStudentInput): Promise<SessionStudent> {
+  const token = String(input.token ?? '').trim();
+  if (!token) {
+    throw new ApiError('VALIDATION_ERROR', 'token es obligatorio');
+  }
+  const nombre = String(input.nombre ?? '').trim();
+  const apellido = String(input.apellido ?? '').trim();
+  const dni = String(input.dni ?? '').trim();
+  if (!nombre.length || !apellido.length || !dni.length) {
+    throw new ApiError('VALIDATION_ERROR', 'Nombre, apellidos y DNI son obligatorios');
+  }
+
+  const data = await request('/public-session-students', {
+    method: 'POST',
+    body: JSON.stringify({ token, nombre, apellido, dni }),
+  });
+
+  return normalizeSessionStudent(data?.student ?? {});
+}
+
+export async function updatePublicSessionStudent(
+  token: string,
+  studentId: string,
+  input: { nombre?: string; apellido?: string; dni?: string },
+): Promise<SessionStudent> {
+  const normalizedToken = String(token ?? '').trim();
+  const normalizedId = String(studentId ?? '').trim();
+  if (!normalizedToken || !normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'token y studentId son obligatorios');
+  }
+
+  const payload: Record<string, unknown> = {};
+  if (input.nombre !== undefined) payload.nombre = String(input.nombre ?? '').trim();
+  if (input.apellido !== undefined) payload.apellido = String(input.apellido ?? '').trim();
+  if (input.dni !== undefined) payload.dni = String(input.dni ?? '').trim();
+
+  const params = new URLSearchParams({ token: normalizedToken });
+  const data = await request(`/public-session-students/${encodeURIComponent(normalizedId)}?${params.toString()}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return normalizeSessionStudent(data?.student ?? {});
+}
+
+export async function deletePublicSessionStudent(token: string, studentId: string): Promise<void> {
+  const normalizedToken = String(token ?? '').trim();
+  const normalizedId = String(studentId ?? '').trim();
+  if (!normalizedToken || !normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'token y studentId son obligatorios');
+  }
+
+  const params = new URLSearchParams({ token: normalizedToken });
+  await request(`/public-session-students/${encodeURIComponent(normalizedId)}?${params.toString()}`, {
+    method: 'DELETE',
+  });
 }
 
 /* =======================
