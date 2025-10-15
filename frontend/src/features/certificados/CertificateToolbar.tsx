@@ -6,9 +6,19 @@ type CertificateToolbarProps = {
   loading?: boolean;
   progress?: number;
   total?: number;
+  infoMessage?: string;
+  disabledReason?: string;
 };
 
-export function CertificateToolbar({ onGenerate, disabled, loading, progress, total }: CertificateToolbarProps) {
+export function CertificateToolbar({
+  onGenerate,
+  disabled,
+  loading,
+  progress,
+  total,
+  infoMessage,
+  disabledReason,
+}: CertificateToolbarProps) {
   const isLoading = Boolean(loading);
   const buttonDisabled = Boolean(disabled || isLoading);
   const resolvedTotal = typeof total === 'number' && total > 0 ? Math.floor(total) : null;
@@ -19,6 +29,10 @@ export function CertificateToolbar({ onGenerate, disabled, loading, progress, to
   const loadingLabel = resolvedTotal !== null && resolvedProgress !== null
     ? `Generando (${resolvedProgress}/${resolvedTotal})`
     : 'Generando...';
+  const resolvedInfoMessage = infoMessage?.trim().length
+    ? infoMessage.trim()
+    : 'Ajusta los datos de los alumnos antes de generar los certificados.';
+  const buttonTitle = buttonDisabled && disabledReason?.trim().length ? disabledReason.trim() : undefined;
 
   const handleClick = () => {
     if (isLoading || !onGenerate) {
@@ -29,13 +43,12 @@ export function CertificateToolbar({ onGenerate, disabled, loading, progress, to
 
   return (
     <div className="certificate-toolbar">
-      <div className="certificate-toolbar__info text-muted">
-        Ajusta los datos de los alumnos antes de generar los certificados.
-      </div>
+      <div className="certificate-toolbar__info text-muted">{resolvedInfoMessage}</div>
       <Button
         variant="primary"
         onClick={handleClick}
         disabled={buttonDisabled}
+        title={buttonTitle}
         className="certificate-toolbar__button"
       >
         {isLoading ? (

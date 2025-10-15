@@ -21,6 +21,8 @@ type EditableField =
   | 'formacion'
   | 'irata';
 
+const REQUIRED_FIELDS: EditableField[] = ['nombre', 'apellidos', 'dni'];
+
 function buildFullName(row: CertificateRow): string {
   const name = row.nombre?.trim() ?? '';
   const surname = row.apellidos?.trim() ?? '';
@@ -44,6 +46,9 @@ export function CertificateTable({ rows, onRowsChange, disabled }: CertificateTa
 
   const renderInput = (row: CertificateRow, field: EditableField) => {
     const value = row[field] ?? '';
+    const trimmedValue = typeof value === 'string' ? value.trim() : '';
+    const isRequired = REQUIRED_FIELDS.includes(field);
+    const isInvalid = isRequired && !trimmedValue.length;
     return (
       <Form.Control
         size="sm"
@@ -51,6 +56,8 @@ export function CertificateTable({ rows, onRowsChange, disabled }: CertificateTa
         value={value}
         onChange={(event) => handleChange(row.id, field, event.target.value)}
         disabled={disabled}
+        isInvalid={isInvalid}
+        aria-invalid={isInvalid || undefined}
       />
     );
   };
