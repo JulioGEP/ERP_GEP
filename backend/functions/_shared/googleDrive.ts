@@ -875,7 +875,11 @@ export async function uploadDealDocumentToGoogleDrive(params: {
   fileName: string;
   mimeType?: string | null;
   data: Buffer;
-}): Promise<{ driveFileName: string; driveWebViewLink: string | null }> {
+}): Promise<{
+  driveFileId: string;
+  driveFileName: string;
+  driveWebViewLink: string | null;
+}> {
   const driveId = resolveDriveSharedId();
   if (!driveId) {
     throw new Error("Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)");
@@ -930,6 +934,7 @@ export async function uploadDealDocumentToGoogleDrive(params: {
   }
 
   return {
+    driveFileId: uploadResult.id,
     driveFileName: uploadResult.name || safeName,
     driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
   };
@@ -944,7 +949,12 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
   fileName: string;
   mimeType?: string | null;
   data: Buffer;
-}): Promise<{ driveFileName: string; driveWebViewLink: string | null }> {
+  targetSubfolderName?: string | null;
+}): Promise<{
+  driveFileId: string;
+  driveFileName: string;
+  driveWebViewLink: string | null;
+}> {
   const driveId = resolveDriveSharedId();
   if (!driveId) {
     throw new Error("Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)");
@@ -992,8 +1002,19 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
   const safeName = sanitizeName(params.fileName || "documento") || "documento";
   const mimeType = params.mimeType?.trim() || "application/octet-stream";
 
+  let parentFolderId = sessionFolderId;
+  if (params.targetSubfolderName) {
+    const requestedName = sanitizeName(params.targetSubfolderName) || params.targetSubfolderName;
+    const effectiveName = sanitizeName(requestedName || "Certificados") || "Certificados";
+    parentFolderId = await ensureFolder({
+      name: effectiveName,
+      parentId: sessionFolderId,
+      driveId,
+    });
+  }
+
   const uploadResult = await uploadBufferToDrive({
-    parentId: sessionFolderId,
+    parentId: parentFolderId,
     name: safeName,
     mimeType,
     data: params.data,
@@ -1012,9 +1033,30 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
   }
 
   return {
+    driveFileId: uploadResult.id,
     driveFileName: uploadResult.name || safeName,
     driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
   };
+}
+
+export async function uploadSessionCertificateToGoogleDrive(params: {
+  deal: any;
+  session: any;
+  organizationName?: string | null;
+  sessionNumber: string;
+  sessionName?: string | null;
+  fileName: string;
+  mimeType?: string | null;
+  data: Buffer;
+}): Promise<{
+  driveFileId: string;
+  driveFileName: string;
+  driveWebViewLink: string | null;
+}> {
+  return uploadSessionDocumentToGoogleDrive({
+    ...params,
+    targetSubfolderName: "Certificados",
+  });
 }
 
 function extractDriveFileId(link?: string | null): string | null {
