@@ -9,6 +9,7 @@ import {
   ToastContainer,
   NavDropdown,
 } from 'react-bootstrap';
+import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetTable } from './features/presupuestos/BudgetTable';
@@ -30,10 +31,12 @@ import { RoomsView } from './features/recursos/RoomsView';
 import { MobileUnitsView } from './features/recursos/MobileUnitsView';
 import { CalendarView } from './features/calendar/CalendarView';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
+import { CertificadosPage } from './features/certificados/CertificadosPage';
 
 type NavView = {
   key: string;
   label: string;
+  path?: string;
 };
 
 type NavItem = NavView & {
@@ -41,7 +44,7 @@ type NavItem = NavView & {
 };
 
 const NAVIGATION_ITEMS: NavItem[] = [
-  { key: 'Presupuestos', label: 'Presupuestos' },
+  { key: 'Presupuestos', label: 'Presupuestos', path: '/' },
   { key: 'Calendario', label: 'Calendario' },
   {
     key: 'Recursos',
@@ -52,6 +55,7 @@ const NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Salas', label: 'Salas' },
     ],
   },
+  { key: 'Certificados', label: 'Certificados', path: '/certificados' },
 ];
 
 const VIEW_ITEMS: NavView[] = NAVIGATION_ITEMS.flatMap((item) =>
@@ -64,7 +68,8 @@ const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
     item.key !== 'Calendario' &&
     item.key !== 'Recursos/Formadores' &&
     item.key !== 'Recursos/Salas' &&
-    item.key !== 'Recursos/Unidades'
+    item.key !== 'Recursos/Unidades' &&
+    item.key !== 'Certificados'
 );
 
 type ToastMessage = {
@@ -80,6 +85,9 @@ export default function App() {
   if (isPublicStudentsPage) {
     return <PublicSessionStudentsPage />;
   }
+
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
@@ -147,11 +155,20 @@ export default function App() {
     }
   });
 
+  useEffect(() => {
+    if (location.pathname.startsWith('/certificados')) {
+      setActiveView((current) => (current === 'Certificados' ? current : 'Certificados'));
+    } else if (activeView === 'Certificados' && location.pathname === '/') {
+      setActiveView('Presupuestos');
+    }
+  }, [activeView, location.pathname]);
+
   const isBudgetsView = activeView === 'Presupuestos';
   const isCalendarView = activeView === 'Calendario';
   const isTrainersView = activeView === 'Recursos/Formadores';
   const isRoomsView = activeView === 'Recursos/Salas';
   const isMobileUnitsView = activeView === 'Recursos/Unidades';
+  const isCertificatesView = location.pathname.startsWith('/certificados');
   const activeViewLabel = useMemo(
     () => VIEW_ITEMS.find((item) => item.key === activeView)?.label ?? activeView,
     [activeView]
@@ -294,14 +311,19 @@ export default function App() {
                   key={item.key}
                   title={<span className="text-uppercase">{item.label}</span>}
                   id={`nav-${item.key}`}
-                  active={item.children.some((child) => child.key === activeView)}
+                  active={
+                    !isCertificatesView && item.children.some((child) => child.key === activeView)
+                  }
                 >
                   {item.children.map((child) => (
                     <NavDropdown.Item
                       key={child.key}
-                      active={activeView === child.key}
+                      active={!isCertificatesView && activeView === child.key}
                       onClick={(event) => {
                         event.preventDefault();
+                        if (location.pathname !== '/') {
+                          navigate('/');
+                        }
                         setActiveView(child.key);
                       }}
                     >
@@ -312,8 +334,25 @@ export default function App() {
               ) : (
                 <Nav.Item key={item.key}>
                   <Nav.Link
-                    active={activeView === item.key}
-                    onClick={() => setActiveView(item.key)}
+                    active={
+                      item.path
+                        ? item.path === '/'
+                          ? location.pathname === '/'
+                          : location.pathname.startsWith(item.path)
+                        : !isCertificatesView && activeView === item.key
+                    }
+                    onClick={() => {
+                      if (item.path) {
+                        setActiveView(item.key);
+                        navigate(item.path);
+                        return;
+                      }
+
+                      if (location.pathname !== '/') {
+                        navigate('/');
+                      }
+                      setActiveView(item.key);
+                    }}
                     className="text-uppercase"
                   >
                     {item.label}
@@ -327,56 +366,64 @@ export default function App() {
 
       <main className="flex-grow-1 py-5">
         <Container fluid="xl">
-          {isBudgetsView ? (
-            <div className="d-grid gap-4">
-              <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-                <div>
-                  <h1 className="h3 fw-bold mb-1">Presupuestos</h1>
-                  <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
-                </div>
-                <div className="d-flex align-items-center gap-3">
-                  {(importMutation.isPending || isRefreshing) && (
-                    <Spinner animation="border" role="status" size="sm" />
-                  )}
-                  <Button size="lg" onClick={() => setShowImportModal(true)}>
-                    Importar presupuesto
-                  </Button>
-                </div>
-              </section>
-              <BudgetTable
-                budgets={budgets}
-                isLoading={budgetsQuery.isLoading}
-                isFetching={isRefreshing}
-                error={budgetsQuery.error ?? null}
-                onRetry={() => budgetsQuery.refetch()}
-                onSelect={handleSelectBudget}
-                onDelete={handleDeleteBudget}
-              />
-            </div>
-          ) : isCalendarView ? (
-            <CalendarView onNotify={pushToast} onSessionOpen={handleOpenCalendarSession} />
-          ) : isTrainersView ? (
-            <TrainersView onNotify={pushToast} />
-          ) : isRoomsView ? (
-            <RoomsView onNotify={pushToast} />
-          ) : isMobileUnitsView ? (
-            <MobileUnitsView onNotify={pushToast} />
-          ) : (
-            <div className="bg-white rounded-4 shadow-sm p-5 text-center text-muted">
-              <h2 className="h4 fw-semibold mb-2">{activeViewLabel}</h2>
-              <p className="mb-0">
-                La sección {activeViewLabel} estará disponible próximamente. Mientras tanto, puedes seguir trabajando en
-                la pestaña de Presupuestos.
-              </p>
-              <div className="d-flex justify-content-center gap-2 mt-4">
-                {placeholderViews.map((view) => (
-                  <Button key={view.key} variant="outline-secondary" size="sm" disabled>
-                    {view.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
+          <Routes>
+            <Route path="/certificados" element={<CertificadosPage />} />
+            <Route
+              path="*"
+              element={
+                isBudgetsView ? (
+                  <div className="d-grid gap-4">
+                    <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                      <div>
+                        <h1 className="h3 fw-bold mb-1">Presupuestos</h1>
+                        <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
+                      </div>
+                      <div className="d-flex align-items-center gap-3">
+                        {(importMutation.isPending || isRefreshing) && (
+                          <Spinner animation="border" role="status" size="sm" />
+                        )}
+                        <Button size="lg" onClick={() => setShowImportModal(true)}>
+                          Importar presupuesto
+                        </Button>
+                      </div>
+                    </section>
+                    <BudgetTable
+                      budgets={budgets}
+                      isLoading={budgetsQuery.isLoading}
+                      isFetching={isRefreshing}
+                      error={budgetsQuery.error ?? null}
+                      onRetry={() => budgetsQuery.refetch()}
+                      onSelect={handleSelectBudget}
+                      onDelete={handleDeleteBudget}
+                    />
+                  </div>
+                ) : isCalendarView ? (
+                  <CalendarView onNotify={pushToast} onSessionOpen={handleOpenCalendarSession} />
+                ) : isTrainersView ? (
+                  <TrainersView onNotify={pushToast} />
+                ) : isRoomsView ? (
+                  <RoomsView onNotify={pushToast} />
+                ) : isMobileUnitsView ? (
+                  <MobileUnitsView onNotify={pushToast} />
+                ) : (
+                  <div className="bg-white rounded-4 shadow-sm p-5 text-center text-muted">
+                    <h2 className="h4 fw-semibold mb-2">{activeViewLabel}</h2>
+                    <p className="mb-0">
+                      La sección {activeViewLabel} estará disponible próximamente. Mientras tanto, puedes seguir
+                      trabajando en la pestaña de Presupuestos.
+                    </p>
+                    <div className="d-flex justify-content-center gap-2 mt-4">
+                      {placeholderViews.map((view) => (
+                        <Button key={view.key} variant="outline-secondary" size="sm" disabled>
+                          {view.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              }
+            />
+          </Routes>
         </Container>
       </main>
 
