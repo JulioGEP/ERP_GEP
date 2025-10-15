@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -135,6 +136,15 @@ function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function CopyIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} {...props}>
+      <rect x={9} y={9} width={11} height={11} rx={2} ry={2} />
+      <path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
 type StudentDraft = {
   nombre: string;
   apellido: string;
@@ -188,6 +198,7 @@ function SessionStudentsAccordionItem({
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [generatedLinks, setGeneratedLinks] = useState<SessionPublicLink[]>([]);
 
   const studentsQuery = useQuery({
     queryKey: ['session-students', dealId, sessionId],
@@ -205,7 +216,8 @@ function SessionStudentsAccordionItem({
   });
 
   const createPublicLinkMutation = useMutation({
-    mutationFn: () => createSessionPublicLink(dealId, sessionId),
+    mutationFn: (options?: { regenerate?: boolean }) =>
+      createSessionPublicLink(dealId, sessionId, options),
     onSuccess: (link) => {
       qc.setQueryData(['session-public-link', dealId, sessionId], link);
     },
@@ -220,6 +232,7 @@ function SessionStudentsAccordionItem({
     setUpdatingId(null);
     setDeletingId(null);
     createPublicLinkMutation.reset();
+    setGeneratedLinks([]);
   }, [dealId, sessionId, createPublicLinkMutation]);
 
   const students = studentsQuery.data ?? [];
@@ -245,16 +258,40 @@ function SessionStudentsAccordionItem({
     : null;
   const publicLinkGenerating = createPublicLinkMutation.isPending;
 
-  const publicLinkUrl = useMemo(() => {
-    if (!publicLink) return null;
-    if (publicLink.public_url && publicLink.public_url.trim().length) {
-      return publicLink.public_url;
-    }
-    if (publicLink.public_path && publicLink.public_path.trim().length && typeof window !== 'undefined') {
-      return `${window.location.origin}${publicLink.public_path}`;
-    }
-    return publicLink.public_path ?? null;
+  useEffect(() => {
+    setGeneratedLinks((current) => {
+      if (!publicLink) {
+        return [];
+      }
+
+      const normalizedLink = { ...publicLink, active: true };
+      const existingIndex = current.findIndex((item) => item.id === normalizedLink.id);
+
+      if (existingIndex >= 0) {
+        return current.map((item, index) =>
+          index === existingIndex
+            ? { ...normalizedLink }
+            : { ...item, active: false },
+        );
+      }
+
+      return [
+        ...current.map((item) => ({ ...item, active: false })),
+        normalizedLink,
+      ];
+    });
   }, [publicLink]);
+
+  const resolvePublicLinkUrl = useCallback((link: SessionPublicLink | null) => {
+    if (!link) return null;
+    if (link.public_url && link.public_url.trim().length) {
+      return link.public_url;
+    }
+    if (link.public_path && link.public_path.trim().length && typeof window !== 'undefined') {
+      return `${window.location.origin}${link.public_path}`;
+    }
+    return link.public_path ?? null;
+  }, []);
 
   const publicLinkCreatedAt = useMemo(() => {
     if (!publicLink?.created_at) return null;
@@ -267,34 +304,24 @@ function SessionStudentsAccordionItem({
     }
   }, [publicLink?.created_at]);
 
-  const handleOpenPublicLink = async () => {
+  const handleOpenPublicLink = (target: string | null) => {
+    if (!target || typeof window === 'undefined') return;
+    window.open(target, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleGeneratePublicLink = async () => {
     if (!dealId || !sessionId) return;
 
-    const openLinkInTab = (target: string | null) => {
-      if (!target) return;
-      window.open(target, '_blank', 'noopener,noreferrer');
-    };
-
-    const existingUrl = publicLinkUrl;
-    if (existingUrl) {
-      openLinkInTab(existingUrl);
-      return;
-    }
-
     try {
-      const link = await createPublicLinkMutation.mutateAsync();
-      const targetUrl = link.public_url && link.public_url.trim().length
-        ? link.public_url
-        : link.public_path && link.public_path.trim().length && typeof window !== 'undefined'
-          ? `${window.location.origin}${link.public_path}`
-          : link.public_path ?? null;
+      const link = await createPublicLinkMutation.mutateAsync({ regenerate: true });
+      const targetUrl = resolvePublicLinkUrl(link);
 
       if (!targetUrl) {
         onNotify?.({ variant: 'danger', message: 'No se pudo abrir la URL pública generada' });
         return;
       }
 
-      openLinkInTab(targetUrl);
+      handleOpenPublicLink(targetUrl);
       onNotify?.({ variant: 'success', message: 'URL pública generada correctamente' });
     } catch (error: any) {
       const message = isApiError(error)
@@ -304,9 +331,8 @@ function SessionStudentsAccordionItem({
     }
   };
 
-  const handleCopyPublicLink = async () => {
-    const url = publicLinkUrl;
-    if (!url || typeof navigator === 'undefined') return;
+  const handleCopyPublicLink = async (url: string | null) => {
+    if (!url || typeof navigator === 'undefined' || !navigator.clipboard) return;
     try {
       await navigator.clipboard.writeText(url);
       onNotify?.({ variant: 'success', message: 'URL de alumnos copiada al portapapeles' });
@@ -642,17 +668,17 @@ function SessionStudentsAccordionItem({
               <Button
                 variant="outline-secondary"
                 size="sm"
-                onClick={handleOpenPublicLink}
+                onClick={handleGeneratePublicLink}
                 disabled={publicLinkGenerating || publicLinkLoading}
                 className="d-flex align-items-center gap-2"
               >
                 {publicLinkGenerating ? (
                   <>
                     <Spinner animation="border" size="sm" role="status" />
-                    <span>Creando URL…</span>
+                    <span>Generando URL…</span>
                   </>
                 ) : (
-                  'URL Alumnos'
+                  'Generar URL'
                 )}
               </Button>
             </div>
@@ -674,24 +700,42 @@ function SessionStudentsAccordionItem({
             </Alert>
           ) : null}
 
-          {publicLink && publicLinkUrl ? (
-            <div className="d-flex flex-column flex-lg-row align-items-lg-center gap-2">
-              <a
-                href={publicLink.public_url ?? publicLink.public_path ?? '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-break"
-              >
-                {publicLinkUrl}
-              </a>
-              <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2">
-                <Button variant="outline-secondary" size="sm" onClick={handleCopyPublicLink}>
-                  Copiar
-                </Button>
-                {publicLinkCreatedAt ? (
-                  <span className="text-muted small">Creada {publicLinkCreatedAt}</span>
-                ) : null}
+          {generatedLinks.length ? (
+            <div className="d-flex flex-column gap-2">
+              <div className="d-flex flex-wrap align-items-center gap-2">
+                {generatedLinks.map((link, index) => {
+                  const url = resolvePublicLinkUrl(link);
+                  const label = `URL #${index + 1}`;
+                  const isActive = Boolean(link.active);
+                  return (
+                    <div key={link.id || `${link.token}-${index}`} className="d-flex align-items-center gap-1">
+                      <Button
+                        variant={isActive ? 'outline-primary' : 'outline-secondary'}
+                        size="sm"
+                        onClick={() => handleOpenPublicLink(url)}
+                        disabled={!url}
+                        title={url ?? undefined}
+                      >
+                        {label}
+                      </Button>
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        className="d-flex align-items-center justify-content-center p-1"
+                        onClick={() => handleCopyPublicLink(url)}
+                        disabled={!url}
+                        title={url ? `Copiar ${label}` : undefined}
+                      >
+                        <CopyIcon aria-hidden="true" width={16} height={16} />
+                        <span className="visually-hidden">Copiar {label}</span>
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
+              {publicLinkCreatedAt ? (
+                <span className="text-muted small">Creada {publicLinkCreatedAt}</span>
+              ) : null}
             </div>
           ) : null}
         </div>
