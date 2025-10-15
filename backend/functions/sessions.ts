@@ -569,9 +569,12 @@ export const handler = async (event: any) => {
     const isAvailabilityRequest =
       /\/(?:\.netlify\/functions\/)?sessions\/availability$/i.test(path);
     const isRangeRequest = /\/(?:\.netlify\/functions\/)?sessions\/range$/i.test(path);
+    const isDealSessionsRequest =
+      /\/(?:\.netlify\/functions\/)?sessions\/by-deal$/i.test(path);
     const isCountsRequest =
       /\/(?:\.netlify\/functions\/)?sessions\/[^/]+\/counts$/i.test(path);
-    const sessionIdFromPath = isAvailabilityRequest ? null : parseSessionIdFromPath(path);
+    const sessionIdFromPath =
+      isAvailabilityRequest || isDealSessionsRequest ? null : parseSessionIdFromPath(path);
 
     if (method === 'POST' && /\/sessions\/generate-from-deal$/i.test(path)) {
       const body = parseJson(event.body);
@@ -656,6 +659,41 @@ export const handler = async (event: any) => {
           units: Array.from(unitLocks),
         },
       });
+    }
+
+    if (method === 'GET' && isDealSessionsRequest) {
+      const dealId = toTrimmed(event.queryStringParameters?.dealId);
+      if (!dealId) {
+        return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
+      }
+
+      const sessions = await prisma.sessions.findMany({
+        where: { deal_id: dealId },
+        orderBy: [
+          { fecha_inicio_utc: 'asc' },
+          { created_at: 'asc' },
+        ],
+        select: {
+          id: true,
+          fecha_inicio_utc: true,
+          fecha_fin_utc: true,
+          sala: { select: { sala_id: true, name: true } },
+        },
+      });
+
+      const payload = sessions.map((session) => ({
+        id: session.id,
+        fecha_inicio_utc: toIsoOrNull(session.fecha_inicio_utc),
+        fecha_fin_utc: toIsoOrNull(session.fecha_fin_utc),
+        room: session.sala
+          ? {
+              id: session.sala.sala_id,
+              name: session.sala.name,
+            }
+          : null,
+      }));
+
+      return successResponse({ sessions: payload });
     }
 
     if (method === 'GET' && isRangeRequest) {

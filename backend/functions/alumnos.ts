@@ -44,6 +44,7 @@ function mapStudentForResponse(student: any) {
     dni: student.dni,
     apto: Boolean(student.apto),
     certificado: Boolean(student.certificado),
+    drive_url: typeof student.drive_url === 'string' ? student.drive_url : null,
     created_at: toMadridISOString(student.created_at),
     updated_at: toMadridISOString(student.updated_at),
   };
