@@ -663,7 +663,7 @@ function SessionStudentsAccordionItem({
       <Accordion.Body>
         <div className="d-flex flex-column gap-3 mb-3">
           <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2">
-            <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2">
+            <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2 flex-wrap">
               <Button
                 variant="outline-primary"
                 size="sm"
@@ -688,6 +688,42 @@ function SessionStudentsAccordionItem({
                   'Generar URL'
                 )}
               </Button>
+              {generatedLinks.length ? (
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  {generatedLinks.map((link, index) => {
+                    const url = resolvePublicLinkUrl(link);
+                    const label = `URL #${index + 1}`;
+                    const isActive = Boolean(link.active);
+                    return (
+                      <div
+                        key={link.id || `${link.token}-${index}`}
+                        className="d-flex align-items-center gap-1"
+                      >
+                        <Button
+                          variant={isActive ? 'outline-primary' : 'outline-secondary'}
+                          size="sm"
+                          onClick={() => handleOpenPublicLink(url)}
+                          disabled={!url}
+                          title={url ?? undefined}
+                        >
+                          {label}
+                        </Button>
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          className="d-flex align-items-center justify-content-center p-1"
+                          onClick={() => handleCopyPublicLink(url)}
+                          disabled={!url}
+                          title={url ? `Copiar ${label}` : undefined}
+                        >
+                          <CopyIcon aria-hidden="true" width={16} height={16} />
+                          <span className="visually-hidden">Copiar {label}</span>
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
             <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2 text-muted small">
               {!studentsLoading && studentsFetching ? <span>Actualizando alumnos…</span> : null}
@@ -707,42 +743,9 @@ function SessionStudentsAccordionItem({
             </Alert>
           ) : null}
 
-          {generatedLinks.length ? (
+          {generatedLinks.length && publicLinkCreatedAt ? (
             <div className="d-flex flex-column gap-2">
-              <div className="d-flex flex-wrap align-items-center gap-2">
-                {generatedLinks.map((link, index) => {
-                  const url = resolvePublicLinkUrl(link);
-                  const label = `URL #${index + 1}`;
-                  const isActive = Boolean(link.active);
-                  return (
-                    <div key={link.id || `${link.token}-${index}`} className="d-flex align-items-center gap-1">
-                      <Button
-                        variant={isActive ? 'outline-primary' : 'outline-secondary'}
-                        size="sm"
-                        onClick={() => handleOpenPublicLink(url)}
-                        disabled={!url}
-                        title={url ?? undefined}
-                      >
-                        {label}
-                      </Button>
-                      <Button
-                        variant="outline-secondary"
-                        size="sm"
-                        className="d-flex align-items-center justify-content-center p-1"
-                        onClick={() => handleCopyPublicLink(url)}
-                        disabled={!url}
-                        title={url ? `Copiar ${label}` : undefined}
-                      >
-                        <CopyIcon aria-hidden="true" width={16} height={16} />
-                        <span className="visually-hidden">Copiar {label}</span>
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-              {publicLinkCreatedAt ? (
-                <span className="text-muted small">Creada {publicLinkCreatedAt}</span>
-              ) : null}
+              <span className="text-muted small">Creada {publicLinkCreatedAt}</span>
             </div>
           ) : null}
         </div>
