@@ -33,6 +33,51 @@ import { SessionsAccordion } from './sessions/SessionsAccordion';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
 
+function normalizeId(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function mergeById<T extends { id?: string | null }>(
+  primary: readonly T[] | null | undefined,
+  fallback: readonly T[] | null | undefined,
+): T[] {
+  const result: T[] = [];
+  const seen = new Set<string>();
+
+  const addItem = (item: T | null | undefined) => {
+    if (!item) return;
+    const id = normalizeId(item.id);
+    if (id.length) {
+      if (seen.has(id)) return;
+      seen.add(id);
+    }
+    result.push(item);
+  };
+
+  primary?.forEach(addItem);
+  fallback?.forEach(addItem);
+
+  return result;
+}
+
+function mergeDealDetailData(current: DealDetail | undefined, next: DealDetail): DealDetail {
+  if (!current) return next;
+
+  const manualDocuments = (current.documents ?? []).filter(
+    (doc): doc is DealDocument => !!doc && (doc.source === 'MANUAL' || doc.source === 'S3'),
+  );
+
+  return {
+    ...next,
+    notes: mergeById(next.notes ?? [], current.notes ?? []),
+    documents: mergeById(next.documents ?? [], manualDocuments),
+  };
+}
+
 const EMPTY_DOCUMENTS: DealDocument[] = [];
 
 interface Props {
@@ -161,12 +206,24 @@ export function BudgetDetailModal({
     onSuccess: (payload) => {
       const nextDeal = payload?.deal ?? null;
       if (nextDeal) {
-        qc.setQueryData(detailQueryKey, nextDeal);
-      } else {
-        qc.invalidateQueries({ queryKey: detailQueryKey });
+        qc.setQueryData(detailQueryKey, (current: DealDetail | undefined) =>
+          mergeDealDetailData(current, nextDeal),
+        );
       }
+      qc.invalidateQueries({ queryKey: detailQueryKey });
       qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
       qc.invalidateQueries({ queryKey: ['calendarSessions'] });
+      qc.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key.length > 1 &&
+            key[0] === 'dealSessions' &&
+            key[1] === normalizedDealId
+          );
+        },
+      });
 
       const warnings = Array.isArray(payload?.warnings)
         ? payload.warnings.filter((warning) => typeof warning === 'string' && warning.trim().length)
