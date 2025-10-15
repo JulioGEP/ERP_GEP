@@ -1415,6 +1415,7 @@ type IsoRange = {
 type SaveStatus = {
   saving: boolean;
   error: string | null;
+  dirty: boolean;
   savedAt?: number;
 };
 
@@ -1811,7 +1812,6 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
   const formsRef = useRef<Record<string, SessionFormState>>({});
   const [forms, setForms] = useState<Record<string, SessionFormState>>({});
   const lastSavedRef = useRef<Record<string, SessionFormState>>({});
-  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const sessionProductRef = useRef<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<Record<string, SaveStatus>>({});
   const [activeSession, setActiveSession] = useState<
@@ -1863,22 +1863,13 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
     lastSavedRef.current = nextSaved;
     sessionProductRef.current = productMap;
     setForms(nextForms);
-    setSaveStatus((current) => {
+    setSaveStatus(() => {
       const next: Record<string, SaveStatus> = {};
-      for (const [sessionId, status] of Object.entries(current)) {
-        if (nextForms[sessionId]) {
-          next[sessionId] = { ...status, error: null };
-        }
+      for (const sessionId of Object.keys(nextForms)) {
+        next[sessionId] = { saving: false, error: null, dirty: false };
       }
       return next;
     });
-
-    for (const [sessionId, timer] of Object.entries(saveTimersRef.current)) {
-      if (!nextForms[sessionId]) {
-        clearTimeout(timer);
-        delete saveTimersRef.current[sessionId];
-      }
-    }
   }, [generationDone, queriesUpdatedKey, applicableProducts]);
 
   const patchMutation = useMutation({
@@ -1906,79 +1897,6 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
     mutationFn: (sessionId: string) => deleteSession(sessionId),
   });
 
-  const scheduleSave = (sessionId: string) => {
-    if (!formsRef.current[sessionId]) return;
-    if (saveTimersRef.current[sessionId]) {
-      clearTimeout(saveTimersRef.current[sessionId]);
-    }
-    saveTimersRef.current[sessionId] = setTimeout(() => {
-      runSave(sessionId);
-    }, 600);
-  };
-
-  const runSave = async (sessionId: string) => {
-    const form = formsRef.current[sessionId];
-    const saved = lastSavedRef.current[sessionId];
-    if (!form) return;
-
-    const patchResult = buildSessionPatchPayload(form, saved);
-    if (patchResult === null) return;
-    if (patchResult === 'INVALID_START') {
-      setSaveStatus((current) => ({
-        ...current,
-        [sessionId]: { saving: false, error: 'Fecha de inicio inválida' },
-      }));
-      return;
-    }
-    if (patchResult === 'INVALID_END') {
-      setSaveStatus((current) => ({
-        ...current,
-        [sessionId]: { saving: false, error: 'Fecha de fin inválida' },
-      }));
-      return;
-    }
-    if (patchResult === 'INVALID_DATES') {
-      setSaveStatus((current) => ({
-        ...current,
-        [sessionId]: { saving: false, error: 'Fin no puede ser anterior al inicio' },
-      }));
-      return;
-    }
-
-    const payload = patchResult;
-
-    setSaveStatus((current) => ({
-      ...current,
-      [sessionId]: { saving: true, error: null },
-    }));
-
-    try {
-      const updated = await patchMutation.mutateAsync({ sessionId, payload });
-      const updatedForm = mapSessionToForm(updated);
-      formsRef.current[sessionId] = updatedForm;
-      lastSavedRef.current[sessionId] = updatedForm;
-      setForms((current) => ({ ...current, [sessionId]: updatedForm }));
-      setSaveStatus((current) => ({
-        ...current,
-        [sessionId]: { saving: false, error: null, savedAt: Date.now() },
-      }));
-      await qc.invalidateQueries({ queryKey: ['calendarSessions'] });
-    } catch (error) {
-      const message = isApiError(error)
-        ? error.message
-        : error instanceof Error
-        ? error.message
-        : 'No se pudo guardar la sesión';
-      setSaveStatus((current) => ({
-        ...current,
-        [sessionId]: { saving: false, error: message },
-      }));
-      // restaura valores previos para evitar inconsistencias
-      setForms((current) => ({ ...current, [sessionId]: saved ?? form }));
-      formsRef.current[sessionId] = saved ?? form;
-    }
-  };
-
   const handleFieldChange = (sessionId: string, updater: (current: SessionFormState) => SessionFormState) => {
     setForms((current) => {
       const existing = current[sessionId];
@@ -1990,10 +1908,190 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
     });
     setSaveStatus((current) => ({
       ...current,
-      [sessionId]: { saving: false, error: null },
+      [sessionId]: { saving: false, error: null, dirty: true },
     }));
-    scheduleSave(sessionId);
   };
+
+  const hasSessionChanges = useCallback(
+    (sessionId: string) => {
+      const form = formsRef.current[sessionId];
+      const saved = lastSavedRef.current[sessionId];
+      if (!form) return false;
+      const patchResult = buildSessionPatchPayload(form, saved);
+      return patchResult !== null;
+    },
+    [],
+  );
+
+  const runSave = useCallback(
+    async (sessionId: string, { notifyOnSuccess = true }: { notifyOnSuccess?: boolean } = {}) => {
+      const form = formsRef.current[sessionId];
+      const saved = lastSavedRef.current[sessionId];
+      if (!form) return false;
+
+      const patchResult = buildSessionPatchPayload(form, saved);
+      if (patchResult === null) {
+        setSaveStatus((current) => ({
+          ...current,
+          [sessionId]: { saving: false, error: null, dirty: false, savedAt: Date.now() },
+        }));
+        return true;
+      }
+      if (patchResult === 'INVALID_START') {
+        const message = 'Fecha de inicio inválida';
+        setSaveStatus((current) => ({
+          ...current,
+          [sessionId]: { saving: false, error: message, dirty: true },
+        }));
+        onNotify?.({ variant: 'danger', message });
+        return false;
+      }
+      if (patchResult === 'INVALID_END') {
+        const message = 'Fecha de fin inválida';
+        setSaveStatus((current) => ({
+          ...current,
+          [sessionId]: { saving: false, error: message, dirty: true },
+        }));
+        onNotify?.({ variant: 'danger', message });
+        return false;
+      }
+      if (patchResult === 'INVALID_DATES') {
+        const message = 'Fin no puede ser anterior al inicio';
+        setSaveStatus((current) => ({
+          ...current,
+          [sessionId]: { saving: false, error: message, dirty: true },
+        }));
+        onNotify?.({ variant: 'danger', message });
+        return false;
+      }
+
+      const payload = patchResult;
+
+      setSaveStatus((current) => ({
+        ...current,
+        [sessionId]: { saving: true, error: null, dirty: true },
+      }));
+
+      try {
+        const updated = await patchMutation.mutateAsync({ sessionId, payload });
+        const updatedForm = mapSessionToForm(updated);
+        formsRef.current[sessionId] = updatedForm;
+        lastSavedRef.current[sessionId] = updatedForm;
+        setForms((current) => ({ ...current, [sessionId]: updatedForm }));
+        setSaveStatus((current) => ({
+          ...current,
+          [sessionId]: { saving: false, error: null, dirty: false, savedAt: Date.now() },
+        }));
+        await qc.invalidateQueries({ queryKey: ['calendarSessions'] });
+        if (notifyOnSuccess) {
+          onNotify?.({ variant: 'success', message: 'Sesión guardada correctamente' });
+        }
+        return true;
+      } catch (error) {
+        const message = isApiError(error)
+          ? error.message
+          : error instanceof Error
+          ? error.message
+          : 'No se pudo guardar la sesión';
+        setSaveStatus((current) => ({
+          ...current,
+          [sessionId]: { saving: false, error: message, dirty: true },
+        }));
+        onNotify?.({ variant: 'danger', message });
+        return false;
+      }
+    },
+    [onNotify, patchMutation, qc],
+  );
+
+  const handleSaveSession = useCallback(
+    (sessionId: string) => runSave(sessionId),
+    [runSave],
+  );
+
+  const revertSessionChanges = useCallback((sessionId: string) => {
+    const savedForm = lastSavedRef.current[sessionId];
+    if (savedForm) {
+      formsRef.current[sessionId] = savedForm;
+      setForms((current) => ({ ...current, [sessionId]: savedForm }));
+    }
+    setSaveStatus((current) => ({
+      ...current,
+      [sessionId]: { saving: false, error: null, dirty: false },
+    }));
+  }, []);
+
+  const handleCloseSession = useCallback(
+    async (sessionId: string) => {
+      const status = saveStatus[sessionId];
+      if (status?.saving) {
+        onNotify?.({ variant: 'info', message: 'Espera a que termine el guardado en curso.' });
+        return;
+      }
+
+      const hasChanges = hasSessionChanges(sessionId);
+      if (!hasChanges) {
+        setActiveSession(null);
+        return;
+      }
+
+      const shouldSave = window.confirm('Tienes cambios sin guardar. ¿Deseas guardarlos antes de cerrar?');
+      if (shouldSave) {
+        const savedSuccessfully = await runSave(sessionId, { notifyOnSuccess: true });
+        if (savedSuccessfully) {
+          setActiveSession(null);
+        }
+      } else {
+        revertSessionChanges(sessionId);
+        setActiveSession(null);
+      }
+    },
+    [hasSessionChanges, onNotify, runSave, revertSessionChanges, saveStatus],
+  );
+
+  const requestCloseActiveSession = useCallback(() => {
+    if (!activeSession) return;
+    void handleCloseSession(activeSession.sessionId);
+  }, [activeSession, handleCloseSession]);
+
+  const handleSelectSession = useCallback(
+    async ({
+      sessionId,
+      productId,
+      productName,
+      displayIndex,
+    }: {
+      sessionId: string;
+      productId: string;
+      productName: string;
+      displayIndex: number;
+    }) => {
+      if (activeSession && activeSession.sessionId !== sessionId) {
+        const currentId = activeSession.sessionId;
+        const status = saveStatus[currentId];
+        if (status?.saving) {
+          onNotify?.({ variant: 'info', message: 'Espera a que termine el guardado en curso.' });
+          return;
+        }
+        if (hasSessionChanges(currentId)) {
+          const shouldSave = window.confirm(
+            'Tienes cambios sin guardar. ¿Deseas guardarlos antes de cambiar de sesión?',
+          );
+          if (shouldSave) {
+            const saved = await runSave(currentId, { notifyOnSuccess: true });
+            if (!saved) {
+              return;
+            }
+          } else {
+            revertSessionChanges(currentId);
+          }
+        }
+      }
+
+      setActiveSession({ sessionId, productId, productName, displayIndex });
+    },
+    [activeSession, hasSessionChanges, onNotify, revertSessionChanges, runSave, saveStatus],
+  );
 
   const invalidateProductSessions = async (productId: string) => {
     const currentPage = pageByProduct[productId] ?? 1;
@@ -2100,12 +2198,6 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
       delete nextSavedRef[sessionId];
       lastSavedRef.current = nextSavedRef;
 
-      const timer = saveTimersRef.current[sessionId];
-      if (timer) {
-        clearTimeout(timer);
-        delete saveTimersRef.current[sessionId];
-      }
-
       const nextSessionProducts = { ...sessionProductRef.current };
       delete nextSessionProducts[sessionId];
       sessionProductRef.current = nextSessionProducts;
@@ -2176,8 +2268,8 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
   const rooms = roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
   const units = unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
   const activeStatus = activeSession
-    ? saveStatus[activeSession.sessionId] ?? { saving: false, error: null }
-    : { saving: false, error: null };
+    ? saveStatus[activeSession.sessionId] ?? { saving: false, error: null, dirty: false }
+    : { saving: false, error: null, dirty: false };
 
   const deleteDialogCounts = deleteDialog?.counts ?? null;
   const deleteDialogHasContent = deleteDialogCounts
@@ -2279,7 +2371,8 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
                 <ListGroup as="ol" numbered className="mb-0">
                   {sessions.map((session, sessionIndex) => {
                     const form = forms[session.id];
-                    const status = saveStatus[session.id] ?? { saving: false, error: null };
+                    const status =
+                      saveStatus[session.id] ?? { saving: false, error: null, dirty: false };
                     if (!form) return null;
                     const displayIndex = ((pagination.page ?? currentPage) - 1) * SESSION_LIMIT + sessionIndex + 1;
                     const productName = product.name ?? product.code ?? 'Producto';
@@ -2292,7 +2385,7 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
                         value={displayIndex}
                         className="session-list-item d-flex justify-content-between align-items-center gap-3"
                         onClick={() =>
-                          setActiveSession({
+                          void handleSelectSession({
                             sessionId: session.id,
                             productId: product.id,
                             productName,
@@ -2334,7 +2427,9 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
                                 <Spinner animation="border" size="sm" /> Guardando…
                               </span>
                             ) : status.error ? (
-                              <span className="text-danger">Error al guardar</span>
+                              <span className="text-danger">{status.error}</span>
+                            ) : status.dirty ? (
+                              <span className="text-warning">Cambios sin guardar</span>
                             ) : (
                               <SessionStateBadge estado={form.estado} />
                             )}
@@ -2460,11 +2555,13 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
         {activeSession && (
           <Modal
             show={Boolean(activeForm)}
-            onHide={() => setActiveSession(null)}
+            onHide={requestCloseActiveSession}
             size="lg"
             centered
             scrollable
             contentClassName="session-modal"
+            backdrop={activeStatus.saving ? 'static' : true}
+            keyboard={!activeStatus.saving}
           >
             <Modal.Header closeButton closeVariant="white" className="border-0">
               <Modal.Title className="session-modal-title d-flex align-items-center justify-content-between gap-3">
@@ -2484,6 +2581,7 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
                   allForms={forms}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
                   onOpenMap={handleOpenMap}
+                  onSave={() => handleSaveSession(activeSession.sessionId)}
                   dealId={dealId}
                   onNotify={onNotify}
                 />
@@ -2526,6 +2624,7 @@ interface SessionEditorProps {
   allForms: Record<string, SessionFormState>;
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
   onOpenMap: (address: string) => void;
+  onSave: () => Promise<boolean> | boolean;
   dealId: string;
   onNotify?: (toast: ToastParams) => void;
 }
@@ -2540,6 +2639,7 @@ function SessionEditor({
   allForms,
   onChange,
   onOpenMap,
+  onSave,
   dealId,
   onNotify,
 }: SessionEditorProps) {
@@ -2549,6 +2649,9 @@ function SessionEditor({
   const [unitListOpen, setUnitListOpen] = useState(false);
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
+  const handleManualSave = useCallback(() => {
+    void onSave();
+  }, [onSave]);
 
   const filteredTrainers = useMemo(() => {
     const search = trainerFilter.trim().toLowerCase();
@@ -3015,17 +3118,30 @@ function SessionEditor({
         </Col>
       </Row>
 
-      <div className="d-flex justify-content-end align-items-center mt-3">
-        <div className="text-end">
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mt-3">
+        <div className="text-md-start text-end flex-grow-1">
           {status.saving ? (
-            <span className="text-primary d-flex align-items-center gap-2">
+            <span className="text-primary d-inline-flex align-items-center gap-2">
               <Spinner size="sm" animation="border" /> Guardando…
             </span>
           ) : status.error ? (
             <span className="text-danger">{status.error}</span>
+          ) : status.dirty ? (
+            <span className="text-warning">Cambios sin guardar</span>
           ) : status.savedAt ? (
             <span className="text-success">Guardado ✓</span>
           ) : null}
+        </div>
+        <div className="d-flex justify-content-end">
+          <Button variant="primary" onClick={handleManualSave} disabled={!status.dirty || status.saving}>
+            {status.saving ? (
+              <span className="d-inline-flex align-items-center gap-2">
+                <Spinner size="sm" animation="border" role="status" aria-hidden="true" /> Guardando…
+              </span>
+            ) : (
+              'Guardar cambios'
+            )}
+          </Button>
         </div>
       </div>
 
