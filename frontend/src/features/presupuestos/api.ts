@@ -757,6 +757,14 @@ function sanitizeStringArray(values: string[] | undefined): string[] | undefined
   return Array.from(new Set(normalized));
 }
 
+function normalizeDriveUrlInput(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const text = String(value ?? "").trim();
+  return text.length ? text : null;
+}
+
 /* =====================
  * Request helper (fetch)
  * ===================== */
@@ -788,6 +796,28 @@ async function request(path: string, init?: RequestInit) {
     throw new ApiError(code, msg, res.status);
   }
   return data;
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  if (typeof btoa === "function") {
+    return btoa(binary);
+  }
+
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(binary, "binary").toString("base64");
+  }
+
+  throw new Error("No se puede convertir el archivo a base64 en este entorno.");
 }
 
 /* ===============================
@@ -1534,6 +1564,77 @@ export async function deleteSessionDocument(
   });
 }
 
+export type SessionCertificateUploadResult = {
+  docId: string | null;
+  fileName: string | null;
+  publicUrl: string | null;
+  student: { id: string | null; drive_url: string | null } | null;
+};
+
+export async function uploadSessionCertificate(params: {
+  dealId: string;
+  sessionId: string;
+  studentId: string;
+  fileName: string;
+  file: Blob;
+  mimeType?: string;
+}): Promise<SessionCertificateUploadResult> {
+  const normalizedDealId = String(params.dealId ?? '').trim();
+  const normalizedSessionId = String(params.sessionId ?? '').trim();
+  const normalizedStudentId = String(params.studentId ?? '').trim();
+  const fileName = String(params.fileName ?? '').trim();
+
+  if (!normalizedDealId || !normalizedSessionId || !normalizedStudentId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId, sessionId y studentId son obligatorios');
+  }
+
+  if (!fileName.length) {
+    throw new ApiError('VALIDATION_ERROR', 'fileName es obligatorio');
+  }
+
+  const file = params.file;
+  const isBlobAvailable = typeof Blob !== 'undefined' && file instanceof Blob;
+  if (!isBlobAvailable) {
+    throw new ApiError('VALIDATION_ERROR', 'El archivo del certificado es obligatorio');
+  }
+  if (file.size <= 0) {
+    throw new ApiError('VALIDATION_ERROR', 'El certificado generado está vacío');
+  }
+
+  const contentBase64 = await blobToBase64(file);
+  const payload = {
+    dealId: normalizedDealId,
+    sessionId: normalizedSessionId,
+    studentId: normalizedStudentId,
+    type: 'certificate',
+    file: {
+      fileName,
+      mimeType: params.mimeType ?? file.type ?? 'application/pdf',
+      contentBase64,
+      fileSize: file.size,
+    },
+  };
+
+  const data = await request('/documents/upload', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  const docId = toStringValue(data?.doc_id) ?? null;
+  const uploadedFileName = toStringValue(data?.file_name) ?? null;
+  const publicUrl = toStringValue(data?.public_url) ?? null;
+  const studentData = data?.student && typeof data.student === 'object' ? data.student : null;
+  const studentId = toStringValue(studentData?.id) ?? null;
+  const driveUrl = toStringValue(studentData?.drive_url) ?? null;
+
+  return {
+    docId,
+    fileName: uploadedFileName,
+    publicUrl,
+    student: studentId || driveUrl ? { id: studentId, drive_url: driveUrl } : null,
+  };
+}
+
 /* =========================
  * Alumnos de sesión
  * ========================= */
@@ -1606,6 +1707,8 @@ export type UpdateSessionStudentInput = {
   dni?: string;
   apto?: boolean;
   certificado?: boolean;
+  drive_url?: string | null;
+  driveUrl?: string | null;
 };
 
 export async function updateSessionStudent(
@@ -1623,6 +1726,10 @@ export async function updateSessionStudent(
   if (input.dni !== undefined) payload.dni = String(input.dni ?? '').trim();
   if (input.apto !== undefined) payload.apto = Boolean(input.apto);
   if (input.certificado !== undefined) payload.certificado = Boolean(input.certificado);
+  if (input.drive_url !== undefined || input.driveUrl !== undefined) {
+    const driveUrlValue = input.drive_url !== undefined ? input.drive_url : input.driveUrl;
+    payload.drive_url = normalizeDriveUrlInput(driveUrlValue ?? null);
+  }
 
   const data = await request(`/alumnos/${encodeURIComponent(normalizedId)}`, {
     method: 'PATCH',

@@ -603,23 +603,27 @@
     return 'Fecha sin definir';
   }
 
-  function sanitiseFileNameComponent(value, fallback) {
+  function normalizeForAscii(value) {
     const text = normaliseText(value);
-    const cleaned = text
-      .replace(/[\n\r]/g, ' ')
-      .replace(/[\\/:*?"<>|]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return cleaned || fallback;
+    if (!text) {
+      return '';
+    }
+    const normalized = typeof text.normalize === 'function' ? text.normalize('NFD') : text;
+    return normalized
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^0-9a-zA-Z]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toUpperCase();
   }
 
   function buildFileName(row) {
-    const trainingTitle = sanitiseFileNameComponent(resolveTrainingTitle(row), 'Formación');
-    const studentName = sanitiseFileNameComponent(buildFullName(row), 'Alumno/a');
-    const trainingDate = sanitiseFileNameComponent(formatDateForFileName(row?.fecha), 'Fecha sin definir');
-    const baseName = `${trainingTitle} - ${studentName} - ${trainingDate}`.trim();
-    const safeName = baseName || 'Certificado';
-    return `${safeName}.pdf`;
+    const dniComponent = normalizeForAscii(row?.dni) || 'SIN_DNI';
+    const surnameSource = row?.apellido !== undefined ? row.apellido : row?.apellidos;
+    const surnameComponent = normalizeForAscii(surnameSource) || 'SIN_APELLIDOS';
+    const productComponent = normalizeForAscii(resolveTrainingTitle(row)) || 'SIN_FORMACION';
+    const parts = ['CERTIFICADO', dniComponent, surnameComponent, productComponent];
+    return `${parts.join('_')}.pdf`;
   }
 
   function buildDocStyles() {
