@@ -985,6 +985,53 @@ async function fileToBase64(file: File): Promise<string> {
   return typeof window !== "undefined" ? window.btoa(binary) : Buffer.from(binary, "binary").toString("base64");
 }
 
+const MANUAL_INLINE_UPLOAD_MAX_BYTES = Math.floor(4.5 * 1024 * 1024); // ~4.5 MB → < 6 MB cuando es base64
+
+async function prepareDealDocumentUpload(
+  dealId: string,
+  file: File,
+  headers: Record<string, string>,
+): Promise<{ uploadUrl: string; storageKey: string }> {
+  const payload = await request(`/deal_documents/${encodeURIComponent(dealId)}/upload-url`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      fileName: file.name,
+      mimeType: file.type,
+      fileSize: file.size,
+    }),
+  });
+
+  const uploadUrl = toStringValue(payload?.uploadUrl);
+  const storageKey = toStringValue(payload?.storageKey);
+  if (!uploadUrl || !storageKey) {
+    throw new ApiError("UPLOAD_PREPARE_ERROR", "No se pudo preparar la subida del documento");
+  }
+
+  return { uploadUrl, storageKey };
+}
+
+async function uploadFileToUrl(uploadUrl: string, file: File): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(uploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+    });
+  } catch (error: any) {
+    throw new ApiError("NETWORK_ERROR", error?.message || "Fallo de red al subir el documento");
+  }
+
+  if (!response.ok) {
+    throw new ApiError(
+      "UPLOAD_ERROR",
+      "No se pudo subir el documento al almacenamiento",
+      response.status,
+    );
+  }
+}
+
 export async function uploadManualDocument(
   dealId: string,
   file: File,
@@ -995,11 +1042,28 @@ export async function uploadManualDocument(
     throw new ApiError("VALIDATION_ERROR", "Falta dealId para subir el documento");
   }
 
-  const base64 = await fileToBase64(file);
   const headers: Record<string, string> = {};
   if (user?.id) headers["X-User-Id"] = user.id;
   if (user?.name) headers["X-User-Name"] = user.name;
 
+  if (file.size > MANUAL_INLINE_UPLOAD_MAX_BYTES) {
+    const { uploadUrl, storageKey } = await prepareDealDocumentUpload(normalizedId, file, headers);
+    await uploadFileToUrl(uploadUrl, file);
+
+    await request(`/deal_documents/${encodeURIComponent(normalizedId)}/manual`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        fileName: file.name,
+        mimeType: file.type,
+        fileSize: file.size,
+        storageKey,
+      }),
+    });
+    return;
+  }
+
+  const base64 = await fileToBase64(file);
   await request(`/deal_documents/${encodeURIComponent(normalizedId)}/manual`, {
     method: "POST",
     headers,
