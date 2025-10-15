@@ -2173,7 +2173,8 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
   const deleteDialogHasContent = deleteDialogCounts
     ? deleteDialogCounts.comentarios > 0 ||
       deleteDialogCounts.documentos > 0 ||
-      deleteDialogCounts.alumnos > 0
+      deleteDialogCounts.alumnos > 0 ||
+      deleteDialogCounts.tokens > 0
     : false;
   const isDeleteDialogDeleting =
     !!deleteDialog && deleteMutation.isPending && deletingSessionId === deleteDialog.sessionId;
@@ -2401,10 +2402,13 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
                             <li>
                               <strong>{deleteDialogCounts.documentos}</strong> documentos
                             </li>
-                            <li>
-                              <strong>{deleteDialogCounts.alumnos}</strong> alumnos
-                            </li>
-                          </ul>
+                          <li>
+                            <strong>{deleteDialogCounts.alumnos}</strong> alumnos
+                          </li>
+                          <li>
+                            <strong>{deleteDialogCounts.tokens}</strong> tokens de URL generadas
+                          </li>
+                        </ul>
                           <p className="mb-0">
                             ¿Seguro que quieres eliminarla? Se borrará todo y no se podrá deshacer.
                           </p>
