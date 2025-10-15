@@ -15,6 +15,10 @@ import {
   deleteSessionDocumentFromGoogleDrive,
 } from './_shared/googleDrive';
 
+const ONE_MEGABYTE = 1024 * 1024;
+const MAX_SESSION_DOCUMENT_SIZE_BYTES = 4 * ONE_MEGABYTE;
+const MAX_SESSION_DOCUMENT_SIZE_LABEL = '4 MB';
+
 type ParsedPath = {
   docId: string | null;
 };
@@ -285,6 +289,23 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'Se requiere al menos un archivo', 400);
       }
 
+      const estimatedTotalSize = filesInput.reduce((sum, item) => {
+        const parsed =
+          typeof item.fileSize === 'number' ? item.fileSize : Number(item.fileSize);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          return sum;
+        }
+        return sum + parsed;
+      }, 0);
+
+      if (estimatedTotalSize > MAX_SESSION_DOCUMENT_SIZE_BYTES) {
+        return errorResponse(
+          'PAYLOAD_TOO_LARGE',
+          `El tamaño total de los archivos supera el límite permitido de ${MAX_SESSION_DOCUMENT_SIZE_LABEL}`,
+          413,
+        );
+      }
+
       const context = await ensureSessionContext(prisma, dealId, sessionId);
       if (context.error) return context.error;
       const session = context.session!;
@@ -298,6 +319,7 @@ export const handler = async (event: any) => {
 
       const now = nowInMadridDate();
       const createdRecords: SessionFileRecord[] = [];
+      let processedTotalSize = 0;
 
       for (const item of filesInput) {
         const fileNameRaw = toStringOrNull(item.fileName);
@@ -333,6 +355,24 @@ export const handler = async (event: any) => {
               400,
             );
           }
+        }
+
+        processedTotalSize += buffer.length;
+
+        if (buffer.length > MAX_SESSION_DOCUMENT_SIZE_BYTES) {
+          return errorResponse(
+            'PAYLOAD_TOO_LARGE',
+            `El archivo "${fileNameRaw}" supera el tamaño máximo permitido de ${MAX_SESSION_DOCUMENT_SIZE_LABEL}`,
+            413,
+          );
+        }
+
+        if (processedTotalSize > MAX_SESSION_DOCUMENT_SIZE_BYTES) {
+          return errorResponse(
+            'PAYLOAD_TOO_LARGE',
+            `El tamaño total de los archivos supera el límite permitido de ${MAX_SESSION_DOCUMENT_SIZE_LABEL}`,
+            413,
+          );
         }
 
         const normalizedFileName = normalizeIncomingFileName(fileNameRaw) || fileNameRaw;
