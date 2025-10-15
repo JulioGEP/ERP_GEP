@@ -281,7 +281,6 @@ function SessionStudentsAccordionItem({
       return;
     }
 
-    const pendingWindow = window.open('', '_blank', 'noopener,noreferrer');
     try {
       const link = await createPublicLinkMutation.mutateAsync();
       const targetUrl = link.public_url && link.public_url.trim().length
@@ -289,18 +288,15 @@ function SessionStudentsAccordionItem({
         : link.public_path && link.public_path.trim().length && typeof window !== 'undefined'
           ? `${window.location.origin}${link.public_path}`
           : link.public_path ?? null;
-      if (targetUrl) {
-        if (pendingWindow) {
-          pendingWindow.location.href = targetUrl;
-        } else {
-          openLinkInTab(targetUrl);
-        }
-      } else if (pendingWindow) {
-        pendingWindow.close();
+
+      if (!targetUrl) {
+        onNotify?.({ variant: 'danger', message: 'No se pudo abrir la URL pública generada' });
+        return;
       }
+
+      openLinkInTab(targetUrl);
       onNotify?.({ variant: 'success', message: 'URL pública generada correctamente' });
     } catch (error: any) {
-      if (pendingWindow) pendingWindow.close();
       const message = isApiError(error)
         ? error.message
         : 'No se pudo generar la URL pública, inténtalo de nuevo';
@@ -648,8 +644,16 @@ function SessionStudentsAccordionItem({
                 size="sm"
                 onClick={handleOpenPublicLink}
                 disabled={publicLinkGenerating || publicLinkLoading}
+                className="d-flex align-items-center gap-2"
               >
-                {publicLinkGenerating ? 'Generando…' : 'URL Alumnos'}
+                {publicLinkGenerating ? (
+                  <>
+                    <Spinner animation="border" size="sm" role="status" />
+                    <span>Creando URL…</span>
+                  </>
+                ) : (
+                  'URL Alumnos'
+                )}
               </Button>
             </div>
             <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2 text-muted small">
