@@ -995,6 +995,10 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 const MANUAL_INLINE_UPLOAD_MAX_BYTES = Math.floor(4.5 * 1024 * 1024); // ~4.5 MB → < 6 MB cuando es base64
+const MANUAL_INLINE_UPLOAD_MAX_LABEL = '4.5 MB';
+export const MANUAL_DOCUMENT_SIZE_LIMIT_BYTES = MANUAL_INLINE_UPLOAD_MAX_BYTES;
+export const MANUAL_DOCUMENT_SIZE_LIMIT_LABEL = MANUAL_INLINE_UPLOAD_MAX_LABEL;
+export const MANUAL_DOCUMENT_SIZE_LIMIT_MESSAGE = `Archivo demasiado pesado, máximo ${MANUAL_DOCUMENT_SIZE_LIMIT_LABEL}`;
 
 async function prepareDealDocumentUpload(
   dealId: string,
@@ -1409,6 +1413,7 @@ export async function deleteSessionComment(
 
 export const SESSION_DOCUMENT_SIZE_LIMIT_BYTES = 4 * 1024 * 1024;
 export const SESSION_DOCUMENT_SIZE_LIMIT_LABEL = '4 MB';
+export const SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE = `Archivo demasiado pesado, máximo ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`;
 
 export async function fetchSessionDocuments(
   dealId: string,
@@ -1445,20 +1450,12 @@ export async function uploadSessionDocuments(params: {
 
   const oversizedFile = files.find((file) => file.size > SESSION_DOCUMENT_SIZE_LIMIT_BYTES);
   if (oversizedFile) {
-    throw new ApiError(
-      'PAYLOAD_TOO_LARGE',
-      `El archivo "${oversizedFile.name}" supera el tamaño máximo permitido de ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`,
-      413,
-    );
+    throw new ApiError('PAYLOAD_TOO_LARGE', SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE, 413);
   }
 
   const totalSize = files.reduce((sum, file) => sum + Math.max(0, file.size || 0), 0);
   if (totalSize > SESSION_DOCUMENT_SIZE_LIMIT_BYTES) {
-    throw new ApiError(
-      'PAYLOAD_TOO_LARGE',
-      `El tamaño total de los archivos supera el límite permitido de ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`,
-      413,
-    );
+    throw new ApiError('PAYLOAD_TOO_LARGE', SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE, 413);
   }
 
   const payloadFiles = await Promise.all(
