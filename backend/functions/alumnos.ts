@@ -29,6 +29,17 @@ function normalizeDni(value: unknown): string | null {
   return trimmed.length ? trimmed : null;
 }
 
+function normalizeDriveUrl(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
 function isValidDni(dni: string): boolean {
   return dni.length >= 7 && dni.length <= 12 && /^[A-Z0-9]+$/.test(dni);
 }
@@ -182,6 +193,11 @@ export const handler = async (event: any) => {
       const apto = payload.apto === undefined ? undefined : Boolean(payload.apto);
       const certificado =
         payload.certificado === undefined ? undefined : Boolean(payload.certificado);
+      const driveUrlRaw =
+        payload.drive_url === undefined && payload.driveUrl === undefined
+          ? undefined
+          : payload.drive_url ?? payload.driveUrl;
+      const driveUrl = driveUrlRaw === undefined ? undefined : normalizeDriveUrl(driveUrlRaw);
 
       const data: Record<string, any> = {};
 
@@ -223,6 +239,10 @@ export const handler = async (event: any) => {
 
       if (certificado !== undefined) {
         data.certificado = certificado;
+      }
+
+      if (driveUrl !== undefined) {
+        data.drive_url = driveUrl;
       }
 
       if (!Object.keys(data).length) {
