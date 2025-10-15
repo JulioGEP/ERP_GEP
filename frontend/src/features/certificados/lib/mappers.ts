@@ -19,6 +19,8 @@ export type CertificateRow = {
   cliente: string;
   formacion: string;
   irata: string;
+  certificado: boolean;
+  driveUrl: string | null;
 };
 
 const DATE_FORMATTER = new Intl.DateTimeFormat('es-ES', {
@@ -81,5 +83,7 @@ export function mapStudentsToCertificateRows(params: {
     cliente,
     formacion,
     irata: '',
+    certificado: Boolean(student.certificado),
+    driveUrl: student.drive_url ?? null,
   }));
 }

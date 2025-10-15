@@ -1,8 +1,12 @@
-import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
-import { Alert, Button, Card, Form, Spinner, Table } from 'react-bootstrap';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Button, Card, Form, Spinner } from 'react-bootstrap';
 
 import { useCertificateData } from './hooks/useCertificateData';
-import type { CertificateSession } from './lib/mappers';
+import { CertificateTable } from './CertificateTable';
+import { CertificateToolbar } from './CertificateToolbar';
+import type { CertificateRow, CertificateSession } from './lib/mappers';
+
+import './styles/certificados.scss';
 
 const SESSION_DATE_FORMATTER = new Intl.DateTimeFormat('es-ES', {
   day: '2-digit',
@@ -42,6 +46,20 @@ export function CertificadosPage() {
     selectSession,
   } = useCertificateData();
 
+  const [editableRows, setEditableRows] = useState<CertificateRow[]>([]);
+
+  useEffect(() => {
+    setEditableRows(rows.map((row) => ({ ...row })));
+  }, [rows]);
+
+  const handleRowsChange = useCallback((nextRows: CertificateRow[]) => {
+    setEditableRows(nextRows);
+  }, []);
+
+  const handleGenerateCertificates = useCallback(() => {
+    // La lógica de generación se implementará en tareas posteriores
+  }, []);
+
   const sessionOptions = useMemo(
     () =>
       sessions.map((session) => ({
@@ -63,7 +81,8 @@ export function CertificadosPage() {
 
   const showSessionsSelect = sessions.length > 1;
   const showAutoSelectedSession = sessions.length === 1 && selectedSession;
-  const hasResults = rows.length > 0;
+  const hasResults = editableRows.length > 0;
+  const isToolbarDisabled = !hasResults || loadingStudents;
 
   return (
     <div className="d-flex justify-content-center">
@@ -149,41 +168,16 @@ export function CertificadosPage() {
           )}
 
           {hasResults && (
-            <div className="table-responsive">
-              <Table striped bordered hover size="sm" className="mb-0">
-                <thead>
-                  <tr>
-                    <th>Presu</th>
-                    <th>Nombre</th>
-                    <th>Apellidos</th>
-                    <th>DNI</th>
-                    <th>Fecha</th>
-                    <th>Fecha 2</th>
-                    <th>Lugar</th>
-                    <th>Horas</th>
-                    <th>Cliente</th>
-                    <th>Formación</th>
-                    <th>Irata</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.id}>
-                      <td>{row.presu}</td>
-                      <td>{row.nombre}</td>
-                      <td>{row.apellidos}</td>
-                      <td>{row.dni}</td>
-                      <td>{row.fecha}</td>
-                      <td>{row.fecha2}</td>
-                      <td>{row.lugar}</td>
-                      <td>{row.horas}</td>
-                      <td>{row.cliente}</td>
-                      <td>{row.formacion}</td>
-                      <td>{row.irata}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
+            <div className="certificate-panel">
+              <CertificateToolbar
+                onGenerate={handleGenerateCertificates}
+                disabled={isToolbarDisabled}
+              />
+              <CertificateTable
+                rows={editableRows}
+                onRowsChange={handleRowsChange}
+                disabled={loadingStudents}
+              />
             </div>
           )}
 

@@ -85,6 +85,7 @@ export type SessionStudent = {
   dni: string;
   apto: boolean;
   certificado: boolean;
+  drive_url: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -654,6 +655,7 @@ function normalizeSessionStudent(raw: any): SessionStudent {
   const dni = toStringValue(raw?.dni) ?? '';
   const apto = Boolean(raw?.apto);
   const certificado = Boolean(raw?.certificado);
+  const driveUrl = toStringValue(raw?.drive_url);
   const createdAt = toStringValue(raw?.created_at);
   const updatedAt = toStringValue(raw?.updated_at);
 
@@ -666,6 +668,7 @@ function normalizeSessionStudent(raw: any): SessionStudent {
     dni,
     apto,
     certificado,
+    drive_url: driveUrl ?? null,
     created_at: createdAt ?? null,
     updated_at: updatedAt ?? null,
   };
