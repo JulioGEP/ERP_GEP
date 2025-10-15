@@ -249,12 +249,16 @@ export function BudgetDetailModal({
     setIsDragActive(false);
   };
 
-  const handleSelectUploadFile = (files: FileList | null | undefined) => {
-    if (!files || !files.length) {
+  const toFileArray = (files: FileList | File[] | null | undefined): File[] =>
+    files ? (Array.isArray(files) ? files : Array.from(files)) : [];
+
+  const handleSelectUploadFile = (files: FileList | File[] | null | undefined) => {
+    const fileArray = toFileArray(files);
+    if (!fileArray.length) {
       setPendingUploadFile(null);
       return;
     }
-    const [file] = Array.from(files);
+    const [file] = fileArray;
     setPendingUploadFile(file);
   };
 
@@ -276,6 +280,13 @@ export function BudgetDetailModal({
     setIsDragActive(true);
   };
 
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (uploadingDocument) return;
+    setIsDragActive(true);
+  };
+
   const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -291,7 +302,25 @@ export function BudgetDetailModal({
     event.stopPropagation();
     if (uploadingDocument) return;
     setIsDragActive(false);
-    handleSelectUploadFile(event.dataTransfer?.files ?? null);
+    const dataTransfer = event.dataTransfer;
+    if (!dataTransfer) {
+      handleSelectUploadFile(null);
+      return;
+    }
+
+    if (dataTransfer.files && dataTransfer.files.length > 0) {
+      handleSelectUploadFile(dataTransfer.files);
+      return;
+    }
+
+    const itemFiles = dataTransfer.items
+      ? Array.from(dataTransfer.items)
+          .filter((item) => item.kind === 'file')
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => Boolean(file))
+      : [];
+
+    handleSelectUploadFile(itemFiles.length ? itemFiles : null);
   };
 
   const handleUploadDocument = async () => {
@@ -1319,6 +1348,7 @@ export function BudgetDetailModal({
             isDragActive ? 'border-primary bg-light' : 'border-secondary-subtle'
           }`}
           style={{ borderStyle: 'dashed' }}
+          onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDropFile}
