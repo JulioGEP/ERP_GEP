@@ -57,22 +57,57 @@ function buildPublicUrl(event: any, token: string): string {
   return `${base}${buildPublicPath(token)}`;
 }
 
+function truncateValue(value: string | null | undefined, maxLength: number): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+  return trimmed.length > maxLength ? trimmed.slice(0, maxLength) : trimmed;
+}
+
+function extractClientIp(event: any): string | null {
+  const headers = event?.headers ?? {};
+  const forwarded = readHeader(headers, 'x-forwarded-for');
+  if (forwarded) {
+    const ip = forwarded.split(',')[0]?.trim();
+    if (ip) return ip;
+  }
+  const netlifyIp = readHeader(headers, 'x-nf-client-connection-ip');
+  if (netlifyIp && netlifyIp.trim().length) return netlifyIp.trim();
+  const realIp = readHeader(headers, 'x-real-ip');
+  if (realIp && realIp.trim().length) return realIp.trim();
+  const clientIp = readHeader(headers, 'client-ip');
+  if (clientIp && clientIp.trim().length) return clientIp.trim();
+  return null;
+}
+
+function extractUserAgent(event: any): string | null {
+  const headers = event?.headers ?? {};
+  const ua = readHeader(headers, 'user-agent');
+  return ua ? ua.trim() : null;
+}
+
 function mapLinkForResponse(link: any, event: any) {
   if (!link) return null;
+  const session = link.session ?? {};
+  const sesionId = session.id ?? link.sesion_id ?? null;
+  const dealId = session.deal_id ?? null;
   return {
     id: String(link.id ?? ''),
-    deal_id: link.deal_id,
-    sesion_id: link.sesion_id,
+    deal_id: dealId ? String(dealId) : '',
+    sesion_id: sesionId ? String(sesionId) : '',
     token: link.token,
     public_path: buildPublicPath(link.token),
     public_url: buildPublicUrl(event, link.token),
     created_at: toMadridISOString(link.created_at),
-    updated_at: toMadridISOString(link.updated_at),
+    updated_at: null,
     expires_at: toMadridISOString(link.expires_at),
-    revoked_at: toMadridISOString(link.revoked_at),
-    last_access_at: toMadridISOString(link.last_access_at),
-    last_access_ip: link.last_access_ip ?? null,
-    last_access_ua: link.last_access_ua ?? null,
+    revoked_at: null,
+    last_access_at: null,
+    last_access_ip: null,
+    last_access_ua: null,
+    active: Boolean(link.active),
+    ip_created: link.ip_created ?? null,
+    user_agent: link.user_agent ?? null,
   };
 }
 
@@ -89,15 +124,20 @@ function computeExpiration(hours: number): Date {
 
 async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: string) {
   const now = new Date();
-  const link = await prisma.session_public_links.findFirst({
+  return prisma.tokens.findFirst({
     where: {
       sesion_id: sessionId,
-      revoked_at: null,
-      expires_at: { gt: now },
+      active: true,
+      OR: [
+        { expires_at: null },
+        { expires_at: { gt: now } },
+      ],
     },
     orderBy: { created_at: 'desc' },
+    include: {
+      session: { select: { id: true, deal_id: true } },
+    },
   });
-  return link;
 }
 
 export const handler = async (event: any) => {
@@ -186,25 +226,28 @@ export const handler = async (event: any) => {
       }
 
       const now = nowInMadridDate();
-      if (activeLink) {
-        await prisma.session_public_links.update({
-          where: { id: activeLink.id },
-          data: { revoked_at: now },
-        });
-      }
+      const ip = truncateValue(extractClientIp(event), 255);
+      const userAgent = truncateValue(extractUserAgent(event), 1024);
+
+      await prisma.tokens.updateMany({
+        where: { sesion_id: sessionId, active: true },
+        data: { active: false },
+      });
 
       const token = generateToken();
       const expiresAt = computeExpiration(ttlHours);
 
-      const created = await prisma.session_public_links.create({
+      const created = await prisma.tokens.create({
         data: {
-          deal_id: dealId,
           sesion_id: sessionId,
           token,
           created_at: now,
-          updated_at: now,
           expires_at: expiresAt,
+          active: true,
+          ip_created: ip,
+          user_agent: userAgent,
         },
+        include: { session: { select: { id: true, deal_id: true } } },
       });
 
       return successResponse({ link: mapLinkForResponse(created, event) }, 201);

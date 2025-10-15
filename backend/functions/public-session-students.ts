@@ -102,8 +102,9 @@ function mapStudent(student: any) {
 }
 
 function mapSessionInfo(link: any) {
-  const dealId = link?.deal_id ?? link?.deal?.deal_id ?? null;
   const session = link?.session ?? {};
+  const deal = session?.deal ?? {};
+  const dealId = session?.deal_id ?? deal?.deal_id ?? null;
   const formation =
     session?.deal_product?.name?.trim()?.length
       ? session.deal_product.name
@@ -115,16 +116,30 @@ function mapSessionInfo(link: any) {
     sesion_id: session?.id ?? null,
     session_name: session?.nombre_cache ?? null,
     formation_name: formation,
-    title: link?.deal?.title ?? null,
+    title: deal?.title ?? null,
   };
 }
 
 async function resolveLink(
   prisma: ReturnType<typeof getPrisma>,
   token: string,
-): Promise<Prisma.session_public_linksGetPayload<{ include: { session: { select: { id: true; deal_id: true; nombre_cache: true; deal_product: { select: { id: true; name: true; code: true } } } }; deal: { select: { deal_id: true; title: true } } } }> | null> {
+): Promise<
+  Prisma.tokensGetPayload<{
+    include: {
+      session: {
+        select: {
+          id: true;
+          deal_id: true;
+          nombre_cache: true;
+          deal_product: { select: { id: true; name: true; code: true } };
+          deal: { select: { deal_id: true; title: true } };
+        };
+      };
+    };
+  }>
+> | null {
   if (!token.trim().length) return null;
-  return prisma.session_public_links.findUnique({
+  return prisma.tokens.findUnique({
     where: { token },
     include: {
       session: {
@@ -133,9 +148,9 @@ async function resolveLink(
           deal_id: true,
           nombre_cache: true,
           deal_product: { select: { id: true, name: true, code: true } },
+          deal: { select: { deal_id: true, title: true } },
         },
       },
-      deal: { select: { deal_id: true, title: true } },
     },
   });
 }
@@ -146,8 +161,8 @@ async function ensureValidLink(prisma: ReturnType<typeof getPrisma>, token: stri
     return { error: errorResponse('TOKEN_INVALID', 'Enlace inválido', 404) } as const;
   }
   const now = new Date();
-  if (link.revoked_at) {
-    return { error: errorResponse('TOKEN_REVOKED', 'Este enlace ha sido revocado', 410) } as const;
+  if (!link.active) {
+    return { error: errorResponse('TOKEN_REVOKED', 'Este enlace ha sido desactivado', 410) } as const;
   }
   if (link.expires_at && now >= link.expires_at) {
     return { error: errorResponse('TOKEN_EXPIRED', 'Este enlace ha expirado', 410) } as const;
@@ -155,30 +170,13 @@ async function ensureValidLink(prisma: ReturnType<typeof getPrisma>, token: stri
   return { link } as const;
 }
 
-async function touchLink(
-  prisma: ReturnType<typeof getPrisma>,
-  linkId: string,
-  ip: string | null,
-  userAgent: string | null,
-) {
-  const now = nowInMadridDate();
-  await prisma.session_public_links.update({
-    where: { id: linkId },
-    data: {
-      last_access_at: now,
-      last_access_ip: ip ? ip.slice(0, 64) : null,
-      last_access_ua: userAgent ? userAgent.slice(0, 512) : null,
-    },
-  });
-}
-
 function logAudit(event: any, link: any, action: string, details: Record<string, unknown> = {}) {
   const payload = {
     scope: 'public-session-students',
     action,
     link_id: link?.id ?? null,
-    sesion_id: link?.sesion_id ?? null,
-    deal_id: link?.deal_id ?? null,
+    sesion_id: link?.sesion_id ?? link?.session?.id ?? null,
+    deal_id: link?.session?.deal_id ?? link?.session?.deal?.deal_id ?? null,
     token_suffix: typeof link?.token === 'string' ? link.token.slice(-6) : null,
     ip: extractClientIp(event),
     user_agent: extractUserAgent(event),
@@ -233,13 +231,18 @@ export const handler = async (event: any) => {
     }
 
     const { link } = validation;
-    const userAgent = extractUserAgent(event);
+    const sessionDealId = link.session?.deal_id ?? link.session?.deal?.deal_id ?? null;
+    const sessionIdForStudents = link.sesion_id ?? link.session?.id ?? null;
+
+    if (!sessionIdForStudents) {
+      logAudit(event, link, 'session_missing');
+      return errorResponse('TOKEN_INVALID', 'Sesión no disponible para este enlace', 404);
+    }
 
     if (method === 'GET') {
-      await touchLink(prisma, link.id, ip, userAgent);
       logAudit(event, link, 'list');
       const students = await prisma.alumnos.findMany({
-        where: { sesion_id: link.sesion_id },
+        where: { sesion_id: sessionIdForStudents },
         orderBy: [{ apellido: 'asc' }, { nombre: 'asc' }],
       });
       return successResponse({
@@ -272,18 +275,22 @@ export const handler = async (event: any) => {
       }
 
       const duplicate = await prisma.alumnos.findFirst({
-        where: { sesion_id: link.sesion_id, dni },
+        where: { sesion_id: sessionIdForStudents, dni },
         select: { id: true },
       });
       if (duplicate) {
         return errorResponse('DUPLICATE_DNI', 'Este DNI ya existe en esta sesión', 409);
       }
 
+      if (!sessionDealId) {
+        return errorResponse('TOKEN_INVALID', 'La sesión vinculada al enlace no es válida', 409);
+      }
+
       const now = nowInMadridDate();
       const created = await prisma.alumnos.create({
         data: {
-          deal_id: link.deal_id,
-          sesion_id: link.sesion_id,
+          deal_id: sessionDealId,
+          sesion_id: sessionIdForStudents,
           nombre,
           apellido,
           dni,
@@ -294,7 +301,6 @@ export const handler = async (event: any) => {
         },
       });
 
-      await touchLink(prisma, link.id, ip, userAgent);
       logAudit(event, link, 'create', { student_id: created.id });
       return successResponse({ student: mapStudent(created) }, 201);
     }
@@ -317,7 +323,7 @@ export const handler = async (event: any) => {
       }
 
       const existing = await prisma.alumnos.findFirst({
-        where: { id: studentIdTrimmed, sesion_id: link.sesion_id },
+        where: { id: studentIdTrimmed, sesion_id: sessionIdForStudents },
       });
 
       if (!existing) {
@@ -350,7 +356,7 @@ export const handler = async (event: any) => {
         }
         const duplicate = await prisma.alumnos.findFirst({
           where: {
-            sesion_id: link.sesion_id,
+            sesion_id: sessionIdForStudents,
             dni,
             NOT: { id: studentIdTrimmed },
           },
@@ -371,7 +377,6 @@ export const handler = async (event: any) => {
         data,
       });
 
-      await touchLink(prisma, link.id, ip, userAgent);
       logAudit(event, link, 'update', { student_id: updated.id });
       return successResponse({ student: mapStudent(updated) });
     }
@@ -383,7 +388,7 @@ export const handler = async (event: any) => {
       }
 
       const existing = await prisma.alumnos.findFirst({
-        where: { id: studentIdTrimmed, sesion_id: link.sesion_id },
+        where: { id: studentIdTrimmed, sesion_id: sessionIdForStudents },
         select: { id: true },
       });
 
@@ -393,7 +398,6 @@ export const handler = async (event: any) => {
 
       await prisma.alumnos.delete({ where: { id: studentIdTrimmed } });
 
-      await touchLink(prisma, link.id, ip, userAgent);
       logAudit(event, link, 'delete', { student_id: studentIdTrimmed });
       return successResponse({ deleted: true });
     }
