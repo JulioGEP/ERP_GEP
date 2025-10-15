@@ -21,6 +21,7 @@ import {
   importDeal,
   deleteDeal,
 } from './features/presupuestos/api';
+import { normalizeImportDealResult } from './features/presupuestos/importDealUtils';
 import type { CalendarSession } from './features/calendar/api';
 import type { DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
@@ -120,29 +121,23 @@ export default function App() {
   const importMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
     onSuccess: (payload) => {
-  // Soporta ambos formatos de retorno:
-  // - DealSummary | null
-  // - { deal: DealSummary | null, warnings?: string[] }
-  const dealObj =
-    payload && typeof payload === 'object' && 'deal' in (payload as any)
-      ? (payload as any).deal
-      : (payload as any);
+      const { deal } = normalizeImportDealResult(payload);
 
-  if (dealObj) {
-    setSelectedBudgetSummary(dealObj as DealSummary);
-    // Acepta dealId o deal_id y fuerza string|null
-    setSelectedBudgetId(
-      ((dealObj as any).dealId ?? (dealObj as any).deal_id ?? null) as string | null
-    );
-  } else {
-    setSelectedBudgetSummary(null);
-    setSelectedBudgetId(null);
-  }
+      if (deal) {
+        setSelectedBudgetSummary(deal as DealSummary);
+        // Acepta dealId o deal_id y fuerza string|null
+        setSelectedBudgetId(
+          ((deal as any).dealId ?? (deal as any).deal_id ?? null) as string | null,
+        );
+      } else {
+        setSelectedBudgetSummary(null);
+        setSelectedBudgetId(null);
+      }
 
-  pushToast({ variant: 'success', message: 'Presupuesto importado' });
-  setShowImportModal(false);
-  queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
-},
+      pushToast({ variant: 'success', message: 'Presupuesto importado' });
+      setShowImportModal(false);
+      queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+    },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
       const code = apiError?.code ?? 'UNKNOWN_ERROR';

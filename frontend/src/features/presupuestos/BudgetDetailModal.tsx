@@ -28,6 +28,7 @@ import {
   MANUAL_DOCUMENT_SIZE_LIMIT_BYTES,
   MANUAL_DOCUMENT_SIZE_LIMIT_MESSAGE
 } from './api';
+import { normalizeImportDealResult } from './importDealUtils';
 import { formatSedeLabel } from './formatSedeLabel';
 import { SessionsAccordion } from './sessions/SessionsAccordion';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
@@ -204,10 +205,10 @@ export function BudgetDetailModal({
   const refreshMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
     onSuccess: (payload) => {
-      const nextDeal = payload?.deal ?? null;
+      const { deal: nextDeal, warnings } = normalizeImportDealResult(payload);
       if (nextDeal) {
         qc.setQueryData(detailQueryKey, (current: DealDetail | undefined) =>
-          mergeDealDetailData(current, nextDeal),
+          mergeDealDetailData(current, nextDeal as DealDetail),
         );
       }
       qc.invalidateQueries({ queryKey: detailQueryKey });
@@ -225,19 +226,26 @@ export function BudgetDetailModal({
         },
       });
 
-      const warnings = Array.isArray(payload?.warnings)
-        ? payload.warnings.filter((warning) => typeof warning === 'string' && warning.trim().length)
-        : [];
       if (warnings.length) {
         alert(`Presupuesto actualizado con avisos:\n\n${warnings.join('\n')}`);
       }
+
+      if (onNotify) {
+        onNotify({ variant: 'success', message: 'Presupuesto importado' });
+      }
     },
     onError: (error: unknown) => {
-      if (isApiError(error)) {
-        alert(`No se pudo actualizar el presupuesto. [${error.code}] ${error.message}`);
+      const defaultMessage = 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
+      const notifyMessage = isApiError(error)
+        ? `No se pudo importar. [${error.code}] ${error.message}`
+        : `No se pudo importar. [UNKNOWN_ERROR] ${
+            error instanceof Error && error.message ? error.message : defaultMessage
+          }`;
+
+      if (onNotify) {
+        onNotify({ variant: 'danger', message: notifyMessage });
       } else {
-        const message = error instanceof Error ? error.message : 'No se pudo actualizar la información';
-        alert(message);
+        alert(notifyMessage);
       }
     }
   });
