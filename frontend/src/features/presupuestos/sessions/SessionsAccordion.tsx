@@ -53,6 +53,8 @@ import {
   deleteSessionStudent,
   fetchSessionPublicLink,
   createSessionPublicLink,
+  SESSION_DOCUMENT_SIZE_LIMIT_BYTES,
+  SESSION_DOCUMENT_SIZE_LIMIT_LABEL,
   type TrainerOption,
   type RoomOption,
   type MobileUnitOption,
@@ -838,6 +840,7 @@ function SessionDocumentsAccordionItem({
     if (uploadPending) return;
     setPendingUploadFiles([]);
     setIsDragActive(false);
+    setDocumentError(null);
     setShowUploadDialog(true);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -849,6 +852,7 @@ function SessionDocumentsAccordionItem({
     setShowUploadDialog(false);
     setPendingUploadFiles([]);
     setIsDragActive(false);
+    setDocumentError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -866,6 +870,26 @@ function SessionDocumentsAccordionItem({
       return;
     }
     const filteredFiles = files.filter(Boolean);
+
+    const oversizedFile = filteredFiles.find((file) => file.size > SESSION_DOCUMENT_SIZE_LIMIT_BYTES);
+    if (oversizedFile) {
+      const message = `El archivo "${oversizedFile.name}" supera el tamaño máximo permitido de ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`;
+      setDocumentError(message);
+      onNotify?.({ variant: 'danger', message });
+      setPendingUploadFiles([]);
+      return;
+    }
+
+    const totalSize = filteredFiles.reduce((sum, file) => sum + file.size, 0);
+    if (totalSize > SESSION_DOCUMENT_SIZE_LIMIT_BYTES) {
+      const message = `El tamaño total de los archivos seleccionados supera el límite permitido de ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`;
+      setDocumentError(message);
+      onNotify?.({ variant: 'danger', message });
+      setPendingUploadFiles([]);
+      return;
+    }
+
+    setDocumentError(null);
     setPendingUploadFiles(filteredFiles);
   };
 
@@ -1212,6 +1236,9 @@ function SessionDocumentsAccordionItem({
               <div className="text-muted small">Ningún archivo seleccionado</div>
             )}
           </div>
+          <p className="text-muted small mt-3 mb-0">
+            Tamaño máximo total permitido: {SESSION_DOCUMENT_SIZE_LIMIT_LABEL}
+          </p>
         </div>
       </Modal.Body>
       <Modal.Footer>

@@ -1398,6 +1398,9 @@ export async function deleteSessionComment(
  * Documentos de sesión
  * ========================= */
 
+export const SESSION_DOCUMENT_SIZE_LIMIT_BYTES = 4 * 1024 * 1024;
+export const SESSION_DOCUMENT_SIZE_LIMIT_LABEL = '4 MB';
+
 export async function fetchSessionDocuments(
   dealId: string,
   sessionId: string,
@@ -1429,6 +1432,24 @@ export async function uploadSessionDocuments(params: {
   const files = Array.isArray(params.files) ? params.files : [];
   if (!files.length) {
     throw new ApiError('VALIDATION_ERROR', 'Selecciona al menos un archivo');
+  }
+
+  const oversizedFile = files.find((file) => file.size > SESSION_DOCUMENT_SIZE_LIMIT_BYTES);
+  if (oversizedFile) {
+    throw new ApiError(
+      'PAYLOAD_TOO_LARGE',
+      `El archivo "${oversizedFile.name}" supera el tamaño máximo permitido de ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`,
+      413,
+    );
+  }
+
+  const totalSize = files.reduce((sum, file) => sum + Math.max(0, file.size || 0), 0);
+  if (totalSize > SESSION_DOCUMENT_SIZE_LIMIT_BYTES) {
+    throw new ApiError(
+      'PAYLOAD_TOO_LARGE',
+      `El tamaño total de los archivos supera el límite permitido de ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`,
+      413,
+    );
   }
 
   const payloadFiles = await Promise.all(
