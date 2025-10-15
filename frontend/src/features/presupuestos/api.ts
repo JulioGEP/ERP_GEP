@@ -1047,20 +1047,27 @@ export async function uploadManualDocument(
   if (user?.name) headers["X-User-Name"] = user.name;
 
   if (file.size > MANUAL_INLINE_UPLOAD_MAX_BYTES) {
-    const { uploadUrl, storageKey } = await prepareDealDocumentUpload(normalizedId, file, headers);
-    await uploadFileToUrl(uploadUrl, file);
+    try {
+      const { uploadUrl, storageKey } = await prepareDealDocumentUpload(normalizedId, file, headers);
+      await uploadFileToUrl(uploadUrl, file);
 
-    await request(`/deal_documents/${encodeURIComponent(normalizedId)}/manual`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        fileName: file.name,
-        mimeType: file.type,
-        fileSize: file.size,
-        storageKey,
-      }),
-    });
-    return;
+      await request(`/deal_documents/${encodeURIComponent(normalizedId)}/manual`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+          storageKey,
+        }),
+      });
+      return;
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "VALIDATION_ERROR") {
+        throw error;
+      }
+      // Fallback to inline upload below if S3 is not configured or request fails.
+    }
   }
 
   const base64 = await fileToBase64(file);
