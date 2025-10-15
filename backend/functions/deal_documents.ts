@@ -224,26 +224,43 @@ export const handler = async (event: any) => {
           return errorResponse("VALIDATION_ERROR", "JSON inválido", 400);
         }
 
-        const { fileName, mimeType, fileSize, contentBase64 } = payload as {
+        const { fileName, mimeType, fileSize } = payload as {
           fileName?: string;
           mimeType?: string;
           fileSize?: number;
-          contentBase64?: string;
         };
 
-        if (!fileName || !contentBase64) {
+        const contentBase64Raw = typeof payload?.contentBase64 === "string" ? payload.contentBase64 : null;
+        const storageKeyRaw = typeof payload?.storageKey === "string" ? payload.storageKey : null;
+
+        const contentBase64 = contentBase64Raw?.trim() ?? "";
+        const storageKey = storageKeyRaw?.trim() ?? "";
+
+        if (!fileName || (!contentBase64 && !storageKey)) {
           return errorResponse(
             "VALIDATION_ERROR",
-            "fileName y contentBase64 son requeridos para la subida manual",
+            "fileName y (contentBase64 o storageKey) son requeridos para la subida manual",
             400
           );
         }
 
-        let buffer: Buffer;
-        try {
-          buffer = Buffer.from(String(contentBase64), "base64");
-        } catch {
-          return errorResponse("VALIDATION_ERROR", "contentBase64 no es válido", 400);
+        let buffer: Buffer | null = null;
+        let fetchedFromStorage = false;
+
+        if (contentBase64) {
+          try {
+            buffer = Buffer.from(String(contentBase64), "base64");
+          } catch {
+            return errorResponse("VALIDATION_ERROR", "contentBase64 no es válido", 400);
+          }
+        } else if (storageKey) {
+          try {
+            const object = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: storageKey }));
+            buffer = await streamToBuffer(object.Body);
+            fetchedFromStorage = true;
+          } catch {
+            return errorResponse("UPLOAD_ERROR", "No se pudo recuperar el archivo subido", 502);
+          }
         }
 
         if (!buffer || !buffer.length) {
@@ -306,12 +323,29 @@ export const handler = async (event: any) => {
           },
         });
 
-        return successResponse({
+        const response = successResponse({
           ok: true,
           id,
           drive_file_name: uploadResult.driveFileName,
           drive_web_view_link: uploadResult.driveWebViewLink,
         });
+
+        if (fetchedFromStorage && storageKey) {
+          try {
+            await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: storageKey }));
+          } catch (cleanupError) {
+            console.warn("[deal_documents] No se pudo eliminar objeto temporal de S3", {
+              dealId: dealIdStr,
+              storageKey,
+              error:
+                cleanupError instanceof Error
+                  ? cleanupError.message
+                  : String(cleanupError ?? "unknown"),
+            });
+          }
+        }
+
+        return response;
       }
 
       if (!event.body) return errorResponse("VALIDATION_ERROR", "Body requerido", 400);
