@@ -152,6 +152,39 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
   return out as T;
 }
 
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed.length) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof value === "object" && value !== null) {
+    const decimalValue = value as { toNumber?: () => number };
+    if (typeof decimalValue.toNumber === "function") {
+      try {
+        const parsed = decimalValue.toNumber();
+        return Number.isFinite(parsed) ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+function parseSedeLabels(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[;,]/)
+    .map((entry) => entry.trim())
+    .filter((entry, index, array) => entry.length > 0 && array.indexOf(entry) === index);
+}
+
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs?: number | null,
@@ -462,7 +495,21 @@ export const handler = async (event: any) => {
       if (!dealRaw) return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
 
       const deal = mapDealForApi(dealRaw);
-      return successResponse({ deal });
+      const sedeLabels = parseSedeLabels(dealRaw?.sede_label ?? null);
+      const dealProducts = (dealRaw.deal_products ?? []).map((product: any) => ({
+        name: typeof product?.name === "string" ? product.name : null,
+        hours: toNullableNumber(product?.hours),
+      }));
+
+      return successResponse({
+        deal: deal
+          ? {
+              ...deal,
+              sede_labels: sedeLabels,
+              deal_products: dealProducts,
+            }
+          : null,
+      });
     }
 
     /* ---------------- ELIMINAR DEAL ---------------- */
