@@ -30,6 +30,13 @@ type CertificatePdfModule = {
   ) => Promise<{ fileName: string; blob: Blob }>;
 };
 
+type GenerationResult = {
+  id: string;
+  label: string;
+  status: 'success' | 'error';
+  message?: string | null;
+};
+
 declare global {
   interface Window {
     certificatePdf?: CertificatePdfModule;
@@ -89,6 +96,10 @@ function buildStudentDisplayName(row: CertificateRow): string {
   return 'Alumno/a sin identificar';
 }
 
+function isRowComplete(row: CertificateRow): boolean {
+  return Boolean(row.nombre?.trim()) && Boolean(row.apellidos?.trim()) && Boolean(row.dni?.trim());
+}
+
 function toNonEmptyString(value?: string | null): string | null {
   if (!value) {
     return null;
@@ -131,7 +142,7 @@ export function CertificadosPage() {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [generationTotal, setGenerationTotal] = useState(0);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [generationSuccess, setGenerationSuccess] = useState(false);
+  const [generationResults, setGenerationResults] = useState<GenerationResult[]>([]);
 
   useEffect(() => {
     setEditableRows(rows.map((row) => ({ ...row })));
@@ -139,9 +150,9 @@ export function CertificadosPage() {
 
   useEffect(() => {
     setGenerationError(null);
-    setGenerationSuccess(false);
     setGenerationProgress(0);
     setGenerationTotal(0);
+    setGenerationResults([]);
   }, [selectedSessionId]);
 
   const handleRowsChange = useCallback((nextRows: CertificateRow[]) => {
@@ -153,6 +164,11 @@ export function CertificadosPage() {
     const sessionId = selectedSessionId ? String(selectedSessionId).trim() : '';
     const rowsToProcess = editableRows.slice();
     const pdfGenerator = window.certificatePdf;
+
+    setGenerationError(null);
+    setGenerationResults([]);
+    setGenerationProgress(0);
+    setGenerationTotal(0);
 
     if (!dealId) {
       setGenerationError('Selecciona un deal válido antes de generar certificados.');
@@ -169,20 +185,26 @@ export function CertificadosPage() {
       return;
     }
 
+    if (rowsToProcess.some((row) => !isRowComplete(row))) {
+      return;
+    }
+
     if (!pdfGenerator || typeof pdfGenerator.generate !== 'function') {
       setGenerationError('El generador de certificados no está disponible.');
       return;
     }
 
-    setGenerationError(null);
-    setGenerationSuccess(false);
-    setGenerationProgress(0);
     setGenerationTotal(rowsToProcess.length);
     setGenerating(true);
+
+    const results: GenerationResult[] = [];
 
     try {
       for (let index = 0; index < rowsToProcess.length; index += 1) {
         const row = rowsToProcess[index];
+        const studentLabel = buildStudentDisplayName(row);
+        let result: GenerationResult;
+
         try {
           const pdfRow = mapRowToPdfRow(row);
           const { blob, fileName } = await pdfGenerator.generate(pdfRow, { download: false });
@@ -218,33 +240,35 @@ export function CertificadosPage() {
             ),
           );
 
-          setGenerationProgress(index + 1);
+          result = { id: row.id, label: studentLabel, status: 'success' };
         } catch (error) {
-          const studentLabel = buildStudentDisplayName(row);
           const message = resolveGenerationError(error);
-          throw new Error(`No se pudo generar el certificado de ${studentLabel}. ${message}`);
+          result = {
+            id: row.id,
+            label: studentLabel,
+            status: 'error',
+            message: `No se pudo generar el certificado. ${message}`,
+          };
         }
+
+        results.push(result);
+        setGenerationResults([...results]);
+        setGenerationProgress(index + 1);
       }
 
-      await selectSession(sessionId);
-      setGenerationSuccess(true);
+      let reloadErrorMessage: string | null = null;
+      try {
+        await selectSession(sessionId);
+      } catch (reloadError) {
+        reloadErrorMessage = resolveGenerationError(reloadError);
+      }
+
+      if (reloadErrorMessage) {
+        setGenerationError(`No se pudo recargar el listado de alumnos (${reloadErrorMessage}).`);
+      }
     } catch (error) {
       const message = resolveGenerationError(error);
       setGenerationError(message);
-
-      if (sessionId) {
-        try {
-          await selectSession(sessionId);
-        } catch (reloadError) {
-          const reloadMessage = resolveGenerationError(reloadError);
-          setGenerationError((currentMessage) => {
-            if (currentMessage && currentMessage.includes(reloadMessage)) {
-              return currentMessage;
-            }
-            return `${currentMessage ?? message} Además, no se pudo recargar el listado de alumnos (${reloadMessage}).`;
-          });
-        }
-      }
     } finally {
       setGenerating(false);
     }
@@ -269,10 +293,66 @@ export function CertificadosPage() {
     selectSession(value ? value : null);
   };
 
+  const incompleteRows = useMemo(
+    () => editableRows.filter((row) => !isRowComplete(row)),
+    [editableRows],
+  );
+  const hasIncompleteRows = incompleteRows.length > 0;
+  const hasDealId = Boolean(deal?.deal_id);
+  const hasSelectedSession = Boolean(selectedSessionId);
   const showSessionsSelect = sessions.length > 1;
   const showAutoSelectedSession = sessions.length === 1 && selectedSession;
   const hasResults = editableRows.length > 0;
-  const isToolbarDisabled = !hasResults || loadingStudents || generating;
+  const isToolbarDisabled =
+    !hasResults ||
+    loadingStudents ||
+    generating ||
+    !hasDealId ||
+    !hasSelectedSession ||
+    hasIncompleteRows;
+
+  const toolbarDisabledReason = (() => {
+    if (generating) {
+      return 'Generando certificados. Espera a que finalice el proceso.';
+    }
+    if (loadingStudents) {
+      return 'Cargando alumnos. Espera a que finalice la carga.';
+    }
+    if (!hasDealId) {
+      return 'Busca un deal válido antes de generar los certificados.';
+    }
+    if (!hasSelectedSession) {
+      return 'Selecciona una sesión para generar los certificados.';
+    }
+    if (!hasResults) {
+      return 'No hay alumnos disponibles para generar certificados.';
+    }
+    if (hasIncompleteRows) {
+      return 'Completa el nombre, apellidos y DNI de todos los alumnos.';
+    }
+    return undefined;
+  })();
+
+  const toolbarInfoMessage = (() => {
+    if (toolbarDisabledReason) {
+      return toolbarDisabledReason;
+    }
+    if (generating) {
+      return 'Generando certificados. Sigue el progreso en el botón.';
+    }
+    return 'Ajusta los datos de los alumnos antes de generar los certificados.';
+  })();
+
+  const generationSummary = useMemo(() => {
+    if (!generationResults.length) {
+      return null;
+    }
+    const successCount = generationResults.filter((result) => result.status === 'success').length;
+    const errorCount = generationResults.length - successCount;
+    return { total: generationResults.length, successCount, errorCount };
+  }, [generationResults]);
+
+  const hasGenerationFailures = Boolean(generationSummary && generationSummary.errorCount > 0);
 
   return (
     <div className="d-flex justify-content-center">
@@ -365,21 +445,70 @@ export function CertificadosPage() {
                 loading={generating}
                 progress={generationProgress}
                 total={generationTotal}
+                infoMessage={toolbarInfoMessage}
+                disabledReason={toolbarDisabledReason}
               />
               <CertificateTable
                 rows={editableRows}
                 onRowsChange={handleRowsChange}
                 disabled={loadingStudents || generating}
               />
+              {hasIncompleteRows && (
+                <Alert variant="warning" className="text-start mt-3">
+                  {incompleteRows.length === 1
+                    ? 'Falta completar el nombre, apellidos y DNI de 1 alumno.'
+                    : `Faltan completar el nombre, apellidos y DNI de ${incompleteRows.length} alumnos.`}
+                </Alert>
+              )}
               {generationError && (
                 <Alert variant="danger" className="text-start mt-3">
                   {generationError}
                 </Alert>
               )}
-              {generationSuccess && !generationError && (
-                <Alert variant="success" className="text-start mt-3">
-                  Certificados generados correctamente.
+              {!generating && generationSummary && (
+                <Alert
+                  variant={hasGenerationFailures ? 'warning' : 'success'}
+                  className="text-start mt-3"
+                >
+                  {hasGenerationFailures
+                    ? `Se generaron ${generationSummary.successCount} de ${generationSummary.total} certificados. Revisa el detalle para ver los alumnos con incidencias.`
+                    : 'Se generaron todos los certificados correctamente.'}
                 </Alert>
+              )}
+              {generationResults.length > 0 && (
+                <div className="certificate-generation-results mt-3 text-start">
+                  <div className="fw-semibold mb-2">Detalle por alumno</div>
+                  <ul className="certificate-generation-results__list">
+                    {generationResults.map((result) => (
+                      <li key={result.id} className="certificate-generation-results__item">
+                        <span
+                          className={`certificate-generation-results__status ${
+                            result.status === 'success'
+                              ? 'certificate-generation-results__status--success'
+                              : 'certificate-generation-results__status--error'
+                          }`}
+                          aria-label={result.status === 'success' ? 'Correcto' : 'Error'}
+                        >
+                          {result.status === 'success' ? '✔️' : '❌'}
+                        </span>
+                        <div>
+                          <div className="fw-semibold">{result.label}</div>
+                          <div
+                            className={`certificate-generation-results__message ${
+                              result.status === 'success'
+                                ? 'certificate-generation-results__message--success'
+                                : 'certificate-generation-results__message--error'
+                            }`}
+                          >
+                            {result.status === 'success'
+                              ? 'Generado correctamente.'
+                              : result.message}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           )}
