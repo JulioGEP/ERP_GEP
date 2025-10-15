@@ -30,12 +30,22 @@ type CertificatePdfModule = {
   ) => Promise<{ fileName: string; blob: Blob }>;
 };
 
+const CERTIFICATE_BATCH_SIZE = 5;
+const CERTIFICATE_MAX_RETRIES = 3;
+const CERTIFICATE_RETRY_DELAY_MS = 500;
+
 type GenerationResult = {
   id: string;
   label: string;
   status: 'success' | 'error';
   message?: string | null;
 };
+
+function wait(delay: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, delay);
+  });
+}
 
 declare global {
   interface Window {
@@ -159,120 +169,184 @@ export function CertificadosPage() {
     setEditableRows(nextRows);
   }, []);
 
-  const handleGenerateCertificates = useCallback(async () => {
-    const dealId = deal?.deal_id ? String(deal.deal_id).trim() : '';
-    const sessionId = selectedSessionId ? String(selectedSessionId).trim() : '';
-    const rowsToProcess = editableRows.slice();
-    const pdfGenerator = window.certificatePdf;
+  const runCertificateGeneration = useCallback(
+    async (options?: { rows?: CertificateRow[]; resetResults?: boolean }) => {
+      const dealId = deal?.deal_id ? String(deal.deal_id).trim() : '';
+      const sessionId = selectedSessionId ? String(selectedSessionId).trim() : '';
+      const rowsToProcess = options?.rows ? options.rows.slice() : editableRows.slice();
+      const pdfGenerator = window.certificatePdf;
+      const shouldResetResults = options?.resetResults !== false;
 
-    setGenerationError(null);
-    setGenerationResults([]);
-    setGenerationProgress(0);
-    setGenerationTotal(0);
+      setGenerationError(null);
+      setGenerationProgress(0);
+      setGenerationTotal(0);
 
-    if (!dealId) {
-      setGenerationError('Selecciona un deal válido antes de generar certificados.');
-      return;
-    }
+      if (!dealId) {
+        setGenerationError('Selecciona un deal válido antes de generar certificados.');
+        return;
+      }
 
-    if (!sessionId) {
-      setGenerationError('Selecciona una sesión antes de generar certificados.');
-      return;
-    }
+      if (!sessionId) {
+        setGenerationError('Selecciona una sesión antes de generar certificados.');
+        return;
+      }
 
-    if (!rowsToProcess.length) {
-      setGenerationError('No hay alumnos disponibles para generar certificados.');
-      return;
-    }
+      if (!rowsToProcess.length) {
+        if (shouldResetResults) {
+          setGenerationError('No hay alumnos disponibles para generar certificados.');
+        }
+        return;
+      }
 
-    if (rowsToProcess.some((row) => !isRowComplete(row))) {
-      return;
-    }
+      if (rowsToProcess.some((row) => !isRowComplete(row))) {
+        return;
+      }
 
-    if (!pdfGenerator || typeof pdfGenerator.generate !== 'function') {
-      setGenerationError('El generador de certificados no está disponible.');
-      return;
-    }
+      if (!pdfGenerator || typeof pdfGenerator.generate !== 'function') {
+        setGenerationError('El generador de certificados no está disponible.');
+        return;
+      }
 
-    setGenerationTotal(rowsToProcess.length);
-    setGenerating(true);
+      if (shouldResetResults) {
+        setGenerationResults([]);
+      }
 
-    const results: GenerationResult[] = [];
+      setGenerationTotal(rowsToProcess.length);
+      setGenerating(true);
 
-    try {
-      for (let index = 0; index < rowsToProcess.length; index += 1) {
-        const row = rowsToProcess[index];
-        const studentLabel = buildStudentDisplayName(row);
-        let result: GenerationResult;
+      const rowsOrder = editableRows.map((row) => row.id);
 
-        try {
-          const pdfRow = mapRowToPdfRow(row);
-          const { blob, fileName } = await pdfGenerator.generate(pdfRow, { download: false });
-          if (!(blob instanceof Blob) || !blob.size) {
-            throw new Error('El certificado generado está vacío.');
+      const updateResultsState = (result: GenerationResult) => {
+        setGenerationResults((current) => {
+          const map = new Map(current.map((item) => [item.id, item]));
+          map.set(result.id, result);
+          const orderedResults = rowsOrder
+            .filter((rowId) => map.has(rowId))
+            .map((rowId) => map.get(rowId) as GenerationResult);
+          if (orderedResults.length === map.size) {
+            return orderedResults;
           }
-
-          const uploadResult = await uploadSessionCertificate({
-            dealId,
-            sessionId,
-            studentId: row.id,
-            fileName,
-            file: blob,
-          });
-
-          const publicUrl =
-            toNonEmptyString(uploadResult.publicUrl) ??
-            toNonEmptyString(uploadResult.student?.drive_url ?? null);
-
-          const updatedStudent = await updateSessionStudent(row.id, {
-            certificado: true,
-            drive_url: publicUrl,
-          });
-
-          const resolvedUrl =
-            toNonEmptyString(updatedStudent.drive_url) ?? publicUrl ?? row.driveUrl ?? null;
-
-          setEditableRows((current) =>
-            current.map((item) =>
-              item.id === row.id
-                ? { ...item, certificado: true, driveUrl: resolvedUrl }
-                : item,
-            ),
+          const remaining = Array.from(map.values()).filter(
+            (item) => !rowsOrder.includes(item.id),
           );
+          return [...orderedResults, ...remaining];
+        });
+      };
 
-          result = { id: row.id, label: studentLabel, status: 'success' };
-        } catch (error) {
-          const message = resolveGenerationError(error);
-          result = {
-            id: row.id,
-            label: studentLabel,
-            status: 'error',
-            message: `No se pudo generar el certificado. ${message}`,
-          };
+      const processRowWithRetry = async (row: CertificateRow) => {
+        const studentLabel = buildStudentDisplayName(row);
+        let lastError: unknown = null;
+
+        for (let attempt = 1; attempt <= CERTIFICATE_MAX_RETRIES; attempt += 1) {
+          try {
+            const pdfRow = mapRowToPdfRow(row);
+            const { blob, fileName } = await pdfGenerator.generate(pdfRow, { download: false });
+            if (!(blob instanceof Blob) || !blob.size) {
+              throw new Error('El certificado generado está vacío.');
+            }
+
+            const uploadResult = await uploadSessionCertificate({
+              dealId,
+              sessionId,
+              studentId: row.id,
+              fileName,
+              file: blob,
+            });
+
+            const publicUrl =
+              toNonEmptyString(uploadResult.publicUrl) ??
+              toNonEmptyString(uploadResult.student?.drive_url ?? null);
+
+            const updatedStudent = await updateSessionStudent(row.id, {
+              certificado: true,
+              drive_url: publicUrl,
+            });
+
+            const resolvedUrl =
+              toNonEmptyString(updatedStudent.drive_url) ?? publicUrl ?? row.driveUrl ?? null;
+
+            setEditableRows((current) =>
+              current.map((item) =>
+                item.id === row.id
+                  ? { ...item, certificado: true, driveUrl: resolvedUrl }
+                  : item,
+              ),
+            );
+
+            return { id: row.id, label: studentLabel, status: 'success' };
+          } catch (error) {
+            lastError = error;
+            if (attempt < CERTIFICATE_MAX_RETRIES) {
+              await wait(CERTIFICATE_RETRY_DELAY_MS * attempt);
+              continue;
+            }
+          }
         }
 
-        results.push(result);
-        setGenerationResults([...results]);
-        setGenerationProgress(index + 1);
-      }
+        const message = resolveGenerationError(lastError);
+        const attemptsInfo =
+          CERTIFICATE_MAX_RETRIES > 1 ? ` Intentos realizados: ${CERTIFICATE_MAX_RETRIES}.` : '';
+        return {
+          id: row.id,
+          label: studentLabel,
+          status: 'error',
+          message: `No se pudo generar el certificado. ${message}${attemptsInfo}`,
+        };
+      };
 
-      let reloadErrorMessage: string | null = null;
       try {
-        await selectSession(sessionId);
-      } catch (reloadError) {
-        reloadErrorMessage = resolveGenerationError(reloadError);
-      }
+        for (
+          let startIndex = 0;
+          startIndex < rowsToProcess.length;
+          startIndex += CERTIFICATE_BATCH_SIZE
+        ) {
+          const batch = rowsToProcess.slice(startIndex, startIndex + CERTIFICATE_BATCH_SIZE);
+          await Promise.all(
+            batch.map(async (row) => {
+              const result = await processRowWithRetry(row);
+              updateResultsState(result);
+              setGenerationProgress((current) => current + 1);
+            }),
+          );
+        }
 
-      if (reloadErrorMessage) {
-        setGenerationError(`No se pudo recargar el listado de alumnos (${reloadErrorMessage}).`);
+        let reloadErrorMessage: string | null = null;
+        try {
+          await selectSession(sessionId);
+        } catch (reloadError) {
+          reloadErrorMessage = resolveGenerationError(reloadError);
+        }
+
+        if (reloadErrorMessage) {
+          setGenerationError(`No se pudo recargar el listado de alumnos (${reloadErrorMessage}).`);
+        }
+      } catch (error) {
+        const message = resolveGenerationError(error);
+        setGenerationError(message);
+      } finally {
+        setGenerating(false);
       }
-    } catch (error) {
-      const message = resolveGenerationError(error);
-      setGenerationError(message);
-    } finally {
-      setGenerating(false);
+    },
+    [deal?.deal_id, selectedSessionId, editableRows, selectSession],
+  );
+
+  const handleGenerateCertificates = useCallback(() => {
+    void runCertificateGeneration({ resetResults: true });
+  }, [runCertificateGeneration]);
+
+  const handleRetryFailed = useCallback(() => {
+    const failedIds = new Set(
+      generationResults.filter((result) => result.status === 'error').map((result) => result.id),
+    );
+    if (!failedIds.size) {
+      return;
     }
-  }, [deal?.deal_id, selectedSessionId, editableRows, selectSession]);
+    const rowsToRetry = editableRows.filter((row) => failedIds.has(row.id));
+    if (!rowsToRetry.length) {
+      return;
+    }
+    void runCertificateGeneration({ rows: rowsToRetry, resetResults: false });
+  }, [editableRows, generationResults, runCertificateGeneration]);
 
   const sessionOptions = useMemo(
     () =>
@@ -348,7 +422,7 @@ export function CertificadosPage() {
       return null;
     }
     const successCount = generationResults.filter((result) => result.status === 'success').length;
-    const errorCount = generationResults.length - successCount;
+    const errorCount = generationResults.filter((result) => result.status === 'error').length;
     return { total: generationResults.length, successCount, errorCount };
   }, [generationResults]);
 
@@ -474,6 +548,13 @@ export function CertificadosPage() {
                     ? `Se generaron ${generationSummary.successCount} de ${generationSummary.total} certificados. Revisa el detalle para ver los alumnos con incidencias.`
                     : 'Se generaron todos los certificados correctamente.'}
                 </Alert>
+              )}
+              {hasGenerationFailures && !generating && (
+                <div className="mt-2 text-start">
+                  <Button variant="outline-primary" onClick={handleRetryFailed}>
+                    Reintentar fallidos
+                  </Button>
+                </div>
               )}
               {generationResults.length > 0 && (
                 <div className="certificate-generation-results mt-3 text-start">
