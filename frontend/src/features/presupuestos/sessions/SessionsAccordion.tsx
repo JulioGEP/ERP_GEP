@@ -835,13 +835,19 @@ function SessionDocumentsAccordionItem({
     }
   };
 
-  const handleSelectUploadFiles = (filesList: FileList | null | undefined) => {
-    if (!filesList || !filesList.length) {
+  const toFileArray = (files: FileList | File[] | null | undefined): File[] =>
+    files ? (Array.isArray(files) ? files : Array.from(files)) : [];
+
+  const handleSelectUploadFiles = (
+    filesList: FileList | File[] | null | undefined,
+  ) => {
+    const files = toFileArray(filesList);
+    if (!files.length) {
       setPendingUploadFiles([]);
       return;
     }
-    const files = Array.from(filesList).filter(Boolean);
-    setPendingUploadFiles(files);
+    const filteredFiles = files.filter(Boolean);
+    setPendingUploadFiles(filteredFiles);
   };
 
   const handleUploadFiles = async (filesInput: File[] | FileList | null | undefined) => {
@@ -900,6 +906,13 @@ function SessionDocumentsAccordionItem({
     setIsDragActive(true);
   };
 
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (uploadPending) return;
+    setIsDragActive(true);
+  };
+
   const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -915,7 +928,25 @@ function SessionDocumentsAccordionItem({
     event.stopPropagation();
     if (uploadPending) return;
     setIsDragActive(false);
-    handleSelectUploadFiles(event.dataTransfer?.files ?? null);
+    const dataTransfer = event.dataTransfer;
+    if (!dataTransfer) {
+      handleSelectUploadFiles(null);
+      return;
+    }
+
+    if (dataTransfer.files && dataTransfer.files.length > 0) {
+      handleSelectUploadFiles(dataTransfer.files);
+      return;
+    }
+
+    const itemFiles = dataTransfer.items
+      ? Array.from(dataTransfer.items)
+          .filter((item) => item.kind === 'file')
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => Boolean(file))
+      : [];
+
+    handleSelectUploadFiles(itemFiles.length ? itemFiles : null);
   };
 
   const handleUploadConfirm = () => {
@@ -1130,6 +1161,7 @@ function SessionDocumentsAccordionItem({
             isDragActive ? 'border-primary bg-light' : 'border-secondary-subtle'
           }`}
           style={{ borderStyle: 'dashed' }}
+          onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDropFiles}
