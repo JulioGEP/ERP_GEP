@@ -101,6 +101,25 @@ const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS)
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 
+function formatErrorMessage(error: unknown, fallback: string): string {
+  if (isApiError(error)) {
+    const baseMessage = error.message?.trim().length ? error.message : fallback;
+    const meta: string[] = [];
+    if (error.code?.trim().length) {
+      meta.push(`código: ${error.code}`);
+    }
+    if (typeof error.status === 'number') {
+      meta.push(`estado: ${error.status}`);
+    }
+    return meta.length ? `${baseMessage} (${meta.join(', ')})` : baseMessage;
+  }
+  if (error instanceof Error) {
+    const baseMessage = error.message?.trim().length ? error.message : fallback;
+    return baseMessage;
+  }
+  return fallback;
+}
+
 function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} {...props}>
@@ -868,11 +887,8 @@ function SessionDocumentsAccordionItem({
       setPendingUploadFiles([]);
       setIsDragActive(false);
     } catch (error: unknown) {
-      const message = isApiError(error)
-        ? error.message
-        : error instanceof Error
-        ? error.message
-        : 'No se pudo subir el documento';
+      const message = formatErrorMessage(error, 'No se pudo subir el documento');
+      console.error('[SessionDocumentsAccordionItem] Error al subir documentos de sesión', error);
       setDocumentError(message);
       onNotify?.({ variant: 'danger', message });
     } finally {
@@ -965,11 +981,14 @@ function SessionDocumentsAccordionItem({
           : 'Documento marcado como no compartido',
       });
     } catch (error: unknown) {
-      const message = isApiError(error)
-        ? error.message
-        : error instanceof Error
-        ? error.message
-        : 'No se pudo actualizar el estado de compartición';
+      const message = formatErrorMessage(
+        error,
+        'No se pudo actualizar el estado de compartición',
+      );
+      console.error(
+        '[SessionDocumentsAccordionItem] Error al actualizar compartición de documento de sesión',
+        error,
+      );
       setDocumentError(message);
       onNotify?.({ variant: 'danger', message });
     } finally {
@@ -990,11 +1009,8 @@ function SessionDocumentsAccordionItem({
       await deleteDocumentMutation.mutateAsync(doc.id);
       onNotify?.({ variant: 'success', message: 'Documento eliminado correctamente' });
     } catch (error: unknown) {
-      const message = isApiError(error)
-        ? error.message
-        : error instanceof Error
-        ? error.message
-        : 'No se pudo eliminar el documento';
+      const message = formatErrorMessage(error, 'No se pudo eliminar el documento');
+      console.error('[SessionDocumentsAccordionItem] Error al eliminar documento de sesión', error);
       setDocumentError(message);
       onNotify?.({ variant: 'danger', message });
     } finally {
