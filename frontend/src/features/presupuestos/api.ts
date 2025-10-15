@@ -120,6 +120,7 @@ export type SessionCounts = {
   comentarios: number;
   documentos: number;
   alumnos: number;
+  tokens: number;
 };
 
 export type TrainerOption = {
@@ -1238,6 +1239,7 @@ export async function fetchSessionCounts(sessionId: string): Promise<SessionCoun
     comentarios: toNonNegativeInteger(data?.comentarios),
     documentos: toNonNegativeInteger(data?.documentos),
     alumnos: toNonNegativeInteger(data?.alumnos),
+    tokens: toNonNegativeInteger(data?.tokens),
   };
 }
 

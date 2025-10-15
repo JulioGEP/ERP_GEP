@@ -832,13 +832,14 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
       }
 
-      const [comentarios, documentos, alumnos] = await prisma.$transaction([
+      const [comentarios, documentos, alumnos, tokens] = await prisma.$transaction([
         prisma.sesiones_comentarios.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.session_files.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.alumnos.count({ where: { sesion_id: sessionIdFromPath } }),
+        prisma.tokens.count({ where: { sesion_id: sessionIdFromPath, active: true } }),
       ]);
 
-      return successResponse({ comentarios, documentos, alumnos });
+      return successResponse({ comentarios, documentos, alumnos, tokens });
     }
 
     if (method === 'GET') {
@@ -1174,6 +1175,13 @@ export const handler = async (event: any) => {
       }
 
       await prisma.$transaction(async (tx) => {
+        await tx.session_trainers.deleteMany({ where: { session_id: sessionIdFromPath } });
+        await tx.session_unidades.deleteMany({ where: { session_id: sessionIdFromPath } });
+        await tx.session_files.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+        await tx.sesiones_comentarios.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+        await tx.alumnos.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+        await tx.tokens.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+
         await tx.sessions.delete({ where: { id: sessionIdFromPath } });
         const product = await tx.deal_products.findUnique({
           where: { id: existing.deal_product_id },
