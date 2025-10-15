@@ -1,3 +1,24 @@
+import pdfMake from 'pdfmake/build/pdfmake';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
+
+const basePdfMake = pdfMake;
+const baseVfs = pdfFonts?.pdfMake?.vfs ?? null;
+
+if (baseVfs) {
+  basePdfMake.vfs = { ...(basePdfMake.vfs || {}), ...baseVfs };
+}
+
+const globalScope: typeof window | undefined = typeof window !== 'undefined' ? window : undefined;
+
+if (globalScope) {
+  const existingPdfMake = (globalScope as typeof window & { pdfMake?: typeof basePdfMake }).pdfMake;
+  if (!existingPdfMake) {
+    (globalScope as typeof window & { pdfMake: typeof basePdfMake }).pdfMake = basePdfMake;
+  } else {
+    existingPdfMake.vfs = { ...(existingPdfMake.vfs || {}), ...(basePdfMake.vfs || {}) };
+  }
+}
+
 (function (global) {
   const TRANSPARENT_PIXEL =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NkYGD4DwABBAEAi5JBSwAAAABJRU5ErkJggg==';
