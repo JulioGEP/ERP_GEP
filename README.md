@@ -81,6 +81,13 @@ Las entidades principales gestionadas en la base de datos son:
 - `deals` — Presupuestos y formaciones vinculadas a organizaciones y personas.
 - `deal_products`, `deal_notes`, `deal_files` — Productos, notas y documentos asociados a cada deal.
 - `trainers`, `rooms`, `mobile_units` — Recursos logísticos gestionados desde el backend.
+- `tokens` — Enlaces públicos asociados a cada sesión para gestionar alumnos sin autenticación interna.
+
+### Enlaces públicos de alumnos
+
+El modelo `tokens` sustituye al antiguo esquema `session_public_links` y almacena los enlaces públicos que se generan desde el botón **URL Alumnos** del ERP. Cada registro contiene un token aleatorio, la sesión asociada, metadatos de creación (IP y user agent), estado (`active`) y fecha de caducidad (`expires_at`).
+
+Cuando se solicita un enlace, el backend crea (o reutiliza) un token activo y construye la URL pública `/public/sesiones/:token/alumnos`. Esta ruta permite añadir, editar y borrar alumnos de la sesión utilizando únicamente el token, respetando la caducidad y el estado `active` del registro en base de datos.
 
 ### Convenciones de campos importados desde Pipedrive
 

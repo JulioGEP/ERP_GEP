@@ -64,7 +64,6 @@ model deals {
   session_comments sesiones_comentarios[]
   session_files        session_files[]
   alumnos              alumnos[]
-  session_public_links session_public_links[]
 
   @@index([org_id], map: "idx_deals_org_id")
   @@index([person_id], map: "idx_deals_person_id")
@@ -213,8 +212,8 @@ model sessions {
   unidades      session_unidades[]
   comments      sesiones_comentarios[]
   session_files        session_files[]
-  alumnos              alumnos[]
-  public_links         session_public_links[]
+  alumnos alumnos[]
+  tokens  tokens[]
 
   @@index([deal_id], map: "idx_sesiones_deal_id")
   @@index([deal_product_id], map: "idx_sesiones_deal_product_id")
@@ -282,26 +281,20 @@ model alumnos {
   @@map("alumnos")
 }
 
-model session_public_links {
-  id               String   @id @default(uuid()) @db.Uuid
-  deal_id          String
-  sesion_id        String   @db.Uuid
-  token            String   @db.VarChar(128)
-  created_at       DateTime @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime @default(now()) @updatedAt @db.Timestamptz(6)
-  expires_at       DateTime @db.Timestamptz(6)
-  revoked_at       DateTime? @db.Timestamptz(6)
-  last_access_at   DateTime? @db.Timestamptz(6)
-  last_access_ip   String?   @db.VarChar(64)
-  last_access_ua   String?   @db.VarChar(512)
+model tokens {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sesion_id   String   @map("session_id") @db.Uuid
+  token       String   @unique @db.Text
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  expires_at  DateTime? @db.Timestamptz(6)
+  active      Boolean  @default(true)
+  ip_created  String?  @db.Text
+  user_agent  String?  @db.Text
 
-  deal    deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "session_public_links_deal_fk")
-  session sessions @relation(fields: [sesion_id], references: [id], onDelete: Cascade, map: "session_public_links_session_fk")
+  session sessions @relation(fields: [sesion_id], references: [id], onDelete: Cascade)
 
-  @@unique([token], map: "ux_session_public_links_token")
-  @@index([deal_id], map: "idx_session_public_links_deal_id")
-  @@index([sesion_id], map: "idx_session_public_links_sesion_id")
-  @@map("session_public_links")
+  @@index([sesion_id])
+  @@map("tokens")
 }
 
 enum SessionEstado {

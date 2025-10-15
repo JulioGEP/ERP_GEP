@@ -103,6 +103,9 @@ export type SessionPublicLink = {
   last_access_at: string | null;
   last_access_ip: string | null;
   last_access_ua: string | null;
+  active: boolean;
+  ip_created: string | null;
+  user_agent: string | null;
 };
 
 export type PublicSessionInfo = {
@@ -681,6 +684,9 @@ function normalizeSessionPublicLink(raw: any): SessionPublicLink {
   const lastAccessAt = toStringValue(raw?.last_access_at) ?? null;
   const lastAccessIp = toStringValue(raw?.last_access_ip) ?? null;
   const lastAccessUa = toStringValue(raw?.last_access_ua) ?? null;
+  const ipCreated = toStringValue(raw?.ip_created) ?? null;
+  const userAgent = toStringValue(raw?.user_agent) ?? null;
+  const active = Boolean(raw?.active);
 
   return {
     id,
@@ -696,6 +702,9 @@ function normalizeSessionPublicLink(raw: any): SessionPublicLink {
     last_access_at: lastAccessAt,
     last_access_ip: lastAccessIp,
     last_access_ua: lastAccessUa,
+    active,
+    ip_created: ipCreated,
+    user_agent: userAgent,
   };
 }
 
