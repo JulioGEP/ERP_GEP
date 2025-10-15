@@ -63,6 +63,7 @@ import {
   type SessionDocument,
   type SessionStudent,
   type SessionCounts,
+  type SessionPublicLink,
 } from '../api';
 import { isApiError } from '../api';
 
@@ -102,6 +103,34 @@ const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['BORRADOR', 'SUSPENDIDA', 'CANC
 const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
+
+function resolveSessionPublicLinkUrl(link: SessionPublicLink | null): string | null {
+  if (!link) return null;
+  if (link.public_url && link.public_url.trim().length) {
+    return link.public_url;
+  }
+  if (link.public_path && link.public_path.trim().length && typeof window !== 'undefined') {
+    return `${window.location.origin}${link.public_path}`;
+  }
+  return link.public_path ?? null;
+}
+
+function ClipboardIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      fill="currentColor"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M10 1.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 1 .5.5v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 0 .5-.5v-1A1.5 1.5 0 0 1 7.5 0h1A1.5 1.5 0 0 1 10 1.5Z" />
+      <path d="M5 2a.5.5 0 0 0-.5.5V4h7V2.5a.5.5 0 0 0-.5-.5h-1a1 1 0 0 1-1-1v-.5h-2V1a1 1 0 0 1-1 1H5Z" />
+    </svg>
+  );
+}
 
 function formatErrorMessage(error: unknown, fallback: string): string {
   if (isApiError(error)) {
@@ -184,6 +213,7 @@ function SessionStudentsAccordionItem({
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [publicLinks, setPublicLinks] = useState<SessionPublicLink[]>([]);
 
   const studentsQuery = useQuery({
     queryKey: ['session-students', dealId, sessionId],
@@ -216,6 +246,7 @@ function SessionStudentsAccordionItem({
     setUpdatingId(null);
     setDeletingId(null);
     createPublicLinkMutation.reset();
+    setPublicLinks([]);
   }, [dealId, sessionId, createPublicLinkMutation]);
 
   const students = studentsQuery.data ?? [];
@@ -241,15 +272,22 @@ function SessionStudentsAccordionItem({
     : null;
   const publicLinkGenerating = createPublicLinkMutation.isPending;
 
-  const publicLinkUrl = useMemo(() => {
-    if (!publicLink) return null;
-    if (publicLink.public_url && publicLink.public_url.trim().length) {
-      return publicLink.public_url;
-    }
-    if (publicLink.public_path && publicLink.public_path.trim().length && typeof window !== 'undefined') {
-      return `${window.location.origin}${publicLink.public_path}`;
-    }
-    return publicLink.public_path ?? null;
+  const latestPublicLinkUrl = useMemo(() => resolveSessionPublicLinkUrl(publicLink), [publicLink]);
+
+  useEffect(() => {
+    if (!publicLink) return;
+    setPublicLinks((current) => {
+      const existingIndex = current.findIndex((link) => link.id === publicLink.id);
+      if (existingIndex >= 0) {
+        if (current[existingIndex] === publicLink) {
+          return current;
+        }
+        const updated = [...current];
+        updated[existingIndex] = publicLink;
+        return updated;
+      }
+      return [...current, publicLink];
+    });
   }, [publicLink]);
 
   const publicLinkCreatedAt = useMemo(() => {
@@ -263,17 +301,17 @@ function SessionStudentsAccordionItem({
     }
   }, [publicLink?.created_at]);
 
+  const openLinkInNewTab = (target: string | null) => {
+    if (!target || typeof window === 'undefined') return;
+    window.open(target, '_blank', 'noopener,noreferrer');
+  };
+
   const handleOpenPublicLink = async () => {
     if (!dealId || !sessionId) return;
 
-    const openLinkInTab = (target: string | null) => {
-      if (!target) return;
-      window.open(target, '_blank', 'noopener,noreferrer');
-    };
-
-    const existingUrl = publicLinkUrl;
+    const existingUrl = latestPublicLinkUrl;
     if (existingUrl) {
-      openLinkInTab(existingUrl);
+      openLinkInNewTab(existingUrl);
       return;
     }
 
@@ -289,7 +327,7 @@ function SessionStudentsAccordionItem({
         if (pendingWindow) {
           pendingWindow.location.href = targetUrl;
         } else {
-          openLinkInTab(targetUrl);
+          openLinkInNewTab(targetUrl);
         }
       } else if (pendingWindow) {
         pendingWindow.close();
@@ -304,15 +342,20 @@ function SessionStudentsAccordionItem({
     }
   };
 
-  const handleCopyPublicLink = async () => {
-    const url = publicLinkUrl;
+  const handleCopyPublicLink = async (url: string | null, index?: number) => {
     if (!url || typeof navigator === 'undefined') return;
     try {
       await navigator.clipboard.writeText(url);
-      onNotify?.({ variant: 'success', message: 'URL de alumnos copiada al portapapeles' });
+      const suffix = typeof index === 'number' ? ` #${index + 1}` : '';
+      onNotify?.({ variant: 'success', message: `URL${suffix} de alumnos copiada al portapapeles` });
     } catch {
       onNotify?.({ variant: 'danger', message: 'No se pudo copiar la URL, copia manualmente' });
     }
+  };
+
+  const handleOpenExistingPublicLink = (url: string | null) => {
+    if (!url) return;
+    openLinkInNewTab(url);
   };
 
   const resetDraft = () => {
@@ -645,7 +688,7 @@ function SessionStudentsAccordionItem({
                 onClick={handleOpenPublicLink}
                 disabled={publicLinkGenerating || publicLinkLoading}
               >
-                {publicLinkGenerating ? 'Generando…' : 'URL Alumnos'}
+                {publicLinkGenerating ? 'Generando…' : 'Generar URL'}
               </Button>
             </div>
             <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2 text-muted small">
@@ -666,24 +709,41 @@ function SessionStudentsAccordionItem({
             </Alert>
           ) : null}
 
-          {publicLink && publicLinkUrl ? (
-            <div className="d-flex flex-column flex-lg-row align-items-lg-center gap-2">
-              <a
-                href={publicLink.public_url ?? publicLink.public_path ?? '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-break"
-              >
-                {publicLinkUrl}
-              </a>
-              <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2">
-                <Button variant="outline-secondary" size="sm" onClick={handleCopyPublicLink}>
-                  Copiar
-                </Button>
-                {publicLinkCreatedAt ? (
-                  <span className="text-muted small">Creada {publicLinkCreatedAt}</span>
-                ) : null}
+          {publicLinks.length > 0 ? (
+            <div className="d-flex flex-column gap-2">
+              <div className="d-flex flex-wrap gap-2">
+                {publicLinks.map((link, index) => {
+                  const url = resolveSessionPublicLinkUrl(link);
+                  if (!url) {
+                    return null;
+                  }
+                  return (
+                    <div key={link.id} className="d-flex align-items-center gap-2">
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => handleOpenExistingPublicLink(url)}
+                      >
+                        {`URL #${index + 1}`}
+                      </Button>
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        className="d-flex align-items-center justify-content-center p-0"
+                        style={{ width: '2rem', height: '2rem' }}
+                        title={`Copiar URL #${index + 1}`}
+                        aria-label={`Copiar URL #${index + 1}`}
+                        onClick={() => handleCopyPublicLink(url, index)}
+                      >
+                        <ClipboardIcon />
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
+              {publicLinkCreatedAt ? (
+                <span className="text-muted small">Creada {publicLinkCreatedAt}</span>
+              ) : null}
             </div>
           ) : null}
         </div>
