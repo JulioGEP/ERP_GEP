@@ -24,7 +24,9 @@ import {
   createDealNote,
   updateDealNote,
   deleteDealNote,
-  isApiError
+  isApiError,
+  MANUAL_DOCUMENT_SIZE_LIMIT_BYTES,
+  MANUAL_DOCUMENT_SIZE_LIMIT_MESSAGE
 } from './api';
 import { formatSedeLabel } from './formatSedeLabel';
 import { SessionsAccordion } from './sessions/SessionsAccordion';
@@ -335,25 +337,38 @@ export function BudgetDetailModal({
     } catch (error: unknown) {
       console.error('[BudgetDetailModal] Error al subir documento del presupuesto', error);
       const fallbackMessage = 'No se pudo subir el documento';
+      const sizeLimitMessage = MANUAL_DOCUMENT_SIZE_LIMIT_MESSAGE;
+      const fileTooLarge = pendingUploadFile.size > MANUAL_DOCUMENT_SIZE_LIMIT_BYTES;
       let message = fallbackMessage;
 
       if (isApiError(error)) {
-        const parts: string[] = [];
-        const baseMessage = error.message?.trim().length ? error.message : fallbackMessage;
-        parts.push(baseMessage);
-        const meta: string[] = [];
-        if (error.code?.trim().length) {
-          meta.push(`código: ${error.code}`);
+        const { code, status, message: baseMessageRaw } = error;
+        const normalizedBaseMessage = baseMessageRaw?.trim().length ? baseMessageRaw : fallbackMessage;
+        if (
+          code === 'PAYLOAD_TOO_LARGE' ||
+          status === 413 ||
+          (fileTooLarge && (status === 500 || status === 502 || code === 'HTTP_500'))
+        ) {
+          message = sizeLimitMessage;
+        } else {
+          const parts: string[] = [normalizedBaseMessage];
+          const meta: string[] = [];
+          if (code?.trim().length) {
+            meta.push(`código: ${code}`);
+          }
+          if (typeof status === 'number') {
+            meta.push(`estado: ${status}`);
+          }
+          if (meta.length) {
+            parts.push(`(${meta.join(', ')})`);
+          }
+          message = parts.join(' ');
         }
-        if (typeof error.status === 'number') {
-          meta.push(`estado: ${error.status}`);
-        }
-        if (meta.length) {
-          parts.push(`(${meta.join(', ')})`);
-        }
-        message = parts.join(' ');
       } else if (error instanceof Error) {
-        message = error.message?.trim().length ? error.message : fallbackMessage;
+        const normalizedErrorMessage = error.message?.trim().length ? error.message : fallbackMessage;
+        message = fileTooLarge ? sizeLimitMessage : normalizedErrorMessage;
+      } else if (fileTooLarge) {
+        message = sizeLimitMessage;
       }
 
       alert(message);

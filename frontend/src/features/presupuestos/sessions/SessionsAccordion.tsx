@@ -55,6 +55,7 @@ import {
   createSessionPublicLink,
   SESSION_DOCUMENT_SIZE_LIMIT_BYTES,
   SESSION_DOCUMENT_SIZE_LIMIT_LABEL,
+  SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE,
   type TrainerOption,
   type RoomOption,
   type MobileUnitOption,
@@ -105,6 +106,9 @@ const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750
 
 function formatErrorMessage(error: unknown, fallback: string): string {
   if (isApiError(error)) {
+    if (error.code === 'PAYLOAD_TOO_LARGE' || error.status === 413) {
+      return SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE;
+    }
     const baseMessage = error.message?.trim().length ? error.message : fallback;
     const meta: string[] = [];
     if (error.code?.trim().length) {
@@ -873,7 +877,7 @@ function SessionDocumentsAccordionItem({
 
     const oversizedFile = filteredFiles.find((file) => file.size > SESSION_DOCUMENT_SIZE_LIMIT_BYTES);
     if (oversizedFile) {
-      const message = `El archivo "${oversizedFile.name}" supera el tamaño máximo permitido de ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`;
+      const message = SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE;
       setDocumentError(message);
       onNotify?.({ variant: 'danger', message });
       setPendingUploadFiles([]);
@@ -882,7 +886,7 @@ function SessionDocumentsAccordionItem({
 
     const totalSize = filteredFiles.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > SESSION_DOCUMENT_SIZE_LIMIT_BYTES) {
-      const message = `El tamaño total de los archivos seleccionados supera el límite permitido de ${SESSION_DOCUMENT_SIZE_LIMIT_LABEL}`;
+      const message = SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE;
       setDocumentError(message);
       onNotify?.({ variant: 'danger', message });
       setPendingUploadFiles([]);
