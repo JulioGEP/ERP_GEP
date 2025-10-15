@@ -54,6 +54,7 @@ import {
   deleteSessionStudent,
   fetchSessionPublicLink,
   createSessionPublicLink,
+  type SessionPublicLink,
   SESSION_DOCUMENT_SIZE_LIMIT_BYTES,
   SESSION_DOCUMENT_SIZE_LIMIT_LABEL,
   SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE,
@@ -222,6 +223,7 @@ function SessionStudentsAccordionItem({
       qc.setQueryData(['session-public-link', dealId, sessionId], link);
     },
   });
+  const resetPublicLinkMutation = createPublicLinkMutation.reset;
 
   useEffect(() => {
     setEditingId(null);
@@ -231,9 +233,11 @@ function SessionStudentsAccordionItem({
     setSaving(false);
     setUpdatingId(null);
     setDeletingId(null);
-    createPublicLinkMutation.reset();
+    if (typeof resetPublicLinkMutation === 'function') {
+      resetPublicLinkMutation();
+    }
     setGeneratedLinks([]);
-  }, [dealId, sessionId, createPublicLinkMutation]);
+  }, [dealId, sessionId, resetPublicLinkMutation]);
 
   const students = studentsQuery.data ?? [];
   const studentsLoading = studentsQuery.isLoading;
@@ -265,7 +269,10 @@ function SessionStudentsAccordionItem({
       }
 
       const normalizedLink = { ...publicLink, active: true };
-      const existingIndex = current.findIndex((item) => item.id === normalizedLink.id);
+      const currentKey = `${normalizedLink.id}-${normalizedLink.token ?? ''}`;
+      const existingIndex = current.findIndex(
+        (item) => `${item.id}-${item.token ?? ''}` === currentKey,
+      );
 
       if (existingIndex >= 0) {
         return current.map((item, index) =>
