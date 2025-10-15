@@ -1,4 +1,12 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ChangeEvent,
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Alert, Button, Card, Form, Spinner } from 'react-bootstrap';
 
 import { ApiError, updateSessionStudent, uploadSessionCertificate } from '../presupuestos/api';
@@ -153,6 +161,31 @@ export function CertificadosPage() {
   const [generationTotal, setGenerationTotal] = useState(0);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationResults, setGenerationResults] = useState<GenerationResult[]>([]);
+  const certificateModulePromiseRef = useRef<Promise<CertificatePdfModule | null> | null>(null);
+
+  const ensureCertificateGenerator = useCallback(async (): Promise<CertificatePdfModule> => {
+    const currentGenerator = window.certificatePdf;
+    if (currentGenerator && typeof currentGenerator.generate === 'function') {
+      return currentGenerator;
+    }
+
+    if (!certificateModulePromiseRef.current) {
+      certificateModulePromiseRef.current = import('./lib/pdf/certificate-pdf')
+        .then(() => window.certificatePdf ?? null)
+        .catch((error) => {
+          certificateModulePromiseRef.current = null;
+          throw error;
+        });
+    }
+
+    const loadedGenerator = await certificateModulePromiseRef.current;
+    if (loadedGenerator && typeof loadedGenerator.generate === 'function') {
+      return loadedGenerator;
+    }
+
+    certificateModulePromiseRef.current = null;
+    throw new Error('El generador de certificados no está disponible.');
+  }, []);
 
   useEffect(() => {
     setEditableRows(rows.map((row) => ({ ...row })));
@@ -165,6 +198,12 @@ export function CertificadosPage() {
     setGenerationResults([]);
   }, [selectedSessionId]);
 
+  useEffect(() => {
+    void ensureCertificateGenerator().catch(() => {
+      // The generator will be re-attempted when trying to generate certificates.
+    });
+  }, [ensureCertificateGenerator]);
+
   const handleRowsChange = useCallback((nextRows: CertificateRow[]) => {
     setEditableRows(nextRows);
   }, []);
@@ -174,7 +213,6 @@ export function CertificadosPage() {
       const dealId = deal?.deal_id ? String(deal.deal_id).trim() : '';
       const sessionId = selectedSessionId ? String(selectedSessionId).trim() : '';
       const rowsToProcess = options?.rows ? options.rows.slice() : editableRows.slice();
-      const pdfGenerator = window.certificatePdf;
       const shouldResetResults = options?.resetResults !== false;
 
       setGenerationError(null);
@@ -202,8 +240,11 @@ export function CertificadosPage() {
         return;
       }
 
-      if (!pdfGenerator || typeof pdfGenerator.generate !== 'function') {
-        setGenerationError('El generador de certificados no está disponible.');
+      let pdfGenerator: CertificatePdfModule;
+      try {
+        pdfGenerator = await ensureCertificateGenerator();
+      } catch (error) {
+        setGenerationError(resolveGenerationError(error));
         return;
       }
 
@@ -327,7 +368,13 @@ export function CertificadosPage() {
         setGenerating(false);
       }
     },
-    [deal?.deal_id, selectedSessionId, editableRows, selectSession],
+    [
+      deal?.deal_id,
+      selectedSessionId,
+      editableRows,
+      selectSession,
+      ensureCertificateGenerator,
+    ],
   );
 
   const handleGenerateCertificates = useCallback(() => {
