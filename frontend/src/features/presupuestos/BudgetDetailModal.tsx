@@ -332,8 +332,31 @@ export function BudgetDetailModal({
       setShowUploadDialog(false);
       setPendingUploadFile(null);
       setIsDragActive(false);
-    } catch (error: any) {
-      alert(error?.message || 'No se pudo subir el documento');
+    } catch (error: unknown) {
+      console.error('[BudgetDetailModal] Error al subir documento del presupuesto', error);
+      const fallbackMessage = 'No se pudo subir el documento';
+      let message = fallbackMessage;
+
+      if (isApiError(error)) {
+        const parts: string[] = [];
+        const baseMessage = error.message?.trim().length ? error.message : fallbackMessage;
+        parts.push(baseMessage);
+        const meta: string[] = [];
+        if (error.code?.trim().length) {
+          meta.push(`código: ${error.code}`);
+        }
+        if (typeof error.status === 'number') {
+          meta.push(`estado: ${error.status}`);
+        }
+        if (meta.length) {
+          parts.push(`(${meta.join(', ')})`);
+        }
+        message = parts.join(' ');
+      } else if (error instanceof Error) {
+        message = error.message?.trim().length ? error.message : fallbackMessage;
+      }
+
+      alert(message);
     } finally {
       setUploadingDocument(false);
     }
