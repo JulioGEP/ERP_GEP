@@ -15,63 +15,176 @@ import { CertificateTable } from './CertificateTable';
 import { CertificateToolbar, type CertificateToolbarProgressStatus } from './CertificateToolbar';
 import type { CertificateRow, CertificateSession } from './lib/mappers';
 import type { DealDetail } from '../../types/deal';
+import { generateCertificatePDF, type CertificateGenerationData } from './pdf/generator';
+import { pdfMakeReady } from './lib/pdf/pdfmake-initializer';
 
 import './styles/certificados.scss';
 
-type CertificatePdfRowStudent = {
-  nombre?: string;
-  apellido?: string;
-  dni?: string;
-  documentType?: string;
-};
+function toTrimmedString(value?: string | null): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
 
-type CertificatePdfRowDeal = {
-  id?: string;
-  sedeLabel?: string | null;
-  organizationName?: string | null;
-};
+function parseHoursValue(value?: string | number | null): number | null {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalised = value.replace(',', '.').trim();
+    if (!normalised.length) {
+      return null;
+    }
+    const parsed = Number(normalised);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return null;
+}
 
-type CertificatePdfRowSession = {
-  id?: string;
-  nombre?: string | null;
-  fechaInicioUtc?: string | null;
-  formattedStartDate?: string | null;
-  secondDateLabel?: string | null;
-  location?: string | null;
-  productHours?: number | null;
-};
+function normaliseSessionDate(value?: string | null): string {
+  const trimmed = toTrimmedString(value);
+  if (!trimmed.length) {
+    return '';
+  }
 
-type CertificatePdfRowProduct = {
-  id?: string;
-  name?: string | null;
-  templateName?: string | null;
-  hours?: number | null;
-};
+  const directDate = new Date(trimmed);
+  if (!Number.isNaN(directDate.getTime())) {
+    return trimmed;
+  }
 
-type CertificatePdfRowMetadata = {
-  cliente?: string | null;
-  trainer?: string | null;
-  primaryDateLabel?: string | null;
-  secondaryDateLabel?: string | null;
-  locationLabel?: string | null;
-  durationLabel?: string | null;
-  trainingLabel?: string | null;
-};
+  const match = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (match) {
+    const [, day, month, year] = match;
+    return `${year.padStart(4, '0')}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
 
-type CertificatePdfRowInput = {
-  alumno: CertificatePdfRowStudent;
-  deal?: CertificatePdfRowDeal;
-  session?: CertificatePdfRowSession;
-  producto?: CertificatePdfRowProduct;
-  metadata?: CertificatePdfRowMetadata;
-};
+  return trimmed;
+}
 
-type CertificatePdfModule = {
-  generate: (
-    row: CertificatePdfRowInput,
-    options?: { download?: boolean },
-  ) => Promise<{ fileName: string; blob: Blob }>;
-};
+function mapRowToCertificateGenerationData(
+  row: CertificateRow,
+  context: { deal: DealDetail | null; session: CertificateSession | null },
+): CertificateGenerationData {
+  const nombre = toTrimmedString(row.nombre);
+  const apellido = toTrimmedString(row.apellidos);
+  const dni = toTrimmedString(row.dni);
+  const sessionDate = normaliseSessionDate(context.session?.fecha_inicio_utc ?? row.fecha);
+  const sede = toTrimmedString(context.deal?.sede_label ?? row.lugar);
+  const productName = toTrimmedString(context.session?.productName ?? row.formacion);
+  const hours =
+    parseHoursValue(context.session?.productHours ?? null) ?? parseHoursValue(row.horas ?? null);
+
+  if (!sessionDate) {
+    throw new Error('Falta la fecha de la sesión para generar el certificado.');
+  }
+
+  if (!sede) {
+    throw new Error('Falta la sede para generar el certificado.');
+  }
+
+  if (!productName) {
+    throw new Error('Falta la formación para generar el certificado.');
+  }
+
+  if (hours === null || hours <= 0) {
+    throw new Error('Faltan las horas de la formación para generar el certificado.');
+  }
+
+  return {
+    alumno: {
+      nombre,
+      apellido,
+      dni,
+    },
+    sesion: {
+      fecha_inicio_utc: sessionDate,
+    },
+    deal: {
+      sede_labels: sede,
+    },
+    producto: {
+      name: productName,
+      hours,
+    },
+  };
+}
+
+function slugifyForFileName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+}
+
+function formatDateForFileName(value?: string | null): string | null {
+  const trimmed = toTrimmedString(value);
+  if (!trimmed.length) {
+    return null;
+  }
+
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  const match = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (match) {
+    const [, day, month, year] = match;
+    return `${year.padStart(4, '0')}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  const fallback = slugifyForFileName(trimmed);
+  return fallback.length ? fallback : null;
+}
+
+function buildCertificateFileName(row: CertificateRow, session: CertificateSession | null): string {
+  const fullName = `${toTrimmedString(row.nombre)} ${toTrimmedString(row.apellidos)}`.trim();
+  const dni = toTrimmedString(row.dni);
+  const training = toTrimmedString(session?.productName ?? row.formacion);
+  const baseSlug = slugifyForFileName(fullName || dni || training || 'certificado');
+  const dateSlug =
+    formatDateForFileName(session?.fecha_inicio_utc ?? row.fecha) ?? undefined;
+
+  const parts = ['certificado'];
+  if (baseSlug) {
+    parts.push(baseSlug);
+  }
+  if (dateSlug) {
+    parts.push(dateSlug);
+  }
+
+  return `${parts.join('-')}.pdf`;
+}
+
+function triggerCertificateDownload(blob: Blob, fileName: string) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+
+  const downloadUrl = URL.createObjectURL(blob);
+
+  try {
+    const openedWindow = window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+    if (openedWindow) {
+      openedWindow.opener = null;
+    }
+
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName;
+    link.rel = 'noopener';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } finally {
+    setTimeout(() => {
+      URL.revokeObjectURL(downloadUrl);
+    }, 0);
+  }
+}
 
 const CERTIFICATE_BATCH_SIZE = 5;
 const CERTIFICATE_MAX_RETRIES = 3;
@@ -129,12 +242,6 @@ function wait(delay: number) {
   });
 }
 
-declare global {
-  interface Window {
-    certificatePdf?: CertificatePdfModule;
-  }
-}
-
 const SESSION_DATE_FORMATTER = new Intl.DateTimeFormat('es-ES', {
   day: '2-digit',
   month: '2-digit',
@@ -155,98 +262,6 @@ function buildSessionLabel(session: CertificateSession): string {
   if (session.nombre_cache) parts.push(session.nombre_cache);
   if (session.productName) parts.push(session.productName);
   return parts.join(' · ');
-}
-
-function toNullableString(value?: string | null): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
-}
-
-function safeString(value?: string | number | null): string {
-  if (value === null || value === undefined) {
-    return '';
-  }
-  return String(value);
-}
-
-function mapRowToPdfRow(
-  row: CertificateRow,
-  context: { deal: DealDetail | null; session: CertificateSession | null },
-): CertificatePdfRowInput {
-  const documentType = row.dni?.trim() ? 'DNI' : undefined;
-  const deal = context.deal ?? null;
-  const session = context.session ?? null;
-
-  const dealId = deal?.deal_id != null ? safeString(deal.deal_id) : undefined;
-  const sedeLabel = toNullableString(deal?.sede_label ?? null);
-  const organizationName = toNullableString(deal?.organization?.name ?? null);
-
-  const sessionId = session?.id ? safeString(session.id) : undefined;
-  const sessionName = toNullableString(session?.nombre_cache ?? null);
-  const sessionStartUtc = toNullableString(session?.fecha_inicio_utc ?? null);
-  const sessionHours = session?.productHours ?? null;
-
-  const productId = session?.deal_product_id != null ? safeString(session.deal_product_id) : undefined;
-  const productName = toNullableString(session?.productName ?? null);
-  const productHours = session?.productHours ?? null;
-  const templateName = toNullableString(row.formacion);
-
-  const formattedStartDate = toNullableString(row.fecha);
-  const secondaryDateLabel = toNullableString(row.fecha2);
-  const locationLabel = toNullableString(row.lugar) ?? sedeLabel;
-  const durationLabel = toNullableString(row.horas);
-
-  const resolvedHours = (() => {
-    if (typeof productHours === 'number') {
-      return productHours;
-    }
-    if (typeof sessionHours === 'number') {
-      return sessionHours;
-    }
-    const parsed = Number(row.horas);
-    return Number.isNaN(parsed) ? null : parsed;
-  })();
-
-  return {
-    alumno: {
-      nombre: row.nombre,
-      apellido: row.apellidos,
-      dni: row.dni,
-      documentType,
-    },
-    deal: {
-      id: dealId,
-      sedeLabel,
-      organizationName,
-    },
-    session: {
-      id: sessionId,
-      nombre: sessionName,
-      fechaInicioUtc: sessionStartUtc,
-      formattedStartDate,
-      secondDateLabel: secondaryDateLabel,
-      location: locationLabel,
-      productHours: sessionHours ?? null,
-    },
-    producto: {
-      id: productId,
-      name: productName,
-      templateName,
-      hours: resolvedHours,
-    },
-    metadata: {
-      cliente: toNullableString(row.cliente),
-      trainer: toNullableString(row.irata),
-      primaryDateLabel: formattedStartDate,
-      secondaryDateLabel,
-      locationLabel,
-      durationLabel,
-      trainingLabel: templateName ?? productName ?? null,
-    },
-  };
 }
 
 function buildStudentDisplayName(row: CertificateRow): string {
@@ -313,7 +328,6 @@ export function CertificadosPage() {
   const [generationResults, setGenerationResults] = useState<GenerationResult[]>([]);
   const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>(() => createGenerationSteps());
   const [isCancellingGeneration, setIsCancellingGeneration] = useState(false);
-  const certificateModulePromiseRef = useRef<Promise<CertificatePdfModule | null> | null>(null);
   const generationAbortRef = useRef<{ cancelled: boolean } | null>(null);
 
   const resetGenerationSteps = useCallback(() => {
@@ -329,30 +343,6 @@ export function CertificadosPage() {
     [setGenerationSteps],
   );
 
-  const ensureCertificateGenerator = useCallback(async (): Promise<CertificatePdfModule> => {
-    const currentGenerator = window.certificatePdf;
-    if (currentGenerator && typeof currentGenerator.generate === 'function') {
-      return currentGenerator;
-    }
-
-    if (!certificateModulePromiseRef.current) {
-      certificateModulePromiseRef.current = import('./lib/pdf/certificate-pdf')
-        .then(() => window.certificatePdf ?? null)
-        .catch((error) => {
-          certificateModulePromiseRef.current = null;
-          throw error;
-        });
-    }
-
-    const loadedGenerator = await certificateModulePromiseRef.current;
-    if (loadedGenerator && typeof loadedGenerator.generate === 'function') {
-      return loadedGenerator;
-    }
-
-    certificateModulePromiseRef.current = null;
-    throw new Error('El generador de certificados no está disponible.');
-  }, []);
-
   useEffect(() => {
     setEditableRows(rows.map((row) => ({ ...row })));
   }, [rows]);
@@ -366,10 +356,10 @@ export function CertificadosPage() {
   }, [selectedSessionId, resetGenerationSteps]);
 
   useEffect(() => {
-    void ensureCertificateGenerator().catch(() => {
-      // The generator will be re-attempted when trying to generate certificates.
+    void pdfMakeReady.catch(() => {
+      // pdfMake se inicializará de nuevo cuando el usuario intente generar.
     });
-  }, [ensureCertificateGenerator]);
+  }, []);
 
   const handleRowsChange = useCallback((nextRows: CertificateRow[]) => {
     setEditableRows(nextRows);
@@ -404,6 +394,7 @@ export function CertificadosPage() {
       }
 
       if (rowsToProcess.some((row) => !isRowComplete(row))) {
+        setGenerationError('Completa el nombre, los apellidos y el DNI de todos los alumnos.');
         return;
       }
 
@@ -419,10 +410,9 @@ export function CertificadosPage() {
       resetGenerationSteps();
       setGenerationStepStatus('loadGenerator', 'working');
 
-      let pdfGenerator: CertificatePdfModule;
       try {
         throwIfCancelled();
-        pdfGenerator = await ensureCertificateGenerator();
+        await pdfMakeReady;
         throwIfCancelled();
         setGenerationStepStatus('loadGenerator', 'success');
       } catch (error) {
@@ -478,12 +468,20 @@ export function CertificadosPage() {
           let currentStage: GenerationFailureStage = 'generate';
           try {
             throwIfCancelled();
-            const pdfRow = mapRowToPdfRow(row, { deal, session: selectedSession });
-            const { blob, fileName } = await pdfGenerator.generate(pdfRow, { download: false });
+            const certificateData = mapRowToCertificateGenerationData(row, {
+              deal,
+              session: selectedSession,
+            });
+            const blob = await generateCertificatePDF(certificateData);
             throwIfCancelled();
+
             if (!(blob instanceof Blob) || !blob.size) {
               throw new Error('El certificado generado está vacío.');
             }
+
+            const fileName = buildCertificateFileName(row, selectedSession ?? null);
+            triggerCertificateDownload(blob, fileName);
+            throwIfCancelled();
 
             currentStage = 'upload';
             if (!hasStartedUpload) {
@@ -614,11 +612,11 @@ export function CertificadosPage() {
       }
     },
     [
-      deal?.deal_id,
+      deal,
+      selectedSession,
       selectedSessionId,
       editableRows,
       selectSession,
-      ensureCertificateGenerator,
       resetGenerationSteps,
       setGenerationStepStatus,
     ],
