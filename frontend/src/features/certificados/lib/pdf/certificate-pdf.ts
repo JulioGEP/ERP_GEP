@@ -1,6 +1,8 @@
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
 
+import { POPPINS_FONT_BASE64 } from './poppins-fonts';
+
 const basePdfMake = pdfMake;
 const baseVfs = pdfFonts?.pdfMake?.vfs ?? null;
 
@@ -64,24 +66,32 @@ if (globalScope) {
     height: 595.28
   };
 
-  const FONT_SOURCES = {
-    'Poppins-Regular.ttf': [
-      `${CERTIFICATE_ASSETS_BASE_PATH}Poppins-Regular.ttf`,
-      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-normal.ttf'
-    ],
-    'Poppins-Italic.ttf': [
-      `${CERTIFICATE_ASSETS_BASE_PATH}Poppins-Italic.ttf`,
-      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-italic.ttf'
-    ],
-    'Poppins-SemiBold.ttf': [
-      `${CERTIFICATE_ASSETS_BASE_PATH}Poppins-SemiBold.ttf`,
-      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-normal.ttf'
-    ],
-    'Poppins-SemiBoldItalic.ttf': [
-      `${CERTIFICATE_ASSETS_BASE_PATH}Poppins-SemiBoldItalic.ttf`,
+  const CDN_FONT_SOURCES = {
+    'Poppins-Regular.ttf':
+      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-normal.ttf',
+    'Poppins-Italic.ttf':
+      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-italic.ttf',
+    'Poppins-SemiBold.ttf':
+      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-normal.ttf',
+    'Poppins-SemiBoldItalic.ttf':
       'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-italic.ttf'
-    ]
-  };
+  } as const;
+
+  const FONT_SOURCES = Object.fromEntries(
+    Object.entries(CDN_FONT_SOURCES).map(([fileName, cdnUrl]) => {
+      const candidates: string[] = [];
+      const inlineFont = POPPINS_FONT_BASE64[fileName];
+
+      if (inlineFont) {
+        candidates.push(inlineFont);
+      }
+
+      candidates.push(`${CERTIFICATE_ASSETS_BASE_PATH}${fileName}`);
+      candidates.push(cdnUrl);
+
+      return [fileName, candidates as const];
+    })
+  ) as Record<keyof typeof CDN_FONT_SOURCES, readonly string[]>;
 
   const REQUIRED_FONT_STYLES = ['normal', 'bold', 'italics', 'bolditalics'] as const;
 
@@ -323,10 +333,59 @@ if (globalScope) {
     });
   }
 
-  async function loadFontAsBase64(url) {
-    const response = await fetch(url);
+  function extractBase64FromDataUri(dataUri) {
+    const BASE64_SEPARATOR = 'base64,';
+    const separatorIndex = dataUri.indexOf(BASE64_SEPARATOR);
+    if (separatorIndex === -1) {
+      const commaIndex = dataUri.indexOf(',');
+      return commaIndex === -1 ? '' : dataUri.slice(commaIndex + 1);
+    }
+    return dataUri.slice(separatorIndex + BASE64_SEPARATOR.length);
+  }
+
+  function looksLikeBase64(source) {
+    if (typeof source !== 'string') {
+      return false;
+    }
+    const trimmedSource = source.trim();
+    if (!trimmedSource) {
+      return false;
+    }
+    if (trimmedSource.startsWith('data:')) {
+      return true;
+    }
+    if (trimmedSource.includes('://')) {
+      return false;
+    }
+    if (trimmedSource.startsWith('/') || trimmedSource.startsWith('./')) {
+      return false;
+    }
+    const base64Pattern = /^[0-9a-zA-Z+/=]+$/;
+    return base64Pattern.test(trimmedSource) && trimmedSource.length % 4 === 0;
+  }
+
+  async function loadFontAsBase64(source) {
+    if (typeof source !== 'string' || !source) {
+      throw new Error('No se ha proporcionado un origen válido para la fuente.');
+    }
+
+    const trimmedSource = source.trim();
+
+    if (!trimmedSource) {
+      throw new Error('El origen de la fuente está vacío.');
+    }
+
+    if (trimmedSource.startsWith('data:')) {
+      return extractBase64FromDataUri(trimmedSource);
+    }
+
+    if (looksLikeBase64(trimmedSource)) {
+      return trimmedSource;
+    }
+
+    const response = await fetch(trimmedSource);
     if (!response.ok) {
-      throw new Error(`Respuesta ${response.status} al cargar ${url}`);
+      throw new Error(`Respuesta ${response.status} al cargar ${trimmedSource}`);
     }
     const buffer = await response.arrayBuffer();
     return arrayBufferToBase64(buffer);
@@ -771,6 +830,9 @@ if (globalScope) {
 
   async function buildDocDefinition(row) {
     await ensurePoppinsFont();
+    const preferredFontFamily =
+      global.pdfMake && isFontFullyRegistered(global.pdfMake, 'Poppins') ? 'Poppins' : 'Roboto';
+
     const [backgroundImage, sidebarImage, footerImage, logoImage] = await Promise.all([
       getCachedAsset('background'),
       getCachedAsset('leftSidebar'),
@@ -922,7 +984,7 @@ if (globalScope) {
         fontSize: adjustFontSize(10),
         lineHeight: adjustLineHeight(1.35),
         color: '#1f274d',
-        font: 'Poppins'
+        font: preferredFontFamily
       },
       info: {
         title: `Certificado - ${fullName}`,
