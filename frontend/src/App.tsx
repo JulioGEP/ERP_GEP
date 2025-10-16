@@ -379,7 +379,7 @@ export default function App() {
                     active={
                       item.path
                         ? item.path === '/'
-                          ? location.pathname === '/'
+                          ? !isCertificatesView && activeView === item.key
                           : location.pathname.startsWith(item.path)
                         : !isCertificatesView && activeView === item.key
                     }
