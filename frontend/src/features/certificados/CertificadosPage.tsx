@@ -325,6 +325,15 @@ export function CertificadosPage() {
         }
 
         const message = resolveGenerationError(lastError);
+        if (
+          lastError instanceof ApiError &&
+          (lastError.code === 'NETWORK_ERROR' || lastError.code === 'TIMEOUT')
+        ) {
+          setGenerationError((current) =>
+            current ??
+            'No se pudo contactar con el servicio de certificados (endpoint no alcanzable o timeout).',
+          );
+        }
         const attemptsInfo =
           CERTIFICATE_MAX_RETRIES > 1 ? ` Intentos realizados: ${CERTIFICATE_MAX_RETRIES}.` : '';
         return {

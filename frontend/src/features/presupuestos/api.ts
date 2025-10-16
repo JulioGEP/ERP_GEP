@@ -9,6 +9,110 @@ import type {
   DealNote,
 } from "../../types/deal";
 
+type DeploymentContext = "local" | "preview" | "production";
+
+type ApiBaseResolution = {
+  baseUrl: string;
+  context: DeploymentContext;
+  targetDescription: string;
+};
+
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+function sanitizeEnvValue(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function detectDeploymentContext(): DeploymentContext {
+  const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
+  const envContext = sanitizeEnvValue(
+    env.VITE_NETLIFY_CONTEXT || env.NETLIFY_CONTEXT || env.VITE_DEPLOYMENT_CONTEXT,
+  );
+
+  if (envContext) {
+    const normalized = envContext.toLowerCase();
+    if (["dev", "development", "local"].includes(normalized)) {
+      return "local";
+    }
+    if (["preview", "branch-deploy", "staging"].includes(normalized)) {
+      return "preview";
+    }
+    if (normalized === "production" || normalized === "prod") {
+      return "production";
+    }
+  }
+
+  if (import.meta.env?.DEV) {
+    return "local";
+  }
+
+  if (typeof window !== "undefined" && window.location) {
+    const { hostname, port } = window.location;
+    const normalizedHost = hostname.toLowerCase();
+    if (
+      LOCAL_HOSTNAMES.has(normalizedHost) ||
+      normalizedHost.endsWith(".local") ||
+      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(normalizedHost)
+    ) {
+      return "local";
+    }
+
+    if (/deploy-preview/i.test(normalizedHost) || normalizedHost.includes("--")) {
+      return "preview";
+    }
+
+    if (port === "8888") {
+      return "local";
+    }
+  }
+
+  return "production";
+}
+
+function resolveApiBase(): ApiBaseResolution {
+  const env = (import.meta.env ?? {}) as Record<string, string | undefined>;
+  const explicitBase =
+    sanitizeEnvValue(env.VITE_API_BASE) || sanitizeEnvValue(env.VITE_FUNCTIONS_BASE_URL);
+
+  if (explicitBase) {
+    return {
+      baseUrl: explicitBase.replace(/\/$/, ""),
+      context: detectDeploymentContext(),
+      targetDescription: explicitBase,
+    };
+  }
+
+  const context = detectDeploymentContext();
+  if (context === "local") {
+    if (typeof window !== "undefined" && window.location?.port === "8888") {
+      return {
+        baseUrl: "/.netlify/functions",
+        context,
+        targetDescription: `${window.location.protocol}//${window.location.host}`,
+      };
+    }
+
+    return {
+      baseUrl: "http://localhost:8888/.netlify/functions",
+      context,
+      targetDescription: "http://localhost:8888",
+    };
+  }
+
+  const sameOriginDescription =
+    typeof window !== "undefined" && window.location
+      ? `${window.location.protocol}//${window.location.host}`
+      : "same-origin";
+
+  return {
+    baseUrl: "/.netlify/functions",
+    context,
+    targetDescription: sameOriginDescription,
+  };
+}
+
 export type SessionEstado =
   | 'BORRADOR'
   | 'PLANIFICADA'
@@ -151,17 +255,19 @@ export type SessionAvailability = {
 
 type Json = any;
 
-// Netlify Functions base (auto local/Netlify)
-// - Si estás en localhost:5173 (Vite), apunta a http://localhost:8888/.netlify/functions
-// - Si estás sirviendo vía Netlify Dev (8888) o en producción, usa ruta relativa
-export const API_BASE =
-  typeof window !== "undefined" && window.location
-    ? (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-        ? (window.location.port === "8888"
-            ? "/.netlify/functions"
-            : "http://localhost:8888/.netlify/functions")
-        : "/.netlify/functions"
-    : "/.netlify/functions";
+const API_BASE_RESOLUTION = resolveApiBase();
+
+export const API_BASE = API_BASE_RESOLUTION.baseUrl;
+export const API_DEPLOYMENT_CONTEXT = API_BASE_RESOLUTION.context;
+
+if (typeof window !== "undefined") {
+  // eslint-disable-next-line no-console
+  console.info("[api] Base de funciones resuelta", {
+    baseUrl: API_BASE,
+    context: API_DEPLOYMENT_CONTEXT,
+    target: API_BASE_RESOLUTION.targetDescription,
+  });
+}
 
 /* =========================
  * Utilidades de normalizado
@@ -769,33 +875,131 @@ function normalizeDriveUrlInput(value: unknown): string | null {
  * Request helper (fetch)
  * ===================== */
 
-async function request(path: string, init?: RequestInit) {
-  let res: Response;
-  try {
-    res = await fetch(
-      `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`,
-      {
-        ...init,
-        headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-      }
-    );
-  } catch (e: any) {
-    throw new ApiError("NETWORK_ERROR", e?.message || "Fallo de red");
+const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
+
+type RequestOptions = {
+  timeoutMs?: number;
+  requestName?: string;
+  timeoutMessage?: string;
+};
+
+async function request(path: string, init?: RequestInit, options?: RequestOptions) {
+  const urlPath = path.startsWith("/") ? path : `/${path}`;
+  const targetUrl = `${API_BASE}${urlPath}`;
+  const requestName = options?.requestName ?? urlPath;
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+
+  const controller = new AbortController();
+  const originalSignal = init?.signal;
+  if (originalSignal) {
+    if (originalSignal.aborted) {
+      controller.abort(originalSignal.reason);
+    } else {
+      originalSignal.addEventListener(
+        "abort",
+        () => {
+          controller.abort(originalSignal.reason);
+        },
+        { once: true },
+      );
+    }
   }
 
-  let data: any = {};
-  try {
-    data = await res.json();
-  } catch {
-    /* puede no haber body */
+  let timedOut = false;
+  const timeoutId =
+    Number.isFinite(timeoutMs) && timeoutMs !== Infinity && timeoutMs > 0
+      ? setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs)
+      : null;
+
+  const headers = new Headers(init?.headers ?? {});
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
   }
 
-  if (!res.ok || data?.ok === false) {
-    const code = data?.error_code || data?.code || `HTTP_${res.status}`;
-    const msg = data?.message || "Error inesperado";
-    throw new ApiError(code, msg, res.status);
+  const requestInit: RequestInit = {
+    ...init,
+    headers,
+    signal: controller.signal,
+  };
+
+  // eslint-disable-next-line no-console
+  console.info(`[api] ${requestName} -> ${targetUrl}`, {
+    method: requestInit.method ?? "GET",
+    timeoutMs,
+  });
+
+  try {
+    const res = await fetch(targetUrl, requestInit);
+
+    // eslint-disable-next-line no-console
+    console.info(`[api] ${requestName} <- ${res.status}`, {
+      ok: res.ok,
+      url: targetUrl,
+    });
+
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch {
+      /* puede no haber body */
+    }
+
+    if (!res.ok || data?.ok === false) {
+      const code = data?.error_code || data?.code || `HTTP_${res.status}`;
+      const msg = data?.message || "Error inesperado";
+      throw new ApiError(code, msg, res.status);
+    }
+
+    return data;
+  } catch (error: any) {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+
+    if (timedOut) {
+      // eslint-disable-next-line no-console
+      console.error(`[api] ${requestName} !! timeout`, {
+        url: targetUrl,
+        timeoutMs,
+      });
+      throw new ApiError(
+        "TIMEOUT",
+        options?.timeoutMessage ?? "La solicitud expiró antes de recibir respuesta.",
+      );
+    }
+
+    if (error?.name === "AbortError") {
+      const abortReason = controller.signal?.reason ?? originalSignal?.reason;
+      const reasonMessage =
+        typeof abortReason === "string"
+          ? abortReason
+          : abortReason instanceof Error && abortReason.message
+            ? abortReason.message
+            : null;
+      // eslint-disable-next-line no-console
+      console.warn(`[api] ${requestName} !! cancelled`, {
+        url: targetUrl,
+      });
+      throw new ApiError(
+        "CANCELLED",
+        reasonMessage ?? "La solicitud se canceló antes de completarse.",
+      );
+    }
+
+    // eslint-disable-next-line no-console
+    console.error(`[api] ${requestName} !! network-error`, {
+      url: targetUrl,
+      message: error?.message ?? "Fallo de red",
+    });
+    throw new ApiError("NETWORK_ERROR", error?.message || "Fallo de red");
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
-  return data;
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -1571,6 +1775,8 @@ export type SessionCertificateUploadResult = {
   student: { id: string | null; drive_url: string | null } | null;
 };
 
+const CERTIFICATE_UPLOAD_TIMEOUT_MS = 60_000;
+
 export async function uploadSessionCertificate(params: {
   dealId: string;
   sessionId: string;
@@ -1615,10 +1821,19 @@ export async function uploadSessionCertificate(params: {
     },
   };
 
-  const data = await request('/documents/upload', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  const data = await request(
+    '/documents/upload',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    {
+      requestName: 'uploadSessionCertificate',
+      timeoutMs: CERTIFICATE_UPLOAD_TIMEOUT_MS,
+      timeoutMessage:
+        'La carga del certificado tardó demasiado. Comprueba que el endpoint de funciones está disponible.',
+    },
+  );
 
   const docId = toStringValue(data?.doc_id) ?? null;
   const uploadedFileName = toStringValue(data?.file_name) ?? null;
