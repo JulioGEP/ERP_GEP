@@ -34,6 +34,8 @@ import { CalendarView } from './features/calendar/CalendarView';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { CertificadosPage } from './features/certificados/CertificadosPage';
 
+const ACTIVE_VIEW_STORAGE_KEY = 'erp-gep-active-view';
+
 type NavView = {
   key: string;
   label: string;
@@ -95,7 +97,38 @@ export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
-  const [activeView, setActiveView] = useState('Presupuestos');
+  const [activeView, setActiveViewState] = useState(() => {
+    if (typeof window === 'undefined') {
+      return 'Presupuestos';
+    }
+
+    const { pathname } = window.location;
+    if (pathname.startsWith('/certificados')) {
+      return 'Certificados';
+    }
+
+    try {
+      const storedView = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
+      if (storedView && VIEW_ITEMS.some((item) => item.key === storedView)) {
+        return storedView;
+      }
+    } catch (error) {
+      console.warn('No se pudo leer la vista activa almacenada', error);
+    }
+
+    return 'Presupuestos';
+  });
+
+  const setActiveView = useCallback((view: string) => {
+    setActiveViewState(view);
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
+      } catch (error) {
+        console.warn('No se pudo guardar la vista activa', error);
+      }
+    }
+  }, []);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [productComment, setProductComment] = useState<ProductCommentPayload | null>(null);
 
@@ -160,11 +193,16 @@ export default function App() {
 
   useEffect(() => {
     if (location.pathname.startsWith('/certificados')) {
-      setActiveView((current) => (current === 'Certificados' ? current : 'Certificados'));
-    } else if (activeView === 'Certificados' && location.pathname === '/') {
+      if (activeView !== 'Certificados') {
+        setActiveView('Certificados');
+      }
+      return;
+    }
+
+    if (activeView === 'Certificados' && location.pathname === '/') {
       setActiveView('Presupuestos');
     }
-  }, [activeView, location.pathname]);
+  }, [activeView, location.pathname, setActiveView]);
 
   const isBudgetsView = activeView === 'Presupuestos';
   const isCalendarView = activeView === 'Calendario';
