@@ -2,11 +2,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, ButtonGroup, Spinner } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
-import { fetchCalendarSessions, type CalendarSession } from './api';
+import { fetchCalendarSessions, type CalendarResource, type CalendarSession } from './api';
 import type { SessionEstado } from '../presupuestos/api';
 import { ApiError } from '../presupuestos/api';
 
-const STORAGE_KEY = 'erp-calendar-preferences';
+const STORAGE_KEY_PREFIX = 'erp-calendar-preferences';
 const MADRID_TZ = 'Europe/Madrid';
 const FETCH_PADDING_DAYS = 14;
 const DEBOUNCE_MS = 220;
@@ -39,6 +39,7 @@ const SESSION_CLASSNAMES: Record<SessionEstado, string> = {
 };
 
 type CalendarViewType = 'month' | 'week' | 'day';
+type CalendarMode = 'sessions' | 'trainers' | 'units';
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -48,6 +49,9 @@ type ToastParams = {
 type CalendarViewProps = {
   onNotify?: (toast: ToastParams) => void;
   onSessionOpen?: (session: CalendarSession) => void;
+  title?: string;
+  mode?: CalendarMode;
+  initialView?: CalendarViewType;
 };
 
 type MadridDate = { year: number; month: number; day: number };
@@ -232,21 +236,27 @@ function formatToolbarLabel(view: CalendarViewType, range: VisibleRange): string
   return `${formatter.format(start)} – ${formatter.format(end)}`;
 }
 
-function readStoredPreferences(): { view: CalendarViewType; date: Date } {
+function readStoredPreferences(
+  storageKey: string,
+  fallbackView: CalendarViewType,
+): { view: CalendarViewType; date: Date } {
   const today = new Date();
   if (typeof window === 'undefined') {
-    return { view: 'month', date: today };
+    return { view: fallbackView, date: today };
   }
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) {
-      return { view: 'month', date: today };
+      return { view: fallbackView, date: today };
     }
     const parsed = JSON.parse(raw);
-    const view = parsed?.view === 'week' || parsed?.view === 'day' ? parsed.view : 'month';
+    const view =
+      parsed?.view === 'week' || parsed?.view === 'day' || parsed?.view === 'month'
+        ? (parsed.view as CalendarViewType)
+        : fallbackView;
     return { view, date: today };
   } catch {
-    return { view: 'month', date: today };
+    return { view: fallbackView, date: today };
   }
 }
 
@@ -286,6 +296,23 @@ function computeVisibleRange(view: CalendarViewType, reference: Date): VisibleRa
 function buildChipLabel(type: 'room' | 'trainer' | 'unit', label: string, extra = 0) {
   const icon = type === 'room' ? '🏢' : type === 'trainer' ? '🧑‍🏫' : '🚐';
   return `${icon} ${extra > 0 ? `${label} +${extra}` : label}`;
+}
+
+function formatResourceName(resource: CalendarResource): string {
+  const secondary = resource.secondary?.trim();
+  return secondary?.length ? `${resource.name} ${secondary}`.trim() : resource.name;
+}
+
+function formatResourceSummary(resources: CalendarResource[], emptyLabel: string): string {
+  if (!resources.length) return emptyLabel;
+  const [first, ...rest] = resources;
+  const base = formatResourceName(first);
+  return rest.length ? `${base} +${rest.length}` : base;
+}
+
+function formatResourceDetail(resources: CalendarResource[], emptyLabel: string): string {
+  if (!resources.length) return emptyLabel;
+  return resources.map((resource) => formatResourceName(resource)).join(', ');
 }
 
 function groupSessionsByJulian(sessions: CalendarSession[]): Map<number, CalendarSession[]> {
@@ -455,8 +482,15 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   return debounced;
 }
 
-export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
-  const stored = useMemo(() => readStoredPreferences(), []);
+export function CalendarView({
+  onNotify,
+  onSessionOpen,
+  title = 'Calendario',
+  mode = 'sessions',
+  initialView = 'month',
+}: CalendarViewProps) {
+  const storageKey = `${STORAGE_KEY_PREFIX}-${mode}`;
+  const stored = useMemo(() => readStoredPreferences(storageKey, initialView), [storageKey, initialView]);
   const [view, setView] = useState<CalendarViewType>(stored.view);
   const [currentDate, setCurrentDate] = useState<Date>(stored.date);
   const [visibleRange, setVisibleRange] = useState<VisibleRange>(() => computeVisibleRange(stored.view, stored.date));
@@ -469,14 +503,14 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
     try {
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(
-          STORAGE_KEY,
+          storageKey,
           JSON.stringify({ view, date: currentDate.toISOString() }),
         );
       }
     } catch {
       /* ignore storage errors */
     }
-  }, [view, currentDate]);
+  }, [view, currentDate, storageKey]);
 
   const fetchRange = useMemo(() => {
     if (!debouncedRange) return null;
@@ -630,31 +664,51 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
 
   const renderSessionContent = (session: CalendarSession) => {
     const chips: string[] = [];
-    if (session.room) {
-      chips.push(buildChipLabel('room', session.room.name));
+    if (mode === 'sessions') {
+      if (session.room) {
+        chips.push(buildChipLabel('room', session.room.name));
+      }
+      if (session.trainers.length) {
+        const [first, ...rest] = session.trainers;
+        chips.push(buildChipLabel('trainer', formatResourceName(first), rest.length));
+      }
+      if (session.units.length) {
+        const [first, ...rest] = session.units;
+        chips.push(buildChipLabel('unit', formatResourceName(first), rest.length));
+      }
+    } else if (mode === 'trainers') {
+      if (session.trainers.length > 1) {
+        session.trainers.slice(1).forEach((trainer) => {
+          chips.push(buildChipLabel('trainer', formatResourceName(trainer)));
+        });
+      }
+    } else if (mode === 'units') {
+      if (session.units.length > 1) {
+        session.units.slice(1).forEach((unit) => {
+          chips.push(buildChipLabel('unit', formatResourceName(unit)));
+        });
+      }
     }
-    if (session.trainers.length) {
-      const [first, ...rest] = session.trainers;
-      const label = first.secondary ? `${first.name} ${first.secondary}`.trim() : first.name;
-      chips.push(buildChipLabel('trainer', label, rest.length));
-    }
-    if (session.units.length) {
-      const [first, ...rest] = session.units;
-      const label = first.secondary ? `${first.name} ${first.secondary}`.trim() : first.name;
-      chips.push(buildChipLabel('unit', label, rest.length));
-    }
-    const eventTitle = session.dealPipelineId ?? session.title;
+
+    const eventTitle =
+      mode === 'sessions'
+        ? session.dealPipelineId ?? session.title
+        : mode === 'trainers'
+        ? formatResourceSummary(session.trainers, 'Sin formador')
+        : formatResourceSummary(session.units, 'Sin unidad móvil');
 
     return (
       <div className="erp-calendar-event-content">
         <div className="erp-calendar-event-title">{eventTitle}</div>
-        <div className="erp-calendar-event-meta">
-          {chips.map((chip) => (
-            <span key={chip} className="erp-calendar-chip">
-              {chip}
-            </span>
-          ))}
-        </div>
+        {chips.length ? (
+          <div className="erp-calendar-event-meta">
+            {chips.map((chip, index) => (
+              <span key={`${chip}-${index}`} className="erp-calendar-chip">
+                {chip}
+              </span>
+            ))}
+          </div>
+        ) : null}
         <span className="erp-calendar-event-status">
           {SESSION_ESTADO_LABELS[session.estado] ?? session.estado}
         </span>
@@ -668,7 +722,7 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
     <section className="d-grid gap-4">
       <header className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
         <div>
-          <h1 className="h3 fw-bold mb-1">Calendario</h1>
+          <h1 className="h3 fw-bold mb-1">{title}</h1>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-2">
           <Button variant="outline-secondary" className="fw-semibold" onClick={handleToday}>
@@ -749,7 +803,18 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                     <div className="erp-calendar-day-label">{day.date.day}</div>
                     <div className="erp-calendar-day-events">
                       {day.sessions.map((session) => {
-                        const monthEventLabel = session.dealPipelineId ?? session.title;
+                        const monthEventLabel =
+                          mode === 'sessions'
+                            ? session.dealPipelineId ?? session.title
+                            : mode === 'trainers'
+                            ? formatResourceSummary(session.trainers, 'Sin formador')
+                            : formatResourceSummary(session.units, 'Sin unidad móvil');
+                        const monthEventTitle =
+                          mode === 'sessions'
+                            ? session.dealPipelineId ?? session.title
+                            : mode === 'trainers'
+                            ? formatResourceDetail(session.trainers, 'Sin formador')
+                            : formatResourceDetail(session.units, 'Sin unidad móvil');
                         return (
                           <div
                             key={session.id}
@@ -757,7 +822,7 @@ export function CalendarView({ onNotify, onSessionOpen }: CalendarViewProps) {
                             role="button"
                             tabIndex={0}
                             draggable
-                            title={monthEventLabel}
+                            title={monthEventTitle}
                             onClick={() => onSessionOpen?.(session)}
                             onKeyDown={(event) => {
                               if (event.key === 'Enter' || event.key === ' ') {

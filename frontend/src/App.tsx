@@ -48,7 +48,15 @@ type NavItem = NavView & {
 
 const NAVIGATION_ITEMS: NavItem[] = [
   { key: 'Presupuestos', label: 'Presupuestos', path: '/' },
-  { key: 'Calendario', label: 'Calendario' },
+  {
+    key: 'Calendario',
+    label: 'Calendario',
+    children: [
+      { key: 'Calendario/Sesiones', label: 'Por sesiones' },
+      { key: 'Calendario/Formadores', label: 'Por formador' },
+      { key: 'Calendario/Unidades', label: 'Por unidad móvil' },
+    ],
+  },
   {
     key: 'Recursos',
     label: 'Recursos',
@@ -69,7 +77,9 @@ const VIEW_ITEMS: NavView[] = NAVIGATION_ITEMS.flatMap((item) =>
 const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
   (item) =>
     item.key !== 'Presupuestos' &&
-    item.key !== 'Calendario' &&
+    item.key !== 'Calendario/Sesiones' &&
+    item.key !== 'Calendario/Formadores' &&
+    item.key !== 'Calendario/Unidades' &&
     item.key !== 'Recursos/Formadores' &&
     item.key !== 'Recursos/Salas' &&
     item.key !== 'Recursos/Unidades' &&
@@ -109,8 +119,15 @@ export default function App() {
 
     try {
       const storedView = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
-      if (storedView && VIEW_ITEMS.some((item) => item.key === storedView)) {
-        return storedView;
+      if (storedView) {
+        const normalizedView =
+          storedView === 'Calendario' ? 'Calendario/Sesiones' : storedView;
+        if (VIEW_ITEMS.some((item) => item.key === normalizedView)) {
+          if (normalizedView !== storedView) {
+            window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, normalizedView);
+          }
+          return normalizedView;
+        }
       }
     } catch (error) {
       console.warn('No se pudo leer la vista activa almacenada', error);
@@ -205,7 +222,9 @@ export default function App() {
   }, [activeView, location.pathname, setActiveView]);
 
   const isBudgetsView = activeView === 'Presupuestos';
-  const isCalendarView = activeView === 'Calendario';
+  const isCalendarSessionsView = activeView === 'Calendario/Sesiones';
+  const isCalendarTrainersView = activeView === 'Calendario/Formadores';
+  const isCalendarUnitsView = activeView === 'Calendario/Unidades';
   const isTrainersView = activeView === 'Recursos/Formadores';
   const isRoomsView = activeView === 'Recursos/Salas';
   const isMobileUnitsView = activeView === 'Recursos/Unidades';
@@ -439,8 +458,32 @@ export default function App() {
                       onDelete={handleDeleteBudget}
                     />
                   </div>
-                ) : isCalendarView ? (
-                  <CalendarView onNotify={pushToast} onSessionOpen={handleOpenCalendarSession} />
+                ) : isCalendarSessionsView ? (
+                  <CalendarView
+                    key="calendar-sesiones"
+                    title="Calendario · Por sesiones"
+                    mode="sessions"
+                    onNotify={pushToast}
+                    onSessionOpen={handleOpenCalendarSession}
+                  />
+                ) : isCalendarTrainersView ? (
+                  <CalendarView
+                    key="calendar-formadores"
+                    title="Calendario · Por formador"
+                    mode="trainers"
+                    initialView="month"
+                    onNotify={pushToast}
+                    onSessionOpen={handleOpenCalendarSession}
+                  />
+                ) : isCalendarUnitsView ? (
+                  <CalendarView
+                    key="calendar-unidades"
+                    title="Calendario · Por unidad móvil"
+                    mode="units"
+                    initialView="month"
+                    onNotify={pushToast}
+                    onSessionOpen={handleOpenCalendarSession}
+                  />
                 ) : isTrainersView ? (
                   <TrainersView onNotify={pushToast} />
                 ) : isRoomsView ? (
