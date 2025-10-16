@@ -616,9 +616,9 @@ import {
     if (!normalised) {
       return '________';
     }
-    const parsed = new Date(normalised);
-    if (Number.isNaN(parsed.getTime())) {
-      return normalised;
+    const parsed = parseDateValue(normalised);
+    if (!parsed) {
+      return normalised.replace(/[\/]/g, '-');
     }
     const formatter = new Intl.DateTimeFormat('es-ES', {
       day: 'numeric',
@@ -633,6 +633,33 @@ import {
     if (!normalised) {
       return null;
     }
+    const isoMatch = normalised.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    const slashMatch = normalised.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+    if (slashMatch) {
+      const [, rawDay, rawMonth, rawYear] = slashMatch;
+      const day = Number(rawDay);
+      const month = Number(rawMonth);
+      const year = rawYear.length === 2 ? Number(`20${rawYear}`) : Number(rawYear);
+      if (
+        Number.isInteger(day) &&
+        Number.isInteger(month) &&
+        Number.isInteger(year) &&
+        day > 0 &&
+        day <= 31 &&
+        month > 0 &&
+        month <= 12
+      ) {
+        const parsed = new Date(year, month - 1, day);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+    }
+
     const parsed = new Date(normalised);
     if (Number.isNaN(parsed.getTime())) {
       return null;
@@ -707,14 +734,24 @@ import {
 
     const normalised = normaliseText(value);
     if (normalised) {
-      return normalised;
+      const slashNormalised = normalised.replace(/[\/]/g, '-');
+      const dashMatch = slashNormalised.match(/^(\d{1,4})-(\d{1,2})-(\d{2,4})$/);
+      if (dashMatch) {
+        const [_, first, second, third] = dashMatch;
+        if (first.length === 4) {
+          return `${third.padStart(2, '0')}-${second.padStart(2, '0')}-${first}`;
+        }
+        return `${first.padStart(2, '0')}-${second.padStart(2, '0')}-${third.padStart(4, '0')}`;
+      }
+      return slashNormalised;
     }
 
     return '____';
   }
 
   function formatLocation(value) {
-    return normaliseText(value) || '________';
+    const normalised = normaliseText(value);
+    return normalised ? normalised.toUpperCase() : '________';
   }
 
   function formatDuration(value) {
@@ -747,21 +784,14 @@ import {
   }
 
   function normaliseIsoDate(value) {
-    const text = normaliseText(value);
-    if (!text) {
+    const parsed = parseDateValue(value);
+    if (!parsed) {
       return '';
     }
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-      return text;
-    }
-
-    const parsed = new Date(text);
-    if (Number.isNaN(parsed.getTime())) {
-      return '';
-    }
-
-    return parsed.toISOString().split('T')[0];
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   function formatDateForFileName(value) {
@@ -839,7 +869,7 @@ import {
         fontSize: adjustFontSize(14),
         bold: true,
         color: TITLE_TEXT_COLOR,
-        margin: [0, 0, 0, 0]
+        margin: [0, 6, 0, 18]
       },
       contentSectionTitle: {
         fontSize: adjustFontSize(12),
@@ -914,9 +944,9 @@ import {
       : 'Roboto';
 
     const [
-      rawBackgroundImage,
-      rawLeftSidebarImage,
-      rawFooterImage,
+      backgroundImage,
+      leftSidebarImage,
+      footerImage,
       logoImage
     ] = await Promise.all([
       getCachedAsset('background'),
@@ -925,18 +955,14 @@ import {
       getCachedAsset('logo')
     ]);
 
-    const backgroundImage = rawBackgroundImage === TRANSPARENT_PIXEL ? null : rawBackgroundImage;
-    const leftSidebarImage = rawLeftSidebarImage === TRANSPARENT_PIXEL ? null : rawLeftSidebarImage;
-    const footerImage = rawFooterImage === TRANSPARENT_PIXEL ? null : rawFooterImage;
-
     const [
       backgroundImageDimensions,
       leftSidebarDimensions,
       footerImageDimensions
     ] = await Promise.all([
-      measureImageDimensions(backgroundImage ?? ''),
-      measureImageDimensions(leftSidebarImage ?? ''),
-      measureImageDimensions(footerImage ?? '')
+      measureImageDimensions(backgroundImage),
+      measureImageDimensions(leftSidebarImage),
+      measureImageDimensions(footerImage)
     ]);
 
     const pageWidth = PAGE_DIMENSIONS.width;
@@ -989,7 +1015,7 @@ import {
 
     const formattedPrimaryDate = formatDateAsDayMonthYear(getPrimaryDateValue(row));
     const readableDate = trainingDate === '________' ? '' : trainingDate;
-    const readableLocation = location === '________' ? sedeLabel : location;
+    const readableLocation = location === '________' ? formatLocation(sedeLabel) : location;
     const readableDuration = duration === '____' ? '' : `${duration} horas`;
 
     const formattedLocationLabel = (() => {
@@ -1023,12 +1049,16 @@ import {
         margin: [0, 0, 0, 2]
       },
       {
-        text: `ha superado, con una duración total de ${durationLabel}, la formación de:`,
+        text: `ha superado, con una duración total de ${durationLabel}, la siguiente formación:`,
         style: 'bodyText',
         alignment: 'left',
         margin: [0, 0, 0, 10]
       },
-      { text: trainingNameDisplay, style: 'trainingName', alignment: 'left' }
+      {
+        text: `CURSO: ${trainingNameDisplay}`,
+        style: 'trainingName',
+        alignment: 'left'
+      }
     ];
 
     const metadataLines: string[] = [];
@@ -1103,9 +1133,11 @@ import {
     });
 
     const decorativeElements: Array<Record<string, unknown>> = [];
+    const overlayElements: Array<Record<string, unknown>> = [];
 
     if (rightColumnWidth > 0 && backgroundImage) {
       let backgroundWidth = rightColumnWidth;
+      let backgroundHeight = contentHeight;
       let backgroundX = rightColumnX;
       let backgroundY = pageMargins[1];
 
@@ -1120,8 +1152,10 @@ import {
         if (scaledHeight < contentHeight) {
           const scaleToHeight = contentHeight / backgroundImageDimensions.height;
           backgroundWidth = backgroundImageDimensions.width * scaleToHeight;
+          backgroundHeight = contentHeight;
           backgroundX = rightColumnX + (rightColumnWidth - backgroundWidth) / 2;
         } else {
+          backgroundHeight = scaledHeight;
           backgroundY = pageMargins[1] - (scaledHeight - contentHeight) / 2;
         }
       }
@@ -1130,6 +1164,7 @@ import {
         image: backgroundImage,
         absolutePosition: { x: backgroundX, y: backgroundY },
         width: backgroundWidth,
+        height: backgroundHeight,
         opacity: 1
       });
     }
@@ -1138,6 +1173,7 @@ import {
       const maxSidebarWidth = Math.min(leftColumnWidth, 80);
       if (maxSidebarWidth > 0) {
         let sidebarWidth = maxSidebarWidth;
+        let sidebarHeight = Math.min(Math.max(140, contentHeight * 0.3), contentHeight);
         let sidebarX = pageMargins[0];
         let sidebarY = pageMargins[1];
 
@@ -1154,34 +1190,45 @@ import {
             const heightScale = desiredHeight / leftSidebarDimensions.height;
             sidebarWidth = leftSidebarDimensions.width * heightScale;
             sidebarY = pageMargins[1] + contentHeight - desiredHeight;
+            sidebarHeight = desiredHeight;
+          } else {
+            sidebarHeight = scaledHeight;
           }
+        } else {
+          sidebarY = pageMargins[1] + (contentHeight - sidebarHeight);
         }
 
         decorativeElements.push({
           image: leftSidebarImage,
           absolutePosition: { x: sidebarX, y: sidebarY },
           width: sidebarWidth,
+          height: sidebarHeight,
           opacity: 1
         });
       }
     }
 
+    let footerReservedHeight = 0;
+
     if (footerImage && totalContentWidth > 0) {
       const footerWidth = totalContentWidth;
-      let footerHeight = 100;
+      let footerHeight = Math.min(140, contentHeight * 0.25);
 
       if (footerImageDimensions && footerImageDimensions.width > 0) {
         const footerScale = footerWidth / footerImageDimensions.width;
         footerHeight = footerImageDimensions.height * footerScale;
       }
 
-      decorativeElements.push({
+      footerReservedHeight = footerHeight + 8;
+
+      overlayElements.push({
         image: footerImage,
         absolutePosition: {
           x: pageMargins[0],
           y: pageMargins[1] + contentHeight - footerHeight
         },
         width: footerWidth,
+        height: footerHeight,
         opacity: 1
       });
     }
@@ -1204,8 +1251,10 @@ import {
               stack: rightColumnStack
             }
           ],
-          columnGap
-        }
+          columnGap,
+          margin: [0, 0, 0, footerReservedHeight]
+        },
+        ...overlayElements
       ],
       styles: buildDocStyles(),
       defaultStyle: {
