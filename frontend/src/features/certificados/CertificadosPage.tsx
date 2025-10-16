@@ -85,12 +85,6 @@ function normaliseSessionDate(value?: string | null): string {
   return trimmed;
 }
 
-const CERTIFICATE_LOCATION_OVERRIDES: Record<string, string> = {
-  'c. primavera, 1, 28500 arganda del rey, madrid, espana': 'Arganda del Rey',
-  'carrer de moratin, 100, 08206 sabadell, barcelona, espana': 'Sabadell',
-  'in company': 'sus instalaciones',
-};
-
 function normaliseLocationKey(value: string): string {
   return value
     .normalize('NFD')
@@ -103,8 +97,19 @@ function resolveCertificateLocation(value: string): string {
     return value;
   }
 
-  const normalisedValue = normaliseLocationKey(value.trim());
-  return CERTIFICATE_LOCATION_OVERRIDES[normalisedValue] ?? value;
+  const trimmedValue = value.trim();
+  const normalisedValue = normaliseLocationKey(trimmedValue);
+
+  if (normalisedValue === 'in company') {
+    return 'sus instalaciones';
+  }
+
+  const postalCodeMatch = trimmedValue.match(/\b\d{5}\s+([^,]+)/);
+  if (postalCodeMatch) {
+    return postalCodeMatch[1].trim();
+  }
+
+  return trimmedValue;
 }
 
 function mapRowToCertificateGenerationData(
