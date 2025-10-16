@@ -14,6 +14,12 @@ function normalizeDealId(value: unknown): string | null {
   return trimmed.length ? trimmed : null;
 }
 
+function normalizeToken(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
 function normalizeBoolean(value: unknown): boolean {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {
@@ -251,6 +257,66 @@ export const handler = async (event: any) => {
       });
 
       return successResponse({ link: mapLinkForResponse(created, event) }, 201);
+    }
+
+    if (method === 'DELETE') {
+      const params = event.queryStringParameters || {};
+      const dealId =
+        normalizeDealId(params.deal_id) ||
+        normalizeDealId(params.dealId) ||
+        normalizeDealId(params.dealID);
+      const sessionId =
+        normalizeDealId(params.sesion_id) ||
+        normalizeDealId(params.session_id) ||
+        normalizeDealId(params.sessionId) ||
+        normalizeDealId(params.sesionId);
+      const tokenId =
+        normalizeDealId(params.token_id) ||
+        normalizeDealId(params.tokenId) ||
+        normalizeDealId(params.id);
+      const tokenValue = normalizeToken(params.token);
+
+      if (!dealId) {
+        return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
+      }
+      if (!sessionId || !isUUID(sessionId)) {
+        return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
+      }
+
+      const session = await prisma.sessions.findUnique({
+        where: { id: sessionId },
+        select: { id: true, deal_id: true },
+      });
+
+      if (!session || session.deal_id !== dealId) {
+        return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
+      }
+
+      const where: Record<string, any> = { sesion_id: sessionId };
+      if (tokenId) {
+        where.id = tokenId;
+      }
+      if (tokenValue) {
+        where.token = tokenValue;
+      }
+
+      const existing = await prisma.tokens.findFirst({
+        where: tokenId || tokenValue ? where : { ...where, active: true },
+        orderBy: { created_at: 'desc' },
+      });
+
+      if (!existing) {
+        return successResponse({ deleted: false });
+      }
+
+      const now = nowInMadridDate();
+
+      const updated = await prisma.tokens.update({
+        where: { id: existing.id },
+        data: { active: false, expires_at: now },
+      });
+
+      return successResponse({ deleted: true, token_id: updated.id });
     }
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);

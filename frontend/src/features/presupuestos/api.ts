@@ -1802,6 +1802,37 @@ export async function createSessionPublicLink(
   return normalizeSessionPublicLink(data?.link ?? {});
 }
 
+export async function deleteSessionPublicLink(
+  dealId: string,
+  sessionId: string,
+  options?: { tokenId?: string | null; token?: string | null },
+): Promise<void> {
+  const normalizedDealId = String(dealId ?? '').trim();
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  if (!normalizedDealId || !normalizedSessionId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId y sessionId son obligatorios');
+  }
+
+  const params = new URLSearchParams({
+    deal_id: normalizedDealId,
+    sesion_id: normalizedSessionId,
+  });
+
+  const tokenId = String(options?.tokenId ?? '').trim();
+  if (tokenId.length) {
+    params.set('token_id', tokenId);
+  }
+
+  const tokenValue = String(options?.token ?? '').trim();
+  if (tokenValue.length) {
+    params.set('token', tokenValue);
+  }
+
+  await request(`/session_public_links?${params.toString()}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function fetchPublicSessionStudents(token: string): Promise<{
   session: PublicSessionInfo;
   students: SessionStudent[];

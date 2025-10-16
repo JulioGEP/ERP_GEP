@@ -16,6 +16,19 @@ function normalizeText(value: unknown): string | null {
   return trimmed.length ? trimmed : null;
 }
 
+function normalizeId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function normalizeUuid(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+  return isUUID(trimmed) ? trimmed : null;
+}
+
 function normalizeDni(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toUpperCase().replace(/\s+/g, '');
@@ -91,11 +104,17 @@ function mapStudent(student: any) {
   if (!student) return student;
   return {
     id: String(student.id ?? ''),
+    deal_id: normalizeId(student.deal_id),
+    sesion_id: normalizeUuid(student.sesion_id) ?? normalizeId(student.sesion_id),
     nombre: student.nombre,
     apellido: student.apellido,
     dni: student.dni,
     apto: Boolean(student.apto),
     certificado: Boolean(student.certificado),
+    drive_url:
+      typeof student.drive_url === 'string' && student.drive_url.trim().length
+        ? student.drive_url.trim()
+        : null,
     created_at: toMadridISOString(student.created_at),
     updated_at: toMadridISOString(student.updated_at),
   };
@@ -104,7 +123,7 @@ function mapStudent(student: any) {
 function mapSessionInfo(link: any) {
   const session = link?.session ?? {};
   const deal = session?.deal ?? {};
-  const dealId = session?.deal_id ?? deal?.deal_id ?? null;
+  const dealId = normalizeId(session?.deal_id) ?? normalizeId(deal?.deal_id);
   const formation =
     session?.deal_product?.name?.trim()?.length
       ? session.deal_product.name
@@ -231,8 +250,10 @@ export const handler = async (event: any) => {
     }
 
     const { link } = validation;
-    const sessionDealId = link.session?.deal_id ?? link.session?.deal?.deal_id ?? null;
-    const sessionIdForStudents = link.sesion_id ?? link.session?.id ?? null;
+    const sessionDealId =
+      normalizeId(link.session?.deal_id) ?? normalizeId(link.session?.deal?.deal_id);
+    const sessionIdForStudents =
+      normalizeUuid(link.sesion_id) ?? normalizeUuid(link.session?.id) ?? normalizeId(link.session?.id);
 
     if (!sessionIdForStudents) {
       logAudit(event, link, 'session_missing');
