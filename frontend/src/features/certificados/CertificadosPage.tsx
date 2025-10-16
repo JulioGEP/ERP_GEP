@@ -42,15 +42,22 @@ const CERTIFICATE_BATCH_SIZE = 5;
 const CERTIFICATE_MAX_RETRIES = 3;
 const CERTIFICATE_RETRY_DELAY_MS = 500;
 
+type GenerationFailureStage = 'generate' | 'upload';
+
 type GenerationResult = {
   id: string;
   label: string;
   status: 'success' | 'error';
   message?: string | null;
+  stage?: GenerationFailureStage;
 };
 
 type GenerationStepStatus = CertificateToolbarProgressStatus;
-type GenerationStepId = 'loadGenerator' | 'generateCertificates' | 'refreshStudents';
+type GenerationStepId =
+  | 'loadGenerator'
+  | 'generatePdf'
+  | 'uploadCertificates'
+  | 'refreshStudents';
 
 type GenerationStep = {
   id: GenerationStepId;
@@ -62,7 +69,8 @@ type GenerationStepDefinition = Pick<GenerationStep, 'id' | 'label'>;
 
 const GENERATION_STEP_DEFINITIONS: GenerationStepDefinition[] = [
   { id: 'loadGenerator', label: 'Preparando generador de certificados' },
-  { id: 'generateCertificates', label: 'Generando y subiendo certificados' },
+  { id: 'generatePdf', label: 'Generando certificados (PDF)' },
+  { id: 'uploadCertificates', label: 'Subiendo certificados' },
   { id: 'refreshStudents', label: 'Actualizando listado de alumnos' },
 ];
 
@@ -299,7 +307,7 @@ export function CertificadosPage() {
 
       setGenerationTotal(rowsToProcess.length);
       setGenerating(true);
-      setGenerationStepStatus('generateCertificates', 'working');
+      setGenerationStepStatus('generatePdf', 'working');
 
       const rowsOrder = editableRows.map((row) => row.id);
 
@@ -320,11 +328,18 @@ export function CertificadosPage() {
         });
       };
 
+      let hasStartedUpload = false;
+      let encounteredGenerationError = false;
+      let encounteredUploadError = false;
+
+      type ProcessRowError = { stage: GenerationFailureStage; error: unknown };
+
       const processRowWithRetry = async (row: CertificateRow) => {
         const studentLabel = buildStudentDisplayName(row);
-        let lastError: unknown = null;
+        let lastError: ProcessRowError | null = null;
 
         for (let attempt = 1; attempt <= CERTIFICATE_MAX_RETRIES; attempt += 1) {
+          let currentStage: GenerationFailureStage = 'generate';
           try {
             const pdfRow = mapRowToPdfRow(row);
             const { blob, fileName } = await pdfGenerator.generate(pdfRow, { download: false });
@@ -332,6 +347,11 @@ export function CertificadosPage() {
               throw new Error('El certificado generado está vacío.');
             }
 
+            currentStage = 'upload';
+            if (!hasStartedUpload) {
+              hasStartedUpload = true;
+              setGenerationStepStatus('uploadCertificates', 'working');
+            }
             const uploadResult = await uploadSessionCertificate({
               dealId,
               sessionId,
@@ -358,8 +378,12 @@ export function CertificadosPage() {
             );
 
             return { id: row.id, label: studentLabel, status: 'success' };
-          } catch (error) {
-            lastError = error;
+          } catch (error: unknown) {
+            const stageError: ProcessRowError = {
+              stage: currentStage,
+              error,
+            };
+            lastError = stageError;
             if (attempt < CERTIFICATE_MAX_RETRIES) {
               await wait(CERTIFICATE_RETRY_DELAY_MS * attempt);
               continue;
@@ -367,18 +391,23 @@ export function CertificadosPage() {
           }
         }
 
-        const message = resolveGenerationError(lastError);
+        const failureStage = lastError?.stage ?? 'generate';
+        const resolvedMessage = resolveGenerationError(lastError?.error).trim();
         const attemptsInfo =
           CERTIFICATE_MAX_RETRIES > 1 ? ` Intentos realizados: ${CERTIFICATE_MAX_RETRIES}.` : '';
+        const failurePrefix =
+          failureStage === 'upload'
+            ? 'No se pudo subir el certificado.'
+            : 'No se pudo generar el archivo PDF del certificado.';
+        const messageBody = resolvedMessage.length ? ` ${resolvedMessage}` : '';
         return {
           id: row.id,
           label: studentLabel,
           status: 'error',
-          message: `No se pudo generar el certificado. ${message}${attemptsInfo}`,
+          stage: failureStage,
+          message: `${failurePrefix}${messageBody}${attemptsInfo}`,
         };
       };
-
-      let encounteredRowError = false;
 
       try {
         for (
@@ -393,16 +422,25 @@ export function CertificadosPage() {
               updateResultsState(result);
               setGenerationProgress((current) => current + 1);
               if (result.status === 'error') {
-                encounteredRowError = true;
+                if (result.stage === 'generate') {
+                  encounteredGenerationError = true;
+                }
+                if (result.stage === 'upload') {
+                  encounteredUploadError = true;
+                }
               }
             }),
           );
         }
 
-        setGenerationStepStatus(
-          'generateCertificates',
-          encounteredRowError ? 'error' : 'success',
-        );
+        setGenerationStepStatus('generatePdf', encounteredGenerationError ? 'error' : 'success');
+
+        if (hasStartedUpload) {
+          setGenerationStepStatus(
+            'uploadCertificates',
+            encounteredUploadError ? 'error' : 'success',
+          );
+        }
 
         setGenerationStepStatus('refreshStudents', 'working');
         try {
@@ -414,7 +452,10 @@ export function CertificadosPage() {
           setGenerationError(`No se pudo recargar el listado de alumnos (${reloadErrorMessage}).`);
         }
       } catch (error) {
-        setGenerationStepStatus('generateCertificates', 'error');
+        setGenerationStepStatus('generatePdf', 'error');
+        if (hasStartedUpload) {
+          setGenerationStepStatus('uploadCertificates', 'error');
+        }
         const message = resolveGenerationError(error);
         setGenerationError(message);
       } finally {
