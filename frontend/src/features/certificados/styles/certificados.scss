@@ -11,8 +11,7 @@
   gap: 0.75rem;
 }
 
-.certificate-template-controls__select,
-.certificate-template-controls__button {
+.certificate-template-controls__select {
   flex: 1 1 220px;
   min-width: 220px;
 }
@@ -21,7 +20,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  min-width: auto;
   min-height: calc(1.5em + 0.5rem + 2px);
+  align-self: flex-end;
+  white-space: nowrap;
+}
+
+.deal-search-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.deal-search-controls__input {
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.deal-search-controls__clear-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .certificate-toolbar {

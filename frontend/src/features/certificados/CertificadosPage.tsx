@@ -1219,7 +1219,7 @@ export function CertificadosPage() {
           <Form onSubmit={handleSubmit} className="mb-4">
             <Form.Group controlId="certificate-deal" className="text-start">
               <Form.Label>Introduce el número de presupuesto</Form.Label>
-              <div className="d-flex flex-wrap align-items-center gap-2">
+              <div className="deal-search-controls">
                 <Button type="submit" variant="primary" disabled={loadingDeal}>
                   {loadingDeal ? (
                     <>
@@ -1230,22 +1230,23 @@ export function CertificadosPage() {
                     'Buscar'
                   )}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline-secondary"
-                  onClick={handleClearData}
-                  disabled={loadingDeal || generating}
-                >
-                  Limpiar datos
-                </Button>
                 <Form.Control
                   type="text"
                   placeholder="Ej. 1234"
                   value={dealIdInput}
                   onChange={(event) => setDealIdInput(event.target.value)}
                   disabled={loadingDeal}
-                  style={{ maxWidth: '220px' }}
+                  className="deal-search-controls__input"
                 />
+                <Button
+                  type="button"
+                  variant="outline-secondary"
+                  onClick={handleClearData}
+                  disabled={loadingDeal || generating}
+                  className="deal-search-controls__clear-button"
+                >
+                  Limpiar datos
+                </Button>
               </div>
             </Form.Group>
           </Form>
