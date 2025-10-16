@@ -12,7 +12,10 @@ import {
   resolveSessionNumber,
   toStringOrNull,
 } from './_shared/sessions';
-import { uploadSessionCertificateToGoogleDrive } from './_shared/googleDrive';
+import {
+  uploadSessionCertificateToGoogleDrive,
+  GoogleDriveSelfCheckError,
+} from './_shared/googleDrive';
 
 const MAX_CERTIFICATE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -197,6 +200,9 @@ export const handler = async (event: any) => {
         data: buffer,
       });
     } catch (err: any) {
+      if (err instanceof GoogleDriveSelfCheckError) {
+        return errorResponse(err.code, err.message, err.statusCode ?? 500);
+      }
       const message = err?.message || 'No se pudo subir el certificado a Drive';
       return errorResponse('UPLOAD_ERROR', message, 502);
     }
