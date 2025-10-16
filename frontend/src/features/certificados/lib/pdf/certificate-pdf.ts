@@ -1,38 +1,13 @@
-import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
-
-import { POPPINS_FONT_BASE64 } from './poppins-fonts';
-
-const basePdfMake = pdfMake;
-const baseVfs = pdfFonts?.pdfMake?.vfs ?? null;
-
-if (baseVfs) {
-  basePdfMake.vfs = { ...(basePdfMake.vfs || {}), ...baseVfs };
-}
-
-const globalScope: typeof window | undefined = typeof window !== 'undefined' ? window : undefined;
-
-if (globalScope) {
-  const existingPdfMake = (globalScope as typeof window & { pdfMake?: typeof basePdfMake }).pdfMake;
-  if (!existingPdfMake) {
-    (globalScope as typeof window & { pdfMake: typeof basePdfMake }).pdfMake = basePdfMake;
-  } else {
-    existingPdfMake.vfs = { ...(existingPdfMake.vfs || {}), ...(basePdfMake.vfs || {}) };
-  }
-}
+import {
+  getCertificateImageDataUrl,
+  getPdfMakeInstance,
+  pdfMakeReady,
+  type CertificateImageKey
+} from './pdfmake-initializer';
 
 (function (global) {
   const TRANSPARENT_PIXEL =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NkYGD4DwABBAEAi5JBSwAAAABJRU5ErkJggg==';
-
-  const CERTIFICATE_ASSETS_BASE_PATH = '/certificados/';
-
-  const ASSET_PATHS = {
-    background: `${CERTIFICATE_ASSETS_BASE_PATH}fondo-certificado.png`,
-    leftSidebar: `${CERTIFICATE_ASSETS_BASE_PATH}lateral-izquierdo.png`,
-    footer: `${CERTIFICATE_ASSETS_BASE_PATH}pie-firma.png`,
-    logo: `${CERTIFICATE_ASSETS_BASE_PATH}logo-certificado.png`
-  };
 
   const IMAGE_ASPECT_RATIOS = {
     background: 1328 / 839,
@@ -66,36 +41,7 @@ if (globalScope) {
     height: 595.28
   };
 
-  const CDN_FONT_SOURCES = {
-    'Poppins-Regular.ttf':
-      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-normal.ttf',
-    'Poppins-Italic.ttf':
-      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-italic.ttf',
-    'Poppins-SemiBold.ttf':
-      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-normal.ttf',
-    'Poppins-SemiBoldItalic.ttf':
-      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-italic.ttf'
-  } as const;
-
-  const FONT_SOURCES = Object.fromEntries(
-    Object.entries(CDN_FONT_SOURCES).map(([fileName, cdnUrl]) => {
-      const candidates: string[] = [];
-      const inlineFont = POPPINS_FONT_BASE64[fileName];
-
-      if (inlineFont) {
-        candidates.push(inlineFont);
-      }
-
-      candidates.push(`${CERTIFICATE_ASSETS_BASE_PATH}${fileName}`);
-      candidates.push(cdnUrl);
-
-      return [fileName, candidates as const];
-    })
-  ) as Record<keyof typeof CDN_FONT_SOURCES, readonly string[]>;
-
   const REQUIRED_FONT_STYLES = ['normal', 'bold', 'italics', 'bolditalics'] as const;
-
-  let poppinsFontPromise = null;
 
   function isFontFullyRegistered(pdfMakeInstance, family) {
     if (!pdfMakeInstance || !family) {
@@ -121,33 +67,6 @@ if (globalScope) {
     });
   }
 
-  function getPdfMakeInstances(primaryInstance) {
-    const instances = new Set();
-
-    if (primaryInstance) {
-      instances.add(primaryInstance);
-    }
-
-    if (basePdfMake) {
-      instances.add(basePdfMake);
-    }
-
-    if (global.pdfMake) {
-      instances.add(global.pdfMake);
-    }
-
-    const uniqueInstances = [];
-
-    instances.forEach((instance) => {
-      if (instance) {
-        uniqueInstances.push(instance);
-      }
-    });
-
-    return uniqueInstances;
-  }
-
-  const assetCache = new Map();
   const trainingTemplates = global.trainingTemplates || null;
 
   type CertificatePdfStudent = {
@@ -615,203 +534,14 @@ if (globalScope) {
     ];
   }
 
-  function getCachedAsset(key) {
-    if (assetCache.has(key)) {
-      return assetCache.get(key);
+  async function getCachedAsset(key: CertificateImageKey) {
+    await pdfMakeReady;
+    const dataUrl = getCertificateImageDataUrl(key);
+    if (dataUrl) {
+      return dataUrl;
     }
-    const promise = loadImageAsDataUrl(ASSET_PATHS[key]).catch((error) => {
-      console.warn(`No se ha podido cargar el recurso "${key}" (${ASSET_PATHS[key]}).`, error);
-      return TRANSPARENT_PIXEL;
-    });
-    assetCache.set(key, promise);
-    return promise;
-  }
-
-  async function loadImageAsDataUrl(path) {
-    if (!path) {
-      return TRANSPARENT_PIXEL;
-    }
-    const response = await fetch(path);
-    if (!response.ok) {
-      throw new Error(`Respuesta ${response.status} al cargar ${path}`);
-    }
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = () => reject(new Error(`No se ha podido leer el archivo ${path}`));
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  function extractBase64FromDataUri(dataUri) {
-    const BASE64_SEPARATOR = 'base64,';
-    const separatorIndex = dataUri.indexOf(BASE64_SEPARATOR);
-    if (separatorIndex === -1) {
-      const commaIndex = dataUri.indexOf(',');
-      return commaIndex === -1 ? '' : dataUri.slice(commaIndex + 1);
-    }
-    return dataUri.slice(separatorIndex + BASE64_SEPARATOR.length);
-  }
-
-  function looksLikeBase64(source) {
-    if (typeof source !== 'string') {
-      return false;
-    }
-    const trimmedSource = source.trim();
-    if (!trimmedSource) {
-      return false;
-    }
-    if (trimmedSource.startsWith('data:')) {
-      return true;
-    }
-    if (trimmedSource.includes('://')) {
-      return false;
-    }
-    if (trimmedSource.startsWith('/') || trimmedSource.startsWith('./')) {
-      return false;
-    }
-    const base64Pattern = /^[0-9a-zA-Z+/=]+$/;
-    return base64Pattern.test(trimmedSource) && trimmedSource.length % 4 === 0;
-  }
-
-  async function loadFontAsBase64(source) {
-    if (typeof source !== 'string' || !source) {
-      throw new Error('No se ha proporcionado un origen válido para la fuente.');
-    }
-
-    const trimmedSource = source.trim();
-
-    if (!trimmedSource) {
-      throw new Error('El origen de la fuente está vacío.');
-    }
-
-    if (trimmedSource.startsWith('data:')) {
-      return extractBase64FromDataUri(trimmedSource);
-    }
-
-    if (looksLikeBase64(trimmedSource)) {
-      return trimmedSource;
-    }
-
-    const response = await fetch(trimmedSource);
-    if (!response.ok) {
-      throw new Error(`Respuesta ${response.status} al cargar ${trimmedSource}`);
-    }
-    const buffer = await response.arrayBuffer();
-    return arrayBufferToBase64(buffer);
-  }
-
-  function arrayBufferToBase64(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      binary += String.fromCharCode.apply(null, chunk);
-    }
-    if (typeof global.btoa === 'function') {
-      return global.btoa(binary);
-    }
-    if (typeof Buffer !== 'undefined') {
-      return Buffer.from(binary, 'binary').toString('base64');
-    }
-    throw new Error('No se puede convertir el buffer en base64 en este entorno.');
-  }
-
-  async function ensurePoppinsFont() {
-    const { pdfMake } = global;
-    if (!pdfMake) {
-      return;
-    }
-    if (isFontFullyRegistered(pdfMake, 'Poppins')) {
-      return;
-    }
-    if (!poppinsFontPromise) {
-      poppinsFontPromise = (async () => {
-        try {
-          const fontEntries = await Promise.all(
-            Object.entries(FONT_SOURCES).map(async ([name, sources]) => {
-              const sourceList = Array.isArray(sources) ? sources : [sources];
-              let lastError = null;
-
-              for (const source of sourceList) {
-                try {
-                  const data = await loadFontAsBase64(source);
-                  if (source !== sourceList[0]) {
-                    console.info(
-                      `Se está usando la fuente Poppins (${name}) desde el origen alternativo: ${source}`
-                    );
-                  }
-                  return [name, data];
-                } catch (error) {
-                  lastError = error;
-                }
-              }
-
-              console.warn(`No se ha podido cargar la fuente Poppins (${name}).`, lastError);
-              return null;
-            })
-          );
-
-          const validEntries = fontEntries.filter(Boolean);
-          const pdfMakeInstances = getPdfMakeInstances(pdfMake);
-
-          if (validEntries.length) {
-            pdfMakeInstances.forEach((instance) => {
-              if (!instance) {
-                return;
-              }
-
-              const nextVfs = { ...(instance.vfs || {}) };
-
-              validEntries.forEach(([name, data]) => {
-                nextVfs[name] = data;
-              });
-
-              instance.vfs = nextVfs;
-            });
-          }
-
-          pdfMakeInstances.forEach((instance) => {
-            if (!instance) {
-              return;
-            }
-
-            const existingFonts = instance.fonts || {};
-            const roboto = existingFonts.Roboto || {};
-            const previousPoppins = existingFonts.Poppins || {};
-            const availableFontNames = new Set(validEntries.map(([name]) => name));
-
-            instance.fonts = {
-              ...existingFonts,
-              Poppins: {
-                normal: availableFontNames.has('Poppins-Regular.ttf')
-                  ? 'Poppins-Regular.ttf'
-                  : previousPoppins.normal || roboto.normal || 'Roboto-Regular.ttf',
-                bold: availableFontNames.has('Poppins-SemiBold.ttf')
-                  ? 'Poppins-SemiBold.ttf'
-                  : previousPoppins.bold || roboto.bold || 'Roboto-Medium.ttf',
-                italics: availableFontNames.has('Poppins-Italic.ttf')
-                  ? 'Poppins-Italic.ttf'
-                  : previousPoppins.italics || roboto.italics || 'Roboto-Italic.ttf',
-                bolditalics: availableFontNames.has('Poppins-SemiBoldItalic.ttf')
-                  ? 'Poppins-SemiBoldItalic.ttf'
-                  : previousPoppins.bolditalics || roboto.bolditalics || 'Roboto-BoldItalic.ttf'
-              }
-            };
-          });
-        } catch (error) {
-          console.warn('No se ha podido preparar la tipografía Poppins.', error);
-        }
-      })();
-    }
-
-    try {
-      await poppinsFontPromise;
-    } catch (error) {
-      console.warn('No se ha podido cargar la tipografía Poppins para el certificado.', error);
-    }
+    console.warn(`No se ha podido encontrar el recurso "${key}" en el VFS de pdfMake.`);
+    return TRANSPARENT_PIXEL;
   }
 
   function normaliseText(value) {
@@ -1141,9 +871,11 @@ if (globalScope) {
   }
 
   async function buildDocDefinition(row: CertificatePdfRow | null | undefined = {}) {
-    await ensurePoppinsFont();
-    const preferredFontFamily =
-      global.pdfMake && isFontFullyRegistered(global.pdfMake, 'Poppins') ? 'Poppins' : 'Roboto';
+    await pdfMakeReady;
+    const pdfMakeInstance = await getPdfMakeInstance();
+    const preferredFontFamily = isFontFullyRegistered(pdfMakeInstance, 'Poppins')
+      ? 'Poppins'
+      : 'Roboto';
 
     const [backgroundImage, sidebarImage, footerImage, logoImage] = await Promise.all([
       getCachedAsset('background'),
@@ -1356,7 +1088,10 @@ if (globalScope) {
     row: CertificatePdfRow | null | undefined,
     options: { download?: boolean } = {}
   ) {
-    if (!global.pdfMake || typeof global.pdfMake.createPdf !== 'function') {
+    await pdfMakeReady;
+    const pdfMakeInstance = await getPdfMakeInstance();
+
+    if (!pdfMakeInstance || typeof pdfMakeInstance.createPdf !== 'function') {
       throw new Error('pdfMake no está disponible.');
     }
     const docDefinition = await buildDocDefinition(row || {});
@@ -1368,7 +1103,7 @@ if (globalScope) {
     return new Promise((resolve, reject) => {
       let pdfDocument;
       try {
-        pdfDocument = global.pdfMake.createPdf(docDefinition);
+        pdfDocument = pdfMakeInstance.createPdf(docDefinition);
       } catch (error) {
         reject(error);
         return;
