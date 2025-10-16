@@ -23,14 +23,11 @@ if (globalScope) {
   const TRANSPARENT_PIXEL =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NkYGD4DwABBAEAi5JBSwAAAABJRU5ErkJggg==';
 
-  const GLOBAL_ASSET_BASE_KEY = '__GEP_CERTIFICATE_ASSET_BASE__';
-  const CERTIFICATE_ASSET_FOLDER = 'certificados';
-
-  const ASSET_FILES = {
-    background: 'fondo-certificado.png',
-    leftSidebar: 'lateral-izquierdo.png',
-    footer: 'pie-firma.png',
-    logo: 'logo-certificado.png'
+  const ASSET_PATHS = {
+    background: 'assets/certificados/fondo-certificado.png',
+    leftSidebar: 'assets/certificados/lateral-izquierdo.png',
+    footer: 'assets/certificados/pie-firma.png',
+    logo: 'assets/certificados/logo-certificado.png'
   };
 
   const IMAGE_ASPECT_RATIOS = {
@@ -65,28 +62,24 @@ if (globalScope) {
     height: 595.28
   };
 
-  const FONT_REGISTRY = {
-    'Poppins-Regular.ttf': {
-      fileName: 'Poppins-Regular.ttf',
-      fallback:
-        'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-normal.ttf'
-    },
-    'Poppins-Italic.ttf': {
-      fileName: 'Poppins-Italic.ttf',
-      fallback:
-        'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-italic.ttf'
-    },
-    'Poppins-SemiBold.ttf': {
-      fileName: 'Poppins-SemiBold.ttf',
-      fallback:
-        'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-normal.ttf'
-    },
-    'Poppins-SemiBoldItalic.ttf': {
-      fileName: 'Poppins-SemiBoldItalic.ttf',
-      fallback:
-        'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-italic.ttf'
-    }
-  } as const;
+  const FONT_SOURCES = {
+    'Poppins-Regular.ttf': [
+      'assets/certificados/Poppins-Regular.ttf',
+      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-normal.ttf'
+    ],
+    'Poppins-Italic.ttf': [
+      'assets/certificados/Poppins-Italic.ttf',
+      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-italic.ttf'
+    ],
+    'Poppins-SemiBold.ttf': [
+      'assets/certificados/Poppins-SemiBold.ttf',
+      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-normal.ttf'
+    ],
+    'Poppins-SemiBoldItalic.ttf': [
+      'assets/certificados/Poppins-SemiBoldItalic.ttf',
+      'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-italic.ttf'
+    ]
+  };
 
   let poppinsFontPromise = null;
 
@@ -247,122 +240,12 @@ if (globalScope) {
     ];
   }
 
-  const assetBaseUrl = (() => {
-    const globalOverride = (() => {
-      try {
-        const override = global?.[GLOBAL_ASSET_BASE_KEY];
-        return typeof override === 'string' ? override.trim() : null;
-      } catch (error) {
-        console.warn('No se ha podido leer la configuración global de assets.', error);
-        return null;
-      }
-    })();
-
-    const candidate =
-      globalOverride ||
-      (typeof import.meta !== 'undefined' && import.meta.env && typeof import.meta.env.BASE_URL === 'string'
-        ? import.meta.env.BASE_URL
-        : '/') ||
-      '/';
-
-    return normaliseAssetBase(candidate);
-  })();
-
-  function normaliseAssetBase(base) {
-    if (!base || typeof base !== 'string') {
-      return '/';
-    }
-
-    if (/^(?:https?:)?\/\//i.test(base)) {
-      return base.endsWith('/') ? base : `${base}/`;
-    }
-
-    const trimmed = base.replace(/^\/+/, '');
-    const withLeadingSlash = trimmed ? `/${trimmed}` : '/';
-    return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`;
-  }
-
-  function buildCertificateAssetPath(fileName) {
-    if (!fileName) {
-      return null;
-    }
-    const cleanedFileName = String(fileName).replace(/^\/+/, '');
-    return `${CERTIFICATE_ASSET_FOLDER}/${cleanedFileName}`;
-  }
-
-  function resolveAssetUrl(path) {
-    if (!path || typeof path !== 'string') {
-      return null;
-    }
-
-    if (/^(?:https?:)?\/\//i.test(path)) {
-      return path;
-    }
-
-    const normalisedPath = path.replace(/^\/+/, '');
-
-    if (/^(?:https?:)?\/\//i.test(assetBaseUrl)) {
-      try {
-        return new URL(normalisedPath, assetBaseUrl).toString();
-      } catch (error) {
-        console.warn(`No se ha podido construir la URL absoluta para el recurso ${path}.`, error);
-        return `${assetBaseUrl}${normalisedPath}`;
-      }
-    }
-
-    return `${assetBaseUrl}${normalisedPath}`;
-  }
-
-  function getImageAssetUrl(key) {
-    const fileName = ASSET_FILES[key];
-    if (!fileName) {
-      console.warn(`No se ha definido un fichero para el recurso de imagen "${key}".`);
-      return null;
-    }
-
-    const resolved = resolveAssetUrl(buildCertificateAssetPath(fileName));
-    if (!resolved) {
-      console.warn(`No se ha podido resolver la URL para el recurso de imagen "${key}" (${fileName}).`);
-    }
-    return resolved;
-  }
-
-  function getFontSources(fontName) {
-    const entry = FONT_REGISTRY[fontName as keyof typeof FONT_REGISTRY];
-    if (!entry) {
-      return [];
-    }
-
-    const sources = [];
-    const localUrl = resolveAssetUrl(buildCertificateAssetPath(entry.fileName));
-    if (localUrl) {
-      sources.push(localUrl);
-    } else {
-      console.warn(`No se ha podido resolver la URL local para la fuente ${fontName}.`);
-    }
-
-    if (entry.fallback) {
-      sources.push(entry.fallback);
-    }
-
-    return sources;
-  }
-
   function getCachedAsset(key) {
     if (assetCache.has(key)) {
       return assetCache.get(key);
     }
-    const assetUrl = getImageAssetUrl(key);
-    if (!assetUrl) {
-      console.warn(
-        `Se utilizará un placeholder transparente para el recurso de imagen "${key}" al no poder resolverse su ruta.`
-      );
-      const fallbackPromise = Promise.resolve(TRANSPARENT_PIXEL);
-      assetCache.set(key, fallbackPromise);
-      return fallbackPromise;
-    }
-    const promise = loadImageAsDataUrl(assetUrl).catch((error) => {
-      console.warn(`No se ha podido cargar el recurso "${key}" (${assetUrl}).`, error);
+    const promise = loadImageAsDataUrl(ASSET_PATHS[key]).catch((error) => {
+      console.warn(`No se ha podido cargar el recurso "${key}" (${ASSET_PATHS[key]}).`, error);
       return TRANSPARENT_PIXEL;
     });
     assetCache.set(key, promise);
@@ -424,19 +307,11 @@ if (globalScope) {
       poppinsFontPromise = (async () => {
         try {
           const fontEntries = await Promise.all(
-            Object.keys(FONT_REGISTRY).map(async (name) => {
-              const sourceList = getFontSources(name);
-              if (!sourceList.length) {
-                console.warn(`No hay orígenes configurados para la fuente ${name}.`);
-                return null;
-              }
-
+            Object.entries(FONT_SOURCES).map(async ([name, sources]) => {
+              const sourceList = Array.isArray(sources) ? sources : [sources];
               let lastError = null;
 
               for (const source of sourceList) {
-                if (!source) {
-                  continue;
-                }
                 try {
                   const data = await loadFontAsBase64(source);
                   if (source !== sourceList[0]) {
