@@ -1196,6 +1196,14 @@ export function CertificadosPage() {
             <Form.Group controlId="certificate-deal" className="text-start">
               <Form.Label>Introduce el número de presupuesto</Form.Label>
               <div className="deal-search-controls">
+                <Form.Control
+                  type="text"
+                  placeholder="Ej. 1234"
+                  value={dealIdInput}
+                  onChange={(event) => setDealIdInput(event.target.value)}
+                  disabled={loadingDeal}
+                  className="deal-search-controls__input"
+                />
                 <Button type="submit" variant="primary" disabled={loadingDeal}>
                   {loadingDeal ? (
                     <>
@@ -1206,14 +1214,6 @@ export function CertificadosPage() {
                     'Buscar'
                   )}
                 </Button>
-                <Form.Control
-                  type="text"
-                  placeholder="Ej. 1234"
-                  value={dealIdInput}
-                  onChange={(event) => setDealIdInput(event.target.value)}
-                  disabled={loadingDeal}
-                  className="deal-search-controls__input"
-                />
                 <Button
                   type="button"
                   variant="outline-secondary"
