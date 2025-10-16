@@ -696,6 +696,23 @@ import {
     return `${formattedPrimary} y ${formattedSecondary}`;
   }
 
+  function formatDateAsDayMonthYear(value) {
+    const parsedDate = parseDateValue(value);
+    if (parsedDate) {
+      const day = String(parsedDate.getDate()).padStart(2, '0');
+      const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+      const year = parsedDate.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+
+    const normalised = normaliseText(value);
+    if (normalised) {
+      return normalised;
+    }
+
+    return '____';
+  }
+
   function formatLocation(value) {
     return normaliseText(value) || '________';
   }
@@ -787,23 +804,24 @@ import {
   function buildDocStyles() {
     return {
       bodyText: {
-        fontSize: adjustFontSize(11),
-        lineHeight: adjustLineHeight(1.5),
+        fontSize: adjustFontSize(11.5),
+        lineHeight: adjustLineHeight(1.65),
         color: BODY_TEXT_COLOR,
-        margin: [0, 0, 0, 10]
+        margin: [0, 0, 0, 8]
       },
       introText: {
         fontSize: adjustFontSize(10),
         lineHeight: adjustLineHeight(1.4),
         color: SECONDARY_TEXT_COLOR,
-        margin: [0, 0, 0, 12]
+        margin: [0, 0, 0, 8]
       },
       certificateTitle: {
-        fontSize: adjustFontSize(32),
+        fontSize: adjustFontSize(40),
         bold: true,
         color: TITLE_TEXT_COLOR,
-        letterSpacing: 2,
-        margin: [0, 6, 0, 12]
+        characterSpacing: 0.5,
+        alignment: 'center',
+        margin: [0, 0, 0, 14]
       },
       highlighted: {
         fontSize: adjustFontSize(13),
@@ -811,11 +829,17 @@ import {
         color: TITLE_TEXT_COLOR,
         margin: [0, 8, 0, 8]
       },
-      trainingName: {
-        fontSize: adjustFontSize(18),
+      highlightName: {
+        fontSize: adjustFontSize(17),
         bold: true,
         color: TITLE_TEXT_COLOR,
-        margin: [0, 12, 0, 16]
+        margin: [0, 0, 0, 6]
+      },
+      trainingName: {
+        fontSize: adjustFontSize(14),
+        bold: true,
+        color: TITLE_TEXT_COLOR,
+        margin: [0, 0, 0, 0]
       },
       contentSectionTitle: {
         fontSize: adjustFontSize(12),
@@ -931,11 +955,6 @@ import {
 
     const fullName = buildFullName(row);
     const formattedFullName = normaliseText(fullName).toUpperCase() || fullName;
-    const documentSentenceFragments = buildDocumentSentenceFragments(row);
-    const styledDocumentSentenceFragments = documentSentenceFragments.map((fragment) => ({
-      ...fragment,
-      color: BODY_TEXT_COLOR
-    }));
     const trainingDate = formatTrainingDateRange(
       getPrimaryDateValue(row),
       getSecondaryDateValue(row)
@@ -957,49 +976,59 @@ import {
     const organizationName = normaliseText(dealInfo.organizationName);
     const sedeLabel = normaliseText(dealInfo.sedeLabel);
 
+    const documentTypeLabel = normaliseText(getDocumentTypeValue(row)).toUpperCase();
+    const documentNumber = normaliseText(getStudentDni(row));
+    const identityLabelParts = [];
+    if (documentTypeLabel) {
+      identityLabelParts.push(`con ${documentTypeLabel}`);
+    } else {
+      identityLabelParts.push('con DNI');
+    }
+    identityLabelParts.push(documentNumber || '________');
+    const identityLine = identityLabelParts.join(' ');
+
+    const formattedPrimaryDate = formatDateAsDayMonthYear(getPrimaryDateValue(row));
     const readableDate = trainingDate === '________' ? '' : trainingDate;
     const readableLocation = location === '________' ? sedeLabel : location;
     const readableDuration = duration === '____' ? '' : `${duration} horas`;
 
-    const participationParts = [];
-    if (readableDate) {
-      participationParts.push(`celebrada el ${readableDate}`);
-    }
-    if (readableLocation) {
-      participationParts.push(`en ${readableLocation}`);
-    }
-
-    const participationSentence = participationParts.length
-      ? `, quien ha realizado la formación ${participationParts.join(' ')}.`
-      : ', quien ha realizado la formación.';
-
-    styledDocumentSentenceFragments.push({
-      text: participationSentence,
-      color: BODY_TEXT_COLOR
-    });
+    const formattedLocationLabel = (() => {
+      const rawLocation = normaliseText(readableLocation);
+      return rawLocation ? rawLocation.toUpperCase() : '________';
+    })();
 
     const rightColumnStack = [
       {
         text: 'Sr. Lluís Vicent Pérez,\nDirector de la escuela GEPCO Formación\nexpide el presente:',
-        style: 'introText'
+        style: 'introText',
+        alignment: 'left',
+        margin: [0, 0, 0, 8],
+        preserveLeadingSpaces: true
       },
       { text: 'CERTIFICADO', style: 'certificateTitle' },
       {
-        text: [
-          'A nombre del alumno/a ',
-          { text: formattedFullName, bold: true, color: BODY_TEXT_COLOR }
-        ],
-        style: 'bodyText'
+        text: `A nombre del alumno/a ${formattedFullName}`,
+        style: 'highlightName'
       },
       {
-        text: styledDocumentSentenceFragments,
-        style: 'bodyText'
+        text: identityLine,
+        style: 'bodyText',
+        alignment: 'left',
+        margin: [0, 0, 0, 2]
       },
       {
-        text: `Ha superado, con una duración total de ${durationLabel}, la formación:`,
-        style: 'bodyText'
+        text: `quien en fecha ${formattedPrimaryDate} y en ${formattedLocationLabel}`,
+        style: 'bodyText',
+        alignment: 'left',
+        margin: [0, 0, 0, 2]
       },
-      { text: trainingNameDisplay, style: 'trainingName' }
+      {
+        text: `ha superado, con una duración total de ${durationLabel}, la formación de:`,
+        style: 'bodyText',
+        alignment: 'left',
+        margin: [0, 0, 0, 10]
+      },
+      { text: trainingNameDisplay, style: 'trainingName', alignment: 'left' }
     ];
 
     const metadataLines: string[] = [];
