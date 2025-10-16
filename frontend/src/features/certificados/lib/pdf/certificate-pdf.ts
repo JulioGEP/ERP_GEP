@@ -23,11 +23,13 @@ if (globalScope) {
   const TRANSPARENT_PIXEL =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NkYGD4DwABBAEAi5JBSwAAAABJRU5ErkJggg==';
 
+  const CERTIFICATE_ASSETS_BASE_PATH = '/certificados/';
+
   const ASSET_PATHS = {
-    background: 'assets/certificados/fondo-certificado.png',
-    leftSidebar: 'assets/certificados/lateral-izquierdo.png',
-    footer: 'assets/certificados/pie-firma.png',
-    logo: 'assets/certificados/logo-certificado.png'
+    background: `${CERTIFICATE_ASSETS_BASE_PATH}fondo-certificado.png`,
+    leftSidebar: `${CERTIFICATE_ASSETS_BASE_PATH}lateral-izquierdo.png`,
+    footer: `${CERTIFICATE_ASSETS_BASE_PATH}pie-firma.png`,
+    logo: `${CERTIFICATE_ASSETS_BASE_PATH}logo-certificado.png`
   };
 
   const IMAGE_ASPECT_RATIOS = {
@@ -64,19 +66,19 @@ if (globalScope) {
 
   const FONT_SOURCES = {
     'Poppins-Regular.ttf': [
-      'assets/certificados/Poppins-Regular.ttf',
+      `${CERTIFICATE_ASSETS_BASE_PATH}Poppins-Regular.ttf`,
       'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-normal.ttf'
     ],
     'Poppins-Italic.ttf': [
-      'assets/certificados/Poppins-Italic.ttf',
+      `${CERTIFICATE_ASSETS_BASE_PATH}Poppins-Italic.ttf`,
       'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-400-italic.ttf'
     ],
     'Poppins-SemiBold.ttf': [
-      'assets/certificados/Poppins-SemiBold.ttf',
+      `${CERTIFICATE_ASSETS_BASE_PATH}Poppins-SemiBold.ttf`,
       'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-normal.ttf'
     ],
     'Poppins-SemiBoldItalic.ttf': [
-      'assets/certificados/Poppins-SemiBoldItalic.ttf',
+      `${CERTIFICATE_ASSETS_BASE_PATH}Poppins-SemiBoldItalic.ttf`,
       'https://cdn.jsdelivr.net/npm/@fontsource/poppins@5.0.17/files/poppins-latin-600-italic.ttf'
     ]
   };
