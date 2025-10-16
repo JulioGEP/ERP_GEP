@@ -60,8 +60,19 @@ export type SessionComment = {
   sesion_id: string;
   content: string;
   author: string | null;
+  compartir_formador: boolean;
   created_at: string | null;
   updated_at: string | null;
+};
+
+export type CreateSessionCommentInput = {
+  content: string;
+  compartir_formador?: boolean;
+};
+
+export type UpdateSessionCommentInput = {
+  content?: string;
+  compartir_formador?: boolean;
 };
 
 export type SessionDocument = {
@@ -609,6 +620,7 @@ function normalizeSessionComment(raw: any): SessionComment {
   const sessionId = toStringValue(raw?.sesion_id) ?? '';
   const content = toStringValue(raw?.content) ?? '';
   const author = toStringValue(raw?.author);
+  const shareWithTrainer = Boolean(raw?.compartir_formador);
   const createdAt = toStringValue(raw?.created_at);
   const updatedAt = toStringValue(raw?.updated_at);
 
@@ -618,6 +630,7 @@ function normalizeSessionComment(raw: any): SessionComment {
     sesion_id: sessionId,
     content,
     author: author ?? null,
+    compartir_formador: shareWithTrainer,
     created_at: createdAt ?? null,
     updated_at: updatedAt ?? null,
   };
@@ -1359,7 +1372,7 @@ export async function fetchSessionComments(sessionId: string): Promise<SessionCo
 
 export async function createSessionComment(
   sessionId: string,
-  content: string,
+  input: CreateSessionCommentInput,
   user?: { id: string; name?: string },
 ): Promise<SessionComment> {
   const normalizedId = String(sessionId ?? '').trim();
@@ -1367,7 +1380,8 @@ export async function createSessionComment(
     throw new ApiError('VALIDATION_ERROR', 'sessionId es obligatorio');
   }
 
-  const trimmedContent = typeof content === 'string' ? content.trim() : '';
+  const trimmedContent =
+    typeof input?.content === 'string' ? input.content.trim() : '';
   if (!trimmedContent.length) {
     throw new ApiError('VALIDATION_ERROR', 'content requerido');
   }
@@ -1376,10 +1390,15 @@ export async function createSessionComment(
   if (user?.id) headers['X-User-Id'] = user.id;
   if (user?.name) headers['X-User-Name'] = user.name;
 
+  const payload: Record<string, unknown> = { content: trimmedContent };
+  if (typeof input?.compartir_formador === 'boolean') {
+    payload.compartir_formador = input.compartir_formador;
+  }
+
   const data = await request(`/session_comments/${encodeURIComponent(normalizedId)}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ content: trimmedContent }),
+    body: JSON.stringify(payload),
   });
 
   return normalizeSessionComment(data?.comment ?? {});
@@ -1388,7 +1407,7 @@ export async function createSessionComment(
 export async function updateSessionComment(
   sessionId: string,
   commentId: string,
-  content: string,
+  input: UpdateSessionCommentInput,
   user?: { id: string; name?: string },
 ): Promise<SessionComment> {
   const normalizedSessionId = String(sessionId ?? '').trim();
@@ -1397,8 +1416,9 @@ export async function updateSessionComment(
     throw new ApiError('VALIDATION_ERROR', 'sessionId y commentId son obligatorios');
   }
 
-  const trimmedContent = typeof content === 'string' ? content.trim() : '';
-  if (!trimmedContent.length) {
+  const trimmedContent =
+    typeof input?.content === 'string' ? input.content.trim() : undefined;
+  if (trimmedContent !== undefined && !trimmedContent.length) {
     throw new ApiError('VALIDATION_ERROR', 'content requerido');
   }
 
@@ -1406,12 +1426,24 @@ export async function updateSessionComment(
   if (user?.id) headers['X-User-Id'] = user.id;
   if (user?.name) headers['X-User-Name'] = user.name;
 
+  const payload: Record<string, unknown> = {};
+  if (trimmedContent !== undefined) {
+    payload.content = trimmedContent;
+  }
+  if (typeof input?.compartir_formador === 'boolean') {
+    payload.compartir_formador = input.compartir_formador;
+  }
+
+  if (!Object.keys(payload).length) {
+    throw new ApiError('VALIDATION_ERROR', 'Nada que actualizar');
+  }
+
   const data = await request(
     `/session_comments/${encodeURIComponent(normalizedSessionId)}/${encodeURIComponent(normalizedCommentId)}`,
     {
       method: 'PATCH',
       headers,
-      body: JSON.stringify({ content: trimmedContent }),
+      body: JSON.stringify(payload),
     },
   );
 

@@ -6,6 +6,24 @@ import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
 
 const DEFAULT_AUTHOR = process.env.DEFAULT_NOTE_AUTHOR || 'erp_user';
 
+function parseCompartirFormador(value: any): boolean | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return null;
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return null;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized.length) return null;
+    if (['true', '1', 'si', 'sí', 'yes'].includes(normalized)) return true;
+    if (['false', '0', 'no'].includes(normalized)) return false;
+  }
+  return null;
+}
+
 function parsePath(path: string) {
   const value = String(path || '');
   const match = value.match(/\/(?:\.netlify\/functions\/)?session_comments\/([^/]+)(?:\/([^/]+))?$/i);
@@ -30,6 +48,7 @@ function mapCommentForResponse(comment: any) {
     sesion_id: comment.sesion_id,
     content: comment.content,
     author: comment.author ?? DEFAULT_AUTHOR,
+    compartir_formador: Boolean(comment.compartir_formador),
     created_at: toMadridISOString(comment.created_at),
     updated_at: toMadridISOString(comment.updated_at),
   };
@@ -95,11 +114,13 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
       }
 
-      const { content } = JSON.parse(event.body || '{}');
+      const { content, compartir_formador } = JSON.parse(event.body || '{}');
       const trimmedContent = typeof content === 'string' ? content.trim() : '';
       if (!trimmedContent.length) {
         return errorResponse('VALIDATION_ERROR', 'content requerido', 400);
       }
+
+      const compartirFormadorValue = parseCompartirFormador(compartir_formador);
 
       const author = requestUser && requestUser.length ? requestUser : DEFAULT_AUTHOR;
       const now = nowInMadridDate();
@@ -119,6 +140,7 @@ export const handler = async (event: any) => {
           sesion_id: sessionUuid,
           content: trimmedContent,
           author,
+          compartir_formador: compartirFormadorValue ?? false,
           created_at: now,
           updated_at: now,
         },
@@ -144,18 +166,31 @@ export const handler = async (event: any) => {
         return errorResponse('FORBIDDEN', 'No puedes editar este comentario', 403);
       }
 
-      const { content } = JSON.parse(event.body || '{}');
-      const trimmedContent = typeof content === 'string' ? content.trim() : '';
-      if (!trimmedContent.length) {
+      const { content, compartir_formador } = JSON.parse(event.body || '{}');
+      const trimmedContent = typeof content === 'string' ? content.trim() : null;
+      const compartirFormadorValue = parseCompartirFormador(compartir_formador);
+
+      if (trimmedContent !== null && !trimmedContent.length) {
         return errorResponse('VALIDATION_ERROR', 'content requerido', 400);
       }
 
+      const data: any = {};
+      if (trimmedContent !== null) {
+        data.content = trimmedContent;
+      }
+      if (compartirFormadorValue !== null) {
+        data.compartir_formador = compartirFormadorValue;
+      }
+
+      if (!Object.keys(data).length) {
+        return successResponse({ comment: mapCommentForResponse(existing) });
+      }
+
+      data.updated_at = nowInMadridDate();
+
       const updated = await prisma.sesiones_comentarios.update({
         where: { id: parsedCommentId },
-        data: {
-          content: trimmedContent,
-          updated_at: nowInMadridDate(),
-        },
+        data,
       });
 
       return successResponse({ comment: mapCommentForResponse(updated) });
