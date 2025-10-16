@@ -68,6 +68,7 @@ import {
   type SessionCounts,
 } from '../api';
 import { isApiError } from '../api';
+import { buildFieldTooltip } from '../../../utils/fieldTooltip';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -537,6 +538,7 @@ function SessionStudentsAccordionItem({
             onChange={(event) => handleDraftChange('nombre', event.target.value)}
             placeholder="Nombre"
             disabled={disableInputs}
+            title={buildFieldTooltip(draft.nombre)}
           />
         </td>
         <td className="align-middle">
@@ -546,6 +548,7 @@ function SessionStudentsAccordionItem({
             onChange={(event) => handleDraftChange('apellido', event.target.value)}
             placeholder="Apellidos"
             disabled={disableInputs}
+            title={buildFieldTooltip(draft.apellido)}
           />
         </td>
         <td className="align-middle">
@@ -555,6 +558,7 @@ function SessionStudentsAccordionItem({
             onChange={(event) => handleDraftChange('dni', event.target.value)}
             placeholder="DNI"
             disabled={disableInputs}
+            title={buildFieldTooltip(draft.dni)}
           />
         </td>
         <td className="align-middle text-center">
@@ -2769,6 +2773,15 @@ function SessionEditor({
     return set;
   }, [availability, localLocks]);
 
+  const selectedRoomLabel = useMemo(() => {
+    if (!form.sala_id) return '';
+    const room = rooms.find((item) => item.sala_id === form.sala_id);
+    if (!room) return '';
+    const baseLabel = room.sede ? `${room.name} (${room.sede})` : room.name;
+    const blocked = blockedRooms.has(room.sala_id);
+    return blocked ? `${baseLabel} · No disponible` : baseLabel;
+  }, [blockedRooms, form.sala_id, rooms]);
+
   const hasDateRange = Boolean(availabilityRange);
   const roomWarningVisible = hasDateRange && blockedRooms.size > 0;
 
@@ -2806,6 +2819,7 @@ function SessionEditor({
               onChange={(event) =>
                 onChange((current) => ({ ...current, nombre_cache: event.target.value }))
               }
+              title={buildFieldTooltip(form.nombre_cache)}
             />
           </Form.Group>
         </Col>
@@ -2847,6 +2861,7 @@ function SessionEditor({
                   return next;
                 });
               }}
+              title={buildFieldTooltip(form.fecha_inicio_local)}
             />
           </Form.Group>
         </Col>
@@ -2860,6 +2875,7 @@ function SessionEditor({
               onChange={(event) =>
                 onChange((current) => ({ ...current, fecha_fin_local: event.target.value || null }))
               }
+              title={buildFieldTooltip(form.fecha_fin_local)}
             />
           </Form.Group>
         </Col>
@@ -2875,6 +2891,7 @@ function SessionEditor({
                 }
                 onChange((current) => ({ ...current, estado: nextValue }));
               }}
+              title={buildFieldTooltip(SESSION_ESTADO_LABELS[form.estado])}
             >
               <option value="BORRADOR">
                 {SESSION_ESTADO_LABELS.BORRADOR}
@@ -2911,6 +2928,7 @@ function SessionEditor({
                     setTrainerListOpen((open) => !open);
                   }
                 }}
+                title={buildFieldTooltip(trainerSummary)}
               />
               <Collapse in={trainerListOpen}>
                 <div
@@ -2923,6 +2941,7 @@ function SessionEditor({
                     value={trainerFilter}
                     onChange={(event) => setTrainerFilter(event.target.value)}
                     className="mb-2"
+                    title={buildFieldTooltip(trainerFilter)}
                   />
                   <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
                     <ListGroup variant="flush">
@@ -2994,6 +3013,7 @@ function SessionEditor({
                     setUnitListOpen((open) => !open);
                   }
                 }}
+                title={buildFieldTooltip(unitSummary)}
               />
               <Collapse in={unitListOpen}>
                 <div id={`session-${form.id}-units-options`} className="session-multiselect-panel mt-2">
@@ -3003,6 +3023,7 @@ function SessionEditor({
                     value={unitFilter}
                     onChange={(event) => setUnitFilter(event.target.value)}
                     className="mb-2"
+                    title={buildFieldTooltip(unitFilter)}
                   />
                   <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
                     <ListGroup variant="flush">
@@ -3065,6 +3086,7 @@ function SessionEditor({
               onChange={(event) =>
                 onChange((current) => ({ ...current, sala_id: event.target.value || null }))
               }
+              title={buildFieldTooltip(selectedRoomLabel)}
             >
               <option value="">Sin sala asignada</option>
               {rooms.map((room) => {
@@ -3101,6 +3123,7 @@ function SessionEditor({
                 onChange={(event) =>
                   onChange((current) => ({ ...current, direccion: event.target.value ?? '' }))
                 }
+                title={buildFieldTooltip(form.direccion)}
               />
               <Button
                 variant="outline-primary"
@@ -3359,6 +3382,7 @@ function SessionCommentsSection({
                             value={editingCommentContent}
                             onChange={(event) => setEditingCommentContent(event.target.value)}
                             disabled={isUpdating}
+                            title={buildFieldTooltip(editingCommentContent)}
                           />
                           <div className="d-flex justify-content-end gap-2 mt-2">
                             <Button
@@ -3441,6 +3465,7 @@ function SessionCommentsSection({
                   onChange={(event) => setNewCommentContent(event.target.value)}
                   disabled={createCommentMutation.isPending}
                   placeholder="Escribe un comentario"
+                  title={buildFieldTooltip(newCommentContent)}
                 />
               </Form.Group>
               <div className="d-flex justify-content-end align-items-center gap-2 mt-2">
