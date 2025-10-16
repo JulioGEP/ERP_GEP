@@ -194,29 +194,6 @@ function buildCertificateFileName(row: CertificateRow, session: CertificateSessi
   return `${fileName}.pdf`;
 }
 
-function triggerCertificateDownload(blob: Blob, fileName: string) {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return;
-  }
-
-  const downloadUrl = URL.createObjectURL(blob);
-
-  try {
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = fileName;
-    link.rel = 'noopener';
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  } finally {
-    setTimeout(() => {
-      URL.revokeObjectURL(downloadUrl);
-    }, 0);
-  }
-}
-
 const CERTIFICATE_BATCH_SIZE = 5;
 const CERTIFICATE_MAX_RETRIES = 3;
 const CERTIFICATE_RETRY_DELAY_MS = 500;
@@ -786,7 +763,6 @@ export function CertificadosPage() {
             }
 
             const fileName = buildCertificateFileName(row, selectedSession ?? null);
-            triggerCertificateDownload(blob, fileName);
             throwIfCancelled();
 
             currentStage = 'upload';
