@@ -33,6 +33,7 @@ import { formatSedeLabel } from './formatSedeLabel';
 import { SessionsAccordion } from './sessions/SessionsAccordion';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
+import { buildFieldTooltip } from '../../utils/fieldTooltip';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -968,19 +969,35 @@ export function BudgetDetailModal({
             <Row className="erp-summary-row g-3">
               <Col md={3}>
                 <Form.Label>Título</Form.Label>
-                <Form.Control value={displayOrDash(titleDisplay)} readOnly />
+                <Form.Control
+                  value={displayOrDash(titleDisplay)}
+                  readOnly
+                  title={buildFieldTooltip(titleDisplay)}
+                />
               </Col>
               <Col md={3}>
                 <Form.Label>Cliente</Form.Label>
-                <Form.Control value={displayOrDash(clientDisplay)} readOnly />
+                <Form.Control
+                  value={displayOrDash(clientDisplay)}
+                  readOnly
+                  title={buildFieldTooltip(clientDisplay)}
+                />
               </Col>
               <Col md={3}>
                 <Form.Label>Teléfono</Form.Label>
-                <Form.Control value={displayOrDash(clientPhoneDisplay)} readOnly />
+                <Form.Control
+                  value={displayOrDash(clientPhoneDisplay)}
+                  readOnly
+                  title={buildFieldTooltip(clientPhoneDisplay)}
+                />
               </Col>
               <Col md={3}>
                 <Form.Label>Mail</Form.Label>
-                <Form.Control value={displayOrDash(clientEmailDisplay)} readOnly />
+                <Form.Control
+                  value={displayOrDash(clientEmailDisplay)}
+                  readOnly
+                  title={buildFieldTooltip(clientEmailDisplay)}
+                />
               </Col>
             </Row>
           </div>
@@ -1004,6 +1021,7 @@ export function BudgetDetailModal({
                 <Form.Control
                   value={formatSedeLabel(form.sede_label) ?? ''}
                   onChange={(e) => updateForm('sede_label', e.target.value)}
+                  title={buildFieldTooltip(form.sede_label)}
                 />
               </Col>
               <Col md={8}>
@@ -1013,6 +1031,7 @@ export function BudgetDetailModal({
                     className="flex-grow-1"
                     value={form.training_address}
                     onChange={(e) => updateForm('training_address', e.target.value)}
+                    title={buildFieldTooltip(form.training_address)}
                   />
                   <Button
                     variant="outline-primary"
@@ -1029,6 +1048,7 @@ export function BudgetDetailModal({
                   value={form.caes_label}
                   onChange={(e) => updateForm('caes_label', e.target.value)}
                   style={affirmativeBorder(form.caes_label)}
+                  title={buildFieldTooltip(form.caes_label)}
                 />
               </Col>
               <Col md={2} className="budget-field-narrow">
@@ -1037,6 +1057,7 @@ export function BudgetDetailModal({
                   value={form.fundae_label}
                   onChange={(e) => updateForm('fundae_label', e.target.value)}
                   style={affirmativeBorder(form.fundae_label)}
+                  title={buildFieldTooltip(form.fundae_label)}
                 />
               </Col>
               <Col md={2} className="budget-field-narrow">
@@ -1045,6 +1066,7 @@ export function BudgetDetailModal({
                   value={form.hotel_label}
                   onChange={(e) => updateForm('hotel_label', e.target.value)}
                   style={affirmativeBorder(form.hotel_label)}
+                  title={buildFieldTooltip(form.hotel_label)}
                 />
               </Col>
               <Col md={2}>
@@ -1053,15 +1075,24 @@ export function BudgetDetailModal({
                   value={displayOrDash(deal.transporte ?? null)}
                   readOnly
                   style={affirmativeBorder(deal.transporte ?? null)}
+                  title={buildFieldTooltip(deal.transporte ?? null)}
                 />
               </Col>
               <Col md={2} className="budget-field-wide">
                 <Form.Label>PO</Form.Label>
-                <Form.Control value={displayOrDash(deal.po ?? null)} readOnly />
+                <Form.Control
+                  value={displayOrDash(deal.po ?? null)}
+                  readOnly
+                  title={buildFieldTooltip(deal.po ?? null)}
+                />
               </Col>
               <Col md={2} className="budget-field-wide">
                 <Form.Label>Mail Factura</Form.Label>
-                <Form.Control value={displayOrDash(deal.mail_invoice ?? null)} readOnly />
+                <Form.Control
+                  value={displayOrDash(deal.mail_invoice ?? null)}
+                  readOnly
+                  title={buildFieldTooltip(deal.mail_invoice ?? null)}
+                />
               </Col>
             </Row>
 
@@ -1100,6 +1131,7 @@ export function BudgetDetailModal({
                               onChange={(event) => handleHoursChange(productId!, event.target.value)}
                               className="text-center"
                               aria-label={`Horas de ${productLabel}`}
+                              title={buildFieldTooltip(hoursValue)}
                             />
                           ) : (
                             <span className="text-muted">{displayOrDash(product?.hours ?? null)}</span>
@@ -1189,6 +1221,7 @@ export function BudgetDetailModal({
                                   value={editingNoteContent}
                                   onChange={(event) => setEditingNoteContent(event.target.value)}
                                   disabled={updatingNote}
+                                  title={buildFieldTooltip(editingNoteContent)}
                                 />
                                 <div className="d-flex justify-content-end gap-2 mt-2">
                                   <Button
@@ -1269,6 +1302,7 @@ export function BudgetDetailModal({
                         onChange={(event) => setNewNoteContent(event.target.value)}
                         disabled={creatingNote}
                         placeholder="Escribe una nota"
+                        title={buildFieldTooltip(newNoteContent)}
                       />
                     </Form.Group>
                     <div className="d-flex justify-content-end align-items-center gap-2 mt-2">
