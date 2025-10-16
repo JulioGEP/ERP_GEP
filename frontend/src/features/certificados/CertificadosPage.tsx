@@ -1384,16 +1384,7 @@ export function CertificadosPage() {
                         <div className="text-muted small">
                           Obteniendo enlace público de certificados…
                         </div>
-                      ) : publicLinkUrl ? (
-                        <a
-                          href={publicLinkUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="link-primary"
-                        >
-                          Abrir carpeta pública de certificados
-                        </a>
-                      ) : publicLinkError ? (
+                      ) : publicLinkUrl ? null : publicLinkError ? (
                         <div className="text-danger small">
                           No se pudo obtener el enlace público de certificados. {publicLinkError}
                         </div>
