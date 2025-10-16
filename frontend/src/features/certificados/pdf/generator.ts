@@ -73,6 +73,19 @@ const CERTIFICATE_TEMPLATES: Record<CertificateTemplateKey, CertificateTemplateC
   },
 };
 
+const CERTIFICATE_IMAGE_DIMENSIONS = {
+  background: { width: 839, height: 1328 },
+  leftSidebar: { width: 85, height: 1241 },
+  logo: { width: 827, height: 382 },
+  footer: { width: 853, height: 153 },
+} as const;
+
+const BACKGROUND_SCALE = 0.5;
+const SIDEBAR_SCALE = 0.5;
+const FOOTER_SCALE = 0.5;
+const LOGO_WIDTH = 180;
+const LOGO_RIGHT_MARGIN = 40;
+
 const CERTIFICATE_TEMPLATE_LABELS: Record<CertificateTemplateKey, string> = {
   'CERT-GENERICO': 'Genérico',
   'CERT-PAUX-EI': 'Auxiliar Educación Infantil',
@@ -234,10 +247,17 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.backgroundKey) {
       const background = getCertificateImageDataUrl(template.backgroundKey);
       if (background) {
+        const scaledWidth = pageSize.width * BACKGROUND_SCALE;
+        const aspectRatio =
+          CERTIFICATE_IMAGE_DIMENSIONS.background.height /
+          CERTIFICATE_IMAGE_DIMENSIONS.background.width;
+        const scaledHeight = scaledWidth * aspectRatio;
+
         layers.push({
           image: background,
-          width: pageSize.width,
-          absolutePosition: { x: 0, y: 0 },
+          width: scaledWidth,
+          height: scaledHeight,
+          absolutePosition: { x: pageSize.width - scaledWidth, y: 0 },
         });
       }
     }
@@ -245,9 +265,16 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.sidebarKey) {
       const sidebar = getCertificateImageDataUrl(template.sidebarKey);
       if (sidebar) {
+        const scaledHeight = pageSize.height * SIDEBAR_SCALE;
+        const aspectRatio =
+          CERTIFICATE_IMAGE_DIMENSIONS.leftSidebar.width /
+          CERTIFICATE_IMAGE_DIMENSIONS.leftSidebar.height;
+        const scaledWidth = scaledHeight * aspectRatio;
+
         layers.push({
           image: sidebar,
-          height: pageSize.height,
+          width: scaledWidth,
+          height: scaledHeight,
           absolutePosition: { x: 0, y: 0 },
         });
       }
@@ -256,10 +283,19 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.logoKey) {
       const logo = getCertificateImageDataUrl(template.logoKey);
       if (logo) {
+        const aspectRatio =
+          CERTIFICATE_IMAGE_DIMENSIONS.logo.height /
+          CERTIFICATE_IMAGE_DIMENSIONS.logo.width;
+        const scaledHeight = LOGO_WIDTH * aspectRatio;
+
         layers.push({
           image: logo,
-          width: 180,
-          absolutePosition: { x: pageSize.width - 220, y: 40 },
+          width: LOGO_WIDTH,
+          height: scaledHeight,
+          absolutePosition: {
+            x: pageSize.width - LOGO_RIGHT_MARGIN - LOGO_WIDTH,
+            y: (pageSize.height - scaledHeight) / 2,
+          },
         });
       }
     }
@@ -267,10 +303,17 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.footerKey) {
       const footer = getCertificateImageDataUrl(template.footerKey);
       if (footer) {
+        const scaledWidth = pageSize.width * FOOTER_SCALE;
+        const aspectRatio =
+          CERTIFICATE_IMAGE_DIMENSIONS.footer.height /
+          CERTIFICATE_IMAGE_DIMENSIONS.footer.width;
+        const scaledHeight = scaledWidth * aspectRatio;
+
         layers.push({
           image: footer,
-          width: pageSize.width,
-          absolutePosition: { x: 0, y: pageSize.height - 120 },
+          width: scaledWidth,
+          height: scaledHeight,
+          absolutePosition: { x: 0, y: pageSize.height - scaledHeight },
         });
       }
     }
