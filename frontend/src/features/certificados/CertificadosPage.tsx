@@ -12,7 +12,7 @@ import { Alert, Button, Card, Form, Spinner } from 'react-bootstrap';
 import { ApiError, uploadSessionCertificate } from '../presupuestos/api';
 import { useCertificateData } from './hooks/useCertificateData';
 import { CertificateTable } from './CertificateTable';
-import { CertificateToolbar } from './CertificateToolbar';
+import { CertificateToolbar, type CertificateToolbarProgressStatus } from './CertificateToolbar';
 import type { CertificateRow, CertificateSession } from './lib/mappers';
 
 import './styles/certificados.scss';
@@ -48,6 +48,30 @@ type GenerationResult = {
   status: 'success' | 'error';
   message?: string | null;
 };
+
+type GenerationStepStatus = CertificateToolbarProgressStatus;
+type GenerationStepId = 'loadGenerator' | 'generateCertificates' | 'refreshStudents';
+
+type GenerationStep = {
+  id: GenerationStepId;
+  label: string;
+  status: GenerationStepStatus;
+};
+
+type GenerationStepDefinition = Pick<GenerationStep, 'id' | 'label'>;
+
+const GENERATION_STEP_DEFINITIONS: GenerationStepDefinition[] = [
+  { id: 'loadGenerator', label: 'Preparando generador de certificados' },
+  { id: 'generateCertificates', label: 'Generando y subiendo certificados' },
+  { id: 'refreshStudents', label: 'Actualizando listado de alumnos' },
+];
+
+function createGenerationSteps(): GenerationStep[] {
+  return GENERATION_STEP_DEFINITIONS.map((definition) => ({
+    ...definition,
+    status: 'pending',
+  }));
+}
 
 function wait(delay: number) {
   return new Promise((resolve) => {
@@ -162,7 +186,21 @@ export function CertificadosPage() {
   const [generationTotal, setGenerationTotal] = useState(0);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationResults, setGenerationResults] = useState<GenerationResult[]>([]);
+  const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>(() => createGenerationSteps());
   const certificateModulePromiseRef = useRef<Promise<CertificatePdfModule | null> | null>(null);
+
+  const resetGenerationSteps = useCallback(() => {
+    setGenerationSteps(createGenerationSteps());
+  }, [setGenerationSteps]);
+
+  const setGenerationStepStatus = useCallback(
+    (stepId: GenerationStepId, status: GenerationStepStatus) => {
+      setGenerationSteps((current) =>
+        current.map((step) => (step.id === stepId ? { ...step, status } : step)),
+      );
+    },
+    [setGenerationSteps],
+  );
 
   const ensureCertificateGenerator = useCallback(async (): Promise<CertificatePdfModule> => {
     const currentGenerator = window.certificatePdf;
@@ -197,7 +235,8 @@ export function CertificadosPage() {
     setGenerationProgress(0);
     setGenerationTotal(0);
     setGenerationResults([]);
-  }, [selectedSessionId]);
+    resetGenerationSteps();
+  }, [selectedSessionId, resetGenerationSteps]);
 
   useEffect(() => {
     void ensureCertificateGenerator().catch(() => {
@@ -241,10 +280,15 @@ export function CertificadosPage() {
         return;
       }
 
+      resetGenerationSteps();
+      setGenerationStepStatus('loadGenerator', 'working');
+
       let pdfGenerator: CertificatePdfModule;
       try {
         pdfGenerator = await ensureCertificateGenerator();
+        setGenerationStepStatus('loadGenerator', 'success');
       } catch (error) {
+        setGenerationStepStatus('loadGenerator', 'error');
         setGenerationError(resolveGenerationError(error));
         return;
       }
@@ -255,6 +299,7 @@ export function CertificadosPage() {
 
       setGenerationTotal(rowsToProcess.length);
       setGenerating(true);
+      setGenerationStepStatus('generateCertificates', 'working');
 
       const rowsOrder = editableRows.map((row) => row.id);
 
@@ -333,6 +378,8 @@ export function CertificadosPage() {
         };
       };
 
+      let encounteredRowError = false;
+
       try {
         for (
           let startIndex = 0;
@@ -345,21 +392,29 @@ export function CertificadosPage() {
               const result = await processRowWithRetry(row);
               updateResultsState(result);
               setGenerationProgress((current) => current + 1);
+              if (result.status === 'error') {
+                encounteredRowError = true;
+              }
             }),
           );
         }
 
-        let reloadErrorMessage: string | null = null;
+        setGenerationStepStatus(
+          'generateCertificates',
+          encounteredRowError ? 'error' : 'success',
+        );
+
+        setGenerationStepStatus('refreshStudents', 'working');
         try {
           await selectSession(sessionId);
+          setGenerationStepStatus('refreshStudents', 'success');
         } catch (reloadError) {
-          reloadErrorMessage = resolveGenerationError(reloadError);
-        }
-
-        if (reloadErrorMessage) {
+          setGenerationStepStatus('refreshStudents', 'error');
+          const reloadErrorMessage = resolveGenerationError(reloadError);
           setGenerationError(`No se pudo recargar el listado de alumnos (${reloadErrorMessage}).`);
         }
       } catch (error) {
+        setGenerationStepStatus('generateCertificates', 'error');
         const message = resolveGenerationError(error);
         setGenerationError(message);
       } finally {
@@ -372,6 +427,8 @@ export function CertificadosPage() {
       editableRows,
       selectSession,
       ensureCertificateGenerator,
+      resetGenerationSteps,
+      setGenerationStepStatus,
     ],
   );
 
@@ -422,6 +479,7 @@ export function CertificadosPage() {
   const showSessionsSelect = sessions.length > 1;
   const showAutoSelectedSession = sessions.length === 1 && selectedSession;
   const hasResults = editableRows.length > 0;
+  const hasVisibleStepProgress = generationSteps.some((step) => step.status !== 'pending');
   const isToolbarDisabled =
     !hasResults ||
     loadingStudents ||
@@ -432,7 +490,7 @@ export function CertificadosPage() {
 
   const toolbarDisabledReason = (() => {
     if (generating) {
-      return 'Generando certificados. Espera a que finalice el proceso.';
+      return 'Generación de certificados en curso. Consulta el detalle del progreso.';
     }
     if (loadingStudents) {
       return 'Cargando alumnos. Espera a que finalice la carga.';
@@ -453,14 +511,16 @@ export function CertificadosPage() {
   })();
 
   const toolbarInfoMessage = (() => {
+    if (generating || hasVisibleStepProgress) {
+      return undefined;
+    }
     if (toolbarDisabledReason) {
       return toolbarDisabledReason;
     }
-    if (generating) {
-      return 'Generando certificados. Sigue el progreso en el botón.';
-    }
-    return 'Ajusta los datos de los alumnos antes de generar los certificados.';
+    return undefined;
   })();
+
+  const toolbarInfoDetails = hasVisibleStepProgress ? generationSteps : undefined;
 
   const generationSummary = useMemo(() => {
     if (!generationResults.length) {
@@ -565,6 +625,7 @@ export function CertificadosPage() {
                 progress={generationProgress}
                 total={generationTotal}
                 infoMessage={toolbarInfoMessage}
+                infoDetails={toolbarInfoDetails}
                 disabledReason={toolbarDisabledReason}
               />
               <CertificateTable
