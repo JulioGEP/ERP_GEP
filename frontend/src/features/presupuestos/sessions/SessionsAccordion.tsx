@@ -3270,8 +3270,10 @@ function SessionCommentsSection({
   const qc = useQueryClient();
 
   const [newCommentContent, setNewCommentContent] = useState('');
+  const [newCommentShare, setNewCommentShare] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentContent, setEditingCommentContent] = useState('');
+  const [editingCommentShare, setEditingCommentShare] = useState(false);
   const [viewingComment, setViewingComment] = useState<SessionComment | null>(null);
   const [commentError, setCommentError] = useState<string | null>(null);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
@@ -3280,11 +3282,13 @@ function SessionCommentsSection({
   useEffect(() => {
     setEditingCommentId(null);
     setEditingCommentContent('');
+    setEditingCommentShare(false);
     setViewingComment(null);
     setCommentError(null);
     setDeletingCommentId(null);
     setUpdatingCommentId(null);
     setNewCommentContent('');
+    setNewCommentShare(false);
   }, [sessionId]);
 
   const commentsQuery = useQuery({
@@ -3302,16 +3306,27 @@ function SessionCommentsSection({
     commentsQuery.error instanceof Error ? commentsQuery.error.message : commentsQuery.error ? 'No se pudieron cargar los comentarios' : null;
 
   const createCommentMutation = useMutation({
-    mutationFn: (content: string) =>
-      createSessionComment(sessionId, content, { id: userId, name: userName }),
+    mutationFn: (input: { content: string; compartir_formador: boolean }) =>
+      createSessionComment(
+        sessionId,
+        { content: input.content, compartir_formador: input.compartir_formador },
+        { id: userId, name: userName },
+      ),
   });
 
   const updateCommentMutation = useMutation({
-    mutationFn: (input: { commentId: string; content: string }) =>
-      updateSessionComment(sessionId, input.commentId, input.content, {
-        id: userId,
-        name: userName,
-      }),
+    mutationFn: (
+      input: { commentId: string; content?: string; compartir_formador?: boolean },
+    ) =>
+      updateSessionComment(
+        sessionId,
+        input.commentId,
+        { content: input.content, compartir_formador: input.compartir_formador },
+        {
+          id: userId,
+          name: userName,
+        },
+      ),
   });
 
   const deleteCommentMutation = useMutation({
@@ -3330,8 +3345,12 @@ function SessionCommentsSection({
     if (!trimmed) return;
     setCommentError(null);
     try {
-      await createCommentMutation.mutateAsync(trimmed);
+      await createCommentMutation.mutateAsync({
+        content: trimmed,
+        compartir_formador: newCommentShare,
+      });
       setNewCommentContent('');
+      setNewCommentShare(false);
       await qc.invalidateQueries({ queryKey: ['session-comments', sessionId] });
     } catch (error) {
       const message = isApiError(error)
@@ -3347,12 +3366,14 @@ function SessionCommentsSection({
     if (!comment?.id) return;
     setEditingCommentId(comment.id);
     setEditingCommentContent(comment.content ?? '');
+    setEditingCommentShare(Boolean(comment.compartir_formador));
     setCommentError(null);
   };
 
   const cancelEditingComment = () => {
     setEditingCommentId(null);
     setEditingCommentContent('');
+    setEditingCommentShare(false);
     setUpdatingCommentId(null);
   };
 
@@ -3363,8 +3384,37 @@ function SessionCommentsSection({
     setCommentError(null);
     setUpdatingCommentId(comment.id);
     try {
-      await updateCommentMutation.mutateAsync({ commentId: comment.id, content: trimmed });
+      await updateCommentMutation.mutateAsync({
+        commentId: comment.id,
+        content: trimmed,
+        compartir_formador: editingCommentShare,
+      });
       cancelEditingComment();
+      await qc.invalidateQueries({ queryKey: ['session-comments', sessionId] });
+    } catch (error) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo actualizar el comentario';
+      setCommentError(message);
+    } finally {
+      setUpdatingCommentId(null);
+    }
+  };
+
+  const handleToggleCommentShare = async (comment: SessionComment, checked: boolean) => {
+    if (!comment?.id) return;
+    setCommentError(null);
+    setUpdatingCommentId(comment.id);
+    try {
+      await updateCommentMutation.mutateAsync({
+        commentId: comment.id,
+        compartir_formador: checked,
+      });
+      setViewingComment((current) =>
+        current && current.id === comment.id ? { ...current, compartir_formador: checked } : current,
+      );
       await qc.invalidateQueries({ queryKey: ['session-comments', sessionId] });
     } catch (error) {
       const message = isApiError(error)
@@ -3463,6 +3513,16 @@ function SessionCommentsSection({
                             disabled={isUpdating}
                             title={buildFieldTooltip(editingCommentContent)}
                           />
+                          <Form.Check
+                            type="switch"
+                            id={`session-comment-share-edit-${comment.id}`}
+                            className="mt-2"
+                            label="Compartir con formador"
+                            checked={editingCommentShare}
+                            onChange={(event) => setEditingCommentShare(event.target.checked)}
+                            onClick={(event) => event.stopPropagation()}
+                            disabled={isUpdating}
+                          />
                           <div className="d-flex justify-content-end gap-2 mt-2">
                             <Button
                               size="sm"
@@ -3490,9 +3550,25 @@ function SessionCommentsSection({
                         </>
                       ) : (
                         <>
-                          <p className="mb-2 text-break" style={{ whiteSpace: 'pre-line' }}>
-                            {displayOrDash(comment.content)}
-                          </p>
+                          <div className="d-flex flex-column flex-sm-row justify-content-between align-items-sm-start gap-2">
+                            <p className="mb-2 flex-grow-1 text-break" style={{ whiteSpace: 'pre-line' }}>
+                              {displayOrDash(comment.content)}
+                            </p>
+                            <Form.Check
+                              type="switch"
+                              id={`session-comment-share-${comment.id}`}
+                              className="mt-sm-1"
+                              label="Compartir con formador"
+                              checked={Boolean(comment.compartir_formador)}
+                              onChange={(event) => {
+                                event.stopPropagation();
+                                if (!canEdit) return;
+                                handleToggleCommentShare(comment, event.target.checked);
+                              }}
+                              onClick={(event) => event.stopPropagation()}
+                              disabled={isDeleting || isUpdating || !canEdit}
+                            />
+                          </div>
                           <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap">
                             <small className="text-muted mb-0">Autor: {displayOrDash(comment.author)}</small>
                             {canEdit ? (
@@ -3545,6 +3621,15 @@ function SessionCommentsSection({
                   disabled={createCommentMutation.isPending}
                   placeholder="Escribe un comentario"
                   title={buildFieldTooltip(newCommentContent)}
+                />
+                <Form.Check
+                  type="switch"
+                  id={`session-${sessionId}-comment-share`}
+                  className="mt-2"
+                  label="Compartir con formador"
+                  checked={newCommentShare}
+                  onChange={(event) => setNewCommentShare(event.target.checked)}
+                  disabled={createCommentMutation.isPending}
                 />
               </Form.Group>
               <div className="d-flex justify-content-end align-items-center gap-2 mt-2">
