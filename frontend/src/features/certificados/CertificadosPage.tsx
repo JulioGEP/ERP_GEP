@@ -368,6 +368,8 @@ export function CertificadosPage() {
   const [excludedCertifiedIds, setExcludedCertifiedIds] = useState<Set<string>>(
     () => new Set<string>(),
   );
+  const [showCertifiedWarning, setShowCertifiedWarning] = useState(false);
+  const suppressCertifiedWarningRef = useRef(false);
 
   const resetGenerationSteps = useCallback(() => {
     setGenerationSteps(createGenerationSteps());
@@ -431,6 +433,22 @@ export function CertificadosPage() {
 
   useEffect(() => {
     setEditableRows(rows.map((row) => ({ ...row })));
+
+    if (!rows.length) {
+      setShowCertifiedWarning(false);
+      suppressCertifiedWarningRef.current = false;
+      return;
+    }
+
+    const hasCertifiedRows = rows.some((row) => row.certificado);
+
+    if (suppressCertifiedWarningRef.current) {
+      setShowCertifiedWarning(false);
+      suppressCertifiedWarningRef.current = false;
+      return;
+    }
+
+    setShowCertifiedWarning(hasCertifiedRows);
   }, [rows]);
 
   useEffect(() => {
@@ -711,12 +729,14 @@ export function CertificadosPage() {
         throwIfCancelled();
         setGenerationStepStatus('refreshStudents', 'working');
         try {
+          suppressCertifiedWarningRef.current = true;
           await selectSession(sessionId);
           throwIfCancelled();
           setGenerationStepStatus('refreshStudents', 'success');
           throwIfCancelled();
           await ensureSessionPublicLink({ forceCreate: true });
         } catch (reloadError) {
+          suppressCertifiedWarningRef.current = false;
           setGenerationStepStatus('refreshStudents', 'error');
           const reloadErrorMessage = resolveGenerationError(reloadError);
           setGenerationError(`No se pudo recargar el listado de alumnos (${reloadErrorMessage}).`);
@@ -834,7 +854,7 @@ export function CertificadosPage() {
   const showSessionsSelect = sessions.length > 1;
   const showAutoSelectedSession = sessions.length === 1 && selectedSession;
   const hasResults = editableRows.length > 0;
-  const hasCertifiedRows = alreadyCertifiedRows.length > 0;
+  const hasCertifiedRows = showCertifiedWarning && alreadyCertifiedRows.length > 0;
   const hasVisibleStepProgress = generationSteps.some((step) => step.status !== 'pending');
   const isToolbarDisabled =
     !hasResults ||
