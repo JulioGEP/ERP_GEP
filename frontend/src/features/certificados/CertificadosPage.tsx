@@ -9,7 +9,13 @@ import {
 } from 'react';
 import { Alert, Button, Card, Form, Spinner } from 'react-bootstrap';
 
-import { ApiError, uploadSessionCertificate } from '../presupuestos/api';
+import {
+  ApiError,
+  createSessionPublicLink,
+  fetchSessionPublicLink,
+  uploadSessionCertificate,
+  type SessionPublicLink,
+} from '../presupuestos/api';
 import { useCertificateData } from './hooks/useCertificateData';
 import { CertificateTable } from './CertificateTable';
 import { CertificateToolbar, type CertificateToolbarProgressStatus } from './CertificateToolbar';
@@ -118,6 +124,15 @@ function slugifyForFileName(value: string): string {
     .toLowerCase();
 }
 
+function sanitizeFileNamePart(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s\-_.]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function formatDateForFileName(value?: string | null): string | null {
   const trimmed = toTrimmedString(value);
   if (!trimmed.length) {
@@ -140,22 +155,25 @@ function formatDateForFileName(value?: string | null): string | null {
 }
 
 function buildCertificateFileName(row: CertificateRow, session: CertificateSession | null): string {
-  const fullName = `${toTrimmedString(row.nombre)} ${toTrimmedString(row.apellidos)}`.trim();
-  const dni = toTrimmedString(row.dni);
-  const training = toTrimmedString(session?.productName ?? row.formacion);
-  const baseSlug = slugifyForFileName(fullName || dni || training || 'certificado');
-  const dateSlug =
-    formatDateForFileName(session?.fecha_inicio_utc ?? row.fecha) ?? undefined;
+  const productName = sanitizeFileNamePart(
+    toTrimmedString(session?.productName ?? row.formacion),
+  );
+  const sessionDate = formatDateForFileName(session?.fecha_inicio_utc ?? row.fecha) ?? '';
+  const sedeLabel = sanitizeFileNamePart(toTrimmedString(row.lugar));
 
-  const parts = ['certificado'];
-  if (baseSlug) {
-    parts.push(baseSlug);
+  const parts = ['Certificado'];
+  if (productName) {
+    parts.push(productName);
   }
-  if (dateSlug) {
-    parts.push(dateSlug);
+  if (sessionDate) {
+    parts.push(sessionDate);
+  }
+  if (sedeLabel) {
+    parts.push(sedeLabel);
   }
 
-  return `${parts.join('-')}.pdf`;
+  const fileName = parts.join(' ').replace(/\s+/g, ' ').trim() || 'Certificado';
+  return `${fileName}.pdf`;
 }
 
 function triggerCertificateDownload(blob: Blob, fileName: string) {
@@ -166,11 +184,6 @@ function triggerCertificateDownload(blob: Blob, fileName: string) {
   const downloadUrl = URL.createObjectURL(blob);
 
   try {
-    const openedWindow = window.open(downloadUrl, '_blank', 'noopener,noreferrer');
-    if (openedWindow) {
-      openedWindow.opener = null;
-    }
-
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = fileName;
@@ -198,6 +211,7 @@ type GenerationResult = {
   status: 'success' | 'error';
   message?: string | null;
   stage?: GenerationFailureStage;
+  url?: string | null;
 };
 
 type GenerationStepStatus = CertificateToolbarProgressStatus;
@@ -290,6 +304,24 @@ function toNonEmptyString(value?: string | null): string | null {
   return trimmed.length ? trimmed : null;
 }
 
+function resolveSessionPublicLinkUrl(link: SessionPublicLink | null): string | null {
+  if (!link) {
+    return null;
+  }
+  const directUrl = toNonEmptyString(link.public_url ?? null);
+  if (directUrl) {
+    return directUrl;
+  }
+  const publicPath = toNonEmptyString(link.public_path ?? null);
+  if (!publicPath) {
+    return null;
+  }
+  if (typeof window !== 'undefined' && publicPath.startsWith('/')) {
+    return `${window.location.origin}${publicPath}`;
+  }
+  return publicPath;
+}
+
 function resolveGenerationError(error: unknown): string {
   if (error instanceof ApiError) {
     const codeLabel = error.code ? `[${error.code}] ` : '';
@@ -329,10 +361,64 @@ export function CertificadosPage() {
   const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>(() => createGenerationSteps());
   const [isCancellingGeneration, setIsCancellingGeneration] = useState(false);
   const generationAbortRef = useRef<{ cancelled: boolean } | null>(null);
+  const [publicLinkUrl, setPublicLinkUrl] = useState<string | null>(null);
+  const [publicLinkLoading, setPublicLinkLoading] = useState(false);
+  const [publicLinkError, setPublicLinkError] = useState<string | null>(null);
+  const publicLinkRequestIdRef = useRef(0);
+  const [excludedCertifiedIds, setExcludedCertifiedIds] = useState<Set<string>>(
+    () => new Set<string>(),
+  );
 
   const resetGenerationSteps = useCallback(() => {
     setGenerationSteps(createGenerationSteps());
   }, [setGenerationSteps]);
+
+  const ensureSessionPublicLink = useCallback(
+    async (options?: { forceCreate?: boolean }) => {
+      const dealId = deal?.deal_id ? String(deal.deal_id).trim() : '';
+      const sessionId = selectedSessionId ? String(selectedSessionId).trim() : '';
+
+      if (!dealId || !sessionId) {
+        publicLinkRequestIdRef.current += 1;
+        setPublicLinkUrl(null);
+        setPublicLinkError(null);
+        setPublicLinkLoading(false);
+        return;
+      }
+
+      const requestId = ++publicLinkRequestIdRef.current;
+      setPublicLinkLoading(true);
+      setPublicLinkError(null);
+
+      try {
+        let link = await fetchSessionPublicLink(dealId, sessionId);
+        if (!link && options?.forceCreate) {
+          link = await createSessionPublicLink(dealId, sessionId);
+        }
+
+        if (publicLinkRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        if (link) {
+          setPublicLinkUrl(resolveSessionPublicLinkUrl(link));
+        } else {
+          setPublicLinkUrl(null);
+        }
+      } catch (error) {
+        if (publicLinkRequestIdRef.current !== requestId) {
+          return;
+        }
+        setPublicLinkUrl(null);
+        setPublicLinkError(resolveGenerationError(error));
+      } finally {
+        if (publicLinkRequestIdRef.current === requestId) {
+          setPublicLinkLoading(false);
+        }
+      }
+    },
+    [deal?.deal_id, selectedSessionId],
+  );
 
   const setGenerationStepStatus = useCallback(
     (stepId: GenerationStepId, status: GenerationStepStatus) => {
@@ -356,10 +442,48 @@ export function CertificadosPage() {
   }, [selectedSessionId, resetGenerationSteps]);
 
   useEffect(() => {
+    setExcludedCertifiedIds(new Set<string>());
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    setExcludedCertifiedIds((current) => {
+      if (!current.size) {
+        return current;
+      }
+      if (!editableRows.length) {
+        if (!current.size) {
+          return current;
+        }
+        return new Set<string>();
+      }
+
+      const certifiedIds = new Set(editableRows.filter((row) => row.certificado).map((row) => row.id));
+      let changed = false;
+      const next = new Set<string>();
+      current.forEach((id) => {
+        if (certifiedIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      });
+
+      if (!changed && next.size === current.size) {
+        return current;
+      }
+      return next;
+    });
+  }, [editableRows]);
+
+  useEffect(() => {
     void pdfMakeReady.catch(() => {
       // pdfMake se inicializará de nuevo cuando el usuario intente generar.
     });
   }, []);
+
+  useEffect(() => {
+    void ensureSessionPublicLink({ forceCreate: false });
+  }, [ensureSessionPublicLink]);
 
   const handleRowsChange = useCallback((nextRows: CertificateRow[]) => {
     setEditableRows(nextRows);
@@ -515,7 +639,7 @@ export function CertificadosPage() {
               ),
             );
 
-            return { id: row.id, label: studentLabel, status: 'success' };
+            return { id: row.id, label: studentLabel, status: 'success', url: resolvedUrl };
           } catch (error: unknown) {
             const stageError: ProcessRowError = {
               stage: currentStage,
@@ -545,6 +669,7 @@ export function CertificadosPage() {
           status: 'error',
           stage: failureStage,
           message: `${failurePrefix}${messageBody}${attemptsInfo}`,
+          url: null,
         };
       };
 
@@ -589,6 +714,8 @@ export function CertificadosPage() {
           await selectSession(sessionId);
           throwIfCancelled();
           setGenerationStepStatus('refreshStudents', 'success');
+          throwIfCancelled();
+          await ensureSessionPublicLink({ forceCreate: true });
         } catch (reloadError) {
           setGenerationStepStatus('refreshStudents', 'error');
           const reloadErrorMessage = resolveGenerationError(reloadError);
@@ -619,12 +746,31 @@ export function CertificadosPage() {
       selectSession,
       resetGenerationSteps,
       setGenerationStepStatus,
+      ensureSessionPublicLink,
     ],
   );
 
+  const handleCertifiedToggle = useCallback((studentId: string, checked: boolean) => {
+    setExcludedCertifiedIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.delete(studentId);
+      } else {
+        next.add(studentId);
+      }
+      return next;
+    });
+  }, []);
+
   const handleGenerateCertificates = useCallback(() => {
-    void runCertificateGeneration({ resetResults: true });
-  }, [runCertificateGeneration]);
+    const rowsToGenerate = editableRows.filter(
+      (row) => !row.certificado || !excludedCertifiedIds.has(row.id),
+    );
+    if (!rowsToGenerate.length) {
+      return;
+    }
+    void runCertificateGeneration({ rows: rowsToGenerate, resetResults: true });
+  }, [editableRows, excludedCertifiedIds, runCertificateGeneration]);
 
   const handleCancelGeneration = useCallback(() => {
     if (!generating) {
@@ -670,9 +816,17 @@ export function CertificadosPage() {
     selectSession(value ? value : null);
   };
 
+  const alreadyCertifiedRows = useMemo(
+    () => editableRows.filter((row) => row.certificado),
+    [editableRows],
+  );
   const incompleteRows = useMemo(
     () => editableRows.filter((row) => !isRowComplete(row)),
     [editableRows],
+  );
+  const hasRowsToGenerate = useMemo(
+    () => editableRows.some((row) => !row.certificado || !excludedCertifiedIds.has(row.id)),
+    [editableRows, excludedCertifiedIds],
   );
   const hasIncompleteRows = incompleteRows.length > 0;
   const hasDealId = Boolean(deal?.deal_id);
@@ -680,6 +834,7 @@ export function CertificadosPage() {
   const showSessionsSelect = sessions.length > 1;
   const showAutoSelectedSession = sessions.length === 1 && selectedSession;
   const hasResults = editableRows.length > 0;
+  const hasCertifiedRows = alreadyCertifiedRows.length > 0;
   const hasVisibleStepProgress = generationSteps.some((step) => step.status !== 'pending');
   const isToolbarDisabled =
     !hasResults ||
@@ -687,7 +842,8 @@ export function CertificadosPage() {
     generating ||
     !hasDealId ||
     !hasSelectedSession ||
-    hasIncompleteRows;
+    hasIncompleteRows ||
+    !hasRowsToGenerate;
 
   const toolbarDisabledReason = (() => {
     if (generating) {
@@ -707,6 +863,9 @@ export function CertificadosPage() {
     }
     if (hasIncompleteRows) {
       return 'Completa el nombre, apellidos y DNI de todos los alumnos.';
+    }
+    if (!hasRowsToGenerate) {
+      return 'Selecciona al menos un alumno para generar certificados.';
     }
     return undefined;
   })();
@@ -819,19 +978,44 @@ export function CertificadosPage() {
 
           {hasResults && (
             <div className="certificate-panel">
-          <CertificateToolbar
-            onGenerate={handleGenerateCertificates}
-            onCancel={generating ? handleCancelGeneration : undefined}
-            disabled={isToolbarDisabled}
-            loading={generating}
-            progress={generationProgress}
-            total={generationTotal}
-            infoMessage={toolbarInfoMessage}
-            infoDetails={toolbarInfoDetails}
-            disabledReason={toolbarDisabledReason}
-            canCancel={!isCancellingGeneration}
-            cancelling={isCancellingGeneration}
-          />
+              <CertificateToolbar
+                onGenerate={handleGenerateCertificates}
+                onCancel={generating ? handleCancelGeneration : undefined}
+                disabled={isToolbarDisabled}
+                loading={generating}
+                progress={generationProgress}
+                total={generationTotal}
+                infoMessage={toolbarInfoMessage}
+                infoDetails={toolbarInfoDetails}
+                disabledReason={toolbarDisabledReason}
+                canCancel={!isCancellingGeneration}
+                cancelling={isCancellingGeneration}
+              />
+              {hasCertifiedRows && (
+                <Alert variant="warning" className="text-start mt-3">
+                  <div className="fw-semibold mb-2">
+                    Los siguientes Alumnos tienen un certificado hecho, ¿Rehacer?
+                  </div>
+                  <div className="d-flex flex-column gap-1">
+                    {alreadyCertifiedRows.map((row) => {
+                      const checkboxId = `certificate-regenerate-${row.id}`;
+                      const checked = !excludedCertifiedIds.has(row.id);
+                      return (
+                        <Form.Check
+                          key={row.id}
+                          id={checkboxId}
+                          type="checkbox"
+                          label={buildStudentDisplayName(row)}
+                          checked={checked}
+                          onChange={(event) =>
+                            handleCertifiedToggle(row.id, event.target.checked)
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                </Alert>
+              )}
               <CertificateTable
                 rows={editableRows}
                 onRowsChange={handleRowsChange}
@@ -850,14 +1034,38 @@ export function CertificadosPage() {
                 </Alert>
               )}
               {!generating && generationSummary && (
-                <Alert
-                  variant={hasGenerationFailures ? 'warning' : 'success'}
-                  className="text-start mt-3"
-                >
-                  {hasGenerationFailures
-                    ? `Se generaron ${generationSummary.successCount} de ${generationSummary.total} certificados. Revisa el detalle para ver los alumnos con incidencias.`
-                    : 'Se generaron todos los certificados correctamente.'}
-                </Alert>
+                <>
+                  <Alert
+                    variant={hasGenerationFailures ? 'warning' : 'success'}
+                    className="text-start mt-3"
+                  >
+                    {hasGenerationFailures
+                      ? `Se generaron ${generationSummary.successCount} de ${generationSummary.total} certificados. Revisa el detalle para ver los alumnos con incidencias.`
+                      : 'Se generaron todos los certificados correctamente.'}
+                  </Alert>
+                  {!hasGenerationFailures && (
+                    <div className="mt-2 text-start">
+                      {publicLinkLoading ? (
+                        <div className="text-muted small">
+                          Obteniendo enlace público de certificados…
+                        </div>
+                      ) : publicLinkUrl ? (
+                        <a
+                          href={publicLinkUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="link-primary"
+                        >
+                          Abrir carpeta pública de certificados
+                        </a>
+                      ) : publicLinkError ? (
+                        <div className="text-danger small">
+                          No se pudo obtener el enlace público de certificados. {publicLinkError}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </>
               )}
               {hasGenerationFailures && !generating && (
                 <div className="mt-2 text-start">
@@ -883,7 +1091,20 @@ export function CertificadosPage() {
                           {result.status === 'success' ? '✔️' : '❌'}
                         </span>
                         <div>
-                          <div className="fw-semibold">{result.label}</div>
+                          <div className="fw-semibold">
+                            {result.status === 'success' && result.url ? (
+                              <a
+                                href={result.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="link-primary"
+                              >
+                                {result.label}
+                              </a>
+                            ) : (
+                              result.label
+                            )}
+                          </div>
                           <div
                             className={`certificate-generation-results__message ${
                               result.status === 'success'
