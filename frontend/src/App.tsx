@@ -29,6 +29,7 @@ import logo from './assets/gep-group-logo.png';
 import { TrainersView } from './features/recursos/TrainersView';
 import { RoomsView } from './features/recursos/RoomsView';
 import { MobileUnitsView } from './features/recursos/MobileUnitsView';
+import { CertificateTemplatesView } from './features/recursos/CertificateTemplatesView';
 import { CalendarView } from './features/calendar/CalendarView';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { CertificadosPage } from './features/certificados/CertificadosPage';
@@ -53,6 +54,7 @@ const NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Formadores', label: 'Formadores / Bomberos' },
       { key: 'Recursos/Unidades', label: 'Unidades Móviles' },
       { key: 'Recursos/Salas', label: 'Salas' },
+      { key: 'Recursos/Templates', label: 'Templates Certificados' },
     ],
   },
   { key: 'Certificados', label: 'Certificados', path: '/certificados' },
@@ -69,6 +71,7 @@ const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
     item.key !== 'Recursos/Formadores' &&
     item.key !== 'Recursos/Salas' &&
     item.key !== 'Recursos/Unidades' &&
+    item.key !== 'Recursos/Templates' &&
     item.key !== 'Certificados'
 );
 
@@ -168,6 +171,7 @@ export default function App() {
   const isTrainersView = activeView === 'Recursos/Formadores';
   const isRoomsView = activeView === 'Recursos/Salas';
   const isMobileUnitsView = activeView === 'Recursos/Unidades';
+  const isCertificateTemplatesView = activeView === 'Recursos/Templates';
   const isCertificatesView = location.pathname.startsWith('/certificados');
   const activeViewLabel = useMemo(
     () => VIEW_ITEMS.find((item) => item.key === activeView)?.label ?? activeView,
@@ -405,6 +409,8 @@ export default function App() {
                   <RoomsView onNotify={pushToast} />
                 ) : isMobileUnitsView ? (
                   <MobileUnitsView onNotify={pushToast} />
+                ) : isCertificateTemplatesView ? (
+                  <CertificateTemplatesView onNotify={pushToast} />
                 ) : (
                   <div className="bg-white rounded-4 shadow-sm p-5 text-center text-muted">
                     <h2 className="h4 fw-semibold mb-2">{activeViewLabel}</h2>
