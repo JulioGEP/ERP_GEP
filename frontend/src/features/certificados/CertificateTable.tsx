@@ -87,18 +87,7 @@ export function CertificateTable({ rows, onRowsChange, disabled }: CertificateTa
             return (
               <tr key={row.id}>
                 <td>{renderInput(row, 'presu')}</td>
-                <td>
-                  <div className="certificate-table-name">
-                    {row.driveUrl ? (
-                      <a href={row.driveUrl} target="_blank" rel="noreferrer">
-                        {fullName}
-                      </a>
-                    ) : (
-                      <span>{fullName}</span>
-                    )}
-                  </div>
-                  {renderInput(row, 'nombre')}
-                </td>
+                <td>{renderInput(row, 'nombre')}</td>
                 <td>{renderInput(row, 'apellidos')}</td>
                 <td className="certificate-table-dni">{renderInput(row, 'dni')}</td>
                 <td>{renderInput(row, 'fecha')}</td>

@@ -72,7 +72,7 @@
 }
 
 .certificate-table {
-  min-width: 960px;
+  min-width: 1400px;
 }
 
 .certificate-table td {
@@ -81,23 +81,6 @@
 
 .certificate-table .form-control {
   font-size: 0.875rem;
-}
-
-.certificate-table-name {
-  font-size: 0.75rem;
-  font-weight: 600;
-  margin-bottom: 0.4rem;
-  color: var(--color-gray-medium);
-}
-
-.certificate-table-name a {
-  color: var(--color-red);
-  text-decoration: none;
-}
-
-.certificate-table-name a:hover,
-.certificate-table-name a:focus {
-  text-decoration: underline;
 }
 
 .certificate-table-dni .form-control {
