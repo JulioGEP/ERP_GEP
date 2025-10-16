@@ -80,11 +80,22 @@ const CERTIFICATE_IMAGE_DIMENSIONS = {
   footer: { width: 853, height: 153 },
 } as const;
 
-const BACKGROUND_SCALE = 0.5;
-const SIDEBAR_SCALE = 0.5;
-const FOOTER_SCALE = 0.5;
+const BACKGROUND_WIDTH_RATIO = 0.9;
+const BACKGROUND_HORIZONTAL_SHIFT_RATIO = 0.4;
+const BACKGROUND_VERTICAL_OVERFLOW_RATIO = 0.06;
+const SIDEBAR_REDUCTION_FACTOR = 1 / 1.2;
+const SIDEBAR_HORIZONTAL_OVERFLOW_RATIO = 0.15;
+const SIDEBAR_VERTICAL_OVERFLOW_RATIO = 0.2;
+const FOOTER_SCALE = 0.5 * 1.6;
+const FOOTER_LEFT_SHIFT_RATIO = 0.2;
 const LOGO_WIDTH = 180;
 const LOGO_RIGHT_MARGIN = 40;
+const PAGE_LEFT_OFFSET_RATIO = 0.1;
+const PAGE_TOP_OFFSET_RATIO = 0.1;
+const LANDSCAPE_A4_WIDTH = 841.89;
+const LANDSCAPE_A4_HEIGHT = 595.28;
+const PAGE_LEFT_OFFSET = LANDSCAPE_A4_WIDTH * PAGE_LEFT_OFFSET_RATIO;
+const PAGE_TOP_OFFSET = LANDSCAPE_A4_HEIGHT * PAGE_TOP_OFFSET_RATIO;
 
 const CERTIFICATE_TEMPLATE_LABELS: Record<CertificateTemplateKey, string> = {
   'CERT-GENERICO': 'Genérico',
@@ -193,25 +204,33 @@ function buildCertificateContent(data: CertificateGenerationData, template: Cert
         margin: [0, 0, 0, 12],
       },
       {
-        text: `A nombre del alumno/a ${data.alumno.nombre} ${data.alumno.apellido}`,
+        text: [
+          'A nombre del alumno/a ',
+          { text: `${data.alumno.nombre} ${data.alumno.apellido}`, bold: true },
+        ],
         style: 'body',
       },
       {
-        text: `con ${data.alumno.dni}, quien en fecha ${formattedDate} y en ${data.deal.sede_labels}`,
+        text: [
+          'con ',
+          { text: data.alumno.dni, bold: true },
+          ', quien en fecha ',
+          { text: formattedDate, bold: true },
+          ' y en ',
+          { text: data.deal.sede_labels, bold: true },
+          ' ha superado, con una duración total de ',
+          { text: `${data.producto.hours} horas`, bold: true },
+          ', la formación de:',
+        ],
         style: 'body',
-      },
-      {
-        text: `ha superado, con una duración total de ${data.producto.hours} horas, la formación de:`,
-        style: 'body',
-        margin: [0, 0, 0, 12],
+        margin: [0, 12, 0, 12],
       },
       {
         text: data.producto.name,
         style: 'trainingName',
       },
     ],
-    alignment: 'center',
-    margin: [60, 180, 60, 0],
+    absolutePosition: { x: PAGE_LEFT_OFFSET, y: PAGE_TOP_OFFSET },
   };
 }
 
@@ -234,7 +253,7 @@ function buildCertificateStyles(template: CertificateTemplateConfig): StyleDicti
       font: 'Poppins',
       bold: true,
       fontSize: 24,
-      color: '#1F1F1F',
+      color: '#c1124f',
     },
     ...(template.styles ?? {}),
   };
@@ -247,7 +266,7 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.backgroundKey) {
       const background = getCertificateImageDataUrl(template.backgroundKey);
       if (background) {
-        const scaledWidth = pageSize.width * BACKGROUND_SCALE;
+        const scaledWidth = pageSize.width * BACKGROUND_WIDTH_RATIO;
         const aspectRatio =
           CERTIFICATE_IMAGE_DIMENSIONS.background.height /
           CERTIFICATE_IMAGE_DIMENSIONS.background.width;
@@ -257,7 +276,12 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
           image: background,
           width: scaledWidth,
           height: scaledHeight,
-          absolutePosition: { x: pageSize.width - scaledWidth, y: 0 },
+          absolutePosition: {
+            x:
+              (pageSize.width - scaledWidth) / 2 +
+              pageSize.width * BACKGROUND_HORIZONTAL_SHIFT_RATIO,
+            y: -scaledHeight * BACKGROUND_VERTICAL_OVERFLOW_RATIO,
+          },
         });
       }
     }
@@ -265,17 +289,22 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.sidebarKey) {
       const sidebar = getCertificateImageDataUrl(template.sidebarKey);
       if (sidebar) {
-        const scaledHeight = pageSize.height * SIDEBAR_SCALE;
         const aspectRatio =
           CERTIFICATE_IMAGE_DIMENSIONS.leftSidebar.width /
           CERTIFICATE_IMAGE_DIMENSIONS.leftSidebar.height;
+        const baseHeight = pageSize.height * (1 + SIDEBAR_VERTICAL_OVERFLOW_RATIO * 2);
+        const scaledHeight = baseHeight * SIDEBAR_REDUCTION_FACTOR;
         const scaledWidth = scaledHeight * aspectRatio;
+        const verticalOffset = -(scaledHeight - pageSize.height) / 2;
 
         layers.push({
           image: sidebar,
           width: scaledWidth,
           height: scaledHeight,
-          absolutePosition: { x: 0, y: 0 },
+          absolutePosition: {
+            x: -scaledWidth * SIDEBAR_HORIZONTAL_OVERFLOW_RATIO,
+            y: verticalOffset,
+          },
         });
       }
     }
@@ -313,7 +342,12 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
           image: footer,
           width: scaledWidth,
           height: scaledHeight,
-          absolutePosition: { x: 0, y: pageSize.height - scaledHeight },
+          absolutePosition: {
+            x:
+              (pageSize.width - scaledWidth) / 2 -
+              pageSize.width * FOOTER_LEFT_SHIFT_RATIO,
+            y: pageSize.height - scaledHeight,
+          },
         });
       }
     }
