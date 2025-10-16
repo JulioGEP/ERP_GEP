@@ -74,6 +74,13 @@ const GENERATION_STEP_DEFINITIONS: GenerationStepDefinition[] = [
   { id: 'refreshStudents', label: 'Actualizando listado de alumnos' },
 ];
 
+class GenerationCancelledError extends Error {
+  constructor() {
+    super('Generación de certificados cancelada por el usuario.');
+    this.name = 'GenerationCancelledError';
+  }
+}
+
 function createGenerationSteps(): GenerationStep[] {
   return GENERATION_STEP_DEFINITIONS.map((definition) => ({
     ...definition,
@@ -195,7 +202,9 @@ export function CertificadosPage() {
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationResults, setGenerationResults] = useState<GenerationResult[]>([]);
   const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>(() => createGenerationSteps());
+  const [isCancellingGeneration, setIsCancellingGeneration] = useState(false);
   const certificateModulePromiseRef = useRef<Promise<CertificatePdfModule | null> | null>(null);
+  const generationAbortRef = useRef<{ cancelled: boolean } | null>(null);
 
   const resetGenerationSteps = useCallback(() => {
     setGenerationSteps(createGenerationSteps());
@@ -288,16 +297,32 @@ export function CertificadosPage() {
         return;
       }
 
+      generationAbortRef.current = { cancelled: false };
+      setIsCancellingGeneration(false);
+
+      const throwIfCancelled = () => {
+        if (generationAbortRef.current?.cancelled) {
+          throw new GenerationCancelledError();
+        }
+      };
+
       resetGenerationSteps();
       setGenerationStepStatus('loadGenerator', 'working');
 
       let pdfGenerator: CertificatePdfModule;
       try {
+        throwIfCancelled();
         pdfGenerator = await ensureCertificateGenerator();
+        throwIfCancelled();
         setGenerationStepStatus('loadGenerator', 'success');
       } catch (error) {
         setGenerationStepStatus('loadGenerator', 'error');
-        setGenerationError(resolveGenerationError(error));
+        const resolvedError = error instanceof GenerationCancelledError
+          ? error.message
+          : resolveGenerationError(error);
+        setGenerationError(resolvedError);
+        setIsCancellingGeneration(false);
+        generationAbortRef.current = null;
         return;
       }
 
@@ -339,10 +364,13 @@ export function CertificadosPage() {
         let lastError: ProcessRowError | null = null;
 
         for (let attempt = 1; attempt <= CERTIFICATE_MAX_RETRIES; attempt += 1) {
+          throwIfCancelled();
           let currentStage: GenerationFailureStage = 'generate';
           try {
+            throwIfCancelled();
             const pdfRow = mapRowToPdfRow(row);
             const { blob, fileName } = await pdfGenerator.generate(pdfRow, { download: false });
+            throwIfCancelled();
             if (!(blob instanceof Blob) || !blob.size) {
               throw new Error('El certificado generado está vacío.');
             }
@@ -352,6 +380,7 @@ export function CertificadosPage() {
               hasStartedUpload = true;
               setGenerationStepStatus('uploadCertificates', 'working');
             }
+            throwIfCancelled();
             const uploadResult = await uploadSessionCertificate({
               dealId,
               sessionId,
@@ -359,6 +388,7 @@ export function CertificadosPage() {
               fileName,
               file: blob,
             });
+            throwIfCancelled();
 
             const publicUrl = toNonEmptyString(uploadResult.publicUrl);
             const studentDriveUrl = toNonEmptyString(uploadResult.student?.drive_url ?? null);
@@ -386,6 +416,7 @@ export function CertificadosPage() {
             lastError = stageError;
             if (attempt < CERTIFICATE_MAX_RETRIES) {
               await wait(CERTIFICATE_RETRY_DELAY_MS * attempt);
+              throwIfCancelled();
               continue;
             }
           }
@@ -415,9 +446,11 @@ export function CertificadosPage() {
           startIndex < rowsToProcess.length;
           startIndex += CERTIFICATE_BATCH_SIZE
         ) {
+          throwIfCancelled();
           const batch = rowsToProcess.slice(startIndex, startIndex + CERTIFICATE_BATCH_SIZE);
           await Promise.all(
             batch.map(async (row) => {
+              throwIfCancelled();
               const result = await processRowWithRetry(row);
               updateResultsState(result);
               setGenerationProgress((current) => current + 1);
@@ -442,9 +475,11 @@ export function CertificadosPage() {
           );
         }
 
+        throwIfCancelled();
         setGenerationStepStatus('refreshStudents', 'working');
         try {
           await selectSession(sessionId);
+          throwIfCancelled();
           setGenerationStepStatus('refreshStudents', 'success');
         } catch (reloadError) {
           setGenerationStepStatus('refreshStudents', 'error');
@@ -456,10 +491,16 @@ export function CertificadosPage() {
         if (hasStartedUpload) {
           setGenerationStepStatus('uploadCertificates', 'error');
         }
-        const message = resolveGenerationError(error);
-        setGenerationError(message);
+        if (error instanceof GenerationCancelledError) {
+          setGenerationError(error.message);
+        } else {
+          const message = resolveGenerationError(error);
+          setGenerationError(message);
+        }
       } finally {
         setGenerating(false);
+        setIsCancellingGeneration(false);
+        generationAbortRef.current = null;
       }
     },
     [
@@ -476,6 +517,17 @@ export function CertificadosPage() {
   const handleGenerateCertificates = useCallback(() => {
     void runCertificateGeneration({ resetResults: true });
   }, [runCertificateGeneration]);
+
+  const handleCancelGeneration = useCallback(() => {
+    if (!generating) {
+      return;
+    }
+    const abortSignal = generationAbortRef.current;
+    if (abortSignal && !abortSignal.cancelled) {
+      abortSignal.cancelled = true;
+      setIsCancellingGeneration(true);
+    }
+  }, [generating]);
 
   const handleRetryFailed = useCallback(() => {
     const failedIds = new Set(
@@ -659,16 +711,19 @@ export function CertificadosPage() {
 
           {hasResults && (
             <div className="certificate-panel">
-              <CertificateToolbar
-                onGenerate={handleGenerateCertificates}
-                disabled={isToolbarDisabled}
-                loading={generating}
-                progress={generationProgress}
-                total={generationTotal}
-                infoMessage={toolbarInfoMessage}
-                infoDetails={toolbarInfoDetails}
-                disabledReason={toolbarDisabledReason}
-              />
+          <CertificateToolbar
+            onGenerate={handleGenerateCertificates}
+            onCancel={generating ? handleCancelGeneration : undefined}
+            disabled={isToolbarDisabled}
+            loading={generating}
+            progress={generationProgress}
+            total={generationTotal}
+            infoMessage={toolbarInfoMessage}
+            infoDetails={toolbarInfoDetails}
+            disabledReason={toolbarDisabledReason}
+            canCancel={!isCancellingGeneration}
+            cancelling={isCancellingGeneration}
+          />
               <CertificateTable
                 rows={editableRows}
                 onRowsChange={handleRowsChange}
