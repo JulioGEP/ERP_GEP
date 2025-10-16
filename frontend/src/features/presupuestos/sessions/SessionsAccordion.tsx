@@ -54,6 +54,7 @@ import {
   deleteSessionStudent,
   fetchSessionPublicLink,
   createSessionPublicLink,
+  deleteSessionPublicLink,
   type SessionPublicLink,
   SESSION_DOCUMENT_SIZE_LIMIT_BYTES,
   SESSION_DOCUMENT_SIZE_LIMIT_LABEL,
@@ -147,6 +148,15 @@ function CopyIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function TrashIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false" {...props}>
+      <path d="M5.5 5.5a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z" />
+      <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zm8.382-1 .5-.5H11V2z" />
+    </svg>
+  );
+}
+
 type StudentDraft = {
   nombre: string;
   apellido: string;
@@ -201,6 +211,7 @@ function SessionStudentsAccordionItem({
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [generatedLinks, setGeneratedLinks] = useState<SessionPublicLink[]>([]);
+  const [deletingLinkKey, setDeletingLinkKey] = useState<string | null>(null);
 
   const studentsQuery = useQuery({
     queryKey: ['session-students', dealId, sessionId],
@@ -224,6 +235,15 @@ function SessionStudentsAccordionItem({
       qc.setQueryData(['session-public-link', dealId, sessionId], link);
     },
   });
+  const deletePublicLinkMutation = useMutation({
+    mutationFn: (link: SessionPublicLink) =>
+      deleteSessionPublicLink(dealId, sessionId, { tokenId: link.id, token: link.token }),
+    onSuccess: () => {
+      qc.setQueryData(['session-public-link', dealId, sessionId], null);
+      setGeneratedLinks([]);
+      void qc.invalidateQueries({ queryKey: ['session-public-link', dealId, sessionId] });
+    },
+  });
   const resetPublicLinkMutation = createPublicLinkMutation.reset;
 
   useEffect(() => {
@@ -238,6 +258,7 @@ function SessionStudentsAccordionItem({
       resetPublicLinkMutation();
     }
     setGeneratedLinks([]);
+    setDeletingLinkKey(null);
   }, [dealId, sessionId, resetPublicLinkMutation]);
 
   const students = studentsQuery.data ?? [];
@@ -346,6 +367,32 @@ function SessionStudentsAccordionItem({
       onNotify?.({ variant: 'success', message: 'URL de alumnos copiada al portapapeles' });
     } catch {
       onNotify?.({ variant: 'danger', message: 'No se pudo copiar la URL, copia manualmente' });
+    }
+  };
+
+  const handleDeletePublicLink = async (link: SessionPublicLink, label: string) => {
+    if (!dealId || !sessionId) return;
+
+    if (typeof window !== 'undefined') {
+      const confirmMessage = `¿Seguro que quieres eliminar ${label}?`;
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+    }
+
+    const key = `${link.id}-${link.token ?? ''}`;
+    setDeletingLinkKey(key);
+
+    try {
+      await deletePublicLinkMutation.mutateAsync(link);
+      onNotify?.({ variant: 'success', message: `${label} eliminada correctamente` });
+    } catch (error: unknown) {
+      const message = isApiError(error)
+        ? error.message
+        : 'No se pudo eliminar la URL pública, inténtalo de nuevo';
+      onNotify?.({ variant: 'danger', message });
+    } finally {
+      setDeletingLinkKey((current) => (current === key ? null : current));
     }
   };
 
@@ -698,6 +745,8 @@ function SessionStudentsAccordionItem({
                     const url = resolvePublicLinkUrl(link);
                     const label = `URL #${index + 1}`;
                     const isActive = Boolean(link.active);
+                    const deleteKey = `${link.id ?? ''}-${link.token ?? ''}`;
+                    const isDeletingLink = deletePublicLinkMutation.isPending && deletingLinkKey === deleteKey;
                     return (
                       <div
                         key={link.id || `${link.token}-${index}`}
@@ -722,6 +771,21 @@ function SessionStudentsAccordionItem({
                         >
                           <CopyIcon aria-hidden="true" width={16} height={16} />
                           <span className="visually-hidden">Copiar {label}</span>
+                        </Button>
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          className="d-flex align-items-center justify-content-center p-1"
+                          onClick={() => handleDeletePublicLink(link, label)}
+                          disabled={deletePublicLinkMutation.isPending}
+                          title={`Eliminar ${label}`}
+                        >
+                          {isDeletingLink ? (
+                            <Spinner animation="border" size="sm" role="status" />
+                          ) : (
+                            <TrashIcon width={16} height={16} />
+                          )}
+                          <span className="visually-hidden">Eliminar {label}</span>
                         </Button>
                       </div>
                     );
