@@ -33,6 +33,17 @@ import { pdfMakeReady } from './lib/pdf/pdfmake-initializer';
 
 import './styles/certificados.scss';
 
+const CERTIFICATES_STORAGE_KEY = 'certificadosState';
+
+type PersistedCertificatePageState = {
+  dealIdInput?: string;
+  selectedSessionId?: string | null;
+  editableRows?: CertificateRow[];
+  selectedTemplateKey?: CertificateTemplateKey;
+  templateSelectionManuallyChanged?: boolean;
+  excludedCertifiedIds?: string[];
+};
+
 function toTrimmedString(value?: string | null): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -357,6 +368,7 @@ export function CertificadosPage() {
     studentsError,
     loadDealAndSessions,
     selectSession,
+    resetAll: resetCertificateData,
   } = useCertificateData();
 
   const [editableRows, setEditableRows] = useState<CertificateRow[]>([]);
@@ -377,6 +389,19 @@ export function CertificadosPage() {
   );
   const [showCertifiedWarning, setShowCertifiedWarning] = useState(false);
   const suppressCertifiedWarningRef = useRef(false);
+  const hasLoadedPersistedStateRef = useRef(false);
+  const pendingPersistedSessionRef = useRef<string | null>(null);
+  const pendingPersistedRowsRef = useRef<CertificateRow[] | null>(null);
+  const pendingPersistedExcludedIdsRef = useRef<string[] | null>(null);
+  const pendingTemplateManualRef = useRef<boolean | null>(null);
+
+  const templateSelectionManuallyChangedRef = useRef(false);
+  const [templateSelectionManuallyChangedState, setTemplateSelectionManuallyChangedState] =
+    useState(false);
+  const setTemplateSelectionManuallyChanged = useCallback((value: boolean) => {
+    templateSelectionManuallyChangedRef.current = value;
+    setTemplateSelectionManuallyChangedState(value);
+  }, []);
 
   const DEFAULT_TEMPLATE_KEY: CertificateTemplateKey = 'CERT-GENERICO';
   const [selectedTemplateKey, setSelectedTemplateKey] = useState<CertificateTemplateKey>(
@@ -386,7 +411,6 @@ export function CertificadosPage() {
   const [templatePreviewUrl, setTemplatePreviewUrl] = useState<string | null>(null);
   const [loadingTemplatePreview, setLoadingTemplatePreview] = useState(false);
   const [templatePreviewError, setTemplatePreviewError] = useState<string | null>(null);
-  const templateSelectionManuallyChangedRef = useRef(false);
 
   const resetGenerationSteps = useCallback(() => {
     setGenerationSteps(createGenerationSteps());
@@ -439,6 +463,66 @@ export function CertificadosPage() {
     [deal?.deal_id, selectedSessionId],
   );
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      hasLoadedPersistedStateRef.current = true;
+      return;
+    }
+
+    let parsedState: PersistedCertificatePageState | null = null;
+
+    try {
+      const storedValue = window.localStorage.getItem(CERTIFICATES_STORAGE_KEY);
+      if (storedValue) {
+        parsedState = JSON.parse(storedValue) as PersistedCertificatePageState;
+      }
+    } catch (error) {
+      parsedState = null;
+    }
+
+    const storedDealId =
+      parsedState && typeof parsedState.dealIdInput === 'string'
+        ? parsedState.dealIdInput
+        : '';
+
+    if (storedDealId) {
+      setDealIdInput(storedDealId);
+      void loadDealAndSessions(storedDealId);
+    } else {
+      setDealIdInput('');
+    }
+
+    const storedTemplateKey = parsedState?.selectedTemplateKey;
+    if (
+      storedTemplateKey &&
+      CERTIFICATE_TEMPLATE_OPTIONS.some((option) => option.key === storedTemplateKey)
+    ) {
+      setSelectedTemplateKey(storedTemplateKey);
+    }
+
+    const manualFlag =
+      typeof parsedState?.templateSelectionManuallyChanged === 'boolean'
+        ? parsedState.templateSelectionManuallyChanged
+        : false;
+    setTemplateSelectionManuallyChanged(manualFlag);
+    pendingTemplateManualRef.current = manualFlag;
+
+    pendingPersistedSessionRef.current =
+      parsedState && typeof parsedState.selectedSessionId === 'string'
+        ? parsedState.selectedSessionId
+        : null;
+
+    pendingPersistedRowsRef.current = Array.isArray(parsedState?.editableRows)
+      ? parsedState?.editableRows.slice()
+      : null;
+
+    pendingPersistedExcludedIdsRef.current = Array.isArray(parsedState?.excludedCertifiedIds)
+      ? parsedState?.excludedCertifiedIds.slice()
+      : null;
+
+    hasLoadedPersistedStateRef.current = true;
+  }, [loadDealAndSessions, setTemplateSelectionManuallyChanged]);
+
   const setGenerationStepStatus = useCallback(
     (stepId: GenerationStepId, status: GenerationStepStatus) => {
       setGenerationSteps((current) =>
@@ -449,15 +533,49 @@ export function CertificadosPage() {
   );
 
   useEffect(() => {
-    setEditableRows(rows.map((row) => ({ ...row })));
+    const pendingSessionId = pendingPersistedSessionRef.current;
+    if (!pendingSessionId) {
+      return;
+    }
 
-    if (!rows.length) {
+    const sessionExists = sessions.some((session) => session.id === pendingSessionId);
+    if (!sessionExists) {
+      pendingPersistedSessionRef.current = null;
+      return;
+    }
+
+    pendingPersistedSessionRef.current = null;
+    void selectSession(pendingSessionId);
+  }, [sessions, selectSession]);
+
+  useEffect(() => {
+    const persistedRows = pendingPersistedRowsRef.current;
+    let nextEditableRows: CertificateRow[];
+
+    if (persistedRows) {
+      if (persistedRows.length) {
+        const persistedMap = new Map(persistedRows.map((row) => [row.id, row]));
+        nextEditableRows = rows.map((row) => {
+          const persisted = persistedMap.get(row.id);
+          return persisted ? { ...row, ...persisted } : { ...row };
+        });
+      } else {
+        nextEditableRows = rows.map((row) => ({ ...row }));
+      }
+      pendingPersistedRowsRef.current = null;
+    } else {
+      nextEditableRows = rows.map((row) => ({ ...row }));
+    }
+
+    setEditableRows(nextEditableRows);
+
+    if (!nextEditableRows.length) {
       setShowCertifiedWarning(false);
       suppressCertifiedWarningRef.current = false;
       return;
     }
 
-    const hasCertifiedRows = rows.some((row) => row.certificado);
+    const hasCertifiedRows = nextEditableRows.some((row) => row.certificado);
 
     if (suppressCertifiedWarningRef.current) {
       setShowCertifiedWarning(false);
@@ -469,8 +587,13 @@ export function CertificadosPage() {
   }, [rows]);
 
   useEffect(() => {
-    templateSelectionManuallyChangedRef.current = false;
-  }, [selectedSessionId]);
+    if (pendingTemplateManualRef.current !== null) {
+      setTemplateSelectionManuallyChanged(pendingTemplateManualRef.current);
+      pendingTemplateManualRef.current = null;
+      return;
+    }
+    setTemplateSelectionManuallyChanged(false);
+  }, [selectedSessionId, setTemplateSelectionManuallyChanged]);
 
   useEffect(() => {
     if (templateSelectionManuallyChangedRef.current) {
@@ -493,6 +616,12 @@ export function CertificadosPage() {
   }, [selectedSessionId, resetGenerationSteps]);
 
   useEffect(() => {
+    const pendingExcluded = pendingPersistedExcludedIdsRef.current;
+    if (pendingExcluded) {
+      setExcludedCertifiedIds(new Set(pendingExcluded));
+      pendingPersistedExcludedIdsRef.current = null;
+      return;
+    }
     setExcludedCertifiedIds(new Set<string>());
   }, [selectedSessionId]);
 
@@ -874,7 +1003,7 @@ export function CertificadosPage() {
 
   const handleTemplateChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value as CertificateTemplateKey;
-    templateSelectionManuallyChangedRef.current = true;
+    setTemplateSelectionManuallyChanged(true);
     setSelectedTemplateKey(value);
   };
 
@@ -910,6 +1039,60 @@ export function CertificadosPage() {
     setTemplatePreviewError(null);
     setLoadingTemplatePreview(false);
   };
+
+  const handleClearData = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.removeItem(CERTIFICATES_STORAGE_KEY);
+      } catch (error) {
+        // Ignorado: almacenamiento no disponible.
+      }
+    }
+
+    pendingPersistedSessionRef.current = null;
+    pendingPersistedRowsRef.current = null;
+    pendingPersistedExcludedIdsRef.current = null;
+    pendingTemplateManualRef.current = null;
+
+    if (generationAbortRef.current && !generationAbortRef.current.cancelled) {
+      generationAbortRef.current.cancelled = true;
+    }
+    generationAbortRef.current = null;
+
+    suppressCertifiedWarningRef.current = false;
+    publicLinkRequestIdRef.current += 1;
+
+    setDealIdInput('');
+    resetCertificateData();
+
+    setEditableRows([]);
+    setExcludedCertifiedIds(new Set<string>());
+    setShowCertifiedWarning(false);
+
+    setGenerationError(null);
+    setGenerationProgress(0);
+    setGenerationTotal(0);
+    setGenerationResults([]);
+    resetGenerationSteps();
+    setGenerating(false);
+    setIsCancellingGeneration(false);
+
+    setPublicLinkUrl(null);
+    setPublicLinkError(null);
+    setPublicLinkLoading(false);
+
+    setSelectedTemplateKey(DEFAULT_TEMPLATE_KEY);
+    setTemplateSelectionManuallyChanged(false);
+
+    setShowTemplatePreview(false);
+    setTemplatePreviewUrl(null);
+    setTemplatePreviewError(null);
+    setLoadingTemplatePreview(false);
+  }, [
+    resetCertificateData,
+    resetGenerationSteps,
+    setTemplateSelectionManuallyChanged,
+  ]);
 
   const alreadyCertifiedRows = useMemo(
     () => editableRows.filter((row) => row.certificado),
@@ -988,6 +1171,43 @@ export function CertificadosPage() {
 
   const hasGenerationFailures = Boolean(generationSummary && generationSummary.errorCount > 0);
 
+  useEffect(() => {
+    if (!hasLoadedPersistedStateRef.current) {
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!dealIdInput) {
+      window.localStorage.removeItem(CERTIFICATES_STORAGE_KEY);
+      return;
+    }
+
+    const stateToPersist: PersistedCertificatePageState = {
+      dealIdInput,
+      selectedSessionId: selectedSessionId ?? null,
+      editableRows,
+      selectedTemplateKey,
+      templateSelectionManuallyChanged: templateSelectionManuallyChangedState,
+      excludedCertifiedIds: Array.from(excludedCertifiedIds),
+    };
+
+    try {
+      window.localStorage.setItem(CERTIFICATES_STORAGE_KEY, JSON.stringify(stateToPersist));
+    } catch (error) {
+      // Ignored: almacenamiento no disponible.
+    }
+  }, [
+    dealIdInput,
+    editableRows,
+    excludedCertifiedIds,
+    selectedSessionId,
+    selectedTemplateKey,
+    templateSelectionManuallyChangedState,
+  ]);
+
   return (
     <div className="d-flex justify-content-center">
       <Card className="shadow-sm border-0 w-100" style={{ maxWidth: '1248px' }}>
@@ -1009,6 +1229,14 @@ export function CertificadosPage() {
                   ) : (
                     'Buscar'
                   )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline-secondary"
+                  onClick={handleClearData}
+                  disabled={loadingDeal || generating}
+                >
+                  Limpiar datos
                 </Button>
                 <Form.Control
                   type="text"

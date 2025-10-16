@@ -180,6 +180,15 @@ export function useCertificateData() {
     [deal?.deal_id, loadStudentsForSession],
   );
 
+  const resetAll = useCallback(() => {
+    sessionRequestIdRef.current += 1;
+    resetState();
+    setDealError(null);
+    setStudentsError(null);
+    setLoadingDeal(false);
+    setLoadingStudents(false);
+  }, [resetState]);
+
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) ?? null,
     [sessions, selectedSessionId],
@@ -203,5 +212,6 @@ export function useCertificateData() {
     studentsError,
     loadDealAndSessions,
     selectSession,
+    resetAll,
   };
 }
