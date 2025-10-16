@@ -13,6 +13,7 @@ import {
   toStringOrNull,
 } from './_shared/sessions';
 import { uploadSessionCertificateToGoogleDrive } from './_shared/googleDrive';
+import { nowInMadridDate } from './_shared/timezone';
 
 const MAX_CERTIFICATE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -211,7 +212,11 @@ export const handler = async (event: any) => {
 
     const updatedStudent = await prisma.alumnos.update({
       where: { id: student.id },
-      data: { drive_url: uploadResult.driveWebViewLink },
+      data: {
+        drive_url: uploadResult.driveWebViewLink,
+        certificado: true,
+        updated_at: nowInMadridDate(),
+      },
     });
 
     return successResponse(
@@ -222,6 +227,7 @@ export const handler = async (event: any) => {
         student: {
           id: updatedStudent.id,
           drive_url: updatedStudent.drive_url,
+          certificado: Boolean(updatedStudent.certificado),
         },
       },
       201,
