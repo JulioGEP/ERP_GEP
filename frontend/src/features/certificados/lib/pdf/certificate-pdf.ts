@@ -10,9 +10,6 @@ import {
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NkYGD4DwABBAEAi5JBSwAAAABJRU5ErkJggg==';
 
   const LEFT_PANEL_RATIO = 0.36;
-  const LEFT_PANEL_PRIMARY_COLOR = '#c1124f';
-  const LEFT_PANEL_ACCENT_COLOR = '#e6406e';
-  const LEFT_PANEL_DIVIDER_COLOR = '#f3f3f3';
   const LEFT_PANEL_TEXT_COLOR = '#ffffff';
   const LEFT_PANEL_MUTED_TEXT_COLOR = '#f5c9da';
   const BODY_TEXT_COLOR = '#3a405a';
@@ -31,6 +28,11 @@ import {
   const PAGE_DIMENSIONS = {
     width: 841.89,
     height: 595.28
+  };
+
+  type ImageDimensions = {
+    width: number;
+    height: number;
   };
 
   const REQUIRED_FONT_STYLES = ['normal', 'bold', 'italics', 'bolditalics'] as const;
@@ -536,6 +538,34 @@ import {
     return TRANSPARENT_PIXEL;
   }
 
+  async function measureImageDimensions(dataUrl: string): Promise<ImageDimensions | null> {
+    if (!dataUrl) {
+      return null;
+    }
+
+    const GlobalImage = (global as typeof window | undefined)?.Image;
+    if (!GlobalImage) {
+      return null;
+    }
+
+    return new Promise((resolve) => {
+      const img = new GlobalImage();
+      img.onload = () => {
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+
+        if (!width || !height) {
+          resolve(null);
+          return;
+        }
+
+        resolve({ width, height });
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }
+
   function normaliseText(value) {
     if (value === undefined || value === null) {
       return '';
@@ -859,7 +889,31 @@ import {
       ? 'Poppins'
       : 'Roboto';
 
-    const logoImage = await getCachedAsset('logo');
+    const [
+      rawBackgroundImage,
+      rawLeftSidebarImage,
+      rawFooterImage,
+      logoImage
+    ] = await Promise.all([
+      getCachedAsset('background'),
+      getCachedAsset('leftSidebar'),
+      getCachedAsset('footer'),
+      getCachedAsset('logo')
+    ]);
+
+    const backgroundImage = rawBackgroundImage === TRANSPARENT_PIXEL ? null : rawBackgroundImage;
+    const leftSidebarImage = rawLeftSidebarImage === TRANSPARENT_PIXEL ? null : rawLeftSidebarImage;
+    const footerImage = rawFooterImage === TRANSPARENT_PIXEL ? null : rawFooterImage;
+
+    const [
+      backgroundImageDimensions,
+      leftSidebarDimensions,
+      footerImageDimensions
+    ] = await Promise.all([
+      measureImageDimensions(backgroundImage ?? ''),
+      measureImageDimensions(leftSidebarImage ?? ''),
+      measureImageDimensions(footerImage ?? '')
+    ]);
 
     const pageWidth = PAGE_DIMENSIONS.width;
     const pageMargins = [60, 50, 70, 60];
@@ -872,6 +926,8 @@ import {
       Math.max(0, maxLeftColumnWidth)
     );
     const rightColumnWidth = Math.max(0, totalContentWidth - leftColumnWidth - columnGap);
+    const rightColumnX = pageMargins[0] + leftColumnWidth + columnGap;
+    const contentHeight = Math.max(0, PAGE_DIMENSIONS.height - pageMargins[1] - pageMargins[3]);
 
     const fullName = buildFullName(row);
     const formattedFullName = normaliseText(fullName).toUpperCase() || fullName;
@@ -1017,52 +1073,97 @@ import {
       margin: [0, 6, 0, 0]
     });
 
+    const decorativeElements: Array<Record<string, unknown>> = [];
+
+    if (rightColumnWidth > 0 && backgroundImage) {
+      let backgroundWidth = rightColumnWidth;
+      let backgroundX = rightColumnX;
+      let backgroundY = pageMargins[1];
+
+      if (
+        backgroundImageDimensions &&
+        backgroundImageDimensions.width > 0 &&
+        backgroundImageDimensions.height > 0
+      ) {
+        const scaleToWidth = backgroundWidth / backgroundImageDimensions.width;
+        const scaledHeight = backgroundImageDimensions.height * scaleToWidth;
+
+        if (scaledHeight < contentHeight) {
+          const scaleToHeight = contentHeight / backgroundImageDimensions.height;
+          backgroundWidth = backgroundImageDimensions.width * scaleToHeight;
+          backgroundX = rightColumnX + (rightColumnWidth - backgroundWidth) / 2;
+        } else {
+          backgroundY = pageMargins[1] - (scaledHeight - contentHeight) / 2;
+        }
+      }
+
+      decorativeElements.push({
+        image: backgroundImage,
+        absolutePosition: { x: backgroundX, y: backgroundY },
+        width: backgroundWidth,
+        opacity: 1
+      });
+    }
+
+    if (leftSidebarImage) {
+      const maxSidebarWidth = Math.min(leftColumnWidth, 80);
+      if (maxSidebarWidth > 0) {
+        let sidebarWidth = maxSidebarWidth;
+        let sidebarX = pageMargins[0];
+        let sidebarY = pageMargins[1];
+
+        if (
+          leftSidebarDimensions &&
+          leftSidebarDimensions.width > 0 &&
+          leftSidebarDimensions.height > 0
+        ) {
+          const widthScale = sidebarWidth / leftSidebarDimensions.width;
+          const scaledHeight = leftSidebarDimensions.height * widthScale;
+
+          if (scaledHeight > contentHeight) {
+            const desiredHeight = Math.min(Math.max(140, contentHeight * 0.3), 160);
+            const heightScale = desiredHeight / leftSidebarDimensions.height;
+            sidebarWidth = leftSidebarDimensions.width * heightScale;
+            sidebarY = pageMargins[1] + contentHeight - desiredHeight;
+          }
+        }
+
+        decorativeElements.push({
+          image: leftSidebarImage,
+          absolutePosition: { x: sidebarX, y: sidebarY },
+          width: sidebarWidth,
+          opacity: 1
+        });
+      }
+    }
+
+    if (footerImage && totalContentWidth > 0) {
+      const footerWidth = totalContentWidth;
+      let footerHeight = 100;
+
+      if (footerImageDimensions && footerImageDimensions.width > 0) {
+        const footerScale = footerWidth / footerImageDimensions.width;
+        footerHeight = footerImageDimensions.height * footerScale;
+      }
+
+      decorativeElements.push({
+        image: footerImage,
+        absolutePosition: {
+          x: pageMargins[0],
+          y: pageMargins[1] + contentHeight - footerHeight
+        },
+        width: footerWidth,
+        opacity: 1
+      });
+    }
+
     const docDefinition = {
       pageOrientation: 'landscape',
       pageSize: 'A4',
       pageMargins,
-      background: function (_currentPage, pageSize) {
-        const width = pageSize.width || PAGE_DIMENSIONS.width;
-        const height = pageSize.height || PAGE_DIMENSIONS.height;
-        const panelWidth = Math.min(
-          width,
-          pageMargins[0] + leftColumnWidth + columnGap * 0.5
-        );
-        const accentWidth = panelWidth * 0.55;
-        const accentX = Math.max(0, panelWidth - accentWidth * 0.6);
-
-        return [
-          {
-            canvas: [
-              { type: 'rect', x: 0, y: 0, w: width, h: height, color: '#ffffff' },
-              { type: 'rect', x: 0, y: 0, w: panelWidth, h: height, color: LEFT_PANEL_PRIMARY_COLOR },
-              {
-                type: 'rect',
-                x: accentX,
-                y: -height * 0.1,
-                w: accentWidth,
-                h: height * 1.2,
-                color: LEFT_PANEL_ACCENT_COLOR
-              },
-              { type: 'rect', x: panelWidth, y: 0, w: 6, h: height, color: LEFT_PANEL_DIVIDER_COLOR }
-            ]
-          },
-          {
-            text: 'Formación profesional en emergencias',
-            color: LEFT_PANEL_TEXT_COLOR,
-            opacity: 0.3,
-            fontSize: adjustFontSize(12),
-            bold: true,
-            angle: 90,
-            font: preferredFontFamily,
-            absolutePosition: {
-              x: Math.max(panelWidth * 0.08, 14),
-              y: height * 0.72
-            }
-          }
-        ];
-      },
+      background: null,
       content: [
+        ...decorativeElements,
         {
           columns: [
             {
