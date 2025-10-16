@@ -92,7 +92,22 @@ type SessionRecord = {
   estado: SessionEstado;
   trainers: Array<{ trainer_id: string }>;
   unidades: Array<{ unidad_id: string }>;
+  deal?: { sede_label: string | null } | null;
 };
+
+const SEDE_ALIASES: Record<string, string> = {
+  'c/ moratín, 100, 08206 sabadell, barcelona': 'GEP Sabadell',
+  'c/ primavera, 1, 28500, arganda del rey, madrid': 'GEP Arganda',
+  'in company - unidad móvil': 'In Company',
+};
+
+function normalizeSedeLabel(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed.length) return null;
+  const alias = SEDE_ALIASES[trimmed.toLowerCase()];
+  return alias ?? trimmed;
+}
 
 function toSessionEstado(value: unknown): SessionEstado | null {
   if (value === null || value === undefined) return null;
@@ -117,23 +132,30 @@ function computeAutomaticSessionEstadoFromValues({
   salaId,
   trainerIds,
   unidadIds,
+  dealSede,
 }: {
   fechaInicio: Date | null | undefined;
   fechaFin: Date | null | undefined;
   salaId: string | null | undefined;
   trainerIds: string[];
   unidadIds: string[];
+  dealSede?: string | null;
 }): AutomaticSessionEstado {
   if (!fechaInicio || !fechaFin) return 'BORRADOR';
-  if (!salaId || !String(salaId).trim().length) return 'BORRADOR';
+  const normalizedSede = normalizeSedeLabel(dealSede);
+  const requiresRoom = normalizedSede !== 'In Company';
+  if (
+    requiresRoom &&
+    (!salaId || !String(salaId).trim().length)
+  ) {
+    return 'BORRADOR';
+  }
   if (!trainerIds || !trainerIds.length) return 'BORRADOR';
   if (!unidadIds || !unidadIds.length) return 'BORRADOR';
   return 'PLANIFICADA';
 }
 
-function resolveAutomaticSessionEstado(
-  row: Pick<SessionRecord, 'fecha_inicio_utc' | 'fecha_fin_utc' | 'sala_id' | 'trainers' | 'unidades'>,
-): AutomaticSessionEstado {
+function resolveAutomaticSessionEstado(row: SessionRecord): AutomaticSessionEstado {
   const trainerIds = row.trainers.map((trainer) => trainer.trainer_id).filter(Boolean);
   const unidadIds = row.unidades.map((unidad) => unidad.unidad_id).filter(Boolean);
   return computeAutomaticSessionEstadoFromValues({
@@ -142,6 +164,7 @@ function resolveAutomaticSessionEstado(
     salaId: row.sala_id,
     trainerIds,
     unidadIds,
+    dealSede: row.deal?.sede_label ?? null,
   });
 }
 
@@ -548,6 +571,7 @@ async function fetchSessionsByProduct(
       include: {
         trainers: { select: { trainer_id: true } },
         unidades: { select: { unidad_id: true } },
+        deal: { select: { sede_label: true } },
       },
     }),
   ]);
@@ -772,7 +796,15 @@ export const handler = async (event: any) => {
           ],
         },
         include: {
-          deal: { select: { deal_id: true, title: true, training_address: true, pipeline_id: true } },
+          deal: {
+            select: {
+              deal_id: true,
+              title: true,
+              training_address: true,
+              pipeline_id: true,
+              sede_label: true,
+            },
+          },
           deal_product: { select: { id: true, name: true, code: true } },
           sala: { select: { sala_id: true, name: true, sede: true } },
           trainers: {
@@ -980,7 +1012,7 @@ export const handler = async (event: any) => {
       const result = await prisma.$transaction(async (tx) => {
         const deal = await tx.deals.findUnique({
           where: { deal_id: dealId },
-          select: { deal_id: true, training_address: true },
+          select: { deal_id: true, training_address: true, sede_label: true },
         });
         if (!deal) {
           throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
@@ -1010,6 +1042,7 @@ export const handler = async (event: any) => {
           salaId: salaId ?? null,
           trainerIds: trainerIdsResult,
           unidadIds: unidadIdsResult,
+          dealSede: deal.sede_label ?? null,
         });
 
         const created = await tx.sessions.create({
@@ -1055,6 +1088,7 @@ export const handler = async (event: any) => {
         const stored = await tx.sessions.findUnique({
           where: { id: created.id },
           include: {
+            deal: { select: { sede_label: true } },
             trainers: { select: { trainer_id: true } },
             unidades: { select: { unidad_id: true } },
           },
@@ -1079,6 +1113,7 @@ export const handler = async (event: any) => {
       const stored = await prisma.sessions.findUnique({
         where: { id: sessionIdFromPath },
         include: {
+          deal: { select: { sede_label: true } },
           trainers: { select: { trainer_id: true } },
           unidades: { select: { unidad_id: true } },
         },
@@ -1124,6 +1159,7 @@ export const handler = async (event: any) => {
         salaId: nextSalaId,
         trainerIds: nextTrainerIds,
         unidadIds: nextUnidadIds,
+        dealSede: storedRecord.deal?.sede_label ?? null,
       });
 
       if (requestedEstado !== undefined) {
@@ -1195,6 +1231,7 @@ export const handler = async (event: any) => {
       const refreshed = await prisma.sessions.findUnique({
         where: { id: sessionIdFromPath },
         include: {
+          deal: { select: { sede_label: true } },
           trainers: { select: { trainer_id: true } },
           unidades: { select: { unidad_id: true } },
         },
