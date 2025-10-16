@@ -83,7 +83,59 @@ if (globalScope) {
     ]
   };
 
+  const REQUIRED_FONT_STYLES = ['normal', 'bold', 'italics', 'bolditalics'] as const;
+
   let poppinsFontPromise = null;
+
+  function isFontFullyRegistered(pdfMakeInstance, family) {
+    if (!pdfMakeInstance || !family) {
+      return false;
+    }
+
+    const fonts = pdfMakeInstance.fonts;
+    const vfs = pdfMakeInstance.vfs;
+
+    if (!fonts || !vfs) {
+      return false;
+    }
+
+    const familyDefinition = fonts[family];
+
+    if (!familyDefinition || typeof familyDefinition !== 'object') {
+      return false;
+    }
+
+    return REQUIRED_FONT_STYLES.every((style) => {
+      const fileName = familyDefinition[style];
+      return typeof fileName === 'string' && fileName in vfs;
+    });
+  }
+
+  function getPdfMakeInstances(primaryInstance) {
+    const instances = new Set();
+
+    if (primaryInstance) {
+      instances.add(primaryInstance);
+    }
+
+    if (basePdfMake) {
+      instances.add(basePdfMake);
+    }
+
+    if (global.pdfMake) {
+      instances.add(global.pdfMake);
+    }
+
+    const uniqueInstances = [];
+
+    instances.forEach((instance) => {
+      if (instance) {
+        uniqueInstances.push(instance);
+      }
+    });
+
+    return uniqueInstances;
+  }
 
   const assetCache = new Map();
   const trainingTemplates = global.trainingTemplates || null;
@@ -302,7 +354,7 @@ if (globalScope) {
     if (!pdfMake) {
       return;
     }
-    if (pdfMake.fonts && pdfMake.fonts.Poppins) {
+    if (isFontFullyRegistered(pdfMake, 'Poppins')) {
       return;
     }
     if (!poppinsFontPromise) {
@@ -333,35 +385,52 @@ if (globalScope) {
           );
 
           const validEntries = fontEntries.filter(Boolean);
+          const pdfMakeInstances = getPdfMakeInstances(pdfMake);
+
           if (validEntries.length) {
-            pdfMake.vfs = pdfMake.vfs || {};
-            validEntries.forEach(([name, data]) => {
-              pdfMake.vfs[name] = data;
+            pdfMakeInstances.forEach((instance) => {
+              if (!instance) {
+                return;
+              }
+
+              const nextVfs = { ...(instance.vfs || {}) };
+
+              validEntries.forEach(([name, data]) => {
+                nextVfs[name] = data;
+              });
+
+              instance.vfs = nextVfs;
             });
           }
 
-          const existingFonts = pdfMake.fonts || {};
-          const roboto = existingFonts.Roboto || {};
-          const previousPoppins = existingFonts.Poppins || {};
-          const availableFontNames = new Set(validEntries.map(([name]) => name));
-
-          pdfMake.fonts = {
-            ...existingFonts,
-            Poppins: {
-              normal: availableFontNames.has('Poppins-Regular.ttf')
-                ? 'Poppins-Regular.ttf'
-                : previousPoppins.normal || roboto.normal || 'Roboto-Regular.ttf',
-              bold: availableFontNames.has('Poppins-SemiBold.ttf')
-                ? 'Poppins-SemiBold.ttf'
-                : previousPoppins.bold || roboto.bold || 'Roboto-Medium.ttf',
-              italics: availableFontNames.has('Poppins-Italic.ttf')
-                ? 'Poppins-Italic.ttf'
-                : previousPoppins.italics || roboto.italics || 'Roboto-Italic.ttf',
-              bolditalics: availableFontNames.has('Poppins-SemiBoldItalic.ttf')
-                ? 'Poppins-SemiBoldItalic.ttf'
-                : previousPoppins.bolditalics || roboto.bolditalics || 'Roboto-BoldItalic.ttf'
+          pdfMakeInstances.forEach((instance) => {
+            if (!instance) {
+              return;
             }
-          };
+
+            const existingFonts = instance.fonts || {};
+            const roboto = existingFonts.Roboto || {};
+            const previousPoppins = existingFonts.Poppins || {};
+            const availableFontNames = new Set(validEntries.map(([name]) => name));
+
+            instance.fonts = {
+              ...existingFonts,
+              Poppins: {
+                normal: availableFontNames.has('Poppins-Regular.ttf')
+                  ? 'Poppins-Regular.ttf'
+                  : previousPoppins.normal || roboto.normal || 'Roboto-Regular.ttf',
+                bold: availableFontNames.has('Poppins-SemiBold.ttf')
+                  ? 'Poppins-SemiBold.ttf'
+                  : previousPoppins.bold || roboto.bold || 'Roboto-Medium.ttf',
+                italics: availableFontNames.has('Poppins-Italic.ttf')
+                  ? 'Poppins-Italic.ttf'
+                  : previousPoppins.italics || roboto.italics || 'Roboto-Italic.ttf',
+                bolditalics: availableFontNames.has('Poppins-SemiBoldItalic.ttf')
+                  ? 'Poppins-SemiBoldItalic.ttf'
+                  : previousPoppins.bolditalics || roboto.bolditalics || 'Roboto-BoldItalic.ttf'
+              }
+            };
+          });
         } catch (error) {
           console.warn('No se ha podido preparar la tipografía Poppins.', error);
         }
