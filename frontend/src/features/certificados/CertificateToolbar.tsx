@@ -10,6 +10,7 @@ type CertificateToolbarProgressDetail = {
 
 type CertificateToolbarProps = {
   onGenerate?: () => void;
+  onCancel?: () => void;
   disabled?: boolean;
   loading?: boolean;
   progress?: number;
@@ -21,6 +22,7 @@ type CertificateToolbarProps = {
 
 export function CertificateToolbar({
   onGenerate,
+  onCancel,
   disabled,
   loading,
   progress,
@@ -50,6 +52,13 @@ export function CertificateToolbar({
       return;
     }
     onGenerate();
+  };
+
+  const handleCancel = () => {
+    if (!isLoading || !onCancel) {
+      return;
+    }
+    onCancel();
   };
 
   return (
@@ -97,22 +106,33 @@ export function CertificateToolbar({
           {resolvedInfoMessage ?? 'Ajusta los datos de los alumnos antes de generar los certificados.'}
         </div>
       )}
-      <Button
-        variant="primary"
-        onClick={handleClick}
-        disabled={buttonDisabled}
-        title={buttonTitle}
-        className="certificate-toolbar__button"
-      >
-        {isLoading ? (
-          <>
-            <Spinner animation="border" size="sm" className="me-2" />
-            {loadingLabel}
-          </>
-        ) : (
-          'Generar certificados'
-        )}
-      </Button>
+      <div className="certificate-toolbar__actions">
+        <Button
+          variant="primary"
+          onClick={handleClick}
+          disabled={buttonDisabled}
+          title={buttonTitle}
+          className="certificate-toolbar__button"
+        >
+          {isLoading ? (
+            <>
+              <Spinner animation="border" size="sm" className="me-2" />
+              {loadingLabel}
+            </>
+          ) : (
+            'Generar certificados'
+          )}
+        </Button>
+        {isLoading && onCancel ? (
+          <Button
+            variant="outline-danger"
+            onClick={handleCancel}
+            className="certificate-toolbar__cancel-button"
+          >
+            Parar
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

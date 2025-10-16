@@ -41,6 +41,7 @@ type CertificatePdfModule = {
 const CERTIFICATE_BATCH_SIZE = 5;
 const CERTIFICATE_MAX_RETRIES = 3;
 const CERTIFICATE_RETRY_DELAY_MS = 500;
+const GENERATION_ABORT_MESSAGE = 'La generación de certificados se canceló por el usuario.';
 
 type GenerationResult = {
   id: string;
@@ -77,6 +78,13 @@ function wait(delay: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, delay);
   });
+}
+
+class GenerationAbortError extends Error {
+  constructor() {
+    super(GENERATION_ABORT_MESSAGE);
+    this.name = 'GenerationAbortError';
+  }
 }
 
 declare global {
@@ -188,6 +196,7 @@ export function CertificadosPage() {
   const [generationResults, setGenerationResults] = useState<GenerationResult[]>([]);
   const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>(() => createGenerationSteps());
   const certificateModulePromiseRef = useRef<Promise<CertificatePdfModule | null> | null>(null);
+  const generationAbortRef = useRef<{ aborted: boolean } | null>(null);
 
   const resetGenerationSteps = useCallback(() => {
     setGenerationSteps(createGenerationSteps());
@@ -301,6 +310,17 @@ export function CertificadosPage() {
       setGenerating(true);
       setGenerationStepStatus('generateCertificates', 'working');
 
+      const abortState = { aborted: false };
+      generationAbortRef.current = abortState;
+
+      const throwIfAborted = () => {
+        if (abortState.aborted || generationAbortRef.current !== abortState) {
+          throw new GenerationAbortError();
+        }
+      };
+
+      throwIfAborted();
+
       const rowsOrder = editableRows.map((row) => row.id);
 
       const updateResultsState = (result: GenerationResult) => {
@@ -321,13 +341,17 @@ export function CertificadosPage() {
       };
 
       const processRowWithRetry = async (row: CertificateRow) => {
+        throwIfAborted();
         const studentLabel = buildStudentDisplayName(row);
         let lastError: unknown = null;
 
         for (let attempt = 1; attempt <= CERTIFICATE_MAX_RETRIES; attempt += 1) {
+          throwIfAborted();
           try {
+            throwIfAborted();
             const pdfRow = mapRowToPdfRow(row);
             const { blob, fileName } = await pdfGenerator.generate(pdfRow, { download: false });
+            throwIfAborted();
             if (!(blob instanceof Blob) || !blob.size) {
               throw new Error('El certificado generado está vacío.');
             }
@@ -339,6 +363,8 @@ export function CertificadosPage() {
               fileName,
               file: blob,
             });
+
+            throwIfAborted();
 
             const publicUrl = toNonEmptyString(uploadResult.publicUrl);
             const studentDriveUrl = toNonEmptyString(uploadResult.student?.drive_url ?? null);
@@ -359,9 +385,13 @@ export function CertificadosPage() {
 
             return { id: row.id, label: studentLabel, status: 'success' };
           } catch (error) {
+            if (error instanceof GenerationAbortError) {
+              throw error;
+            }
             lastError = error;
             if (attempt < CERTIFICATE_MAX_RETRIES) {
               await wait(CERTIFICATE_RETRY_DELAY_MS * attempt);
+              throwIfAborted();
               continue;
             }
           }
@@ -389,7 +419,9 @@ export function CertificadosPage() {
           const batch = rowsToProcess.slice(startIndex, startIndex + CERTIFICATE_BATCH_SIZE);
           await Promise.all(
             batch.map(async (row) => {
+              throwIfAborted();
               const result = await processRowWithRetry(row);
+              throwIfAborted();
               updateResultsState(result);
               setGenerationProgress((current) => current + 1);
               if (result.status === 'error') {
@@ -399,11 +431,13 @@ export function CertificadosPage() {
           );
         }
 
+        throwIfAborted();
         setGenerationStepStatus(
           'generateCertificates',
           encounteredRowError ? 'error' : 'success',
         );
 
+        throwIfAborted();
         setGenerationStepStatus('refreshStudents', 'working');
         try {
           await selectSession(sessionId);
@@ -414,11 +448,20 @@ export function CertificadosPage() {
           setGenerationError(`No se pudo recargar el listado de alumnos (${reloadErrorMessage}).`);
         }
       } catch (error) {
-        setGenerationStepStatus('generateCertificates', 'error');
-        const message = resolveGenerationError(error);
-        setGenerationError(message);
+        if (error instanceof GenerationAbortError) {
+          setGenerationStepStatus('generateCertificates', 'error');
+          setGenerationStepStatus('refreshStudents', 'pending');
+          setGenerationError(GENERATION_ABORT_MESSAGE);
+        } else {
+          setGenerationStepStatus('generateCertificates', 'error');
+          const message = resolveGenerationError(error);
+          setGenerationError(message);
+        }
       } finally {
-        setGenerating(false);
+        if (generationAbortRef.current === abortState) {
+          generationAbortRef.current = null;
+          setGenerating(false);
+        }
       }
     },
     [
@@ -429,12 +472,23 @@ export function CertificadosPage() {
       ensureCertificateGenerator,
       resetGenerationSteps,
       setGenerationStepStatus,
+      generationAbortRef,
     ],
   );
 
   const handleGenerateCertificates = useCallback(() => {
     void runCertificateGeneration({ resetResults: true });
   }, [runCertificateGeneration]);
+
+  const handleCancelGeneration = useCallback(() => {
+    const abortState = generationAbortRef.current;
+    if (!abortState || abortState.aborted) {
+      return;
+    }
+    abortState.aborted = true;
+    setGenerationError(GENERATION_ABORT_MESSAGE);
+    setGenerating(false);
+  }, [generationAbortRef]);
 
   const handleRetryFailed = useCallback(() => {
     const failedIds = new Set(
@@ -620,6 +674,7 @@ export function CertificadosPage() {
             <div className="certificate-panel">
               <CertificateToolbar
                 onGenerate={handleGenerateCertificates}
+                onCancel={handleCancelGeneration}
                 disabled={isToolbarDisabled}
                 loading={generating}
                 progress={generationProgress}

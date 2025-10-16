@@ -12,6 +12,13 @@
   flex-wrap: wrap;
 }
 
+.certificate-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .certificate-toolbar__info {
   font-size: 0.875rem;
 }
@@ -55,6 +62,10 @@
 
 .certificate-toolbar__button {
   flex-shrink: 0;
+}
+
+.certificate-toolbar__cancel-button {
+  white-space: nowrap;
 }
 
 .certificate-table-wrapper {
