@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Alert, Button, Card, Form, Spinner } from 'react-bootstrap';
+import { Alert, Button, Card, Form, Modal, Spinner } from 'react-bootstrap';
 
 import {
   ApiError,
@@ -21,7 +21,14 @@ import { CertificateTable } from './CertificateTable';
 import { CertificateToolbar, type CertificateToolbarProgressStatus } from './CertificateToolbar';
 import type { CertificateRow, CertificateSession } from './lib/mappers';
 import type { DealDetail } from '../../types/deal';
-import { generateCertificatePDF, type CertificateGenerationData } from './pdf/generator';
+import {
+  CERTIFICATE_TEMPLATE_OPTIONS,
+  generateCertificatePDF,
+  generateCertificateTemplatePreviewDataUrl,
+  resolveCertificateTemplateKey,
+  type CertificateGenerationData,
+  type CertificateTemplateKey,
+} from './pdf/generator';
 import { pdfMakeReady } from './lib/pdf/pdfmake-initializer';
 
 import './styles/certificados.scss';
@@ -369,6 +376,16 @@ export function CertificadosPage() {
     () => new Set<string>(),
   );
 
+  const DEFAULT_TEMPLATE_KEY: CertificateTemplateKey = 'CERT-GENERICO';
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState<CertificateTemplateKey>(
+    DEFAULT_TEMPLATE_KEY,
+  );
+  const [showTemplatePreview, setShowTemplatePreview] = useState(false);
+  const [templatePreviewUrl, setTemplatePreviewUrl] = useState<string | null>(null);
+  const [loadingTemplatePreview, setLoadingTemplatePreview] = useState(false);
+  const [templatePreviewError, setTemplatePreviewError] = useState<string | null>(null);
+  const templateSelectionManuallyChangedRef = useRef(false);
+
   const resetGenerationSteps = useCallback(() => {
     setGenerationSteps(createGenerationSteps());
   }, [setGenerationSteps]);
@@ -432,6 +449,22 @@ export function CertificadosPage() {
   useEffect(() => {
     setEditableRows(rows.map((row) => ({ ...row })));
   }, [rows]);
+
+  useEffect(() => {
+    templateSelectionManuallyChangedRef.current = false;
+  }, [selectedSessionId]);
+
+  useEffect(() => {
+    if (templateSelectionManuallyChangedRef.current) {
+      return;
+    }
+    const referenceProductName =
+      selectedSession?.productName ?? rows[0]?.formacion ?? '';
+    const resolvedKey = referenceProductName
+      ? resolveCertificateTemplateKey(referenceProductName)
+      : DEFAULT_TEMPLATE_KEY;
+    setSelectedTemplateKey((current) => (current === resolvedKey ? current : resolvedKey));
+  }, [rows, selectedSession]);
 
   useEffect(() => {
     setGenerationError(null);
@@ -596,7 +629,9 @@ export function CertificadosPage() {
               deal,
               session: selectedSession,
             });
-            const blob = await generateCertificatePDF(certificateData);
+            const blob = await generateCertificatePDF(certificateData, {
+              templateKey: selectedTemplateKey,
+            });
             throwIfCancelled();
 
             if (!(blob instanceof Blob) || !blob.size) {
@@ -747,6 +782,7 @@ export function CertificadosPage() {
       resetGenerationSteps,
       setGenerationStepStatus,
       ensureSessionPublicLink,
+      selectedTemplateKey,
     ],
   );
 
@@ -814,6 +850,45 @@ export function CertificadosPage() {
   const handleSessionChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value;
     selectSession(value ? value : null);
+  };
+
+  const handleTemplateChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value as CertificateTemplateKey;
+    templateSelectionManuallyChangedRef.current = true;
+    setSelectedTemplateKey(value);
+  };
+
+  const handlePreviewTemplate = () => {
+    setShowTemplatePreview(true);
+    setTemplatePreviewUrl(null);
+    setTemplatePreviewError(null);
+    setLoadingTemplatePreview(true);
+
+    void (async () => {
+      try {
+        await pdfMakeReady;
+        const dataUrl = await generateCertificateTemplatePreviewDataUrl(selectedTemplateKey);
+        setTemplatePreviewUrl(dataUrl);
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : 'No se pudo generar la previsualización del certificado.';
+        setTemplatePreviewError(message);
+      } finally {
+        setLoadingTemplatePreview(false);
+      }
+    })();
+  };
+
+  const handleCloseTemplatePreview = () => {
+    setShowTemplatePreview(false);
+  };
+
+  const handleTemplatePreviewExited = () => {
+    setTemplatePreviewUrl(null);
+    setTemplatePreviewError(null);
+    setLoadingTemplatePreview(false);
   };
 
   const alreadyCertifiedRows = useMemo(
@@ -903,15 +978,8 @@ export function CertificadosPage() {
 
           <Form onSubmit={handleSubmit} className="mb-4">
             <Form.Group controlId="certificate-deal" className="text-start">
-              <Form.Label>Introduce el número de deal</Form.Label>
-              <div className="d-flex gap-2">
-                <Form.Control
-                  type="text"
-                  placeholder="Ej. 1234"
-                  value={dealIdInput}
-                  onChange={(event) => setDealIdInput(event.target.value)}
-                  disabled={loadingDeal}
-                />
+              <Form.Label>Introduce el número de presupuesto</Form.Label>
+              <div className="d-flex flex-wrap align-items-center gap-2">
                 <Button type="submit" variant="primary" disabled={loadingDeal}>
                   {loadingDeal ? (
                     <>
@@ -922,6 +990,14 @@ export function CertificadosPage() {
                     'Buscar'
                   )}
                 </Button>
+                <Form.Control
+                  type="text"
+                  placeholder="Ej. 1234"
+                  value={dealIdInput}
+                  onChange={(event) => setDealIdInput(event.target.value)}
+                  disabled={loadingDeal}
+                  style={{ maxWidth: '220px' }}
+                />
               </div>
             </Form.Group>
           </Form>
@@ -978,6 +1054,39 @@ export function CertificadosPage() {
 
           {hasResults && (
             <div className="certificate-panel">
+              <div className="certificate-template-controls">
+                <Form.Group controlId="certificate-template" className="mb-0">
+                  <Form.Label className="mb-1">Template del certificado</Form.Label>
+                  <Form.Select
+                    value={selectedTemplateKey}
+                    onChange={handleTemplateChange}
+                    size="sm"
+                    className="certificate-template-controls__select"
+                  >
+                    {CERTIFICATE_TEMPLATE_OPTIONS.map((templateOption) => (
+                      <option key={templateOption.key} value={templateOption.key}>
+                        {templateOption.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={handlePreviewTemplate}
+                  disabled={loadingTemplatePreview}
+                >
+                  {loadingTemplatePreview ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Generando previsualización…
+                    </>
+                  ) : (
+                    'Previsualizar template'
+                  )}
+                </Button>
+              </div>
+
               <CertificateToolbar
                 onGenerate={handleGenerateCertificates}
                 onCancel={generating ? handleCancelGeneration : undefined}
@@ -1132,6 +1241,40 @@ export function CertificadosPage() {
           )}
         </Card.Body>
       </Card>
+
+      <Modal
+        show={showTemplatePreview}
+        onHide={handleCloseTemplatePreview}
+        onExited={handleTemplatePreviewExited}
+        size="xl"
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Previsualización del template</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {templatePreviewError && (
+            <Alert variant="danger" className="mb-3">
+              {templatePreviewError}
+            </Alert>
+          )}
+          {loadingTemplatePreview && !templatePreviewError && (
+            <div className="d-flex justify-content-center align-items-center py-5">
+              <Spinner animation="border" role="status" />
+              <span className="ms-2">Generando vista previa…</span>
+            </div>
+          )}
+          {!loadingTemplatePreview && templatePreviewUrl && !templatePreviewError && (
+            <div className="template-preview-frame">
+              <iframe
+                src={templatePreviewUrl}
+                title="Previsualización del template"
+                className="template-preview-frame__content"
+              />
+            </div>
+          )}
+        </Modal.Body>
+      </Modal>
     </div>
   );
 }

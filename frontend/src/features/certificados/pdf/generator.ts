@@ -29,6 +29,8 @@ export interface CertificateGenerationData {
 
 export type CertificateTemplateKey = 'CERT-PAUX-EI' | 'CERT-PACK' | 'CERT-GENERICO';
 
+const DEFAULT_CERTIFICATE_TEMPLATE_KEY: CertificateTemplateKey = 'CERT-GENERICO';
+
 type CertificateTemplateConfig = {
   key: CertificateTemplateKey;
   title?: string;
@@ -71,6 +73,24 @@ const CERTIFICATE_TEMPLATES: Record<CertificateTemplateKey, CertificateTemplateC
   },
 };
 
+const CERTIFICATE_TEMPLATE_LABELS: Record<CertificateTemplateKey, string> = {
+  'CERT-GENERICO': 'Genérico',
+  'CERT-PAUX-EI': 'Auxiliar Educación Infantil',
+  'CERT-PACK': 'Pack / Combo',
+};
+
+export type CertificateTemplateOption = {
+  key: CertificateTemplateKey;
+  label: string;
+};
+
+export const CERTIFICATE_TEMPLATE_OPTIONS: CertificateTemplateOption[] = (
+  Object.keys(CERTIFICATE_TEMPLATES) as CertificateTemplateKey[]
+).map((key) => ({
+  key,
+  label: CERTIFICATE_TEMPLATE_LABELS[key],
+}));
+
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -107,14 +127,18 @@ function normaliseText(text: string): string {
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
-export function resolveCertificateTemplate(productName: string): CertificateTemplateConfig {
+export function resolveCertificateTemplateKey(productName: string): CertificateTemplateKey {
   const normalisedName = normaliseText(productName);
 
   const matchingRule = CERTIFICATE_TEMPLATE_RULES.find(({ keywords }) =>
     keywords.some((keyword) => normalisedName.includes(keyword))
   );
 
-  const templateKey = matchingRule?.template ?? 'CERT-GENERICO';
+  return matchingRule?.template ?? DEFAULT_CERTIFICATE_TEMPLATE_KEY;
+}
+
+export function resolveCertificateTemplate(productName: string): CertificateTemplateConfig {
+  const templateKey = resolveCertificateTemplateKey(productName);
   return CERTIFICATE_TEMPLATES[templateKey];
 }
 
@@ -276,11 +300,33 @@ function createDocumentDefinition(data: CertificateGenerationData, template: Cer
   };
 }
 
-export async function generateCertificatePDF(data: CertificateGenerationData): Promise<Blob> {
+const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
+  alumno: {
+    nombre: 'Nombre',
+    apellido: 'Apellido',
+    dni: '12345678A',
+  },
+  sesion: {
+    fecha_inicio_utc: '2024-01-15',
+  },
+  deal: {
+    sede_labels: 'Valencia',
+  },
+  producto: {
+    name: 'Curso de ejemplo',
+    hours: 20,
+  },
+};
+
+export async function generateCertificatePDF(
+  data: CertificateGenerationData,
+  options?: { templateKey?: CertificateTemplateKey },
+): Promise<Blob> {
   assertCertificateData(data);
 
   const pdfMakeInstance = await getPdfMakeInstance();
-  const template = resolveCertificateTemplate(data.producto.name);
+  const templateKey = options?.templateKey ?? resolveCertificateTemplateKey(data.producto.name);
+  const template = CERTIFICATE_TEMPLATES[templateKey] ?? CERTIFICATE_TEMPLATES[DEFAULT_CERTIFICATE_TEMPLATE_KEY];
   const docDefinition = createDocumentDefinition(data, template);
 
   return new Promise<Blob>((resolve, reject) => {
@@ -295,6 +341,34 @@ export async function generateCertificatePDF(data: CertificateGenerationData): P
       });
     } catch (error) {
       reject(error instanceof Error ? error : new Error('Error desconocido generando el certificado.'));
+    }
+  });
+}
+
+export async function generateCertificateTemplatePreviewDataUrl(
+  templateKey: CertificateTemplateKey,
+): Promise<string> {
+  const pdfMakeInstance = await getPdfMakeInstance();
+  const template =
+    CERTIFICATE_TEMPLATES[templateKey] ?? CERTIFICATE_TEMPLATES[DEFAULT_CERTIFICATE_TEMPLATE_KEY];
+  const docDefinition = createDocumentDefinition(PREVIEW_SAMPLE_DATA, template);
+
+  return new Promise<string>((resolve, reject) => {
+    try {
+      const pdfDoc = pdfMakeInstance.createPdf(docDefinition);
+      pdfDoc.getDataUrl((dataUrl) => {
+        if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+          resolve(dataUrl);
+        } else {
+          reject(new Error('No se ha podido generar la previsualización del certificado.'));
+        }
+      });
+    } catch (error) {
+      reject(
+        error instanceof Error
+          ? error
+          : new Error('Error generando la previsualización del certificado.'),
+      );
     }
   });
 }
