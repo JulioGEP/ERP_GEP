@@ -1568,7 +1568,7 @@ export type SessionCertificateUploadResult = {
   docId: string | null;
   fileName: string | null;
   publicUrl: string | null;
-  student: { id: string | null; drive_url: string | null } | null;
+  student: { id: string | null; drive_url: string | null; certificado: boolean | null } | null;
 };
 
 export async function uploadSessionCertificate(params: {
@@ -1626,12 +1626,19 @@ export async function uploadSessionCertificate(params: {
   const studentData = data?.student && typeof data.student === 'object' ? data.student : null;
   const studentId = toStringValue(studentData?.id) ?? null;
   const driveUrl = toStringValue(studentData?.drive_url) ?? null;
+  const certificado =
+    studentData?.certificado === undefined
+      ? null
+      : Boolean(studentData.certificado);
 
   return {
     docId,
     fileName: uploadedFileName,
     publicUrl,
-    student: studentId || driveUrl ? { id: studentId, drive_url: driveUrl } : null,
+    student:
+      studentId || driveUrl || certificado !== null
+        ? { id: studentId, drive_url: driveUrl, certificado }
+        : null,
   };
 }
 

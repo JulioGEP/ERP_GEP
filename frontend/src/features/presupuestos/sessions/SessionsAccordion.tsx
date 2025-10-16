@@ -604,10 +604,25 @@ function SessionStudentsAccordionItem({
     const rowDisabled = Boolean(editingId && editingId !== student.id);
     const isUpdating = updatingId === student.id && updateMutation.isPending;
     const isDeleting = deletingId === student.id && deleteMutation.isPending;
+    const driveUrl = typeof student.drive_url === 'string' ? student.drive_url.trim() : '';
+    const nameContent = student.nombre;
 
     return (
       <tr key={student.id}>
-        <td className="align-middle">{student.nombre}</td>
+        <td className="align-middle">
+          {driveUrl ? (
+            <a
+              href={driveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abrir certificado en una nueva pestaña"
+            >
+              {nameContent}
+            </a>
+          ) : (
+            nameContent
+          )}
+        </td>
         <td className="align-middle">{student.apellido}</td>
         <td className="align-middle text-uppercase">{student.dni}</td>
         <td className="align-middle text-center">

@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { Alert, Button, Card, Form, Spinner } from 'react-bootstrap';
 
-import { ApiError, updateSessionStudent, uploadSessionCertificate } from '../presupuestos/api';
+import { ApiError, uploadSessionCertificate } from '../presupuestos/api';
 import { useCertificateData } from './hooks/useCertificateData';
 import { CertificateTable } from './CertificateTable';
 import { CertificateToolbar } from './CertificateToolbar';
@@ -128,7 +128,8 @@ function toNonEmptyString(value?: string | null): string | null {
 
 function resolveGenerationError(error: unknown): string {
   if (error instanceof ApiError) {
-    return error.message;
+    const codeLabel = error.code ? `[${error.code}] ` : '';
+    return `${codeLabel}${error.message}`.trim();
   }
   if (error instanceof Error && error.message) {
     return error.message;
@@ -294,22 +295,19 @@ export function CertificadosPage() {
               file: blob,
             });
 
-            const publicUrl =
-              toNonEmptyString(uploadResult.publicUrl) ??
-              toNonEmptyString(uploadResult.student?.drive_url ?? null);
-
-            const updatedStudent = await updateSessionStudent(row.id, {
-              certificado: true,
-              drive_url: publicUrl,
-            });
-
-            const resolvedUrl =
-              toNonEmptyString(updatedStudent.drive_url) ?? publicUrl ?? row.driveUrl ?? null;
+            const publicUrl = toNonEmptyString(uploadResult.publicUrl);
+            const studentDriveUrl = toNonEmptyString(uploadResult.student?.drive_url ?? null);
+            const resolvedUrl = studentDriveUrl ?? publicUrl ?? row.driveUrl ?? null;
+            const studentCertificateFlag = uploadResult.student?.certificado ?? null;
+            const resolvedCertificateFlag =
+              studentCertificateFlag === null || studentCertificateFlag === undefined
+                ? true
+                : Boolean(studentCertificateFlag);
 
             setEditableRows((current) =>
               current.map((item) =>
                 item.id === row.id
-                  ? { ...item, certificado: true, driveUrl: resolvedUrl }
+                  ? { ...item, certificado: resolvedCertificateFlag, driveUrl: resolvedUrl }
                   : item,
               ),
             );
