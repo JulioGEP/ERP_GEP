@@ -1107,7 +1107,7 @@ export function BudgetDetailModal({
                   <tr>
                     <th>Formación</th>
                     <th style={{ width: 60 }}>Horas</th>
-                    <th style={{ width: 130 }}>Comentarios</th>
+                    <th style={{ width: 189 }}>Comentarios</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1141,7 +1141,7 @@ export function BudgetDetailModal({
                             <span className="text-muted">{displayOrDash(product?.hours ?? null)}</span>
                           )}
                         </td>
-                        <td style={{ width: 130 }}>
+                        <td style={{ width: 189 }}>
                           {commentPreview ? (
                             <Button
                               type="button"
@@ -1152,7 +1152,7 @@ export function BudgetDetailModal({
                             >
                               <span
                                 className="d-inline-block text-truncate"
-                                style={{ maxWidth: 130 }}
+                                style={{ maxWidth: 189 }}
                                 title={commentText}
                               >
                                 {commentPreview}
