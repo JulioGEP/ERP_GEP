@@ -14,21 +14,56 @@ import { useCertificateData } from './hooks/useCertificateData';
 import { CertificateTable } from './CertificateTable';
 import { CertificateToolbar, type CertificateToolbarProgressStatus } from './CertificateToolbar';
 import type { CertificateRow, CertificateSession } from './lib/mappers';
+import type { DealDetail } from '../../types/deal';
 
 import './styles/certificados.scss';
 
-type CertificatePdfRowInput = {
+type CertificatePdfRowStudent = {
   nombre?: string;
   apellido?: string;
   dni?: string;
   documentType?: string;
-  fecha?: string;
-  segundaFecha?: string;
-  lugar?: string;
-  duracion?: string | number;
-  formacion?: string;
-  cliente?: string;
-  irata?: string;
+};
+
+type CertificatePdfRowDeal = {
+  id?: string;
+  sedeLabel?: string | null;
+  organizationName?: string | null;
+};
+
+type CertificatePdfRowSession = {
+  id?: string;
+  nombre?: string | null;
+  fechaInicioUtc?: string | null;
+  formattedStartDate?: string | null;
+  secondDateLabel?: string | null;
+  location?: string | null;
+  productHours?: number | null;
+};
+
+type CertificatePdfRowProduct = {
+  id?: string;
+  name?: string | null;
+  templateName?: string | null;
+  hours?: number | null;
+};
+
+type CertificatePdfRowMetadata = {
+  cliente?: string | null;
+  trainer?: string | null;
+  primaryDateLabel?: string | null;
+  secondaryDateLabel?: string | null;
+  locationLabel?: string | null;
+  durationLabel?: string | null;
+  trainingLabel?: string | null;
+};
+
+type CertificatePdfRowInput = {
+  alumno: CertificatePdfRowStudent;
+  deal?: CertificatePdfRowDeal;
+  session?: CertificatePdfRowSession;
+  producto?: CertificatePdfRowProduct;
+  metadata?: CertificatePdfRowMetadata;
 };
 
 type CertificatePdfModule = {
@@ -122,20 +157,95 @@ function buildSessionLabel(session: CertificateSession): string {
   return parts.join(' · ');
 }
 
-function mapRowToPdfRow(row: CertificateRow): CertificatePdfRowInput {
+function toNullableString(value?: string | null): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function safeString(value?: string | number | null): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value);
+}
+
+function mapRowToPdfRow(
+  row: CertificateRow,
+  context: { deal: DealDetail | null; session: CertificateSession | null },
+): CertificatePdfRowInput {
   const documentType = row.dni?.trim() ? 'DNI' : undefined;
+  const deal = context.deal ?? null;
+  const session = context.session ?? null;
+
+  const dealId = deal?.deal_id != null ? safeString(deal.deal_id) : undefined;
+  const sedeLabel = toNullableString(deal?.sede_label ?? null);
+  const organizationName = toNullableString(deal?.organization?.name ?? null);
+
+  const sessionId = session?.id ? safeString(session.id) : undefined;
+  const sessionName = toNullableString(session?.nombre_cache ?? null);
+  const sessionStartUtc = toNullableString(session?.fecha_inicio_utc ?? null);
+  const sessionHours = session?.productHours ?? null;
+
+  const productId = session?.deal_product_id != null ? safeString(session.deal_product_id) : undefined;
+  const productName = toNullableString(session?.productName ?? null);
+  const productHours = session?.productHours ?? null;
+  const templateName = toNullableString(row.formacion);
+
+  const formattedStartDate = toNullableString(row.fecha);
+  const secondaryDateLabel = toNullableString(row.fecha2);
+  const locationLabel = toNullableString(row.lugar) ?? sedeLabel;
+  const durationLabel = toNullableString(row.horas);
+
+  const resolvedHours = (() => {
+    if (typeof productHours === 'number') {
+      return productHours;
+    }
+    if (typeof sessionHours === 'number') {
+      return sessionHours;
+    }
+    const parsed = Number(row.horas);
+    return Number.isNaN(parsed) ? null : parsed;
+  })();
+
   return {
-    nombre: row.nombre,
-    apellido: row.apellidos,
-    dni: row.dni,
-    documentType,
-    fecha: row.fecha,
-    segundaFecha: row.fecha2,
-    lugar: row.lugar,
-    duracion: row.horas,
-    formacion: row.formacion,
-    cliente: row.cliente,
-    irata: row.irata,
+    alumno: {
+      nombre: row.nombre,
+      apellido: row.apellidos,
+      dni: row.dni,
+      documentType,
+    },
+    deal: {
+      id: dealId,
+      sedeLabel,
+      organizationName,
+    },
+    session: {
+      id: sessionId,
+      nombre: sessionName,
+      fechaInicioUtc: sessionStartUtc,
+      formattedStartDate,
+      secondDateLabel: secondaryDateLabel,
+      location: locationLabel,
+      productHours: sessionHours ?? null,
+    },
+    producto: {
+      id: productId,
+      name: productName,
+      templateName,
+      hours: resolvedHours,
+    },
+    metadata: {
+      cliente: toNullableString(row.cliente),
+      trainer: toNullableString(row.irata),
+      primaryDateLabel: formattedStartDate,
+      secondaryDateLabel,
+      locationLabel,
+      durationLabel,
+      trainingLabel: templateName ?? productName ?? null,
+    },
   };
 }
 
@@ -368,7 +478,7 @@ export function CertificadosPage() {
           let currentStage: GenerationFailureStage = 'generate';
           try {
             throwIfCancelled();
-            const pdfRow = mapRowToPdfRow(row);
+            const pdfRow = mapRowToPdfRow(row, { deal, session: selectedSession });
             const { blob, fileName } = await pdfGenerator.generate(pdfRow, { download: false });
             throwIfCancelled();
             if (!(blob instanceof Blob) || !blob.size) {
