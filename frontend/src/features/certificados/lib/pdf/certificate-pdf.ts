@@ -27,9 +27,6 @@ import {
   const TRAINING_CONTENT_MIN_WIDTH = 320;
   const TRAINING_CONTENT_MIN_COLUMN_WIDTH = 150;
   const TRAINING_CONTENT_COLUMN_GAP = 18;
-  const CERTIFICATE_BACKGROUND_ASPECT_RATIO = 839 / 1328;
-  const LEFT_SIDEBAR_IMAGE_ASPECT_RATIO = 85 / 1241;
-  const FOOTER_IMAGE_ASPECT_RATIO = 853 / 153;
 
   const PAGE_DIMENSIONS = {
     width: 841.89,
@@ -765,14 +762,8 @@ import {
         color: BODY_TEXT_COLOR,
         margin: [0, 0, 0, 10]
       },
-      certificateIntroBodyText: {
-        fontSize: adjustFontSize(7.1),
-        lineHeight: adjustLineHeight(1.5),
-        color: BODY_TEXT_COLOR,
-        margin: [0, 0, 0, 10]
-      },
       introText: {
-        fontSize: adjustFontSize(6.4),
+        fontSize: adjustFontSize(10),
         lineHeight: adjustLineHeight(1.4),
         color: SECONDARY_TEXT_COLOR,
         margin: [0, 0, 0, 12]
@@ -869,9 +860,6 @@ import {
       : 'Roboto';
 
     const logoImage = await getCachedAsset('logo');
-    const backgroundImage = await getCachedAsset('background');
-    const leftSidebarImage = await getCachedAsset('leftSidebar');
-    const footerImage = await getCachedAsset('footer');
 
     const pageWidth = PAGE_DIMENSIONS.width;
     const pageMargins = [60, 50, 70, 60];
@@ -945,15 +933,15 @@ import {
           'A nombre del alumno/a ',
           { text: formattedFullName, bold: true, color: BODY_TEXT_COLOR }
         ],
-        style: 'certificateIntroBodyText'
+        style: 'bodyText'
       },
       {
         text: styledDocumentSentenceFragments,
-        style: 'certificateIntroBodyText'
+        style: 'bodyText'
       },
       {
         text: `Ha superado, con una duración total de ${durationLabel}, la formación:`,
-        style: 'certificateIntroBodyText'
+        style: 'bodyText'
       },
       { text: trainingNameDisplay, style: 'trainingName' }
     ];
@@ -1043,7 +1031,7 @@ import {
         const accentWidth = panelWidth * 0.55;
         const accentX = Math.max(0, panelWidth - accentWidth * 0.6);
 
-        const layers: Array<Record<string, unknown>> = [
+        return [
           {
             canvas: [
               { type: 'rect', x: 0, y: 0, w: width, h: height, color: '#ffffff' },
@@ -1058,68 +1046,21 @@ import {
               },
               { type: 'rect', x: panelWidth, y: 0, w: 6, h: height, color: LEFT_PANEL_DIVIDER_COLOR }
             ]
+          },
+          {
+            text: 'Formación profesional en emergencias',
+            color: LEFT_PANEL_TEXT_COLOR,
+            opacity: 0.3,
+            fontSize: adjustFontSize(12),
+            bold: true,
+            angle: 90,
+            font: preferredFontFamily,
+            absolutePosition: {
+              x: Math.max(panelWidth * 0.08, 14),
+              y: height * 0.72
+            }
           }
         ];
-
-        if (backgroundImage) {
-          const backgroundWidth = width * 0.5;
-          const backgroundHeight = backgroundWidth / CERTIFICATE_BACKGROUND_ASPECT_RATIO;
-          layers.push({
-            image: backgroundImage,
-            width: backgroundWidth,
-            absolutePosition: {
-              x: width - backgroundWidth * 0.6,
-              y: (height - backgroundHeight) / 2
-            }
-          });
-        }
-
-        let footerStartX = pageMargins[0];
-
-        if (leftSidebarImage) {
-          const sidebarHeight = height * 1.2;
-          const sidebarWidth = sidebarHeight * LEFT_SIDEBAR_IMAGE_ASPECT_RATIO;
-          const sidebarX = -sidebarWidth * 0.4;
-          const sidebarY = (height - sidebarHeight) / 2;
-
-          layers.push({
-            image: leftSidebarImage,
-            height: sidebarHeight,
-            absolutePosition: { x: sidebarX, y: sidebarY }
-          });
-
-          footerStartX = Math.max(footerStartX, sidebarX + sidebarWidth);
-        }
-
-        if (footerImage) {
-          const footerWidth = Math.max(width - footerStartX, width * 0.4);
-          const footerHeight = footerWidth / FOOTER_IMAGE_ASPECT_RATIO;
-
-          layers.push({
-            image: footerImage,
-            width: footerWidth,
-            absolutePosition: {
-              x: footerStartX,
-              y: height - footerHeight
-            }
-          });
-        }
-
-        layers.push({
-          text: 'Formación profesional en emergencias',
-          color: LEFT_PANEL_TEXT_COLOR,
-          opacity: 0.3,
-          fontSize: adjustFontSize(12),
-          bold: true,
-          angle: 90,
-          font: preferredFontFamily,
-          absolutePosition: {
-            x: Math.max(panelWidth * 0.08, 14),
-            y: height * 0.72
-          }
-        });
-
-        return layers;
       },
       content: [
         {
