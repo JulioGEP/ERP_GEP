@@ -9,29 +9,21 @@ import {
   const TRANSPARENT_PIXEL =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NkYGD4DwABBAEAi5JBSwAAAABJRU5ErkJggg==';
 
-  const IMAGE_ASPECT_RATIOS = {
-    background: 1328 / 839,
-    footer: 153 / 853,
-    logo: 382 / 827
-  };
-
-  const SIDEBAR_WIDTH_REDUCTION = 0.55;
-  const FOOTER_WIDTH_REDUCTION = 0.816; // 15% size reduction applied to previous value
-  const FOOTER_LEFT_ADDITIONAL_OFFSET = 20;
-  const FOOTER_BASELINE_PADDING = 18;
-  const BACKGROUND_MARGIN_BLEED = 20;
-  const LOGO_VERTICAL_SHIFT_RATIO = 0.02;
+  const LEFT_PANEL_RATIO = 0.36;
+  const LEFT_PANEL_PRIMARY_COLOR = '#c1124f';
+  const LEFT_PANEL_ACCENT_COLOR = '#e6406e';
+  const LEFT_PANEL_DIVIDER_COLOR = '#f3f3f3';
+  const LEFT_PANEL_TEXT_COLOR = '#ffffff';
+  const LEFT_PANEL_MUTED_TEXT_COLOR = '#f5c9da';
+  const BODY_TEXT_COLOR = '#3a405a';
+  const TITLE_TEXT_COLOR = '#c1124f';
+  const SECONDARY_TEXT_COLOR = '#5a617a';
   const FONT_SIZE_ADJUSTMENT = 2;
   const LINE_HEIGHT_REDUCTION = 0.5;
   const MIN_LINE_HEIGHT = 0.7;
   const PRACTICE_COLUMN_SHIFT_RATIO = 0.1;
   const PRACTICE_COLUMN_SHIFT_MAX = 2;
   const THEORY_COLUMN_ADDITIONAL_RIGHT_MARGIN = 2;
-  const BACKGROUND_HORIZONTAL_SHIFT_RATIO = 0.15;
-  const BACKGROUND_VERTICAL_SHIFT_RATIO = 0.05;
-  const LOGO_HORIZONTAL_SHIFT_RATIO = 0.2;
-  const TRAINING_CONTENT_MAX_WIDTH_RATIO = 0.78;
-  const TRAINING_CONTENT_SAFETY_MARGIN = 80;
   const TRAINING_CONTENT_MIN_WIDTH = 320;
   const TRAINING_CONTENT_MIN_COLUMN_WIDTH = 150;
   const TRAINING_CONTENT_COLUMN_GAP = 18;
@@ -693,63 +685,6 @@ import {
     return normaliseText(value) || 'Nombre de la formación';
   }
 
-  function calculateSidebarWidth(pageWidth) {
-    const baseSidebarWidth = Math.min(70, pageWidth * 0.08);
-    return baseSidebarWidth * 0.85 * SIDEBAR_WIDTH_REDUCTION;
-  }
-
-  function calculateFooterGeometry(pageWidth, pageHeight, pageMargins) {
-    const sidebarWidth = calculateSidebarWidth(pageWidth);
-    const footerBaseWidth = Math.min(pageWidth - 40, 780);
-    const footerMinLeft = Math.max(
-      0,
-      sidebarWidth + FOOTER_BASELINE_PADDING + FOOTER_LEFT_ADDITIONAL_OFFSET
-    );
-    const footerMaxWidth = Math.max(0, pageWidth - footerMinLeft - 30);
-    const footerWidthBase = Math.min(footerBaseWidth * 0.8, footerMaxWidth);
-    const footerWidth = footerWidthBase * FOOTER_WIDTH_REDUCTION;
-    const footerHeight = footerWidth * IMAGE_ASPECT_RATIOS.footer;
-    const bottomLift = pageMargins[3] * 0.1;
-    const footerY = Math.max(0, pageHeight - footerHeight - bottomLift);
-    return { footerY, footerMinLeft, footerWidth, footerHeight };
-  }
-
-  function calculateTrainingContentWidth(totalWidth) {
-    if (typeof totalWidth !== 'number' || totalWidth <= 0) {
-      return TRAINING_CONTENT_MIN_WIDTH;
-    }
-
-    const ratioWidth = totalWidth * TRAINING_CONTENT_MAX_WIDTH_RATIO;
-    const safetyWidth = totalWidth - TRAINING_CONTENT_SAFETY_MARGIN;
-    const candidateWidth = Math.min(ratioWidth, safetyWidth);
-    const constrainedCandidate = Number.isFinite(candidateWidth)
-      ? candidateWidth
-      : totalWidth;
-    const minWidthConstraint = Math.min(TRAINING_CONTENT_MIN_WIDTH, totalWidth);
-
-    const resolvedWidth = Math.max(minWidthConstraint, constrainedCandidate);
-    return Math.min(resolvedWidth, totalWidth);
-  }
-
-  function buildTrainerBlock(row: CertificatePdfRow | null | undefined, geometry, pageMargins) {
-    const trainer = normaliseText(getTrainerValue(row));
-    if (!trainer) {
-      return null;
-    }
-
-    const label = `Formador: ${trainer}`;
-    const x = Math.max(geometry.footerMinLeft + 10, pageMargins[0]);
-    const y = Math.max(0, geometry.footerY - 18);
-
-    return {
-      text: label,
-      fontSize: adjustFontSize(9),
-      color: '#1f274d',
-      absolutePosition: { x, y },
-      margin: [0, 0, 0, 0]
-    };
-  }
-
   function resolveTrainingTitle(row: CertificatePdfRow | null | undefined) {
     const templateKey = getTrainingTemplateKey(row);
     if (templateKey && trainingTemplates && typeof trainingTemplates.getTrainingTitle === 'function') {
@@ -822,50 +757,97 @@ import {
   function buildDocStyles() {
     return {
       bodyText: {
-        fontSize: adjustFontSize(10),
-        lineHeight: adjustLineHeight(1.35)
+        fontSize: adjustFontSize(11),
+        lineHeight: adjustLineHeight(1.5),
+        color: BODY_TEXT_COLOR,
+        margin: [0, 0, 0, 10]
       },
       introText: {
         fontSize: adjustFontSize(10),
-        lineHeight: adjustLineHeight(1.35),
-        margin: [0, 0, 0, 8]
+        lineHeight: adjustLineHeight(1.4),
+        color: SECONDARY_TEXT_COLOR,
+        margin: [0, 0, 0, 12]
       },
       certificateTitle: {
-        fontSize: adjustFontSize(26),
+        fontSize: adjustFontSize(32),
         bold: true,
-        color: '#c4143c',
-        letterSpacing: 3,
-        margin: [0, 8, 0, 8]
+        color: TITLE_TEXT_COLOR,
+        letterSpacing: 2,
+        margin: [0, 6, 0, 12]
       },
       highlighted: {
-        fontSize: adjustFontSize(12),
+        fontSize: adjustFontSize(13),
         bold: true,
-        margin: [0, 6, 0, 6]
+        color: TITLE_TEXT_COLOR,
+        margin: [0, 8, 0, 8]
       },
       trainingName: {
-        fontSize: adjustFontSize(16),
+        fontSize: adjustFontSize(18),
         bold: true,
-        margin: [0, 12, 0, 0]
+        color: TITLE_TEXT_COLOR,
+        margin: [0, 12, 0, 16]
       },
       contentSectionTitle: {
         fontSize: adjustFontSize(12),
         bold: true,
-        margin: [0, 12, 0, 6]
+        color: TITLE_TEXT_COLOR,
+        margin: [0, 18, 0, 10],
+        letterSpacing: 1
       },
       sectionHeading: {
         fontSize: adjustFontSize(11),
         bold: true,
-        margin: [0, 0, 0, 4]
+        color: TITLE_TEXT_COLOR,
+        margin: [0, 0, 0, 6]
       },
       listItem: {
-        fontSize: adjustFontSize(8),
-        lineHeight: adjustLineHeight(1.2),
-        margin: [0, 0, 0, 3]
+        fontSize: adjustFontSize(9),
+        lineHeight: adjustLineHeight(1.3),
+        color: BODY_TEXT_COLOR,
+        margin: [0, 0, 0, 4]
       },
       theoryListItem: {
-        fontSize: adjustFontSize(7.5),
-        lineHeight: adjustLineHeight(1.15),
-        margin: [0, 0, 0, 3]
+        fontSize: adjustFontSize(9),
+        lineHeight: adjustLineHeight(1.3),
+        color: BODY_TEXT_COLOR,
+        margin: [0, 0, 0, 4]
+      },
+      leftPanelTitle: {
+        fontSize: adjustFontSize(20),
+        bold: true,
+        color: LEFT_PANEL_TEXT_COLOR,
+        lineHeight: adjustLineHeight(1.15)
+      },
+      leftPanelSubtitle: {
+        fontSize: adjustFontSize(9),
+        color: LEFT_PANEL_MUTED_TEXT_COLOR,
+        lineHeight: adjustLineHeight(1.3)
+      },
+      leftPanelHeading: {
+        fontSize: adjustFontSize(10),
+        bold: true,
+        color: LEFT_PANEL_TEXT_COLOR,
+        margin: [0, 16, 0, 6],
+        letterSpacing: 1
+      },
+      leftPanelSummaryLabel: {
+        fontSize: adjustFontSize(8.5),
+        bold: true,
+        color: LEFT_PANEL_MUTED_TEXT_COLOR
+      },
+      leftPanelSummaryValue: {
+        fontSize: adjustFontSize(11),
+        color: LEFT_PANEL_TEXT_COLOR
+      },
+      leftPanelFooter: {
+        fontSize: adjustFontSize(8.5),
+        color: LEFT_PANEL_MUTED_TEXT_COLOR,
+        margin: [0, 24, 0, 0]
+      },
+      metadataText: {
+        fontSize: adjustFontSize(9.5),
+        color: SECONDARY_TEXT_COLOR,
+        margin: [0, 8, 0, 0]
       }
     };
   }
@@ -877,53 +859,70 @@ import {
       ? 'Poppins'
       : 'Roboto';
 
-    const [backgroundImage, sidebarImage, footerImage, logoImage] = await Promise.all([
-      getCachedAsset('background'),
-      getCachedAsset('leftSidebar'),
-      getCachedAsset('footer'),
-      getCachedAsset('logo')
-    ]);
+    const logoImage = await getCachedAsset('logo');
 
-    const referencePageMargins = [105, 40, 160, 100];
     const pageWidth = PAGE_DIMENSIONS.width;
-    const pageHeight = PAGE_DIMENSIONS.height;
-    const leftMargin = Math.max(
-      0,
-      calculateSidebarWidth(pageWidth) + FOOTER_BASELINE_PADDING + FOOTER_LEFT_ADDITIONAL_OFFSET
+    const pageMargins = [60, 50, 70, 60];
+    const columnGap = 36;
+    const totalContentWidth = Math.max(0, pageWidth - pageMargins[0] - pageMargins[2]);
+    const maxLeftColumnWidth = Math.max(totalContentWidth * 0.55, totalContentWidth - 260);
+    const preliminaryLeftWidth = Math.max(240, totalContentWidth * LEFT_PANEL_RATIO);
+    const leftColumnWidth = Math.min(
+      Math.max(0, preliminaryLeftWidth),
+      Math.max(0, maxLeftColumnWidth)
     );
-    const baseContentWidth = pageWidth - referencePageMargins[0] - referencePageMargins[2];
-    const contentWidthAdjustment = 15;
-    const adjustedContentWidth = Math.max(0, baseContentWidth - contentWidthAdjustment);
-    const minimumRightMargin = referencePageMargins[2] + 40;
-    const rightMargin = Math.max(
-      minimumRightMargin,
-      pageWidth - leftMargin - adjustedContentWidth
-    );
-    const pageMargins = [
-      leftMargin,
-      referencePageMargins[1],
-      rightMargin,
-      referencePageMargins[3]
-    ];
+    const rightColumnWidth = Math.max(0, totalContentWidth - leftColumnWidth - columnGap);
+
     const fullName = buildFullName(row);
+    const formattedFullName = normaliseText(fullName).toUpperCase() || fullName;
     const documentSentenceFragments = buildDocumentSentenceFragments(row);
+    const styledDocumentSentenceFragments = documentSentenceFragments.map((fragment) => ({
+      ...fragment,
+      color: BODY_TEXT_COLOR
+    }));
     const trainingDate = formatTrainingDateRange(
       getPrimaryDateValue(row),
       getSecondaryDateValue(row)
     );
     const location = formatLocation(getLocationValue(row));
     const duration = formatDuration(getDurationValue(row));
+    const durationLabel = duration === '____' ? '____ horas' : `${duration} horas`;
     const trainingTitle = resolveTrainingTitle(row);
-    const trainingName = formatTrainingName(trainingTitle);
+    const trainingNameRaw = formatTrainingName(trainingTitle);
+    const trainingNameDisplay = normaliseText(trainingNameRaw).toUpperCase() ||
+      trainingNameRaw.toUpperCase();
     const templateKey = getTrainingTemplateKey(row);
     const trainingDetails =
       templateKey && trainingTemplates
         ? trainingTemplates.getTrainingDetails(templateKey)
         : null;
-    const footerGeometry = calculateFooterGeometry(pageWidth, pageHeight, pageMargins);
-    const trainerBlock = buildTrainerBlock(row, footerGeometry, pageMargins);
+    const trainer = normaliseText(getTrainerValue(row));
+    const dealInfo = getDealInfo(row);
+    const organizationName = normaliseText(dealInfo.organizationName);
+    const sedeLabel = normaliseText(dealInfo.sedeLabel);
 
-    const contentStack = [
+    const readableDate = trainingDate === '________' ? '' : trainingDate;
+    const readableLocation = location === '________' ? sedeLabel : location;
+    const readableDuration = duration === '____' ? '' : `${duration} horas`;
+
+    const participationParts = [];
+    if (readableDate) {
+      participationParts.push(`celebrada el ${readableDate}`);
+    }
+    if (readableLocation) {
+      participationParts.push(`en ${readableLocation}`);
+    }
+
+    const participationSentence = participationParts.length
+      ? `, quien ha realizado la formación ${participationParts.join(' ')}.`
+      : ', quien ha realizado la formación.';
+
+    styledDocumentSentenceFragments.push({
+      text: participationSentence,
+      color: BODY_TEXT_COLOR
+    });
+
+    const rightColumnStack = [
       {
         text: 'Sr. Lluís Vicent Pérez,\nDirector de la escuela GEPCO Formación\nexpide el presente:',
         style: 'introText'
@@ -932,119 +931,165 @@ import {
       {
         text: [
           'A nombre del alumno/a ',
-          { text: fullName, bold: true }
+          { text: formattedFullName, bold: true, color: BODY_TEXT_COLOR }
         ],
         style: 'bodyText'
       },
       {
-        text: [
-          ...documentSentenceFragments,
-          { text: `, quien en fecha ${trainingDate} y en ${location}` }
-        ],
+        text: styledDocumentSentenceFragments,
         style: 'bodyText'
       },
       {
-        text: `ha superado, con una duración total de ${duration} horas, la formación de:`,
+        text: `Ha superado, con una duración total de ${durationLabel}, la formación:`,
         style: 'bodyText'
       },
-      { text: trainingName, style: 'trainingName' }
+      { text: trainingNameDisplay, style: 'trainingName' }
     ];
 
-    const availableContentWidth = Math.max(0, pageWidth - pageMargins[0] - pageMargins[2]);
-    const trainingContentWidth = calculateTrainingContentWidth(availableContentWidth);
+    const metadataLines: string[] = [];
+    if (organizationName) {
+      metadataLines.push(`Organizado para ${organizationName}.`);
+    }
+    if (trainer) {
+      metadataLines.push(`Impartido por ${trainer}.`);
+    }
+
+    metadataLines.forEach((line) => {
+      rightColumnStack.push({ text: line, style: 'metadataText' });
+    });
+
+    const detailsAvailableWidth = rightColumnWidth > 0 ? rightColumnWidth : totalContentWidth;
     const trainingDetailsContent = buildTrainingDetailsContent(trainingDetails, {
-      practiceColumnShift: availableContentWidth * PRACTICE_COLUMN_SHIFT_RATIO,
-      totalAvailableWidth: availableContentWidth,
-      boundingWidth: trainingContentWidth,
+      practiceColumnShift: detailsAvailableWidth * PRACTICE_COLUMN_SHIFT_RATIO,
+      totalAvailableWidth: detailsAvailableWidth,
+      boundingWidth: detailsAvailableWidth,
       columnGap: TRAINING_CONTENT_COLUMN_GAP
     });
+
     if (trainingDetailsContent.length) {
-      contentStack.push({
-        text: 'Contenidos de la formación',
-        style: 'contentSectionTitle',
-        width: trainingContentWidth
-      });
-      contentStack.push(...trainingDetailsContent);
+      rightColumnStack.push({ text: 'Contenidos de la formación', style: 'contentSectionTitle' });
+      rightColumnStack.push(...trainingDetailsContent);
     }
-    contentStack.push({ text: '\n', margin: [0, 0, 0, 0] });
+
+    const summaryEntries = [
+      { label: 'Fecha', value: readableDate },
+      { label: 'Duración', value: readableDuration },
+      { label: 'Lugar', value: readableLocation },
+      { label: 'Cliente', value: organizationName },
+      { label: 'Formador/a', value: trainer }
+    ].filter((entry) => entry.value);
+
+    const leftColumnStack = [
+      { text: 'GEPCO Formación', style: 'leftPanelTitle' },
+      {
+        text: 'Escuela acreditada en seguridad y emergencias',
+        style: 'leftPanelSubtitle',
+        margin: [0, 6, 0, 0]
+      }
+    ];
+
+    if (summaryEntries.length) {
+      leftColumnStack.push({ text: 'Detalles de la formación', style: 'leftPanelHeading' });
+      summaryEntries.forEach((entry) => {
+        leftColumnStack.push({
+          columns: [
+            { text: entry.label.toUpperCase(), style: 'leftPanelSummaryLabel', width: 'auto' },
+            { text: entry.value, style: 'leftPanelSummaryValue', width: '*' }
+          ],
+          columnGap: 6,
+          margin: [0, 4, 0, 0]
+        });
+      });
+    }
+
+    if (logoImage) {
+      leftColumnStack.push({
+        image: logoImage,
+        width: Math.min(leftColumnWidth * 0.6, 180),
+        margin: [0, 40, 0, 12]
+      });
+    }
+
+    leftColumnStack.push({ text: 'www.gepcoformacion.com', style: 'leftPanelFooter' });
+    leftColumnStack.push({
+      text: 'ERP Group',
+      style: 'leftPanelSubtitle',
+      margin: [0, 6, 0, 0]
+    });
 
     const docDefinition = {
       pageOrientation: 'landscape',
       pageSize: 'A4',
       pageMargins,
-      background: function (currentPage, pageSize) {
-        const pageWidth = pageSize.width || PAGE_DIMENSIONS.width;
-        const pageHeight = pageSize.height || PAGE_DIMENSIONS.height;
-        const sidebarWidth = calculateSidebarWidth(pageWidth);
-        const backgroundWidth = Math.min(320, pageWidth * 0.35);
-        const backgroundBaseX = pageWidth - backgroundWidth + backgroundWidth * 0.12;
-        const backgroundX = backgroundBaseX + backgroundWidth * BACKGROUND_HORIZONTAL_SHIFT_RATIO;
-        const backgroundBaseHeight = backgroundWidth * IMAGE_ASPECT_RATIOS.background;
-        const topBleed = (pageMargins[1] || 0) + BACKGROUND_MARGIN_BLEED;
-        const bottomBleed = (pageMargins[3] || 0) + BACKGROUND_MARGIN_BLEED;
-        const backgroundHeight = backgroundBaseHeight + topBleed + bottomBleed;
-        const backgroundBaseY = (pageHeight - backgroundBaseHeight) / 2 - topBleed;
-        const backgroundY = backgroundBaseY - backgroundHeight * BACKGROUND_VERTICAL_SHIFT_RATIO;
-        const { footerMinLeft, footerWidth, footerY } = calculateFooterGeometry(
-          pageWidth,
-          pageHeight,
-          pageMargins
+      background: function (_currentPage, pageSize) {
+        const width = pageSize.width || PAGE_DIMENSIONS.width;
+        const height = pageSize.height || PAGE_DIMENSIONS.height;
+        const panelWidth = Math.min(
+          width,
+          pageMargins[0] + leftColumnWidth + columnGap * 0.5
         );
-        const logoWidth = Math.min(backgroundWidth * 0.6, 200);
-        const logoHeight = logoWidth * IMAGE_ASPECT_RATIOS.logo;
-        const logoVerticalShift = pageHeight * LOGO_VERTICAL_SHIFT_RATIO;
-        const logoY = Math.max(0, (pageHeight - logoHeight) / 2 + logoVerticalShift);
-        const logoBaseX = backgroundX + (backgroundWidth - logoWidth) / 2;
-        const logoX = logoBaseX - logoWidth * LOGO_HORIZONTAL_SHIFT_RATIO;
+        const accentWidth = panelWidth * 0.55;
+        const accentX = Math.max(0, panelWidth - accentWidth * 0.6);
 
         return [
           {
-            image: sidebarImage,
-            width: sidebarWidth,
-            height: pageHeight,
-            absolutePosition: { x: 0, y: 0 }
+            canvas: [
+              { type: 'rect', x: 0, y: 0, w: width, h: height, color: '#ffffff' },
+              { type: 'rect', x: 0, y: 0, w: panelWidth, h: height, color: LEFT_PANEL_PRIMARY_COLOR },
+              {
+                type: 'rect',
+                x: accentX,
+                y: -height * 0.1,
+                w: accentWidth,
+                h: height * 1.2,
+                color: LEFT_PANEL_ACCENT_COLOR
+              },
+              { type: 'rect', x: panelWidth, y: 0, w: 6, h: height, color: LEFT_PANEL_DIVIDER_COLOR }
+            ]
           },
           {
-            image: backgroundImage,
-            width: backgroundWidth,
-            height: backgroundHeight,
-            absolutePosition: { x: backgroundX, y: backgroundY }
-          },
-          {
-            image: logoImage,
-            width: logoWidth,
-            absolutePosition: { x: logoX, y: logoY }
-          },
-          {
-            image: footerImage,
-            width: footerWidth,
-            absolutePosition: { x: footerMinLeft, y: footerY }
+            text: 'Formación profesional en emergencias',
+            color: LEFT_PANEL_TEXT_COLOR,
+            opacity: 0.3,
+            fontSize: adjustFontSize(12),
+            bold: true,
+            angle: 90,
+            font: preferredFontFamily,
+            absolutePosition: {
+              x: Math.max(panelWidth * 0.08, 14),
+              y: height * 0.72
+            }
           }
         ];
       },
       content: [
         {
-          margin: [0, 8, 0, 0],
-          stack: contentStack
+          columns: [
+            {
+              width: leftColumnWidth,
+              stack: leftColumnStack
+            },
+            {
+              width: '*',
+              stack: rightColumnStack
+            }
+          ],
+          columnGap
         }
       ],
       styles: buildDocStyles(),
       defaultStyle: {
         fontSize: adjustFontSize(10),
-        lineHeight: adjustLineHeight(1.35),
-        color: '#1f274d',
+        lineHeight: adjustLineHeight(1.45),
+        color: BODY_TEXT_COLOR,
         font: preferredFontFamily
       },
       info: {
         title: `Certificado - ${fullName}`,
         author: 'GEPCO Formación',
-        subject: trainingName
+        subject: trainingNameRaw
       }
     };
-
-    if (trainerBlock) {
-      docDefinition.content.push(trainerBlock);
-    }
 
     return docDefinition;
   }
