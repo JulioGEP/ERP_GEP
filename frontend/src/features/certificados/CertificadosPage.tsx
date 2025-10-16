@@ -628,7 +628,7 @@ export function CertificadosPage() {
 
   return (
     <div className="d-flex justify-content-center">
-      <Card className="shadow-sm border-0 w-100" style={{ maxWidth: '960px' }}>
+      <Card className="shadow-sm border-0 w-100" style={{ maxWidth: '1248px' }}>
         <Card.Body className="p-4">
           <Card.Title as="h1" className="h4 fw-bold mb-4 text-uppercase text-center">
             Certificados
