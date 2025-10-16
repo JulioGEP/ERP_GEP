@@ -85,6 +85,28 @@ function normaliseSessionDate(value?: string | null): string {
   return trimmed;
 }
 
+const CERTIFICATE_LOCATION_OVERRIDES: Record<string, string> = {
+  'c. primavera, 1, 28500 arganda del rey, madrid, espana': 'Arganda del Rey',
+  'carrer de moratin, 100, 08206 sabadell, barcelona, espana': 'Sabadell',
+  'in company': 'sus instalaciones',
+};
+
+function normaliseLocationKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function resolveCertificateLocation(value: string): string {
+  if (!value.trim().length) {
+    return value;
+  }
+
+  const normalisedValue = normaliseLocationKey(value.trim());
+  return CERTIFICATE_LOCATION_OVERRIDES[normalisedValue] ?? value;
+}
+
 function mapRowToCertificateGenerationData(
   row: CertificateRow,
   context: { deal: DealDetail | null; session: CertificateSession | null },
@@ -93,7 +115,7 @@ function mapRowToCertificateGenerationData(
   const apellido = toTrimmedString(row.apellidos);
   const dni = toTrimmedString(row.dni);
   const sessionDate = normaliseSessionDate(context.session?.fecha_inicio_utc ?? row.fecha);
-  const sede = toTrimmedString(context.deal?.sede_label ?? row.lugar);
+  const sede = resolveCertificateLocation(toTrimmedString(context.deal?.sede_label ?? row.lugar));
   const productName = toTrimmedString(context.session?.productName ?? row.formacion);
   const hours =
     parseHoursValue(context.session?.productHours ?? null) ?? parseHoursValue(row.horas ?? null);
