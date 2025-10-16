@@ -6,10 +6,7 @@ import { getPrisma } from "./_shared/prisma";
 import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { downloadFile as downloadPipedriveFile } from "./_shared/pipedrive";
-import {
-  uploadDealDocumentToGoogleDrive,
-  GoogleDriveSelfCheckError,
-} from "./_shared/googleDrive";
+import { uploadDealDocumentToGoogleDrive } from "./_shared/googleDrive";
 
 const BUCKET = process.env.S3_BUCKET!;
 const REGION = process.env.S3_REGION!;
@@ -299,9 +296,6 @@ export const handler = async (event: any) => {
             data: buffer,
           });
         } catch (err) {
-          if (err instanceof GoogleDriveSelfCheckError) {
-            return errorResponse(err.code, err.message, err.statusCode ?? 500);
-          }
           const message = err instanceof Error ? err.message : String(err ?? "Error subiendo a Drive");
           return errorResponse("UPLOAD_ERROR", message, 502);
         }

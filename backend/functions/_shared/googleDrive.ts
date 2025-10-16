@@ -70,87 +70,6 @@ function getServiceAccount(): { clientEmail: string; privateKey: string } | null
   return cachedServiceAccount;
 }
 
-const REQUIRED_DRIVE_ENV_VARS = [
-  "GOOGLE_DRIVE_SHARED_DRIVE_ID",
-  "GOOGLE_DRIVE_CLIENT_EMAIL",
-  "GOOGLE_DRIVE_PRIVATE_KEY",
-];
-
-export type GoogleDriveSelfCheckResult = {
-  ok: true;
-  driveId: string;
-  checkedAt: string;
-  durationMs: number;
-  listedItems: number;
-  testFileId: string;
-  testFileName: string;
-};
-
-export class GoogleDriveSelfCheckError extends Error {
-  code: string;
-  statusCode: number;
-  details?: Record<string, any>;
-
-  constructor(
-    code: string,
-    message: string,
-    statusCode = 500,
-    details?: Record<string, any>
-  ) {
-    super(message);
-    this.name = "GoogleDriveSelfCheckError";
-    this.code = code;
-    this.statusCode = statusCode;
-    this.details = details;
-  }
-}
-
-function toErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return String(err ?? "Error desconocido");
-}
-
-function collectMissingDriveEnvVars(): string[] {
-  return REQUIRED_DRIVE_ENV_VARS.filter((name) => {
-    const value = process.env[name];
-    return !value || !String(value).trim();
-  });
-}
-
-function validateDriveEnvironment(): { driveId: string } {
-  const missing = collectMissingDriveEnvVars();
-  if (missing.length) {
-    throw new GoogleDriveSelfCheckError(
-      "GOOGLE_DRIVE_ENV_MISSING",
-      `Faltan variables de entorno requeridas: ${missing.join(", ")}`,
-      500,
-      { missing }
-    );
-  }
-
-  const driveId = resolveDriveSharedId();
-  if (!driveId) {
-    throw new GoogleDriveSelfCheckError(
-      "GOOGLE_DRIVE_ENV_MISSING",
-      "Falta GOOGLE_DRIVE_SHARED_DRIVE_ID",
-      500,
-      { missing: ["GOOGLE_DRIVE_SHARED_DRIVE_ID"] }
-    );
-  }
-
-  const serviceAccount = getServiceAccount();
-  if (!serviceAccount) {
-    throw new GoogleDriveSelfCheckError(
-      "GOOGLE_DRIVE_CREDENTIALS",
-      "No se pudo inicializar el service account de Google Drive",
-      500,
-      { reason: "missing_credentials" }
-    );
-  }
-
-  return { driveId };
-}
-
 function base64UrlEncode(input: string | Buffer): string {
   return Buffer.isBuffer(input)
     ? input.toString("base64url")
@@ -293,132 +212,6 @@ async function driveDelete(fileId: string): Promise<void> {
     const text = await response.text().catch(() => "");
     throw new Error(`[google-drive-sync] Delete failed: ${response.status} ${text}`.trim());
   }
-}
-
-let driveSelfCheckPromise: Promise<GoogleDriveSelfCheckResult> | null = null;
-let driveSelfCheckError: GoogleDriveSelfCheckError | null = null;
-
-export async function performGoogleDriveSelfCheck(): Promise<GoogleDriveSelfCheckResult> {
-  const startedAt = Date.now();
-  const { driveId } = validateDriveEnvironment();
-
-  let listedItems = 0;
-  try {
-    const list = await driveFilesList({
-      corpora: "drive",
-      driveId,
-      includeItemsFromAllDrives: "true",
-      supportsAllDrives: "true",
-      q: `'${driveId}' in parents and trashed = false`,
-      fields: "files(id)",
-      pageSize: "10",
-    });
-
-    const files = Array.isArray(list.files) ? list.files : [];
-    listedItems = files.length;
-  } catch (err) {
-    throw new GoogleDriveSelfCheckError(
-      "GOOGLE_DRIVE_SELF_CHECK_FAILED",
-      "No se pudo listar la raíz del Shared Drive configurado",
-      502,
-      { step: "list_root", cause: toErrorMessage(err) }
-    );
-  }
-
-  const testFileName = `_erp_selfcheck_${Date.now()}.txt`;
-  const payload = Buffer.from(`Self-check ${new Date().toISOString()}`);
-
-  let uploadResult: { id: string; name?: string | null };
-  try {
-    uploadResult = await uploadBufferToDrive({
-      parentId: driveId,
-      name: testFileName,
-      mimeType: "text/plain",
-      data: payload,
-    });
-  } catch (err) {
-    throw new GoogleDriveSelfCheckError(
-      "GOOGLE_DRIVE_SELF_CHECK_FAILED",
-      "No se pudo crear el archivo de prueba en Google Drive",
-      502,
-      { step: "create_test_file", cause: toErrorMessage(err) }
-    );
-  }
-
-  try {
-    await driveDelete(uploadResult.id);
-  } catch (err) {
-    throw new GoogleDriveSelfCheckError(
-      "GOOGLE_DRIVE_SELF_CHECK_FAILED",
-      "El archivo de prueba se creó pero no se pudo eliminar",
-      502,
-      { step: "cleanup_test_file", cause: toErrorMessage(err), fileId: uploadResult.id }
-    );
-  }
-
-  return {
-    ok: true,
-    driveId,
-    checkedAt: new Date().toISOString(),
-    durationMs: Date.now() - startedAt,
-    listedItems,
-    testFileId: uploadResult.id,
-    testFileName: uploadResult.name || testFileName,
-  };
-}
-
-function scheduleDriveSelfCheck(): Promise<GoogleDriveSelfCheckResult> {
-  const promise = performGoogleDriveSelfCheck()
-    .then((result) => {
-      driveSelfCheckError = null;
-      return result;
-    })
-    .catch((error) => {
-      const normalized =
-        error instanceof GoogleDriveSelfCheckError
-          ? error
-          : new GoogleDriveSelfCheckError(
-              "GOOGLE_DRIVE_SELF_CHECK_FAILED",
-              toErrorMessage(error),
-              502,
-              { step: "unknown" }
-            );
-      driveSelfCheckError = normalized;
-      driveSelfCheckPromise = null;
-      throw normalized;
-    });
-
-  driveSelfCheckPromise = promise;
-  return promise;
-}
-
-export async function ensureGoogleDriveReady(options: { force?: boolean } = {}): Promise<GoogleDriveSelfCheckResult> {
-  if (options.force) {
-    return scheduleDriveSelfCheck();
-  }
-
-  if (driveSelfCheckError) {
-    throw driveSelfCheckError;
-  }
-
-  if (driveSelfCheckPromise) {
-    return driveSelfCheckPromise;
-  }
-
-  return scheduleDriveSelfCheck();
-}
-
-const shouldRunStartupSelfCheck =
-  process.env.GOOGLE_DRIVE_SELF_CHECK !== "disabled" && process.env.NODE_ENV !== "test";
-if (shouldRunStartupSelfCheck) {
-  scheduleDriveSelfCheck().catch((err) => {
-    const error = err instanceof GoogleDriveSelfCheckError ? err : undefined;
-    console.error("[google-drive-sync] Self-check inicial falló", {
-      code: error?.code ?? "GOOGLE_DRIVE_SELF_CHECK_FAILED",
-      message: error?.message ?? toErrorMessage(err),
-      details: error?.details,
-    });
-  });
 }
 
 async function findFolder(params: { name: string; parentId: string; driveId: string }): Promise<string | null> {
@@ -891,7 +684,12 @@ export async function syncDealDocumentsToGoogleDrive(params: {
   organizationName?: string | null;
 }): Promise<void> {
   try {
-    const { driveId } = await ensureGoogleDriveReady();
+    const driveId = resolveDriveSharedId();
+    if (!driveId) return;
+
+    if (!getServiceAccount()) {
+      return;
+    }
 
     const prisma = getPrisma();
     const documents = Array.isArray(params.documents) ? params.documents : [];
@@ -998,7 +796,12 @@ export async function deleteDealFolderFromGoogleDrive(params: {
   organizationName?: string | null;
 }): Promise<void> {
   try {
-    const { driveId } = await ensureGoogleDriveReady();
+    const driveId = resolveDriveSharedId();
+    if (!driveId) return;
+
+    if (!getServiceAccount()) {
+      return;
+    }
 
     const prisma = getPrisma();
     const baseFolderName = resolveDriveBaseFolderName();
@@ -1077,7 +880,14 @@ export async function uploadDealDocumentToGoogleDrive(params: {
   driveFileName: string;
   driveWebViewLink: string | null;
 }> {
-  const { driveId } = await ensureGoogleDriveReady();
+  const driveId = resolveDriveSharedId();
+  if (!driveId) {
+    throw new Error("Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)");
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error("Credenciales de Google Drive no configuradas");
+  }
 
   const baseFolderId = await ensureFolder({
     name: resolveDriveBaseFolderName(),
@@ -1145,7 +955,14 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
   driveFileName: string;
   driveWebViewLink: string | null;
 }> {
-  const { driveId } = await ensureGoogleDriveReady();
+  const driveId = resolveDriveSharedId();
+  if (!driveId) {
+    throw new Error("Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)");
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error("Credenciales de Google Drive no configuradas");
+  }
 
   const baseFolderId = await ensureFolder({
     name: resolveDriveBaseFolderName(),
@@ -1296,7 +1113,16 @@ export async function deleteSessionDocumentFromGoogleDrive(params: {
   driveWebViewLink?: string | null;
   removeSessionFolder?: boolean;
 }): Promise<{ fileDeleted: boolean; sessionFolderDeleted: boolean }> {
-  const { driveId } = await ensureGoogleDriveReady();
+  const driveId = resolveDriveSharedId();
+  if (!driveId) {
+    throw new Error(
+      "Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)",
+    );
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error("Credenciales de Google Drive no configuradas");
+  }
 
   const baseFolderName = resolveDriveBaseFolderName();
   const baseFolderId = await findFolder({
