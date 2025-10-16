@@ -40,13 +40,32 @@ body {
   border-color: #d93b41;
 }
 
-.nav-link {
+.navbar .nav-link {
   font-weight: 500;
   color: var(--color-gray-medium);
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.nav-link.active {
-  color: var(--color-red);
+.navbar .dropdown-item {
+  color: var(--color-gray-medium);
+  border-radius: 0.5rem;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.navbar .nav-link.active,
+.navbar .nav-link:hover,
+.navbar .nav-link:focus {
+  color: #ffffff;
+  background-color: var(--color-red);
+}
+
+.navbar .dropdown-item:hover,
+.navbar .dropdown-item:focus,
+.navbar .dropdown-item.active {
+  color: #ffffff;
+  background-color: var(--color-red);
 }
 
 .table thead {
