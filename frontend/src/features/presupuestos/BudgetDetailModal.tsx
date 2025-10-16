@@ -512,6 +512,10 @@ export function BudgetDetailModal({
     form?.training_address?.trim()?.length
       ? form.training_address
       : deal?.training_address ?? summary?.training_address ?? null;
+  const defaultSessionSede =
+    form?.sede_label?.trim()?.length
+      ? form.sede_label
+      : deal?.sede_label ?? summary?.sede_label ?? null;
 
   const trainingProducts = useMemo(
     () =>
@@ -1175,6 +1179,7 @@ export function BudgetDetailModal({
               <SessionsAccordion
                 dealId={normalizedDealId}
                 dealAddress={defaultSessionAddress ?? null}
+                dealSedeLabel={defaultSessionSede ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
               />

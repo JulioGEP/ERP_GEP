@@ -108,6 +108,25 @@ const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS)
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 
+function normalizeForComparison(value: string | null | undefined): string {
+  if (!value) return '';
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isInCompanyValue(value: string | null | undefined): boolean {
+  const normalized = normalizeForComparison(value);
+  return normalized === 'in company' || normalized === 'incompany';
+}
+
+function isInCompanyRoom(room: RoomOption): boolean {
+  return isInCompanyValue(room.name) || isInCompanyValue(room.sede);
+}
+
 function formatErrorMessage(error: unknown, fallback: string): string {
   if (isApiError(error)) {
     if (error.code === 'PAYLOAD_TOO_LARGE' || error.status === 413) {
@@ -1756,11 +1775,18 @@ function rangesOverlap(a: SessionTimeRange, b: SessionTimeRange): boolean {
 interface SessionsAccordionProps {
   dealId: string;
   dealAddress: string | null;
+  dealSedeLabel: string | null;
   products: DealProduct[];
   onNotify?: (toast: ToastParams) => void;
 }
 
-export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: SessionsAccordionProps) {
+export function SessionsAccordion({
+  dealId,
+  dealAddress,
+  dealSedeLabel,
+  products,
+  onNotify,
+}: SessionsAccordionProps) {
   const qc = useQueryClient();
 
   const applicableProducts = useMemo(
@@ -1786,6 +1812,7 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
   );
 
   const shouldShow = applicableProducts.length > 0;
+  const dealSedeIsInCompany = isInCompanyValue(dealSedeLabel);
 
   const generationKey = useMemo(
     () =>
@@ -2339,18 +2366,59 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
       })()
     : null;
 
-  useEffect(() => {
-    if (activeSession && !forms[activeSession.sessionId]) {
-      setActiveSession(null);
-    }
-  }, [activeSession, forms]);
+    useEffect(() => {
+      if (activeSession && !forms[activeSession.sessionId]) {
+        setActiveSession(null);
+      }
+    }, [activeSession, forms]);
 
-  if (!shouldShow) return null;
+    const trainers = trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
+    const rooms = roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
+    const units = unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
+    const inCompanyRoomId = useMemo(() => {
+      const match = rooms.find((room) => isInCompanyRoom(room));
+      return match?.sala_id ?? null;
+    }, [rooms]);
+    const inCompanyRoomIds = useMemo(() => {
+      const ids = rooms.filter((room) => isInCompanyRoom(room)).map((room) => room.sala_id);
+      return new Set(ids);
+    }, [rooms]);
 
-  const trainers = trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
-  const rooms = roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
-  const units = unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
-  const activeStatus = activeSession
+    useEffect(() => {
+      if (!dealSedeIsInCompany || !inCompanyRoomId) return;
+      if (!Object.keys(forms).length) return;
+
+      const nextForms: Record<string, SessionFormState> = { ...forms };
+      const updatedEntries: [string, SessionFormState][] = [];
+
+      for (const [sessionId, formState] of Object.entries(forms)) {
+        if (formState.sala_id === inCompanyRoomId) continue;
+        const updatedForm = { ...formState, sala_id: inCompanyRoomId };
+        nextForms[sessionId] = updatedForm;
+        updatedEntries.push([sessionId, updatedForm]);
+      }
+
+      if (!updatedEntries.length) return;
+
+      formsRef.current = nextForms;
+      setForms(nextForms);
+      setSaveStatus((current) => {
+        const next: Record<string, SaveStatus> = { ...current };
+        updatedEntries.forEach(([sessionId]) => {
+          const prev = current[sessionId];
+          next[sessionId] = {
+            saving: prev?.saving ?? false,
+            error: prev?.error ?? null,
+            dirty: true,
+          };
+        });
+        return next;
+      });
+    }, [dealSedeIsInCompany, forms, inCompanyRoomId]);
+
+    if (!shouldShow) return null;
+
+    const activeStatus = activeSession
     ? saveStatus[activeSession.sessionId] ?? { saving: false, error: null, dirty: false }
     : { saving: false, error: null, dirty: false };
 
@@ -2416,6 +2484,9 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
                           deal_id: dealId,
                           deal_product_id: product.id,
                           direccion: dealAddress ?? '',
+                          ...(dealSedeIsInCompany && inCompanyRoomId
+                            ? { sala_id: inCompanyRoomId }
+                            : {}),
                         })
                         .then(() => invalidateProductSessions(product.id))
                         .catch((error: unknown) => {
@@ -2660,6 +2731,7 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
                   trainers={trainers}
                   rooms={rooms}
                   units={units}
+                  inCompanyRoomIds={inCompanyRoomIds}
                   defaultDurationHours={activeProductHours}
                   allForms={forms}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
@@ -2703,6 +2775,7 @@ interface SessionEditorProps {
   trainers: TrainerOption[];
   rooms: RoomOption[];
   units: MobileUnitOption[];
+  inCompanyRoomIds: Set<string>;
   defaultDurationHours: number | null;
   allForms: Record<string, SessionFormState>;
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
@@ -2718,6 +2791,7 @@ function SessionEditor({
   trainers,
   rooms,
   units,
+  inCompanyRoomIds,
   defaultDurationHours,
   allForms,
   onChange,
@@ -2814,12 +2888,14 @@ function SessionEditor({
       if (!otherRange) continue;
       if (!rangesOverlap(currentRange, otherRange)) continue;
       otherForm.trainer_ids.forEach((trainerId) => trainerSet.add(trainerId));
-      if (otherForm.sala_id) roomSet.add(otherForm.sala_id);
+      if (otherForm.sala_id && !inCompanyRoomIds.has(otherForm.sala_id)) {
+        roomSet.add(otherForm.sala_id);
+      }
       otherForm.unidad_movil_ids.forEach((unidadId) => unitSet.add(unidadId));
     }
 
     return { trainers: trainerSet, rooms: roomSet, units: unitSet };
-  }, [allForms, form.id, form.fecha_fin_local, form.fecha_inicio_local]);
+  }, [allForms, form.id, form.fecha_fin_local, form.fecha_inicio_local, inCompanyRoomIds]);
 
   const availability = availabilityQuery.data;
 
@@ -2832,10 +2908,18 @@ function SessionEditor({
 
   const blockedRooms = useMemo(() => {
     const set = new Set<string>();
-    localLocks.rooms.forEach((id) => set.add(id));
-    availability?.rooms?.forEach((id) => set.add(id));
+    localLocks.rooms.forEach((id) => {
+      if (!inCompanyRoomIds.has(id)) {
+        set.add(id);
+      }
+    });
+    availability?.rooms?.forEach((id) => {
+      if (!inCompanyRoomIds.has(id)) {
+        set.add(id);
+      }
+    });
     return set;
-  }, [availability, localLocks]);
+  }, [availability, inCompanyRoomIds, localLocks]);
 
   const blockedUnits = useMemo(() => {
     const set = new Set<string>();
