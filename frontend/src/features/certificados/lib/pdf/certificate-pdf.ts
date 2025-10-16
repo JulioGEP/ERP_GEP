@@ -150,6 +150,317 @@ if (globalScope) {
   const assetCache = new Map();
   const trainingTemplates = global.trainingTemplates || null;
 
+  type CertificatePdfStudent = {
+    nombre?: string;
+    apellido?: string;
+    dni?: string;
+    documentType?: string;
+  };
+
+  type CertificatePdfDeal = {
+    id?: string | null;
+    sedeLabel?: string | null;
+    organizationName?: string | null;
+  };
+
+  type CertificatePdfSession = {
+    id?: string | null;
+    nombre?: string | null;
+    fechaInicioUtc?: string | null;
+    fecha_inicio_utc?: string | null;
+    formattedStartDate?: string | null;
+    secondDateLabel?: string | null;
+    fechaFinUtc?: string | null;
+    location?: string | null;
+    lugar?: string | null;
+    productHours?: number | null;
+  };
+
+  type CertificatePdfProduct = {
+    id?: string | null;
+    name?: string | null;
+    templateName?: string | null;
+    hours?: number | null;
+  };
+
+  type CertificatePdfMetadata = {
+    cliente?: string | null;
+    trainer?: string | null;
+    primaryDateLabel?: string | null;
+    secondaryDateLabel?: string | null;
+    locationLabel?: string | null;
+    durationLabel?: string | null;
+    trainingLabel?: string | null;
+  };
+
+  type CertificatePdfRow = {
+    alumno?: CertificatePdfStudent;
+    deal?: CertificatePdfDeal;
+    session?: CertificatePdfSession;
+    producto?: CertificatePdfProduct;
+    metadata?: CertificatePdfMetadata;
+    [key: string]: unknown;
+  };
+
+  function getStudentInfo(row: CertificatePdfRow | null | undefined): CertificatePdfStudent {
+    if (row && row.alumno && typeof row.alumno === 'object') {
+      return row.alumno;
+    }
+    if (row && typeof row === 'object') {
+      const legacySurname =
+        typeof row.apellido === 'string'
+          ? row.apellido
+          : typeof row.apellidos === 'string'
+            ? row.apellidos
+            : undefined;
+      return {
+        nombre: typeof row.nombre === 'string' ? row.nombre : undefined,
+        apellido: legacySurname,
+        dni: typeof row.dni === 'string' ? row.dni : undefined,
+        documentType: typeof row.documentType === 'string' ? row.documentType : undefined,
+      };
+    }
+    return {};
+  }
+
+  function getDealInfo(row: CertificatePdfRow | null | undefined): CertificatePdfDeal {
+    if (row && row.deal && typeof row.deal === 'object') {
+      return row.deal;
+    }
+    if (row && typeof row === 'object') {
+      return {
+        sedeLabel: typeof row.lugar === 'string' ? row.lugar : undefined,
+        organizationName: typeof row.cliente === 'string' ? row.cliente : undefined,
+      };
+    }
+    return {};
+  }
+
+  function getSessionInfo(row: CertificatePdfRow | null | undefined): CertificatePdfSession {
+    if (row && row.session && typeof row.session === 'object') {
+      return row.session;
+    }
+    if (row && typeof row === 'object') {
+      return {
+        fechaInicioUtc: typeof row.fecha === 'string' ? row.fecha : undefined,
+        secondDateLabel: typeof row.segundaFecha === 'string' ? row.segundaFecha : undefined,
+        location: typeof row.lugar === 'string' ? row.lugar : undefined,
+      };
+    }
+    return {};
+  }
+
+  function getProductInfo(row: CertificatePdfRow | null | undefined): CertificatePdfProduct {
+    if (row && row.producto && typeof row.producto === 'object') {
+      return row.producto;
+    }
+    if (row && typeof row === 'object') {
+      return {
+        name: typeof row.formacion === 'string' ? row.formacion : undefined,
+        templateName: typeof row.formacion === 'string' ? row.formacion : undefined,
+        hours:
+          typeof row.duracion === 'number'
+            ? row.duracion
+            : typeof row.horas === 'number'
+              ? row.horas
+              : undefined,
+      };
+    }
+    return {};
+  }
+
+  function getMetadataInfo(row: CertificatePdfRow | null | undefined): CertificatePdfMetadata {
+    if (row && row.metadata && typeof row.metadata === 'object') {
+      return row.metadata;
+    }
+    if (row && typeof row === 'object') {
+      return {
+        cliente: typeof row.cliente === 'string' ? row.cliente : undefined,
+        trainer: typeof row.irata === 'string' ? row.irata : undefined,
+        primaryDateLabel: typeof row.fecha === 'string' ? row.fecha : undefined,
+        secondaryDateLabel: typeof row.segundaFecha === 'string' ? row.segundaFecha : undefined,
+        locationLabel: typeof row.lugar === 'string' ? row.lugar : undefined,
+        durationLabel:
+          typeof row.duracion === 'string'
+            ? row.duracion
+            : typeof row.horas === 'string'
+              ? row.horas
+              : undefined,
+        trainingLabel: typeof row.formacion === 'string' ? row.formacion : undefined,
+      };
+    }
+    return {};
+  }
+
+  function resolveTextValue(...values: Array<string | null | undefined>): string {
+    for (const value of values) {
+      const text = normaliseText(value);
+      if (text) {
+        return text;
+      }
+    }
+    return '';
+  }
+
+  function getStudentName(row: CertificatePdfRow | null | undefined): string {
+    const student = getStudentInfo(row);
+    const name = normaliseText(student.nombre);
+    if (name) {
+      return name;
+    }
+    if (row && typeof row === 'object') {
+      return normaliseText(row.nombre);
+    }
+    return '';
+  }
+
+  function getStudentSurname(row: CertificatePdfRow | null | undefined): string {
+    const student = getStudentInfo(row);
+    const surname = normaliseText(student.apellido);
+    if (surname) {
+      return surname;
+    }
+    if (row && typeof row === 'object') {
+      const legacySurname =
+        normaliseText(row.apellido) || normaliseText(row.apellidos);
+      if (legacySurname) {
+        return legacySurname;
+      }
+    }
+    return '';
+  }
+
+  function getStudentDni(row: CertificatePdfRow | null | undefined): string {
+    const student = getStudentInfo(row);
+    const dni = normaliseText(student.dni);
+    if (dni) {
+      return dni;
+    }
+    if (row && typeof row === 'object') {
+      return normaliseText(row.dni);
+    }
+    return '';
+  }
+
+  function getDocumentTypeValue(row: CertificatePdfRow | null | undefined): string {
+    const student = getStudentInfo(row);
+    const docType = normaliseText(student.documentType);
+    if (docType) {
+      return docType;
+    }
+    if (row && typeof row === 'object' && typeof row.documentType === 'string') {
+      const legacyDoc = normaliseText(row.documentType);
+      if (legacyDoc) {
+        return legacyDoc;
+      }
+    }
+    const dni = getStudentDni(row);
+    if (dni) {
+      return 'DNI';
+    }
+    return '';
+  }
+
+  function getPrimaryDateValue(row: CertificatePdfRow | null | undefined): string {
+    const session = getSessionInfo(row);
+    const metadata = getMetadataInfo(row);
+    return resolveTextValue(
+      session.fechaInicioUtc,
+      session.fecha_inicio_utc,
+      metadata.primaryDateLabel,
+      session.formattedStartDate,
+      row && typeof row === 'object' && typeof row.fecha === 'string' ? row.fecha : undefined
+    );
+  }
+
+  function getSecondaryDateValue(row: CertificatePdfRow | null | undefined): string {
+    const session = getSessionInfo(row);
+    const metadata = getMetadataInfo(row);
+    return resolveTextValue(
+      session.secondDateLabel,
+      metadata.secondaryDateLabel,
+      session.fechaFinUtc,
+      row && typeof row === 'object' && typeof row.segundaFecha === 'string'
+        ? row.segundaFecha
+        : undefined
+    );
+  }
+
+  function getLocationValue(row: CertificatePdfRow | null | undefined): string {
+    const session = getSessionInfo(row);
+    const metadata = getMetadataInfo(row);
+    const deal = getDealInfo(row);
+    return resolveTextValue(
+      metadata.locationLabel,
+      session.location,
+      session.lugar,
+      deal.sedeLabel,
+      row && typeof row === 'object' && typeof row.lugar === 'string' ? row.lugar : undefined
+    );
+  }
+
+  function getDurationValue(row: CertificatePdfRow | null | undefined): string | number | null {
+    const product = getProductInfo(row);
+    if (typeof product.hours === 'number') {
+      return product.hours;
+    }
+    const session = getSessionInfo(row);
+    if (typeof session.productHours === 'number') {
+      return session.productHours;
+    }
+    const metadata = getMetadataInfo(row);
+    const metadataDuration = normaliseText(metadata.durationLabel);
+    if (metadataDuration) {
+      return metadataDuration;
+    }
+    if (row && typeof row === 'object') {
+      if (typeof row.duracion === 'number') {
+        return row.duracion;
+      }
+      const legacyDuration = normaliseText(row.duracion) || normaliseText(row.horas);
+      if (legacyDuration) {
+        return legacyDuration;
+      }
+    }
+    return null;
+  }
+
+  function getTrainingTemplateKey(row: CertificatePdfRow | null | undefined): string {
+    const product = getProductInfo(row);
+    const metadata = getMetadataInfo(row);
+    const candidate = resolveTextValue(
+      product.templateName,
+      metadata.trainingLabel,
+      product.name,
+      row && typeof row === 'object' && typeof row.formacion === 'string' ? row.formacion : undefined
+    );
+    return candidate;
+  }
+
+  function getTrainingNameValue(row: CertificatePdfRow | null | undefined): string {
+    const product = getProductInfo(row);
+    const metadata = getMetadataInfo(row);
+    const value = resolveTextValue(
+      metadata.trainingLabel,
+      product.name,
+      product.templateName,
+      row && typeof row === 'object' && typeof row.formacion === 'string' ? row.formacion : undefined
+    );
+    return value;
+  }
+
+  function getTrainerValue(row: CertificatePdfRow | null | undefined): string {
+    const metadata = getMetadataInfo(row);
+    const trainer = normaliseText(metadata.trainer);
+    if (trainer) {
+      return trainer;
+    }
+    if (row && typeof row === 'object' && typeof row.irata === 'string') {
+      return normaliseText(row.irata);
+    }
+    return '';
+  }
+
   function adjustFontSize(size) {
     return typeof size === 'number' ? size + FONT_SIZE_ADJUSTMENT : size;
   }
@@ -510,15 +821,16 @@ if (globalScope) {
     return String(value).trim();
   }
 
-  function buildFullName(row) {
-    const name = normaliseText(row.nombre);
-    const surname = normaliseText(row.apellido);
-    return [name, surname].filter(Boolean).join(' ').trim() || 'Nombre del alumno/a';
+  function buildFullName(row: CertificatePdfRow | null | undefined) {
+    const name = getStudentName(row);
+    const surname = getStudentSurname(row);
+    const fullName = [name, surname].filter(Boolean).join(' ').trim();
+    return fullName || 'Nombre del alumno/a';
   }
 
-  function buildDocumentSentenceFragments(row) {
-    const documentType = normaliseText(row.documentType).toUpperCase();
-    const documentNumber = normaliseText(row.dni);
+  function buildDocumentSentenceFragments(row: CertificatePdfRow | null | undefined) {
+    const documentType = normaliseText(getDocumentTypeValue(row)).toUpperCase();
+    const documentNumber = getStudentDni(row);
 
     if (!documentType && !documentNumber) {
       return [{ text: 'con documento de identidad' }];
@@ -689,8 +1001,8 @@ if (globalScope) {
     return Math.min(resolvedWidth, totalWidth);
   }
 
-  function buildTrainerBlock(row, geometry, pageMargins) {
-    const trainer = normaliseText(row.irata);
+  function buildTrainerBlock(row: CertificatePdfRow | null | undefined, geometry, pageMargins) {
+    const trainer = normaliseText(getTrainerValue(row));
     if (!trainer) {
       return null;
     }
@@ -708,16 +1020,17 @@ if (globalScope) {
     };
   }
 
-  function resolveTrainingTitle(row) {
-    if (trainingTemplates && typeof trainingTemplates.getTrainingTitle === 'function') {
-      const templateTitle = trainingTemplates.getTrainingTitle(row?.formacion);
+  function resolveTrainingTitle(row: CertificatePdfRow | null | undefined) {
+    const templateKey = getTrainingTemplateKey(row);
+    if (templateKey && trainingTemplates && typeof trainingTemplates.getTrainingTitle === 'function') {
+      const templateTitle = trainingTemplates.getTrainingTitle(templateKey);
       const normalised = normaliseText(templateTitle);
       if (normalised) {
         return normalised;
       }
     }
 
-    const rawTitle = normaliseText(row?.formacion);
+    const rawTitle = normaliseText(getTrainingNameValue(row));
     return rawTitle || 'Formación sin título';
   }
 
@@ -768,10 +1081,9 @@ if (globalScope) {
       .toUpperCase();
   }
 
-  function buildFileName(row) {
-    const dniComponent = normalizeForAscii(row?.dni) || 'SIN_DNI';
-    const surnameSource = row?.apellido !== undefined ? row.apellido : row?.apellidos;
-    const surnameComponent = normalizeForAscii(surnameSource) || 'SIN_APELLIDOS';
+  function buildFileName(row: CertificatePdfRow | null | undefined) {
+    const dniComponent = normalizeForAscii(getStudentDni(row)) || 'SIN_DNI';
+    const surnameComponent = normalizeForAscii(getStudentSurname(row)) || 'SIN_APELLIDOS';
     const productComponent = normalizeForAscii(resolveTrainingTitle(row)) || 'SIN_FORMACION';
     const parts = ['CERTIFICADO', dniComponent, surnameComponent, productComponent];
     return `${parts.join('_')}.pdf`;
@@ -828,7 +1140,7 @@ if (globalScope) {
     };
   }
 
-  async function buildDocDefinition(row) {
+  async function buildDocDefinition(row: CertificatePdfRow | null | undefined = {}) {
     await ensurePoppinsFont();
     const preferredFontFamily =
       global.pdfMake && isFontFullyRegistered(global.pdfMake, 'Poppins') ? 'Poppins' : 'Roboto';
@@ -863,14 +1175,19 @@ if (globalScope) {
     ];
     const fullName = buildFullName(row);
     const documentSentenceFragments = buildDocumentSentenceFragments(row);
-    const trainingDate = formatTrainingDateRange(row.fecha, row.segundaFecha);
-    const location = formatLocation(row.lugar);
-    const duration = formatDuration(row.duracion);
+    const trainingDate = formatTrainingDateRange(
+      getPrimaryDateValue(row),
+      getSecondaryDateValue(row)
+    );
+    const location = formatLocation(getLocationValue(row));
+    const duration = formatDuration(getDurationValue(row));
     const trainingTitle = resolveTrainingTitle(row);
     const trainingName = formatTrainingName(trainingTitle);
-    const trainingDetails = trainingTemplates
-      ? trainingTemplates.getTrainingDetails(row.formacion)
-      : null;
+    const templateKey = getTrainingTemplateKey(row);
+    const trainingDetails =
+      templateKey && trainingTemplates
+        ? trainingTemplates.getTrainingDetails(templateKey)
+        : null;
     const footerGeometry = calculateFooterGeometry(pageWidth, pageHeight, pageMargins);
     const trainerBlock = buildTrainerBlock(row, footerGeometry, pageMargins);
 
@@ -1035,7 +1352,10 @@ if (globalScope) {
     }, 0);
   }
 
-  async function generateCertificate(row, options = {}) {
+  async function generateCertificate(
+    row: CertificatePdfRow | null | undefined,
+    options: { download?: boolean } = {}
+  ) {
     if (!global.pdfMake || typeof global.pdfMake.createPdf !== 'function') {
       throw new Error('pdfMake no está disponible.');
     }
