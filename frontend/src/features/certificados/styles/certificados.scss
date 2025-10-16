@@ -16,6 +16,43 @@
   font-size: 0.875rem;
 }
 
+.certificate-toolbar__info-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+}
+
+.certificate-toolbar__info-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.certificate-toolbar__info-status {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.certificate-toolbar__info-status--pending {
+  color: var(--bs-secondary);
+}
+
+.certificate-toolbar__info-status--working {
+  color: var(--bs-warning);
+}
+
+.certificate-toolbar__info-status--success {
+  color: var(--bs-success);
+}
+
+.certificate-toolbar__info-status--error {
+  color: var(--bs-danger);
+}
+
 .certificate-toolbar__button {
   flex-shrink: 0;
 }

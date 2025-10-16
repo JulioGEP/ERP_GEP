@@ -1,5 +1,13 @@
 import { Button, Spinner } from 'react-bootstrap';
 
+export type CertificateToolbarProgressStatus = 'pending' | 'working' | 'success' | 'error';
+
+type CertificateToolbarProgressDetail = {
+  id: string;
+  label: string;
+  status: CertificateToolbarProgressStatus;
+};
+
 type CertificateToolbarProps = {
   onGenerate?: () => void;
   disabled?: boolean;
@@ -7,6 +15,7 @@ type CertificateToolbarProps = {
   progress?: number;
   total?: number;
   infoMessage?: string;
+  infoDetails?: CertificateToolbarProgressDetail[];
   disabledReason?: string;
 };
 
@@ -17,6 +26,7 @@ export function CertificateToolbar({
   progress,
   total,
   infoMessage,
+  infoDetails,
   disabledReason,
 }: CertificateToolbarProps) {
   const isLoading = Boolean(loading);
@@ -29,9 +39,10 @@ export function CertificateToolbar({
   const loadingLabel = resolvedTotal !== null && resolvedProgress !== null
     ? `Generando (${resolvedProgress}/${resolvedTotal})`
     : 'Generando...';
-  const resolvedInfoMessage = infoMessage?.trim().length
+  const hasInfoDetails = Boolean(infoDetails?.length);
+  const resolvedInfoMessage = !hasInfoDetails && infoMessage?.trim().length
     ? infoMessage.trim()
-    : 'Ajusta los datos de los alumnos antes de generar los certificados.';
+    : null;
   const buttonTitle = buttonDisabled && disabledReason?.trim().length ? disabledReason.trim() : undefined;
 
   const handleClick = () => {
@@ -43,7 +54,49 @@ export function CertificateToolbar({
 
   return (
     <div className="certificate-toolbar">
-      <div className="certificate-toolbar__info text-muted">{resolvedInfoMessage}</div>
+      {hasInfoDetails ? (
+        <ul className="certificate-toolbar__info-list text-muted" aria-live="polite">
+          {infoDetails?.map((detail) => {
+            const statusClassName = `certificate-toolbar__info-status certificate-toolbar__info-status--${detail.status}`;
+            const statusIcon = (() => {
+              switch (detail.status) {
+                case 'success':
+                  return '✔️';
+                case 'error':
+                  return '❌';
+                case 'working':
+                  return '⏳';
+                default:
+                  return '•';
+              }
+            })();
+            const statusLabel = (() => {
+              switch (detail.status) {
+                case 'success':
+                  return 'Completado';
+                case 'error':
+                  return 'Error';
+                case 'working':
+                  return 'En progreso';
+                default:
+                  return 'Pendiente';
+              }
+            })();
+            return (
+              <li key={detail.id} className="certificate-toolbar__info-item">
+                <span className={statusClassName} aria-label={statusLabel}>
+                  {statusIcon}
+                </span>
+                <span>{detail.label}</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="certificate-toolbar__info text-muted">
+          {resolvedInfoMessage ?? 'Ajusta los datos de los alumnos antes de generar los certificados.'}
+        </div>
+      )}
       <Button
         variant="primary"
         onClick={handleClick}
