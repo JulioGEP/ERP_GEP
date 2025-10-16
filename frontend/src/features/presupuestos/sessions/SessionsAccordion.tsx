@@ -70,6 +70,7 @@ import {
 } from '../api';
 import { isApiError } from '../api';
 import { buildFieldTooltip } from '../../../utils/fieldTooltip';
+import { formatSedeLabel } from '../formatSedeLabel';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -1756,11 +1757,18 @@ function rangesOverlap(a: SessionTimeRange, b: SessionTimeRange): boolean {
 interface SessionsAccordionProps {
   dealId: string;
   dealAddress: string | null;
+  dealSedeLabel: string | null;
   products: DealProduct[];
   onNotify?: (toast: ToastParams) => void;
 }
 
-export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: SessionsAccordionProps) {
+export function SessionsAccordion({
+  dealId,
+  dealAddress,
+  dealSedeLabel,
+  products,
+  onNotify,
+}: SessionsAccordionProps) {
   const qc = useQueryClient();
 
   const applicableProducts = useMemo(
@@ -2347,8 +2355,18 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
 
   if (!shouldShow) return null;
 
+  const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
+
   const trainers = trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
-  const rooms = roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
+  const allRooms = roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
+  const rooms = useMemo(() => {
+    if (!allRooms.length) return allRooms;
+    if (!normalizedDealSede) return allRooms;
+    if (normalizedDealSede === 'In Company') {
+      return [];
+    }
+    return allRooms.filter((room) => formatSedeLabel(room.sede) === normalizedDealSede);
+  }, [allRooms, normalizedDealSede]);
   const units = unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
   const activeStatus = activeSession
     ? saveStatus[activeSession.sessionId] ?? { saving: false, error: null, dirty: false }
@@ -2666,6 +2684,7 @@ export function SessionsAccordion({ dealId, dealAddress, products, onNotify }: S
                   onOpenMap={handleOpenMap}
                   onSave={() => handleSaveSession(activeSession.sessionId)}
                   dealId={dealId}
+                  dealSede={normalizedDealSede}
                   onNotify={onNotify}
                 />
               ) : (
@@ -2709,6 +2728,7 @@ interface SessionEditorProps {
   onOpenMap: (address: string) => void;
   onSave: () => Promise<boolean> | boolean;
   dealId: string;
+  dealSede: string | null;
   onNotify?: (toast: ToastParams) => void;
 }
 
@@ -2724,6 +2744,7 @@ function SessionEditor({
   onOpenMap,
   onSave,
   dealId,
+  dealSede,
   onNotify,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
@@ -2732,6 +2753,7 @@ function SessionEditor({
   const [unitListOpen, setUnitListOpen] = useState(false);
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
+  const isInCompany = dealSede === 'In Company';
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
@@ -2853,16 +2875,29 @@ function SessionEditor({
   }, [availability, localLocks]);
 
   const selectedRoomLabel = useMemo(() => {
+    if (isInCompany) return 'In Company';
     if (!form.sala_id) return '';
     const room = rooms.find((item) => item.sala_id === form.sala_id);
     if (!room) return '';
     const baseLabel = room.sede ? `${room.name} (${room.sede})` : room.name;
     const blocked = blockedRooms.has(room.sala_id);
     return blocked ? `${baseLabel} · No disponible` : baseLabel;
-  }, [blockedRooms, form.sala_id, rooms]);
+  }, [blockedRooms, form.sala_id, isInCompany, rooms]);
 
   const hasDateRange = Boolean(availabilityRange);
-  const roomWarningVisible = hasDateRange && blockedRooms.size > 0;
+  const roomWarningVisible = !isInCompany && hasDateRange && blockedRooms.size > 0;
+
+  useEffect(() => {
+    if (isInCompany) {
+      if (form.sala_id !== null) {
+        onChange((current) => ({ ...current, sala_id: null }));
+      }
+      return;
+    }
+    if (!form.sala_id) return;
+    if (rooms.some((room) => room.sala_id === form.sala_id)) return;
+    onChange((current) => ({ ...current, sala_id: null }));
+  }, [form.sala_id, isInCompany, onChange, rooms]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -3166,24 +3201,26 @@ function SessionEditor({
                 onChange((current) => ({ ...current, sala_id: event.target.value || null }))
               }
               title={buildFieldTooltip(selectedRoomLabel)}
+              disabled={isInCompany}
             >
-              <option value="">Sin sala asignada</option>
-              {rooms.map((room) => {
-                const label = room.sede ? `${room.name} (${room.sede})` : room.name;
-                const blocked = blockedRooms.has(room.sala_id);
-                const displayLabel = blocked ? `${label} · No disponible` : label;
-                return (
-                  <option
-                    key={room.sala_id}
-                    value={room.sala_id}
-                    disabled={blocked && form.sala_id !== room.sala_id}
-                    className={blocked ? 'session-option-unavailable' : undefined}
-                    style={blocked ? { color: '#dc3545', fontWeight: 600 } : undefined}
-                  >
-                    {displayLabel}
-                  </option>
-                );
-              })}
+              <option value="">{isInCompany ? 'In Company' : 'Sin sala asignada'}</option>
+              {!isInCompany &&
+                rooms.map((room) => {
+                  const label = room.sede ? `${room.name} (${room.sede})` : room.name;
+                  const blocked = blockedRooms.has(room.sala_id);
+                  const displayLabel = blocked ? `${label} · No disponible` : label;
+                  return (
+                    <option
+                      key={room.sala_id}
+                      value={room.sala_id}
+                      disabled={blocked && form.sala_id !== room.sala_id}
+                      className={blocked ? 'session-option-unavailable' : undefined}
+                      style={blocked ? { color: '#dc3545', fontWeight: 600 } : undefined}
+                    >
+                      {displayLabel}
+                    </option>
+                  );
+                })}
             </Form.Select>
             {availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>

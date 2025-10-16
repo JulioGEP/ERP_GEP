@@ -513,6 +513,12 @@ export function BudgetDetailModal({
       ? form.training_address
       : deal?.training_address ?? summary?.training_address ?? null;
 
+  const rawDealSedeLabel =
+    form?.sede_label?.trim()?.length
+      ? form.sede_label
+      : detailView.sedeLabel ?? null;
+  const dealSedeLabel = formatSedeLabel(rawDealSedeLabel);
+
   const trainingProducts = useMemo(
     () =>
       detailProducts.filter((product) => {
@@ -1175,6 +1181,7 @@ export function BudgetDetailModal({
               <SessionsAccordion
                 dealId={normalizedDealId}
                 dealAddress={defaultSessionAddress ?? null}
+                dealSedeLabel={dealSedeLabel ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
               />
