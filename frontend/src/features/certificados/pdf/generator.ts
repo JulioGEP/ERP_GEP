@@ -73,30 +73,6 @@ const CERTIFICATE_TEMPLATES: Record<CertificateTemplateKey, CertificateTemplateC
   },
 };
 
-const CERTIFICATE_IMAGE_DIMENSIONS = {
-  background: { width: 839, height: 1328 },
-  leftSidebar: { width: 85, height: 1241 },
-  logo: { width: 827, height: 382 },
-  footer: { width: 853, height: 153 },
-} as const;
-
-const BACKGROUND_WIDTH_RATIO = 0.9;
-const BACKGROUND_HORIZONTAL_SHIFT_RATIO = 0.4;
-const BACKGROUND_VERTICAL_OVERFLOW_RATIO = 0.06;
-const SIDEBAR_REDUCTION_FACTOR = 1 / 1.2;
-const SIDEBAR_HORIZONTAL_OVERFLOW_RATIO = 0.15;
-const SIDEBAR_VERTICAL_OVERFLOW_RATIO = 0.2;
-const FOOTER_SCALE = 0.5 * 1.6;
-const FOOTER_LEFT_SHIFT_RATIO = 0.2;
-const LOGO_WIDTH = 180;
-const LOGO_RIGHT_MARGIN = 40;
-const PAGE_LEFT_OFFSET_RATIO = 0.1;
-const PAGE_TOP_OFFSET_RATIO = 0.1;
-const LANDSCAPE_A4_WIDTH = 841.89;
-const LANDSCAPE_A4_HEIGHT = 595.28;
-const PAGE_LEFT_OFFSET = LANDSCAPE_A4_WIDTH * PAGE_LEFT_OFFSET_RATIO;
-const PAGE_TOP_OFFSET = LANDSCAPE_A4_HEIGHT * PAGE_TOP_OFFSET_RATIO;
-
 const CERTIFICATE_TEMPLATE_LABELS: Record<CertificateTemplateKey, string> = {
   'CERT-GENERICO': 'Genérico',
   'CERT-PAUX-EI': 'Auxiliar Educación Infantil',
@@ -204,33 +180,25 @@ function buildCertificateContent(data: CertificateGenerationData, template: Cert
         margin: [0, 0, 0, 12],
       },
       {
-        text: [
-          'A nombre del alumno/a ',
-          { text: `${data.alumno.nombre} ${data.alumno.apellido}`, bold: true },
-        ],
+        text: `A nombre del alumno/a ${data.alumno.nombre} ${data.alumno.apellido}`,
         style: 'body',
       },
       {
-        text: [
-          'con ',
-          { text: data.alumno.dni, bold: true },
-          ', quien en fecha ',
-          { text: formattedDate, bold: true },
-          ' y en ',
-          { text: data.deal.sede_labels, bold: true },
-          ' ha superado, con una duración total de ',
-          { text: `${data.producto.hours} horas`, bold: true },
-          ', la formación de:',
-        ],
+        text: `con ${data.alumno.dni}, quien en fecha ${formattedDate} y en ${data.deal.sede_labels}`,
         style: 'body',
-        margin: [0, 12, 0, 12],
+      },
+      {
+        text: `ha superado, con una duración total de ${data.producto.hours} horas, la formación de:`,
+        style: 'body',
+        margin: [0, 0, 0, 12],
       },
       {
         text: data.producto.name,
         style: 'trainingName',
       },
     ],
-    absolutePosition: { x: PAGE_LEFT_OFFSET, y: PAGE_TOP_OFFSET },
+    alignment: 'center',
+    margin: [60, 180, 60, 0],
   };
 }
 
@@ -253,7 +221,7 @@ function buildCertificateStyles(template: CertificateTemplateConfig): StyleDicti
       font: 'Poppins',
       bold: true,
       fontSize: 24,
-      color: '#c1124f',
+      color: '#1F1F1F',
     },
     ...(template.styles ?? {}),
   };
@@ -266,22 +234,10 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.backgroundKey) {
       const background = getCertificateImageDataUrl(template.backgroundKey);
       if (background) {
-        const scaledWidth = pageSize.width * BACKGROUND_WIDTH_RATIO;
-        const aspectRatio =
-          CERTIFICATE_IMAGE_DIMENSIONS.background.height /
-          CERTIFICATE_IMAGE_DIMENSIONS.background.width;
-        const scaledHeight = scaledWidth * aspectRatio;
-
         layers.push({
           image: background,
-          width: scaledWidth,
-          height: scaledHeight,
-          absolutePosition: {
-            x:
-              (pageSize.width - scaledWidth) / 2 +
-              pageSize.width * BACKGROUND_HORIZONTAL_SHIFT_RATIO,
-            y: -scaledHeight * BACKGROUND_VERTICAL_OVERFLOW_RATIO,
-          },
+          width: pageSize.width,
+          absolutePosition: { x: 0, y: 0 },
         });
       }
     }
@@ -289,22 +245,10 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.sidebarKey) {
       const sidebar = getCertificateImageDataUrl(template.sidebarKey);
       if (sidebar) {
-        const aspectRatio =
-          CERTIFICATE_IMAGE_DIMENSIONS.leftSidebar.width /
-          CERTIFICATE_IMAGE_DIMENSIONS.leftSidebar.height;
-        const baseHeight = pageSize.height * (1 + SIDEBAR_VERTICAL_OVERFLOW_RATIO * 2);
-        const scaledHeight = baseHeight * SIDEBAR_REDUCTION_FACTOR;
-        const scaledWidth = scaledHeight * aspectRatio;
-        const verticalOffset = -(scaledHeight - pageSize.height) / 2;
-
         layers.push({
           image: sidebar,
-          width: scaledWidth,
-          height: scaledHeight,
-          absolutePosition: {
-            x: -scaledWidth * SIDEBAR_HORIZONTAL_OVERFLOW_RATIO,
-            y: verticalOffset,
-          },
+          height: pageSize.height,
+          absolutePosition: { x: 0, y: 0 },
         });
       }
     }
@@ -312,19 +256,10 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.logoKey) {
       const logo = getCertificateImageDataUrl(template.logoKey);
       if (logo) {
-        const aspectRatio =
-          CERTIFICATE_IMAGE_DIMENSIONS.logo.height /
-          CERTIFICATE_IMAGE_DIMENSIONS.logo.width;
-        const scaledHeight = LOGO_WIDTH * aspectRatio;
-
         layers.push({
           image: logo,
-          width: LOGO_WIDTH,
-          height: scaledHeight,
-          absolutePosition: {
-            x: pageSize.width - LOGO_RIGHT_MARGIN - LOGO_WIDTH,
-            y: (pageSize.height - scaledHeight) / 2,
-          },
+          width: 180,
+          absolutePosition: { x: pageSize.width - 220, y: 40 },
         });
       }
     }
@@ -332,22 +267,10 @@ function buildBackgroundLayers(template: CertificateTemplateConfig): NonNullable
     if (template.footerKey) {
       const footer = getCertificateImageDataUrl(template.footerKey);
       if (footer) {
-        const scaledWidth = pageSize.width * FOOTER_SCALE;
-        const aspectRatio =
-          CERTIFICATE_IMAGE_DIMENSIONS.footer.height /
-          CERTIFICATE_IMAGE_DIMENSIONS.footer.width;
-        const scaledHeight = scaledWidth * aspectRatio;
-
         layers.push({
           image: footer,
-          width: scaledWidth,
-          height: scaledHeight,
-          absolutePosition: {
-            x:
-              (pageSize.width - scaledWidth) / 2 -
-              pageSize.width * FOOTER_LEFT_SHIFT_RATIO,
-            y: pageSize.height - scaledHeight,
-          },
+          width: pageSize.width,
+          absolutePosition: { x: 0, y: pageSize.height - 120 },
         });
       }
     }
