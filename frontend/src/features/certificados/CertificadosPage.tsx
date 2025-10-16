@@ -1095,6 +1095,7 @@ export function CertificadosPage() {
                   size="sm"
                   onClick={handlePreviewTemplate}
                   disabled={loadingTemplatePreview}
+                  className="certificate-template-controls__button"
                 >
                   {loadingTemplatePreview ? (
                     <>

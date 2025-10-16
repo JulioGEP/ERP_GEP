@@ -7,12 +7,21 @@
 .certificate-template-controls {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
 }
 
-.certificate-template-controls__select {
+.certificate-template-controls__select,
+.certificate-template-controls__button {
+  flex: 1 1 220px;
   min-width: 220px;
+}
+
+.certificate-template-controls__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(1.5em + 0.5rem + 2px);
 }
 
 .certificate-toolbar {
