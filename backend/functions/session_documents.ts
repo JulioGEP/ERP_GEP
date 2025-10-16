@@ -13,6 +13,7 @@ import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
 import {
   uploadSessionDocumentToGoogleDrive,
   deleteSessionDocumentFromGoogleDrive,
+  GoogleDriveSelfCheckError,
 } from './_shared/googleDrive';
 import {
   ensureSessionContext,
@@ -276,6 +277,9 @@ export const handler = async (event: any) => {
             data: buffer,
           });
         } catch (err: any) {
+          if (err instanceof GoogleDriveSelfCheckError) {
+            return errorResponse(err.code, err.message, err.statusCode ?? 500);
+          }
           const message = err?.message || 'No se pudo subir el archivo a Drive';
           return errorResponse('UPLOAD_ERROR', message, 502);
         }
@@ -409,6 +413,9 @@ export const handler = async (event: any) => {
           removeSessionFolder: remainingCount === 0,
         });
       } catch (err: any) {
+        if (err instanceof GoogleDriveSelfCheckError) {
+          return errorResponse(err.code, err.message, err.statusCode ?? 500);
+        }
         const message = err?.message || 'No se pudo eliminar el archivo de Drive';
         return errorResponse('UPLOAD_ERROR', message, 502);
       }

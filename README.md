@@ -73,6 +73,24 @@ Crear un archivo `.env` en la raíz con las siguientes claves mínimas:
 
 > 🔒 **No** versionar archivos `.env` ni credenciales.
 
+### Credenciales de Google Drive (certificados)
+
+Las funciones serverless que generan certificados necesitan acceso a un Shared Drive de Google para subir los PDF. El runtime espera exactamente estas variables de entorno (definidas en Netlify → _Site configuration_ → _Environment variables_ → _Functions_):
+
+- `GOOGLE_DRIVE_SHARED_DRIVE_ID`
+- `GOOGLE_DRIVE_CLIENT_EMAIL`
+- `GOOGLE_DRIVE_PRIVATE_KEY`
+
+Proceso recomendado para actualizar o rotar las credenciales:
+
+1. Crear un nuevo service account en Google Cloud y añadirlo como _Content manager_ del Shared Drive configurado.
+2. Generar una clave JSON para el service account y copiar los campos `client_email` y `private_key`.
+3. En Netlify, actualizar las variables anteriores (respetando los nombres exactos). El valor de `GOOGLE_DRIVE_PRIVATE_KEY` debe copiarse tal cual y reemplazar los saltos de línea por `\n`.
+4. Desplegar o volver a publicar el sitio para propagar las variables.
+5. Ejecutar la función `/.netlify/functions/google-drive-self-check` (por ejemplo con `curl`) para validar que el backend puede listar y crear archivos en el Shared Drive. Se puede forzar un reintento añadiendo `?force=1`.
+
+Si falta alguna variable o las credenciales no tienen permisos suficientes, la función devolverá un error estructurado (`error_code`, `message`, `details`) en menos de un segundo, lo que facilita detectar configuraciones incorrectas antes de procesar certificados reales.
+
 ## 🗄️ Modelo de datos
 
 Las entidades principales gestionadas en la base de datos son:
