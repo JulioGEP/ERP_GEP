@@ -1,6 +1,6 @@
 // backend/functions/sessions.ts
 import { randomUUID } from 'crypto';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 
@@ -23,6 +23,59 @@ type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>
 
 // Certain unidades móviles act as placeholders and should never block availability checks.
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
+const IN_COMPANY_NORMALIZED_VALUES = new Set(['in company', 'incompany']);
+
+function normalizeForComparison(value: string | null | undefined): string {
+  if (!value) return '';
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isInCompanyValue(value: string | null | undefined): boolean {
+  const normalized = normalizeForComparison(value);
+  return IN_COMPANY_NORMALIZED_VALUES.has(normalized);
+}
+
+type PrismaLikeClient = Prisma.TransactionClient | PrismaClient;
+
+type RoomSummary = { sala_id: string; name: string | null; sede: string | null };
+
+async function fetchInCompanyRoomIds(
+  tx: PrismaLikeClient,
+  roomIds: string[],
+): Promise<Set<string>> {
+  const ids = Array.from(new Set(roomIds.filter((roomId) => typeof roomId === 'string' && roomId.trim())));
+  if (!ids.length) {
+    return new Set();
+  }
+
+  const rooms = (await tx.salas.findMany({
+    where: { sala_id: { in: ids } },
+    select: { sala_id: true, name: true, sede: true },
+  })) as RoomSummary[];
+
+  const result = new Set<string>();
+  rooms.forEach((room) => {
+    if (isInCompanyValue(room.name) || isInCompanyValue(room.sede)) {
+      result.add(room.sala_id);
+    }
+  });
+
+  return result;
+}
+
+async function isInCompanyRoomId(
+  tx: PrismaLikeClient,
+  salaId: string | null | undefined,
+): Promise<boolean> {
+  if (!salaId) return false;
+  const matches = await fetchInCompanyRoomIds(tx, [salaId]);
+  return matches.has(salaId);
+}
 
 function toTrimmed(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -473,6 +526,8 @@ async function ensureResourcesAvailable(
   const range = normalizeDateRange(start ?? null, end ?? null);
   if (!range) return;
 
+  const skipRoomAvailabilityCheck = salaId ? await isInCompanyRoomId(tx, salaId) : false;
+
   const resourceConditions: Prisma.sessionsWhereInput[] = [];
 
   if (trainerIds && trainerIds.length) {
@@ -487,7 +542,7 @@ async function ensureResourcesAvailable(
     resourceConditions.push({ unidades: { some: { unidad_id: { in: filteredUnidadIds } } } });
   }
 
-  if (salaId) {
+  if (salaId && !skipRoomAvailabilityCheck) {
     resourceConditions.push({ sala_id: salaId });
   }
 
@@ -616,7 +671,16 @@ export const handler = async (event: any) => {
 
       const excludeSessionId = toTrimmed(event.queryStringParameters?.excludeSessionId);
 
-      const sessions = await prisma.sessions.findMany({
+      type AvailabilitySessionRow = {
+        id: string;
+        sala_id: string | null;
+        fecha_inicio_utc: Date | null;
+        fecha_fin_utc: Date | null;
+        trainers: Array<{ trainer_id: string }>;
+        unidades: Array<{ unidad_id: string }>;
+      };
+
+      const sessions = (await prisma.sessions.findMany({
         where: {
           ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
           OR: [
@@ -633,7 +697,14 @@ export const handler = async (event: any) => {
           trainers: { select: { trainer_id: true } },
           unidades: { select: { unidad_id: true } },
         },
-      });
+      })) as AvailabilitySessionRow[];
+
+      const inCompanyRoomIds = await fetchInCompanyRoomIds(
+        prisma,
+        sessions
+          .map((session) => session.sala_id)
+          .filter((roomId): roomId is string => typeof roomId === 'string' && roomId.trim().length > 0),
+      );
 
       const trainerLocks = new Set<string>();
       const roomLocks = new Set<string>();
@@ -648,7 +719,9 @@ export const handler = async (event: any) => {
         ) {
           session.trainers.forEach((trainer) => trainerLocks.add(trainer.trainer_id));
           session.unidades.forEach((unit) => unitLocks.add(unit.unidad_id));
-          if (session.sala_id) roomLocks.add(session.sala_id);
+          if (session.sala_id && !inCompanyRoomIds.has(session.sala_id)) {
+            roomLocks.add(session.sala_id);
+          }
         }
       });
 
