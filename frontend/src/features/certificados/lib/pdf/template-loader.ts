@@ -1,4 +1,4 @@
-const CERTIFICATE_TEMPLATE_PATH = '/certificados/certificado deseado.pdf';
+const CERTIFICATE_TEMPLATE_PATH = '/certificados/certificado_final.pdf';
 
 let templateBytesPromise: Promise<Uint8Array> | null = null;
 let cachedTemplateBytes: Uint8Array | null = null;
