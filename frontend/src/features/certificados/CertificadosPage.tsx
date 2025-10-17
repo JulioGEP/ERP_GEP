@@ -27,6 +27,7 @@ import {
   type CertificateGenerationData,
 } from './pdf/generator';
 import { pdfMakeReady } from './lib/pdf/pdfmake-initializer';
+import { certificateTemplateReady } from './lib/pdf/template-loader';
 
 import './lib/templates/training-templates';
 
@@ -948,6 +949,9 @@ export function CertificadosPage() {
     void pdfMakeReady.catch(() => {
       // pdfMake se inicializará de nuevo cuando el usuario intente generar.
     });
+    void certificateTemplateReady.catch(() => {
+      // La plantilla se volverá a cargar cuando el usuario intente generar certificados.
+    });
   }, []);
 
   useEffect(() => {
@@ -1005,7 +1009,7 @@ export function CertificadosPage() {
 
       try {
         throwIfCancelled();
-        await pdfMakeReady;
+        await Promise.all([pdfMakeReady, certificateTemplateReady]);
         throwIfCancelled();
         setGenerationStepStatus('loadGenerator', 'success');
       } catch (error) {
@@ -1319,7 +1323,7 @@ export function CertificadosPage() {
 
     void (async () => {
       try {
-        await pdfMakeReady;
+        await Promise.all([pdfMakeReady, certificateTemplateReady]);
         const selectedTemplateOption = templateOptions.find(
           (option) => option.key === selectedTemplateKey,
         );
