@@ -14,6 +14,7 @@ import {
   const LEFT_PANEL_MUTED_TEXT_COLOR = '#f5c9da';
   const BODY_TEXT_COLOR = '#3a405a';
   const TITLE_TEXT_COLOR = '#c1124f';
+  const PRODUCT_TITLE_COLOR = '#ff0000';
   const SECONDARY_TEXT_COLOR = '#5a617a';
   const FONT_SIZE_ADJUSTMENT = 2;
   const LINE_HEIGHT_REDUCTION = 0.5;
@@ -24,6 +25,11 @@ import {
   const TRAINING_CONTENT_MIN_WIDTH = 320;
   const TRAINING_CONTENT_MIN_COLUMN_WIDTH = 150;
   const TRAINING_CONTENT_COLUMN_GAP = 18;
+  const BACKGROUND_SCALE_MULTIPLIER = 3;
+  const BACKGROUND_HORIZONTAL_SHIFT = 10;
+  const LEFT_SIDEBAR_SCALE_MULTIPLIER = 1.3;
+  const LEFT_SIDEBAR_TEXT_GAP = 15;
+  const FOOTER_SCALE_MULTIPLIER = 0.95;
 
   const PAGE_DIMENSIONS = {
     width: 841.89,
@@ -818,7 +824,7 @@ import {
       certificateTitle: {
         fontSize: adjustFontSize(40),
         bold: true,
-        color: TITLE_TEXT_COLOR,
+        color: '#000000',
         characterSpacing: 0.5,
         alignment: 'center',
         margin: [0, 0, 0, 14]
@@ -836,9 +842,9 @@ import {
         margin: [0, 0, 0, 6]
       },
       trainingName: {
-        fontSize: adjustFontSize(14),
+        fontSize: adjustFontSize(19),
         bold: true,
-        color: TITLE_TEXT_COLOR,
+        color: PRODUCT_TITLE_COLOR,
         margin: [0, 0, 0, 0]
       },
       contentSectionTitle: {
@@ -849,19 +855,19 @@ import {
         letterSpacing: 1
       },
       sectionHeading: {
-        fontSize: adjustFontSize(11),
+        fontSize: adjustFontSize(9),
         bold: true,
         color: TITLE_TEXT_COLOR,
         margin: [0, 0, 0, 6]
       },
       listItem: {
-        fontSize: adjustFontSize(9),
+        fontSize: adjustFontSize(7),
         lineHeight: adjustLineHeight(1.3),
         color: BODY_TEXT_COLOR,
         margin: [0, 0, 0, 4]
       },
       theoryListItem: {
-        fontSize: adjustFontSize(9),
+        fontSize: adjustFontSize(7),
         lineHeight: adjustLineHeight(1.3),
         color: BODY_TEXT_COLOR,
         margin: [0, 0, 0, 4]
@@ -1106,6 +1112,7 @@ import {
 
     if (rightColumnWidth > 0 && backgroundImage) {
       let backgroundWidth = rightColumnWidth;
+      let backgroundHeight = contentHeight;
       let backgroundX = rightColumnX;
       let backgroundY = pageMargins[1];
 
@@ -1120,16 +1127,26 @@ import {
         if (scaledHeight < contentHeight) {
           const scaleToHeight = contentHeight / backgroundImageDimensions.height;
           backgroundWidth = backgroundImageDimensions.width * scaleToHeight;
+          backgroundHeight = contentHeight;
           backgroundX = rightColumnX + (rightColumnWidth - backgroundWidth) / 2;
         } else {
+          backgroundHeight = scaledHeight;
           backgroundY = pageMargins[1] - (scaledHeight - contentHeight) / 2;
         }
       }
+
+      const backgroundCenterX = backgroundX + backgroundWidth / 2;
+      const backgroundCenterY = backgroundY + backgroundHeight / 2;
+      backgroundWidth *= BACKGROUND_SCALE_MULTIPLIER;
+      backgroundHeight *= BACKGROUND_SCALE_MULTIPLIER;
+      backgroundX = backgroundCenterX - backgroundWidth / 2 + BACKGROUND_HORIZONTAL_SHIFT;
+      backgroundY = backgroundCenterY - backgroundHeight / 2;
 
       decorativeElements.push({
         image: backgroundImage,
         absolutePosition: { x: backgroundX, y: backgroundY },
         width: backgroundWidth,
+        height: backgroundHeight,
         opacity: 1
       });
     }
@@ -1138,7 +1155,7 @@ import {
       const maxSidebarWidth = Math.min(leftColumnWidth, 80);
       if (maxSidebarWidth > 0) {
         let sidebarWidth = maxSidebarWidth;
-        let sidebarX = pageMargins[0];
+        let sidebarHeight = contentHeight;
         let sidebarY = pageMargins[1];
 
         if (
@@ -1153,14 +1170,25 @@ import {
             const desiredHeight = Math.min(Math.max(140, contentHeight * 0.3), 160);
             const heightScale = desiredHeight / leftSidebarDimensions.height;
             sidebarWidth = leftSidebarDimensions.width * heightScale;
+            sidebarHeight = desiredHeight;
             sidebarY = pageMargins[1] + contentHeight - desiredHeight;
+          } else {
+            sidebarHeight = scaledHeight;
           }
         }
+
+        const sidebarCenterY = sidebarY + sidebarHeight / 2;
+        sidebarWidth *= LEFT_SIDEBAR_SCALE_MULTIPLIER;
+        sidebarHeight *= LEFT_SIDEBAR_SCALE_MULTIPLIER;
+        sidebarY = sidebarCenterY - sidebarHeight / 2;
+        const sidebarRightEdge = pageMargins[0] - LEFT_SIDEBAR_TEXT_GAP;
+        const sidebarX = sidebarRightEdge - sidebarWidth;
 
         decorativeElements.push({
           image: leftSidebarImage,
           absolutePosition: { x: sidebarX, y: sidebarY },
           width: sidebarWidth,
+          height: sidebarHeight,
           opacity: 1
         });
       }
@@ -1175,13 +1203,20 @@ import {
         footerHeight = footerImageDimensions.height * footerScale;
       }
 
+      const scaledFooterWidth = footerWidth * FOOTER_SCALE_MULTIPLIER;
+      const scaledFooterHeight = footerHeight * FOOTER_SCALE_MULTIPLIER;
+      const footerX =
+        pageMargins[0] + (totalContentWidth - scaledFooterWidth) / 2;
+      const footerY = pageMargins[1] + contentHeight - scaledFooterHeight;
+
       decorativeElements.push({
         image: footerImage,
         absolutePosition: {
-          x: pageMargins[0],
-          y: pageMargins[1] + contentHeight - footerHeight
+          x: footerX,
+          y: footerY
         },
-        width: footerWidth,
+        width: scaledFooterWidth,
+        height: scaledFooterHeight,
         opacity: 1
       });
     }
