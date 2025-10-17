@@ -45,6 +45,7 @@ type TrainingTemplatesApi = {
   saveTemplate: (template: TrainingTemplateInput) => TrainingTemplate;
   deleteTemplate: (id: string) => boolean;
   createEmptyTemplate: () => TrainingTemplate;
+  getTemplateById?: (id: string) => TrainingTemplate | null;
   isCustomTemplateId?: (id: string) => boolean;
   subscribe?: (callback: () => void) => () => void;
 };

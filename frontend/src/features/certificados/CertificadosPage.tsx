@@ -45,6 +45,7 @@ type TrainingTemplate = {
 
 type TrainingTemplatesApi = {
   listTemplates: () => TrainingTemplate[];
+  getTemplateById?: (id: string) => TrainingTemplate | null;
   getTemplateByName?: (name: string) => TrainingTemplate | null;
   subscribe?: (callback: () => void) => () => void;
   normaliseName?: (name: string) => string;
@@ -115,21 +116,61 @@ function findMatchingTemplateOption(
     return null;
   }
 
-  const directMatch = options.find((option) => option.key === trimmed);
-  if (directMatch) {
-    return directMatch;
+  const candidateValues = new Set<string>();
+  candidateValues.add(trimmed);
+
+  if (api && typeof api.getTemplateById === 'function') {
+    try {
+      const template = api.getTemplateById(trimmed);
+      if (template) {
+        const id = typeof template.id === 'string' ? template.id.trim() : '';
+        const name = typeof template.name === 'string' ? template.name.trim() : '';
+        const title = typeof template.title === 'string' ? template.title.trim() : '';
+        if (id) candidateValues.add(id);
+        if (name) candidateValues.add(name);
+        if (title) candidateValues.add(title);
+      }
+    } catch {
+      // Ignorado: el ID no se pudo resolver en una plantilla conocida.
+    }
   }
 
-  const normalisedCandidate = normaliseTemplateKey(trimmed, api);
-  if (!normalisedCandidate) {
-    return null;
+  for (const value of candidateValues) {
+    const directMatch = options.find((option) => {
+      if (option.key === value) {
+        return true;
+      }
+      const optionId =
+        typeof option.template?.id === 'string' ? option.template.id.trim() : '';
+      return optionId === value;
+    });
+    if (directMatch) {
+      return directMatch;
+    }
   }
 
-  return (
-    options.find(
-      (option) => normaliseTemplateKey(option.key, api) === normalisedCandidate,
-    ) ?? null
-  );
+  for (const value of candidateValues) {
+    const normalisedCandidate = normaliseTemplateKey(value, api);
+    if (!normalisedCandidate) {
+      continue;
+    }
+    const normalisedMatch = options.find((option) => {
+      if (normaliseTemplateKey(option.key, api) === normalisedCandidate) {
+        return true;
+      }
+      const optionId =
+        typeof option.template?.id === 'string' ? option.template.id.trim() : '';
+      if (!optionId) {
+        return false;
+      }
+      return normaliseTemplateKey(optionId, api) === normalisedCandidate;
+    });
+    if (normalisedMatch) {
+      return normalisedMatch;
+    }
+  }
+
+  return null;
 }
 
 function toTemplateOption(template: TrainingTemplate): CertificateTemplateOption | null {
