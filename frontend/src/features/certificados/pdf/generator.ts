@@ -1,8 +1,7 @@
+import { PDFDocument } from 'pdf-lib';
 import type { Content, StyleDictionary, TDocumentDefinitions } from 'pdfmake/interfaces';
-import {
-  getCertificateImageDataUrl,
-  getPdfMakeInstance,
-} from '../lib/pdf/pdfmake-initializer';
+import { getPdfMakeInstance } from '../lib/pdf/pdfmake-initializer';
+import { loadCertificateTemplateBytes } from '../lib/pdf/template-loader';
 
 export interface CertificateStudentData {
   nombre: string;
@@ -32,18 +31,20 @@ export interface CertificateGenerationData {
   practicalItems?: string[];
 }
 
+export type CertificateTextLayoutAdjustments = {
+  textBlock?: {
+    offsetX?: number;
+    offsetY?: number;
+    widthDelta?: number;
+  };
+};
+
 export type CertificateTemplatePreviewOptions = {
   courseName?: string;
   theoreticalItems?: string[];
   practicalItems?: string[];
   hours?: number;
-};
-
-type CertificatePdfImages = {
-  background: string | null;
-  leftSidebar: string | null;
-  footer: string | null;
-  logo: string | null;
+  layoutAdjustments?: CertificateTextLayoutAdjustments;
 };
 
 const PAGE_WIDTH = 841.89;
@@ -78,6 +79,17 @@ const IMAGE_DIMENSIONS = {
 const BACKGROUND_WIDTH_SCALE = 0.5;
 const LEFT_SIDEBAR_HEIGHT_SCALE = 1.4;
 const LEFT_SIDEBAR_HORIZONTAL_SHIFT = 10;
+
+const DEFAULT_LEFT_SIDEBAR_RIGHT_EDGE = (() => {
+  const leftSidebarHeight = PAGE_HEIGHT * LEFT_SIDEBAR_HEIGHT_SCALE * LEFT_SIDEBAR_SIZE_REDUCTION;
+  const leftSidebarScale = leftSidebarHeight / IMAGE_DIMENSIONS.leftSidebar.height;
+  const leftSidebarWidth = IMAGE_DIMENSIONS.leftSidebar.width * leftSidebarScale;
+  const leftSidebarX =
+    -leftSidebarWidth * LEFT_OFFSET_RATIO * LEFT_EXTRA_OFFSET_RATIO -
+    LEFT_SIDEBAR_HORIZONTAL_SHIFT +
+    LEFT_SIDEBAR_RIGHT_SHIFT;
+  return leftSidebarX + leftSidebarWidth;
+})();
 
 const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
   alumno: {
@@ -334,6 +346,64 @@ function formatHours(value: number): string {
   return String(value);
 }
 
+function base64ToUint8Array(base64: string): Uint8Array {
+  if (typeof base64 !== 'string' || base64.length === 0) {
+    return new Uint8Array();
+  }
+
+  if (typeof atob === 'function') {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+    const binary = window.atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  if (typeof Buffer !== 'undefined') {
+    return Uint8Array.from(Buffer.from(base64, 'base64'));
+  }
+
+  throw new Error('No se puede decodificar datos base64 en este entorno.');
+}
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  if (!(bytes instanceof Uint8Array)) {
+    return '';
+  }
+
+  const chunkSize = 0x8000;
+  let binary = '';
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  if (typeof btoa === 'function') {
+    return btoa(binary);
+  }
+
+  if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+    return window.btoa(binary);
+  }
+
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(bytes).toString('base64');
+  }
+
+  throw new Error('No se puede codificar datos base64 en este entorno.');
+}
+
 const PROVINCE_NAMES = new Set(
   [
     'a coruna',
@@ -498,18 +568,9 @@ function assertCertificateData(data: CertificateGenerationData): void {
   }
 }
 
-function loadCertificateImages(): CertificatePdfImages {
-  return {
-    background: getCertificateImageDataUrl('background'),
-    leftSidebar: getCertificateImageDataUrl('leftSidebar'),
-    footer: getCertificateImageDataUrl('footer'),
-    logo: getCertificateImageDataUrl('logo'),
-  };
-}
-
 function buildCertificateDocDefinition(
   data: CertificateGenerationData,
-  images: CertificatePdfImages,
+  layoutAdjustments?: CertificateTextLayoutAdjustments,
 ): TDocumentDefinitions {
   const studentName = `${normaliseText(data.alumno.nombre)} ${normaliseText(data.alumno.apellido)}`.trim();
   const dni = normaliseText(data.alumno.dni);
@@ -537,61 +598,29 @@ function buildCertificateDocDefinition(
 
   const content: Content[] = [];
 
-  if (images.background) {
-    const height = PAGE_HEIGHT;
-    const baseWidth =
-      (IMAGE_DIMENSIONS.background.width / IMAGE_DIMENSIONS.background.height) * height;
-    const width = baseWidth * BACKGROUND_WIDTH_SCALE;
-    const x = resolveHorizontalPosition(CERTIFICATE_ELEMENT_LAYOUT.background.horizontal, width);
-    const y = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.background.vertical, height);
-    content.push({
-      image: images.background,
-      width,
-      height,
-      absolutePosition: { x, y },
-    });
-  }
+  const textBlockAdjustments = layoutAdjustments?.textBlock ?? {};
 
-  let lateralRightEdge = 40;
-
-  if (images.leftSidebar) {
-    const baseHeight = PAGE_HEIGHT * LEFT_SIDEBAR_HEIGHT_SCALE * LEFT_SIDEBAR_SIZE_REDUCTION;
-    const baseScale = baseHeight / IMAGE_DIMENSIONS.leftSidebar.height;
-    const baseWidth = IMAGE_DIMENSIONS.leftSidebar.width * baseScale;
-    const height = baseHeight;
-    const width = baseWidth;
-    const x = resolveHorizontalPosition(CERTIFICATE_ELEMENT_LAYOUT.leftSidebar.horizontal, width);
-    const y = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.leftSidebar.vertical, height);
-    lateralRightEdge = x + width;
-    content.push({
-      image: images.leftSidebar,
-      height,
-      width,
-      absolutePosition: { x, y },
-    });
-  }
-
-  if (images.footer) {
-    const availableWidth = PAGE_WIDTH;
-    const scale = (availableWidth / IMAGE_DIMENSIONS.footer.width) * 0.8 * FOOTER_SIZE_REDUCTION;
-    const height = IMAGE_DIMENSIONS.footer.height * scale;
-    const width = IMAGE_DIMENSIONS.footer.width * scale;
-    const footerX = resolveHorizontalPosition(CERTIFICATE_ELEMENT_LAYOUT.footer.horizontal, width);
-    const y = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.footer.vertical, height);
-    content.push({
-      image: images.footer,
-      width,
-      absolutePosition: { x: footerX, y },
-    });
-  }
-
+  const lateralRightEdge = DEFAULT_LEFT_SIDEBAR_RIGHT_EDGE;
   const textHorizontalPlacement = resolveTextHorizontalPlacement(
     CERTIFICATE_ELEMENT_LAYOUT.textContent.horizontal,
     lateralRightEdge,
   );
-  const textStartX = textHorizontalPlacement.x;
-  const textWidth = textHorizontalPlacement.width;
-  const textStartY = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.textContent.vertical, 0);
+  const textStartXBase = textHorizontalPlacement.x;
+  const textWidthBase = textHorizontalPlacement.width;
+  const textStartYBase = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.textContent.vertical, 0);
+
+  const adjustedTextStartX = textStartXBase + (textBlockAdjustments.offsetX ?? 0);
+  const boundedTextStartX = Math.max(0, Math.min(PAGE_WIDTH - MIN_TEXT_BLOCK_WIDTH, adjustedTextStartX));
+
+  const adjustedTextWidth = Math.max(
+    MIN_TEXT_BLOCK_WIDTH,
+    textWidthBase + (textBlockAdjustments.widthDelta ?? 0),
+  );
+  const maxAvailableWidth = Math.max(MIN_TEXT_BLOCK_WIDTH, PAGE_WIDTH - boundedTextStartX);
+  const textWidth = Math.min(adjustedTextWidth, maxAvailableWidth);
+
+  const adjustedTextStartY = textStartYBase + (textBlockAdjustments.offsetY ?? 0);
+  const textStartY = Math.max(0, Math.min(PAGE_HEIGHT, adjustedTextStartY));
 
   const stack: Content[] = [];
 
@@ -670,24 +699,10 @@ function buildCertificateDocDefinition(
   });
 
   content.push({
-    absolutePosition: { x: textStartX, y: textStartY },
+    absolutePosition: { x: boundedTextStartX, y: textStartY },
     width: textWidth,
     stack,
   });
-
-  if (images.logo) {
-    const scale = LOGO_TARGET_WIDTH / IMAGE_DIMENSIONS.logo.width;
-    const width = LOGO_TARGET_WIDTH;
-    const height = IMAGE_DIMENSIONS.logo.height * scale;
-    const x = resolveHorizontalPosition(CERTIFICATE_ELEMENT_LAYOUT.logo.horizontal, width);
-    const y = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.logo.vertical, height);
-    content.push({
-      image: images.logo,
-      width,
-      height,
-      absolutePosition: { x, y },
-    });
-  }
 
   return {
     pageSize: 'A4',
@@ -702,31 +717,112 @@ function buildCertificateDocDefinition(
   };
 }
 
-export async function generateCertificatePDF(data: CertificateGenerationData): Promise<Blob> {
-  assertCertificateData(data);
+async function getPdfMakeDocumentBytes(pdfDoc: unknown): Promise<Uint8Array> {
+  return new Promise<Uint8Array>((resolve, reject) => {
+    if (!pdfDoc || typeof pdfDoc !== 'object') {
+      reject(new Error('No se pudo generar el documento PDF.'));
+      return;
+    }
 
-  const pdfMakeInstance = await getPdfMakeInstance();
-  const images = loadCertificateImages();
-  const docDefinition = buildCertificateDocDefinition(data, images);
+    const typedDoc = pdfDoc as {
+      getBuffer?: (callback: (buffer: ArrayBuffer) => void) => void;
+      getBlob?: (callback: (blob: Blob) => void) => void;
+      getBase64?: (callback: (base64: string) => void) => void;
+    };
 
-  return new Promise<Blob>((resolve, reject) => {
-    try {
-      const pdfDoc = pdfMakeInstance.createPdf(docDefinition);
-      pdfDoc.getBlob((blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('No se ha podido generar el PDF del certificado.'));
+    if (typeof typedDoc.getBuffer === 'function') {
+      typedDoc.getBuffer((buffer) => {
+        try {
+          resolve(new Uint8Array(buffer));
+        } catch (error) {
+          reject(
+            error instanceof Error
+              ? error
+              : new Error('No se pudo leer el PDF generado.'),
+          );
         }
       });
-    } catch (error) {
-      reject(
-        error instanceof Error
-          ? error
-          : new Error('Error desconocido generando el certificado.'),
-      );
+      return;
     }
+
+    if (typeof typedDoc.getBlob === 'function') {
+      typedDoc.getBlob(async (blob) => {
+        try {
+          const arrayBuffer = await blob.arrayBuffer();
+          resolve(new Uint8Array(arrayBuffer));
+        } catch (error) {
+          reject(
+            error instanceof Error
+              ? error
+              : new Error('No se pudo convertir el PDF generado.'),
+          );
+        }
+      });
+      return;
+    }
+
+    if (typeof typedDoc.getBase64 === 'function') {
+      typedDoc.getBase64((base64) => {
+        try {
+          resolve(base64ToUint8Array(base64));
+        } catch (error) {
+          reject(
+            error instanceof Error
+              ? error
+              : new Error('No se pudo decodificar el PDF generado.'),
+          );
+        }
+      });
+      return;
+    }
+
+    reject(new Error('El generador de PDF no proporciona un método de extracción compatible.'));
   });
+}
+
+async function mergeCertificateWithTemplate(textPdfBytes: Uint8Array): Promise<Uint8Array> {
+  const templateBytes = await loadCertificateTemplateBytes();
+  const templateDocument = await PDFDocument.load(templateBytes);
+  const [embeddedPage] = await templateDocument.embedPdf(textPdfBytes);
+  const [templatePage] = templateDocument.getPages();
+  const { width, height } = templatePage.getSize();
+
+  templatePage.drawPage(embeddedPage, {
+    x: 0,
+    y: 0,
+    width,
+    height,
+  });
+
+  return templateDocument.save();
+}
+
+async function renderCertificatePdfBytes(
+  docDefinition: TDocumentDefinitions,
+): Promise<Uint8Array> {
+  const pdfMakeInstance = await getPdfMakeInstance();
+  const pdfDoc = pdfMakeInstance.createPdf(docDefinition);
+  const textBytes = await getPdfMakeDocumentBytes(pdfDoc);
+  return mergeCertificateWithTemplate(textBytes);
+}
+
+export async function generateCertificatePDF(
+  data: CertificateGenerationData,
+  layoutAdjustments?: CertificateTextLayoutAdjustments,
+): Promise<Blob> {
+  assertCertificateData(data);
+
+  const docDefinition = buildCertificateDocDefinition(data, layoutAdjustments);
+
+  try {
+    const pdfBytes = await renderCertificatePdfBytes(docDefinition);
+    return new Blob([pdfBytes], { type: 'application/pdf' });
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error desconocido generando el certificado.');
+  }
 }
 
 export async function generateCertificateTemplatePreviewDataUrl(
@@ -752,26 +848,21 @@ export async function generateCertificateTemplatePreviewDataUrl(
 
   assertCertificateData(previewData);
 
-  const pdfMakeInstance = await getPdfMakeInstance();
-  const images = loadCertificateImages();
-  const docDefinition = buildCertificateDocDefinition(previewData, images);
-
-  return new Promise<string>((resolve, reject) => {
-    try {
-      const pdfDoc = pdfMakeInstance.createPdf(docDefinition);
-      pdfDoc.getDataUrl((dataUrl) => {
-        if (typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
-          resolve(dataUrl);
-        } else {
-          reject(new Error('No se ha podido generar la previsualización del certificado.'));
-        }
-      });
-    } catch (error) {
-      reject(
-        error instanceof Error
-          ? error
-          : new Error('Error generando la previsualización del certificado.'),
-      );
+  try {
+    const docDefinition = buildCertificateDocDefinition(
+      previewData,
+      options?.layoutAdjustments,
+    );
+    const pdfBytes = await renderCertificatePdfBytes(docDefinition);
+    const base64 = uint8ArrayToBase64(pdfBytes);
+    if (!base64) {
+      throw new Error('No se ha podido generar la previsualización del certificado.');
     }
-  });
+    return `data:application/pdf;base64,${base64}`;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error generando la previsualización del certificado.');
+  }
 }
