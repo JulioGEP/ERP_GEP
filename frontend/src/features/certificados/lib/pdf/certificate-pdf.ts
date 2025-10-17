@@ -410,10 +410,10 @@ import {
           { text: 'Módulos teóricos', style: 'sectionHeading' },
           {
             ul: theoryItems.map((item) => ({ text: item, style: 'theoryListItem' })),
-            margin: [0, 4, 0, 0]
+            margin: [12, 0, 0, 0]
           }
         ],
-        margin: [0, 0, 0, 10]
+        margin: [0, 10, 0, 10]
       });
     }
 
@@ -423,10 +423,10 @@ import {
           { text: 'Módulos prácticos', style: 'sectionHeading' },
           {
             ul: practiceItems.map((item) => ({ text: item, style: 'listItem' })),
-            margin: [0, 4, 0, 0]
+            margin: [12, 0, 0, 0]
           }
         ],
-        margin: [0, 0, 0, manualText ? 10 : 0]
+        margin: [0, 10, 0, manualText ? 10 : 0]
       });
     }
 
@@ -436,7 +436,7 @@ import {
           { text: 'Manual de contenidos', style: 'sectionHeading' },
           { text: manualText, style: 'manualParagraph' }
         ],
-        margin: [0, 0, 0, 0]
+        margin: [0, 10, 0, 0]
       });
     }
 
@@ -493,37 +493,6 @@ import {
     const surname = getStudentSurname(row);
     const fullName = [name, surname].filter(Boolean).join(' ').trim();
     return fullName || 'Nombre del alumno/a';
-  }
-
-  function buildDocumentSentenceFragments(row: CertificatePdfRow | null | undefined) {
-    const documentType = normaliseText(getDocumentTypeValue(row)).toUpperCase();
-    const documentNumber = getStudentDni(row);
-
-    if (!documentType && !documentNumber) {
-      return [{ text: 'con documento de identidad' }];
-    }
-
-    if (!documentType) {
-      return [
-        { text: 'con documento ' },
-        { text: documentNumber, bold: true }
-      ];
-    }
-
-    if (!documentNumber) {
-      return [{ text: `con ${documentType}` }];
-    }
-
-    return [
-      { text: `con ${documentType} ` },
-      { text: documentNumber, bold: true }
-    ];
-  }
-
-  function buildDocumentSentence(row) {
-    return buildDocumentSentenceFragments(row)
-      .map((fragment) => (fragment && typeof fragment.text === 'string' ? fragment.text : ''))
-      .join('');
   }
 
   function formatTrainingDate(value) {
@@ -664,9 +633,67 @@ import {
     return '____';
   }
 
-  function formatLocation(value) {
+  function extractLocationName(value: string | null | undefined) {
     const normalised = normaliseText(value);
-    return normalised ? normalised.toUpperCase() : '________';
+    if (!normalised) {
+      return '';
+    }
+
+    const cleaned = normalised
+      .replace(/\s+/g, ' ')
+      .replace(/[\u2013\u2014]/g, '-')
+      .trim();
+
+    const splitTokens = (segment: string) =>
+      segment
+        .split(/[,|·]/)
+        .map((token) => token.trim())
+        .filter(Boolean);
+
+    const primarySegments = cleaned
+      .split(/\n|\r/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const candidates: string[] = [];
+
+    primarySegments.forEach((segment) => {
+      const dashParts = segment
+        .split(/\s-\s|\s-|-\s/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      if (dashParts.length > 1) {
+        dashParts.forEach((part) => candidates.push(...splitTokens(part)));
+      } else {
+        candidates.push(...splitTokens(segment));
+      }
+    });
+
+    if (!candidates.length) {
+      candidates.push(cleaned);
+    }
+
+    const looksLikeLocation = (segment: string) => {
+      if (!segment) {
+        return false;
+      }
+      if (/^\d/.test(segment)) {
+        return false;
+      }
+      if (/\b(C\/|CL\.|CALLE|AVDA\.|AV\.|PLAZA|PZA\.|POL\.)/i.test(segment)) {
+        return false;
+      }
+      return /[A-Za-zÁÉÍÓÚÜÑÇàèìòùáéíóúüñç]/.test(segment);
+    };
+
+    const locationCandidate = candidates.find(looksLikeLocation) ?? candidates[0];
+    return locationCandidate ? locationCandidate : '';
+  }
+
+  function formatLocation(value) {
+    const extracted = extractLocationName(value);
+    return extracted ? extracted.toUpperCase() : '________';
   }
 
   function formatDuration(value) {
@@ -755,8 +782,8 @@ import {
         margin: [0, 0, 0, 8]
       },
       introText: {
-        fontSize: adjustFontSize(10),
-        lineHeight: adjustLineHeight(1.4),
+        fontSize: adjustFontSize(11.5),
+        lineHeight: adjustLineHeight(1.65),
         color: SECONDARY_TEXT_COLOR,
         margin: [0, 0, 0, 8]
       },
@@ -775,47 +802,47 @@ import {
         margin: [0, 8, 0, 8]
       },
       highlightName: {
-        fontSize: adjustFontSize(17),
+        fontSize: adjustFontSize(15),
         bold: true,
         color: TITLE_TEXT_COLOR,
         margin: [0, 0, 0, 6]
       },
       trainingName: {
-        fontSize: adjustFontSize(14),
+        fontSize: adjustFontSize(15),
         bold: true,
         color: TITLE_TEXT_COLOR,
-        margin: [0, 6, 0, 18]
+        margin: [0, 0, 0, 18]
       },
       contentSectionTitle: {
         fontSize: adjustFontSize(12),
         bold: true,
         color: TITLE_TEXT_COLOR,
-        margin: [0, 18, 0, 10],
+        margin: [0, 10, 0, 6],
         letterSpacing: 1
       },
       sectionHeading: {
-        fontSize: adjustFontSize(11),
+        fontSize: adjustFontSize(12),
         bold: true,
         color: TITLE_TEXT_COLOR,
         margin: [0, 0, 0, 6]
       },
       listItem: {
-        fontSize: adjustFontSize(9),
-        lineHeight: adjustLineHeight(1.3),
+        fontSize: adjustFontSize(10.5),
+        lineHeight: adjustLineHeight(1.68),
         color: BODY_TEXT_COLOR,
         margin: [0, 0, 0, 4]
       },
       theoryListItem: {
-        fontSize: adjustFontSize(9),
-        lineHeight: adjustLineHeight(1.3),
+        fontSize: adjustFontSize(10.5),
+        lineHeight: adjustLineHeight(1.68),
         color: BODY_TEXT_COLOR,
         margin: [0, 0, 0, 4]
       },
       manualParagraph: {
-        fontSize: adjustFontSize(9),
-        lineHeight: adjustLineHeight(1.35),
+        fontSize: adjustFontSize(10.5),
+        lineHeight: adjustLineHeight(1.68),
         color: BODY_TEXT_COLOR,
-        margin: [0, 4, 0, 0]
+        margin: [0, 2, 0, 0]
       },
       leftPanelTitle: {
         fontSize: adjustFontSize(20),
@@ -917,16 +944,8 @@ import {
     const organizationName = normaliseText(dealInfo.organizationName);
     const sedeLabel = normaliseText(dealInfo.sedeLabel);
 
-    const documentTypeLabel = normaliseText(getDocumentTypeValue(row)).toUpperCase();
     const documentNumber = normaliseText(getStudentDni(row));
-    const identityLabelParts = [];
-    if (documentTypeLabel) {
-      identityLabelParts.push(`con ${documentTypeLabel}`);
-    } else {
-      identityLabelParts.push('con DNI');
-    }
-    identityLabelParts.push(documentNumber || '________');
-    const identityLine = identityLabelParts.join(' ');
+    const dniValue = documentNumber || '________';
 
     const formattedPrimaryDate = formatDateAsDayMonthYear(getPrimaryDateValue(row));
     const readableDate = trainingDate === '________' ? '' : trainingDate;
@@ -943,34 +962,26 @@ import {
         text: 'Sr. Lluís Vicent Pérez,\nDirector de la escuela GEPCO Formación\nexpide el presente:',
         style: 'introText',
         alignment: 'left',
-        margin: [0, 0, 0, 8],
-        preserveLeadingSpaces: true
+        margin: [0, 0, 0, 8]
       },
       { text: 'CERTIFICADO', style: 'certificateTitle' },
       {
         text: `A nombre del alumno/a ${formattedFullName}`,
-        style: 'highlightName'
+        style: 'highlightName',
+        alignment: 'left',
+        margin: [0, 0, 0, 6]
       },
       {
-        text: identityLine,
+        text: [
+          `con DNI ${dniValue}, quien en fecha ${formattedPrimaryDate} y en ${formattedLocationLabel} ha superado,`,
+          ` con una duración total de ${durationLabel}, la formación de:`
+        ].join(''),
         style: 'bodyText',
         alignment: 'left',
-        margin: [0, 0, 0, 2]
+        margin: [0, 0, 0, 8]
       },
       {
-        text: `quien en fecha ${formattedPrimaryDate} y en ${formattedLocationLabel}`,
-        style: 'bodyText',
-        alignment: 'left',
-        margin: [0, 0, 0, 2]
-      },
-      {
-        text: `ha superado, con una duración total de ${durationLabel}, la siguiente formación:`,
-        style: 'bodyText',
-        alignment: 'left',
-        margin: [0, 0, 0, 10]
-      },
-      {
-        text: `CURSO: ${trainingNameDisplay}`,
+        text: trainingNameDisplay,
         style: 'trainingName',
         alignment: 'left'
       }
