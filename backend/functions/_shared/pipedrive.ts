@@ -51,7 +51,7 @@ function extractFileNameFromContentDisposition(header: string | null): string | 
   return null;
 }
 
-async function pd(path: string, opts: FetchOpts = {}) {
+async function pdRaw(path: string, opts: FetchOpts = {}) {
   const token = process.env.PIPEDRIVE_API_TOKEN;
   if (!token) {
     throw new Error("Falta PIPEDRIVE_API_TOKEN en variables de entorno");
@@ -70,6 +70,11 @@ async function pd(path: string, opts: FetchOpts = {}) {
   }
 
   const json: any = await res.json().catch(() => ({}));
+  return json;
+}
+
+async function pd(path: string, opts: FetchOpts = {}) {
+  const json = await pdRaw(path, opts);
   return json?.data ?? json;
 }
 
@@ -159,6 +164,42 @@ export async function getProductFields() {
   const c = getC(key);
   if (c) return c;
   return setC(key, await pd(`/productFields`));
+}
+
+type PaginationInfo = {
+  more_items_in_collection?: boolean;
+  next_start?: number;
+};
+
+type ProductListPage = {
+  data: any[];
+  additional_data?: { pagination?: PaginationInfo };
+};
+
+export async function listAllProducts(params: { limit?: number } = {}) {
+  const pageSizeRaw = params.limit ?? 500;
+  const pageSize = Number.isFinite(pageSizeRaw)
+    ? Math.max(1, Math.min(500, Number(pageSizeRaw)))
+    : 500;
+
+  const items: any[] = [];
+  let start = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const query = qs({ start, limit: pageSize });
+    const json = (await pdRaw(`/products?${query}`)) as ProductListPage;
+    const data = Array.isArray(json?.data) ? json.data : [];
+    items.push(...data);
+
+    const pagination = json?.additional_data?.pagination;
+    hasMore = Boolean(pagination?.more_items_in_collection && pagination?.next_start != null);
+    if (hasMore && pagination?.next_start != null) {
+      start = Number(pagination.next_start);
+    }
+  }
+
+  return items;
 }
 
 /** Obtiene un producto del catálogo por ID */
