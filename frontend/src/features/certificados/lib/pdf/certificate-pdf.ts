@@ -26,7 +26,6 @@ import {
   const TRAINING_CONTENT_MIN_COLUMN_WIDTH = 150;
   const TRAINING_CONTENT_COLUMN_GAP = 18;
   const PRACTICE_BULLET_LEFT_OFFSET = 20;
-  const FULL_BLEED_VERTICAL_BLEED = 1;
   const LEFT_SIDEBAR_BASE_SCALE = 1;
   const LEFT_SIDEBAR_MAX_WIDTH = 80;
   const THEORY_CONTENT_LEFT_SHIFT = 15;
@@ -861,11 +860,18 @@ import {
         color: TITLE_TEXT_COLOR,
         margin: [0, 8, 0, 8]
       },
-      highlightName: {
-        fontSize: adjustFontSize(17),
-        bold: true,
-        color: TITLE_TEXT_COLOR,
+      highlightNameLine: {
         margin: [0, 0, 0, 6]
+      },
+      highlightNameLabel: {
+        fontSize: adjustFontSize(11.5),
+        lineHeight: adjustLineHeight(1.65),
+        color: BODY_TEXT_COLOR
+      },
+      highlightNameValue: {
+        fontSize: adjustFontSize(13.5),
+        bold: true,
+        color: TITLE_TEXT_COLOR
       },
       trainingName: {
         fontSize: adjustFontSize(23),
@@ -1038,8 +1044,12 @@ import {
       },
       { text: 'CERTIFICADO', style: 'certificateTitle' },
       {
-        text: `A nombre del alumno/a ${formattedFullName}`,
-        style: 'highlightName'
+        text: [
+          { text: 'A nombre del alumno/a ', style: 'highlightNameLabel' },
+          { text: formattedFullName, style: 'highlightNameValue' }
+        ],
+        style: 'highlightNameLine',
+        alignment: 'left'
       },
       {
         text: identityLine,
@@ -1153,25 +1163,22 @@ import {
     const backgroundDefinitions: Array<Record<string, unknown>> = [];
 
     if (backgroundImage) {
-      const bleed = FULL_BLEED_VERTICAL_BLEED;
       const targetWidth = pageWidth;
-      const targetHeight = pageHeight + bleed * 2;
+      const targetTop = 100;
+      const targetHeight = Math.max(0, pageHeight - targetTop);
       const targetLeft = 0;
-      const targetTop = -bleed;
 
       if (
         backgroundImageDimensions &&
         backgroundImageDimensions.width > 0 &&
-        backgroundImageDimensions.height > 0
+        backgroundImageDimensions.height > 0 &&
+        targetHeight > 0
       ) {
-        const widthScale = targetWidth / backgroundImageDimensions.width;
         const heightScale = targetHeight / backgroundImageDimensions.height;
-        const scale = Math.max(widthScale, heightScale);
-
-        const backgroundWidth = backgroundImageDimensions.width * scale;
-        const backgroundHeight = backgroundImageDimensions.height * scale;
+        const backgroundHeight = targetHeight;
+        const backgroundWidth = backgroundImageDimensions.width * heightScale;
         const backgroundX = targetLeft + (targetWidth - backgroundWidth) / 2;
-        const backgroundY = targetTop + (targetHeight - backgroundHeight) / 2;
+        const backgroundY = targetTop;
 
         backgroundDefinitions.push({
           image: backgroundImage,
@@ -1212,7 +1219,8 @@ import {
 
       if (sidebarWidth > 0 && sidebarHeight > 0) {
         const sidebarX = 0;
-        const sidebarY = pageHeight - sidebarHeight;
+        const sidebarBottomY = 0;
+        const sidebarY = Math.max(0, pageHeight - sidebarHeight - sidebarBottomY);
 
         decorativeElements.push({
           image: leftSidebarImage,
