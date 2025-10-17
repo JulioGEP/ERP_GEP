@@ -50,8 +50,9 @@ const PAGE_WIDTH = 841.89;
 const PAGE_HEIGHT = 595.28;
 const DEFAULT_TEXT_START_Y = 48;
 const TEXT_RIGHT_MARGIN = 40;
-const LEFT_BLEED = 24;
 const LEFT_OFFSET_RATIO = 0.35;
+const RIGHT_BLEED = 30;
+const LEFT_EXTRA_OFFSET_RATIO = 1.1;
 const LOGO_TARGET_WIDTH = 180;
 
 const IMAGE_DIMENSIONS = {
@@ -202,26 +203,27 @@ function buildCertificateDocDefinition(
   const practicalItems = ensureList(data.practicalItems);
 
   const styles: StyleDictionary = {
-    bodyText: { fontSize: 12.5, lineHeight: 1.3 },
+    bodyText: { fontSize: 10.5, lineHeight: 1.3 },
+    studentInfoText: { fontSize: 10.5, lineHeight: 0.91 },
     certificateTitle: {
-      fontSize: 32,
+      fontSize: 30,
       bold: true,
       color: '#c1124f',
       lineHeight: 1.1,
       characterSpacing: 0.5,
     },
-    courseName: { fontSize: 18, bold: true, margin: [0, 0, 0, 18] },
-    tableHeader: { fontSize: 13, bold: true, margin: [0, 0, 0, 8] },
-    tableList: { fontSize: 11.5, lineHeight: 1.25 },
+    courseName: { fontSize: 16, bold: true, margin: [0, 0, 0, 18] },
+    tableHeader: { fontSize: 11, bold: true, margin: [0, 0, 0, 8] },
+    tableList: { fontSize: 9.5, lineHeight: 1.125 },
   };
 
   const content: Content[] = [];
 
   if (images.background) {
-    const height = PAGE_HEIGHT * 0.5;
+    const height = PAGE_HEIGHT;
     const scale = height / IMAGE_DIMENSIONS.background.height;
     const width = IMAGE_DIMENSIONS.background.width * scale;
-    const x = PAGE_WIDTH - width * 0.5;
+    const x = PAGE_WIDTH - width + RIGHT_BLEED;
     content.push({
       image: images.background,
       height,
@@ -232,14 +234,13 @@ function buildCertificateDocDefinition(
   let lateralRightEdge = 40;
 
   if (images.leftSidebar) {
-    const baseHeight = PAGE_HEIGHT + LEFT_BLEED * 2;
+    const baseHeight = PAGE_HEIGHT;
     const baseScale = baseHeight / IMAGE_DIMENSIONS.leftSidebar.height;
     const baseWidth = IMAGE_DIMENSIONS.leftSidebar.width * baseScale;
-    const x = -baseWidth * LEFT_OFFSET_RATIO;
-    const y = -LEFT_BLEED;
-    const scaleFactor = 0.6;
-    const height = baseHeight * scaleFactor;
-    const width = baseWidth * scaleFactor;
+    const x = -baseWidth * LEFT_OFFSET_RATIO * LEFT_EXTRA_OFFSET_RATIO;
+    const y = 0;
+    const height = baseHeight;
+    const width = baseWidth;
     lateralRightEdge = x + width;
     content.push({
       image: images.leftSidebar,
@@ -249,12 +250,12 @@ function buildCertificateDocDefinition(
   }
 
   if (images.footer) {
-    const footerX = Math.max(lateralRightEdge, 0);
-    const availableWidth = PAGE_WIDTH - footerX;
+    const availableWidth = PAGE_WIDTH;
     const scale = (availableWidth / IMAGE_DIMENSIONS.footer.width) * 0.8;
     const height = IMAGE_DIMENSIONS.footer.height * scale;
     const width = IMAGE_DIMENSIONS.footer.width * scale;
     const y = PAGE_HEIGHT - height - 8;
+    const footerX = (PAGE_WIDTH - width) / 2;
     content.push({
       image: images.footer,
       width,
@@ -280,7 +281,7 @@ function buildCertificateDocDefinition(
       'A nombre del alumno/a ',
       { text: studentName, bold: true },
     ],
-    style: 'bodyText',
+    style: 'studentInfoText',
     margin: [0, 0, 0, 6],
   });
 
@@ -293,7 +294,7 @@ function buildCertificateDocDefinition(
       ' y en ',
       { text: location, bold: true },
     ],
-    style: 'bodyText',
+    style: 'studentInfoText',
     margin: [0, 0, 0, 6],
   });
 
@@ -303,7 +304,7 @@ function buildCertificateDocDefinition(
       { text: courseHours, bold: true },
       ' horas, la formación de:',
     ],
-    style: 'bodyText',
+    style: 'studentInfoText',
     margin: [0, 0, 0, 12],
   });
 
