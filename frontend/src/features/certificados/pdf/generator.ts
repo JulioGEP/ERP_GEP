@@ -2,7 +2,6 @@ import type { TDocumentDefinitions } from 'pdfmake/interfaces';
 import {
   getCertificateImageDataUrl,
   getPdfMakeInstance,
-  type CertificateImageKey,
 } from '../lib/pdf/pdfmake-initializer';
 
 export interface CertificateStudentData {
@@ -34,13 +33,27 @@ export interface CertificateGenerationData {
   manualText?: string;
 }
 
-export type CertificateTemplateVariant = 'CERT-PAUX-EI' | 'CERT-PACK' | 'CERT-GENERICO';
+type TemplateIds = 'CERT-PAUX-EI' | 'CERT-PACK' | 'CERT-GENERICO';
 
-const CERTIFICATE_TEMPLATE_VARIANTS: CertificateTemplateVariant[] = [
-  'CERT-GENERICO',
-  'CERT-PAUX-EI',
-  'CERT-PACK',
-];
+export type CertificateTemplateKey = TemplateIds;
+
+const CERTIFICATE_TEMPLATE_LABELS: Record<CertificateTemplateKey, string> = {
+  'CERT-GENERICO': 'Genérico',
+  'CERT-PAUX-EI': 'Auxiliar Educación Infantil',
+  'CERT-PACK': 'Pack / Combo',
+};
+
+export type CertificateTemplateOption = {
+  key: CertificateTemplateKey;
+  label: string;
+};
+
+export const CERTIFICATE_TEMPLATE_OPTIONS: CertificateTemplateOption[] = (
+  Object.keys(CERTIFICATE_TEMPLATE_LABELS) as CertificateTemplateKey[]
+).map((key) => ({
+  key,
+  label: CERTIFICATE_TEMPLATE_LABELS[key],
+}));
 
 const TRANSPARENT_PIXEL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NkYGD4DwABBAEAi5JBSwAAAABJRU5ErkJggg==';
@@ -71,10 +84,10 @@ type TemplateImages = {
 export function buildCertificateDocFromDomain(
   data: DomainData,
   images: TemplateImages,
-  templateOverride?: CertificateTemplateVariant,
+  templateOverride?: TemplateIds,
 ): TDocumentDefinitions {
   // ---- 0) Selección de template a partir de deal_products.name ----
-  const templateId = templateOverride ?? detectCertificateTemplateVariant(data.deal_products.name);
+  const templateId = templateOverride ?? detectCertificateTemplate(data.deal_products.name);
 
   // Utilidad para escoger imagen por template (si existe) o fallback genérico
   function pickImg(
@@ -111,121 +124,22 @@ export function buildCertificateDocFromDomain(
   const CONTENT_BOTTOM_LIMIT = 455.88;
 
   // ---- 2) Helpers de formato ----
-  function toDDMMYYYY(input: string): string {
-    const raw = (input ?? '').trim();
-    if (!raw) return '';
-
-    const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
-    if (isoMatch) {
-      const [, year, month, day] = isoMatch;
-      return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
+  function toDDMMYYYY(s: string): string {
+    if (!s) return '';
+    const iso = s.includes('-') && s.split('-')[0].length === 4;
+    if (iso) {
+      const [Y, M, D] = s.split('-');
+      return `${D.padStart(2, '0')}-${M.padStart(2, '0')}-${Y}`;
     }
-
-    const slashMatch = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
-    if (slashMatch) {
-      const [, day, month, year] = slashMatch;
-      const paddedYear = year.length === 2 ? `20${year}` : year.padStart(4, '0');
-      return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${paddedYear}`;
+    if (s.includes('/')) {
+      const [D, M, Y] = s.split('/');
+      return `${D.padStart(2, '0')}-${M.padStart(2, '0')}-${Y}`;
     }
-
-    const parsed = new Date(raw);
-    if (!Number.isNaN(parsed.getTime())) {
-      const day = String(parsed.getDate()).padStart(2, '0');
-      const month = String(parsed.getMonth() + 1).padStart(2, '0');
-      const year = String(parsed.getFullYear());
-      return `${day}-${month}-${year}`;
-    }
-
-    return raw.replace(/\//g, '-');
+    return s.replace(/\//g, '-');
   }
-
-  function extractSedeLabel(sede: string | string[]): string {
-    const raw = Array.isArray(sede) ? sede.join(', ') : sede || '';
-    const normalised = raw
-      .replace(/\s+/g, ' ')
-      .replace(/[\u2013\u2014]/g, '-')
-      .trim();
-
-    if (!normalised) {
-      return '';
-    }
-
-    const segments = normalised
-      .split(/\n|\r/)
-      .map((segment) => segment.trim())
-      .filter(Boolean);
-
-    const candidates: string[] = [];
-
-    const splitTokens = (value: string) =>
-      value
-        .split(/[,|·]/)
-        .map((token) => token.trim())
-        .filter(Boolean);
-
-    segments.forEach((segment) => {
-      const dashParts = segment
-        .split(/\s-\s|\s-|-\s/)
-        .map((part) => part.trim())
-        .filter(Boolean);
-
-      if (dashParts.length > 1) {
-        dashParts.forEach((part) => candidates.push(...splitTokens(part)));
-      } else {
-        candidates.push(...splitTokens(segment));
-      }
-    });
-
-    if (!candidates.length) {
-      candidates.push(normalised);
-    }
-
-    const looksLikeLocation = (segment: string) => {
-      if (!segment) return false;
-      if (/^\d/.test(segment)) return false;
-      if (/\b(C\/|CL\.|CALLE|AVDA\.|AV\.|PLAZA|PZA\.|POL\.)/i.test(segment)) return false;
-      return /[A-Za-zÁÉÍÓÚÜÑÇàèìòùáéíóúüñç]/.test(segment);
-    };
-
-    return candidates.find(looksLikeLocation) ?? candidates[0] ?? '';
-  }
-
   function sedeToUpper(sede: string | string[]): string {
-    const extracted = extractSedeLabel(sede);
-    return extracted ? extracted.toUpperCase() : '';
-  }
-
-  function formatHoursLabel(value: number | null | undefined): string {
-    if (typeof value !== 'number' || Number.isNaN(value)) {
-      return '';
-    }
-    if (Number.isInteger(value)) {
-      return String(value);
-    }
-    return value.toLocaleString('es-ES', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    });
-  }
-
-  let stylesCompacted = false;
-  function applyCompactStyles() {
-    if (stylesCompacted) {
-      return;
-    }
-    stylesCompacted = true;
-    if (typeof styles.sectionHeader?.fontSize === 'number') {
-      styles.sectionHeader.fontSize = Math.max(styles.sectionHeader.fontSize - 0.5, 13.5);
-    }
-    styles.sectionHeader.margin = [0, 0, 0, 5];
-    styles.listItem.fontSize = 12;
-    styles.listItem.lineHeight = 1.12;
-    styles.listItem.margin = [0, 0, 0, 1];
-    styles.manualHeader.fontSize = 13.5;
-    styles.manualHeader.margin = [0, 8, 0, 4];
-    styles.manualText.fontSize = 12;
-    styles.manualText.lineHeight = 1.12;
-    styles.manualText.margin = [0, 0, 0, 0];
+    const raw = Array.isArray(sede) ? sede.join(', ') : sede || '';
+    return raw.toUpperCase();
   }
   function resolveMargin(margin?: number | number[]): [number, number, number, number] {
     if (typeof margin === 'number') {
@@ -273,23 +187,23 @@ export function buildCertificateDocFromDomain(
   }
 
   // ---- 3) Estilos ----
-  const styles: Record<string, any> = {
+  const styles = {
     certificateTitle: {
       fontSize: 42,
       bold: true,
       alignment: 'center',
-      margin: [0, 0, 0, 14],
+      margin: [0, 0, 0, 19],
       characterSpacing: 0.5,
     },
-    bodyText: { fontSize: 13.5, lineHeight: 1.15, margin: [0, 0, 0, 8] },
-    highlightName: { fontSize: 18, bold: true, margin: [0, 0, 0, 6] },
-    courseTitle: { fontSize: 17, bold: true, margin: [0, 0, 0, 18] },
+    bodyText: { fontSize: 13.5, lineHeight: 1.15, margin: [0, 0, 0, 10] },
+    highlightName: { fontSize: 19, bold: true, margin: [0, 0, 0, 10] },
+    courseTitle: { fontSize: 18.5, bold: true, margin: [0, 0, 0, 0] },
 
     sectionHeader: { fontSize: 14.5, bold: true, margin: [0, 0, 0, 6] },
     listItem: { fontSize: 12.5, lineHeight: 1.18, margin: [0, 0, 0, 2] },
-    manualHeader: { fontSize: 14, bold: true, margin: [0, 10, 0, 6] },
-    manualText: { fontSize: 12.5, lineHeight: 1.18, margin: [0, 0, 0, 0] },
-  };
+    manualHeader: { fontSize: 13.5, bold: true, margin: [0, 8, 0, 4] },
+    manualText: { fontSize: 12.5, lineHeight: 1.18 },
+  } as const;
 
   const BULLET_INDENT = 14;
 
@@ -320,37 +234,31 @@ export function buildCertificateDocFromDomain(
   const hasLogo = logoImage !== images['__px.png'];
 
   // ---- 5) Texto institucional EXACTO + variables ----
-  const fechaStr = toDDMMYYYY(data.sesiones.fecha_inicio_utc) || '____-__-____';
-  const localidadStr = sedeToUpper(data.deals.sede_labels) || '________';
-  const alumnoFull = (`${data.alumnos.nombre ?? ''} ${data.alumnos.apellido ?? ''}`.trim()) || '________';
-  const dniValue = (data.alumnos.dni ?? '').trim() || '________';
-  const horasLabel = formatHoursLabel(data.deal_products.hours) || '____';
-  const cursoNombre = (data.deal_products.name ?? '').trim() || 'Nombre de la formación';
+  const fechaStr = toDDMMYYYY(data.sesiones.fecha_inicio_utc);
+  const localidadStr = sedeToUpper(data.deals.sede_labels);
+  const alumnoFull = `${data.alumnos.nombre ?? ''} ${data.alumnos.apellido ?? ''}`.trim();
 
   const institutionStack = [
     {
-      text: 'Sr. Lluís Vicent Pérez,\nDirector de la escuela GEPCO Formación\nexpide el presente:',
+      text: 'Sr. Lluís Vicent Pérez,
+Director de la escuela GEPCO Formación
+expide el presente:',
       style: 'bodyText',
-      margin: [0, 0, 0, 8],
+      margin: [0, 0, 0, 16],
     },
     { text: 'CERTIFICADO', style: 'certificateTitle' },
+    { text: `A nombre del alumno/a ${alumnoFull}`, style: 'highlightName' },
     {
-      text: `A nombre del alumno/a ${alumnoFull}`,
-      style: 'highlightName',
-      margin: [0, 0, 0, 6],
-    },
-    {
-      text: [
-        `con DNI ${dniValue}, quien en fecha ${fechaStr} y en ${localidadStr} ha superado,`,
-        ` con una duración total de ${horasLabel} horas, la formación de:`,
-      ].join(''),
+      text: `con ${data.alumnos.dni}, quien en fecha ${fechaStr} y en ${localidadStr}`,
       style: 'bodyText',
-      margin: [0, 0, 0, 8],
+      margin: [0, 0, 0, 12],
     },
     {
-      text: cursoNombre,
-      style: 'courseTitle',
+      text: `ha superado, con una duración total de ${data.deal_products.hours} horas, la formación de:`,
+      style: 'bodyText',
+      margin: [0, 0, 0, 14],
     },
+    { text: data.deal_products.name || '', style: 'courseTitle' },
   ] as const;
 
   type TextNode = {
@@ -368,7 +276,10 @@ export function buildCertificateDocFromDomain(
     return margin[1] + textHeight + margin[3];
   }
 
-  const trimmedManualText = (data.manualText ?? '').trim();
+  const institutionStackHeight = institutionStack.reduce(
+    (acc, node) => acc + computeTextNodeHeight(node, INSTITUTION_BLOCK.width),
+    0,
+  );
 
   // ---- 6) Sub-bloques (Teóricos → Prácticos → Manual) ----
   function computeListNodeHeight(
@@ -393,152 +304,80 @@ export function buildCertificateDocFromDomain(
   }
 
   const minimumTheoreticalStartY = 267.39;
+  const theoreticalStartY = Math.max(
+    INSTITUTION_BLOCK.y + institutionStackHeight + 10,
+    minimumTheoreticalStartY,
+  );
 
-  function calculateLayout() {
-    const institutionStackHeight = institutionStack.reduce(
-      (acc, node) => acc + computeTextNodeHeight(node, INSTITUTION_BLOCK.width),
-      0,
-    );
+  const theoreticalHeaderHeight = computeTextNodeHeight(
+    { text: 'Módulos teóricos', style: 'sectionHeader' },
+    INSTITUTION_BLOCK.width,
+  );
+  const theoreticalListHeight = computeListNodeHeight(
+    data.theoreticalItems,
+    INSTITUTION_BLOCK.width,
+    [BULLET_INDENT, 0, 0, 0],
+  );
+  const theorTotalH = theoreticalHeaderHeight + theoreticalListHeight;
+  const yPractStart = theoreticalStartY + theorTotalH + 10;
 
-    const theoreticalStartY = Math.max(
-      INSTITUTION_BLOCK.y + institutionStackHeight + 10,
-      minimumTheoreticalStartY,
-    );
+  const practicalHeaderHeight = computeTextNodeHeight(
+    { text: 'Módulos prácticos', style: 'sectionHeader' },
+    INSTITUTION_BLOCK.width,
+  );
+  const practicalListHeight = computeListNodeHeight(
+    data.practicalItems,
+    INSTITUTION_BLOCK.width,
+    [BULLET_INDENT, 0, 0, 0],
+  );
+  const practTotalH = practicalHeaderHeight + practicalListHeight;
+  const yManualStart = yPractStart + practTotalH + 10;
 
-    const theoreticalHeaderHeight = computeTextNodeHeight(
-      { text: 'Módulos teóricos', style: 'sectionHeader' },
-      INSTITUTION_BLOCK.width,
-    );
-    const theoreticalListHeight = computeListNodeHeight(
-      data.theoreticalItems,
-      INSTITUTION_BLOCK.width,
-      [BULLET_INDENT, 0, 0, 0],
-    );
-    const theoreticalHeight = theoreticalHeaderHeight + theoreticalListHeight;
+  const manualHeaderHeight = computeTextNodeHeight(
+    { text: 'Manual de contenidos', style: 'manualHeader' },
+    INSTITUTION_BLOCK.width,
+  );
+  const manualTextHeight = computeTextNodeHeight(
+    { text: data.manualText || '', style: 'manualText' },
+    INSTITUTION_BLOCK.width,
+  );
+  const manualTotalH = manualHeaderHeight + manualTextHeight;
 
-    const practicalStartY = theoreticalStartY + theoreticalHeight + 10;
-    const practicalHeaderHeight = computeTextNodeHeight(
-      { text: 'Módulos prácticos', style: 'sectionHeader' },
-      INSTITUTION_BLOCK.width,
-    );
-    const practicalListHeight = computeListNodeHeight(
-      data.practicalItems,
-      INSTITUTION_BLOCK.width,
-      [BULLET_INDENT, 0, 0, 0],
-    );
-    const practicalHeight = practicalHeaderHeight + practicalListHeight;
-
-    const manualStartY = practicalStartY + practicalHeight + 10;
-    const manualHeaderHeight = computeTextNodeHeight(
-      { text: 'Manual de contenidos', style: 'manualHeader' },
-      INSTITUTION_BLOCK.width,
-    );
-    const manualTextHeight = trimmedManualText
-      ? computeTextNodeHeight({ text: trimmedManualText, style: 'manualText' }, INSTITUTION_BLOCK.width)
-      : 0;
-    const manualHeight = trimmedManualText ? manualHeaderHeight + manualTextHeight : 0;
-
-    return {
-      institutionStackHeight,
-      theoreticalStartY,
-      theoreticalHeight,
-      practicalStartY,
-      practicalHeight,
-      manualStartY,
-      manualHeight,
-    };
+  function assertFits(yStart: number, blockHeight: number, label: string) {
+    if (yStart + blockHeight > CONTENT_BOTTOM_LIMIT) {
+      throw new Error(
+        `[${label}] sobrepasa el límite inferior por pie-firma. Compacta tipografía o salta el MANUAL a la página 2.`,
+      );
+    }
   }
-
-  const isOverflowing = (yStart: number, height: number) => yStart + height > CONTENT_BOTTOM_LIMIT;
-
-  let layout = calculateLayout();
-  let overflow = {
-    theoretical: isOverflowing(layout.theoreticalStartY, layout.theoreticalHeight),
-    practical: isOverflowing(layout.practicalStartY, layout.practicalHeight),
-    manual: isOverflowing(layout.manualStartY, layout.manualHeight),
-  };
-
-  if (overflow.theoretical || overflow.practical || overflow.manual) {
-    applyCompactStyles();
-    layout = calculateLayout();
-    overflow = {
-      theoretical: isOverflowing(layout.theoreticalStartY, layout.theoreticalHeight),
-      practical: isOverflowing(layout.practicalStartY, layout.practicalHeight),
-      manual: isOverflowing(layout.manualStartY, layout.manualHeight),
-    };
-  }
-
-  if (overflow.theoretical) {
-    throw new Error(
-      '[Módulos teóricos] sobrepasa el límite inferior por pie-firma incluso tras compactar la tipografía.',
-    );
-  }
-
-  if (overflow.practical) {
-    throw new Error(
-      '[Módulos prácticos] sobrepasa el límite inferior por pie-firma incluso tras compactar la tipografía.',
-    );
-  }
-
-  const manualToSecondPage = overflow.manual && trimmedManualText.length > 0;
+  assertFits(theoreticalStartY, theorTotalH, 'Módulos teóricos');
+  assertFits(yPractStart, practTotalH, 'Módulos prácticos');
+  assertFits(yManualStart, manualTotalH, 'Manual de contenidos');
 
   const theoreticalBlock = {
-    absolutePosition: { x: INSTITUTION_BLOCK.x, y: layout.theoreticalStartY },
+    absolutePosition: { x: INSTITUTION_BLOCK.x, y: theoreticalStartY },
     width: INSTITUTION_BLOCK.width,
     stack: [
       { text: 'Módulos teóricos', style: 'sectionHeader' },
       { ul: data.theoreticalItems || [], style: 'listItem', margin: [BULLET_INDENT, 0, 0, 0] },
     ],
   };
-
   const practicalBlock = {
-    absolutePosition: { x: INSTITUTION_BLOCK.x, y: layout.practicalStartY },
+    absolutePosition: { x: INSTITUTION_BLOCK.x, y: yPractStart },
     width: INSTITUTION_BLOCK.width,
     stack: [
       { text: 'Módulos prácticos', style: 'sectionHeader' },
       { ul: data.practicalItems || [], style: 'listItem', margin: [BULLET_INDENT, 0, 0, 0] },
     ],
   };
-
-  const manualBlock = !manualToSecondPage && trimmedManualText.length > 0
-    ? {
-        absolutePosition: { x: INSTITUTION_BLOCK.x, y: layout.manualStartY },
-        width: INSTITUTION_BLOCK.width,
-        stack: [
-          { text: 'Manual de contenidos', style: 'manualHeader' },
-          { text: trimmedManualText, style: 'manualText' },
-        ],
-      }
-    : null;
-
-  const manualSecondPageBlocks = manualToSecondPage
-    ? [
-        ...absoluteImages.map((img, index) => ({
-          ...img,
-          pageBreak: index === 0 ? 'before' : undefined,
-        })),
-        ...(hasLogo
-          ? [
-              {
-                image: logoImage,
-                absolutePosition: { x: INSTITUTION_BLOCK.x, y: 15 },
-                width: 180,
-              },
-            ]
-          : []),
-        {
-          absolutePosition: {
-            x: INSTITUTION_BLOCK.x,
-            y: Math.max(INSTITUTION_BLOCK.y + 10, minimumTheoreticalStartY),
-          },
-          width: INSTITUTION_BLOCK.width,
-          stack: [
-            { text: 'Manual de contenidos', style: 'manualHeader' },
-            { text: trimmedManualText, style: 'manualText' },
-          ],
-        },
-      ]
-    : [];
+  const manualBlock = {
+    absolutePosition: { x: INSTITUTION_BLOCK.x, y: yManualStart },
+    width: INSTITUTION_BLOCK.width,
+    stack: [
+      { text: 'Manual de contenidos', style: 'manualHeader' },
+      { text: data.manualText || '', style: 'manualText' },
+    ],
+  };
 
   const logoBlock = hasLogo
     ? {
@@ -576,8 +415,7 @@ export function buildCertificateDocFromDomain(
       },
       theoreticalBlock,
       practicalBlock,
-      ...(manualBlock ? [manualBlock] : []),
-      ...manualSecondPageBlocks,
+      manualBlock,
     ],
   } as unknown as TDocumentDefinitions;
 
@@ -586,7 +424,7 @@ export function buildCertificateDocFromDomain(
 // =========================
 // Detección de template por nombre de producto
 // =========================
-function detectCertificateTemplateVariant(productName: string): CertificateTemplateVariant {
+function detectCertificateTemplate(productName: string): TemplateIds {
   const name = (productName || '').toUpperCase();
 
   if (/\bPAUX\b/.test(name) || /\bPAU[XÇ]\b/.test(name)) return 'CERT-PAUX-EI';
@@ -685,7 +523,7 @@ const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
     'El manual recoge los procedimientos operativos, normativa aplicable y recursos de apoyo para la formación.',
 };
 
-const PREVIEW_PRODUCT_NAMES: Record<CertificateTemplateVariant, string> = {
+const PREVIEW_PRODUCT_NAMES: Record<TemplateIds, string> = {
   'CERT-GENERICO': 'Formación genérica de ejemplo',
   'CERT-PAUX-EI': 'Auxiliar Educación Infantil (PAUX EI)',
   'CERT-PACK': 'Pack Emergencias',
@@ -697,48 +535,30 @@ function buildTemplateImages(): TemplateImages {
   const logo = getCertificateImageDataUrl('logo');
   const pie = getCertificateImageDataUrl('footer');
 
-  const imageMap: TemplateImages = {
+  return {
     'fondo-certificado.png': fondo ?? TRANSPARENT_PIXEL,
     'lateral-izquierdo.png': lateral ?? TRANSPARENT_PIXEL,
     'logo-certificado.png': logo ?? TRANSPARENT_PIXEL,
     'pie-firma.png': pie ?? TRANSPARENT_PIXEL,
     '__px.png': TRANSPARENT_PIXEL,
   };
-
-  const templateVariantIds: CertificateTemplateVariant[] = CERTIFICATE_TEMPLATE_VARIANTS;
-  const assetFileNames = ['fondo-certificado.png', 'lateral-izquierdo.png', 'logo-certificado.png', 'pie-firma.png'] as const;
-
-  templateVariantIds.forEach((templateId) => {
-    assetFileNames.forEach((fileName) => {
-      const variantKey = `${templateId}/${fileName}` as CertificateImageKey;
-      const dataUrl = getCertificateImageDataUrl(variantKey);
-      if (dataUrl) {
-        imageMap[variantKey] = dataUrl;
-      }
-    });
-  });
-
-  return imageMap;
 }
 
-export function resolveCertificateTemplateVariant(
-  productName: string,
-): CertificateTemplateVariant {
-  return detectCertificateTemplateVariant(productName);
+export function resolveCertificateTemplateKey(productName: string): CertificateTemplateKey {
+  return detectCertificateTemplate(productName);
 }
 
 export async function generateCertificatePDF(
   data: CertificateGenerationData,
-  options?: { templateVariant?: CertificateTemplateVariant; images?: TemplateImages },
+  options?: { templateKey?: CertificateTemplateKey; images?: TemplateImages },
 ): Promise<Blob> {
   assertCertificateData(data);
 
   const pdfMakeInstance = await getPdfMakeInstance();
   const domainData = toDomainData(data);
   const images = options?.images ?? buildTemplateImages();
-  const templateVariant =
-    options?.templateVariant ?? detectCertificateTemplateVariant(domainData.deal_products.name);
-  const docDefinition = buildCertificateDocFromDomain(domainData, images, templateVariant);
+  const templateId = options?.templateKey ?? detectCertificateTemplate(domainData.deal_products.name);
+  const docDefinition = buildCertificateDocFromDomain(domainData, images, templateId);
 
   return new Promise<Blob>((resolve, reject) => {
     try {
@@ -757,7 +577,7 @@ export async function generateCertificatePDF(
 }
 
 export async function generateCertificateTemplatePreviewDataUrl(
-  templateVariant: CertificateTemplateVariant,
+  templateKey: CertificateTemplateKey,
 ): Promise<string> {
   const pdfMakeInstance = await getPdfMakeInstance();
   const images = buildTemplateImages();
@@ -765,11 +585,11 @@ export async function generateCertificateTemplatePreviewDataUrl(
     ...PREVIEW_SAMPLE_DATA,
     producto: {
       ...PREVIEW_SAMPLE_DATA.producto,
-      name: PREVIEW_PRODUCT_NAMES[templateVariant] ?? PREVIEW_SAMPLE_DATA.producto.name,
+      name: PREVIEW_PRODUCT_NAMES[templateKey] ?? PREVIEW_SAMPLE_DATA.producto.name,
     },
   };
   const domainData = toDomainData(previewData);
-  const docDefinition = buildCertificateDocFromDomain(domainData, images, templateVariant);
+  const docDefinition = buildCertificateDocFromDomain(domainData, images, templateKey);
 
   return new Promise<string>((resolve, reject) => {
     try {
