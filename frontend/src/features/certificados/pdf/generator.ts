@@ -54,6 +54,17 @@ const LEFT_OFFSET_RATIO = 0.35;
 const RIGHT_BLEED = 30;
 const LEFT_EXTRA_OFFSET_RATIO = 1.1;
 const LOGO_TARGET_WIDTH = 180;
+const BACKGROUND_LEFT_SHIFT = 10;
+const LEFT_SIDEBAR_SIZE_REDUCTION = 0.9;
+const LEFT_SIDEBAR_RIGHT_SHIFT = 5;
+const FOOTER_SIZE_REDUCTION = 0.9;
+const PRACTICAL_COLUMN_LEFT_SHIFT = 15;
+const TABLE_CELL_PADDING = {
+  left: 12,
+  right: 12,
+  top: 6,
+  bottom: 6,
+} as const;
 
 const IMAGE_DIMENSIONS = {
   background: { width: 839, height: 1328 },
@@ -348,13 +359,12 @@ function buildCertificateDocDefinition(
   const content: Content[] = [];
 
   if (images.background) {
-    const baseHeight = PAGE_HEIGHT;
-    const baseScale = baseHeight / IMAGE_DIMENSIONS.background.height;
-    const baseWidth = IMAGE_DIMENSIONS.background.width * baseScale;
+    const height = PAGE_HEIGHT;
+    const baseWidth =
+      (IMAGE_DIMENSIONS.background.width / IMAGE_DIMENSIONS.background.height) * height;
     const width = baseWidth * BACKGROUND_WIDTH_SCALE;
-    const height = (IMAGE_DIMENSIONS.background.height / IMAGE_DIMENSIONS.background.width) * width;
-    const x = PAGE_WIDTH - width + RIGHT_BLEED;
-    const y = (PAGE_HEIGHT - height) / 2;
+    const x = PAGE_WIDTH - width + RIGHT_BLEED - BACKGROUND_LEFT_SHIFT;
+    const y = 0;
     content.push({
       image: images.background,
       width,
@@ -366,11 +376,13 @@ function buildCertificateDocDefinition(
   let lateralRightEdge = 40;
 
   if (images.leftSidebar) {
-    const baseHeight = PAGE_HEIGHT * LEFT_SIDEBAR_HEIGHT_SCALE;
+    const baseHeight = PAGE_HEIGHT * LEFT_SIDEBAR_HEIGHT_SCALE * LEFT_SIDEBAR_SIZE_REDUCTION;
     const baseScale = baseHeight / IMAGE_DIMENSIONS.leftSidebar.height;
     const baseWidth = IMAGE_DIMENSIONS.leftSidebar.width * baseScale;
     const x =
-      -baseWidth * LEFT_OFFSET_RATIO * LEFT_EXTRA_OFFSET_RATIO - LEFT_SIDEBAR_HORIZONTAL_SHIFT;
+      -baseWidth * LEFT_OFFSET_RATIO * LEFT_EXTRA_OFFSET_RATIO -
+      LEFT_SIDEBAR_HORIZONTAL_SHIFT +
+      LEFT_SIDEBAR_RIGHT_SHIFT;
     const height = baseHeight;
     const width = baseWidth;
     const y = -(height - PAGE_HEIGHT) / 2;
@@ -385,7 +397,7 @@ function buildCertificateDocDefinition(
 
   if (images.footer) {
     const availableWidth = PAGE_WIDTH;
-    const scale = (availableWidth / IMAGE_DIMENSIONS.footer.width) * 0.8;
+    const scale = (availableWidth / IMAGE_DIMENSIONS.footer.width) * 0.8 * FOOTER_SIZE_REDUCTION;
     const height = IMAGE_DIMENSIONS.footer.height * scale;
     const width = IMAGE_DIMENSIONS.footer.width * scale;
     const y = PAGE_HEIGHT - height - 8;
@@ -444,25 +456,36 @@ function buildCertificateDocDefinition(
 
   stack.push({ text: courseName, style: 'courseName' });
 
+  const tableLayout = {
+    hLineWidth: () => 0,
+    vLineWidth: () => 0,
+    paddingTop: () => TABLE_CELL_PADDING.top,
+    paddingBottom: () => TABLE_CELL_PADDING.bottom,
+    paddingLeft: () => TABLE_CELL_PADDING.left,
+    paddingRight: () => TABLE_CELL_PADDING.right,
+  };
+
+  const theoreticalCellContent = theoreticalItems.length
+    ? { ul: theoreticalItems, style: 'tableList', margin: [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] }
+    : { text: '—', style: 'tableList', margin: [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] };
+
+  const practicalCellContent = practicalItems.length
+    ? { ul: practicalItems, style: 'tableList', margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, 0, 0] }
+    : { text: '—', style: 'tableList', margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, 0, 0] };
+
   stack.push({
     table: {
+      headerRows: 1,
       widths: ['*', '*'],
       body: [
         [
-          { text: 'Contenido Teórico', style: 'tableHeader' },
-          { text: 'Contenido Práctico', style: 'tableHeader' },
+          { text: 'Contenido Teórico', style: 'tableHeader', margin: [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] },
+          { text: 'Contenido Práctico', style: 'tableHeader', margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, 0, 0] },
         ],
-        [
-          theoreticalItems.length
-            ? { ul: theoreticalItems, style: 'tableList' }
-            : { text: '—', style: 'tableList' },
-          practicalItems.length
-            ? { ul: practicalItems, style: 'tableList' }
-            : { text: '—', style: 'tableList' },
-        ],
+        [theoreticalCellContent, practicalCellContent],
       ],
     },
-    layout: 'noBorders',
+    layout: tableLayout,
   });
 
   content.push({
