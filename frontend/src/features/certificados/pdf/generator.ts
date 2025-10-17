@@ -62,6 +62,10 @@ const IMAGE_DIMENSIONS = {
   logo: { width: 827, height: 382 },
 } as const;
 
+const BACKGROUND_WIDTH_SCALE = 0.5;
+const LEFT_SIDEBAR_HEIGHT_SCALE = 1.4;
+const LEFT_SIDEBAR_HORIZONTAL_SHIFT = 10;
+
 const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
   alumno: {
     nombre: 'Nombre',
@@ -327,48 +331,54 @@ function buildCertificateDocDefinition(
   const practicalItems = ensureList(data.practicalItems);
 
   const styles: StyleDictionary = {
-    bodyText: { fontSize: 10.5, lineHeight: 1.3 },
-    studentInfoText: { fontSize: 10.5, lineHeight: 0.91 },
+    bodyText: { fontSize: 8.5, lineHeight: 1.3 },
+    studentInfoText: { fontSize: 8.5, lineHeight: 0.91 },
     certificateTitle: {
-      fontSize: 30,
+      fontSize: 28,
       bold: true,
-      color: '#c1124f',
+      color: '#000000',
       lineHeight: 1.1,
       characterSpacing: 0.5,
     },
-    courseName: { fontSize: 16, bold: true, margin: [0, 0, 0, 18] },
-    tableHeader: { fontSize: 11, bold: true, margin: [0, 0, 0, 8] },
-    tableList: { fontSize: 9.5, lineHeight: 1.125 },
+    courseName: { fontSize: 14, bold: true, margin: [0, 0, 0, 18], color: '#ff0000' },
+    tableHeader: { fontSize: 9, bold: true, margin: [0, 0, 0, 8] },
+    tableList: { fontSize: 7.5, lineHeight: 1.125 },
   };
 
   const content: Content[] = [];
 
   if (images.background) {
-    const height = PAGE_HEIGHT;
-    const scale = height / IMAGE_DIMENSIONS.background.height;
-    const width = IMAGE_DIMENSIONS.background.width * scale;
+    const baseHeight = PAGE_HEIGHT;
+    const baseScale = baseHeight / IMAGE_DIMENSIONS.background.height;
+    const baseWidth = IMAGE_DIMENSIONS.background.width * baseScale;
+    const width = baseWidth * BACKGROUND_WIDTH_SCALE;
+    const height = (IMAGE_DIMENSIONS.background.height / IMAGE_DIMENSIONS.background.width) * width;
     const x = PAGE_WIDTH - width + RIGHT_BLEED;
+    const y = (PAGE_HEIGHT - height) / 2;
     content.push({
       image: images.background,
+      width,
       height,
-      absolutePosition: { x, y: 0 },
+      absolutePosition: { x, y },
     });
   }
 
   let lateralRightEdge = 40;
 
   if (images.leftSidebar) {
-    const baseHeight = PAGE_HEIGHT;
+    const baseHeight = PAGE_HEIGHT * LEFT_SIDEBAR_HEIGHT_SCALE;
     const baseScale = baseHeight / IMAGE_DIMENSIONS.leftSidebar.height;
     const baseWidth = IMAGE_DIMENSIONS.leftSidebar.width * baseScale;
-    const x = -baseWidth * LEFT_OFFSET_RATIO * LEFT_EXTRA_OFFSET_RATIO;
-    const y = 0;
+    const x =
+      -baseWidth * LEFT_OFFSET_RATIO * LEFT_EXTRA_OFFSET_RATIO - LEFT_SIDEBAR_HORIZONTAL_SHIFT;
     const height = baseHeight;
     const width = baseWidth;
+    const y = -(height - PAGE_HEIGHT) / 2;
     lateralRightEdge = x + width;
     content.push({
       image: images.leftSidebar,
       height,
+      width,
       absolutePosition: { x, y },
     });
   }
@@ -398,7 +408,7 @@ function buildCertificateDocDefinition(
     margin: [0, 0, 0, 12],
   });
 
-  stack.push({ text: 'CERTIFICADO', style: 'certificateTitle', margin: [0, 0, 0, 16] });
+  stack.push({ text: 'CERTIFICADO', style: 'certificateTitle', margin: [0, -5, 0, 16] });
 
   stack.push({
     text: [
@@ -406,7 +416,7 @@ function buildCertificateDocDefinition(
       { text: studentName, bold: true },
     ],
     style: 'studentInfoText',
-    margin: [0, 0, 0, 6],
+    margin: [0, -5, 0, 6],
   });
 
   stack.push({
@@ -419,7 +429,7 @@ function buildCertificateDocDefinition(
       { text: location, bold: true },
     ],
     style: 'studentInfoText',
-    margin: [0, 0, 0, 6],
+    margin: [0, -5, 0, 6],
   });
 
   stack.push({
@@ -429,7 +439,7 @@ function buildCertificateDocDefinition(
       ' horas, la formación de:',
     ],
     style: 'studentInfoText',
-    margin: [0, 0, 0, 12],
+    margin: [0, -5, 0, 12],
   });
 
   stack.push({ text: courseName, style: 'courseName' });
