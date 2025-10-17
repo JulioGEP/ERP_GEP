@@ -26,12 +26,10 @@ import {
   const TRAINING_CONTENT_MIN_COLUMN_WIDTH = 150;
   const TRAINING_CONTENT_COLUMN_GAP = 18;
   const PRACTICE_BULLET_LEFT_OFFSET = 20;
-  const BACKGROUND_VERTICAL_BLEED = 1;
-  const BACKGROUND_HORIZONTAL_SHIFT = -10;
-  const LEFT_SIDEBAR_SCALE_MULTIPLIER = 1.3;
-  const LEFT_SIDEBAR_TEXT_GAP = 3;
-  const LEFT_SIDEBAR_VERTICAL_SHIFT_RATIO = 0.2;
-  const LEFT_SIDEBAR_ADDITIONAL_RIGHT_SHIFT = 5;
+  const FULL_BLEED_VERTICAL_BLEED = 1;
+  const LEFT_SIDEBAR_BASE_SCALE = 1;
+  const LEFT_SIDEBAR_MAX_WIDTH = 80;
+  const THEORY_CONTENT_LEFT_SHIFT = 15;
   const FOOTER_SCALE_MULTIPLIER = 0.95;
 
   const PAGE_DIMENSIONS = {
@@ -557,7 +555,7 @@ import {
           paddingTop: () => 0,
           paddingBottom: () => 0
         },
-        margin: [0, 4, 0, 12]
+        margin: [-THEORY_CONTENT_LEFT_SHIFT, 4, 0, 12]
       }
     ];
   }
@@ -974,6 +972,7 @@ import {
     ]);
 
     const pageWidth = PAGE_DIMENSIONS.width;
+    const pageHeight = PAGE_DIMENSIONS.height;
     const pageMargins = [60, 50, 70, 60];
     const columnGap = 36;
     const totalContentWidth = Math.max(0, pageWidth - pageMargins[0] - pageMargins[2]);
@@ -984,8 +983,6 @@ import {
       Math.max(0, maxLeftColumnWidth)
     );
     const rightColumnWidth = Math.max(0, totalContentWidth - leftColumnWidth - columnGap);
-    const rightColumnX = pageMargins[0] + leftColumnWidth + columnGap;
-    const contentHeight = Math.max(0, PAGE_DIMENSIONS.height - pageMargins[1] - pageMargins[3]);
 
     const fullName = buildFullName(row);
     const formattedFullName = normaliseText(fullName).toUpperCase() || fullName;
@@ -1136,74 +1133,86 @@ import {
       margin: [0, 6, 0, 0]
     });
 
-    const decorativeElements: Array<Record<string, unknown>> = [];
+    if (
+      footerImage &&
+      footerImageDimensions &&
+      footerImageDimensions.width > 0 &&
+      rightColumnWidth > 0
+    ) {
+      const targetFooterWidth = rightColumnWidth * FOOTER_SCALE_MULTIPLIER;
+      if (targetFooterWidth > 0) {
+        rightColumnStack.push({
+          image: footerImage,
+          width: targetFooterWidth,
+          alignment: 'left',
+          margin: [0, 32, 0, 0]
+        });
+      }
+    }
 
-    if (rightColumnWidth > 0 && backgroundImage) {
-      const targetTop = pageMargins[1] - BACKGROUND_VERTICAL_BLEED;
-      const targetHeight = contentHeight + BACKGROUND_VERTICAL_BLEED * 2;
-      const targetCenterX = rightColumnX + rightColumnWidth / 2;
-      const targetCenterY = targetTop + targetHeight / 2;
+    const backgroundDefinitions: Array<Record<string, unknown>> = [];
 
-      let backgroundWidth = rightColumnWidth;
-      let backgroundHeight = targetHeight;
+    if (backgroundImage) {
+      const bleed = FULL_BLEED_VERTICAL_BLEED;
+      const targetWidth = pageWidth;
+      const targetHeight = pageHeight + bleed * 2;
+      const targetLeft = 0;
+      const targetTop = -bleed;
 
       if (
         backgroundImageDimensions &&
         backgroundImageDimensions.width > 0 &&
         backgroundImageDimensions.height > 0
       ) {
-        const widthScale = rightColumnWidth / backgroundImageDimensions.width;
+        const widthScale = targetWidth / backgroundImageDimensions.width;
         const heightScale = targetHeight / backgroundImageDimensions.height;
         const scale = Math.max(widthScale, heightScale);
 
-        backgroundWidth = backgroundImageDimensions.width * scale;
-        backgroundHeight = backgroundImageDimensions.height * scale;
+        const backgroundWidth = backgroundImageDimensions.width * scale;
+        const backgroundHeight = backgroundImageDimensions.height * scale;
+        const backgroundX = targetLeft + (targetWidth - backgroundWidth) / 2;
+        const backgroundY = targetTop + (targetHeight - backgroundHeight) / 2;
+
+        backgroundDefinitions.push({
+          image: backgroundImage,
+          absolutePosition: { x: backgroundX, y: backgroundY },
+          width: backgroundWidth,
+          height: backgroundHeight
+        });
+      } else {
+        backgroundDefinitions.push({
+          image: backgroundImage,
+          absolutePosition: { x: targetLeft, y: targetTop },
+          width: targetWidth,
+          height: targetHeight
+        });
       }
-
-      const backgroundX = targetCenterX - backgroundWidth / 2 + BACKGROUND_HORIZONTAL_SHIFT;
-      const backgroundY = targetCenterY - backgroundHeight / 2;
-
-      decorativeElements.push({
-        image: backgroundImage,
-        absolutePosition: { x: backgroundX, y: backgroundY },
-        width: backgroundWidth,
-        height: backgroundHeight,
-        opacity: 1
-      });
     }
 
-    if (leftSidebarImage) {
-      const maxSidebarWidth = Math.min(leftColumnWidth, 80);
+    const decorativeElements: Array<Record<string, unknown>> = [];
+
+    if (
+      leftSidebarImage &&
+      leftSidebarDimensions &&
+      leftSidebarDimensions.width > 0 &&
+      leftSidebarDimensions.height > 0
+    ) {
+      let sidebarScale = LEFT_SIDEBAR_BASE_SCALE;
+      const maxSidebarWidth = Math.min(leftColumnWidth, LEFT_SIDEBAR_MAX_WIDTH);
+
       if (maxSidebarWidth > 0) {
-        let sidebarWidth = maxSidebarWidth;
-        let sidebarHeight = contentHeight;
-
-        if (
-          leftSidebarDimensions &&
-          leftSidebarDimensions.width > 0 &&
-          leftSidebarDimensions.height > 0
-        ) {
-          const widthScale = sidebarWidth / leftSidebarDimensions.width;
-          const scaledHeight = leftSidebarDimensions.height * widthScale;
-
-          if (scaledHeight > contentHeight) {
-            const desiredHeight = Math.min(Math.max(140, contentHeight * 0.3), 160);
-            const heightScale = desiredHeight / leftSidebarDimensions.height;
-            sidebarWidth = leftSidebarDimensions.width * heightScale;
-            sidebarHeight = desiredHeight;
-          } else {
-            sidebarHeight = scaledHeight;
-          }
+        const scaledWidth = leftSidebarDimensions.width * sidebarScale;
+        if (scaledWidth > maxSidebarWidth) {
+          sidebarScale = maxSidebarWidth / leftSidebarDimensions.width;
         }
+      }
 
-        sidebarWidth *= LEFT_SIDEBAR_SCALE_MULTIPLIER;
-        sidebarHeight *= LEFT_SIDEBAR_SCALE_MULTIPLIER;
-        const sidebarY =
-          pageMargins[1] + (contentHeight - sidebarHeight) / 2 -
-          sidebarHeight * LEFT_SIDEBAR_VERTICAL_SHIFT_RATIO;
-        const sidebarRightEdge =
-          pageMargins[0] - LEFT_SIDEBAR_TEXT_GAP + LEFT_SIDEBAR_ADDITIONAL_RIGHT_SHIFT;
-        const sidebarX = sidebarRightEdge - sidebarWidth;
+      const sidebarWidth = leftSidebarDimensions.width * sidebarScale;
+      const sidebarHeight = leftSidebarDimensions.height * sidebarScale;
+
+      if (sidebarWidth > 0 && sidebarHeight > 0) {
+        const sidebarX = 0;
+        const sidebarY = pageHeight - sidebarHeight;
 
         decorativeElements.push({
           image: leftSidebarImage,
@@ -1215,37 +1224,11 @@ import {
       }
     }
 
-    if (footerImage && rightColumnWidth > 0) {
-      const footerWidth = rightColumnWidth;
-      let footerHeight = 100;
-
-      if (footerImageDimensions && footerImageDimensions.width > 0) {
-        const footerScale = footerWidth / footerImageDimensions.width;
-        footerHeight = footerImageDimensions.height * footerScale;
-      }
-
-      const scaledFooterWidth = footerWidth * FOOTER_SCALE_MULTIPLIER;
-      const scaledFooterHeight = footerHeight * FOOTER_SCALE_MULTIPLIER;
-      const footerX = rightColumnX;
-      const footerY = pageMargins[1] + contentHeight - scaledFooterHeight;
-
-      decorativeElements.push({
-        image: footerImage,
-        absolutePosition: {
-          x: footerX,
-          y: footerY
-        },
-        width: scaledFooterWidth,
-        height: scaledFooterHeight,
-        opacity: 1
-      });
-    }
-
     const docDefinition = {
       pageOrientation: 'landscape',
       pageSize: 'A4',
       pageMargins,
-      background: null,
+      background: backgroundDefinitions.length ? backgroundDefinitions : null,
       content: [
         ...decorativeElements,
         {
