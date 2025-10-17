@@ -140,11 +140,135 @@ function formatHours(value: number): string {
   return String(value);
 }
 
+const PROVINCE_NAMES = new Set(
+  [
+    'a coruna',
+    'alava',
+    'araba',
+    'albacete',
+    'alicante',
+    'almeria',
+    'asturias',
+    'avila',
+    'badajoz',
+    'barcelona',
+    'burgos',
+    'caceres',
+    'cadiz',
+    'cantabria',
+    'castellon',
+    'castello',
+    'ceuta',
+    'ciudad real',
+    'cordoba',
+    'cuenca',
+    'girona',
+    'gerona',
+    'granada',
+    'guadalajara',
+    'gipuzkoa',
+    'guipuzcoa',
+    'huelva',
+    'huesca',
+    'illes balears',
+    'islas baleares',
+    'jaen',
+    'la rioja',
+    'las palmas',
+    'leon',
+    'lleida',
+    'lerida',
+    'lugo',
+    'madrid',
+    'malaga',
+    'melilla',
+    'murcia',
+    'navarra',
+    'ourense',
+    'orense',
+    'palencia',
+    'pontevedra',
+    'salamanca',
+    'santa cruz de tenerife',
+    'segovia',
+    'sevilla',
+    'soria',
+    'tarragona',
+    'teruel',
+    'toledo',
+    'valencia',
+    'valladolid',
+    'vizcaya',
+    'bizkaia',
+    'zamora',
+    'zaragoza',
+  ].map((name) =>
+    name
+      .toLocaleLowerCase('es-ES')
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, ''),
+  ),
+);
+
+function normaliseForComparison(value: string): string {
+  return value
+    .toLocaleLowerCase('es-ES')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .trim();
+}
+
 function formatLocation(value: string | string[]): string {
-  if (Array.isArray(value)) {
-    return value.map((item) => normaliseText(item)).filter(Boolean).join(', ');
+  const items = Array.isArray(value) ? value : [value];
+  const combined = items.map((item) => normaliseText(item)).filter(Boolean).join(', ');
+
+  if (!combined) {
+    return '';
   }
-  return normaliseText(value);
+
+  const combinedLower = combined.toLocaleLowerCase('es-ES');
+  if (combinedLower.includes('in company')) {
+    return 'en sus instalaciones';
+  }
+
+  const segments = combined.split(',').map((segment) => normaliseText(segment)).filter(Boolean);
+
+  for (const segment of segments) {
+    const postalAndCityMatch = segment.match(/\b\d{5}\s+(.+)/u);
+    if (postalAndCityMatch) {
+      return normaliseText(postalAndCityMatch[1]);
+    }
+  }
+
+  for (let index = 0; index < segments.length; index += 1) {
+    if (/^\d{5}$/.test(segments[index])) {
+      const nextSegment = segments
+        .slice(index + 1)
+        .find((item) => /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/u.test(item));
+      if (nextSegment) {
+        return nextSegment;
+      }
+    }
+  }
+
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index];
+    if (!/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/u.test(segment)) {
+      continue;
+    }
+    const comparable = normaliseForComparison(segment);
+    if (!comparable || PROVINCE_NAMES.has(comparable) || comparable === 'espana' || comparable === 'spain') {
+      continue;
+    }
+    return segment;
+  }
+
+  const fallback = segments.find((segment) => /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/u.test(segment));
+  if (fallback) {
+    return fallback;
+  }
+
+  return combined;
 }
 
 function assertCertificateData(data: CertificateGenerationData): void {
