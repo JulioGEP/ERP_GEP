@@ -48,7 +48,7 @@ type CertificatePdfImages = {
 
 const PAGE_WIDTH = 841.89;
 const PAGE_HEIGHT = 595.28;
-const DEFAULT_TEXT_START_Y = 80;
+const DEFAULT_TEXT_START_Y = 48;
 const TEXT_RIGHT_MARGIN = 40;
 const LEFT_BLEED = 24;
 const LEFT_OFFSET_RATIO = 0.35;
@@ -218,7 +218,7 @@ function buildCertificateDocDefinition(
   const content: Content[] = [];
 
   if (images.background) {
-    const height = PAGE_HEIGHT;
+    const height = PAGE_HEIGHT * 0.5;
     const scale = height / IMAGE_DIMENSIONS.background.height;
     const width = IMAGE_DIMENSIONS.background.width * scale;
     const x = PAGE_WIDTH - width * 0.5;
@@ -232,11 +232,14 @@ function buildCertificateDocDefinition(
   let lateralRightEdge = 40;
 
   if (images.leftSidebar) {
-    const height = PAGE_HEIGHT + LEFT_BLEED * 2;
-    const scale = height / IMAGE_DIMENSIONS.leftSidebar.height;
-    const width = IMAGE_DIMENSIONS.leftSidebar.width * scale;
-    const x = -width * LEFT_OFFSET_RATIO;
+    const baseHeight = PAGE_HEIGHT + LEFT_BLEED * 2;
+    const baseScale = baseHeight / IMAGE_DIMENSIONS.leftSidebar.height;
+    const baseWidth = IMAGE_DIMENSIONS.leftSidebar.width * baseScale;
+    const x = -baseWidth * LEFT_OFFSET_RATIO;
     const y = -LEFT_BLEED;
+    const scaleFactor = 0.6;
+    const height = baseHeight * scaleFactor;
+    const width = baseWidth * scaleFactor;
     lateralRightEdge = x + width;
     content.push({
       image: images.leftSidebar,
@@ -248,12 +251,13 @@ function buildCertificateDocDefinition(
   if (images.footer) {
     const footerX = Math.max(lateralRightEdge, 0);
     const availableWidth = PAGE_WIDTH - footerX;
-    const scale = availableWidth / IMAGE_DIMENSIONS.footer.width;
+    const scale = (availableWidth / IMAGE_DIMENSIONS.footer.width) * 0.8;
     const height = IMAGE_DIMENSIONS.footer.height * scale;
-    const y = PAGE_HEIGHT - height;
+    const width = IMAGE_DIMENSIONS.footer.width * scale;
+    const y = PAGE_HEIGHT - height - 8;
     content.push({
       image: images.footer,
-      width: availableWidth,
+      width,
       absolutePosition: { x: footerX, y },
     });
   }
@@ -262,18 +266,6 @@ function buildCertificateDocDefinition(
   const textWidth = Math.max(260, PAGE_WIDTH - textStartX - TEXT_RIGHT_MARGIN);
 
   const stack: Content[] = [];
-
-  if (images.logo) {
-    const scale = LOGO_TARGET_WIDTH / IMAGE_DIMENSIONS.logo.width;
-    const width = LOGO_TARGET_WIDTH;
-    const height = IMAGE_DIMENSIONS.logo.height * scale;
-    stack.push({
-      image: images.logo,
-      width,
-      height,
-      margin: [0, 0, 0, 24],
-    });
-  }
 
   stack.push({
     text: 'Sr. Lluís Vicent Pérez,\nDirector de la escuela GEPCO Formación\nexpide el presente:',
@@ -343,6 +335,20 @@ function buildCertificateDocDefinition(
     width: textWidth,
     stack,
   });
+
+  if (images.logo) {
+    const scale = LOGO_TARGET_WIDTH / IMAGE_DIMENSIONS.logo.width;
+    const width = LOGO_TARGET_WIDTH;
+    const height = IMAGE_DIMENSIONS.logo.height * scale;
+    const x = PAGE_WIDTH - width - 10;
+    const y = (PAGE_HEIGHT - height) / 2;
+    content.push({
+      image: images.logo,
+      width,
+      height,
+      absolutePosition: { x, y },
+    });
+  }
 
   return {
     pageSize: 'A4',
