@@ -30,6 +30,7 @@ import { TrainersView } from './features/recursos/TrainersView';
 import { RoomsView } from './features/recursos/RoomsView';
 import { MobileUnitsView } from './features/recursos/MobileUnitsView';
 import { CertificateTemplatesView } from './features/recursos/CertificateTemplatesView';
+import { ProductsView } from './features/recursos/ProductsView';
 import { CalendarView } from './features/calendar/CalendarView';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { CertificadosPage } from './features/certificados/CertificadosPage';
@@ -65,6 +66,7 @@ const NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Unidades', label: 'Unidades Móviles' },
       { key: 'Recursos/Salas', label: 'Salas' },
       { key: 'Recursos/Templates', label: 'Templates Certificados' },
+      { key: 'Recursos/Productos', label: 'Productos' },
     ],
   },
   { key: 'Certificados', label: 'Certificados', path: '/certificados' },
@@ -84,6 +86,7 @@ const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
     item.key !== 'Recursos/Salas' &&
     item.key !== 'Recursos/Unidades' &&
     item.key !== 'Recursos/Templates' &&
+    item.key !== 'Recursos/Productos' &&
     item.key !== 'Certificados'
 );
 
@@ -229,6 +232,7 @@ export default function App() {
   const isRoomsView = activeView === 'Recursos/Salas';
   const isMobileUnitsView = activeView === 'Recursos/Unidades';
   const isCertificateTemplatesView = activeView === 'Recursos/Templates';
+  const isProductsView = activeView === 'Recursos/Productos';
   const isCertificatesView = location.pathname.startsWith('/certificados');
   const activeViewLabel = useMemo(
     () => VIEW_ITEMS.find((item) => item.key === activeView)?.label ?? activeView,
@@ -492,6 +496,8 @@ export default function App() {
                   <MobileUnitsView onNotify={pushToast} />
                 ) : isCertificateTemplatesView ? (
                   <CertificateTemplatesView onNotify={pushToast} />
+                ) : isProductsView ? (
+                  <ProductsView onNotify={pushToast} />
                 ) : (
                   <div className="bg-white rounded-4 shadow-sm p-5 text-center text-muted">
                     <h2 className="h4 fw-semibold mb-2">{activeViewLabel}</h2>

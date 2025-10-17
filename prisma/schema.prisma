@@ -90,6 +90,22 @@ model deal_products {
   @@index([type])
 }
 
+model products {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_pipe       String   @unique
+  name          String?
+  code          String?
+  category      String?
+  type          String?
+  template      String?
+  url_formacion String?
+  active        Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("products")
+}
+
 model deal_notes {
   id         String    @id
   deal_id    String?
