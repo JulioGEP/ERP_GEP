@@ -300,6 +300,7 @@ function normalizeProducts(
         comments: toStringValue(item.product_comments ?? item.comments),
         typeLabel: toStringValue(item.typeLabel),
         categoryLabel: toStringValue(item.categoryLabel),
+        template: toStringValue(item.template) ?? null,
       };
 
       products.push(product);

@@ -45,6 +45,7 @@ export interface DealProduct {
   comments?: string | null;     // comentarios por línea
   typeLabel?: string | null;    // solo para filtros futuros
   categoryLabel?: string | null;
+  template?: string | null;
 }
 
 /* Documentos unificados (Pipedrive + S3 + Manual) */

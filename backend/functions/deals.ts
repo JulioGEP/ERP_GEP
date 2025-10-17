@@ -494,11 +494,54 @@ export const handler = async (event: any) => {
       });
       if (!dealRaw) return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
 
-      const deal = mapDealForApi(dealRaw);
+      const dealProductNames = (dealRaw.deal_products ?? [])
+        .map((product: { name?: string | null }) =>
+          typeof product?.name === "string" ? product.name.trim() : "",
+        )
+        .filter((name: string) => name.length > 0);
+
+      let dealWithTemplates = dealRaw;
+      if (dealProductNames.length > 0) {
+        const uniqueNames = Array.from(new Set(dealProductNames));
+        const catalogProducts = await prisma.products.findMany({
+          where: { name: { in: uniqueNames } },
+          select: { name: true, template: true },
+        });
+        const templateByName = new Map<string, string | null>();
+        for (const catalogProduct of catalogProducts) {
+          const key =
+            typeof catalogProduct.name === "string"
+              ? catalogProduct.name.trim().toLowerCase()
+              : "";
+          if (!key) continue;
+          if (!templateByName.has(key) || typeof catalogProduct.template === "string") {
+            templateByName.set(key, catalogProduct.template ?? null);
+          }
+        }
+
+        dealWithTemplates = {
+          ...dealRaw,
+          deal_products: (dealRaw.deal_products ?? []).map((product: any) => {
+            const key =
+              typeof product?.name === "string" ? product.name.trim().toLowerCase() : "";
+            const template = key ? templateByName.get(key) ?? null : null;
+            return {
+              ...product,
+              template,
+            };
+          }),
+        };
+      }
+
+      const deal = mapDealForApi(dealWithTemplates);
       const sedeLabels = parseSedeLabels(dealRaw?.sede_label ?? null);
-      const dealProducts = (dealRaw.deal_products ?? []).map((product: any) => ({
+      const dealProducts = (dealWithTemplates.deal_products ?? []).map((product: any) => ({
         name: typeof product?.name === "string" ? product.name : null,
         hours: toNullableNumber(product?.hours),
+        template:
+          typeof product?.template === "string" && product.template.trim().length
+            ? product.template.trim()
+            : null,
       }));
 
       return successResponse({
