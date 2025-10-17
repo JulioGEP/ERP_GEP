@@ -66,6 +66,8 @@ const TABLE_CELL_PADDING = {
   bottom: 6,
 } as const;
 
+const MIN_TEXT_BLOCK_WIDTH = 260;
+
 const IMAGE_DIMENSIONS = {
   background: { width: 839, height: 1328 },
   leftSidebar: { width: 85, height: 1241 },
@@ -105,6 +107,183 @@ const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
     'Aplicación de primeros auxilios.',
   ],
 };
+
+type NormalizedAxisPlacement = {
+  /**
+   * Percentage-based position for the leading edge of an element.
+   *
+   * For horizontal values: 0 = left edge, 100 = right edge.
+   * For vertical values: 0 = bottom edge, 100 = top edge.
+   */
+  percent: number;
+};
+
+type CertificateElementPlacement = {
+  horizontal?: NormalizedAxisPlacement;
+  vertical?: NormalizedAxisPlacement;
+};
+
+type CertificateLayoutConfig = {
+  background: CertificateElementPlacement;
+  leftSidebar: CertificateElementPlacement;
+  footer: CertificateElementPlacement;
+  logo: CertificateElementPlacement;
+  textContent: CertificateElementPlacement;
+};
+
+function createDefaultCertificateLayout(): CertificateLayoutConfig {
+  const backgroundHeight = PAGE_HEIGHT;
+  const backgroundBaseWidth =
+    (IMAGE_DIMENSIONS.background.width / IMAGE_DIMENSIONS.background.height) * backgroundHeight;
+  const backgroundWidth = backgroundBaseWidth * BACKGROUND_WIDTH_SCALE;
+  const backgroundX = PAGE_WIDTH - backgroundWidth + RIGHT_BLEED - BACKGROUND_LEFT_SHIFT;
+  const backgroundAvailableX = PAGE_WIDTH - backgroundWidth;
+
+  const leftSidebarHeight =
+    PAGE_HEIGHT * LEFT_SIDEBAR_HEIGHT_SCALE * LEFT_SIDEBAR_SIZE_REDUCTION;
+  const leftSidebarScale = leftSidebarHeight / IMAGE_DIMENSIONS.leftSidebar.height;
+  const leftSidebarWidth = IMAGE_DIMENSIONS.leftSidebar.width * leftSidebarScale;
+  const leftSidebarX =
+    -leftSidebarWidth * LEFT_OFFSET_RATIO * LEFT_EXTRA_OFFSET_RATIO -
+    LEFT_SIDEBAR_HORIZONTAL_SHIFT +
+    LEFT_SIDEBAR_RIGHT_SHIFT;
+  const leftSidebarY = -(leftSidebarHeight - PAGE_HEIGHT) / 2;
+  const leftSidebarAvailableX = PAGE_WIDTH - leftSidebarWidth;
+  const leftSidebarAvailableY = PAGE_HEIGHT - leftSidebarHeight;
+
+  const lateralRightEdge = leftSidebarX + leftSidebarWidth;
+  const textStartX = Math.max(lateralRightEdge + 10, 60);
+  const textWidth = Math.max(
+    MIN_TEXT_BLOCK_WIDTH,
+    PAGE_WIDTH - textStartX - TEXT_RIGHT_MARGIN,
+  );
+  const textAvailableX = PAGE_WIDTH - textWidth;
+  const textStartPercent = textAvailableX === 0 ? 0 : (textStartX / textAvailableX) * 100;
+
+  const footerScale =
+    (PAGE_WIDTH / IMAGE_DIMENSIONS.footer.width) * 0.8 * FOOTER_SIZE_REDUCTION;
+  const footerHeight = IMAGE_DIMENSIONS.footer.height * footerScale;
+  const footerAvailableY = PAGE_HEIGHT - footerHeight;
+  const footerBottomOffset = 8;
+  const footerTopPercent =
+    footerAvailableY === 0 ? 0 : (footerBottomOffset / footerAvailableY) * 100;
+
+  const logoScale = LOGO_TARGET_WIDTH / IMAGE_DIMENSIONS.logo.width;
+  const logoWidth = LOGO_TARGET_WIDTH;
+  const logoHeight = IMAGE_DIMENSIONS.logo.height * logoScale;
+  const logoX = PAGE_WIDTH - logoWidth - 10;
+  const logoY = (PAGE_HEIGHT - logoHeight) / 2;
+  const logoAvailableX = PAGE_WIDTH - logoWidth;
+  const logoAvailableY = PAGE_HEIGHT - logoHeight;
+
+  return {
+    background: {
+      horizontal: {
+        percent: backgroundAvailableX === 0 ? 0 : (backgroundX / backgroundAvailableX) * 100,
+      },
+      vertical: { percent: 100 },
+    },
+    leftSidebar: {
+      horizontal: {
+        percent: leftSidebarAvailableX === 0 ? 0 : (leftSidebarX / leftSidebarAvailableX) * 100,
+      },
+      vertical: {
+        percent:
+          leftSidebarAvailableY === 0
+            ? 0
+            : 100 - (leftSidebarY / leftSidebarAvailableY) * 100,
+      },
+    },
+    footer: {
+      horizontal: { percent: 50 },
+      vertical: { percent: footerTopPercent },
+    },
+    logo: {
+      horizontal: {
+        percent: logoAvailableX === 0 ? 0 : (logoX / logoAvailableX) * 100,
+      },
+      vertical: {
+        percent: logoAvailableY === 0 ? 0 : 100 - (logoY / logoAvailableY) * 100,
+      },
+    },
+    textContent: {
+      horizontal: { percent: textStartPercent },
+      vertical: {
+        percent: 100 - (DEFAULT_TEXT_START_Y / PAGE_HEIGHT) * 100,
+      },
+    },
+  };
+}
+
+/**
+ * Placement presets expressed in normalized percentages so the PDF layout can be
+ * tweaked with simple "move to X/Y" style instructions.
+ */
+const CERTIFICATE_ELEMENT_LAYOUT = createDefaultCertificateLayout();
+
+function resolveHorizontalPosition(
+  placement: NormalizedAxisPlacement | undefined,
+  elementWidth: number,
+): number {
+  if (!placement) {
+    return 0;
+  }
+
+  const available = PAGE_WIDTH - elementWidth;
+  if (Math.abs(available) < 0.0001) {
+    return 0;
+  }
+
+  return (placement.percent / 100) * available;
+}
+
+function resolveVerticalPosition(
+  placement: NormalizedAxisPlacement | undefined,
+  elementHeight: number,
+): number {
+  if (!placement) {
+    return 0;
+  }
+
+  const available = PAGE_HEIGHT - elementHeight;
+  if (Math.abs(available) < 0.0001) {
+    return 0;
+  }
+
+  return ((100 - placement.percent) / 100) * available;
+}
+
+function resolveTextHorizontalPlacement(
+  placement: NormalizedAxisPlacement | undefined,
+  lateralRightEdge: number,
+): { x: number; width: number } {
+  const percent = placement?.percent ?? 0;
+  let width = Math.max(
+    MIN_TEXT_BLOCK_WIDTH,
+    PAGE_WIDTH - (lateralRightEdge + 10) - TEXT_RIGHT_MARGIN,
+  );
+  let x = lateralRightEdge + 10;
+
+  for (let iteration = 0; iteration < 20; iteration += 1) {
+    const available = PAGE_WIDTH - width;
+    const base = Math.abs(available) < 0.0001 ? 0 : (percent / 100) * available;
+    const candidateX = Math.max(lateralRightEdge + 10, base);
+    const nextWidth = Math.max(MIN_TEXT_BLOCK_WIDTH, PAGE_WIDTH - candidateX - TEXT_RIGHT_MARGIN);
+
+    if (Math.abs(nextWidth - width) < 0.01 && Math.abs(candidateX - x) < 0.01) {
+      x = candidateX;
+      width = nextWidth;
+      break;
+    }
+
+    x = candidateX;
+    width = nextWidth;
+  }
+
+  width = Math.max(MIN_TEXT_BLOCK_WIDTH, PAGE_WIDTH - x - TEXT_RIGHT_MARGIN);
+
+  return { x, width };
+}
 
 function normaliseText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -363,8 +542,8 @@ function buildCertificateDocDefinition(
     const baseWidth =
       (IMAGE_DIMENSIONS.background.width / IMAGE_DIMENSIONS.background.height) * height;
     const width = baseWidth * BACKGROUND_WIDTH_SCALE;
-    const x = PAGE_WIDTH - width + RIGHT_BLEED - BACKGROUND_LEFT_SHIFT;
-    const y = 0;
+    const x = resolveHorizontalPosition(CERTIFICATE_ELEMENT_LAYOUT.background.horizontal, width);
+    const y = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.background.vertical, height);
     content.push({
       image: images.background,
       width,
@@ -379,13 +558,10 @@ function buildCertificateDocDefinition(
     const baseHeight = PAGE_HEIGHT * LEFT_SIDEBAR_HEIGHT_SCALE * LEFT_SIDEBAR_SIZE_REDUCTION;
     const baseScale = baseHeight / IMAGE_DIMENSIONS.leftSidebar.height;
     const baseWidth = IMAGE_DIMENSIONS.leftSidebar.width * baseScale;
-    const x =
-      -baseWidth * LEFT_OFFSET_RATIO * LEFT_EXTRA_OFFSET_RATIO -
-      LEFT_SIDEBAR_HORIZONTAL_SHIFT +
-      LEFT_SIDEBAR_RIGHT_SHIFT;
     const height = baseHeight;
     const width = baseWidth;
-    const y = -(height - PAGE_HEIGHT) / 2;
+    const x = resolveHorizontalPosition(CERTIFICATE_ELEMENT_LAYOUT.leftSidebar.horizontal, width);
+    const y = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.leftSidebar.vertical, height);
     lateralRightEdge = x + width;
     content.push({
       image: images.leftSidebar,
@@ -400,8 +576,8 @@ function buildCertificateDocDefinition(
     const scale = (availableWidth / IMAGE_DIMENSIONS.footer.width) * 0.8 * FOOTER_SIZE_REDUCTION;
     const height = IMAGE_DIMENSIONS.footer.height * scale;
     const width = IMAGE_DIMENSIONS.footer.width * scale;
-    const y = PAGE_HEIGHT - height - 8;
-    const footerX = (PAGE_WIDTH - width) / 2;
+    const footerX = resolveHorizontalPosition(CERTIFICATE_ELEMENT_LAYOUT.footer.horizontal, width);
+    const y = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.footer.vertical, height);
     content.push({
       image: images.footer,
       width,
@@ -409,8 +585,13 @@ function buildCertificateDocDefinition(
     });
   }
 
-  const textStartX = Math.max(lateralRightEdge + 10, 60);
-  const textWidth = Math.max(260, PAGE_WIDTH - textStartX - TEXT_RIGHT_MARGIN);
+  const textHorizontalPlacement = resolveTextHorizontalPlacement(
+    CERTIFICATE_ELEMENT_LAYOUT.textContent.horizontal,
+    lateralRightEdge,
+  );
+  const textStartX = textHorizontalPlacement.x;
+  const textWidth = textHorizontalPlacement.width;
+  const textStartY = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.textContent.vertical, 0);
 
   const stack: Content[] = [];
 
@@ -489,7 +670,7 @@ function buildCertificateDocDefinition(
   });
 
   content.push({
-    absolutePosition: { x: textStartX, y: DEFAULT_TEXT_START_Y },
+    absolutePosition: { x: textStartX, y: textStartY },
     width: textWidth,
     stack,
   });
@@ -498,8 +679,8 @@ function buildCertificateDocDefinition(
     const scale = LOGO_TARGET_WIDTH / IMAGE_DIMENSIONS.logo.width;
     const width = LOGO_TARGET_WIDTH;
     const height = IMAGE_DIMENSIONS.logo.height * scale;
-    const x = PAGE_WIDTH - width - 10;
-    const y = (PAGE_HEIGHT - height) / 2;
+    const x = resolveHorizontalPosition(CERTIFICATE_ELEMENT_LAYOUT.logo.horizontal, width);
+    const y = resolveVerticalPosition(CERTIFICATE_ELEMENT_LAYOUT.logo.vertical, height);
     content.push({
       image: images.logo,
       width,
