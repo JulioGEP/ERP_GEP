@@ -107,6 +107,33 @@ function normaliseTemplateKey(value: string, api: TrainingTemplatesApi | null): 
   return defaultNormaliseName(value);
 }
 
+function findMatchingTemplateOption(
+  options: CertificateTemplateOption[],
+  candidate: string,
+  api: TrainingTemplatesApi | null,
+): CertificateTemplateOption | null {
+  const trimmed = typeof candidate === 'string' ? candidate.trim() : '';
+  if (!trimmed.length) {
+    return null;
+  }
+
+  const directMatch = options.find((option) => option.key === trimmed);
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const normalisedCandidate = normaliseTemplateKey(trimmed, api);
+  if (!normalisedCandidate) {
+    return null;
+  }
+
+  return (
+    options.find(
+      (option) => normaliseTemplateKey(option.key, api) === normalisedCandidate,
+    ) ?? null
+  );
+}
+
 function toTemplateOption(template: TrainingTemplate): CertificateTemplateOption | null {
   const name = typeof template.name === 'string' ? template.name.trim() : '';
   const title = typeof template.title === 'string' ? template.title.trim() : '';
@@ -806,26 +833,27 @@ export function CertificadosPage() {
     if (templateSelectionManuallyChangedRef.current) {
       return;
     }
-    const referenceProductName =
-      selectedSession?.productName ?? rows[0]?.formacion ?? '';
-    if (!referenceProductName) {
-      return;
-    }
 
     const api = trainingTemplatesApiRef.current;
-    const normalisedReference = normaliseTemplateKey(referenceProductName, api);
-    if (!normalisedReference) {
-      return;
+    const candidates: string[] = [];
+
+    if (selectedSession?.productTemplate) {
+      candidates.push(selectedSession.productTemplate);
     }
 
-    const matchedOption = templateOptions.find(
-      (option) => normaliseTemplateKey(option.key, api) === normalisedReference,
-    );
+    const referenceProductName = selectedSession?.productName ?? rows[0]?.formacion ?? '';
+    if (referenceProductName) {
+      candidates.push(referenceProductName);
+    }
 
-    if (matchedOption) {
-      setSelectedTemplateKey((current) =>
-        current === matchedOption.key ? current : matchedOption.key,
-      );
+    for (const candidate of candidates) {
+      const matchedOption = findMatchingTemplateOption(templateOptions, candidate, api);
+      if (matchedOption) {
+        setSelectedTemplateKey((current) =>
+          current === matchedOption.key ? current : matchedOption.key,
+        );
+        return;
+      }
     }
   }, [rows, selectedSession, templateOptions]);
 

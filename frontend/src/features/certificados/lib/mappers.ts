@@ -4,6 +4,7 @@ import type { SessionDTO, SessionStudent } from '../../presupuestos/api';
 export type CertificateSession = SessionDTO & {
   productName: string | null;
   productHours: number | null;
+  productTemplate: string | null;
 };
 
 export type CertificateRow = {
@@ -53,6 +54,7 @@ export function mapSessionToCertificateSession(
     ...session,
     productName: product?.name ?? fallbackName ?? null,
     productHours: product?.hours ?? null,
+    productTemplate: product?.template ?? null,
   };
 }
 
