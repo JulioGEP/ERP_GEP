@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Container,
   Nav,
@@ -211,17 +211,24 @@ export default function App() {
     }
   });
 
+  const previousPathRef = useRef(location.pathname);
+
   useEffect(() => {
-    if (location.pathname.startsWith('/certificados')) {
+    const previousPath = previousPathRef.current;
+    const isCertificatesPath = location.pathname.startsWith('/certificados');
+    const wasCertificatesPath = previousPath.startsWith('/certificados');
+
+    if (isCertificatesPath && !wasCertificatesPath) {
       if (activeView !== 'Certificados') {
         setActiveView('Certificados');
       }
-      return;
+    } else if (wasCertificatesPath && !isCertificatesPath) {
+      if (activeView === 'Certificados') {
+        setActiveView('Presupuestos');
+      }
     }
 
-    if (activeView === 'Certificados' && location.pathname === '/') {
-      setActiveView('Presupuestos');
-    }
+    previousPathRef.current = location.pathname;
   }, [activeView, location.pathname, setActiveView]);
 
   const isBudgetsView = activeView === 'Presupuestos';
