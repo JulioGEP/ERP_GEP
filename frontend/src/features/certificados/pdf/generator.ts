@@ -240,9 +240,7 @@ export function buildCertificateDocFromDomain(
 
   const institutionStack = [
     {
-      text: 'Sr. Lluís Vicent Pérez,
-Director de la escuela GEPCO Formación
-expide el presente:',
+      text: 'Sr. Lluís Vicent Pérez,\nDirector de la escuela GEPCO Formación\nexpide el presente:',
       style: 'bodyText',
       margin: [0, 0, 0, 16],
     },
