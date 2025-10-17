@@ -62,39 +62,56 @@ async function loadFontIntoVfs(fileName: string): Promise<void> {
   };
 }
 
-async function loadImageAsset(
-  fileName: string,
-): Promise<{ base64: string; dataUrl: string }> {
-  const response = await fetch(`${CERTIFICATE_ASSETS_BASE_PATH}${fileName}`);
-
-  if (!response.ok) {
-    throw new Error(`No se ha podido cargar la imagen ${fileName} (${response.status}).`);
+function inferImageMimeType(fileName: string, response: Response): string {
+  const headerValue = response.headers.get('Content-Type');
+  if (headerValue) {
+    const [rawType] = headerValue.split(';', 1);
+    const type = rawType?.trim().toLowerCase();
+    if (type && type.startsWith('image/')) {
+      return type;
+    }
   }
 
-  const base64 = arrayBufferToBase64(await response.arrayBuffer());
-  return {
-    base64,
-    dataUrl: `data:image/png;base64,${base64}`
-  };
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    default:
+      return 'image/png';
+  }
 }
 
-async function loadOptionalImageAsset(
-  fileName: string
+async function loadImageAsset(
+  fileName: string,
+  { optional = false }: { optional?: boolean } = {}
 ): Promise<{ base64: string; dataUrl: string } | null> {
   try {
     const response = await fetch(`${CERTIFICATE_ASSETS_BASE_PATH}${fileName}`);
+
     if (!response.ok) {
-      if (response.status === 404) {
+      if (optional && response.status === 404) {
         return null;
       }
-      throw new Error(`No se ha podido cargar la imagen opcional ${fileName} (${response.status}).`);
+      throw new Error(
+        optional
+          ? `No se ha podido cargar la imagen opcional ${fileName} (${response.status}).`
+          : `No se ha podido cargar la imagen ${fileName} (${response.status}).`
+      );
     }
+
     const base64 = arrayBufferToBase64(await response.arrayBuffer());
+    const mimeType = inferImageMimeType(fileName, response);
     return {
       base64,
-      dataUrl: `data:image/png;base64,${base64}`
+      dataUrl: `data:${mimeType};base64,${base64}`
     };
   } catch (error) {
+    if (!optional) {
+      throw error;
+    }
     console.warn(error);
     return null;
   }
@@ -127,7 +144,11 @@ function initialisePdfMake(): Promise<typeof pdfMake> {
       const imagesEntries = await Promise.all(
         (Object.entries(CERTIFICATE_IMAGE_FILES) as [CertificateImageKey, string][]).map(
           async ([key, fileName]) => {
-            const { base64, dataUrl } = await loadImageAsset(fileName);
+            const asset = await loadImageAsset(fileName);
+            if (!asset) {
+              throw new Error(`No se han podido cargar los recursos base del certificado (${fileName}).`);
+            }
+            const { base64, dataUrl } = asset;
             certificateImages[key] = dataUrl;
             return { key, fileName, base64, dataUrl };
           }
@@ -146,7 +167,7 @@ function initialisePdfMake(): Promise<typeof pdfMake> {
         CERTIFICATE_TEMPLATE_VARIANT_IDS.flatMap((variantId) =>
           (Object.values(CERTIFICATE_IMAGE_FILES) as string[]).map(async (fileName) => {
             const variantPath = `${variantId}/${fileName}`;
-            const asset = await loadOptionalImageAsset(variantPath);
+            const asset = await loadImageAsset(variantPath, { optional: true });
             if (!asset) {
               return null;
             }
