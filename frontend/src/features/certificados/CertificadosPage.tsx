@@ -24,9 +24,7 @@ import type { DealDetail } from '../../types/deal';
 import {
   generateCertificatePDF,
   generateCertificateTemplatePreviewDataUrl,
-  resolveCertificateTemplateVariant,
   type CertificateGenerationData,
-  type CertificateTemplateVariant,
 } from './pdf/generator';
 import { pdfMakeReady } from './lib/pdf/pdfmake-initializer';
 
@@ -993,12 +991,6 @@ export function CertificadosPage() {
         (option) => option.key === selectedTemplateKey,
       );
       const selectedTrainingTemplate = selectedTemplateOption?.template ?? null;
-      const templateVariantSource =
-        selectedTemplateKey ||
-        selectedSession?.productName ||
-        rows[0]?.formacion ||
-        '';
-      const templateVariant = resolveCertificateTemplateVariant(templateVariantSource);
 
       const updateResultsState = (result: GenerationResult) => {
         setGenerationResults((current) => {
@@ -1049,9 +1041,7 @@ export function CertificadosPage() {
                 certificateData.practicalItems = selectedTrainingTemplate.practice.slice();
               }
             }
-            const blob = await generateCertificatePDF(certificateData, {
-              templateVariant,
-            });
+            const blob = await generateCertificatePDF(certificateData);
             throwIfCancelled();
 
             if (!(blob instanceof Blob) || !blob.size) {
@@ -1199,7 +1189,6 @@ export function CertificadosPage() {
       selectedSession,
       selectedSessionId,
       editableRows,
-      rows,
       selectSession,
       resetGenerationSteps,
       setGenerationStepStatus,
@@ -1265,15 +1254,6 @@ export function CertificadosPage() {
     [sessions],
   );
 
-  const resolvedTemplateVariant = useMemo<CertificateTemplateVariant>(() => {
-    const source =
-      selectedTemplateKey ||
-      selectedSession?.productName ||
-      rows[0]?.formacion ||
-      '';
-    return resolveCertificateTemplateVariant(source);
-  }, [rows, selectedSession, selectedTemplateKey]);
-
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     loadDealAndSessions(dealIdInput);
@@ -1299,7 +1279,19 @@ export function CertificadosPage() {
     void (async () => {
       try {
         await pdfMakeReady;
-        const dataUrl = await generateCertificateTemplatePreviewDataUrl(resolvedTemplateVariant);
+        const selectedTemplateOption = templateOptions.find(
+          (option) => option.key === selectedTemplateKey,
+        );
+        const selectedTemplate = selectedTemplateOption?.template ?? null;
+        const dataUrl = await generateCertificateTemplatePreviewDataUrl(
+          selectedTemplate
+            ? {
+                courseName: selectedTemplate.title || selectedTemplate.name,
+                theoreticalItems: selectedTemplate.theory,
+                practicalItems: selectedTemplate.practice,
+              }
+            : undefined,
+        );
         setTemplatePreviewUrl(dataUrl);
       } catch (error) {
         const message =
