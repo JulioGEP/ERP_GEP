@@ -48,16 +48,12 @@ type CertificatePdfImages = {
 
 const PAGE_WIDTH = 841.89;
 const PAGE_HEIGHT = 595.28;
-const DEFAULT_TEXT_START_Y = 48;
-const TEXT_RIGHT_MARGIN = 40;
-const LEFT_OFFSET_RATIO = 0.35;
-const RIGHT_BLEED = 30;
-const LEFT_EXTRA_OFFSET_RATIO = 1.1;
-const LOGO_TARGET_WIDTH = 180;
-const BACKGROUND_LEFT_SHIFT = 10;
-const LEFT_SIDEBAR_SIZE_REDUCTION = 0.9;
-const LEFT_SIDEBAR_RIGHT_SHIFT = 5;
-const FOOTER_SIZE_REDUCTION = 0.9;
+const TEXT_BLOCK_X = 260;
+const TEXT_BLOCK_Y = 86;
+const TEXT_BLOCK_WIDTH = 380;
+const LOGO_TARGET_WIDTH = 190;
+const LOGO_TOP_Y = 120;
+const FOOTER_BOTTOM_MARGIN = 52;
 const PRACTICAL_COLUMN_LEFT_SHIFT = 15;
 const TABLE_CELL_PADDING = {
   left: 12,
@@ -72,10 +68,6 @@ const IMAGE_DIMENSIONS = {
   footer: { width: 853, height: 153 },
   logo: { width: 827, height: 382 },
 } as const;
-
-const BACKGROUND_WIDTH_SCALE = 0.5;
-const LEFT_SIDEBAR_HEIGHT_SCALE = 1.4;
-const LEFT_SIDEBAR_HORIZONTAL_SHIFT = 10;
 
 const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
   alumno: {
@@ -358,13 +350,15 @@ function buildCertificateDocDefinition(
 
   const content: Content[] = [];
 
+  const rightContentWidth = PAGE_WIDTH - TEXT_BLOCK_X;
+
   if (images.background) {
-    const height = PAGE_HEIGHT;
-    const baseWidth =
-      (IMAGE_DIMENSIONS.background.width / IMAGE_DIMENSIONS.background.height) * height;
-    const width = baseWidth * BACKGROUND_WIDTH_SCALE;
-    const x = PAGE_WIDTH - width + RIGHT_BLEED - BACKGROUND_LEFT_SHIFT;
-    const y = 0;
+    const targetWidth = rightContentWidth + 90;
+    const width = targetWidth;
+    const height =
+      (IMAGE_DIMENSIONS.background.height / IMAGE_DIMENSIONS.background.width) * width;
+    const x = TEXT_BLOCK_X - 40;
+    const y = (PAGE_HEIGHT - height) / 2;
     content.push({
       image: images.background,
       width,
@@ -373,20 +367,14 @@ function buildCertificateDocDefinition(
     });
   }
 
-  let lateralRightEdge = 40;
+  const leftPanelRightEdge = TEXT_BLOCK_X - 32;
 
   if (images.leftSidebar) {
-    const baseHeight = PAGE_HEIGHT * LEFT_SIDEBAR_HEIGHT_SCALE * LEFT_SIDEBAR_SIZE_REDUCTION;
-    const baseScale = baseHeight / IMAGE_DIMENSIONS.leftSidebar.height;
-    const baseWidth = IMAGE_DIMENSIONS.leftSidebar.width * baseScale;
-    const x =
-      -baseWidth * LEFT_OFFSET_RATIO * LEFT_EXTRA_OFFSET_RATIO -
-      LEFT_SIDEBAR_HORIZONTAL_SHIFT +
-      LEFT_SIDEBAR_RIGHT_SHIFT;
-    const height = baseHeight;
-    const width = baseWidth;
-    const y = -(height - PAGE_HEIGHT) / 2;
-    lateralRightEdge = x + width;
+    const height = PAGE_HEIGHT * 1.18;
+    const scale = height / IMAGE_DIMENSIONS.leftSidebar.height;
+    const width = IMAGE_DIMENSIONS.leftSidebar.width * scale;
+    const x = leftPanelRightEdge - width;
+    const y = (PAGE_HEIGHT - height) / 2;
     content.push({
       image: images.leftSidebar,
       height,
@@ -396,21 +384,22 @@ function buildCertificateDocDefinition(
   }
 
   if (images.footer) {
-    const availableWidth = PAGE_WIDTH;
-    const scale = (availableWidth / IMAGE_DIMENSIONS.footer.width) * 0.8 * FOOTER_SIZE_REDUCTION;
+    const targetWidth = rightContentWidth - 60;
+    const width = targetWidth;
+    const scale = width / IMAGE_DIMENSIONS.footer.width;
     const height = IMAGE_DIMENSIONS.footer.height * scale;
-    const width = IMAGE_DIMENSIONS.footer.width * scale;
-    const y = PAGE_HEIGHT - height - 8;
-    const footerX = (PAGE_WIDTH - width) / 2;
+    const y = PAGE_HEIGHT - height - FOOTER_BOTTOM_MARGIN;
+    const footerX = TEXT_BLOCK_X;
     content.push({
       image: images.footer,
       width,
+      height,
       absolutePosition: { x: footerX, y },
     });
   }
 
-  const textStartX = Math.max(lateralRightEdge + 10, 60);
-  const textWidth = Math.max(260, PAGE_WIDTH - textStartX - TEXT_RIGHT_MARGIN);
+  const textStartX = TEXT_BLOCK_X;
+  const textWidth = TEXT_BLOCK_WIDTH;
 
   const stack: Content[] = [];
 
@@ -454,7 +443,7 @@ function buildCertificateDocDefinition(
     margin: [0, -5, 0, 12],
   });
 
-  stack.push({ text: courseName, style: 'courseName' });
+  stack.push({ text: courseName, style: 'courseName', margin: [0, 0, 0, 24] });
 
   const tableLayout = {
     hLineWidth: () => 0,
@@ -486,10 +475,11 @@ function buildCertificateDocDefinition(
       ],
     },
     layout: tableLayout,
+    margin: [0, 6, 0, 0],
   });
 
   content.push({
-    absolutePosition: { x: textStartX, y: DEFAULT_TEXT_START_Y },
+    absolutePosition: { x: textStartX, y: TEXT_BLOCK_Y },
     width: textWidth,
     stack,
   });
@@ -498,8 +488,10 @@ function buildCertificateDocDefinition(
     const scale = LOGO_TARGET_WIDTH / IMAGE_DIMENSIONS.logo.width;
     const width = LOGO_TARGET_WIDTH;
     const height = IMAGE_DIMENSIONS.logo.height * scale;
-    const x = PAGE_WIDTH - width - 10;
-    const y = (PAGE_HEIGHT - height) / 2;
+    const remainingRightWidth = PAGE_WIDTH - (TEXT_BLOCK_X + TEXT_BLOCK_WIDTH);
+    const horizontalPadding = Math.max(0, (remainingRightWidth - width) / 2);
+    const x = TEXT_BLOCK_X + TEXT_BLOCK_WIDTH + horizontalPadding;
+    const y = LOGO_TOP_Y;
     content.push({
       image: images.logo,
       width,
