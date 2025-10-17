@@ -43,6 +43,7 @@ type TrainingTemplate = {
 
 type TrainingTemplatesApi = {
   listTemplates: () => TrainingTemplate[];
+  getTemplateById?: (id: string) => TrainingTemplate | null;
   subscribe?: (callback: () => void) => () => void;
 };
 
