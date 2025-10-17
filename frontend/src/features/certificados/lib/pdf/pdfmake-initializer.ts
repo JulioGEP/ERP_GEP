@@ -16,11 +16,9 @@ const CERTIFICATE_IMAGE_FILES = {
   logo: 'logo-certificado.png'
 } as const;
 
-const CERTIFICATE_TEMPLATE_VARIANT_IDS = ['CERT-GENERICO', 'CERT-PAUX-EI', 'CERT-PACK'] as const;
+export type CertificateImageKey = keyof typeof CERTIFICATE_IMAGE_FILES;
 
-export type CertificateImageKey = keyof typeof CERTIFICATE_IMAGE_FILES | `${string}/${string}`;
-
-const certificateImages: Record<string, string> = {};
+const certificateImages: Partial<Record<CertificateImageKey, string>> = {};
 let initializationPromise: Promise<typeof pdfMake> | undefined;
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -62,59 +60,20 @@ async function loadFontIntoVfs(fileName: string): Promise<void> {
   };
 }
 
-function inferImageMimeType(fileName: string, response: Response): string {
-  const headerValue = response.headers.get('Content-Type');
-  if (headerValue) {
-    const [rawType] = headerValue.split(';', 1);
-    const type = rawType?.trim().toLowerCase();
-    if (type && type.startsWith('image/')) {
-      return type;
-    }
-  }
-
-  const extension = fileName.split('.').pop()?.toLowerCase();
-  switch (extension) {
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'png':
-      return 'image/png';
-    default:
-      return 'image/png';
-  }
-}
-
 async function loadImageAsset(
   fileName: string,
-  { optional = false }: { optional?: boolean } = {}
-): Promise<{ base64: string; dataUrl: string } | null> {
-  try {
-    const response = await fetch(`${CERTIFICATE_ASSETS_BASE_PATH}${fileName}`);
+): Promise<{ base64: string; dataUrl: string }> {
+  const response = await fetch(`${CERTIFICATE_ASSETS_BASE_PATH}${fileName}`);
 
-    if (!response.ok) {
-      if (optional && response.status === 404) {
-        return null;
-      }
-      throw new Error(
-        optional
-          ? `No se ha podido cargar la imagen opcional ${fileName} (${response.status}).`
-          : `No se ha podido cargar la imagen ${fileName} (${response.status}).`
-      );
-    }
-
-    const base64 = arrayBufferToBase64(await response.arrayBuffer());
-    const mimeType = inferImageMimeType(fileName, response);
-    return {
-      base64,
-      dataUrl: `data:${mimeType};base64,${base64}`
-    };
-  } catch (error) {
-    if (!optional) {
-      throw error;
-    }
-    console.warn(error);
-    return null;
+  if (!response.ok) {
+    throw new Error(`No se ha podido cargar la imagen ${fileName} (${response.status}).`);
   }
+
+  const base64 = arrayBufferToBase64(await response.arrayBuffer());
+  return {
+    base64,
+    dataUrl: `data:image/png;base64,${base64}`
+  };
 }
 
 function initialisePdfMake(): Promise<typeof pdfMake> {
@@ -144,11 +103,7 @@ function initialisePdfMake(): Promise<typeof pdfMake> {
       const imagesEntries = await Promise.all(
         (Object.entries(CERTIFICATE_IMAGE_FILES) as [CertificateImageKey, string][]).map(
           async ([key, fileName]) => {
-            const asset = await loadImageAsset(fileName);
-            if (!asset) {
-              throw new Error(`No se han podido cargar los recursos base del certificado (${fileName}).`);
-            }
-            const { base64, dataUrl } = asset;
+            const { base64, dataUrl } = await loadImageAsset(fileName);
             certificateImages[key] = dataUrl;
             return { key, fileName, base64, dataUrl };
           }
@@ -162,23 +117,6 @@ function initialisePdfMake(): Promise<typeof pdfMake> {
         updatedVfs[fileName] = base64;
         imageDictionary[key] = dataUrl;
       });
-
-      const variantEntries = await Promise.all(
-        CERTIFICATE_TEMPLATE_VARIANT_IDS.flatMap((variantId) =>
-          (Object.values(CERTIFICATE_IMAGE_FILES) as string[]).map(async (fileName) => {
-            const variantPath = `${variantId}/${fileName}`;
-            const asset = await loadImageAsset(variantPath, { optional: true });
-            if (!asset) {
-              return null;
-            }
-            const { base64, dataUrl } = asset;
-            updatedVfs[variantPath] = base64;
-            imageDictionary[variantPath] = dataUrl;
-            certificateImages[variantPath] = dataUrl;
-            return variantPath;
-          })
-        )
-      );
 
       pdfMake.vfs = updatedVfs;
       pdfMake.images = {
@@ -196,7 +134,6 @@ function initialisePdfMake(): Promise<typeof pdfMake> {
       console.info('pdfMake inicializado con fuentes e imágenes:', {
         fuentes: fontFiles,
         imagenes: Object.keys(imageDictionary),
-        variantesCargadas: variantEntries.filter(Boolean),
         vfs: vfsKeys.filter((key) =>
           fontFiles.includes(key) || Object.values(CERTIFICATE_IMAGE_FILES).includes(key)
         )

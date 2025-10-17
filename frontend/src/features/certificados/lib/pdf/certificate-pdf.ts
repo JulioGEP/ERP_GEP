@@ -9,6 +9,7 @@ import {
   const TRANSPARENT_PIXEL =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NkYGD4DwABBAEAi5JBSwAAAABJRU5ErkJggg==';
 
+  const LEFT_PANEL_RATIO = 0.36;
   const LEFT_PANEL_TEXT_COLOR = '#ffffff';
   const LEFT_PANEL_MUTED_TEXT_COLOR = '#f5c9da';
   const BODY_TEXT_COLOR = '#3a405a';
@@ -17,27 +18,17 @@ import {
   const FONT_SIZE_ADJUSTMENT = 2;
   const LINE_HEIGHT_REDUCTION = 0.5;
   const MIN_LINE_HEIGHT = 0.7;
+  const PRACTICE_COLUMN_SHIFT_RATIO = 0.1;
+  const PRACTICE_COLUMN_SHIFT_MAX = 2;
+  const THEORY_COLUMN_ADDITIONAL_RIGHT_MARGIN = 2;
+  const TRAINING_CONTENT_MIN_WIDTH = 320;
+  const TRAINING_CONTENT_MIN_COLUMN_WIDTH = 150;
+  const TRAINING_CONTENT_COLUMN_GAP = 18;
 
   const PAGE_DIMENSIONS = {
     width: 841.89,
     height: 595.28
   };
-
-  const PAGE_MARGINS = [60, 50, 70, 60] as const;
-  const USABLE_WIDTH = PAGE_DIMENSIONS.width - PAGE_MARGINS[0] - PAGE_MARGINS[2];
-  const COLUMN_GAP = 36;
-  const LEFT_PANEL_WIDTH =
-    Math.round(Math.max(240, USABLE_WIDTH * 0.55) * 100) / 100;
-  const RIGHT_COLUMN_WIDTH =
-    Math.round((USABLE_WIDTH - LEFT_PANEL_WIDTH - COLUMN_GAP) * 100) / 100;
-  const RIGHT_COLUMN_X = PAGE_MARGINS[0] + LEFT_PANEL_WIDTH + COLUMN_GAP;
-  const CONTENT_HEIGHT = PAGE_DIMENSIONS.height - PAGE_MARGINS[1] - PAGE_MARGINS[3];
-  const RIGHT_COLUMN_HEADER_ANCHOR_Y = 260;
-  const HEADER_RESERVED_HEIGHT = Math.max(
-    0,
-    RIGHT_COLUMN_HEADER_ANCHOR_Y - PAGE_MARGINS[1]
-  );
-  const SAFE_CONTENT_BOTTOM = PAGE_MARGINS[1] + CONTENT_HEIGHT - 8;
 
   type ImageDimensions = {
     width: number;
@@ -394,53 +385,147 @@ import {
     return Math.max(MIN_LINE_HEIGHT, value - LINE_HEIGHT_REDUCTION);
   }
 
-  function buildTrainingDetailsContent(details) {
+  function buildTrainingDetailsContent(details, options = {}) {
     if (!details) {
       return [];
     }
 
     const theoryItems = Array.isArray(details.theory) ? details.theory : [];
     const practiceItems = Array.isArray(details.practice) ? details.practice : [];
-    const manualText = normaliseText(details.manual);
-    const blocks: Array<Record<string, unknown>> = [];
+    const columns = [];
+    const columnGap =
+      typeof options.columnGap === 'number' && options.columnGap >= 0
+        ? options.columnGap
+        : TRAINING_CONTENT_COLUMN_GAP;
 
     if (theoryItems.length) {
-      blocks.push({
+      columns.push({
         stack: [
-          { text: 'Módulos teóricos', style: 'sectionHeading' },
+          { text: 'Parte teórica', style: 'sectionHeading' },
           {
             ul: theoryItems.map((item) => ({ text: item, style: 'theoryListItem' })),
-            margin: [12, 0, 0, 0]
+            margin: [0, 2, 0, 0]
           }
         ],
-        margin: [0, 10, 0, 10]
+        margin:
+          THEORY_COLUMN_ADDITIONAL_RIGHT_MARGIN > 0
+            ? [0, 0, THEORY_COLUMN_ADDITIONAL_RIGHT_MARGIN, 0]
+            : [0, 0, 0, 0]
       });
     }
 
     if (practiceItems.length) {
-      blocks.push({
+      columns.push({
         stack: [
-          { text: 'Módulos prácticos', style: 'sectionHeading' },
+          { text: 'Parte práctica', style: 'sectionHeading' },
           {
             ul: practiceItems.map((item) => ({ text: item, style: 'listItem' })),
-            margin: [12, 0, 0, 0]
+            margin: [0, 2, 0, 0]
           }
         ],
-        margin: [0, 10, 0, manualText ? 10 : 0]
+        margin: [0, 0, 0, 0],
+        isPractice: true
       });
     }
 
-    if (manualText) {
-      blocks.push({
-        stack: [
-          { text: 'Manual de contenidos', style: 'sectionHeading' },
-          { text: manualText, style: 'manualParagraph' }
-        ],
-        margin: [0, 10, 0, 0]
-      });
+    if (!columns.length) {
+      return [];
     }
 
-    return blocks;
+    const totalAvailableWidth =
+      typeof options.totalAvailableWidth === 'number' && options.totalAvailableWidth > 0
+        ? options.totalAvailableWidth
+        : null;
+
+    let boundingWidth =
+      typeof options.boundingWidth === 'number' && options.boundingWidth > 0
+        ? options.boundingWidth
+        : null;
+
+    if (boundingWidth !== null && totalAvailableWidth !== null) {
+      boundingWidth = Math.min(boundingWidth, totalAvailableWidth);
+    }
+
+    if (boundingWidth === null) {
+      boundingWidth = totalAvailableWidth || TRAINING_CONTENT_MIN_WIDTH;
+    }
+
+    const minimumBoundingWidth = (() => {
+      const gapWidth = columnGap * Math.max(columns.length - 1, 0);
+      const requiredWidthForColumns =
+        columns.length * TRAINING_CONTENT_MIN_COLUMN_WIDTH + gapWidth;
+      const minWidthConstraint =
+        totalAvailableWidth !== null
+          ? Math.min(TRAINING_CONTENT_MIN_WIDTH, totalAvailableWidth)
+          : TRAINING_CONTENT_MIN_WIDTH;
+      const combinedMinimum = Math.max(requiredWidthForColumns, minWidthConstraint);
+      return totalAvailableWidth !== null
+        ? Math.min(combinedMinimum, totalAvailableWidth)
+        : combinedMinimum;
+    })();
+
+    const effectiveBoundingWidth = Math.max(boundingWidth, minimumBoundingWidth);
+    const totalGap = columnGap * Math.max(columns.length - 1, 0);
+    const rawColumnWidth =
+      columns.length > 0
+        ? (effectiveBoundingWidth - totalGap) / columns.length
+        : effectiveBoundingWidth;
+    const effectiveColumnWidth = Math.max(0, rawColumnWidth);
+
+    const practiceColumnShift =
+      typeof options.practiceColumnShift === 'number' && options.practiceColumnShift > 0
+        ? options.practiceColumnShift
+        : 0;
+
+    const normalizedPracticeShift =
+      columns.length > 1
+        ? Math.min(
+            practiceColumnShift,
+            columnGap * 0.5,
+            effectiveColumnWidth * 0.1,
+            PRACTICE_COLUMN_SHIFT_MAX
+          )
+        : 0;
+
+    const sizedColumns = columns.map((column) => {
+      const { isPractice, ...definition } = column;
+      const sizedColumn = {
+        ...definition,
+        width: effectiveColumnWidth
+      };
+      if (isPractice) {
+        sizedColumn.margin = normalizedPracticeShift
+          ? [normalizedPracticeShift, 0, 0, 0]
+          : [0, 0, 0, 0];
+      }
+      return sizedColumn;
+    });
+
+    return [
+      {
+        table: {
+          widths: [effectiveBoundingWidth],
+          body: [
+            [
+              {
+                columns: sizedColumns,
+                columnGap,
+                margin: [0, 0, 0, 0]
+              }
+            ]
+          ]
+        },
+        layout: {
+          hLineWidth: () => 0,
+          vLineWidth: () => 0,
+          paddingLeft: () => 0,
+          paddingRight: () => 0,
+          paddingTop: () => 0,
+          paddingBottom: () => 0
+        },
+        margin: [0, 4, 0, 12]
+      }
+    ];
   }
 
   async function getCachedAsset(key: CertificateImageKey) {
@@ -495,14 +580,45 @@ import {
     return fullName || 'Nombre del alumno/a';
   }
 
+  function buildDocumentSentenceFragments(row: CertificatePdfRow | null | undefined) {
+    const documentType = normaliseText(getDocumentTypeValue(row)).toUpperCase();
+    const documentNumber = getStudentDni(row);
+
+    if (!documentType && !documentNumber) {
+      return [{ text: 'con documento de identidad' }];
+    }
+
+    if (!documentType) {
+      return [
+        { text: 'con documento ' },
+        { text: documentNumber, bold: true }
+      ];
+    }
+
+    if (!documentNumber) {
+      return [{ text: `con ${documentType}` }];
+    }
+
+    return [
+      { text: `con ${documentType} ` },
+      { text: documentNumber, bold: true }
+    ];
+  }
+
+  function buildDocumentSentence(row) {
+    return buildDocumentSentenceFragments(row)
+      .map((fragment) => (fragment && typeof fragment.text === 'string' ? fragment.text : ''))
+      .join('');
+  }
+
   function formatTrainingDate(value) {
     const normalised = normaliseText(value);
     if (!normalised) {
       return '________';
     }
-    const parsed = parseDateValue(normalised);
-    if (!parsed) {
-      return normalised.replace(/[\/]/g, '-');
+    const parsed = new Date(normalised);
+    if (Number.isNaN(parsed.getTime())) {
+      return normalised;
     }
     const formatter = new Intl.DateTimeFormat('es-ES', {
       day: 'numeric',
@@ -517,33 +633,6 @@ import {
     if (!normalised) {
       return null;
     }
-    const isoMatch = normalised.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (isoMatch) {
-      const [, year, month, day] = isoMatch;
-      const parsed = new Date(Number(year), Number(month) - 1, Number(day));
-      return Number.isNaN(parsed.getTime()) ? null : parsed;
-    }
-
-    const slashMatch = normalised.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
-    if (slashMatch) {
-      const [, rawDay, rawMonth, rawYear] = slashMatch;
-      const day = Number(rawDay);
-      const month = Number(rawMonth);
-      const year = rawYear.length === 2 ? Number(`20${rawYear}`) : Number(rawYear);
-      if (
-        Number.isInteger(day) &&
-        Number.isInteger(month) &&
-        Number.isInteger(year) &&
-        day > 0 &&
-        day <= 31 &&
-        month > 0 &&
-        month <= 12
-      ) {
-        const parsed = new Date(year, month - 1, day);
-        return Number.isNaN(parsed.getTime()) ? null : parsed;
-      }
-    }
-
     const parsed = new Date(normalised);
     if (Number.isNaN(parsed.getTime())) {
       return null;
@@ -618,82 +707,14 @@ import {
 
     const normalised = normaliseText(value);
     if (normalised) {
-      const slashNormalised = normalised.replace(/[\/]/g, '-');
-      const dashMatch = slashNormalised.match(/^(\d{1,4})-(\d{1,2})-(\d{2,4})$/);
-      if (dashMatch) {
-        const [_, first, second, third] = dashMatch;
-        if (first.length === 4) {
-          return `${third.padStart(2, '0')}-${second.padStart(2, '0')}-${first}`;
-        }
-        return `${first.padStart(2, '0')}-${second.padStart(2, '0')}-${third.padStart(4, '0')}`;
-      }
-      return slashNormalised;
+      return normalised;
     }
 
     return '____';
   }
 
-  function extractLocationName(value: string | null | undefined) {
-    const normalised = normaliseText(value);
-    if (!normalised) {
-      return '';
-    }
-
-    const cleaned = normalised
-      .replace(/\s+/g, ' ')
-      .replace(/[\u2013\u2014]/g, '-')
-      .trim();
-
-    const splitTokens = (segment: string) =>
-      segment
-        .split(/[,|·]/)
-        .map((token) => token.trim())
-        .filter(Boolean);
-
-    const primarySegments = cleaned
-      .split(/\n|\r/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const candidates: string[] = [];
-
-    primarySegments.forEach((segment) => {
-      const dashParts = segment
-        .split(/\s-\s|\s-|-\s/)
-        .map((part) => part.trim())
-        .filter(Boolean);
-
-      if (dashParts.length > 1) {
-        dashParts.forEach((part) => candidates.push(...splitTokens(part)));
-      } else {
-        candidates.push(...splitTokens(segment));
-      }
-    });
-
-    if (!candidates.length) {
-      candidates.push(cleaned);
-    }
-
-    const looksLikeLocation = (segment: string) => {
-      if (!segment) {
-        return false;
-      }
-      if (/^\d/.test(segment)) {
-        return false;
-      }
-      if (/\b(C\/|CL\.|CALLE|AVDA\.|AV\.|PLAZA|PZA\.|POL\.)/i.test(segment)) {
-        return false;
-      }
-      return /[A-Za-zÁÉÍÓÚÜÑÇàèìòùáéíóúüñç]/.test(segment);
-    };
-
-    const locationCandidate = candidates.find(looksLikeLocation) ?? candidates[0];
-    return locationCandidate ? locationCandidate : '';
-  }
-
   function formatLocation(value) {
-    const extracted = extractLocationName(value);
-    return extracted ? extracted.toUpperCase() : '________';
+    return normaliseText(value) || '________';
   }
 
   function formatDuration(value) {
@@ -726,14 +747,21 @@ import {
   }
 
   function normaliseIsoDate(value) {
-    const parsed = parseDateValue(value);
-    if (!parsed) {
+    const text = normaliseText(value);
+    if (!text) {
       return '';
     }
-    const year = parsed.getFullYear();
-    const month = String(parsed.getMonth() + 1).padStart(2, '0');
-    const day = String(parsed.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      return text;
+    }
+
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    return parsed.toISOString().split('T')[0];
   }
 
   function formatDateForFileName(value) {
@@ -782,8 +810,8 @@ import {
         margin: [0, 0, 0, 8]
       },
       introText: {
-        fontSize: adjustFontSize(11.5),
-        lineHeight: adjustLineHeight(1.65),
+        fontSize: adjustFontSize(10),
+        lineHeight: adjustLineHeight(1.4),
         color: SECONDARY_TEXT_COLOR,
         margin: [0, 0, 0, 8]
       },
@@ -802,47 +830,41 @@ import {
         margin: [0, 8, 0, 8]
       },
       highlightName: {
-        fontSize: adjustFontSize(15),
+        fontSize: adjustFontSize(17),
         bold: true,
         color: TITLE_TEXT_COLOR,
         margin: [0, 0, 0, 6]
       },
       trainingName: {
-        fontSize: adjustFontSize(15),
+        fontSize: adjustFontSize(14),
         bold: true,
         color: TITLE_TEXT_COLOR,
-        margin: [0, 0, 0, 18]
+        margin: [0, 0, 0, 0]
       },
       contentSectionTitle: {
         fontSize: adjustFontSize(12),
         bold: true,
         color: TITLE_TEXT_COLOR,
-        margin: [0, 10, 0, 6],
+        margin: [0, 18, 0, 10],
         letterSpacing: 1
       },
       sectionHeading: {
-        fontSize: adjustFontSize(12),
+        fontSize: adjustFontSize(11),
         bold: true,
         color: TITLE_TEXT_COLOR,
         margin: [0, 0, 0, 6]
       },
       listItem: {
-        fontSize: adjustFontSize(10.5),
-        lineHeight: adjustLineHeight(1.68),
+        fontSize: adjustFontSize(9),
+        lineHeight: adjustLineHeight(1.3),
         color: BODY_TEXT_COLOR,
         margin: [0, 0, 0, 4]
       },
       theoryListItem: {
-        fontSize: adjustFontSize(10.5),
-        lineHeight: adjustLineHeight(1.68),
+        fontSize: adjustFontSize(9),
+        lineHeight: adjustLineHeight(1.3),
         color: BODY_TEXT_COLOR,
         margin: [0, 0, 0, 4]
-      },
-      manualParagraph: {
-        fontSize: adjustFontSize(10.5),
-        lineHeight: adjustLineHeight(1.68),
-        color: BODY_TEXT_COLOR,
-        margin: [0, 2, 0, 0]
       },
       leftPanelTitle: {
         fontSize: adjustFontSize(20),
@@ -892,9 +914,9 @@ import {
       : 'Roboto';
 
     const [
-      backgroundImage,
-      leftSidebarImage,
-      footerImage,
+      rawBackgroundImage,
+      rawLeftSidebarImage,
+      rawFooterImage,
       logoImage
     ] = await Promise.all([
       getCachedAsset('background'),
@@ -903,23 +925,33 @@ import {
       getCachedAsset('logo')
     ]);
 
+    const backgroundImage = rawBackgroundImage === TRANSPARENT_PIXEL ? null : rawBackgroundImage;
+    const leftSidebarImage = rawLeftSidebarImage === TRANSPARENT_PIXEL ? null : rawLeftSidebarImage;
+    const footerImage = rawFooterImage === TRANSPARENT_PIXEL ? null : rawFooterImage;
+
     const [
       backgroundImageDimensions,
       leftSidebarDimensions,
       footerImageDimensions
     ] = await Promise.all([
-      measureImageDimensions(backgroundImage),
-      measureImageDimensions(leftSidebarImage),
-      measureImageDimensions(footerImage)
+      measureImageDimensions(backgroundImage ?? ''),
+      measureImageDimensions(leftSidebarImage ?? ''),
+      measureImageDimensions(footerImage ?? '')
     ]);
 
-    const pageMargins = [...PAGE_MARGINS];
-    const totalContentWidth = Math.max(0, USABLE_WIDTH);
-    const leftColumnWidth = LEFT_PANEL_WIDTH;
-    const rightColumnWidth = Math.max(0, RIGHT_COLUMN_WIDTH);
-    const columnGap = COLUMN_GAP;
-    const rightColumnX = RIGHT_COLUMN_X;
-    const contentHeight = Math.max(0, CONTENT_HEIGHT);
+    const pageWidth = PAGE_DIMENSIONS.width;
+    const pageMargins = [60, 50, 70, 60];
+    const columnGap = 36;
+    const totalContentWidth = Math.max(0, pageWidth - pageMargins[0] - pageMargins[2]);
+    const maxLeftColumnWidth = Math.max(totalContentWidth * 0.55, totalContentWidth - 260);
+    const preliminaryLeftWidth = Math.max(240, totalContentWidth * LEFT_PANEL_RATIO);
+    const leftColumnWidth = Math.min(
+      Math.max(0, preliminaryLeftWidth),
+      Math.max(0, maxLeftColumnWidth)
+    );
+    const rightColumnWidth = Math.max(0, totalContentWidth - leftColumnWidth - columnGap);
+    const rightColumnX = pageMargins[0] + leftColumnWidth + columnGap;
+    const contentHeight = Math.max(0, PAGE_DIMENSIONS.height - pageMargins[1] - pageMargins[3]);
 
     const fullName = buildFullName(row);
     const formattedFullName = normaliseText(fullName).toUpperCase() || fullName;
@@ -944,12 +976,20 @@ import {
     const organizationName = normaliseText(dealInfo.organizationName);
     const sedeLabel = normaliseText(dealInfo.sedeLabel);
 
+    const documentTypeLabel = normaliseText(getDocumentTypeValue(row)).toUpperCase();
     const documentNumber = normaliseText(getStudentDni(row));
-    const dniValue = documentNumber || '________';
+    const identityLabelParts = [];
+    if (documentTypeLabel) {
+      identityLabelParts.push(`con ${documentTypeLabel}`);
+    } else {
+      identityLabelParts.push('con DNI');
+    }
+    identityLabelParts.push(documentNumber || '________');
+    const identityLine = identityLabelParts.join(' ');
 
     const formattedPrimaryDate = formatDateAsDayMonthYear(getPrimaryDateValue(row));
     const readableDate = trainingDate === '________' ? '' : trainingDate;
-    const readableLocation = location === '________' ? formatLocation(sedeLabel) : location;
+    const readableLocation = location === '________' ? sedeLabel : location;
     const readableDuration = duration === '____' ? '' : `${duration} horas`;
 
     const formattedLocationLabel = (() => {
@@ -957,34 +997,38 @@ import {
       return rawLocation ? rawLocation.toUpperCase() : '________';
     })();
 
-    const rightColumnHeaderStack = [
+    const rightColumnStack = [
       {
         text: 'Sr. Lluís Vicent Pérez,\nDirector de la escuela GEPCO Formación\nexpide el presente:',
         style: 'introText',
         alignment: 'left',
-        margin: [0, 0, 0, 8]
+        margin: [0, 0, 0, 8],
+        preserveLeadingSpaces: true
       },
       { text: 'CERTIFICADO', style: 'certificateTitle' },
       {
         text: `A nombre del alumno/a ${formattedFullName}`,
-        style: 'highlightName',
-        alignment: 'left',
-        margin: [0, 0, 0, 6]
+        style: 'highlightName'
       },
       {
-        text: [
-          `con DNI ${dniValue}, quien en fecha ${formattedPrimaryDate} y en ${formattedLocationLabel} ha superado,`,
-          ` con una duración total de ${durationLabel}, la formación de:`
-        ].join(''),
+        text: identityLine,
         style: 'bodyText',
         alignment: 'left',
-        margin: [0, 0, 0, 8]
+        margin: [0, 0, 0, 2]
       },
       {
-        text: trainingNameDisplay,
-        style: 'trainingName',
-        alignment: 'left'
-      }
+        text: `quien en fecha ${formattedPrimaryDate} y en ${formattedLocationLabel}`,
+        style: 'bodyText',
+        alignment: 'left',
+        margin: [0, 0, 0, 2]
+      },
+      {
+        text: `ha superado, con una duración total de ${durationLabel}, la formación de:`,
+        style: 'bodyText',
+        alignment: 'left',
+        margin: [0, 0, 0, 10]
+      },
+      { text: trainingNameDisplay, style: 'trainingName', alignment: 'left' }
     ];
 
     const metadataLines: string[] = [];
@@ -996,47 +1040,20 @@ import {
     }
 
     metadataLines.forEach((line) => {
-      rightColumnHeaderStack.push({ text: line, style: 'metadataText' });
+      rightColumnStack.push({ text: line, style: 'metadataText' });
     });
 
-    const rightColumnBodyStack: Array<Record<string, unknown>> = [];
-
-    const trainingDetailsContent = buildTrainingDetailsContent(trainingDetails);
+    const detailsAvailableWidth = rightColumnWidth > 0 ? rightColumnWidth : totalContentWidth;
+    const trainingDetailsContent = buildTrainingDetailsContent(trainingDetails, {
+      practiceColumnShift: detailsAvailableWidth * PRACTICE_COLUMN_SHIFT_RATIO,
+      totalAvailableWidth: detailsAvailableWidth,
+      boundingWidth: detailsAvailableWidth,
+      columnGap: TRAINING_CONTENT_COLUMN_GAP
+    });
 
     if (trainingDetailsContent.length) {
-      rightColumnBodyStack.push({
-        text: 'Contenidos de la formación',
-        style: 'contentSectionTitle',
-        margin: [0, 0, 0, 0]
-      });
-      rightColumnBodyStack.push(...trainingDetailsContent);
-    }
-
-    const headerTableWidth = rightColumnWidth > 0 ? rightColumnWidth : totalContentWidth;
-    const rightColumnStack: Array<Record<string, unknown>> = [];
-    const headerTable: Record<string, unknown> = {
-      table: {
-        widths: [headerTableWidth],
-        body: [[{ stack: rightColumnHeaderStack, border: [false, false, false, false] }]]
-      },
-      layout: {
-        hLineWidth: () => 0,
-        vLineWidth: () => 0,
-        paddingLeft: () => 0,
-        paddingRight: () => 0,
-        paddingTop: () => 0,
-        paddingBottom: () => 0
-      }
-    };
-
-    if (HEADER_RESERVED_HEIGHT > 0) {
-      headerTable.heights = [HEADER_RESERVED_HEIGHT];
-    }
-
-    rightColumnStack.push(headerTable);
-
-    if (rightColumnBodyStack.length) {
-      rightColumnStack.push(...rightColumnBodyStack);
+      rightColumnStack.push({ text: 'Contenidos de la formación', style: 'contentSectionTitle' });
+      rightColumnStack.push(...trainingDetailsContent);
     }
 
     const summaryEntries = [
@@ -1086,35 +1103,43 @@ import {
     });
 
     const decorativeElements: Array<Record<string, unknown>> = [];
-    const overlayElements: Array<Record<string, unknown>> = [];
 
     if (rightColumnWidth > 0 && backgroundImage) {
-      let backgroundHeight = contentHeight;
+      let backgroundWidth = rightColumnWidth;
+      let backgroundX = rightColumnX;
+      let backgroundY = pageMargins[1];
 
       if (
         backgroundImageDimensions &&
         backgroundImageDimensions.width > 0 &&
         backgroundImageDimensions.height > 0
       ) {
-        const scaleToWidth = rightColumnWidth / backgroundImageDimensions.width;
-        backgroundHeight = backgroundImageDimensions.height * scaleToWidth;
+        const scaleToWidth = backgroundWidth / backgroundImageDimensions.width;
+        const scaledHeight = backgroundImageDimensions.height * scaleToWidth;
+
+        if (scaledHeight < contentHeight) {
+          const scaleToHeight = contentHeight / backgroundImageDimensions.height;
+          backgroundWidth = backgroundImageDimensions.width * scaleToHeight;
+          backgroundX = rightColumnX + (rightColumnWidth - backgroundWidth) / 2;
+        } else {
+          backgroundY = pageMargins[1] - (scaledHeight - contentHeight) / 2;
+        }
       }
 
       decorativeElements.push({
         image: backgroundImage,
-        absolutePosition: { x: rightColumnX, y: pageMargins[1] },
-        width: rightColumnWidth,
-        height: backgroundHeight,
+        absolutePosition: { x: backgroundX, y: backgroundY },
+        width: backgroundWidth,
         opacity: 1
       });
     }
 
     if (leftSidebarImage) {
-      const targetSidebarWidth = Math.min(Math.max(70, Math.min(80, leftColumnWidth)), leftColumnWidth);
-
-      if (targetSidebarWidth > 0) {
-        let sidebarWidth = targetSidebarWidth;
-        let sidebarHeight = contentHeight;
+      const maxSidebarWidth = Math.min(leftColumnWidth, 80);
+      if (maxSidebarWidth > 0) {
+        let sidebarWidth = maxSidebarWidth;
+        let sidebarX = pageMargins[0];
+        let sidebarY = pageMargins[1];
 
         if (
           leftSidebarDimensions &&
@@ -1122,49 +1147,41 @@ import {
           leftSidebarDimensions.height > 0
         ) {
           const widthScale = sidebarWidth / leftSidebarDimensions.width;
-          sidebarHeight = leftSidebarDimensions.height * widthScale;
+          const scaledHeight = leftSidebarDimensions.height * widthScale;
 
-          if (sidebarHeight > contentHeight) {
-            const heightScale = contentHeight / leftSidebarDimensions.height;
+          if (scaledHeight > contentHeight) {
+            const desiredHeight = Math.min(Math.max(140, contentHeight * 0.3), 160);
+            const heightScale = desiredHeight / leftSidebarDimensions.height;
             sidebarWidth = leftSidebarDimensions.width * heightScale;
-            sidebarHeight = contentHeight;
+            sidebarY = pageMargins[1] + contentHeight - desiredHeight;
           }
         }
 
         decorativeElements.push({
           image: leftSidebarImage,
-          absolutePosition: { x: pageMargins[0], y: pageMargins[1] },
+          absolutePosition: { x: sidebarX, y: sidebarY },
           width: sidebarWidth,
-          height: sidebarHeight,
           opacity: 1
         });
       }
     }
 
-    let footerReservedHeight = 0;
-    let contentLimitY = SAFE_CONTENT_BOTTOM;
-
     if (footerImage && totalContentWidth > 0) {
       const footerWidth = totalContentWidth;
-      let footerHeight = Math.min(140, contentHeight * 0.25);
+      let footerHeight = 100;
 
       if (footerImageDimensions && footerImageDimensions.width > 0) {
         const footerScale = footerWidth / footerImageDimensions.width;
         footerHeight = footerImageDimensions.height * footerScale;
       }
 
-      contentLimitY = SAFE_CONTENT_BOTTOM - footerHeight;
-      footerReservedHeight = Math.max(0, pageMargins[1] + contentHeight - contentLimitY);
-      const footerTop = pageMargins[1] + contentHeight - footerHeight;
-
-      overlayElements.push({
+      decorativeElements.push({
         image: footerImage,
         absolutePosition: {
           x: pageMargins[0],
-          y: footerTop
+          y: pageMargins[1] + contentHeight - footerHeight
         },
         width: footerWidth,
-        height: footerHeight,
         opacity: 1
       });
     }
@@ -1183,14 +1200,12 @@ import {
               stack: leftColumnStack
             },
             {
-              width: rightColumnWidth,
+              width: '*',
               stack: rightColumnStack
             }
           ],
-          columnGap,
-          margin: [0, 0, 0, footerReservedHeight]
-        },
-        ...overlayElements
+          columnGap
+        }
       ],
       styles: buildDocStyles(),
       defaultStyle: {
