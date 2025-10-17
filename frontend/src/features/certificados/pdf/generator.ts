@@ -34,27 +34,13 @@ export interface CertificateGenerationData {
   manualText?: string;
 }
 
-type TemplateIds = 'CERT-PAUX-EI' | 'CERT-PACK' | 'CERT-GENERICO';
+export type CertificateTemplateVariant = 'CERT-PAUX-EI' | 'CERT-PACK' | 'CERT-GENERICO';
 
-export type CertificateTemplateKey = TemplateIds;
-
-const CERTIFICATE_TEMPLATE_LABELS: Record<CertificateTemplateKey, string> = {
-  'CERT-GENERICO': 'Genérico',
-  'CERT-PAUX-EI': 'Auxiliar Educación Infantil',
-  'CERT-PACK': 'Pack / Combo',
-};
-
-export type CertificateTemplateOption = {
-  key: CertificateTemplateKey;
-  label: string;
-};
-
-export const CERTIFICATE_TEMPLATE_OPTIONS: CertificateTemplateOption[] = (
-  Object.keys(CERTIFICATE_TEMPLATE_LABELS) as CertificateTemplateKey[]
-).map((key) => ({
-  key,
-  label: CERTIFICATE_TEMPLATE_LABELS[key],
-}));
+const CERTIFICATE_TEMPLATE_VARIANTS: CertificateTemplateVariant[] = [
+  'CERT-GENERICO',
+  'CERT-PAUX-EI',
+  'CERT-PACK',
+];
 
 const TRANSPARENT_PIXEL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NkYGD4DwABBAEAi5JBSwAAAABJRU5ErkJggg==';
@@ -85,10 +71,10 @@ type TemplateImages = {
 export function buildCertificateDocFromDomain(
   data: DomainData,
   images: TemplateImages,
-  templateOverride?: TemplateIds,
+  templateOverride?: CertificateTemplateVariant,
 ): TDocumentDefinitions {
   // ---- 0) Selección de template a partir de deal_products.name ----
-  const templateId = templateOverride ?? detectCertificateTemplate(data.deal_products.name);
+  const templateId = templateOverride ?? detectCertificateTemplateVariant(data.deal_products.name);
 
   // Utilidad para escoger imagen por template (si existe) o fallback genérico
   function pickImg(
@@ -600,7 +586,7 @@ export function buildCertificateDocFromDomain(
 // =========================
 // Detección de template por nombre de producto
 // =========================
-function detectCertificateTemplate(productName: string): TemplateIds {
+function detectCertificateTemplateVariant(productName: string): CertificateTemplateVariant {
   const name = (productName || '').toUpperCase();
 
   if (/\bPAUX\b/.test(name) || /\bPAU[XÇ]\b/.test(name)) return 'CERT-PAUX-EI';
@@ -699,7 +685,7 @@ const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
     'El manual recoge los procedimientos operativos, normativa aplicable y recursos de apoyo para la formación.',
 };
 
-const PREVIEW_PRODUCT_NAMES: Record<TemplateIds, string> = {
+const PREVIEW_PRODUCT_NAMES: Record<CertificateTemplateVariant, string> = {
   'CERT-GENERICO': 'Formación genérica de ejemplo',
   'CERT-PAUX-EI': 'Auxiliar Educación Infantil (PAUX EI)',
   'CERT-PACK': 'Pack Emergencias',
@@ -719,7 +705,7 @@ function buildTemplateImages(): TemplateImages {
     '__px.png': TRANSPARENT_PIXEL,
   };
 
-  const templateVariantIds: TemplateIds[] = ['CERT-GENERICO', 'CERT-PAUX-EI', 'CERT-PACK'];
+  const templateVariantIds: CertificateTemplateVariant[] = CERTIFICATE_TEMPLATE_VARIANTS;
   const assetFileNames = ['fondo-certificado.png', 'lateral-izquierdo.png', 'logo-certificado.png', 'pie-firma.png'] as const;
 
   templateVariantIds.forEach((templateId) => {
@@ -735,21 +721,24 @@ function buildTemplateImages(): TemplateImages {
   return imageMap;
 }
 
-export function resolveCertificateTemplateKey(productName: string): CertificateTemplateKey {
-  return detectCertificateTemplate(productName);
+export function resolveCertificateTemplateVariant(
+  productName: string,
+): CertificateTemplateVariant {
+  return detectCertificateTemplateVariant(productName);
 }
 
 export async function generateCertificatePDF(
   data: CertificateGenerationData,
-  options?: { templateKey?: CertificateTemplateKey; images?: TemplateImages },
+  options?: { templateVariant?: CertificateTemplateVariant; images?: TemplateImages },
 ): Promise<Blob> {
   assertCertificateData(data);
 
   const pdfMakeInstance = await getPdfMakeInstance();
   const domainData = toDomainData(data);
   const images = options?.images ?? buildTemplateImages();
-  const templateId = options?.templateKey ?? detectCertificateTemplate(domainData.deal_products.name);
-  const docDefinition = buildCertificateDocFromDomain(domainData, images, templateId);
+  const templateVariant =
+    options?.templateVariant ?? detectCertificateTemplateVariant(domainData.deal_products.name);
+  const docDefinition = buildCertificateDocFromDomain(domainData, images, templateVariant);
 
   return new Promise<Blob>((resolve, reject) => {
     try {
@@ -768,7 +757,7 @@ export async function generateCertificatePDF(
 }
 
 export async function generateCertificateTemplatePreviewDataUrl(
-  templateKey: CertificateTemplateKey,
+  templateVariant: CertificateTemplateVariant,
 ): Promise<string> {
   const pdfMakeInstance = await getPdfMakeInstance();
   const images = buildTemplateImages();
@@ -776,11 +765,11 @@ export async function generateCertificateTemplatePreviewDataUrl(
     ...PREVIEW_SAMPLE_DATA,
     producto: {
       ...PREVIEW_SAMPLE_DATA.producto,
-      name: PREVIEW_PRODUCT_NAMES[templateKey] ?? PREVIEW_SAMPLE_DATA.producto.name,
+      name: PREVIEW_PRODUCT_NAMES[templateVariant] ?? PREVIEW_SAMPLE_DATA.producto.name,
     },
   };
   const domainData = toDomainData(previewData);
-  const docDefinition = buildCertificateDocFromDomain(domainData, images, templateKey);
+  const docDefinition = buildCertificateDocFromDomain(domainData, images, templateVariant);
 
   return new Promise<string>((resolve, reject) => {
     try {

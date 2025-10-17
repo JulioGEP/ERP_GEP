@@ -22,27 +22,113 @@ import { CertificateToolbar, type CertificateToolbarProgressStatus } from './Cer
 import type { CertificateRow, CertificateSession } from './lib/mappers';
 import type { DealDetail } from '../../types/deal';
 import {
-  CERTIFICATE_TEMPLATE_OPTIONS,
   generateCertificatePDF,
   generateCertificateTemplatePreviewDataUrl,
-  resolveCertificateTemplateKey,
+  resolveCertificateTemplateVariant,
   type CertificateGenerationData,
-  type CertificateTemplateKey,
+  type CertificateTemplateVariant,
 } from './pdf/generator';
 import { pdfMakeReady } from './lib/pdf/pdfmake-initializer';
+
+import './lib/templates/training-templates';
 
 import './styles/certificados.scss';
 
 const CERTIFICATES_STORAGE_KEY = 'certificadosState';
 
+type TrainingTemplate = {
+  id: string;
+  name: string;
+  title: string;
+  duration: string;
+  theory: string[];
+  practice: string[];
+};
+
+type TrainingTemplatesApi = {
+  listTemplates: () => TrainingTemplate[];
+  getTemplateByName?: (name: string) => TrainingTemplate | null;
+  subscribe?: (callback: () => void) => () => void;
+  normaliseName?: (name: string) => string;
+};
+
+type CertificateTemplateOption = {
+  key: string;
+  label: string;
+  template: TrainingTemplate;
+};
+
+declare global {
+  interface Window {
+    trainingTemplates?: TrainingTemplatesApi;
+  }
+}
+
 type PersistedCertificatePageState = {
   dealIdInput?: string;
   selectedSessionId?: string | null;
   editableRows?: CertificateRow[];
-  selectedTemplateKey?: CertificateTemplateKey;
+  selectedTemplateKey?: string;
   templateSelectionManuallyChanged?: boolean;
   excludedCertifiedIds?: string[];
 };
+
+function resolveTrainingTemplatesApi(): TrainingTemplatesApi | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  return window.trainingTemplates ?? null;
+}
+
+function defaultNormaliseName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function normaliseTemplateKey(value: string, api: TrainingTemplatesApi | null): string {
+  if (!value.trim().length) {
+    return '';
+  }
+  if (api && typeof api.normaliseName === 'function') {
+    try {
+      const normalised = api.normaliseName(value);
+      if (typeof normalised === 'string' && normalised.trim().length > 0) {
+        return normalised.trim();
+      }
+    } catch {
+      // Ignored: fall back to default normalisation.
+    }
+  }
+  return defaultNormaliseName(value);
+}
+
+function toTemplateOption(template: TrainingTemplate): CertificateTemplateOption | null {
+  const name = typeof template.name === 'string' ? template.name.trim() : '';
+  const title = typeof template.title === 'string' ? template.title.trim() : '';
+  if (!name.length && !title.length) {
+    return null;
+  }
+  const key = name.length ? name : title;
+  const label = title.length ? title : name;
+  return {
+    key,
+    label,
+    template: {
+      ...template,
+      id: template.id ?? '',
+      name,
+      title,
+      duration: typeof template.duration === 'string' ? template.duration.trim() : '',
+      theory: Array.isArray(template.theory) ? template.theory.slice() : [],
+      practice: Array.isArray(template.practice) ? template.practice.slice() : [],
+    },
+  };
+}
 
 function toTrimmedString(value?: string | null): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -398,6 +484,7 @@ export function CertificadosPage() {
   const pendingPersistedRowsRef = useRef<CertificateRow[] | null>(null);
   const pendingPersistedExcludedIdsRef = useRef<string[] | null>(null);
   const pendingTemplateManualRef = useRef<boolean | null>(null);
+  const pendingPersistedTemplateKeyRef = useRef<string | null>(null);
 
   const templateSelectionManuallyChangedRef = useRef(false);
   const [templateSelectionManuallyChangedState, setTemplateSelectionManuallyChangedState] =
@@ -407,14 +494,86 @@ export function CertificadosPage() {
     setTemplateSelectionManuallyChangedState(value);
   }, []);
 
-  const DEFAULT_TEMPLATE_KEY: CertificateTemplateKey = 'CERT-GENERICO';
-  const [selectedTemplateKey, setSelectedTemplateKey] = useState<CertificateTemplateKey>(
-    DEFAULT_TEMPLATE_KEY,
-  );
+  const [templateOptions, setTemplateOptions] = useState<CertificateTemplateOption[]>([]);
+  const trainingTemplatesApiRef = useRef<TrainingTemplatesApi | null>(null);
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState<string>('');
   const [showTemplatePreview, setShowTemplatePreview] = useState(false);
   const [templatePreviewUrl, setTemplatePreviewUrl] = useState<string | null>(null);
   const [loadingTemplatePreview, setLoadingTemplatePreview] = useState(false);
   const [templatePreviewError, setTemplatePreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const api = resolveTrainingTemplatesApi();
+    trainingTemplatesApiRef.current = api;
+
+    if (!api) {
+      setTemplateOptions([]);
+      return;
+    }
+
+    const updateOptions = () => {
+      try {
+        const list = api.listTemplates();
+        const optionsMap = new Map<string, CertificateTemplateOption>();
+        list.forEach((template) => {
+          const option = toTemplateOption(template);
+          if (!option) {
+            return;
+          }
+          const normalised = normaliseTemplateKey(option.key, api);
+          if (!normalised) {
+            return;
+          }
+          if (!optionsMap.has(normalised)) {
+            optionsMap.set(normalised, option);
+            return;
+          }
+
+          const existing = optionsMap.get(normalised);
+          if (!existing) {
+            optionsMap.set(normalised, option);
+            return;
+          }
+
+          const existingLabel = existing.label.trim();
+          const candidateLabel = option.label.trim();
+          if (!existingLabel && candidateLabel) {
+            optionsMap.set(normalised, option);
+          }
+        });
+        const options = Array.from(optionsMap.values()).sort((a, b) =>
+          a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }),
+        );
+        setTemplateOptions(options);
+      } catch (error) {
+        console.error('No se pudieron cargar las plantillas de certificados', error);
+        setTemplateOptions([]);
+      }
+    };
+
+    updateOptions();
+
+    let unsubscribe: (() => void) | undefined;
+    if (typeof api.subscribe === 'function') {
+      try {
+        unsubscribe = api.subscribe(() => {
+          updateOptions();
+        });
+      } catch (error) {
+        console.warn('No se pudo suscribir a los cambios de plantillas', error);
+      }
+    }
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        try {
+          unsubscribe();
+        } catch (error) {
+          console.warn('Error al cancelar la suscripción de plantillas', error);
+        }
+      }
+    };
+  }, []);
 
   const resetGenerationSteps = useCallback(() => {
     setGenerationSteps(createGenerationSteps());
@@ -497,11 +656,10 @@ export function CertificadosPage() {
     }
 
     const storedTemplateKey = parsedState?.selectedTemplateKey;
-    if (
-      storedTemplateKey &&
-      CERTIFICATE_TEMPLATE_OPTIONS.some((option) => option.key === storedTemplateKey)
-    ) {
-      setSelectedTemplateKey(storedTemplateKey);
+    if (typeof storedTemplateKey === 'string' && storedTemplateKey.trim().length > 0) {
+      pendingPersistedTemplateKeyRef.current = storedTemplateKey;
+    } else {
+      pendingPersistedTemplateKeyRef.current = null;
     }
 
     const manualFlag =
@@ -600,16 +758,76 @@ export function CertificadosPage() {
   }, [selectedSessionId, setTemplateSelectionManuallyChanged]);
 
   useEffect(() => {
+    const pendingKey = pendingPersistedTemplateKeyRef.current;
+    if (!pendingKey) {
+      return;
+    }
+
+    const directMatch = templateOptions.some((option) => option.key === pendingKey);
+    if (directMatch) {
+      setSelectedTemplateKey(pendingKey);
+      pendingPersistedTemplateKeyRef.current = null;
+      return;
+    }
+
+    const api = trainingTemplatesApiRef.current;
+    const normalisedPending = normaliseTemplateKey(pendingKey, api);
+    if (!normalisedPending) {
+      pendingPersistedTemplateKeyRef.current = null;
+      return;
+    }
+
+    const matchedOption = templateOptions.find(
+      (option) => normaliseTemplateKey(option.key, api) === normalisedPending,
+    );
+
+    if (matchedOption) {
+      setSelectedTemplateKey(matchedOption.key);
+      pendingPersistedTemplateKeyRef.current = null;
+      return;
+    }
+
+    if (templateOptions.length > 0) {
+      pendingPersistedTemplateKeyRef.current = null;
+    }
+  }, [templateOptions]);
+
+  useEffect(() => {
+    if (!selectedTemplateKey) {
+      return;
+    }
+    const hasCurrent = templateOptions.some((option) => option.key === selectedTemplateKey);
+    if (!hasCurrent && !pendingPersistedTemplateKeyRef.current) {
+      setSelectedTemplateKey('');
+    }
+  }, [selectedTemplateKey, templateOptions]);
+
+  useEffect(() => {
     if (templateSelectionManuallyChangedRef.current) {
       return;
     }
     const referenceProductName =
       selectedSession?.productName ?? rows[0]?.formacion ?? '';
-    const resolvedKey = referenceProductName
-      ? resolveCertificateTemplateKey(referenceProductName)
-      : DEFAULT_TEMPLATE_KEY;
-    setSelectedTemplateKey((current) => (current === resolvedKey ? current : resolvedKey));
-  }, [rows, selectedSession]);
+    if (!referenceProductName) {
+      return;
+    }
+
+    const api = trainingTemplatesApiRef.current;
+    const normalisedReference = normaliseTemplateKey(referenceProductName, api);
+    if (!normalisedReference) {
+      return;
+    }
+
+    const matchedOption = templateOptions.find(
+      (option) => normaliseTemplateKey(option.key, api) === normalisedReference,
+    );
+
+    if (matchedOption) {
+      setSelectedTemplateKey((current) =>
+        current === matchedOption.key ? current : matchedOption.key,
+      );
+    }
+  }, [rows, selectedSession, templateOptions]);
 
   useEffect(() => {
     setGenerationError(null);
@@ -743,6 +961,16 @@ export function CertificadosPage() {
       setGenerationStepStatus('generatePdf', 'working');
 
       const rowsOrder = editableRows.map((row) => row.id);
+      const selectedTemplateOption = templateOptions.find(
+        (option) => option.key === selectedTemplateKey,
+      );
+      const selectedTrainingTemplate = selectedTemplateOption?.template ?? null;
+      const templateVariantSource =
+        selectedTemplateKey ||
+        selectedSession?.productName ||
+        rows[0]?.formacion ||
+        '';
+      const templateVariant = resolveCertificateTemplateVariant(templateVariantSource);
 
       const updateResultsState = (result: GenerationResult) => {
         setGenerationResults((current) => {
@@ -780,8 +1008,21 @@ export function CertificadosPage() {
               deal,
               session: selectedSession,
             });
+            if (selectedTrainingTemplate) {
+              const templateTitle =
+                selectedTrainingTemplate.title || selectedTrainingTemplate.name;
+              if (templateTitle) {
+                certificateData.producto.name = templateTitle;
+              }
+              if (selectedTrainingTemplate.theory.length) {
+                certificateData.theoreticalItems = selectedTrainingTemplate.theory.slice();
+              }
+              if (selectedTrainingTemplate.practice.length) {
+                certificateData.practicalItems = selectedTrainingTemplate.practice.slice();
+              }
+            }
             const blob = await generateCertificatePDF(certificateData, {
-              templateKey: selectedTemplateKey,
+              templateVariant,
             });
             throwIfCancelled();
 
@@ -930,11 +1171,13 @@ export function CertificadosPage() {
       selectedSession,
       selectedSessionId,
       editableRows,
+      rows,
       selectSession,
       resetGenerationSteps,
       setGenerationStepStatus,
       ensureSessionPublicLink,
       selectedTemplateKey,
+      templateOptions,
     ],
   );
 
@@ -994,6 +1237,15 @@ export function CertificadosPage() {
     [sessions],
   );
 
+  const resolvedTemplateVariant = useMemo<CertificateTemplateVariant>(() => {
+    const source =
+      selectedTemplateKey ||
+      selectedSession?.productName ||
+      rows[0]?.formacion ||
+      '';
+    return resolveCertificateTemplateVariant(source);
+  }, [rows, selectedSession, selectedTemplateKey]);
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     loadDealAndSessions(dealIdInput);
@@ -1005,7 +1257,7 @@ export function CertificadosPage() {
   };
 
   const handleTemplateChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const value = event.target.value as CertificateTemplateKey;
+    const value = event.target.value;
     setTemplateSelectionManuallyChanged(true);
     setSelectedTemplateKey(value);
   };
@@ -1019,7 +1271,7 @@ export function CertificadosPage() {
     void (async () => {
       try {
         await pdfMakeReady;
-        const dataUrl = await generateCertificateTemplatePreviewDataUrl(selectedTemplateKey);
+        const dataUrl = await generateCertificateTemplatePreviewDataUrl(resolvedTemplateVariant);
         setTemplatePreviewUrl(dataUrl);
       } catch (error) {
         const message =
@@ -1084,7 +1336,7 @@ export function CertificadosPage() {
     setPublicLinkError(null);
     setPublicLinkLoading(false);
 
-    setSelectedTemplateKey(DEFAULT_TEMPLATE_KEY);
+    setSelectedTemplateKey('');
     setTemplateSelectionManuallyChanged(false);
 
     setShowTemplatePreview(false);
@@ -1314,8 +1566,10 @@ export function CertificadosPage() {
                     onChange={handleTemplateChange}
                     size="sm"
                     className="certificate-template-controls__select"
+                    disabled={loadingStudents || templateOptions.length === 0}
                   >
-                    {CERTIFICATE_TEMPLATE_OPTIONS.map((templateOption) => (
+                    <option value="">Selecciona una plantilla</option>
+                    {templateOptions.map((templateOption) => (
                       <option key={templateOption.key} value={templateOption.key}>
                         {templateOption.label}
                       </option>
