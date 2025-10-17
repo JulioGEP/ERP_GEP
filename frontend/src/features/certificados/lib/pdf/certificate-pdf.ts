@@ -30,6 +30,8 @@ import {
   const BACKGROUND_HORIZONTAL_SHIFT = -10;
   const LEFT_SIDEBAR_SCALE_MULTIPLIER = 1.3;
   const LEFT_SIDEBAR_TEXT_GAP = 3;
+  const LEFT_SIDEBAR_VERTICAL_SHIFT_RATIO = 0.2;
+  const LEFT_SIDEBAR_ADDITIONAL_RIGHT_SHIFT = 5;
   const FOOTER_SCALE_MULTIPLIER = 0.95;
 
   const PAGE_DIMENSIONS = {
@@ -1196,8 +1198,11 @@ import {
 
         sidebarWidth *= LEFT_SIDEBAR_SCALE_MULTIPLIER;
         sidebarHeight *= LEFT_SIDEBAR_SCALE_MULTIPLIER;
-        const sidebarY = pageMargins[1] + (contentHeight - sidebarHeight) / 2;
-        const sidebarRightEdge = pageMargins[0] - LEFT_SIDEBAR_TEXT_GAP;
+        const sidebarY =
+          pageMargins[1] + (contentHeight - sidebarHeight) / 2 -
+          sidebarHeight * LEFT_SIDEBAR_VERTICAL_SHIFT_RATIO;
+        const sidebarRightEdge =
+          pageMargins[0] - LEFT_SIDEBAR_TEXT_GAP + LEFT_SIDEBAR_ADDITIONAL_RIGHT_SHIFT;
         const sidebarX = sidebarRightEdge - sidebarWidth;
 
         decorativeElements.push({
