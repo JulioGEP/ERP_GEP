@@ -19,16 +19,17 @@ import {
   const FONT_SIZE_ADJUSTMENT = 2;
   const LINE_HEIGHT_REDUCTION = 0.5;
   const MIN_LINE_HEIGHT = 0.7;
-  const PRACTICE_COLUMN_SHIFT_RATIO = 0.1;
+  const PRACTICE_COLUMN_SHIFT_RATIO = 0;
   const PRACTICE_COLUMN_SHIFT_MAX = 2;
   const THEORY_COLUMN_ADDITIONAL_RIGHT_MARGIN = 2;
   const TRAINING_CONTENT_MIN_WIDTH = 320;
   const TRAINING_CONTENT_MIN_COLUMN_WIDTH = 150;
   const TRAINING_CONTENT_COLUMN_GAP = 18;
-  const BACKGROUND_SCALE_MULTIPLIER = 3;
-  const BACKGROUND_HORIZONTAL_SHIFT = 10;
+  const PRACTICE_BULLET_LEFT_OFFSET = 20;
+  const BACKGROUND_VERTICAL_BLEED = 1;
+  const BACKGROUND_HORIZONTAL_SHIFT = -10;
   const LEFT_SIDEBAR_SCALE_MULTIPLIER = 1.3;
-  const LEFT_SIDEBAR_TEXT_GAP = 15;
+  const LEFT_SIDEBAR_TEXT_GAP = 3;
   const FOOTER_SCALE_MULTIPLIER = 0.95;
 
   const PAGE_DIMENSIONS = {
@@ -399,7 +400,7 @@ import {
     const theoryItems = Array.isArray(details.theory) ? details.theory : [];
     const practiceItems = Array.isArray(details.practice) ? details.practice : [];
     const columns = [];
-    const columnGap =
+    const baseColumnGap =
       typeof options.columnGap === 'number' && options.columnGap >= 0
         ? options.columnGap
         : TRAINING_CONTENT_COLUMN_GAP;
@@ -421,12 +422,30 @@ import {
     }
 
     if (practiceItems.length) {
+      const practiceListBody = practiceItems.map((item) => [
+        {
+          text: '\u2022',
+          style: 'listItem',
+          alignment: 'right',
+          margin: [0, 0, 6, 4]
+        },
+        {
+          text: `${item}\n`,
+          style: 'listItem',
+          margin: [0, 0, 0, 4]
+        }
+      ]);
+
       columns.push({
         stack: [
           { text: 'Parte práctica', style: 'sectionHeading' },
           {
-            ul: practiceItems.map((item) => ({ text: item, style: 'listItem' })),
-            margin: [0, 2, 0, 0]
+            table: {
+              widths: [PRACTICE_BULLET_LEFT_OFFSET, '*'],
+              body: practiceListBody
+            },
+            layout: 'noBorders',
+            margin: [-PRACTICE_BULLET_LEFT_OFFSET, 2, 0, 0]
           }
         ],
         margin: [0, 0, 0, 0],
@@ -437,6 +456,13 @@ import {
     if (!columns.length) {
       return [];
     }
+
+    const hasPracticeColumn = columns.some((column) => column.isPractice);
+    const hasNonPracticeColumn = columns.some((column) => !column.isPractice);
+    const effectiveColumnGap =
+      hasPracticeColumn && hasNonPracticeColumn
+        ? Math.max(baseColumnGap, PRACTICE_BULLET_LEFT_OFFSET + 2)
+        : baseColumnGap;
 
     const totalAvailableWidth =
       typeof options.totalAvailableWidth === 'number' && options.totalAvailableWidth > 0
@@ -457,7 +483,7 @@ import {
     }
 
     const minimumBoundingWidth = (() => {
-      const gapWidth = columnGap * Math.max(columns.length - 1, 0);
+      const gapWidth = effectiveColumnGap * Math.max(columns.length - 1, 0);
       const requiredWidthForColumns =
         columns.length * TRAINING_CONTENT_MIN_COLUMN_WIDTH + gapWidth;
       const minWidthConstraint =
@@ -471,7 +497,7 @@ import {
     })();
 
     const effectiveBoundingWidth = Math.max(boundingWidth, minimumBoundingWidth);
-    const totalGap = columnGap * Math.max(columns.length - 1, 0);
+    const totalGap = effectiveColumnGap * Math.max(columns.length - 1, 0);
     const rawColumnWidth =
       columns.length > 0
         ? (effectiveBoundingWidth - totalGap) / columns.length
@@ -487,7 +513,7 @@ import {
       columns.length > 1
         ? Math.min(
             practiceColumnShift,
-            columnGap * 0.5,
+            effectiveColumnGap * 0.5,
             effectiveColumnWidth * 0.1,
             PRACTICE_COLUMN_SHIFT_MAX
           )
@@ -515,7 +541,7 @@ import {
             [
               {
                 columns: sizedColumns,
-                columnGap,
+                columnGap: effectiveColumnGap,
                 margin: [0, 0, 0, 0]
               }
             ]
@@ -842,7 +868,7 @@ import {
         margin: [0, 0, 0, 6]
       },
       trainingName: {
-        fontSize: adjustFontSize(19),
+        fontSize: adjustFontSize(23),
         bold: true,
         color: PRODUCT_TITLE_COLOR,
         margin: [0, 0, 0, 0]
@@ -1111,36 +1137,29 @@ import {
     const decorativeElements: Array<Record<string, unknown>> = [];
 
     if (rightColumnWidth > 0 && backgroundImage) {
+      const targetTop = pageMargins[1] - BACKGROUND_VERTICAL_BLEED;
+      const targetHeight = contentHeight + BACKGROUND_VERTICAL_BLEED * 2;
+      const targetCenterX = rightColumnX + rightColumnWidth / 2;
+      const targetCenterY = targetTop + targetHeight / 2;
+
       let backgroundWidth = rightColumnWidth;
-      let backgroundHeight = contentHeight;
-      let backgroundX = rightColumnX;
-      let backgroundY = pageMargins[1];
+      let backgroundHeight = targetHeight;
 
       if (
         backgroundImageDimensions &&
         backgroundImageDimensions.width > 0 &&
         backgroundImageDimensions.height > 0
       ) {
-        const scaleToWidth = backgroundWidth / backgroundImageDimensions.width;
-        const scaledHeight = backgroundImageDimensions.height * scaleToWidth;
+        const widthScale = rightColumnWidth / backgroundImageDimensions.width;
+        const heightScale = targetHeight / backgroundImageDimensions.height;
+        const scale = Math.max(widthScale, heightScale);
 
-        if (scaledHeight < contentHeight) {
-          const scaleToHeight = contentHeight / backgroundImageDimensions.height;
-          backgroundWidth = backgroundImageDimensions.width * scaleToHeight;
-          backgroundHeight = contentHeight;
-          backgroundX = rightColumnX + (rightColumnWidth - backgroundWidth) / 2;
-        } else {
-          backgroundHeight = scaledHeight;
-          backgroundY = pageMargins[1] - (scaledHeight - contentHeight) / 2;
-        }
+        backgroundWidth = backgroundImageDimensions.width * scale;
+        backgroundHeight = backgroundImageDimensions.height * scale;
       }
 
-      const backgroundCenterX = backgroundX + backgroundWidth / 2;
-      const backgroundCenterY = backgroundY + backgroundHeight / 2;
-      backgroundWidth *= BACKGROUND_SCALE_MULTIPLIER;
-      backgroundHeight *= BACKGROUND_SCALE_MULTIPLIER;
-      backgroundX = backgroundCenterX - backgroundWidth / 2 + BACKGROUND_HORIZONTAL_SHIFT;
-      backgroundY = backgroundCenterY - backgroundHeight / 2;
+      const backgroundX = targetCenterX - backgroundWidth / 2 + BACKGROUND_HORIZONTAL_SHIFT;
+      const backgroundY = targetCenterY - backgroundHeight / 2;
 
       decorativeElements.push({
         image: backgroundImage,
@@ -1156,7 +1175,6 @@ import {
       if (maxSidebarWidth > 0) {
         let sidebarWidth = maxSidebarWidth;
         let sidebarHeight = contentHeight;
-        let sidebarY = pageMargins[1];
 
         if (
           leftSidebarDimensions &&
@@ -1171,16 +1189,14 @@ import {
             const heightScale = desiredHeight / leftSidebarDimensions.height;
             sidebarWidth = leftSidebarDimensions.width * heightScale;
             sidebarHeight = desiredHeight;
-            sidebarY = pageMargins[1] + contentHeight - desiredHeight;
           } else {
             sidebarHeight = scaledHeight;
           }
         }
 
-        const sidebarCenterY = sidebarY + sidebarHeight / 2;
         sidebarWidth *= LEFT_SIDEBAR_SCALE_MULTIPLIER;
         sidebarHeight *= LEFT_SIDEBAR_SCALE_MULTIPLIER;
-        sidebarY = sidebarCenterY - sidebarHeight / 2;
+        const sidebarY = pageMargins[1] + (contentHeight - sidebarHeight) / 2;
         const sidebarRightEdge = pageMargins[0] - LEFT_SIDEBAR_TEXT_GAP;
         const sidebarX = sidebarRightEdge - sidebarWidth;
 
@@ -1194,8 +1210,8 @@ import {
       }
     }
 
-    if (footerImage && totalContentWidth > 0) {
-      const footerWidth = totalContentWidth;
+    if (footerImage && rightColumnWidth > 0) {
+      const footerWidth = rightColumnWidth;
       let footerHeight = 100;
 
       if (footerImageDimensions && footerImageDimensions.width > 0) {
@@ -1205,8 +1221,7 @@ import {
 
       const scaledFooterWidth = footerWidth * FOOTER_SCALE_MULTIPLIER;
       const scaledFooterHeight = footerHeight * FOOTER_SCALE_MULTIPLIER;
-      const footerX =
-        pageMargins[0] + (totalContentWidth - scaledFooterWidth) / 2;
+      const footerX = rightColumnX;
       const footerY = pageMargins[1] + contentHeight - scaledFooterHeight;
 
       decorativeElements.push({
