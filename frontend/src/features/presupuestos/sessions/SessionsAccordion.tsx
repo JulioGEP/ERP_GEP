@@ -2096,7 +2096,7 @@ export function SessionsAccordion({
   );
 
   const handleSaveSession = useCallback(
-    (sessionId: string) => runSave(sessionId),
+    (sessionId: string, options?: { notifyOnSuccess?: boolean }) => runSave(sessionId, options),
     [runSave],
   );
 
@@ -2682,7 +2682,7 @@ export function SessionsAccordion({
                   allForms={forms}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
                   onOpenMap={handleOpenMap}
-                  onSave={() => handleSaveSession(activeSession.sessionId)}
+                  onSave={(options) => handleSaveSession(activeSession.sessionId, options)}
                   dealId={dealId}
                   dealSede={normalizedDealSede}
                   onNotify={onNotify}
@@ -2726,7 +2726,7 @@ interface SessionEditorProps {
   allForms: Record<string, SessionFormState>;
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
   onOpenMap: (address: string) => void;
-  onSave: () => Promise<boolean> | boolean;
+  onSave: (options?: { notifyOnSuccess?: boolean }) => Promise<boolean> | boolean;
   dealId: string;
   dealSede: string | null;
   onNotify?: (toast: ToastParams) => void;
@@ -2890,14 +2890,22 @@ function SessionEditor({
   useEffect(() => {
     if (isInCompany) {
       if (form.sala_id !== null) {
+        const hadDirtyFields = status.dirty;
         onChange((current) => ({ ...current, sala_id: null }));
+        if (!hadDirtyFields && !status.saving) {
+          void Promise.resolve(onSave({ notifyOnSuccess: false })).catch(() => undefined);
+        }
       }
       return;
     }
     if (!form.sala_id) return;
     if (rooms.some((room) => room.sala_id === form.sala_id)) return;
+    const hadDirtyFields = status.dirty;
     onChange((current) => ({ ...current, sala_id: null }));
-  }, [form.sala_id, isInCompany, onChange, rooms]);
+    if (!hadDirtyFields && !status.saving) {
+      void Promise.resolve(onSave({ notifyOnSuccess: false })).catch(() => undefined);
+    }
+  }, [form.sala_id, isInCompany, onChange, onSave, rooms, status.dirty, status.saving]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
