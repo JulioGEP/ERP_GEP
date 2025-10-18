@@ -30,6 +30,76 @@ function sanitizeName(raw: string): string {
     .trim();
 }
 
+function toNonEmptyString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const str = typeof value === "string" ? value : String(value);
+  const trimmed = str.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function resolveOrganizationNameFromDeal(deal: any): string | null {
+  if (!deal) return null;
+  const candidates: unknown[] = [
+    deal?.organization?.name,
+    deal?.organization?.nombre,
+    deal?.organization_name,
+    deal?.organizationName,
+    deal?.org_name,
+    typeof deal?.org_id === "object" ? deal?.org_id?.name : null,
+  ];
+
+  for (const candidate of candidates) {
+    const value = toNonEmptyString(candidate);
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function resolveOrganizationIdFromDeal(deal: any): string | null {
+  if (!deal) return null;
+  const candidates: unknown[] = [
+    deal?.organization?.org_id,
+    deal?.organization?.orgId,
+    deal?.organization?.id,
+    deal?.org_id,
+    deal?.organization_id,
+    typeof deal?.org_id === "object" ? deal?.org_id?.value ?? deal?.org_id?.id ?? null : null,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized =
+      candidate && typeof candidate === "object" && candidate !== null && !Array.isArray(candidate)
+        ? toNonEmptyString(
+            (candidate as any).value ??
+              (candidate as any).id ??
+              (candidate as any).org_id ??
+              (candidate as any).orgId ??
+              null
+          )
+        : toNonEmptyString(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
+function buildOrganizationFolderName(params: { deal?: any; organizationName?: string | null }): string {
+  const explicitName = toNonEmptyString(params.organizationName);
+  const resolvedName = explicitName ?? resolveOrganizationNameFromDeal(params.deal) ?? "Sin organización";
+  const sanitizedName = sanitizeName(resolvedName) || "Sin organización";
+
+  const organizationId = resolveOrganizationIdFromDeal(params.deal);
+  const sanitizedId = organizationId ? sanitizeName(organizationId) : null;
+
+  if (sanitizedId && !sanitizedName.startsWith(sanitizedId)) {
+    const combined = `${sanitizedId} - ${sanitizedName}`;
+    return sanitizeName(combined) || combined;
+  }
+
+  return sanitizedName;
+}
+
 function isHttpUrl(value?: unknown): value is string {
   if (typeof value !== "string") return false;
   return /^https?:\/\//i.test(value);
@@ -703,9 +773,12 @@ export async function syncDealDocumentsToGoogleDrive(params: {
       driveId,
     });
 
-    const organizationName = sanitizeName(params.organizationName || "Sin organización");
+    const organizationFolderName = buildOrganizationFolderName({
+      deal: params.deal,
+      organizationName: params.organizationName,
+    });
     const organizationFolderId = await ensureFolder({
-      name: organizationName || "Sin organización",
+      name: organizationFolderName,
       parentId: baseFolderId,
       driveId,
     });
@@ -815,10 +888,10 @@ export async function deleteDealFolderFromGoogleDrive(params: {
       return;
     }
 
-    const organizationDisplayName = params.organizationName?.trim()
-      ? params.organizationName
-      : "Sin organización";
-    const organizationFolderName = sanitizeName(organizationDisplayName) || "Sin organización";
+    const organizationFolderName = buildOrganizationFolderName({
+      deal: params.deal,
+      organizationName: params.organizationName,
+    });
     const organizationFolderId = await findFolder({
       name: organizationFolderName,
       parentId: baseFolderId,
@@ -827,7 +900,7 @@ export async function deleteDealFolderFromGoogleDrive(params: {
     if (!organizationFolderId) {
       console.warn(
         "[google-drive-sync] Carpeta de organización no encontrada, no se borra carpeta del deal",
-        { organizationName: organizationDisplayName }
+        { organizationName: organizationFolderName }
       );
       return;
     }
@@ -861,7 +934,7 @@ export async function deleteDealFolderFromGoogleDrive(params: {
 
     console.log("[google-drive-sync] Carpeta del deal eliminada en Drive", {
       dealId: params.deal?.deal_id ?? params.deal?.id,
-      organizationName: organizationDisplayName,
+      organizationName: organizationFolderName,
     });
   } catch (err) {
     console.error("[google-drive-sync] Error inesperado eliminando carpeta del deal", err);
@@ -895,8 +968,10 @@ export async function uploadDealDocumentToGoogleDrive(params: {
     driveId,
   });
 
-  const organizationDisplayName = sanitizeName(params.organizationName || "Sin organización") ||
-    "Sin organización";
+  const organizationDisplayName = buildOrganizationFolderName({
+    deal: params.deal,
+    organizationName: params.organizationName,
+  });
   const organizationFolderId = await ensureFolder({
     name: organizationDisplayName,
     parentId: baseFolderId,
@@ -971,8 +1046,10 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
     driveId,
   });
 
-  const organizationDisplayName =
-    sanitizeName(params.organizationName || "Sin organización") || "Sin organización";
+  const organizationDisplayName = buildOrganizationFolderName({
+    deal: params.deal,
+    organizationName: params.organizationName,
+  });
   const organizationFolderId = await ensureFolder({
     name: organizationDisplayName,
     parentId: baseFolderId,
@@ -1010,6 +1087,10 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
       sessionFolderId,
       error: permissionError instanceof Error ? permissionError.message : String(permissionError),
     });
+  }
+
+  if (!sessionFolderLink) {
+    sessionFolderLink = `https://drive.google.com/drive/folders/${sessionFolderId}`;
   }
 
   const safeName = sanitizeName(params.fileName || "documento") || "documento";
@@ -1152,9 +1233,10 @@ export async function deleteSessionDocumentFromGoogleDrive(params: {
     return { fileDeleted: false, sessionFolderDeleted: false };
   }
 
-  const organizationDisplayName =
-    sanitizeName(params.organizationName || "Sin organización") ||
-    "Sin organización";
+  const organizationDisplayName = buildOrganizationFolderName({
+    deal: params.deal,
+    organizationName: params.organizationName,
+  });
   const organizationFolderId = await findFolder({
     name: organizationDisplayName,
     parentId: baseFolderId,
