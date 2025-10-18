@@ -1138,6 +1138,9 @@ export function CertificadosPage() {
 
             return { id: row.id, label: studentLabel, status: 'success', url: resolvedUrl };
           } catch (error: unknown) {
+            if (error instanceof GenerationCancelledError) {
+              throw error;
+            }
             const stageError: ProcessRowError = {
               stage: currentStage,
               error,
@@ -1215,6 +1218,9 @@ export function CertificadosPage() {
           throwIfCancelled();
           await ensureSessionPublicLink({ forceCreate: true });
         } catch (reloadError) {
+          if (reloadError instanceof GenerationCancelledError) {
+            throw reloadError;
+          }
           suppressCertifiedWarningRef.current = false;
           setGenerationStepStatus('refreshStudents', 'error');
           const reloadErrorMessage = resolveGenerationError(reloadError);
