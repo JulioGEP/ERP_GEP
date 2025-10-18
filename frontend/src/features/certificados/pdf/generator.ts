@@ -583,15 +583,15 @@ function buildCertificateDocDefinition(
 
   const styles: StyleDictionary = {
     bodyText: { fontSize: 8.5, lineHeight: 1.3 },
-    studentInfoText: { fontSize: 8.5, lineHeight: 0.91 },
+    studentInfoText: { fontSize: 10, lineHeight: 1.1 },
     certificateTitle: {
-      fontSize: 28,
+      fontSize: 34,
       bold: true,
-      color: '#000000',
+      color: '#e4032d',
       lineHeight: 1.1,
       characterSpacing: 0.5,
     },
-    courseName: { fontSize: 18, bold: true, margin: [0, 0, 0, 18], color: '#e8474d' },
+    courseName: { fontSize: 18, bold: true, margin: [0, 0, 0, 18], color: '#e4032d' },
     tableHeader: { fontSize: 9, bold: true, margin: [0, 0, 0, 8] },
     tableList: { fontSize: 7.5, lineHeight: 1.125 },
   };
