@@ -47,6 +47,12 @@ type SessionFileRecord = {
   drive_web_view_link: string | null;
 };
 
+function normalizeDriveUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
 function parsePath(path: string): ParsedPath {
   const normalized = String(path || '');
   const trimmed = normalized.replace(/^\/?\.netlify\/functions\//, '/');
@@ -130,15 +136,21 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'sessionId inválido (UUID)', 400);
       }
 
-      const { error } = await ensureSessionContext(prisma, dealId, sessionId);
-      if (error) return error;
+      const context = await ensureSessionContext(prisma, dealId, sessionId);
+      if (context.error) return context.error;
+
+      const session = context.session!;
+      const sessionDriveUrl = normalizeDriveUrl(session?.drive_url ?? null);
 
       const files = await prisma.session_files.findMany({
         where: { deal_id: dealId, sesion_id: sessionId },
         orderBy: { added_at: 'desc' },
       });
 
-      return successResponse({ documents: files.map(mapSessionFile) });
+      return successResponse({
+        documents: files.map(mapSessionFile),
+        drive_url: sessionDriveUrl,
+      });
     }
 
     if (method === 'POST') {
@@ -194,6 +206,7 @@ export const handler = async (event: any) => {
       const context = await ensureSessionContext(prisma, dealId, sessionId);
       if (context.error) return context.error;
       const session = context.session!;
+      let sessionDriveUrl = normalizeDriveUrl(session.drive_url ?? null);
       const deal = session.deal;
       if (!deal) {
         return errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
@@ -280,6 +293,26 @@ export const handler = async (event: any) => {
           return errorResponse('UPLOAD_ERROR', message, 502);
         }
 
+        const folderLink = normalizeDriveUrl(uploadResult.sessionFolderWebViewLink ?? null);
+        if (folderLink && folderLink !== sessionDriveUrl) {
+          try {
+            await prisma.sessions.update({
+              where: { id: sessionId },
+              data: { drive_url: folderLink },
+            });
+            session.drive_url = folderLink;
+            sessionDriveUrl = folderLink;
+          } catch (err) {
+            console.warn(
+              '[SessionDocuments] No se pudo actualizar drive_url de la sesión',
+              {
+                sessionId,
+                error: err instanceof Error ? err.message : String(err),
+              },
+            );
+          }
+        }
+
         const id = randomUUID();
         const created = await prisma.session_files.create({
           data: {
@@ -297,7 +330,10 @@ export const handler = async (event: any) => {
         createdRecords.push(mapSessionFile(created));
       }
 
-      return successResponse({ documents: createdRecords }, 201);
+      return successResponse({
+        documents: createdRecords,
+        drive_url: sessionDriveUrl,
+      }, 201);
     }
 
     if (method === 'PATCH' && docId) {

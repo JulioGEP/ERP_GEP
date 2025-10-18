@@ -80,6 +80,12 @@ type ToastParams = {
   message: string;
 };
 
+function normalizeDriveUrlValue(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
 type DeleteDialogState = {
   sessionId: string;
   productId: string;
@@ -901,10 +907,12 @@ function SessionDocumentsAccordionItem({
   sessionId,
   dealId,
   onNotify,
+  initialDriveUrl,
 }: {
   sessionId: string;
   dealId: string;
   onNotify?: (toast: ToastParams) => void;
+  initialDriveUrl?: string | null;
 }) {
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -914,6 +922,7 @@ function SessionDocumentsAccordionItem({
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [driveUrl, setDriveUrl] = useState<string | null>(normalizeDriveUrlValue(initialDriveUrl));
 
   const documentsQuery = useQuery({
     queryKey: ['session-documents', dealId, sessionId],
@@ -922,6 +931,17 @@ function SessionDocumentsAccordionItem({
     staleTime: 0,
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    setDriveUrl(normalizeDriveUrlValue(initialDriveUrl));
+  }, [initialDriveUrl]);
+
+  useEffect(() => {
+    const data = documentsQuery.data;
+    if (!data) return;
+    const normalized = normalizeDriveUrlValue(data.driveUrl);
+    setDriveUrl((current) => (current === normalized ? current : normalized));
+  }, [documentsQuery.data]);
 
   const uploadMutation = useMutation({
     mutationFn: (input: { files: File[]; shareWithTrainer: boolean }) =>
@@ -954,7 +974,7 @@ function SessionDocumentsAccordionItem({
     }
   }, [dealId, sessionId]);
 
-  const documents = documentsQuery.data ?? [];
+  const documents = documentsQuery.data?.documents ?? [];
   const documentsLoading = documentsQuery.isLoading;
   const documentsFetching = documentsQuery.isFetching;
   const queryError = documentsQuery.error
@@ -1045,7 +1065,9 @@ function SessionDocumentsAccordionItem({
     if (!files.length) return;
     setDocumentError(null);
     try {
-      await uploadMutation.mutateAsync({ files, shareWithTrainer: false });
+      const result = await uploadMutation.mutateAsync({ files, shareWithTrainer: false });
+      const normalizedLink = normalizeDriveUrlValue(result?.driveUrl ?? null);
+      setDriveUrl(normalizedLink);
       onNotify?.({
         variant: 'success',
         message:
@@ -1211,6 +1233,16 @@ function SessionDocumentsAccordionItem({
             disabled={uploadPending}
           >
             {uploadPending ? <Spinner animation="border" size="sm" role="status" /> : 'Subir documentos'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline-secondary"
+            href={driveUrl ?? undefined}
+            target="_blank"
+            rel="noreferrer noopener"
+            disabled={!driveUrl}
+          >
+            Carpeta Drive
           </Button>
         </div>
 
@@ -1487,6 +1519,7 @@ type SessionFormState = {
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
+  drive_url: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
 };
@@ -1635,6 +1668,7 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     sala_id: session.sala_id ?? null,
     direccion: session.direccion ?? '',
     estado: session.estado,
+    drive_url: session.drive_url ?? null,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
   };
@@ -3292,7 +3326,12 @@ function SessionEditor({
         </div>
       </div>
 
-      <SessionCommentsSection sessionId={form.id} dealId={dealId} onNotify={onNotify} />
+      <SessionCommentsSection
+        sessionId={form.id}
+        dealId={dealId}
+        onNotify={onNotify}
+        driveUrl={form.drive_url ?? null}
+      />
     </div>
   );
 }
@@ -3301,10 +3340,12 @@ function SessionCommentsSection({
   sessionId,
   dealId,
   onNotify,
+  driveUrl,
 }: {
   sessionId: string;
   dealId: string;
   onNotify?: (toast: ToastParams) => void;
+  driveUrl?: string | null;
 }) {
   const fallbackUser = 'erp_user';
   const userId =
@@ -3704,6 +3745,7 @@ function SessionCommentsSection({
           sessionId={sessionId}
           dealId={dealId}
           onNotify={onNotify}
+          initialDriveUrl={driveUrl ?? null}
         />
         <SessionStudentsAccordionItem
           dealId={dealId}
