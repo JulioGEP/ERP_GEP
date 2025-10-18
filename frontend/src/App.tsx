@@ -9,7 +9,7 @@ import {
   ToastContainer,
   NavDropdown,
 } from 'react-bootstrap';
-import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetTable } from './features/presupuestos/BudgetTable';
@@ -36,14 +36,18 @@ import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { CertificadosPage } from './features/certificados/CertificadosPage';
 
 const ACTIVE_VIEW_STORAGE_KEY = 'erp-gep-active-view';
+const DEFAULT_VIEW_KEY = 'Presupuestos';
 
 type NavView = {
   key: string;
   label: string;
-  path?: string;
+  path: string;
 };
 
-type NavItem = NavView & {
+type NavItem = {
+  key: string;
+  label: string;
+  path: string;
   children?: NavView[];
 };
 
@@ -52,21 +56,23 @@ const NAVIGATION_ITEMS: NavItem[] = [
   {
     key: 'Calendario',
     label: 'Calendario',
+    path: '/calendario/sesiones',
     children: [
-      { key: 'Calendario/Sesiones', label: 'Por sesiones' },
-      { key: 'Calendario/Formadores', label: 'Por formador' },
-      { key: 'Calendario/Unidades', label: 'Por unidad móvil' },
+      { key: 'Calendario/Sesiones', label: 'Por sesiones', path: '/calendario/sesiones' },
+      { key: 'Calendario/Formadores', label: 'Por formador', path: '/calendario/formadores' },
+      { key: 'Calendario/Unidades', label: 'Por unidad móvil', path: '/calendario/unidades' },
     ],
   },
   {
     key: 'Recursos',
     label: 'Recursos',
+    path: '/recursos/formadores',
     children: [
-      { key: 'Recursos/Formadores', label: 'Formadores / Bomberos' },
-      { key: 'Recursos/Unidades', label: 'Unidades Móviles' },
-      { key: 'Recursos/Salas', label: 'Salas' },
-      { key: 'Recursos/Templates', label: 'Templates Certificados' },
-      { key: 'Recursos/Productos', label: 'Productos' },
+      { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores' },
+      { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades' },
+      { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
+      { key: 'Recursos/Templates', label: 'Templates Certificados', path: '/recursos/templates' },
+      { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
     ],
   },
   { key: 'Certificados', label: 'Certificados', path: '/certificados' },
@@ -76,19 +82,58 @@ const VIEW_ITEMS: NavView[] = NAVIGATION_ITEMS.flatMap((item) =>
   item.children ? item.children : [item]
 );
 
-const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
-  (item) =>
-    item.key !== 'Presupuestos' &&
-    item.key !== 'Calendario/Sesiones' &&
-    item.key !== 'Calendario/Formadores' &&
-    item.key !== 'Calendario/Unidades' &&
-    item.key !== 'Recursos/Formadores' &&
-    item.key !== 'Recursos/Salas' &&
-    item.key !== 'Recursos/Unidades' &&
-    item.key !== 'Recursos/Templates' &&
-    item.key !== 'Recursos/Productos' &&
-    item.key !== 'Certificados'
-);
+const VIEW_KEY_TO_PATH = new Map(VIEW_ITEMS.map((view) => [view.key, view.path]));
+const SORTED_VIEWS_BY_PATH_LENGTH = VIEW_ITEMS.filter((view) => view.path !== '/')
+  .slice()
+  .sort((a, b) => b.path.length - a.path.length);
+
+function normalizePathname(pathname: string): string {
+  if (!pathname || pathname === '/') {
+    return '/';
+  }
+  const trimmed = pathname.replace(/\/+$/, '');
+  return trimmed.length ? trimmed : '/';
+}
+
+function getActiveViewKeyFromPath(pathname: string): string {
+  const normalized = normalizePathname(pathname);
+  for (const view of SORTED_VIEWS_BY_PATH_LENGTH) {
+    if (normalized.startsWith(view.path)) {
+      return view.key;
+    }
+  }
+  return DEFAULT_VIEW_KEY;
+}
+
+function normalizeStoredViewKey(value: string | null): string {
+  if (!value) {
+    return DEFAULT_VIEW_KEY;
+  }
+  const trimmed = value.trim();
+  if (!trimmed.length) {
+    return DEFAULT_VIEW_KEY;
+  }
+  if (trimmed === 'Calendario') {
+    return 'Calendario/Sesiones';
+  }
+  if (VIEW_KEY_TO_PATH.has(trimmed)) {
+    return trimmed;
+  }
+  return DEFAULT_VIEW_KEY;
+}
+
+function readStoredViewKey(): string {
+  if (typeof window === 'undefined') {
+    return DEFAULT_VIEW_KEY;
+  }
+  try {
+    const stored = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
+    return normalizeStoredViewKey(stored);
+  } catch (error) {
+    console.warn('No se pudo leer la vista activa almacenada', error);
+    return DEFAULT_VIEW_KEY;
+  }
+}
 
 type ToastMessage = {
   id: string;
@@ -97,58 +142,24 @@ type ToastMessage = {
 };
 
 export default function App() {
-  const isPublicStudentsPage =
-    typeof window !== 'undefined' && /\/public\/sesiones\/[^/]+\/alumnos/i.test(window.location.pathname);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const initialStoredViewRef = useRef<string>(readStoredViewKey());
+  const skipInitialStoreRef = useRef(true);
+
+  const isPublicStudentsPage = useMemo(
+    () => /^\/public\/sesiones\/[^/]+\/alumnos/i.test(location.pathname),
+    [location.pathname]
+  );
 
   if (isPublicStudentsPage) {
     return <PublicSessionStudentsPage />;
   }
 
-  const location = useLocation();
-  const navigate = useNavigate();
-
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
-  const [activeView, setActiveViewState] = useState(() => {
-    if (typeof window === 'undefined') {
-      return 'Presupuestos';
-    }
-
-    const { pathname } = window.location;
-    if (pathname.startsWith('/certificados')) {
-      return 'Certificados';
-    }
-
-    try {
-      const storedView = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
-      if (storedView) {
-        const normalizedView =
-          storedView === 'Calendario' ? 'Calendario/Sesiones' : storedView;
-        if (VIEW_ITEMS.some((item) => item.key === normalizedView)) {
-          if (normalizedView !== storedView) {
-            window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, normalizedView);
-          }
-          return normalizedView;
-        }
-      }
-    } catch (error) {
-      console.warn('No se pudo leer la vista activa almacenada', error);
-    }
-
-    return 'Presupuestos';
-  });
-
-  const setActiveView = useCallback((view: string) => {
-    setActiveViewState(view);
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
-      } catch (error) {
-        console.warn('No se pudo guardar la vista activa', error);
-      }
-    }
-  }, []);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [productComment, setProductComment] = useState<ProductCommentPayload | null>(null);
 
@@ -160,6 +171,45 @@ export default function App() {
     }
   }, [selectedBudgetId]);
 
+  useEffect(() => {
+    const storedKey = initialStoredViewRef.current;
+    const storedPath = VIEW_KEY_TO_PATH.get(storedKey);
+    const normalizedCurrentPath = normalizePathname(location.pathname);
+    if (
+      normalizedCurrentPath === '/' &&
+      storedPath &&
+      storedPath !== '/' &&
+      storedPath !== normalizedCurrentPath
+    ) {
+      navigate(storedPath, { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
+  const activeViewKey = useMemo(
+    () => getActiveViewKeyFromPath(location.pathname),
+    [location.pathname]
+  );
+
+  useEffect(() => {
+    const normalizedCurrentPath = normalizePathname(location.pathname);
+    if (
+      skipInitialStoreRef.current &&
+      normalizedCurrentPath === '/' &&
+      initialStoredViewRef.current !== DEFAULT_VIEW_KEY
+    ) {
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, activeViewKey);
+      } catch (error) {
+        console.warn('No se pudo guardar la vista activa', error);
+      }
+    }
+    initialStoredViewRef.current = activeViewKey;
+    skipInitialStoreRef.current = false;
+  }, [activeViewKey, location.pathname]);
+
   const budgetsQuery = useQuery({
     queryKey: ['deals', 'noSessions'],
     queryFn: fetchDealsWithoutSessions,
@@ -167,7 +217,7 @@ export default function App() {
     refetchOnReconnect: false,
     refetchInterval: false,
     retry: 0,
-    staleTime: Infinity
+    staleTime: Infinity,
   });
 
   const pushToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
@@ -189,7 +239,6 @@ export default function App() {
 
       if (deal) {
         setSelectedBudgetSummary(deal as DealSummary);
-        // Acepta dealId o deal_id y fuerza string|null
         setSelectedBudgetId(
           ((deal as any).dealId ?? (deal as any).deal_id ?? null) as string | null,
         );
@@ -208,44 +257,9 @@ export default function App() {
       const message =
         apiError?.message ?? 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
       pushToast({ variant: 'danger', message: `No se pudo importar. [${code}] ${message}` });
-    }
+    },
   });
 
-  const previousPathRef = useRef(location.pathname);
-
-  useEffect(() => {
-    const previousPath = previousPathRef.current;
-    const isCertificatesPath = location.pathname.startsWith('/certificados');
-    const wasCertificatesPath = previousPath.startsWith('/certificados');
-
-    if (isCertificatesPath && !wasCertificatesPath) {
-      if (activeView !== 'Certificados') {
-        setActiveView('Certificados');
-      }
-    } else if (wasCertificatesPath && !isCertificatesPath) {
-      if (activeView === 'Certificados') {
-        setActiveView('Presupuestos');
-      }
-    }
-
-    previousPathRef.current = location.pathname;
-  }, [activeView, location.pathname, setActiveView]);
-
-  const isBudgetsView = activeView === 'Presupuestos';
-  const isCalendarSessionsView = activeView === 'Calendario/Sesiones';
-  const isCalendarTrainersView = activeView === 'Calendario/Formadores';
-  const isCalendarUnitsView = activeView === 'Calendario/Unidades';
-  const isTrainersView = activeView === 'Recursos/Formadores';
-  const isRoomsView = activeView === 'Recursos/Salas';
-  const isMobileUnitsView = activeView === 'Recursos/Unidades';
-  const isCertificateTemplatesView = activeView === 'Recursos/Templates';
-  const isProductsView = activeView === 'Recursos/Productos';
-  const isCertificatesView = location.pathname.startsWith('/certificados');
-  const activeViewLabel = useMemo(
-    () => VIEW_ITEMS.find((item) => item.key === activeView)?.label ?? activeView,
-    [activeView]
-  );
-  const placeholderViews = PLACEHOLDER_VIEWS;
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
 
@@ -274,7 +288,6 @@ export default function App() {
 
   const handleSelectBudget = useCallback((budget: DealSummary) => {
     setSelectedBudgetSummary(budget);
-    // 👇 asegura string | null
     setSelectedBudgetId(budget.dealId ?? null);
   }, []);
 
@@ -288,7 +301,7 @@ export default function App() {
 
       await deleteDealMutation.mutateAsync(id);
     },
-    [deleteDealMutation]
+    [deleteDealMutation],
   );
 
   const handleCloseDetail = useCallback(() => {
@@ -363,6 +376,17 @@ export default function App() {
     [pushToast],
   );
 
+  const handleNavigate = useCallback(
+    (path: string) => {
+      const normalizedTarget = normalizePathname(path);
+      const normalizedCurrent = normalizePathname(location.pathname);
+      if (normalizedTarget !== normalizedCurrent) {
+        navigate(path);
+      }
+    },
+    [location.pathname, navigate],
+  );
+
   return (
     <div className="min-vh-100 d-flex flex-column">
       <Navbar bg="white" expand="lg" className="shadow-sm py-3">
@@ -383,20 +407,15 @@ export default function App() {
                   key={item.key}
                   title={<span className="text-uppercase">{item.label}</span>}
                   id={`nav-${item.key}`}
-                  active={
-                    !isCertificatesView && item.children.some((child) => child.key === activeView)
-                  }
+                  active={item.children.some((child) => child.key === activeViewKey)}
                 >
                   {item.children.map((child) => (
                     <NavDropdown.Item
                       key={child.key}
-                      active={!isCertificatesView && activeView === child.key}
+                      active={activeViewKey === child.key}
                       onClick={(event) => {
                         event.preventDefault();
-                        if (location.pathname !== '/') {
-                          navigate('/');
-                        }
-                        setActiveView(child.key);
+                        handleNavigate(child.path);
                       }}
                     >
                       {child.label}
@@ -406,24 +425,10 @@ export default function App() {
               ) : (
                 <Nav.Item key={item.key}>
                   <Nav.Link
-                    active={
-                      item.path
-                        ? item.path === '/'
-                          ? !isCertificatesView && activeView === item.key
-                          : location.pathname.startsWith(item.path)
-                        : !isCertificatesView && activeView === item.key
-                    }
-                    onClick={() => {
-                      if (item.path) {
-                        setActiveView(item.key);
-                        navigate(item.path);
-                        return;
-                      }
-
-                      if (location.pathname !== '/') {
-                        navigate('/');
-                      }
-                      setActiveView(item.key);
+                    active={activeViewKey === item.key}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      handleNavigate(item.path);
                     }}
                     className="text-uppercase"
                   >
@@ -439,90 +444,82 @@ export default function App() {
       <main className="flex-grow-1 py-5">
         <Container fluid="xl">
           <Routes>
-            <Route path="/certificados" element={<CertificadosPage />} />
             <Route
-              path="*"
+              path="/"
               element={
-                isBudgetsView ? (
-                  <div className="d-grid gap-4">
-                    <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-                      <div>
-                        <h1 className="h3 fw-bold mb-1">Presupuestos</h1>
-                        <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
-                      </div>
-                      <div className="d-flex align-items-center gap-3">
-                        {(importMutation.isPending || isRefreshing) && (
-                          <Spinner animation="border" role="status" size="sm" />
-                        )}
-                        <Button size="lg" onClick={() => setShowImportModal(true)}>
-                          Importar presupuesto
-                        </Button>
-                      </div>
-                    </section>
-                    <BudgetTable
-                      budgets={budgets}
-                      isLoading={budgetsQuery.isLoading}
-                      isFetching={isRefreshing}
-                      error={budgetsQuery.error ?? null}
-                      onRetry={() => budgetsQuery.refetch()}
-                      onSelect={handleSelectBudget}
-                      onDelete={handleDeleteBudget}
-                    />
-                  </div>
-                ) : isCalendarSessionsView ? (
-                  <CalendarView
-                    key="calendar-sesiones"
-                    title="Calendario · Por sesiones"
-                    mode="sessions"
-                    onNotify={pushToast}
-                    onSessionOpen={handleOpenCalendarSession}
-                  />
-                ) : isCalendarTrainersView ? (
-                  <CalendarView
-                    key="calendar-formadores"
-                    title="Calendario · Por formador"
-                    mode="trainers"
-                    initialView="month"
-                    onNotify={pushToast}
-                    onSessionOpen={handleOpenCalendarSession}
-                  />
-                ) : isCalendarUnitsView ? (
-                  <CalendarView
-                    key="calendar-unidades"
-                    title="Calendario · Por unidad móvil"
-                    mode="units"
-                    initialView="month"
-                    onNotify={pushToast}
-                    onSessionOpen={handleOpenCalendarSession}
-                  />
-                ) : isTrainersView ? (
-                  <TrainersView onNotify={pushToast} />
-                ) : isRoomsView ? (
-                  <RoomsView onNotify={pushToast} />
-                ) : isMobileUnitsView ? (
-                  <MobileUnitsView onNotify={pushToast} />
-                ) : isCertificateTemplatesView ? (
-                  <CertificateTemplatesView onNotify={pushToast} />
-                ) : isProductsView ? (
-                  <ProductsView onNotify={pushToast} />
-                ) : (
-                  <div className="bg-white rounded-4 shadow-sm p-5 text-center text-muted">
-                    <h2 className="h4 fw-semibold mb-2">{activeViewLabel}</h2>
-                    <p className="mb-0">
-                      La sección {activeViewLabel} estará disponible próximamente. Mientras tanto, puedes seguir
-                      trabajando en la pestaña de Presupuestos.
-                    </p>
-                    <div className="d-flex justify-content-center gap-2 mt-4">
-                      {placeholderViews.map((view) => (
-                        <Button key={view.key} variant="outline-secondary" size="sm" disabled>
-                          {view.label}
-                        </Button>
-                      ))}
+                <div className="d-grid gap-4">
+                  <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                    <div>
+                      <h1 className="h3 fw-bold mb-1">Presupuestos</h1>
+                      <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
                     </div>
-                  </div>
-                )
+                    <div className="d-flex align-items-center gap-3">
+                      {(importMutation.isPending || isRefreshing) && (
+                        <Spinner animation="border" role="status" size="sm" />
+                      )}
+                      <Button size="lg" onClick={() => setShowImportModal(true)}>
+                        Importar presupuesto
+                      </Button>
+                    </div>
+                  </section>
+                  <BudgetTable
+                    budgets={budgets}
+                    isLoading={budgetsQuery.isLoading}
+                    isFetching={isRefreshing}
+                    error={budgetsQuery.error ?? null}
+                    onRetry={() => budgetsQuery.refetch()}
+                    onSelect={handleSelectBudget}
+                    onDelete={handleDeleteBudget}
+                  />
+                </div>
               }
             />
+            <Route path="/presupuestos" element={<Navigate to="/" replace />} />
+            <Route
+              path="/calendario/sesiones"
+              element={
+                <CalendarView
+                  key="calendar-sesiones"
+                  title="Calendario · Por sesiones"
+                  mode="sessions"
+                  onNotify={pushToast}
+                  onSessionOpen={handleOpenCalendarSession}
+                />
+              }
+            />
+            <Route
+              path="/calendario/formadores"
+              element={
+                <CalendarView
+                  key="calendar-formadores"
+                  title="Calendario · Por formador"
+                  mode="trainers"
+                  initialView="month"
+                  onNotify={pushToast}
+                  onSessionOpen={handleOpenCalendarSession}
+                />
+              }
+            />
+            <Route
+              path="/calendario/unidades"
+              element={
+                <CalendarView
+                  key="calendar-unidades"
+                  title="Calendario · Por unidad móvil"
+                  mode="units"
+                  initialView="month"
+                  onNotify={pushToast}
+                  onSessionOpen={handleOpenCalendarSession}
+                />
+              }
+            />
+            <Route path="/recursos/formadores" element={<TrainersView onNotify={pushToast} />} />
+            <Route path="/recursos/salas" element={<RoomsView onNotify={pushToast} />} />
+            <Route path="/recursos/unidades" element={<MobileUnitsView onNotify={pushToast} />} />
+            <Route path="/recursos/templates" element={<CertificateTemplatesView onNotify={pushToast} />} />
+            <Route path="/recursos/productos" element={<ProductsView onNotify={pushToast} />} />
+            <Route path="/certificados/*" element={<CertificadosPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Container>
       </main>
