@@ -21,6 +21,12 @@ const SalasPage = lazy(() => import('../pages/recursos/SalasPage'));
 const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/TemplatesCertificadosPage'));
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
+const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
+const InformesPreventivoPage = lazy(() => import('../pages/informes/PreventivoReportPage'));
+const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroReportPage'));
+const InformesRecursoPreventivoEbroPage = lazy(
+  () => import('../pages/informes/RecursoPreventivoEbroReportPage'),
+);
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -93,6 +99,13 @@ export function AppRouter({
           element={<TemplatesCertificadosPage {...templatesCertificadosPageProps} />}
         />
         <Route path="/recursos/productos" element={<ProductosPage {...productosPageProps} />} />
+        <Route path="/informes/formacion" element={<InformesFormacionPage />} />
+        <Route path="/informes/preventivo" element={<InformesPreventivoPage />} />
+        <Route path="/informes/simulacro" element={<InformesSimulacroPage />} />
+        <Route
+          path="/informes/recurso_preventivo_ebro"
+          element={<InformesRecursoPreventivoEbroPage />}
+        />
         <Route path="/certificados" element={<CertificadosPage {...certificadosPageProps} />} />
         <Route path="*" element={<Navigate to={defaultRedirectPath} replace />} />
       </Routes>

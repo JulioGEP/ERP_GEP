@@ -66,6 +66,20 @@ const NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
     ],
   },
+  {
+    key: 'Informes',
+    label: 'Informes',
+    children: [
+      { key: 'Informes/Formacion', label: 'Formación', path: '/informes/formacion' },
+      { key: 'Informes/Preventivo', label: 'Preventivo', path: '/informes/preventivo' },
+      { key: 'Informes/Simulacro', label: 'Simulacro', path: '/informes/simulacro' },
+      {
+        key: 'Informes/RecursoPreventivoEbro',
+        label: 'Recurso Preventivo EBRO',
+        path: '/informes/recurso_preventivo_ebro',
+      },
+    ],
+  },
   { key: 'Certificados', label: 'Certificados', path: '/certificados' },
 ];
 
