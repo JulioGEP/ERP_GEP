@@ -59,9 +59,9 @@ const BACKGROUND_LEFT_SHIFT = 10;
 const LEFT_SIDEBAR_SIZE_REDUCTION = 0.9;
 const LEFT_SIDEBAR_RIGHT_SHIFT = 5;
 const FOOTER_SIZE_REDUCTION = 0.9;
-const PRACTICAL_COLUMN_LEFT_SHIFT = 8;
+const PRACTICAL_COLUMN_LEFT_SHIFT = 16;
 const TABLE_CELL_PADDING = {
-  left: 6,
+  left: 0,
   right: 6,
   top: 6,
   bottom: 6,
@@ -591,7 +591,7 @@ function buildCertificateDocDefinition(
       lineHeight: 1.1,
       characterSpacing: 0.5,
     },
-    courseName: { fontSize: 14, bold: true, margin: [0, 0, 0, 18], color: '#ff0000' },
+    courseName: { fontSize: 18, bold: true, margin: [0, 0, 0, 18], color: '#e8474d' },
     tableHeader: { fontSize: 9, bold: true, margin: [0, 0, 0, 8] },
     tableList: { fontSize: 7.5, lineHeight: 1.125 },
   };
