@@ -50,7 +50,7 @@ export type CertificateTemplatePreviewOptions = {
 const PAGE_WIDTH = 841.89;
 const PAGE_HEIGHT = 595.28;
 const DEFAULT_TEXT_START_Y = 48;
-const TEXT_RIGHT_MARGIN = 180;
+const TEXT_RIGHT_MARGIN = 300;
 const LEFT_OFFSET_RATIO = 0.35;
 const RIGHT_BLEED = 30;
 const LEFT_EXTRA_OFFSET_RATIO = 1.1;
@@ -585,13 +585,13 @@ function buildCertificateDocDefinition(
     bodyText: { fontSize: 8.5, lineHeight: 1.3 },
     studentInfoText: { fontSize: 10, lineHeight: 1.1 },
     certificateTitle: {
-      fontSize: 34,
+      fontSize: 28,
       bold: true,
-      color: '#e4032d',
+      color: '#000000',
       lineHeight: 1.1,
       characterSpacing: 0.5,
     },
-    courseName: { fontSize: 18, bold: true, margin: [0, 0, 0, 18], color: '#e4032d' },
+    courseName: { fontSize: 24, bold: true, margin: [0, 0, 0, 18], color: '#e4032d' },
     tableHeader: { fontSize: 9, bold: true, margin: [0, 0, 0, 8] },
     tableList: { fontSize: 7.5, lineHeight: 1.125 },
   };
