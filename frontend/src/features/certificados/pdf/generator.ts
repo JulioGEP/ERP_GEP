@@ -64,7 +64,7 @@ const MAX_TEXT_BLOCK_WIDTH = 900;
 const TABLE_CELL_PADDING = {
   left: 0,
   right: 6,
-  top: 6,
+  top: 3,
   bottom: 6,
 } as const;
 
@@ -592,7 +592,7 @@ function buildCertificateDocDefinition(
       lineHeight: 1.1,
       characterSpacing: 0.5,
     },
-    courseName: { fontSize: 24, bold: true, margin: [0, 0, 0, 18], color: '#e4032d' },
+    courseName: { fontSize: 24, bold: true, margin: [0, 0, 0, 10], color: '#e4032d' },
     tableHeader: { fontSize: 9, bold: true, margin: [0, 0, 0, 8] },
     tableList: { fontSize: 7.5, lineHeight: 1.125 },
   };
