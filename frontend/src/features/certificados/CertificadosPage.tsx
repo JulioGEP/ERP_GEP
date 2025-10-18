@@ -1490,6 +1490,7 @@ export function CertificadosPage() {
   }, [generationResults]);
 
   const hasGenerationFailures = Boolean(generationSummary && generationSummary.errorCount > 0);
+  const sessionDriveUrl = toNonEmptyString(selectedSession?.drive_url ?? null);
 
   useEffect(() => {
     if (!hasLoadedPersistedStateRef.current) {
@@ -1738,6 +1739,18 @@ export function CertificadosPage() {
                     </div>
                   )}
                 </>
+              )}
+              {!generating && generationSummary && sessionDriveUrl && (
+                <div className="mt-2 text-start">
+                  <Button
+                    variant="outline-primary"
+                    href={sessionDriveUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Carpeta Google Drive
+                  </Button>
+                </div>
               )}
               {hasGenerationFailures && !generating && (
                 <div className="mt-2 text-start">
