@@ -59,10 +59,10 @@ const BACKGROUND_LEFT_SHIFT = 10;
 const LEFT_SIDEBAR_SIZE_REDUCTION = 0.9;
 const LEFT_SIDEBAR_RIGHT_SHIFT = 5;
 const FOOTER_SIZE_REDUCTION = 0.9;
-const PRACTICAL_COLUMN_LEFT_SHIFT = 15;
+const PRACTICAL_COLUMN_LEFT_SHIFT = 8;
 const TABLE_CELL_PADDING = {
-  left: 12,
-  right: 12,
+  left: 6,
+  right: 6,
   top: 6,
   bottom: 6,
 } as const;
