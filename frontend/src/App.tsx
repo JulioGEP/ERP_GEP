@@ -1,18 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Container,
-  Nav,
-  Navbar,
-  Button,
-  Spinner,
-  Toast,
-  ToastContainer,
-  NavDropdown,
-} from 'react-bootstrap';
-import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
-import { BudgetTable } from './features/presupuestos/BudgetTable';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
 import { ProductCommentWindow } from './features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from './features/presupuestos/ProductCommentWindow';
@@ -34,61 +24,54 @@ import { ProductsView } from './features/recursos/ProductsView';
 import { CalendarView } from './features/calendar/CalendarView';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { CertificadosPage } from './features/certificados/CertificadosPage';
+import { BudgetsPage } from './routes/presupuestos/BudgetsPage';
 
-const ACTIVE_VIEW_STORAGE_KEY = 'erp-gep-active-view';
+const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 
-type NavView = {
+type NavChild = {
+  key: string;
+  label: string;
+  path: string;
+};
+
+type NavItem = {
   key: string;
   label: string;
   path?: string;
-};
-
-type NavItem = NavView & {
-  children?: NavView[];
+  children?: NavChild[];
 };
 
 const NAVIGATION_ITEMS: NavItem[] = [
-  { key: 'Presupuestos', label: 'Presupuestos', path: '/' },
+  { key: 'Presupuestos', label: 'Presupuestos', path: '/presupuestos' },
   {
     key: 'Calendario',
     label: 'Calendario',
     children: [
-      { key: 'Calendario/Sesiones', label: 'Por sesiones' },
-      { key: 'Calendario/Formadores', label: 'Por formador' },
-      { key: 'Calendario/Unidades', label: 'Por unidad móvil' },
+      { key: 'Calendario/Sesiones', label: 'Por sesiones', path: '/calendario/por_sesiones' },
+      { key: 'Calendario/Formadores', label: 'Por formador', path: '/calendario/por_formador' },
+      { key: 'Calendario/Unidades', label: 'Por unidad móvil', path: '/calendario/por_unidad_movil' },
     ],
   },
   {
     key: 'Recursos',
     label: 'Recursos',
     children: [
-      { key: 'Recursos/Formadores', label: 'Formadores / Bomberos' },
-      { key: 'Recursos/Unidades', label: 'Unidades Móviles' },
-      { key: 'Recursos/Salas', label: 'Salas' },
-      { key: 'Recursos/Templates', label: 'Templates Certificados' },
-      { key: 'Recursos/Productos', label: 'Productos' },
+      { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores_bomberos' },
+      { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
+      { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
+      { key: 'Recursos/Templates', label: 'Templates Certificados', path: '/recursos/templates_certificados' },
+      { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
     ],
   },
   { key: 'Certificados', label: 'Certificados', path: '/certificados' },
 ];
 
-const VIEW_ITEMS: NavView[] = NAVIGATION_ITEMS.flatMap((item) =>
-  item.children ? item.children : [item]
+const KNOWN_APP_PATHS = new Set(
+  NAVIGATION_ITEMS.flatMap((item) => [item.path, ...(item.children?.map((child) => child.path) ?? [])])
+    .filter((path): path is string => Boolean(path))
 );
 
-const PLACEHOLDER_VIEWS: NavView[] = VIEW_ITEMS.filter(
-  (item) =>
-    item.key !== 'Presupuestos' &&
-    item.key !== 'Calendario/Sesiones' &&
-    item.key !== 'Calendario/Formadores' &&
-    item.key !== 'Calendario/Unidades' &&
-    item.key !== 'Recursos/Formadores' &&
-    item.key !== 'Recursos/Salas' &&
-    item.key !== 'Recursos/Unidades' &&
-    item.key !== 'Recursos/Templates' &&
-    item.key !== 'Recursos/Productos' &&
-    item.key !== 'Certificados'
-);
+const DEFAULT_REDIRECT_PATH = '/presupuestos';
 
 type ToastMessage = {
   id: string;
@@ -110,45 +93,6 @@ export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
-  const [activeView, setActiveViewState] = useState(() => {
-    if (typeof window === 'undefined') {
-      return 'Presupuestos';
-    }
-
-    const { pathname } = window.location;
-    if (pathname.startsWith('/certificados')) {
-      return 'Certificados';
-    }
-
-    try {
-      const storedView = window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
-      if (storedView) {
-        const normalizedView =
-          storedView === 'Calendario' ? 'Calendario/Sesiones' : storedView;
-        if (VIEW_ITEMS.some((item) => item.key === normalizedView)) {
-          if (normalizedView !== storedView) {
-            window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, normalizedView);
-          }
-          return normalizedView;
-        }
-      }
-    } catch (error) {
-      console.warn('No se pudo leer la vista activa almacenada', error);
-    }
-
-    return 'Presupuestos';
-  });
-
-  const setActiveView = useCallback((view: string) => {
-    setActiveViewState(view);
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
-      } catch (error) {
-        console.warn('No se pudo guardar la vista activa', error);
-      }
-    }
-  }, []);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [productComment, setProductComment] = useState<ProductCommentPayload | null>(null);
 
@@ -211,41 +155,23 @@ export default function App() {
     }
   });
 
-  const previousPathRef = useRef(location.pathname);
-
   useEffect(() => {
-    const previousPath = previousPathRef.current;
-    const isCertificatesPath = location.pathname.startsWith('/certificados');
-    const wasCertificatesPath = previousPath.startsWith('/certificados');
-
-    if (isCertificatesPath && !wasCertificatesPath) {
-      if (activeView !== 'Certificados') {
-        setActiveView('Certificados');
-      }
-    } else if (wasCertificatesPath && !isCertificatesPath) {
-      if (activeView === 'Certificados') {
-        setActiveView('Presupuestos');
+    if (typeof window === 'undefined') return;
+    if (KNOWN_APP_PATHS.has(location.pathname)) {
+      try {
+        window.localStorage.setItem(ACTIVE_PATH_STORAGE_KEY, location.pathname);
+      } catch (error) {
+        console.warn('No se pudo guardar la ruta activa', error);
       }
     }
+  }, [location.pathname]);
 
-    previousPathRef.current = location.pathname;
-  }, [activeView, location.pathname, setActiveView]);
+  useEffect(() => {
+    if (!location.pathname.startsWith('/presupuestos')) {
+      setShowImportModal(false);
+    }
+  }, [location.pathname]);
 
-  const isBudgetsView = activeView === 'Presupuestos';
-  const isCalendarSessionsView = activeView === 'Calendario/Sesiones';
-  const isCalendarTrainersView = activeView === 'Calendario/Formadores';
-  const isCalendarUnitsView = activeView === 'Calendario/Unidades';
-  const isTrainersView = activeView === 'Recursos/Formadores';
-  const isRoomsView = activeView === 'Recursos/Salas';
-  const isMobileUnitsView = activeView === 'Recursos/Unidades';
-  const isCertificateTemplatesView = activeView === 'Recursos/Templates';
-  const isProductsView = activeView === 'Recursos/Productos';
-  const isCertificatesView = location.pathname.startsWith('/certificados');
-  const activeViewLabel = useMemo(
-    () => VIEW_ITEMS.find((item) => item.key === activeView)?.label ?? activeView,
-    [activeView]
-  );
-  const placeholderViews = PLACEHOLDER_VIEWS;
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
 
@@ -367,7 +293,14 @@ export default function App() {
     <div className="min-vh-100 d-flex flex-column">
       <Navbar bg="white" expand="lg" className="shadow-sm py-3">
         <Container fluid="xl" className="d-flex align-items-center gap-4">
-          <Navbar.Brand href="#" className="d-flex align-items-center gap-3">
+          <Navbar.Brand
+            href="#"
+            className="d-flex align-items-center gap-3"
+            onClick={(event) => {
+              event.preventDefault();
+              navigate('/presupuestos');
+            }}
+          >
             <img src={logo} height={64} alt="GEP Group" />
             <div>
               <span className="d-block fw-semibold text-uppercase small text-muted">GEP Group</span>
@@ -383,21 +316,14 @@ export default function App() {
                   key={item.key}
                   title={<span className="text-uppercase">{item.label}</span>}
                   id={`nav-${item.key}`}
-                  active={
-                    !isCertificatesView && item.children.some((child) => child.key === activeView)
-                  }
+                  active={item.children.some((child) => location.pathname.startsWith(child.path))}
                 >
                   {item.children.map((child) => (
                     <NavDropdown.Item
                       key={child.key}
-                      active={!isCertificatesView && activeView === child.key}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        if (location.pathname !== '/') {
-                          navigate('/');
-                        }
-                        setActiveView(child.key);
-                      }}
+                      as={NavLink}
+                      to={child.path}
+                      className="text-uppercase"
                     >
                       {child.label}
                     </NavDropdown.Item>
@@ -406,25 +332,8 @@ export default function App() {
               ) : (
                 <Nav.Item key={item.key}>
                   <Nav.Link
-                    active={
-                      item.path
-                        ? item.path === '/'
-                          ? !isCertificatesView && activeView === item.key
-                          : location.pathname.startsWith(item.path)
-                        : !isCertificatesView && activeView === item.key
-                    }
-                    onClick={() => {
-                      if (item.path) {
-                        setActiveView(item.key);
-                        navigate(item.path);
-                        return;
-                      }
-
-                      if (location.pathname !== '/') {
-                        navigate('/');
-                      }
-                      setActiveView(item.key);
-                    }}
+                    as={NavLink}
+                    to={item.path ?? '#'}
                     className="text-uppercase"
                   >
                     {item.label}
@@ -439,90 +348,77 @@ export default function App() {
       <main className="flex-grow-1 py-5">
         <Container fluid="xl">
           <Routes>
-            <Route path="/certificados" element={<CertificadosPage />} />
+            <Route path="/" element={<HomeRedirect />} />
             <Route
-              path="*"
+              path="/presupuestos"
               element={
-                isBudgetsView ? (
-                  <div className="d-grid gap-4">
-                    <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-                      <div>
-                        <h1 className="h3 fw-bold mb-1">Presupuestos</h1>
-                        <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
-                      </div>
-                      <div className="d-flex align-items-center gap-3">
-                        {(importMutation.isPending || isRefreshing) && (
-                          <Spinner animation="border" role="status" size="sm" />
-                        )}
-                        <Button size="lg" onClick={() => setShowImportModal(true)}>
-                          Importar presupuesto
-                        </Button>
-                      </div>
-                    </section>
-                    <BudgetTable
-                      budgets={budgets}
-                      isLoading={budgetsQuery.isLoading}
-                      isFetching={isRefreshing}
-                      error={budgetsQuery.error ?? null}
-                      onRetry={() => budgetsQuery.refetch()}
-                      onSelect={handleSelectBudget}
-                      onDelete={handleDeleteBudget}
-                    />
-                  </div>
-                ) : isCalendarSessionsView ? (
-                  <CalendarView
-                    key="calendar-sesiones"
-                    title="Calendario · Por sesiones"
-                    mode="sessions"
-                    onNotify={pushToast}
-                    onSessionOpen={handleOpenCalendarSession}
-                  />
-                ) : isCalendarTrainersView ? (
-                  <CalendarView
-                    key="calendar-formadores"
-                    title="Calendario · Por formador"
-                    mode="trainers"
-                    initialView="month"
-                    onNotify={pushToast}
-                    onSessionOpen={handleOpenCalendarSession}
-                  />
-                ) : isCalendarUnitsView ? (
-                  <CalendarView
-                    key="calendar-unidades"
-                    title="Calendario · Por unidad móvil"
-                    mode="units"
-                    initialView="month"
-                    onNotify={pushToast}
-                    onSessionOpen={handleOpenCalendarSession}
-                  />
-                ) : isTrainersView ? (
-                  <TrainersView onNotify={pushToast} />
-                ) : isRoomsView ? (
-                  <RoomsView onNotify={pushToast} />
-                ) : isMobileUnitsView ? (
-                  <MobileUnitsView onNotify={pushToast} />
-                ) : isCertificateTemplatesView ? (
-                  <CertificateTemplatesView onNotify={pushToast} />
-                ) : isProductsView ? (
-                  <ProductsView onNotify={pushToast} />
-                ) : (
-                  <div className="bg-white rounded-4 shadow-sm p-5 text-center text-muted">
-                    <h2 className="h4 fw-semibold mb-2">{activeViewLabel}</h2>
-                    <p className="mb-0">
-                      La sección {activeViewLabel} estará disponible próximamente. Mientras tanto, puedes seguir
-                      trabajando en la pestaña de Presupuestos.
-                    </p>
-                    <div className="d-flex justify-content-center gap-2 mt-4">
-                      {placeholderViews.map((view) => (
-                        <Button key={view.key} variant="outline-secondary" size="sm" disabled>
-                          {view.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                )
+                <BudgetsPage
+                  budgets={budgets}
+                  isLoading={budgetsQuery.isLoading}
+                  isFetching={isRefreshing}
+                  error={budgetsQuery.error ?? null}
+                  onRetry={() => budgetsQuery.refetch()}
+                  onSelect={handleSelectBudget}
+                  onDelete={handleDeleteBudget}
+                  onOpenImportModal={() => setShowImportModal(true)}
+                  isImporting={importMutation.isPending}
+                />
               }
             />
+            <Route
+              path="/calendario/por_sesiones"
+              element={
+                <CalendarView
+                  key="calendar-sesiones"
+                  title="Calendario · Por sesiones"
+                  mode="sessions"
+                  onNotify={pushToast}
+                  onSessionOpen={handleOpenCalendarSession}
+                />
+              }
+            />
+            <Route
+              path="/calendario/por_formador"
+              element={
+                <CalendarView
+                  key="calendar-formadores"
+                  title="Calendario · Por formador"
+                  mode="trainers"
+                  initialView="month"
+                  onNotify={pushToast}
+                  onSessionOpen={handleOpenCalendarSession}
+                />
+              }
+            />
+            <Route
+              path="/calendario/por_unidad_movil"
+              element={
+                <CalendarView
+                  key="calendar-unidades"
+                  title="Calendario · Por unidad móvil"
+                  mode="units"
+                  initialView="month"
+                  onNotify={pushToast}
+                  onSessionOpen={handleOpenCalendarSession}
+                />
+              }
+            />
+            <Route
+              path="/recursos/formadores_bomberos"
+              element={<TrainersView onNotify={pushToast} />}
+            />
+            <Route path="/recursos/salas" element={<RoomsView onNotify={pushToast} />} />
+            <Route
+              path="/recursos/unidades_moviles"
+              element={<MobileUnitsView onNotify={pushToast} />}
+            />
+            <Route
+              path="/recursos/templates_certificados"
+              element={<CertificateTemplatesView onNotify={pushToast} />}
+            />
+            <Route path="/recursos/productos" element={<ProductsView onNotify={pushToast} />} />
+            <Route path="/certificados" element={<CertificadosPage />} />
+            <Route path="*" element={<Navigate to={DEFAULT_REDIRECT_PATH} replace />} />
           </Routes>
         </Container>
       </main>
@@ -571,4 +467,21 @@ export default function App() {
       </ToastContainer>
     </div>
   );
+}
+
+function HomeRedirect() {
+  const preferredPath = (() => {
+    if (typeof window === 'undefined') return DEFAULT_REDIRECT_PATH;
+    try {
+      const storedPath = window.localStorage.getItem(ACTIVE_PATH_STORAGE_KEY);
+      if (storedPath && KNOWN_APP_PATHS.has(storedPath)) {
+        return storedPath;
+      }
+    } catch (error) {
+      console.warn('No se pudo leer la ruta activa almacenada', error);
+    }
+    return DEFAULT_REDIRECT_PATH;
+  })();
+
+  return <Navigate to={preferredPath} replace />;
 }
