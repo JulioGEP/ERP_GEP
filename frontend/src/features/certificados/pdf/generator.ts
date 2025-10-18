@@ -60,6 +60,7 @@ const LEFT_SIDEBAR_SIZE_REDUCTION = 0.9;
 const LEFT_SIDEBAR_RIGHT_SHIFT = 5;
 const FOOTER_SIZE_REDUCTION = 0.9;
 const PRACTICAL_COLUMN_LEFT_SHIFT = 100;
+const MAX_TEXT_BLOCK_WIDTH = 560;
 const TABLE_CELL_PADDING = {
   left: 0,
   right: 6,
@@ -617,7 +618,11 @@ function buildCertificateDocDefinition(
     textWidthBase + (textBlockAdjustments.widthDelta ?? 0),
   );
   const maxAvailableWidth = Math.max(MIN_TEXT_BLOCK_WIDTH, PAGE_WIDTH - boundedTextStartX);
-  const textWidth = Math.min(adjustedTextWidth, maxAvailableWidth);
+  const textWidth = Math.min(
+  adjustedTextWidth,
+  maxAvailableWidth,
+  MAX_TEXT_BLOCK_WIDTH, // ← tope duro
+);
 
   const adjustedTextStartY = textStartYBase + (textBlockAdjustments.offsetY ?? 0);
   const textStartY = Math.max(0, Math.min(PAGE_HEIGHT, adjustedTextStartY));
