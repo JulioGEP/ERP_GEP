@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import logoImg from '../assets/logo-nuevo.png'
 import { generateReportPdfmake } from '../pdf/reportPdfmake'
 import { triesKey, htmlKey } from '../utils/keys'
-import SendEmailModal from './SendEmailModal'
 
 let warnedMissingReportsToken = false
 const getReportsAuthHeaders = () => {
@@ -260,9 +259,6 @@ export default function Preview(props) {
   const [aiHtml, setAiHtml] = useState(null)
   const [aiBusy, setAiBusy] = useState(false)
   const [tries, setTries] = useState(0)
-  const [pdfForModal, setPdfForModal] = useState(null)
-  const [showEmailModal, setShowEmailModal] = useState(false)
-  const [emailStatus, setEmailStatus] = useState(null)
 
   // Cargar contador + HTML guardado
   useEffect(() => {
@@ -276,23 +272,16 @@ export default function Preview(props) {
         if (savedHtml) setAiHtml(savedHtml)
       } catch {}
     } else {
-      setTries(0); setAiHtml(null); setPdfForModal(null); setShowEmailModal(false); setEmailStatus(null)
+      setTries(0); setAiHtml(null)
     }
   }, [dealId])
-
-  useEffect(() => {
-    if (!pdfForModal) {
-      setShowEmailModal(false)
-      setEmailStatus(null)
-    }
-  }, [pdfForModal])
 
   const resetLocalForDeal = () => {
     try {
       localStorage.removeItem(triesKey(dealId))
       sessionStorage.removeItem(htmlKey(dealId))
     } catch {}
-    setTries(0); setAiHtml(null); setPdfForModal(null); setShowEmailModal(false); setEmailStatus(null)
+    setTries(0); setAiHtml(null)
   }
 
   const tieneContenido = useMemo(() => {
@@ -376,44 +365,15 @@ export default function Preview(props) {
     }
   }
 
-  const stripHtml = (html) => (html || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .trim()
-
   const descargarPDF = async () => {
     try {
-      const result = await generateReportPdfmake({ dealId, datos, formador, imagenes, type })
-      setPdfForModal(result)
-      setEmailStatus(null)
-      return result
+      await generateReportPdfmake({ dealId, datos, formador, imagenes, type })
     } catch (e) {
       console.error('Error generando PDF (pdfmake):', e)
       alert('No se ha podido generar el PDF.')
     }
   }
-  const descargarPDFyEnviar = async () => {
-    const pdf = await descargarPDF()
-    if (pdf) {
-      setShowEmailModal(true)
-    }
-  }
 
-  const handleEmailSuccess = (info) => {
-    setShowEmailModal(false)
-    if (info && Array.isArray(info.to)) {
-      setEmailStatus({
-        to: info.to,
-        cc: info.cc || [],
-        bcc: info.bcc || [],
-        timestamp: Date.now(),
-      })
-    } else {
-      setEmailStatus(null)
-    }
-  }
   const triesLabel = isPreventivoEbro ? null : `${dealId ? tries : 0}/${maxTries}`
   const quedanIntentos = !dealId || isPreventivoEbro || tries < maxTries
 
@@ -445,24 +405,12 @@ export default function Preview(props) {
             </button>
           )}
           {aiHtml && (
-            <button className="btn btn-success" onClick={descargarPDFyEnviar} disabled={!tieneContenido}>
-              Descargar PDF y Enviar
+            <button className="btn btn-success" onClick={descargarPDF} disabled={!tieneContenido}>
+              Descargar PDF
             </button>
           )}
         </div>
       </div>
-
-      {emailStatus && (
-        <div className="alert alert-success" role="status">
-          Informe enviado correctamente a {emailStatus.to.join(', ')}.
-          {emailStatus.cc.length > 0 && (
-            <span> CC: {emailStatus.cc.join(', ')}.</span>
-          )}
-          {emailStatus.bcc.length > 0 && (
-            <span> CCO: {emailStatus.bcc.join(', ')}.</span>
-          )}
-        </div>
-      )}
 
       <div className="card">
         <div className="card-body">
@@ -671,8 +619,8 @@ export default function Preview(props) {
           </button>
         )}
         {aiHtml && (
-          <button className="btn btn-success" onClick={descargarPDFyEnviar} disabled={!tieneContenido}>
-            Descargar PDF y Enviar
+          <button className="btn btn-success" onClick={descargarPDF} disabled={!tieneContenido}>
+            Descargar PDF
           </button>
         )}
       </div>
@@ -686,14 +634,6 @@ export default function Preview(props) {
         </div>
       )}
 
-      <SendEmailModal
-        show={showEmailModal && Boolean(pdfForModal)}
-        onClose={() => setShowEmailModal(false)}
-        onSuccess={handleEmailSuccess}
-        pdf={pdfForModal}
-        draft={{ ...draft, type }}
-        title={title}
-      />
     </div>
   )
 }

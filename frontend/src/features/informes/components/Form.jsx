@@ -55,6 +55,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   const isPreventivo = type === 'preventivo' || type === 'preventivo-ebro'
   const isPreventivoEbro = type === 'preventivo-ebro'
   const isFormacion = type === 'formacion'
+  const canChooseAnother = typeof onChooseAnother === 'function'
   const direccionSedeLabel = isPreventivo
     ? 'Dirección del Preventivo'
     : isSimulacro
@@ -671,11 +672,13 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
         </div>
       </div>
 
-      <div className="d-flex justify-content-end mb-2">
-        <button type="button" className="btn btn-secondary" onClick={onChooseAnother}>
-          Elegir otro informe
-        </button>
-      </div>
+      {canChooseAnother && (
+        <div className="d-flex justify-content-end mb-2">
+          <button type="button" className="btn btn-secondary" onClick={onChooseAnother}>
+            Elegir otro informe
+          </button>
+        </div>
+      )}
 
       {/* ===== Cliente + Formador en 2 columnas ===== */}
       <div className="row g-3 align-items-stretch">
@@ -957,7 +960,9 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       )}
 
       <div className="d-flex justify-content-between">
-        <button type="button" className="btn btn-secondary" onClick={onChooseAnother}>Elegir otro informe</button>
+        {canChooseAnother ? (
+          <button type="button" className="btn btn-secondary" onClick={onChooseAnother}>Elegir otro informe</button>
+        ) : <span />}
         <button type="submit" className="btn btn-primary">Siguiente</button>
       </div>
     </form>
