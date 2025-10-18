@@ -875,27 +875,35 @@ export function CertificadosPage() {
     }
 
     const api = trainingTemplatesApiRef.current;
-    const candidates: string[] = [];
+    const productTemplateCandidate =
+      typeof selectedSession?.productTemplate === 'string'
+        ? selectedSession.productTemplate.trim()
+        : '';
 
-    if (selectedSession?.productTemplate) {
-      candidates.push(selectedSession.productTemplate);
-    }
-
-    const referenceProductName = selectedSession?.productName ?? rows[0]?.formacion ?? '';
-    if (referenceProductName) {
-      candidates.push(referenceProductName);
-    }
-
-    for (const candidate of candidates) {
-      const matchedOption = findMatchingTemplateOption(templateOptions, candidate, api);
-      if (matchedOption) {
-        setSelectedTemplateKey((current) =>
-          current === matchedOption.key ? current : matchedOption.key,
-        );
-        return;
+    if (!productTemplateCandidate) {
+      if (!pendingPersistedTemplateKeyRef.current) {
+        setSelectedTemplateKey((current) => (current ? '' : current));
       }
+      return;
     }
-  }, [rows, selectedSession, templateOptions]);
+
+    const matchedOption = findMatchingTemplateOption(
+      templateOptions,
+      productTemplateCandidate,
+      api,
+    );
+
+    if (matchedOption) {
+      setSelectedTemplateKey((current) =>
+        current === matchedOption.key ? current : matchedOption.key,
+      );
+      return;
+    }
+
+    if (!pendingPersistedTemplateKeyRef.current) {
+      setSelectedTemplateKey((current) => (current ? '' : current));
+    }
+  }, [selectedSession, templateOptions]);
 
   useEffect(() => {
     setGenerationError(null);
