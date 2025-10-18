@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
@@ -16,15 +16,18 @@ import { normalizeImportDealResult } from './features/presupuestos/importDealUti
 import type { CalendarSession } from './features/calendar/api';
 import type { DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
-import { TrainersView } from './features/recursos/TrainersView';
-import { RoomsView } from './features/recursos/RoomsView';
-import { MobileUnitsView } from './features/recursos/MobileUnitsView';
-import { CertificateTemplatesView } from './features/recursos/CertificateTemplatesView';
-import { ProductsView } from './features/recursos/ProductsView';
-import { CalendarView } from './features/calendar/CalendarView';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
-import { CertificadosPage } from './features/certificados/CertificadosPage';
-import { BudgetsPage } from './routes/presupuestos/BudgetsPage';
+import { AppRouter } from './app/router';
+import type { BudgetsPageProps } from './pages/presupuestos/BudgetsPage';
+import type { PorSesionesPageProps } from './pages/calendario/PorSesionesPage';
+import type { PorUnidadMovilPageProps } from './pages/calendario/PorUnidadMovilPage';
+import type { PorFormadorPageProps } from './pages/calendario/PorFormadorPage';
+import type { FormadoresBomberosPageProps } from './pages/recursos/FormadoresBomberosPage';
+import type { UnidadesMovilesPageProps } from './pages/recursos/UnidadesMovilesPage';
+import type { SalasPageProps } from './pages/recursos/SalasPage';
+import type { TemplatesCertificadosPageProps } from './pages/recursos/TemplatesCertificadosPage';
+import type { ProductosPageProps } from './pages/recursos/ProductosPage';
+import type { CertificadosPageProps } from './pages/certificados/CertificadosPage';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 
@@ -289,6 +292,55 @@ export default function App() {
     [pushToast],
   );
 
+  const budgetsPageProps: BudgetsPageProps = {
+    budgets,
+    isLoading: budgetsQuery.isLoading,
+    isFetching: isRefreshing,
+    error: budgetsQuery.error ?? null,
+    onRetry: () => budgetsQuery.refetch(),
+    onSelect: handleSelectBudget,
+    onDelete: handleDeleteBudget,
+    onOpenImportModal: () => setShowImportModal(true),
+    isImporting: importMutation.isPending,
+  };
+
+  const calendarSessionsPageProps: PorSesionesPageProps = {
+    onNotify: pushToast,
+    onSessionOpen: handleOpenCalendarSession,
+  };
+
+  const calendarUnitsPageProps: PorUnidadMovilPageProps = {
+    onNotify: pushToast,
+    onSessionOpen: handleOpenCalendarSession,
+  };
+
+  const calendarTrainersPageProps: PorFormadorPageProps = {
+    onNotify: pushToast,
+    onSessionOpen: handleOpenCalendarSession,
+  };
+
+  const formadoresBomberosPageProps: FormadoresBomberosPageProps = {
+    onNotify: pushToast,
+  };
+
+  const unidadesMovilesPageProps: UnidadesMovilesPageProps = {
+    onNotify: pushToast,
+  };
+
+  const salasPageProps: SalasPageProps = {
+    onNotify: pushToast,
+  };
+
+  const templatesCertificadosPageProps: TemplatesCertificadosPageProps = {
+    onNotify: pushToast,
+  };
+
+  const productosPageProps: ProductosPageProps = {
+    onNotify: pushToast,
+  };
+
+  const certificadosPageProps: CertificadosPageProps = {};
+
   return (
     <div className="min-vh-100 d-flex flex-column">
       <Navbar bg="white" expand="lg" className="shadow-sm py-3">
@@ -347,79 +399,21 @@ export default function App() {
 
       <main className="flex-grow-1 py-5">
         <Container fluid="xl">
-          <Routes>
-            <Route path="/" element={<HomeRedirect />} />
-            <Route
-              path="/presupuestos"
-              element={
-                <BudgetsPage
-                  budgets={budgets}
-                  isLoading={budgetsQuery.isLoading}
-                  isFetching={isRefreshing}
-                  error={budgetsQuery.error ?? null}
-                  onRetry={() => budgetsQuery.refetch()}
-                  onSelect={handleSelectBudget}
-                  onDelete={handleDeleteBudget}
-                  onOpenImportModal={() => setShowImportModal(true)}
-                  isImporting={importMutation.isPending}
-                />
-              }
-            />
-            <Route
-              path="/calendario/por_sesiones"
-              element={
-                <CalendarView
-                  key="calendar-sesiones"
-                  title="Calendario · Por sesiones"
-                  mode="sessions"
-                  onNotify={pushToast}
-                  onSessionOpen={handleOpenCalendarSession}
-                />
-              }
-            />
-            <Route
-              path="/calendario/por_formador"
-              element={
-                <CalendarView
-                  key="calendar-formadores"
-                  title="Calendario · Por formador"
-                  mode="trainers"
-                  initialView="month"
-                  onNotify={pushToast}
-                  onSessionOpen={handleOpenCalendarSession}
-                />
-              }
-            />
-            <Route
-              path="/calendario/por_unidad_movil"
-              element={
-                <CalendarView
-                  key="calendar-unidades"
-                  title="Calendario · Por unidad móvil"
-                  mode="units"
-                  initialView="month"
-                  onNotify={pushToast}
-                  onSessionOpen={handleOpenCalendarSession}
-                />
-              }
-            />
-            <Route
-              path="/recursos/formadores_bomberos"
-              element={<TrainersView onNotify={pushToast} />}
-            />
-            <Route path="/recursos/salas" element={<RoomsView onNotify={pushToast} />} />
-            <Route
-              path="/recursos/unidades_moviles"
-              element={<MobileUnitsView onNotify={pushToast} />}
-            />
-            <Route
-              path="/recursos/templates_certificados"
-              element={<CertificateTemplatesView onNotify={pushToast} />}
-            />
-            <Route path="/recursos/productos" element={<ProductsView onNotify={pushToast} />} />
-            <Route path="/certificados" element={<CertificadosPage />} />
-            <Route path="*" element={<Navigate to={DEFAULT_REDIRECT_PATH} replace />} />
-          </Routes>
+          <AppRouter
+            budgetsPageProps={budgetsPageProps}
+            porSesionesPageProps={calendarSessionsPageProps}
+            porUnidadMovilPageProps={calendarUnitsPageProps}
+            porFormadorPageProps={calendarTrainersPageProps}
+            formadoresBomberosPageProps={formadoresBomberosPageProps}
+            unidadesMovilesPageProps={unidadesMovilesPageProps}
+            salasPageProps={salasPageProps}
+            templatesCertificadosPageProps={templatesCertificadosPageProps}
+            productosPageProps={productosPageProps}
+            certificadosPageProps={certificadosPageProps}
+            defaultRedirectPath={DEFAULT_REDIRECT_PATH}
+            knownPaths={KNOWN_APP_PATHS}
+            activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}
+          />
         </Container>
       </main>
 
@@ -467,21 +461,4 @@ export default function App() {
       </ToastContainer>
     </div>
   );
-}
-
-function HomeRedirect() {
-  const preferredPath = (() => {
-    if (typeof window === 'undefined') return DEFAULT_REDIRECT_PATH;
-    try {
-      const storedPath = window.localStorage.getItem(ACTIVE_PATH_STORAGE_KEY);
-      if (storedPath && KNOWN_APP_PATHS.has(storedPath)) {
-        return storedPath;
-      }
-    } catch (error) {
-      console.warn('No se pudo leer la ruta activa almacenada', error);
-    }
-    return DEFAULT_REDIRECT_PATH;
-  })();
-
-  return <Navigate to={preferredPath} replace />;
 }
