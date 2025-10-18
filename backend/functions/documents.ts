@@ -43,6 +43,12 @@ function toBufferFromBase64(contentBase64: string): Buffer {
   return Buffer.from(String(contentBase64), 'base64');
 }
 
+function normalizeDriveUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
 export const handler = async (event: any) => {
   try {
     if (event.httpMethod === 'OPTIONS') {
@@ -208,6 +214,23 @@ export const handler = async (event: any) => {
         'No se pudo obtener un enlace público del certificado',
         502,
       );
+    }
+
+    const sessionFolderLink = normalizeDriveUrl(uploadResult.sessionFolderWebViewLink ?? null);
+    const currentSessionDriveUrl = normalizeDriveUrl(resolvedSession.drive_url ?? null);
+    if (sessionFolderLink && sessionFolderLink !== currentSessionDriveUrl) {
+      try {
+        await prisma.sessions.update({
+          where: { id: resolvedSession.id },
+          data: { drive_url: sessionFolderLink },
+        });
+        resolvedSession.drive_url = sessionFolderLink;
+      } catch (err) {
+        console.warn('[documents] No se pudo actualizar drive_url de la sesión', {
+          sessionId: resolvedSession.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     const updatedStudent = await prisma.alumnos.update({

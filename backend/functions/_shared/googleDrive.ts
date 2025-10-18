@@ -954,6 +954,7 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
   driveFileId: string;
   driveFileName: string;
   driveWebViewLink: string | null;
+  sessionFolderWebViewLink: string | null;
 }> {
   const driveId = resolveDriveSharedId();
   if (!driveId) {
@@ -999,6 +1000,18 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
     driveId,
   });
 
+  let sessionFolderLink: string | null = null;
+  try {
+    sessionFolderLink = await ensureFilePublicWebViewLink(sessionFolderId);
+  } catch (permissionError) {
+    console.warn("[google-drive-sync] No se pudo generar enlace público de carpeta de sesión", {
+      dealId: params.deal?.deal_id ?? params.deal?.id,
+      sessionId: params.session?.id,
+      sessionFolderId,
+      error: permissionError instanceof Error ? permissionError.message : String(permissionError),
+    });
+  }
+
   const safeName = sanitizeName(params.fileName || "documento") || "documento";
   const mimeType = params.mimeType?.trim() || "application/octet-stream";
 
@@ -1036,6 +1049,7 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
     driveFileId: uploadResult.id,
     driveFileName: uploadResult.name || safeName,
     driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
+    sessionFolderWebViewLink: sessionFolderLink,
   };
 }
 
@@ -1052,6 +1066,7 @@ export async function uploadSessionCertificateToGoogleDrive(params: {
   driveFileId: string;
   driveFileName: string;
   driveWebViewLink: string | null;
+  sessionFolderWebViewLink: string | null;
 }> {
   return uploadSessionDocumentToGoogleDrive({
     ...params,

@@ -34,6 +34,7 @@ export type SessionDTO = {
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
+  drive_url: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
 };
@@ -85,6 +86,11 @@ export type SessionDocument = {
   updated_at: string | null;
   drive_file_name: string | null;
   drive_web_view_link: string | null;
+};
+
+export type SessionDocumentsPayload = {
+  documents: SessionDocument[];
+  driveUrl: string | null;
 };
 
 export type SessionStudent = {
@@ -574,6 +580,7 @@ function normalizeSession(row: any): SessionDTO {
   const sala_id = toStringValue(row?.sala_id);
   const direccion = toStringValue(row?.direccion) ?? "";
   const estado = toSessionEstadoValue(row?.estado);
+  const drive_url = toStringValue(row?.drive_url);
 
   const trainer_ids = toStringArray(row?.trainer_ids);
   const unidad_movil_ids = toStringArray(row?.unidad_movil_ids);
@@ -588,6 +595,7 @@ function normalizeSession(row: any): SessionDTO {
     sala_id: sala_id ?? null,
     direccion,
     estado,
+    drive_url: drive_url ?? null,
     trainer_ids,
     unidad_movil_ids,
   };
@@ -1486,7 +1494,7 @@ export const SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE = `Archivo demasiado pesado, m√
 export async function fetchSessionDocuments(
   dealId: string,
   sessionId: string,
-): Promise<SessionDocument[]> {
+): Promise<SessionDocumentsPayload> {
   const normalizedDealId = String(dealId ?? '').trim();
   const normalizedSessionId = String(sessionId ?? '').trim();
   if (!normalizedDealId || !normalizedSessionId) {
@@ -1496,7 +1504,11 @@ export async function fetchSessionDocuments(
   const params = new URLSearchParams({ dealId: normalizedDealId, sessionId: normalizedSessionId });
   const data = await request(`/session_documents?${params.toString()}`);
   const docs: any[] = Array.isArray(data?.documents) ? data.documents : [];
-  return docs.map((doc) => normalizeSessionDocument(doc));
+  const driveUrl = toStringValue(data?.drive_url ?? data?.driveUrl) ?? null;
+  return {
+    documents: docs.map((doc) => normalizeSessionDocument(doc)),
+    driveUrl,
+  };
 }
 
 export async function uploadSessionDocuments(params: {
@@ -1504,7 +1516,7 @@ export async function uploadSessionDocuments(params: {
   sessionId: string;
   files: File[];
   shareWithTrainer: boolean;
-}): Promise<SessionDocument[]> {
+}): Promise<SessionDocumentsPayload> {
   const normalizedDealId = String(params.dealId ?? '').trim();
   const normalizedSessionId = String(params.sessionId ?? '').trim();
   if (!normalizedDealId || !normalizedSessionId) {
@@ -1546,7 +1558,11 @@ export async function uploadSessionDocuments(params: {
   });
 
   const docs: any[] = Array.isArray(data?.documents) ? data.documents : [];
-  return docs.map((doc) => normalizeSessionDocument(doc));
+  const driveUrl = toStringValue(data?.drive_url ?? data?.driveUrl) ?? null;
+  return {
+    documents: docs.map((doc) => normalizeSessionDocument(doc)),
+    driveUrl,
+  };
 }
 
 export async function updateSessionDocumentShare(

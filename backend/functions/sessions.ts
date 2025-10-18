@@ -90,6 +90,7 @@ type SessionRecord = {
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
+  drive_url: string | null;
   trainers: Array<{ trainer_id: string }>;
   unidades: Array<{ unidad_id: string }>;
   deal?: { sede_label: string | null } | null;
@@ -219,6 +220,7 @@ function normalizeSession(row: SessionRecord) {
     sala_id: row.sala_id,
     direccion: row.direccion,
     estado,
+    drive_url: toTrimmed(row.drive_url),
     trainer_ids: trainerIds,
     unidad_movil_ids: unidadIds,
   };
