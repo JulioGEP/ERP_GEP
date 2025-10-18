@@ -1,0 +1,27 @@
+:root {
+  --bs-body-font-family: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+body {
+  font-family: var(--bs-body-font-family);
+}
+
+/* Encabezado: logo + título alineados */
+header img {
+  height: 28px; /* ajusta aquí si lo quieres un pelín más grande */
+  width: auto;
+  display: block;
+}
+
+/* Contenido enriquecido de IA (que renderizamos con dangerouslySetInnerHTML) */
+.ai-content p { margin-bottom: .75rem; }
+.ai-content ul { margin-bottom: .75rem; padding-left: 1.25rem; }
+.ai-content h1, .ai-content h2, .ai-content h3 { margin-top: 1rem; margin-bottom: .5rem; }
+
+/* Imágenes miniaturas en el preview */
+.thumb-120 { width: 120px; }
+
+/* Reglas de impresión generales (para cuando imprimas la vista HTML, aunque el PDF lo hace react-pdf) */
+@media print {
+  .no-print { display: none !important; }
+}
