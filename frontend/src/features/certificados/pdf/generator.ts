@@ -60,6 +60,7 @@ const LEFT_SIDEBAR_SIZE_REDUCTION = 0.9;
 const LEFT_SIDEBAR_RIGHT_SHIFT = 5;
 const FOOTER_SIZE_REDUCTION = 0.9;
 const PRACTICAL_COLUMN_LEFT_SHIFT = 100;
+const PRACTICAL_COLUMN_RIGHT_MARGIN = 40;
 const MAX_TEXT_BLOCK_WIDTH = 900;
 const TABLE_CELL_PADDING = {
   left: 0,
@@ -685,8 +686,16 @@ function buildCertificateDocDefinition(
     : { text: '—', style: 'tableList', margin: [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] };
 
   const practicalCellContent = practicalItems.length
-    ? { ul: practicalItems, style: 'tableList', margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, 0, 0] }
-    : { text: '—', style: 'tableList', margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, 0, 0] };
+    ? {
+        ul: practicalItems,
+        style: 'tableList',
+        margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0],
+      }
+    : {
+        text: '—',
+        style: 'tableList',
+        margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0],
+      };
 
   stack.push({
     table: {
@@ -695,7 +704,11 @@ function buildCertificateDocDefinition(
       body: [
         [
           { text: 'Contenido Teórico', style: 'tableHeader', margin: [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] },
-          { text: 'Contenido Práctico', style: 'tableHeader', margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, 0, 0] },
+          {
+            text: 'Contenido Práctico',
+            style: 'tableHeader',
+            margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0],
+          },
         ],
         [theoreticalCellContent, practicalCellContent],
       ],
