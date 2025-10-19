@@ -5,12 +5,23 @@ import './main.css';
 
 export type ReportType = 'formacion' | 'simulacro' | 'preventivo' | 'preventivo-ebro';
 
+export type ReportSessionInfo = {
+  id: string;
+  number?: string | null;
+  label?: string | null;
+  direccion?: string | null;
+  nombre?: string | null;
+  fecha?: string | null;
+};
+
 type ReportDraft = {
   type: ReportType;
   dealId?: string;
   datos?: Record<string, any>;
   formador?: { nombre?: string; idioma?: string };
   imagenes?: Array<{ name?: string; dataUrl?: string }>;
+  session?: ReportSessionInfo | null;
+  sessionOptions?: ReportSessionInfo[];
 };
 
 type Stage = 'form' | 'preview';
@@ -33,6 +44,8 @@ const createEmptyDraft = (type: ReportType): ReportDraft => ({
   formador: { nombre: '', idioma: 'ES' },
   datos: { tipo: type, idioma: 'ES' },
   imagenes: [],
+  session: null,
+  sessionOptions: [],
 });
 
 export function ReportsFlow({ type, title }: ReportsFlowProps) {

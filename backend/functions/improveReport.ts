@@ -10,8 +10,6 @@ export const handler = async (event) => {
 
     const datosGenerales = `
 Cliente: ${datos?.cliente || ''}
-CIF: ${datos?.cif || ''}
-Dirección (Organización): ${datos?.direccionOrg || ''}
 Dirección de la formación: ${datos?.sede || ''}
 Fecha: ${datos?.fecha || ''}
 Sesiones: ${datos?.sesiones || 1}

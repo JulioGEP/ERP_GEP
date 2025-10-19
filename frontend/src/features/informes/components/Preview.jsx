@@ -2,6 +2,34 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { generateReportPdfmake } from '../pdf/reportPdfmake'
 import { triesKey, htmlKey } from '../utils/keys'
 
+const normalizeDisplay = (value) => {
+  if (value === null || value === undefined) return ''
+  const text = typeof value === 'string' ? value : String(value)
+  return text.trim()
+}
+
+const formatSessionLabel = (session) => {
+  if (!session) return ''
+  const explicit = normalizeDisplay(session.label)
+  if (explicit) return explicit
+
+  const parts = []
+  const number = normalizeDisplay(session.number)
+  if (number) parts.push(`Sesión ${number}`)
+
+  const nombre = normalizeDisplay(session.nombre)
+  if (nombre) parts.push(nombre)
+
+  if (!parts.length) {
+    const id = normalizeDisplay(session.id)
+    if (id) parts.push(`Sesión ${id.slice(0, 8)}`)
+  }
+
+  const direccion = normalizeDisplay(session.direccion)
+  const base = parts.join(' – ')
+  return `${base}${direccion ? ` (${direccion})` : ''}`.trim()
+}
+
 const maxTries = 3
 
 const stripImagesFromDatos = (value) => {
@@ -213,7 +241,7 @@ function EditableHtml({ dealId, initialHtml, onChange }) {
 export default function Preview(props) {
   const { onBack, title = 'Informe de Formación', type: propType } = props
   const draft = props.draft ?? props.data ?? {}
-  const { datos, imagenes, formador, dealId, type: draftType } = draft
+  const { datos, imagenes, formador, dealId, type: draftType, session } = draft
   const type = propType || draftType || 'formacion'
   const isSimulacro = type === 'simulacro'
   const isPreventivo = type === 'preventivo' || type === 'preventivo-ebro'
@@ -236,6 +264,7 @@ export default function Preview(props) {
     : isSimulacro
       ? 'Dirección del simulacro'
       : 'Dirección de la formación'
+  const sessionLabel = useMemo(() => formatSessionLabel(session), [session])
   const bomberosRaw = (formador?.nombre || '').trim()
   const bomberosList = bomberosRaw
     ? bomberosRaw.split(/\s*(?:[,;]|\r?\n)+\s*/).map((name) => name.trim()).filter(Boolean)
@@ -245,6 +274,8 @@ export default function Preview(props) {
   const [aiHtml, setAiHtml] = useState(null)
   const [aiBusy, setAiBusy] = useState(false)
   const [tries, setTries] = useState(0)
+  const [uploading, setUploading] = useState(false)
+  const [lastUpload, setLastUpload] = useState(null)
 
   // Cargar contador + HTML guardado
   useEffect(() => {
@@ -261,6 +292,10 @@ export default function Preview(props) {
       setTries(0); setAiHtml(null)
     }
   }, [dealId])
+
+  useEffect(() => {
+    setLastUpload(null)
+  }, [dealId, session?.id])
 
   const resetLocalForDeal = () => {
     try {
@@ -360,12 +395,95 @@ export default function Preview(props) {
     }
   }
 
-  const descargarPDF = async () => {
+  const guardarEnDrive = async () => {
+    if (!dealId) {
+      alert('El Nº de presupuesto es obligatorio.')
+      return
+    }
+    if (!session || !session.id) {
+      alert('Selecciona la sesión correspondiente en el formulario antes de guardar el informe.')
+      return
+    }
+    if (!tieneContenido) {
+      alert('Completa el contenido del informe antes de guardarlo.')
+      return
+    }
+
+    const toBase64FromArrayBuffer = (buffer) => {
+      if (!buffer) return null
+      try {
+        const bytes = new Uint8Array(buffer)
+        let binary = ''
+        for (let i = 0; i < bytes.length; i += 1) {
+          binary += String.fromCharCode(bytes[i])
+        }
+        return typeof window !== 'undefined' && window.btoa ? window.btoa(binary) : Buffer.from(binary, 'binary').toString('base64')
+      } catch (error) {
+        console.warn('No se pudo convertir el PDF a Base64 desde ArrayBuffer.', error)
+        return null
+      }
+    }
+
+    setUploading(true)
     try {
-      await generateReportPdfmake({ dealId, datos, formador, imagenes, type, aiHtml })
-    } catch (e) {
-      console.error('Error generando PDF (pdfmake):', e)
-      alert('No se ha podido generar el PDF.')
+      const pdf = await generateReportPdfmake({ dealId, datos, formador, imagenes, type, aiHtml })
+
+      let base64 = typeof pdf?.base64 === 'string' ? pdf.base64 : null
+      if (!base64 && typeof pdf?.dataUrl === 'string') {
+        const [, encoded] = pdf.dataUrl.split(',')
+        base64 = encoded || null
+      }
+      if (!base64 && pdf?.arrayBuffer) {
+        base64 = toBase64FromArrayBuffer(pdf.arrayBuffer)
+      }
+      if (!base64) {
+        throw new Error('No se pudo preparar el PDF para subirlo a Drive.')
+      }
+      base64 = base64.replace(/\s+/g, '')
+
+      const payload = {
+        dealId,
+        sessionId: session.id,
+        fileName: pdf?.fileName || `Informe-${dealId}.pdf`,
+        pdfBase64: base64,
+        sessionNumber: session.number ?? null,
+        sessionName: session.nombre ?? null,
+      }
+
+      const response = await fetch('/.netlify/functions/reportUpload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const raw = await response.text()
+      let data = null
+      if (raw) {
+        try {
+          data = JSON.parse(raw)
+        } catch (error) {
+          console.error('Respuesta reportUpload no JSON:', error, raw)
+        }
+      }
+
+      if (!response.ok) {
+        const message = data?.error || data?.message || raw || 'Error guardando el PDF en Drive.'
+        throw new Error(message)
+      }
+
+      if (data?.document) {
+        setLastUpload({ ...data.document, drive_url: data?.drive_url || null })
+      } else {
+        setLastUpload(null)
+      }
+
+      alert('Documento guardado en Drive.')
+    } catch (error) {
+      console.error(error)
+      const message = error?.message ? `No se ha podido guardar el PDF.\n${error.message}` : 'No se ha podido guardar el PDF.'
+      alert(message)
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -386,12 +504,26 @@ export default function Preview(props) {
             </button>
           )}
           {aiHtml && (
-            <button className="btn btn-success" onClick={descargarPDF} disabled={!tieneContenido}>
-              Descargar PDF
+            <button className="btn btn-success" onClick={guardarEnDrive} disabled={!tieneContenido || uploading}>
+              {uploading ? 'Guardando…' : 'Guardar en Drive'}
             </button>
           )}
         </div>
       </div>
+
+      {lastUpload?.drive_web_view_link && (
+        <div className="alert alert-success mt-2" role="alert">
+          Documento guardado en Drive:
+          <a
+            className="ms-1"
+            href={lastUpload.drive_web_view_link}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {lastUpload.drive_file_name || 'Abrir documento'}
+          </a>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-body">
@@ -406,16 +538,15 @@ export default function Preview(props) {
                   {!isPreventivoEbro && (
                     <div className="col-12"><strong>Nº Presupuesto:</strong> {dealId || '—'}</div>
                   )}
-                  <div className="col-md-7"><strong>Cliente:</strong> {datos?.cliente || '—'}</div>
-                  <div className="col-md-5"><strong>CIF:</strong> {datos?.cif || '—'}</div>
-                  {!isPreventivoEbro && (
-                    <div className="col-md-6"><strong>Dirección fiscal:</strong> {datos?.direccionOrg || '—'}</div>
-                  )}
-                  <div className="col-md-6"><strong>{direccionSedeLabel}:</strong> {datos?.sede || '—'}</div>
-                  <div className="col-md-6"><strong>Persona de contacto:</strong> {datos?.contacto || '—'}</div>
-                  {!isPreventivoEbro && (
-                    <div className="col-md-6"><strong>Comercial:</strong> {datos?.comercial || '—'}</div>
-                  )}
+                <div className="col-12"><strong>Cliente:</strong> {datos?.cliente || '—'}</div>
+                {sessionLabel && (
+                  <div className="col-md-6 col-12"><strong>Sesión:</strong> {sessionLabel}</div>
+                )}
+                <div className="col-md-6 col-12"><strong>Persona de contacto:</strong> {datos?.contacto || '—'}</div>
+                <div className="col-md-6 col-12"><strong>{direccionSedeLabel}:</strong> {datos?.sede || '—'}</div>
+                {!isPreventivoEbro && (
+                  <div className="col-md-6 col-12"><strong>Comercial:</strong> {datos?.comercial || '—'}</div>
+                )}
                 </div>
               </div>
             </div>
@@ -600,8 +731,8 @@ export default function Preview(props) {
           </button>
         )}
         {aiHtml && (
-          <button className="btn btn-success" onClick={descargarPDF} disabled={!tieneContenido}>
-            Descargar PDF
+          <button className="btn btn-success" onClick={guardarEnDrive} disabled={!tieneContenido || uploading}>
+            {uploading ? 'Guardando…' : 'Guardar en Drive'}
           </button>
         )}
       </div>

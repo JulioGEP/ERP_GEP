@@ -222,8 +222,6 @@ const preventivoPdfLabels = {
     idioma: 'Idioma',
     presupuesto: 'Nº Presupuesto',
     cliente: 'Cliente',
-    cif: 'CIF',
-    direccionFiscal: 'Dirección fiscal',
     direccionSimulacro: 'Dirección del Preventivo',
     contacto: 'Persona de contacto',
     comercial: 'Comercial',
@@ -243,8 +241,6 @@ const preventivoPdfLabels = {
     idioma: 'Idioma',
     presupuesto: 'Núm. de pressupost',
     cliente: 'Client',
-    cif: 'NIF/CIF',
-    direccionFiscal: 'Adreça fiscal',
     direccionSimulacro: 'Adreça del preventiu',
     contacto: 'Persona de contacte',
     comercial: 'Comercial',
@@ -264,8 +260,6 @@ const preventivoPdfLabels = {
     idioma: 'Language',
     presupuesto: 'Budget ID',
     cliente: 'Customer',
-    cif: 'Tax ID',
-    direccionFiscal: 'Fiscal address',
     direccionSimulacro: 'Preventive address',
     contacto: 'Contact person',
     comercial: 'Account manager',
@@ -367,9 +361,7 @@ const buildDocDefinition = ({
                       width:'50%',
                       stack: [
                         { columns: kv('Nº Presupuesto', dealId) },
-                        { columns: kv('Empresa', datos?.cliente) },
-                        { columns: kv('CIF', datos?.cif) },
-                        { columns: kv('Dirección fiscal', datos?.direccionOrg) },
+                        { columns: kv('Cliente', datos?.cliente) },
                         { columns: kv('Dirección del simulacro', datos?.sede) },
                       ],
                     },
@@ -433,8 +425,6 @@ const buildDocDefinition = ({
     const leftStack = [
       !isPreventivoEbro && { columns: kv(labels.presupuesto, dealId) },
       { columns: kv(labels.cliente, datos?.cliente) },
-      { columns: kv(labels.cif, datos?.cif) },
-      !isPreventivoEbro && { columns: kv(labels.direccionFiscal, datos?.direccionOrg) },
       { columns: kv(labels.direccionSimulacro, datos?.sede) },
     ].filter(Boolean)
     const rightStack = [
@@ -618,9 +608,7 @@ const buildDocDefinition = ({
                         width: '50%',
                         stack: [
                           { columns: kv('Nº Presupuesto', dealId) },
-                          { columns: kv('Empresa', datos?.cliente) },
-                          { columns: kv('CIF', datos?.cif) },
-                          { columns: kv('Dirección fiscal', datos?.direccionOrg) },
+                          { columns: kv('Cliente', datos?.cliente) },
                           { columns: kv('Dirección de la formación', datos?.sede) },
                         ],
                       },
@@ -782,7 +770,6 @@ export async function generateReportPdfmake(draft) {
   const nombre = `GEP Group – ${dealId || 'SinPresu'} – ${cliente} – ${titulo} – ${fecha || 'fecha'}.pdf`
 
   const pdf = pdfMake.createPdf(docDefinition)
-  pdf.download(nombre)
 
   return new Promise((resolve, reject) => {
     try {
