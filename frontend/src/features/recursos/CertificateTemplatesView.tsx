@@ -55,6 +55,30 @@ function resolveProductLabel(product: Product): string {
   return product.id;
 }
 
+function normaliseTemplateKey(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+function extractTemplateTokens(value: string): string[] {
+  return value
+    .split(/[;,|\n]+/)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+}
+
 function resolveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -453,17 +477,48 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
     : null;
   const products = productsQuery.data ?? [];
   const associatedTrainingNames = useMemo(() => {
-    const templateId = selectedTemplate?.id?.trim();
-    if (!templateId) {
+    if (!selectedTemplate) {
       return [] as string[];
     }
 
+    const templateCandidates = [selectedTemplate.id, selectedTemplate.name, selectedTemplate.title]
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => value.length > 0);
+
+    if (!templateCandidates.length) {
+      return [] as string[];
+    }
+
+    const directValues = new Set(templateCandidates);
+    const normalisedValues = new Set(
+      templateCandidates
+        .map((candidate) => normaliseTemplateKey(candidate))
+        .filter((candidate): candidate is string => Boolean(candidate)),
+    );
+
     return products
-      .filter((product) => (product.template ?? '').trim() === templateId)
+      .filter((product) => {
+        const rawTemplate = product.template ?? '';
+        const trimmedTemplate = rawTemplate.trim();
+        if (!trimmedTemplate) {
+          return false;
+        }
+
+        const templateValues = extractTemplateTokens(trimmedTemplate);
+        const candidates = templateValues.length ? templateValues : [trimmedTemplate];
+
+        return candidates.some((value) => {
+          if (directValues.has(value)) {
+            return true;
+          }
+          const normalised = normaliseTemplateKey(value);
+          return Boolean(normalised && normalisedValues.has(normalised));
+        });
+      })
       .map((product) => resolveProductLabel(product))
       .filter((label, index, array) => label.length > 0 && array.indexOf(label) === index)
       .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
-  }, [products, selectedTemplate?.id]);
+  }, [products, selectedTemplate]);
   const isLoadingAssociations = productsQuery.isLoading || productsQuery.isFetching;
   const associationsError = productsQuery.error ? resolveErrorMessage(productsQuery.error) : null;
   const canDuplicate = Boolean(formState?.id);
