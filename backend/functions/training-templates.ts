@@ -46,6 +46,7 @@ type TemplatePayload = {
   duration?: unknown;
   theory?: unknown;
   practice?: unknown;
+  mode?: unknown;
 };
 
 function normalise(value: unknown): string {
@@ -195,6 +196,33 @@ function resolveTemplateKeyById(map: RawTemplatesRegistry, targetId: string): st
   return null;
 }
 
+function resolveTemplateKeyByName(map: RawTemplatesRegistry, targetName: string): string | null {
+  const trimmedName = toDisplayString(targetName);
+  if (!trimmedName) {
+    return null;
+  }
+  const normalisedTarget = normalise(trimmedName);
+  if (!normalisedTarget) {
+    return null;
+  }
+
+  for (const [key, definition] of Object.entries(map)) {
+    if (!definition || typeof definition !== 'object') {
+      continue;
+    }
+    const storedName = toDisplayString((definition as { name?: unknown }).name) || toDisplayString(key);
+    if (!storedName) {
+      continue;
+    }
+    const normalisedName = normalise(storedName);
+    if (normalisedName === normalisedTarget) {
+      return key;
+    }
+  }
+
+  return null;
+}
+
 function applyTemplateChanges(
   map: RawTemplatesRegistry,
   order: string[],
@@ -208,6 +236,8 @@ function applyTemplateChanges(
   const duration = toDisplayString(payload.duration);
   const theory = toStringArray(payload.theory);
   const practice = toStringArray(payload.practice);
+  const mode = toDisplayString(payload.mode).toLowerCase();
+  const allowOverwrite = mode === 'update';
   const existingIds = new Set(
     Object.values(map)
       .map((definition) => (definition && typeof definition === 'object' ? toDisplayString((definition as { id?: unknown }).id) : ''))
@@ -217,8 +247,21 @@ function applyTemplateChanges(
   const providedId = toDisplayString(payload.id);
   let targetKey = providedId ? resolveTemplateKeyById(map, providedId) : null;
 
+  if (!targetKey && allowOverwrite) {
+    targetKey = resolveTemplateKeyByName(map, name);
+  }
+
   const nextMap: RawTemplatesRegistry = { ...map };
   const nextOrder = [...order];
+
+  if (!targetKey && !allowOverwrite) {
+    const conflictingKey = resolveTemplateKeyByName(map, name);
+    if (conflictingKey) {
+      return {
+        error: errorResponse('VALIDATION_ERROR', 'Ya existe una plantilla con ese nombre.', 400),
+      };
+    }
+  }
 
   if (targetKey) {
     const currentDefinition = { ...(nextMap[targetKey] ?? {}) } as RawTemplateDefinition;

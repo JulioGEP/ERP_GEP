@@ -82,6 +82,7 @@ function getTrainingTemplatesApi(): TrainingTemplatesApi {
 
 function mapTemplateToFormState(template: TrainingTemplate, api: TrainingTemplatesApi): TemplateFormState {
   const isCustom = Boolean(api.isCustomTemplateId?.(template.id));
+  const hasPersistableId = Boolean(template.id?.trim?.());
   return {
     id: template.id ?? '',
     name: template.name ?? '',
@@ -89,7 +90,7 @@ function mapTemplateToFormState(template: TrainingTemplate, api: TrainingTemplat
     duration: template.duration ?? '',
     theoryText: Array.isArray(template.theory) ? template.theory.join('\n') : '',
     practiceText: Array.isArray(template.practice) ? template.practice.join('\n') : '',
-    persistId: isCustom,
+    persistId: hasPersistableId,
     isCustom,
   };
 }
@@ -112,8 +113,9 @@ function buildPayloadFromState(
   state: TemplateFormState,
   overrides: Partial<TrainingTemplateInput> = {}
 ): TrainingTemplateInput {
+  const trimmedId = state.id?.trim?.() ?? '';
   const base: TrainingTemplateInput = {
-    id: state.persistId ? state.id : undefined,
+    id: state.persistId && trimmedId ? trimmedId : undefined,
     name: state.name.trim(),
     title: state.title.trim(),
     duration: state.duration.trim(),
@@ -337,16 +339,27 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       }
 
       const name = formState.name.trim();
-      const ignoreId = formState.persistId ? formState.id : undefined;
+      const trimmedId = formState.id?.trim?.() ?? '';
+      const isEditingExisting = trimmedId.length > 0 && templates.some((template) => template.id === trimmedId);
+      const ignoreId = isEditingExisting ? trimmedId : undefined;
       if (hasTemplateWithName(name, ignoreId)) {
         onNotify({ variant: 'danger', message: 'Ya existe una plantilla con ese nombre.' });
         return;
       }
 
-      const payload = buildPayloadFromState(formState);
-      await handlePersistTemplate(payload);
+      const overrides: Partial<TrainingTemplateInput> = {};
+      if (isEditingExisting && trimmedId) {
+        overrides.id = trimmedId;
+        overrides.mode = 'update';
+      } else {
+        overrides.mode = 'create';
+      }
+
+      const payload = buildPayloadFromState(formState, overrides);
+      const successMessage = overrides.mode === 'update' ? 'Plantilla actualizada correctamente.' : undefined;
+      await handlePersistTemplate(payload, successMessage);
     },
-    [api, formState, handlePersistTemplate, hasTemplateWithName, onNotify]
+    [api, formState, handlePersistTemplate, hasTemplateWithName, onNotify, templates]
   );
 
   const handleSaveAsNew = useCallback(async () => {
@@ -371,7 +384,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       return;
     }
 
-    const payload = buildPayloadFromState(formState, { id: undefined, name: trimmedName });
+    const payload = buildPayloadFromState(formState, { id: undefined, name: trimmedName, mode: 'create' });
     await handlePersistTemplate(payload, `La plantilla "${trimmedName}" se ha creado correctamente.`);
   }, [api, formState, handlePersistTemplate, hasTemplateWithName, onNotify]);
 
@@ -397,7 +410,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       return;
     }
 
-    const payload = buildPayloadFromState(formState, { id: undefined, name: trimmedName });
+    const payload = buildPayloadFromState(formState, { id: undefined, name: trimmedName, mode: 'create' });
     await handlePersistTemplate(payload, `La plantilla "${trimmedName}" se ha duplicado correctamente.`);
   }, [api, formState, handlePersistTemplate, hasTemplateWithName, onNotify]);
 
