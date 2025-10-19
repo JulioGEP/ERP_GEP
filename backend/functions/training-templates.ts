@@ -192,6 +192,11 @@ function resolveTemplateKeyById(map: RawTemplatesRegistry, targetId: string): st
     if (defId === trimmedId) {
       return key;
     }
+
+    const template = toTrainingTemplate(key, definition);
+    if (template && toDisplayString(template.id) === trimmedId) {
+      return key;
+    }
   }
   return null;
 }
@@ -237,7 +242,6 @@ function applyTemplateChanges(
   const theory = toStringArray(payload.theory);
   const practice = toStringArray(payload.practice);
   const mode = toDisplayString(payload.mode).toLowerCase();
-  const allowOverwrite = mode === 'update';
   const existingIds = new Set(
     Object.values(map)
       .map((definition) => (definition && typeof definition === 'object' ? toDisplayString((definition as { id?: unknown }).id) : ''))
@@ -245,26 +249,38 @@ function applyTemplateChanges(
   );
 
   const providedId = toDisplayString(payload.id);
-  let targetKey = providedId ? resolveTemplateKeyById(map, providedId) : null;
+  const keyById = providedId ? resolveTemplateKeyById(map, providedId) : null;
+  const allowOverwrite = mode === 'update' || Boolean(keyById);
+  const keyByName = resolveTemplateKeyByName(map, name);
+  let targetKey = keyById;
 
-  if (!targetKey && allowOverwrite) {
-    targetKey = resolveTemplateKeyByName(map, name);
+  if (!allowOverwrite && keyByName) {
+    return {
+      error: errorResponse('VALIDATION_ERROR', 'Ya existe una plantilla con ese nombre.', 400),
+    };
+  }
+
+  if (allowOverwrite) {
+    if (keyByName) {
+      targetKey = keyByName;
+    } else if (!targetKey) {
+      targetKey = keyById;
+    }
   }
 
   const nextMap: RawTemplatesRegistry = { ...map };
   const nextOrder = [...order];
 
-  if (!targetKey && !allowOverwrite) {
-    const conflictingKey = resolveTemplateKeyByName(map, name);
-    if (conflictingKey) {
-      return {
-        error: errorResponse('VALIDATION_ERROR', 'Ya existe una plantilla con ese nombre.', 400),
-      };
-    }
-  }
-
   if (targetKey) {
     const currentDefinition = { ...(nextMap[targetKey] ?? {}) } as RawTemplateDefinition;
+
+    if (keyById && keyById !== targetKey) {
+      delete nextMap[keyById];
+      const index = nextOrder.indexOf(keyById);
+      if (index >= 0) {
+        nextOrder.splice(index, 1);
+      }
+    }
 
     currentDefinition.id = providedId || currentDefinition.id || `${DEFAULT_TEMPLATE_PREFIX}${normalise(title || name).replace(/\s+/g, '-') || 'plantilla'}`;
     currentDefinition.titulo = title;
