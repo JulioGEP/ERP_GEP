@@ -848,7 +848,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
                     </button>
                   </div>
                   {sessionOptions.length > 0 && (
-                    <div className="col-12 col-md-5 col-lg-5">
+                    <div className="col-12 col-md-5 col-lg-5 d-flex flex-column justify-content-end">
                       <label className="form-label">Sesión</label>
                       <select
                         ref={sessionSelectRef}
@@ -865,7 +865,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
                           </option>
                         ))}
                       </select>
-                      <div className="form-text">Se usará su dirección para rellenar el informe.</div>
                     </div>
                   )}
                 </div>
