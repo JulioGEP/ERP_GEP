@@ -1,34 +1,12 @@
-import path from 'node:path';
 import { Buffer } from 'node:buffer';
-import { promises as fs } from 'node:fs';
 
+import { PrismaClient } from '@prisma/client';
+
+import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
-
-const DATA_FILE_PATH = path.resolve(
-  process.cwd(),
-  'frontend',
-  'src',
-  'features',
-  'informes',
-  'utils',
-  'plantillas.json',
-);
 
 const CUSTOM_TEMPLATE_PREFIX = 'custom-';
 const DEFAULT_TEMPLATE_PREFIX = 'default-';
-
-type RawTemplateDefinition = {
-  id?: unknown;
-  titulo?: unknown;
-  title?: unknown;
-  duracion?: unknown;
-  duration?: unknown;
-  teorica?: unknown;
-  practica?: unknown;
-  name?: unknown;
-};
-
-type RawTemplatesRegistry = Record<string, RawTemplateDefinition>;
 
 type TrainingTemplate = {
   id: string;
@@ -49,6 +27,23 @@ type TemplatePayload = {
   mode?: unknown;
 };
 
+type PlantillaRecord = {
+  id: string;
+  name: string;
+  title: string;
+  slug: string;
+  puntos: unknown;
+};
+
+type PuntosPayload = {
+  duration?: unknown;
+  duracion?: unknown;
+  theory?: unknown;
+  teorica?: unknown;
+  practice?: unknown;
+  practica?: unknown;
+};
+
 function normalise(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
@@ -56,7 +51,7 @@ function normalise(value: unknown): string {
   return String(value)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+    .replace(/[^a-zA-Z0-9\s-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
@@ -83,246 +78,119 @@ function toStringArray(value: unknown): string[] {
     .filter((entry) => entry.length > 0);
 }
 
-async function readTemplatesFile(): Promise<{ map: RawTemplatesRegistry; order: string[] }> {
-  const raw = await fs.readFile(DATA_FILE_PATH, 'utf8');
-  const parsed = JSON.parse(raw) as RawTemplatesRegistry;
-  const entries = Object.entries(parsed ?? {});
-  const order = entries.map(([key]) => key);
-  const map: RawTemplatesRegistry = {};
-  for (const [key, value] of entries) {
-    if (!value || typeof value !== 'object') {
-      continue;
-    }
-    map[key] = value;
+function parsePuntos(puntos: unknown): { duration: string; theory: string[]; practice: string[] } {
+  if (!puntos || typeof puntos !== 'object') {
+    return { duration: '', theory: [], practice: [] };
   }
-  return { map, order };
+
+  const data = puntos as PuntosPayload;
+  const duration = toDisplayString(data.duration ?? data.duracion);
+  const theory = toStringArray((data.theory ?? data.teorica) as unknown);
+  const practice = toStringArray((data.practice ?? data.practica) as unknown);
+
+  return { duration, theory, practice };
 }
 
-async function writeTemplatesFile(map: RawTemplatesRegistry, order: string[]): Promise<void> {
-  const payload: RawTemplatesRegistry = {};
-  for (const key of order) {
-    if (!key) {
-      continue;
-    }
-    const value = map[key];
-    if (!value) {
-      continue;
-    }
-    payload[key] = value;
-  }
-  const json = JSON.stringify(payload, null, 2);
-  await fs.writeFile(DATA_FILE_PATH, `${json}\n`, 'utf8');
-}
-
-function toTrainingTemplate(key: string, definition: RawTemplateDefinition): TrainingTemplate | null {
-  if (!definition || typeof definition !== 'object') {
-    return null;
-  }
-
-  const id = toDisplayString((definition as { id?: unknown }).id);
-  const storedName = toDisplayString((definition as { name?: unknown }).name);
-  const name = storedName || toDisplayString(key);
-  const title = toDisplayString((definition as { titulo?: unknown }).titulo ?? (definition as { title?: unknown }).title) || name;
-  const duration = toDisplayString((definition as { duracion?: unknown }).duracion ?? (definition as { duration?: unknown }).duration);
-  const theory = toStringArray((definition as { teorica?: unknown }).teorica);
-  const practice = toStringArray((definition as { practica?: unknown }).practica);
-
-  const resolvedId = id || `${DEFAULT_TEMPLATE_PREFIX}${normalise(title || name).replace(/\s+/g, '-') || 'plantilla'}`;
-
+function toTrainingTemplate(record: PlantillaRecord): TrainingTemplate {
+  const { duration, theory, practice } = parsePuntos(record.puntos);
   return {
-    id: resolvedId,
-    name,
-    title,
+    id: record.slug,
+    name: record.name,
+    title: record.title,
     duration,
     theory,
     practice,
   };
 }
 
-function ensureUniqueCustomId(existingIds: Set<string>, base: string): string {
-  const normalised = normalise(base);
-  const slug = normalised.replace(/\s+/g, '-') || 'plantilla';
-  let candidate = `${CUSTOM_TEMPLATE_PREFIX}${slug}`;
-  let index = 2;
-  while (existingIds.has(candidate)) {
-    candidate = `${CUSTOM_TEMPLATE_PREFIX}${slug}-${index}`;
-    index += 1;
-  }
-  existingIds.add(candidate);
-  return candidate;
-}
-
-function ensureUniqueTemplateKey(map: RawTemplatesRegistry, base: string): string {
-  const trimmed = toDisplayString(base) || 'Plantilla';
-  let candidate = trimmed;
-  let index = 2;
-  while (map[candidate]) {
-    candidate = `${trimmed} (${index})`;
-    index += 1;
-  }
-  return candidate;
-}
-
-async function handleListTemplates() {
-  const { map, order } = await readTemplatesFile();
-  const templates: TrainingTemplate[] = [];
-  for (const key of order) {
-    const definition = map[key];
-    if (!definition) {
-      continue;
-    }
-    const template = toTrainingTemplate(key, definition);
-    if (template) {
-      templates.push(template);
-    }
-  }
-  return successResponse({ templates });
-}
-
-function resolveTemplateKeyById(map: RawTemplatesRegistry, targetId: string): string | null {
-  const trimmedId = toDisplayString(targetId);
-  if (!trimmedId) {
-    return null;
-  }
-  for (const [key, definition] of Object.entries(map)) {
-    if (!definition || typeof definition !== 'object') {
-      continue;
-    }
-    const defId = toDisplayString((definition as { id?: unknown }).id);
-    if (defId === trimmedId) {
-      return key;
-    }
-
-    const template = toTrainingTemplate(key, definition);
-    if (template && toDisplayString(template.id) === trimmedId) {
-      return key;
-    }
-  }
-  return null;
-}
-
-function resolveTemplateKeyByName(map: RawTemplatesRegistry, targetName: string): string | null {
-  const trimmedName = toDisplayString(targetName);
-  if (!trimmedName) {
-    return null;
-  }
-  const normalisedTarget = normalise(trimmedName);
-  if (!normalisedTarget) {
-    return null;
-  }
-
-  for (const [key, definition] of Object.entries(map)) {
-    if (!definition || typeof definition !== 'object') {
-      continue;
-    }
-    const storedName = toDisplayString((definition as { name?: unknown }).name) || toDisplayString(key);
-    if (!storedName) {
-      continue;
-    }
-    const normalisedName = normalise(storedName);
-    if (normalisedName === normalisedTarget) {
-      return key;
-    }
-  }
-
-  return null;
-}
-
-function applyTemplateChanges(
-  map: RawTemplatesRegistry,
-  order: string[],
-  payload: TemplatePayload,
-): { template: TrainingTemplate; map: RawTemplatesRegistry; order: string[] } | { error: ReturnType<typeof errorResponse> } {
-  const name = toDisplayString(payload.name);
-  const title = toDisplayString(payload.title) || name;
-  if (!name) {
-    return { error: errorResponse('VALIDATION_ERROR', 'El nombre de la formación es obligatorio.', 400) };
-  }
-  const duration = toDisplayString(payload.duration);
-  const theory = toStringArray(payload.theory);
-  const practice = toStringArray(payload.practice);
-  const mode = toDisplayString(payload.mode).toLowerCase();
-  const existingIds = new Set(
-    Object.values(map)
-      .map((definition) => (definition && typeof definition === 'object' ? toDisplayString((definition as { id?: unknown }).id) : ''))
-      .filter((id) => id.length > 0),
-  );
-
-  const providedId = toDisplayString(payload.id);
-  const keyById = providedId ? resolveTemplateKeyById(map, providedId) : null;
-  const allowOverwrite = mode === 'update' || Boolean(keyById);
-  const keyByName = resolveTemplateKeyByName(map, name);
-  let targetKey = keyById;
-
-  if (!allowOverwrite && keyByName) {
-    return {
-      error: errorResponse('VALIDATION_ERROR', 'Ya existe una plantilla con ese nombre.', 400),
-    };
-  }
-
-  if (allowOverwrite) {
-    if (keyByName) {
-      targetKey = keyByName;
-    } else if (!targetKey) {
-      targetKey = keyById;
-    }
-  }
-
-  const nextMap: RawTemplatesRegistry = { ...map };
-  const nextOrder = [...order];
-
-  if (targetKey) {
-    const currentDefinition = { ...(nextMap[targetKey] ?? {}) } as RawTemplateDefinition;
-
-    if (keyById && keyById !== targetKey) {
-      delete nextMap[keyById];
-      const index = nextOrder.indexOf(keyById);
-      if (index >= 0) {
-        nextOrder.splice(index, 1);
-      }
-    }
-
-    currentDefinition.id = providedId || currentDefinition.id || `${DEFAULT_TEMPLATE_PREFIX}${normalise(title || name).replace(/\s+/g, '-') || 'plantilla'}`;
-    currentDefinition.titulo = title;
-    currentDefinition.name = name;
-    if (duration) {
-      currentDefinition.duracion = duration;
-    } else {
-      delete currentDefinition.duracion;
-    }
-    currentDefinition.teorica = theory;
-    currentDefinition.practica = practice;
-
-    nextMap[targetKey] = currentDefinition;
-
-    const template = toTrainingTemplate(targetKey, currentDefinition);
-    if (!template) {
-      return { error: errorResponse('UNEXPECTED_ERROR', 'No se pudo procesar la plantilla.', 500) };
-    }
-    return { template, map: nextMap, order: nextOrder };
-  }
-
-  const nextKey = ensureUniqueTemplateKey(nextMap, name);
-
-  const generatedId = ensureUniqueCustomId(existingIds, title || name);
-  const newDefinition: RawTemplateDefinition = {
-    id: generatedId,
-    titulo: title,
-    teorica: theory,
-    practica: practice,
-    name,
+function buildPuntos(duration: string, theory: string[], practice: string[]): Record<string, unknown> {
+  const puntos: Record<string, unknown> = {
+    theory,
+    practice,
   };
-  if (duration) {
-    newDefinition.duracion = duration;
-  }
-  nextMap[nextKey] = newDefinition;
-  nextOrder.push(nextKey);
 
-  const template = toTrainingTemplate(nextKey, newDefinition);
-  if (!template) {
-    return { error: errorResponse('UNEXPECTED_ERROR', 'No se pudo procesar la plantilla.', 500) };
+  if (duration) {
+    puntos.duration = duration;
   }
-  return { template, map: nextMap, order: nextOrder };
+
+  return puntos;
+}
+
+function isUuid(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length !== 36) {
+    return false;
+  }
+  return /^[0-9a-fA-F-]{36}$/.test(trimmed);
+}
+
+async function findTemplateByIdentifier(prisma: PrismaClient, identifier: string): Promise<PlantillaRecord | null> {
+  const trimmed = toDisplayString(identifier);
+  if (!trimmed) {
+    return null;
+  }
+
+  const candidates = Array.from(new Set([trimmed, trimmed.toLowerCase()].filter((value) => value.length > 0)));
+  for (const candidate of candidates) {
+    const bySlug = await prisma.plantillas.findUnique({
+      where: { slug: candidate },
+      select: { id: true, name: true, title: true, slug: true, puntos: true },
+    });
+    if (bySlug) {
+      return bySlug;
+    }
+  }
+
+  if (!isUuid(trimmed)) {
+    return null;
+  }
+
+  try {
+    const byId = await prisma.plantillas.findUnique({
+      where: { id: trimmed },
+      select: { id: true, name: true, title: true, slug: true, puntos: true },
+    });
+    return byId;
+  } catch {
+    return null;
+  }
+}
+
+function resolveSlugCandidate(providedId: string, fallback: string): string {
+  const trimmed = toDisplayString(providedId);
+  const fallbackSource = fallback || trimmed || 'Plantilla';
+  const base = normalise(trimmed || fallbackSource).replace(/\s+/g, '-') || 'plantilla';
+  const lowerTrimmed = trimmed.toLowerCase();
+  const hasKnownPrefix =
+    lowerTrimmed.startsWith(CUSTOM_TEMPLATE_PREFIX) || lowerTrimmed.startsWith(DEFAULT_TEMPLATE_PREFIX);
+  if (hasKnownPrefix) {
+    return base;
+  }
+  return `${CUSTOM_TEMPLATE_PREFIX}${base}`;
+}
+
+async function ensureUniqueSlug(
+  prisma: PrismaClient,
+  baseSlug: string,
+  options: { excludeId?: string } = {},
+): Promise<string> {
+  let candidate = baseSlug;
+  let index = 2;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const existing = await prisma.plantillas.findFirst({
+      where: {
+        slug: candidate,
+        ...(options.excludeId ? { NOT: { id: options.excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (!existing) {
+      return candidate;
+    }
+    candidate = `${baseSlug}-${index}`;
+    index += 1;
+  }
 }
 
 function parsePayload(body: unknown, isBase64Encoded: unknown): TemplatePayload | null {
@@ -346,43 +214,111 @@ function parsePayload(body: unknown, isBase64Encoded: unknown): TemplatePayload 
   }
 }
 
+async function handleListTemplates() {
+  const prisma = getPrisma();
+  const templates: PlantillaRecord[] = await prisma.plantillas.findMany({
+    orderBy: { created_at: 'asc' },
+    select: { id: true, name: true, title: true, slug: true, puntos: true },
+  });
+
+  return successResponse({ templates: templates.map((record) => toTrainingTemplate(record)) });
+}
+
 async function handleSaveTemplate(event: any) {
   const payload = parsePayload(event.body, event.isBase64Encoded);
   if (!payload) {
     return errorResponse('VALIDATION_ERROR', 'Cuerpo de la petición no válido.', 400);
   }
-  const { map, order } = await readTemplatesFile();
-  const result = applyTemplateChanges(map, order, payload);
-  if ('error' in result) {
-    return result.error;
+
+  const name = toDisplayString(payload.name);
+  const title = toDisplayString(payload.title) || name;
+  if (!name) {
+    return errorResponse('VALIDATION_ERROR', 'El nombre de la formación es obligatorio.', 400);
   }
-  await writeTemplatesFile(result.map, result.order);
-  return successResponse({ template: result.template });
+
+  const duration = toDisplayString(payload.duration);
+  const theory = toStringArray(payload.theory);
+  const practice = toStringArray(payload.practice);
+  const mode = toDisplayString(payload.mode).toLowerCase();
+  const providedId = toDisplayString(payload.id);
+
+  const prisma = getPrisma();
+  const existing = providedId ? await findTemplateByIdentifier(prisma, providedId) : null;
+
+  if (existing) {
+    const duplicateName = await prisma.plantillas.findFirst({
+      where: {
+        name: { equals: name, mode: 'insensitive' },
+        NOT: { id: existing.id },
+      },
+      select: { id: true },
+    });
+    if (duplicateName) {
+      return errorResponse('VALIDATION_ERROR', 'Ya existe una plantilla con ese nombre.', 400);
+    }
+
+    const updated = await prisma.plantillas.update({
+      where: { id: existing.id },
+      data: {
+        name,
+        title,
+        puntos: buildPuntos(duration, theory, practice) as any,
+      },
+      select: { id: true, name: true, title: true, slug: true, puntos: true },
+    });
+
+    return successResponse({ template: toTrainingTemplate(updated) });
+  }
+
+  if (mode === 'update' && providedId) {
+    return errorResponse('NOT_FOUND', 'Plantilla no encontrada.', 404);
+  }
+
+  const duplicateName = await prisma.plantillas.findFirst({
+    where: { name: { equals: name, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  if (duplicateName) {
+    return errorResponse('VALIDATION_ERROR', 'Ya existe una plantilla con ese nombre.', 400);
+  }
+
+  const slugBase = resolveSlugCandidate(providedId, title || name);
+  const slug = await ensureUniqueSlug(prisma, slugBase);
+
+  const created = await prisma.plantillas.create({
+    data: {
+      name,
+      title,
+      slug,
+      puntos: buildPuntos(duration, theory, practice) as any,
+    },
+    select: { id: true, name: true, title: true, slug: true, puntos: true },
+  });
+
+  return successResponse({ template: toTrainingTemplate(created) }, 201);
 }
 
 async function handleDeleteTemplate(event: any) {
   const idFromQuery = toDisplayString(event.queryStringParameters?.id);
-  let id = idFromQuery;
-  if (!id && event.body) {
+  let identifier = idFromQuery;
+  if (!identifier && event.body) {
     const parsed = parsePayload(event.body, event.isBase64Encoded);
     if (parsed) {
-      id = toDisplayString((parsed as { id?: unknown }).id);
+      identifier = toDisplayString((parsed as { id?: unknown }).id);
     }
   }
-  if (!id) {
+
+  if (!identifier) {
     return errorResponse('VALIDATION_ERROR', 'Identificador de plantilla no válido.', 400);
   }
 
-  const { map, order } = await readTemplatesFile();
-  const targetKey = resolveTemplateKeyById(map, id);
-  if (!targetKey) {
+  const prisma = getPrisma();
+  const existing = await findTemplateByIdentifier(prisma, identifier);
+  if (!existing) {
     return errorResponse('NOT_FOUND', 'Plantilla no encontrada.', 404);
   }
 
-  const nextMap: RawTemplatesRegistry = { ...map };
-  delete nextMap[targetKey];
-  const nextOrder = order.filter((key) => key !== targetKey);
-  await writeTemplatesFile(nextMap, nextOrder);
+  await prisma.plantillas.delete({ where: { id: existing.id } });
   return successResponse({ deleted: true });
 }
 

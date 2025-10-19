@@ -14,8 +14,7 @@
   # Aseguramos TODA la carpeta .prisma y el paquete @prisma/client
   included_files = [
     "node_modules/.prisma/**",
-    "node_modules/@prisma/client/**",
-    "frontend/src/features/informes/utils/plantillas.json"
+    "node_modules/@prisma/client/**"
   ]
 
 # --------- Redirects ---------
