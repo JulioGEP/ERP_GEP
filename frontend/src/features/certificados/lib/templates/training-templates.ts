@@ -38,6 +38,7 @@ export type TrainingTemplateInput = {
   duration?: string;
   theory?: string[];
   practice?: string[];
+  mode?: 'create' | 'update';
 };
 
 export type TrainingTemplatesManager = {
