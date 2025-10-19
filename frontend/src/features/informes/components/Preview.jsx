@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import logoImg from '../assets/logo-nuevo.png'
 import { generateReportPdfmake } from '../pdf/reportPdfmake'
 import { triesKey, htmlKey } from '../utils/keys'
 
@@ -379,21 +378,7 @@ export default function Preview(props) {
 
   return (
     <div className="d-grid gap-4">
-      {/* Header con margen superior e inferior simétrico */}
-      <div
-        className="border-bottom d-flex align-items-center gap-3 sticky-top bg-white py-3 my-3"
-        style={{ top: 0, zIndex: 10 }}
-      >
-        <img
-          src={logoImg}
-          alt="GEP Group"
-          style={{ width: 180, height: 52, objectFit: 'contain', display: 'block' }}
-        />
-        <div className="flex-grow-1">
-          <h1 className="h5 mb-0">{title}</h1>
-          <small className="text-muted">GEP Group — Formación y Servicios</small>
-        </div>
-      </div>
+      <h1 className="h5 my-3">{title}</h1>
 
       <div className="d-flex align-items-center justify-content-between">
         <h2 className="h5 mb-0">Borrador del informe</h2>
