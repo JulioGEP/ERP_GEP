@@ -1,6 +1,54 @@
 import informesPlantillas from '../../../informes/utils/plantillas.json';
 
-(function (global) {
+export type TrainingTemplate = {
+  id: string;
+  name: string;
+  title: string;
+  duration: string;
+  theory: string[];
+  practice: string[];
+};
+
+export type TrainingTemplateInput = {
+  id?: string;
+  name?: string;
+  title?: string;
+  duration?: string;
+  theory?: string[];
+  practice?: string[];
+};
+
+export type TrainingTemplateDetails = {
+  theory: string[];
+  practice: string[];
+};
+
+export type TrainingTemplatesManager = {
+  listTemplates: () => TrainingTemplate[];
+  getTemplateByName: (name: string) => TrainingTemplate | null;
+  getTemplateById: (id: string) => TrainingTemplate | null;
+  getTrainingDuration: (name: string) => string;
+  getTrainingDetails: (name: string) => TrainingTemplateDetails | null;
+  getTrainingTitle: (name: string) => string;
+  saveTemplate: (template: TrainingTemplateInput) => TrainingTemplate | null;
+  createEmptyTemplate: () => TrainingTemplate;
+  deleteTemplate: (id: string) => boolean;
+  isCustomTemplateId: (id: string) => boolean;
+  subscribe: (callback: () => void) => () => void;
+  normaliseName: (value: string) => string;
+};
+
+type InformeTemplateLookupValue = {
+  title: string;
+  teorica: string[];
+  practica: string[];
+};
+
+type InformeTemplateLookup = Map<string, InformeTemplateLookupValue>;
+
+const globalScope: any = typeof window !== 'undefined' ? window : globalThis;
+
+function createTrainingTemplatesManager(global: any): TrainingTemplatesManager {
   const STORAGE_KEY = 'gep-certificados/training-templates/v1';
 
   const DEFAULT_DURATION_ENTRIES = [
@@ -51,8 +99,8 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     "Curso de ERA's"
   ];
 
-  function buildInformeTemplateLookup() {
-    const lookup = new Map();
+  function buildInformeTemplateLookup(): InformeTemplateLookup {
+    const lookup: InformeTemplateLookup = new Map();
     if (!informesPlantillas || typeof informesPlantillas !== 'object') {
       return lookup;
     }
@@ -61,8 +109,8 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
       if (!normalised) {
         return;
       }
-      const teorica = Array.isArray(content?.teorica) ? [...content.teorica] : [];
-      const practica = Array.isArray(content?.practica) ? [...content.practica] : [];
+      const teorica = Array.isArray((content as any)?.teorica) ? [...(content as any).teorica] : [];
+      const practica = Array.isArray((content as any)?.practica) ? [...(content as any).practica] : [];
       lookup.set(normalised, {
         title,
         teorica,
@@ -72,8 +120,8 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     return lookup;
   }
 
-  function buildCertificateToInformeAliases() {
-    const entries = [
+  function buildCertificateToInformeAliases(): Map<string, string> {
+    const entries: Array<[string, string]> = [
       ['Pack Emergencias', 'Curso pack emergencias – Extinción de incendios básico y primeros auxilios'],
       ['Trabajos en Altura', 'Curso de Trabajos en Altura'],
       ['Trabajos Verticales', 'Curso de Trabajos Verticales'],
@@ -95,7 +143,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
       ["Curso de ERA's", 'Curso Equipos de Respiración Autónoma (ERA)']
     ];
 
-    const map = new Map();
+    const map = new Map<string, string>();
     entries.forEach(([alias, source]) => {
       const aliasKey = normaliseName(alias);
       const sourceKey = normaliseName(source);
@@ -106,7 +154,11 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     return map;
   }
 
-  function resolveInformeTemplateDetails(name) {
+  function resolveInformeTemplateDetails(name: string): {
+    title: string;
+    theory: string[];
+    practice: string[];
+  } | null {
     const normalisedName = normaliseName(name);
     if (!normalisedName) {
       return null;
@@ -123,7 +175,16 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     };
   }
 
-  function getDefaultDetailsEntries() {
+  function getDefaultDetailsEntries(): Array<
+    [
+      string,
+      {
+        title?: string;
+        theory: string[];
+        practice: string[];
+      }
+    ]
+  > {
     return DEFAULT_DETAILS_SOURCE_NAMES.map((name) => {
       const resolved = resolveInformeTemplateDetails(name);
       return [
@@ -137,7 +198,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     });
   }
 
-  function normaliseName(value) {
+  function normaliseName(value: unknown): string {
     if (value === undefined || value === null) {
       return '';
     }
@@ -150,14 +211,14 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
       .replace(/\s+/g, ' ');
   }
 
-  function sanitiseText(value) {
+  function sanitiseText(value: unknown): string {
     if (value === undefined || value === null) {
       return '';
     }
     return String(value).trim();
   }
 
-  function sanitiseList(items) {
+  function sanitiseList(items: unknown): string[] {
     if (!Array.isArray(items)) {
       return [];
     }
@@ -166,7 +227,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
       .filter((text) => text !== '');
   }
 
-  function cloneTemplate(template) {
+  function cloneTemplate(template: TrainingTemplate | null | undefined): TrainingTemplate | null {
     if (!template) {
       return null;
     }
@@ -180,11 +241,13 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     };
   }
 
-  function createCustomId() {
+  function createCustomId(): string {
     return `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  function sanitiseTemplate(template) {
+  function sanitiseTemplate(
+    template: TrainingTemplateInput | TrainingTemplate | null | undefined
+  ): TrainingTemplate {
     if (!template || typeof template !== 'object') {
       return {
         id: '',
@@ -196,22 +259,23 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
       };
     }
 
-    const name = sanitiseText(template.name);
-    const title = sanitiseText(template.title) || name;
+    const input = template as TrainingTemplateInput;
+    const name = sanitiseText(input.name);
+    const title = sanitiseText(input.title) || name;
 
     return {
-      id: template.id ? String(template.id) : '',
+      id: input.id ? String(input.id) : '',
       name,
       title,
-      duration: sanitiseText(template.duration),
-      theory: sanitiseList(template.theory),
-      practice: sanitiseList(template.practice)
+      duration: sanitiseText(input.duration),
+      theory: sanitiseList(input.theory),
+      practice: sanitiseList(input.practice)
     };
   }
 
-  function buildDefaultTemplates() {
-    const templatesByName = new Map();
-    const durationLookup = new Map();
+  function buildDefaultTemplates(): TrainingTemplate[] {
+    const templatesByName = new Map<string, TrainingTemplate>();
+    const durationLookup = new Map<string, string>();
 
     DEFAULT_DURATION_ENTRIES.forEach(([name, duration]) => {
       const normalisedName = normaliseName(name);
@@ -278,8 +342,11 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     });
   }
 
-  function mergeTemplates(defaultTemplates, customTemplates) {
-    const templatesByName = new Map();
+  function mergeTemplates(
+    defaultTemplates: TrainingTemplate[],
+    customTemplates: TrainingTemplate[]
+  ): TrainingTemplate[] {
+    const templatesByName = new Map<string, TrainingTemplate>();
 
     defaultTemplates.forEach((template) => {
       const normalisedName = normaliseName(template.name);
@@ -312,7 +379,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     return Array.from(templatesByName.values());
   }
 
-  function loadCustomTemplates() {
+  function loadCustomTemplates(): TrainingTemplate[] {
     try {
       if (!global.localStorage) {
         return [];
@@ -341,7 +408,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     }
   }
 
-  function persistCustomTemplates(customTemplates) {
+  function persistCustomTemplates(customTemplates: TrainingTemplate[]): void {
     try {
       if (!global.localStorage) {
         return;
@@ -360,12 +427,12 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     }
   }
 
-  let customTemplates = loadCustomTemplates();
-  let templates = [];
-  let sortedTemplates = [];
-  let templatesByName = new Map();
-  let templatesById = new Map();
-  const subscribers = new Set();
+  let customTemplates: TrainingTemplate[] = loadCustomTemplates();
+  let templates: TrainingTemplate[] = [];
+  let sortedTemplates: TrainingTemplate[] = [];
+  let templatesByName = new Map<string, TrainingTemplate>();
+  let templatesById = new Map<string, TrainingTemplate>();
+  const subscribers: Set<() => void> = new Set();
 
   function refreshTemplates() {
     const defaultTemplates = buildDefaultTemplates();
@@ -402,11 +469,13 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
 
   refreshTemplates();
 
-  function listTemplates() {
-    return sortedTemplates.map((template) => cloneTemplate(template));
+  function listTemplates(): TrainingTemplate[] {
+    return sortedTemplates
+      .map((template) => cloneTemplate(template))
+      .filter((template): template is TrainingTemplate => Boolean(template));
   }
 
-  function getTemplateByName(name) {
+  function getTemplateByName(name: string | null | undefined): TrainingTemplate | null {
     const normalisedName = normaliseName(name);
     if (!normalisedName) {
       return null;
@@ -415,7 +484,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     return cloneTemplate(template);
   }
 
-  function getTemplateById(id) {
+  function getTemplateById(id: string | number | null | undefined): TrainingTemplate | null {
     if (!id) {
       return null;
     }
@@ -423,12 +492,12 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     return cloneTemplate(template);
   }
 
-  function getTrainingDuration(name) {
+  function getTrainingDuration(name: string | null | undefined): string {
     const template = getTemplateByName(name);
     return template ? template.duration : '';
   }
 
-  function getTrainingDetails(name) {
+  function getTrainingDetails(name: string | null | undefined): TrainingTemplateDetails | null {
     const template = getTemplateByName(name);
     if (!template) {
       return null;
@@ -439,7 +508,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     };
   }
 
-  function getTrainingTitle(name) {
+  function getTrainingTitle(name: string | null | undefined): string {
     const template = getTemplateByName(name);
     if (!template) {
       return sanitiseText(name);
@@ -447,7 +516,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     return template.title || template.name;
   }
 
-  function saveTemplate(template) {
+  function saveTemplate(template: TrainingTemplateInput): TrainingTemplate | null {
     const sanitised = sanitiseTemplate(template);
     if (!sanitised.name) {
       throw new Error('El nombre de la formación es obligatorio.');
@@ -489,7 +558,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     return getTemplateById(sanitised.id) || getTemplateByName(sanitised.name);
   }
 
-  function createEmptyTemplate() {
+  function createEmptyTemplate(): TrainingTemplate {
     return {
       id: '',
       name: '',
@@ -500,7 +569,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     };
   }
 
-  function isCustomTemplateId(id) {
+  function isCustomTemplateId(id: string | number | null | undefined): boolean {
     if (!id) {
       return false;
     }
@@ -508,7 +577,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     return customTemplates.some((template) => template.id === stringId);
   }
 
-  function deleteTemplate(id) {
+  function deleteTemplate(id: string | number | null | undefined): boolean {
     if (!id) {
       return false;
     }
@@ -527,7 +596,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     return true;
   }
 
-  function subscribe(callback) {
+  function subscribe(callback: () => void): () => void {
     if (typeof callback !== 'function') {
       return () => {};
     }
@@ -537,7 +606,7 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     };
   }
 
-  global.trainingTemplates = {
+  const api: TrainingTemplatesManager = {
     listTemplates,
     getTemplateByName,
     getTemplateById,
@@ -551,4 +620,26 @@ import informesPlantillas from '../../../informes/utils/plantillas.json';
     subscribe,
     normaliseName
   };
-})(typeof window !== 'undefined' ? window : this);
+
+  return api;
+}
+
+export const trainingTemplatesManager = createTrainingTemplatesManager(globalScope);
+
+export function getTrainingTemplatesManager(): TrainingTemplatesManager {
+  return trainingTemplatesManager;
+}
+
+if (globalScope && typeof globalScope === 'object') {
+  try {
+    globalScope.trainingTemplates = trainingTemplatesManager;
+  } catch (error) {
+    console.warn('No se pudo exponer el gestor de plantillas en la ventana global', error);
+  }
+}
+
+declare global {
+  interface Window {
+    trainingTemplates?: TrainingTemplatesManager;
+  }
+}

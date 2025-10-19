@@ -11,7 +11,12 @@ import {
   Table,
 } from 'react-bootstrap';
 
-import '../certificados/lib/templates/training-templates';
+import {
+  getTrainingTemplatesManager,
+  type TrainingTemplate,
+  type TrainingTemplateInput,
+  type TrainingTemplatesManager,
+} from '../certificados/lib/templates/training-templates';
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -22,33 +27,7 @@ type CertificateTemplatesViewProps = {
   onNotify: (toast: ToastParams) => void;
 };
 
-type TrainingTemplate = {
-  id: string;
-  name: string;
-  title: string;
-  duration: string;
-  theory: string[];
-  practice: string[];
-};
-
-type TrainingTemplateInput = {
-  id?: string;
-  name?: string;
-  title?: string;
-  duration?: string;
-  theory?: string[];
-  practice?: string[];
-};
-
-type TrainingTemplatesApi = {
-  listTemplates: () => TrainingTemplate[];
-  saveTemplate: (template: TrainingTemplateInput) => TrainingTemplate;
-  deleteTemplate: (id: string) => boolean;
-  createEmptyTemplate: () => TrainingTemplate;
-  getTemplateById?: (id: string) => TrainingTemplate | null;
-  isCustomTemplateId?: (id: string) => boolean;
-  subscribe?: (callback: () => void) => () => void;
-};
+type TrainingTemplatesApi = TrainingTemplatesManager;
 
 type TemplateFormState = {
   id: string;
@@ -60,12 +39,6 @@ type TemplateFormState = {
   persistId: boolean;
   isCustom: boolean;
 };
-
-declare global {
-  interface Window {
-    trainingTemplates?: TrainingTemplatesApi;
-  }
-}
 
 function resolveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -85,7 +58,7 @@ function normaliseListInput(value: string): string[] {
 }
 
 function getTrainingTemplatesApi(): TrainingTemplatesApi {
-  const api = window.trainingTemplates;
+  const api = getTrainingTemplatesManager();
   if (!api) {
     throw new Error('El gestor de plantillas no está disponible.');
   }
@@ -231,6 +204,9 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
         };
 
         const saved = api.saveTemplate(payload);
+        if (!saved) {
+          throw new Error('No se pudo guardar la plantilla.');
+        }
         setSelectedTemplateId(saved.id);
         setFormState(mapTemplateToFormState(saved, api));
         onNotify({

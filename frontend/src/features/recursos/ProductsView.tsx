@@ -12,7 +12,11 @@ import {
   type ProductUpdatePayload,
 } from './products.api';
 import { ApiError } from '../presupuestos/api';
-import '../certificados/lib/templates/training-templates';
+import {
+  getTrainingTemplatesManager,
+  type TrainingTemplate,
+  type TrainingTemplatesManager,
+} from '../certificados/lib/templates/training-templates';
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -35,23 +39,7 @@ type UpdateVariables = {
   field: 'template' | 'url_formacion' | 'active';
 };
 
-type TrainingTemplate = {
-  id: string;
-  name?: string;
-  title?: string;
-};
-
-type TrainingTemplatesApi = {
-  listTemplates: () => TrainingTemplate[];
-  getTemplateById?: (id: string) => TrainingTemplate | null;
-  subscribe?: (callback: () => void) => () => void;
-};
-
-declare global {
-  interface Window {
-    trainingTemplates?: TrainingTemplatesApi;
-  }
-}
+type TrainingTemplatesApi = TrainingTemplatesManager;
 
 function resolveErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -67,10 +55,7 @@ function resolveErrorMessage(error: unknown): string {
 }
 
 function getTrainingTemplatesApi(): TrainingTemplatesApi | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  return window.trainingTemplates ?? null;
+  return getTrainingTemplatesManager() ?? null;
 }
 
 function mapTemplateOptions(api: TrainingTemplatesApi | null): TemplateOption[] {

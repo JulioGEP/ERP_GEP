@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import plantillasBase from '../utils/plantillas.json'
+import { getTrainingTemplatesManager } from '../../certificados/lib/templates/training-templates'
 import { triesKey, htmlKey } from '../utils/keys'
 
 const fileToDataURL = (file) =>
@@ -32,6 +32,21 @@ const flattenPreventivoImagenes = (imagenesPorSeccion) => {
   return preventivoImageKeys.flatMap((key) =>
     Array.isArray(imagenesPorSeccion?.[key]) ? imagenesPorSeccion[key].map((img) => ({ ...img })) : []
   )
+}
+
+const normaliseStringArray = (value) => {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => (typeof item === 'string' ? item : String(item ?? '')))
+}
+
+const arraysEqual = (a, b) => {
+  const arrayA = normaliseStringArray(a)
+  const arrayB = normaliseStringArray(b)
+  if (arrayA.length !== arrayB.length) return false
+  for (let i = 0; i < arrayA.length; i += 1) {
+    if (arrayA[i] !== arrayB[i]) return false
+  }
+  return true
 }
 
 const toTrimmedOrNull = (value) => {
@@ -170,6 +185,9 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     ? [...sanitizedInitialOptions, initialSessionSanitized]
     : sanitizedInitialOptions
   const [sessionOptions, setSessionOptions] = useState(initialOptions)
+  const trainingTemplatesApiRef = useRef(null)
+  const [trainingTemplates, setTrainingTemplates] = useState([])
+  const lastAppliedTemplateRef = useRef({ key: '', theory: [], practice: [] })
   const [selectedSessionId, setSelectedSessionId] = useState(initialSessionSanitized?.id || null)
   const sessionSelectRef = useRef(null)
   const [selTitulo, setSelTitulo] = useState(isFormacion ? (datos.formacionTitulo || '') : '')
@@ -211,17 +229,94 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     }
   }, [sessionOptions, selectedSessionId])
 
+  useEffect(() => {
+    const api = getTrainingTemplatesManager()
+    trainingTemplatesApiRef.current = api
+
+    const refreshTemplates = () => {
+      if (!api || typeof api.listTemplates !== 'function') {
+        setTrainingTemplates([])
+        return
+      }
+      try {
+        const list = api.listTemplates()
+        setTrainingTemplates(list)
+      } catch (error) {
+        console.error('No se pudieron cargar las plantillas de formación', error)
+        setTrainingTemplates([])
+      }
+    }
+
+    refreshTemplates()
+
+    let unsubscribe
+    if (api && typeof api.subscribe === 'function') {
+      try {
+        unsubscribe = api.subscribe(() => {
+          refreshTemplates()
+        })
+      } catch (error) {
+        console.warn('No se pudo suscribir a los cambios de plantillas', error)
+      }
+    }
+
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        try {
+          unsubscribe()
+        } catch (error) {
+          console.warn('Error al cancelar la suscripción de plantillas', error)
+        }
+      }
+    }
+  }, [])
+
   // Cargar plantilla al seleccionar formación
   useEffect(() => {
-    if (!isFormacion || !selTitulo) return
-    const p = plantillasBase[selTitulo]
-    setDatos(d => ({
-      ...d,
-      formacionTitulo: selTitulo,
-      contenidoTeorica: p?.teorica || [],
-      contenidoPractica: p?.practica || [],
-    }))
-  }, [selTitulo, isFormacion])
+    if (!isFormacion || !selTitulo) {
+      if (isFormacion) {
+        setDatos((current) =>
+          current.formacionTitulo === selTitulo ? current : { ...current, formacionTitulo: selTitulo }
+        )
+      }
+      return
+    }
+
+    const api = trainingTemplatesApiRef.current
+    if (!api || typeof api.getTrainingDetails !== 'function') {
+      setDatos((current) =>
+        current.formacionTitulo === selTitulo ? current : { ...current, formacionTitulo: selTitulo }
+      )
+      return
+    }
+
+    const details = api.getTrainingDetails(selTitulo)
+    const theory = Array.isArray(details?.theory) ? [...details.theory] : []
+    const practice = Array.isArray(details?.practice) ? [...details.practice] : []
+
+    setDatos((current) => {
+      const previous = lastAppliedTemplateRef.current
+      const matchedPrevious = arraysEqual(current.contenidoTeorica, previous.theory) && arraysEqual(current.contenidoPractica, previous.practice)
+      const shouldOverwrite = previous.key !== selTitulo || matchedPrevious
+
+      const next = { ...current }
+      let changed = false
+
+      if (current.formacionTitulo !== selTitulo) {
+        next.formacionTitulo = selTitulo
+        changed = true
+      }
+
+      if (shouldOverwrite) {
+        next.contenidoTeorica = [...theory]
+        next.contenidoPractica = [...practice]
+        lastAppliedTemplateRef.current = { key: selTitulo, theory: [...theory], practice: [...practice] }
+        changed = true
+      }
+
+      return changed ? next : current
+    })
+  }, [selTitulo, isFormacion, trainingTemplates])
 
   // Datos del presupuesto / sesión
   const buscarPresupuesto = useCallback(async () => {
@@ -483,9 +578,26 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   const addTeorica = () => setDatos(d => ({ ...d, contenidoTeorica: [...(d.contenidoTeorica||[]), '' ] }))
   const addPractica = () => setDatos(d => ({ ...d, contenidoPractica: [...(d.contenidoPractica||[]), '' ] }))
 
-  const opcionesOrdenadas = useMemo(() =>
-    Object.keys(plantillasBase).sort((a,b)=>a.localeCompare(b,'es',{sensitivity:'base'}))
-  , [])
+  const opcionesOrdenadas = useMemo(() => {
+    const seen = new Set()
+    const options = []
+    trainingTemplates.forEach((template) => {
+      if (!template) return
+      const title = typeof template.title === 'string' && template.title.trim()
+        ? template.title.trim()
+        : typeof template.name === 'string'
+          ? template.name.trim()
+          : ''
+      if (title && !seen.has(title)) {
+        seen.add(title)
+        options.push(title)
+      }
+    })
+    if (selTitulo && !seen.has(selTitulo)) {
+      options.push(selTitulo)
+    }
+    return options.sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+  }, [trainingTemplates, selTitulo])
 
   let mainSection
   if (isSimulacro) {
