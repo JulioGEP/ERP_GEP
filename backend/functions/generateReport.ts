@@ -381,7 +381,8 @@ export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers: cors, body: 'Method Not Allowed' };
 
-  const sharedSecret = process.env.REPORTS_API_TOKEN || process.env.VITE_REPORTS_API_TOKEN;
+  const sharedSecret =
+    process.env['REPORTS_API_TOKEN'] || process.env['VITE_REPORTS_API_TOKEN'];
   if (!sharedSecret) {
     console.error('[generateReport] Missing REPORTS_API_TOKEN');
     return {
