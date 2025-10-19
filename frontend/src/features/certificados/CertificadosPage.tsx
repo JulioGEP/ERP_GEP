@@ -87,11 +87,11 @@ function normaliseTemplateKey(value: string, api: TrainingTemplatesApi | null): 
   return defaultNormaliseName(value);
 }
 
-function findMatchingTemplateOption(
+async function findMatchingTemplateOption(
   options: CertificateTemplateOption[],
   candidate: string,
   api: TrainingTemplatesApi | null,
-): CertificateTemplateOption | null {
+): Promise<CertificateTemplateOption | null> {
   const trimmed = typeof candidate === 'string' ? candidate.trim() : '';
   if (!trimmed.length) {
     return null;
@@ -102,7 +102,7 @@ function findMatchingTemplateOption(
 
   if (api && typeof api.getTemplateById === 'function') {
     try {
-      const template = api.getTemplateById(trimmed);
+      const template = await api.getTemplateById(trimmed);
       if (template) {
         const id = typeof template.id === 'string' ? template.id.trim() : '';
         const name = typeof template.name === 'string' ? template.name.trim() : '';
@@ -558,9 +558,14 @@ export function CertificadosPage() {
       return;
     }
 
-    const updateOptions = () => {
+    let cancelled = false;
+
+    const updateOptions = async () => {
       try {
-        const list = api.listTemplates();
+        const list = await api.listTemplates();
+        if (cancelled) {
+          return;
+        }
         const optionsMap = new Map<string, CertificateTemplateOption>();
         list.forEach((template) => {
           const option = toTemplateOption(template);
@@ -593,18 +598,20 @@ export function CertificadosPage() {
         );
         setTemplateOptions(options);
       } catch (error) {
-        console.error('No se pudieron cargar las plantillas de certificados', error);
-        setTemplateOptions([]);
+        if (!cancelled) {
+          console.error('No se pudieron cargar las plantillas de certificados', error);
+          setTemplateOptions([]);
+        }
       }
     };
 
-    updateOptions();
+    void updateOptions();
 
     let unsubscribe: (() => void) | undefined;
     if (typeof api.subscribe === 'function') {
       try {
         unsubscribe = api.subscribe(() => {
-          updateOptions();
+          void updateOptions();
         });
       } catch (error) {
         console.warn('No se pudo suscribir a los cambios de plantillas', error);
@@ -612,6 +619,7 @@ export function CertificadosPage() {
     }
 
     return () => {
+      cancelled = true;
       if (typeof unsubscribe === 'function') {
         try {
           unsubscribe();
@@ -867,22 +875,36 @@ export function CertificadosPage() {
       return;
     }
 
-    const matchedOption = findMatchingTemplateOption(
-      templateOptions,
-      productTemplateCandidate,
-      api,
-    );
+    let cancelled = false;
 
-    if (matchedOption) {
-      setSelectedTemplateKey((current) =>
-        current === matchedOption.key ? current : matchedOption.key,
+    const resolveMatch = async () => {
+      const matchedOption = await findMatchingTemplateOption(
+        templateOptions,
+        productTemplateCandidate,
+        api,
       );
-      return;
-    }
 
-    if (!pendingPersistedTemplateKeyRef.current) {
-      setSelectedTemplateKey((current) => (current ? '' : current));
-    }
+      if (cancelled) {
+        return;
+      }
+
+      if (matchedOption) {
+        setSelectedTemplateKey((current) =>
+          current === matchedOption.key ? current : matchedOption.key,
+        );
+        return;
+      }
+
+      if (!pendingPersistedTemplateKeyRef.current) {
+        setSelectedTemplateKey((current) => (current ? '' : current));
+      }
+    };
+
+    void resolveMatch();
+
+    return () => {
+      cancelled = true;
+    };
   }, [selectedSession, templateOptions]);
 
   useEffect(() => {

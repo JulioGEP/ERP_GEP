@@ -1,6 +1,7 @@
 import rawTemplates from '../../../informes/utils/plantillas.json';
 
 type RawTemplateDefinition = {
+  id?: unknown;
   teorica?: unknown;
   practica?: unknown;
   duracion?: unknown;
@@ -11,6 +12,15 @@ type RawTemplateDefinition = {
 };
 
 type RawTemplatesRegistry = Record<string, RawTemplateDefinition>;
+
+type ApiTemplate = {
+  id?: unknown;
+  name?: unknown;
+  title?: unknown;
+  duration?: unknown;
+  theory?: unknown;
+  practice?: unknown;
+};
 
 export type TrainingTemplate = {
   id: string;
@@ -31,20 +41,18 @@ export type TrainingTemplateInput = {
 };
 
 export type TrainingTemplatesManager = {
-  listTemplates(): TrainingTemplate[];
-  getTemplateById(id: string): TrainingTemplate | null;
-  getTrainingDetails(value: string): TrainingTemplate | null;
-  saveTemplate(input: TrainingTemplateInput): TrainingTemplate | null;
-  deleteTemplate(id: string): boolean;
+  listTemplates(): Promise<TrainingTemplate[]>;
+  getTemplateById(id: string): Promise<TrainingTemplate | null>;
+  getTrainingDetails(value: string): Promise<TrainingTemplate | null>;
+  saveTemplate(input: TrainingTemplateInput): Promise<TrainingTemplate | null>;
+  deleteTemplate(id: string): Promise<boolean>;
   createEmptyTemplate(): TrainingTemplate;
   subscribe?(listener: () => void): () => void;
   normaliseName?(value: string): string;
   isCustomTemplateId?(id: string): boolean;
 };
 
-const STORAGE_KEY = 'trainingTemplates.custom';
 const CUSTOM_TEMPLATE_PREFIX = 'custom-';
-
 const rawRegistry: RawTemplatesRegistry = rawTemplates as RawTemplatesRegistry;
 
 function toOptionalString(value: unknown): string {
@@ -80,43 +88,6 @@ function normaliseName(value: string): string {
     .toLowerCase();
 }
 
-const defaultTemplates: TrainingTemplate[] = (() => {
-  const entries = Object.entries(rawRegistry ?? {});
-  const generatedIds = new Map<string, number>();
-
-  return entries.map(([rawKey, definition], index) => {
-    const name = toOptionalString(definition?.name) || toOptionalString(rawKey) || `Plantilla ${index + 1}`;
-    const title = toOptionalString(definition?.titulo) || toOptionalString(definition?.title) || name;
-    const duration = toOptionalString(definition?.duracion) || toOptionalString(definition?.duration);
-    const theory = toStringArray(definition?.teorica);
-    const practice = toStringArray(definition?.practica);
-
-    let baseId = normaliseName(title || name);
-    if (!baseId.length) {
-      baseId = `template-${index + 1}`;
-    }
-    const usageCount = generatedIds.get(baseId) ?? 0;
-    generatedIds.set(baseId, usageCount + 1);
-    const id = usageCount === 0 ? baseId : `${baseId}-${usageCount + 1}`;
-
-    return Object.freeze({
-      id,
-      name,
-      title,
-      duration,
-      theory,
-      practice,
-    });
-  });
-})();
-
-const defaultTemplatesMap = new Map(defaultTemplates.map((template) => [template.id, template]));
-
-let customTemplatesCache: TrainingTemplate[] | null = null;
-
-const subscribers = new Set<() => void>();
-let storageListenerRegistered = false;
-
 function cloneTemplate(template: TrainingTemplate): TrainingTemplate {
   return {
     id: template.id,
@@ -128,70 +99,137 @@ function cloneTemplate(template: TrainingTemplate): TrainingTemplate {
   };
 }
 
-function hasLocalStorage(): boolean {
-  try {
-    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
-  } catch {
-    return false;
-  }
+function parseRawTemplates(): TrainingTemplate[] {
+  const entries = Object.entries(rawRegistry ?? {});
+  const templates: TrainingTemplate[] = [];
+  entries.forEach(([key, definition]) => {
+    if (!definition || typeof definition !== 'object') {
+      return;
+    }
+    const name = toOptionalString(key);
+    const title =
+      toOptionalString((definition as { titulo?: unknown }).titulo ?? (definition as { title?: unknown }).title) || name;
+    const duration = toOptionalString((definition as { duracion?: unknown }).duracion ?? (definition as { duration?: unknown }).duration);
+    const theory = toStringArray((definition as { teorica?: unknown }).teorica);
+    const practice = toStringArray((definition as { practica?: unknown }).practica);
+    const id =
+      toOptionalString((definition as { id?: unknown }).id) ||
+      `${normaliseName(title || name).replace(/\s+/g, '-') || 'plantilla'}`;
+    templates.push({
+      id,
+      name,
+      title,
+      duration,
+      theory,
+      practice,
+    });
+  });
+  return templates;
 }
 
-function readCustomTemplatesFromStorage(): TrainingTemplate[] {
-  if (!hasLocalStorage()) {
-    return [];
+function normaliseApiTemplate(input: ApiTemplate): TrainingTemplate | null {
+  const id = toOptionalString(input.id);
+  const name = toOptionalString(input.name);
+  const title = toOptionalString(input.title) || name;
+  if (!id || !name) {
+    return null;
   }
+  return {
+    id,
+    name,
+    title,
+    duration: toOptionalString(input.duration),
+    theory: toStringArray(input.theory),
+    practice: toStringArray(input.practice),
+  };
+}
+
+async function fetchTemplatesFromApi(): Promise<TrainingTemplate[] | null> {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [];
+    const response = await fetch('/api/training-templates', {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Unexpected status: ${response.status}`);
     }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
+    const payload = (await response.json()) as { ok?: boolean; templates?: ApiTemplate[] };
+    if (!payload?.ok || !Array.isArray(payload.templates)) {
+      throw new Error('Respuesta no válida del servidor');
     }
-    return parsed
-      .map((entry) => {
-        if (!entry || typeof entry !== 'object') {
-          return null;
-        }
-        const id = toOptionalString((entry as { id?: unknown }).id);
-        const name = toOptionalString((entry as { name?: unknown }).name);
-        const title = toOptionalString((entry as { title?: unknown }).title) || name;
-        if (!id || !name) {
-          return null;
-        }
-        return {
-          id,
-          name,
-          title,
-          duration: toOptionalString((entry as { duration?: unknown }).duration),
-          theory: toStringArray((entry as { theory?: unknown }).theory),
-          practice: toStringArray((entry as { practice?: unknown }).practice),
-        } satisfies TrainingTemplate;
-      })
+    const templates = payload.templates
+      .map((template) => normaliseApiTemplate(template))
       .filter((template): template is TrainingTemplate => Boolean(template));
-  } catch {
-    return [];
+    return templates;
+  } catch (error) {
+    console.warn('No se pudo obtener la lista de plantillas desde la API.', error);
+    return null;
   }
 }
 
-function ensureCustomTemplatesCache(): TrainingTemplate[] {
-  if (!customTemplatesCache) {
-    customTemplatesCache = readCustomTemplatesFromStorage();
+async function persistTemplate(input: TrainingTemplateInput): Promise<TrainingTemplate> {
+  const response = await fetch('/api/training-templates', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(input ?? {}),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || 'No se pudo guardar la plantilla.');
   }
-  return customTemplatesCache;
+  const payload = (await response.json()) as { ok?: boolean; template?: ApiTemplate; message?: string };
+  if (!payload?.ok || !payload.template) {
+    throw new Error(payload?.message || 'No se pudo guardar la plantilla.');
+  }
+  const template = normaliseApiTemplate(payload.template);
+  if (!template) {
+    throw new Error('La plantilla devuelta no es válida.');
+  }
+  return template;
 }
 
-function persistCustomTemplates(templates: TrainingTemplate[]): void {
-  customTemplatesCache = templates;
-  if (hasLocalStorage()) {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
-    } catch (error) {
-      console.warn('No se pudieron guardar las plantillas personalizadas en el almacenamiento local.', error);
-    }
+async function removeTemplate(id: string): Promise<void> {
+  const response = await fetch(`/api/training-templates?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || 'No se pudo eliminar la plantilla.');
   }
-  notifySubscribers();
+  const payload = (await response.json()) as { ok?: boolean; message?: string };
+  if (!payload?.ok) {
+    throw new Error(payload?.message || 'No se pudo eliminar la plantilla.');
+  }
+}
+
+let templatesCache: TrainingTemplate[] | null = parseRawTemplates();
+let initialised = false;
+const subscribers = new Set<() => void>();
+
+async function ensureInitialised(): Promise<void> {
+  if (initialised) {
+    return;
+  }
+  initialised = true;
+  const templates = await fetchTemplatesFromApi();
+  if (Array.isArray(templates)) {
+    templatesCache = templates;
+    notifySubscribers();
+  }
+}
+
+function ensureCache(): TrainingTemplate[] {
+  if (!templatesCache) {
+    templatesCache = parseRawTemplates();
+  }
+  return templatesCache;
 }
 
 function notifySubscribers(): void {
@@ -204,186 +242,80 @@ function notifySubscribers(): void {
   });
 }
 
-function ensureStorageListener(): void {
-  if (storageListenerRegistered || !hasLocalStorage()) {
-    return;
-  }
-  try {
-    window.addEventListener('storage', (event) => {
-      if (event.key === STORAGE_KEY) {
-        customTemplatesCache = null;
-        ensureCustomTemplatesCache();
-        notifySubscribers();
-      }
-    });
-    storageListenerRegistered = true;
-  } catch (error) {
-    console.warn('No se pudo registrar el listener de almacenamiento para las plantillas.', error);
-  }
+async function listTemplates(): Promise<TrainingTemplate[]> {
+  await ensureInitialised();
+  return ensureCache().map(cloneTemplate);
 }
 
-function listTemplates(): TrainingTemplate[] {
-  const custom = ensureCustomTemplatesCache();
-  return [...defaultTemplates.map(cloneTemplate), ...custom.map(cloneTemplate)];
-}
-
-function getTemplateById(id: string): TrainingTemplate | null {
+async function getTemplateById(id: string): Promise<TrainingTemplate | null> {
+  await ensureInitialised();
   const trimmed = id?.trim();
   if (!trimmed) {
     return null;
   }
-
-  const custom = ensureCustomTemplatesCache().find((template) => template.id === trimmed);
-  if (custom) {
-    return cloneTemplate(custom);
-  }
-
-  const defaultTemplate = defaultTemplatesMap.get(trimmed);
-  if (defaultTemplate) {
-    return cloneTemplate(defaultTemplate);
-  }
-
-  const normalised = normaliseName(trimmed);
-  if (!normalised.length) {
-    return null;
-  }
-
-  const fallbackCustom = ensureCustomTemplatesCache().find((template) => normaliseName(template.id) === normalised);
-  if (fallbackCustom) {
-    return cloneTemplate(fallbackCustom);
-  }
-
-  const fallbackDefault = defaultTemplates.find((template) => normaliseName(template.id) === normalised);
-  return fallbackDefault ? cloneTemplate(fallbackDefault) : null;
+  const match = ensureCache().find((template) => template.id === trimmed);
+  return match ? cloneTemplate(match) : null;
 }
 
-function findTemplateByValue(value: string): TrainingTemplate | null {
+async function findTemplateByValue(value: string): Promise<TrainingTemplate | null> {
+  await ensureInitialised();
   const trimmed = value?.trim();
   if (!trimmed) {
     return null;
   }
-
-  const direct = getTemplateById(trimmed);
-  if (direct) {
-    return direct;
-  }
-
   const lower = trimmed.toLowerCase();
   const normalised = normaliseName(trimmed);
-
-  const candidates = [...defaultTemplates, ...ensureCustomTemplatesCache()];
-  for (const template of candidates) {
+  for (const template of ensureCache()) {
+    if (template.id === trimmed) {
+      return cloneTemplate(template);
+    }
+  }
+  for (const template of ensureCache()) {
     if (template.name.toLowerCase() === lower || template.title.toLowerCase() === lower) {
       return cloneTemplate(template);
     }
   }
-
   if (normalised.length) {
-    for (const template of candidates) {
+    for (const template of ensureCache()) {
       if (normaliseName(template.name) === normalised || normaliseName(template.title) === normalised) {
         return cloneTemplate(template);
       }
     }
   }
-
   return null;
 }
 
-function createCustomTemplateId(base?: string): string {
-  const existingIds = new Set([
-    ...defaultTemplates.map((template) => template.id),
-    ...ensureCustomTemplatesCache().map((template) => template.id),
-  ]);
-
-  const slug = normaliseName(base ?? '');
-  const baseId = slug.length ? `${CUSTOM_TEMPLATE_PREFIX}${slug}` : `${CUSTOM_TEMPLATE_PREFIX}${Date.now().toString(36)}`;
-
-  if (!existingIds.has(baseId)) {
-    return baseId;
+async function saveTemplate(input: TrainingTemplateInput): Promise<TrainingTemplate | null> {
+  const template = await persistTemplate(input);
+  const cache = ensureCache();
+  const index = cache.findIndex((entry) => entry.id === template.id);
+  if (index >= 0) {
+    cache[index] = template;
+  } else {
+    cache.push(template);
   }
-
-  let index = 2;
-  let candidate = `${baseId}-${index}`;
-  while (existingIds.has(candidate)) {
-    index += 1;
-    candidate = `${baseId}-${index}`;
-  }
-  return candidate;
+  notifySubscribers();
+  return cloneTemplate(template);
 }
 
-function normaliseTemplateInput(input: TrainingTemplateInput): TrainingTemplate {
-  const name = toOptionalString(input.name);
-  if (!name.length) {
-    throw new Error('El nombre de la formación es obligatorio.');
-  }
-
-  const title = toOptionalString(input.title) || name;
-  const duration = toOptionalString(input.duration);
-  const theory = toStringArray(input.theory);
-  const practice = toStringArray(input.practice);
-
-  return {
-    id: '',
-    name,
-    title,
-    duration,
-    theory,
-    practice,
-  };
-}
-
-function saveTemplate(input: TrainingTemplateInput): TrainingTemplate | null {
-  try {
-    const normalisedTemplate = normaliseTemplateInput(input);
-    const custom = ensureCustomTemplatesCache();
-    const trimmedId = toOptionalString(input.id);
-
-    if (trimmedId.length) {
-      const index = custom.findIndex((template) => template.id === trimmedId);
-      if (index >= 0) {
-        normalisedTemplate.id = trimmedId;
-        const next = [...custom];
-        next[index] = normalisedTemplate;
-        persistCustomTemplates(next);
-        return cloneTemplate(normalisedTemplate);
-      }
-
-      if (!defaultTemplatesMap.has(trimmedId)) {
-        normalisedTemplate.id = trimmedId;
-        persistCustomTemplates([...custom, normalisedTemplate]);
-        return cloneTemplate(normalisedTemplate);
-      }
-    }
-
-    const candidateBase = normalisedTemplate.name || normalisedTemplate.title;
-    normalisedTemplate.id = createCustomTemplateId(candidateBase);
-    persistCustomTemplates([...custom, normalisedTemplate]);
-    return cloneTemplate(normalisedTemplate);
-  } catch (error) {
-    console.error('No se pudo guardar la plantilla de formación.', error);
-    throw error;
-  }
-}
-
-function deleteTemplate(id: string): boolean {
+async function deleteTemplate(id: string): Promise<boolean> {
   const trimmed = id?.trim();
   if (!trimmed) {
     return false;
   }
-  const custom = ensureCustomTemplatesCache();
-  const index = custom.findIndex((template) => template.id === trimmed);
-  if (index < 0) {
-    return false;
+  await removeTemplate(trimmed);
+  const cache = ensureCache();
+  const index = cache.findIndex((entry) => entry.id === trimmed);
+  if (index >= 0) {
+    cache.splice(index, 1);
   }
-  const next = [...custom];
-  next.splice(index, 1);
-  persistCustomTemplates(next);
+  notifySubscribers();
   return true;
 }
 
 function createEmptyTemplate(): TrainingTemplate {
   return {
-    id: createCustomTemplateId(),
+    id: '',
     name: '',
     title: '',
     duration: '',
@@ -397,10 +329,7 @@ function isCustomTemplateId(id: string): boolean {
   if (!trimmed) {
     return false;
   }
-  if (trimmed.startsWith(CUSTOM_TEMPLATE_PREFIX)) {
-    return true;
-  }
-  return !defaultTemplatesMap.has(trimmed);
+  return trimmed.startsWith(CUSTOM_TEMPLATE_PREFIX);
 }
 
 const manager: TrainingTemplatesManager = {
@@ -414,7 +343,6 @@ const manager: TrainingTemplatesManager = {
     if (typeof listener !== 'function') {
       return () => {};
     }
-    ensureStorageListener();
     subscribers.add(listener);
     return () => {
       subscribers.delete(listener);
@@ -429,5 +357,6 @@ export function getTrainingTemplatesManager(): TrainingTemplatesManager {
 }
 
 export function resetTrainingTemplatesCache(): void {
-  customTemplatesCache = null;
+  templatesCache = parseRawTemplates();
+  initialised = false;
 }

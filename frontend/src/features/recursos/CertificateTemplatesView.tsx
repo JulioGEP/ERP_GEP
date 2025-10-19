@@ -102,28 +102,45 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
 
-    try {
-      const api = getTrainingTemplatesApi();
-      const list = api.listTemplates();
-      setTemplates(list);
-      if (list.length > 0) {
-        const initial = list[0];
-        setSelectedTemplateId(initial.id);
-        setFormState(mapTemplateToFormState(initial, api));
-      }
+    const initialise = async () => {
+      try {
+        const api = getTrainingTemplatesApi();
+        const list = await api.listTemplates();
+        if (cancelled) {
+          return;
+        }
+        setTemplates(list);
+        if (list.length > 0) {
+          const initial = list[0];
+          setSelectedTemplateId(initial.id);
+          setFormState(mapTemplateToFormState(initial, api));
+        }
 
-      if (typeof api.subscribe === 'function') {
-        unsubscribe = api.subscribe(() => {
-          const updatedTemplates = api.listTemplates();
-          setTemplates(updatedTemplates);
-        });
+        if (typeof api.subscribe === 'function') {
+          unsubscribe = api.subscribe(async () => {
+            try {
+              const updatedTemplates = await api.listTemplates();
+              if (!cancelled) {
+                setTemplates(updatedTemplates);
+              }
+            } catch (subscriptionError) {
+              console.warn('No se pudieron actualizar las plantillas', subscriptionError);
+            }
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setInitialisationError(resolveErrorMessage(error));
+        }
       }
-    } catch (error) {
-      setInitialisationError(resolveErrorMessage(error));
-    }
+    };
+
+    void initialise();
 
     return () => {
+      cancelled = true;
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
@@ -186,7 +203,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
   }, []);
 
   const handleSave = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
+    async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (!api || !formState) {
         return;
@@ -203,7 +220,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
           practice: normaliseListInput(formState.practiceText),
         };
 
-        const saved = api.saveTemplate(payload);
+        const saved = await api.saveTemplate(payload);
         if (!saved) {
           throw new Error('No se pudo guardar la plantilla.');
         }
@@ -223,7 +240,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
     [api, formState, onNotify]
   );
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = useCallback(async () => {
     if (!api || !formState || !formState.id || !formState.isCustom) {
       return;
     }
@@ -233,21 +250,26 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       return;
     }
 
-    const deleted = api.deleteTemplate(formState.id);
-    if (deleted) {
-      onNotify({ variant: 'success', message: 'La plantilla personalizada se ha eliminado correctamente.' });
-      const remainingTemplates = api.listTemplates();
-      setTemplates(remainingTemplates);
-      if (remainingTemplates.length > 0) {
-        const nextTemplate = remainingTemplates[0];
-        setSelectedTemplateId(nextTemplate.id);
-        setFormState(mapTemplateToFormState(nextTemplate, api));
+    try {
+      const deleted = await api.deleteTemplate(formState.id);
+      if (deleted) {
+        onNotify({ variant: 'success', message: 'La plantilla personalizada se ha eliminado correctamente.' });
+        const remainingTemplates = await api.listTemplates();
+        setTemplates(remainingTemplates);
+        if (remainingTemplates.length > 0) {
+          const nextTemplate = remainingTemplates[0];
+          setSelectedTemplateId(nextTemplate.id);
+          setFormState(mapTemplateToFormState(nextTemplate, api));
+        } else {
+          setSelectedTemplateId('');
+          setFormState(buildEmptyFormState(api));
+        }
       } else {
-        setSelectedTemplateId('');
-        setFormState(buildEmptyFormState(api));
+        onNotify({ variant: 'danger', message: 'No se ha podido eliminar la plantilla seleccionada.' });
       }
-    } else {
-      onNotify({ variant: 'danger', message: 'No se ha podido eliminar la plantilla seleccionada.' });
+    } catch (error) {
+      const message = resolveErrorMessage(error);
+      onNotify({ variant: 'danger', message });
     }
   }, [api, formState, onNotify]);
 
@@ -416,7 +438,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
 
                   <div className="d-flex flex-column flex-md-row gap-3 justify-content-between align-items-md-center">
                     <div className="text-muted small">
-                      Los cambios se guardan localmente en el navegador para su uso en la generación de certificados.
+                      Los cambios se guardan en las plantillas utilizadas para generar los certificados.
                     </div>
                     <div className="d-flex flex-column flex-md-row gap-2">
                       <Button

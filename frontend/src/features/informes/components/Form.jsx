@@ -233,27 +233,33 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     const api = getTrainingTemplatesManager()
     trainingTemplatesApiRef.current = api
 
-    const refreshTemplates = () => {
+    let cancelled = false
+
+    const refreshTemplates = async () => {
       if (!api || typeof api.listTemplates !== 'function') {
         setTrainingTemplates([])
         return
       }
       try {
-        const list = api.listTemplates()
-        setTrainingTemplates(list)
+        const list = await api.listTemplates()
+        if (!cancelled) {
+          setTrainingTemplates(list)
+        }
       } catch (error) {
-        console.error('No se pudieron cargar las plantillas de formación', error)
-        setTrainingTemplates([])
+        if (!cancelled) {
+          console.error('No se pudieron cargar las plantillas de formación', error)
+          setTrainingTemplates([])
+        }
       }
     }
 
-    refreshTemplates()
+    void refreshTemplates()
 
     let unsubscribe
     if (api && typeof api.subscribe === 'function') {
       try {
         unsubscribe = api.subscribe(() => {
-          refreshTemplates()
+          void refreshTemplates()
         })
       } catch (error) {
         console.warn('No se pudo suscribir a los cambios de plantillas', error)
@@ -261,6 +267,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     }
 
     return () => {
+      cancelled = true
       if (typeof unsubscribe === 'function') {
         try {
           unsubscribe()
@@ -290,32 +297,53 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       return
     }
 
-    const details = api.getTrainingDetails(selTitulo)
-    const theory = Array.isArray(details?.theory) ? [...details.theory] : []
-    const practice = Array.isArray(details?.practice) ? [...details.practice] : []
+    let cancelled = false
 
-    setDatos((current) => {
-      const previous = lastAppliedTemplateRef.current
-      const matchedPrevious = arraysEqual(current.contenidoTeorica, previous.theory) && arraysEqual(current.contenidoPractica, previous.practice)
-      const shouldOverwrite = previous.key !== selTitulo || matchedPrevious
+    const applyTemplate = async () => {
+      try {
+        const details = await api.getTrainingDetails(selTitulo)
+        if (cancelled) {
+          return
+        }
+        const theory = Array.isArray(details?.theory) ? [...details.theory] : []
+        const practice = Array.isArray(details?.practice) ? [...details.practice] : []
 
-      const next = { ...current }
-      let changed = false
+        setDatos((current) => {
+          const previous = lastAppliedTemplateRef.current
+          const matchedPrevious =
+            arraysEqual(current.contenidoTeorica, previous.theory) &&
+            arraysEqual(current.contenidoPractica, previous.practice)
+          const shouldOverwrite = previous.key !== selTitulo || matchedPrevious
 
-      if (current.formacionTitulo !== selTitulo) {
-        next.formacionTitulo = selTitulo
-        changed = true
+          const next = { ...current }
+          let changed = false
+
+          if (current.formacionTitulo !== selTitulo) {
+            next.formacionTitulo = selTitulo
+            changed = true
+          }
+
+          if (shouldOverwrite) {
+            next.contenidoTeorica = [...theory]
+            next.contenidoPractica = [...practice]
+            lastAppliedTemplateRef.current = { key: selTitulo, theory: [...theory], practice: [...practice] }
+            changed = true
+          }
+
+          return changed ? next : current
+        })
+      } catch (error) {
+        if (!cancelled) {
+          console.error('No se pudo cargar la plantilla de formación seleccionada', error)
+        }
       }
+    }
 
-      if (shouldOverwrite) {
-        next.contenidoTeorica = [...theory]
-        next.contenidoPractica = [...practice]
-        lastAppliedTemplateRef.current = { key: selTitulo, theory: [...theory], practice: [...practice] }
-        changed = true
-      }
+    void applyTemplate()
 
-      return changed ? next : current
-    })
+    return () => {
+      cancelled = true
+    }
   }, [selTitulo, isFormacion, trainingTemplates])
 
   // Datos del presupuesto / sesión

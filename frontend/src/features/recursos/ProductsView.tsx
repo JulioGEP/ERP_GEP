@@ -58,12 +58,12 @@ function getTrainingTemplatesApi(): TrainingTemplatesApi | null {
   return getTrainingTemplatesManager() ?? null;
 }
 
-function mapTemplateOptions(api: TrainingTemplatesApi | null): TemplateOption[] {
+async function mapTemplateOptions(api: TrainingTemplatesApi | null): Promise<TemplateOption[]> {
   if (!api) {
     return [];
   }
 
-  const templates = api.listTemplates();
+  const templates = await api.listTemplates();
   const options = templates.map((template) => {
     const label = [template.name, template.title, template.id]
       .map((value) => (value ?? '').trim())
@@ -99,18 +99,42 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
 
   useEffect(() => {
     const api = getTrainingTemplatesApi();
-    const refreshOptions = () => {
+    let cancelled = false;
+
+    const refreshOptions = async () => {
       const currentApi = getTrainingTemplatesApi();
-      setTemplateOptions(mapTemplateOptions(currentApi));
+      try {
+        const options = await mapTemplateOptions(currentApi);
+        if (!cancelled) {
+          setTemplateOptions(options);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('No se pudieron cargar las plantillas disponibles', error);
+          setTemplateOptions([]);
+        }
+      }
     };
 
-    refreshOptions();
+    void refreshOptions();
 
+    let unsubscribe: (() => void) | undefined;
     if (api && typeof api.subscribe === 'function') {
-      return api.subscribe(refreshOptions);
+      try {
+        unsubscribe = api.subscribe(() => {
+          void refreshOptions();
+        });
+      } catch (error) {
+        console.warn('No se pudo suscribir a los cambios de plantillas', error);
+      }
     }
 
-    return undefined;
+    return () => {
+      cancelled = true;
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
   }, []);
 
   const productsQuery = useQuery({
