@@ -15,6 +15,11 @@ type RawSession = {
   created_at?: Date | null
 }
 
+type RawDealProduct = {
+  name?: string | null
+  code?: string | null
+}
+
 type NormalizedSession = {
   id: string
   number: string
@@ -50,6 +55,13 @@ const normalizeString = (value: unknown): string | null => {
   const text = typeof value === 'string' ? value : String(value)
   const trimmed = text.trim()
   return trimmed.length ? trimmed : null
+}
+
+const normalizeKey = (value: unknown): string => {
+  if (value === null || value === undefined) return ''
+  const text = typeof value === 'string' ? value : String(value)
+  const trimmed = text.trim()
+  return trimmed.length ? trimmed.toLowerCase() : ''
 }
 
 const formatSessionLabel = (session: { id?: string; number?: string | null; nombre?: string | null; direccion?: string | null; label?: string | null }): string => {
@@ -124,6 +136,12 @@ export const handler = async (event: any) => {
             created_at: true,
           },
         },
+        deal_products: {
+          select: {
+            name: true,
+            code: true,
+          },
+        },
       },
     })
 
@@ -140,6 +158,88 @@ export const handler = async (event: any) => {
       if (mapped) normalizedSessions.push(mapped)
     })
 
+    const dealProductsRaw: RawDealProduct[] = Array.isArray(deal.deal_products)
+      ? deal.deal_products
+      : []
+
+    const normalizedDealProducts = dealProductsRaw.map((product) => {
+      const name = normalizeString(product?.name)
+      const code = normalizeString(product?.code)
+      return {
+        name,
+        code,
+        nameKey: normalizeKey(product?.name),
+        codeKey: normalizeKey(product?.code),
+      }
+    })
+
+    const catalogWhere: any[] = []
+    const nameValues = Array.from(
+      new Set(
+        normalizedDealProducts
+          .map((product) => product.name)
+          .filter((value): value is string => Boolean(value))
+      )
+    )
+    if (nameValues.length) {
+      catalogWhere.push({ name: { in: nameValues } })
+    }
+
+    const codeValues = Array.from(
+      new Set(
+        normalizedDealProducts
+          .map((product) => product.code)
+          .filter((value): value is string => Boolean(value))
+      )
+    )
+    if (codeValues.length) {
+      catalogWhere.push({ code: { in: codeValues } })
+    }
+
+    const templatesByKey = new Map<string, string | null>()
+
+    if (catalogWhere.length) {
+      const catalogProducts = await prisma.products.findMany({
+        where: { OR: catalogWhere },
+        select: { name: true, code: true, template: true },
+      })
+
+      catalogProducts.forEach((product) => {
+        const template = normalizeString(product?.template)
+        const nameKey = normalizeKey(product?.name)
+        const codeKey = normalizeKey(product?.code)
+
+        if (nameKey && (!templatesByKey.has(nameKey) || template)) {
+          templatesByKey.set(nameKey, template ?? null)
+        }
+
+        if (codeKey && (!templatesByKey.has(codeKey) || template)) {
+          templatesByKey.set(codeKey, template ?? null)
+        }
+      })
+    }
+
+    const mappedDealProducts = normalizedDealProducts.map((product) => {
+      let template: string | null = null
+      for (const key of [product.nameKey, product.codeKey]) {
+        if (template) break
+        if (!key) continue
+        if (!templatesByKey.has(key)) continue
+        const candidate = templatesByKey.get(key) ?? null
+        const normalized = normalizeString(candidate)
+        if (normalized) {
+          template = normalized
+          break
+        }
+      }
+
+      return {
+        name: product.name,
+        code: product.code,
+        template,
+      }
+    })
+
     const organizationName = normalizeString(deal.organization?.name)
     const contactFirst = normalizeString(deal.person?.first_name)
     const contactLast = normalizeString(deal.person?.last_name)
@@ -152,6 +252,7 @@ export const handler = async (event: any) => {
         contacto: contacto || '',
         comercial: '',
         sessions: normalizedSessions,
+        products: mappedDealProducts,
       },
     })
   } catch (error) {
