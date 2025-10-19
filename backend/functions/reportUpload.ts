@@ -134,7 +134,6 @@ export const handler = async (event: any) => {
       file_type: 'pdf',
       compartir_formador: true,
       added_at: now,
-      created_at: now,
       updated_at: now,
       drive_file_name: uploadResult.driveFileName,
       drive_web_view_link: uploadResult.driveWebViewLink,
