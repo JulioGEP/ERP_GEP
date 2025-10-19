@@ -456,26 +456,30 @@ const buildDocDefinition = ({
       { key: 'observaciones', label: labels.observaciones },
       { key: 'incidencias', label: labels.incidencias },
     ]
-    const preventivoBody = preventivoSectionOrder.flatMap(({ key, label }, index, arr) => {
-      const fallbackKey = preventivoFields[key]
-      const value = datos?.preventivo?.[key] ?? (fallbackKey ? datos?.comentarios?.[fallbackKey] : '')
-      const paragraphs = multilineToParagraphs(value)
-      const nodes = [
-        { text: label, style: 'h2' },
-      ]
-      const description = descriptions?.[key]
-      if (description) {
-        nodes.push({ text: description, style: 'small', color: '#555', margin: [0, -6, 0, 6] })
-      }
-      nodes.push({ stack: paragraphs, margin: [0, 0, 0, index === arr.length - 1 ? 0 : 12] })
-      if (isPreventivoEbro) {
-        const sectionRows = buildImageRows(preventivoImagenesPorSeccion?.[key] || [])
-        if (sectionRows.length) {
-          nodes.push(...sectionRows)
-        }
-      }
-      return nodes
-    })
+    const showManualPreventivoSections = !aiContent
+    const preventivoBody = showManualPreventivoSections
+      ? preventivoSectionOrder.flatMap(({ key, label }, index, arr) => {
+          const fallbackKey = preventivoFields[key]
+          const value = datos?.preventivo?.[key] ?? (fallbackKey ? datos?.comentarios?.[fallbackKey] : '')
+          const paragraphs = multilineToParagraphs(value)
+          const nodes = [
+            { text: label, style: 'h2' },
+          ]
+          const description = descriptions?.[key]
+          if (description) {
+            nodes.push({ text: description, style: 'small', color: '#555', margin: [0, -6, 0, 6] })
+          }
+          nodes.push({ stack: paragraphs, margin: [0, 0, 0, index === arr.length - 1 ? 0 : 12] })
+          if (isPreventivoEbro) {
+            const sectionRows = buildImageRows(preventivoImagenesPorSeccion?.[key] || [])
+            if (sectionRows.length) {
+              nodes.push(...sectionRows)
+            }
+          }
+          return nodes
+        })
+      : []
+    const shouldShowAnnexImages = mergedImagenes.length > 0 && (!isPreventivoEbro || !preventivoHasSectionImages || !showManualPreventivoSections)
     return {
       pageSize: 'A4',
       pageMargins: [58,110,58,90],
@@ -531,7 +535,7 @@ const buildDocDefinition = ({
         ...preventivoBody,
         ...(aiContent ? [{ id:'informeTecnico', stack:Array.isArray(aiContent)?aiContent:[aiContent] }] : []),
         ...signatureBlock,
-        ...(mergedImagenes.length && (!isPreventivoEbro || !preventivoHasSectionImages)
+        ...(shouldShowAnnexImages
           ? [
               { text: labels.anexos, style:'h2', color:'#000', margin:[0,18,0,6], pageBreak:'before' },
               ...imageRows,
