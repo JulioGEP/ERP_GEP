@@ -1,3 +1,5 @@
+import informesPlantillas from '../../informes/utils/plantillas.json';
+
 (function (global) {
   const STORAGE_KEY = 'gep-certificados/training-templates/v1';
 
@@ -25,317 +27,115 @@
     ['Bombero de Empresa Inicial', '350h']
   ];
 
-  const DEFAULT_DETAILS_ENTRIES = [
-    [
-      'Pack Emergencias',
-      {
-        theory: [
-          'Proceso de la combustión.',
-          'Clases de fuego.',
-          'Clasificación de combustible.',
-          'Propagación de un incendio.',
-          'Transferencia de calor.',
-          'Agentes extintores.',
-          'Mecanismos de extinción.',
-          'Protocolo de actuación (P.A.S.).',
-          'Valoración primaria.',
-          'Posiciones de espera y traslado (P.L.S.).',
-          'O.V.A.C.E. obstrucción vía aérea (Maniobra de Heimlich).'
-        ],
-        practice: [
-          'Reconocer diferentes tipos de extintores.',
-          'Trabajo en interior con extintor de polvo.',
-          'Extinción con CO₂ en armario eléctrico.',
-          'Extinción y cubrimiento con extintor hídrico.',
-          'Ejercicio/simulacro con diferentes grados de dificultad, corte de suministro, víctima consciente e inconsciente.',
-          'Apertura de puertas y comprobación de temperatura.'
-        ]
-      }
-    ],
-    [
-      'Trabajos en Altura',
-      {
-        theory: [
-          'Legislación y normativa vigente.',
-          'Medidas de protección preventiva.',
-          'Conocimientos generales de seguridad en altura.',
-          'Equipos de protección individual y colectiva.',
-          'Instalaciones horizontales y verticales.',
-          'Actuación en caso de emergencia.'
-        ],
-        practice: [
-          'Los nudos básicos y su realización.',
-          'Utilización de equipos de protección individual.',
-          'Utilización de los equipos de protección colectiva.',
-          'Instalación de líneas de vida horizontales y verticales.',
-          'Puntos de anclaje.',
-          'Técnicas de acceso y posicionamiento en altura.',
-          'Rescate de emergencia.'
-        ]
-      }
-    ],
-    [
-      'Trabajos Verticales',
-      {
-        theory: [
-          'Legislación y normativa vigente.',
-          'Medidas de protección preventiva.',
-          'Procedimientos de actuación y rescate.',
-          'Conocimientos generales sobre seguridad.',
-          'Equipos de protección individual y colectiva.',
-          'Sistemas de instalación vertical y horizontal.',
-          'Actuación en caso de emergencia y protocolo P.A.S.'
-        ],
-        practice: [
-          'Taller de nudos y anclajes.',
-          'Utilización y pruebas con los equipos de protección individual.',
-          'Montaje de instalaciones verticales.',
-          'Protección de las instalaciones.',
-          'Paso de nudos.',
-          'Ascenso y descenso con cuerdas, paso de nudos y cambios de cuerda.',
-          'Rescate de víctimas y evacuación segura.'
-        ]
-      }
-    ],
-    [
-      'Carretilla elevadora',
-      {
-        theory: [
-          'Introducción a las carretillas.',
-          'Legislación y normativa vigente.',
-          'Tipos y componentes de la carretilla.',
-          'El operador de carretillas.',
-          'Riesgos y medidas preventivas.',
-          'Normas básicas de utilización y manejo.',
-          'Mantenimiento y seguridad de la carretilla.',
-          'Conceptos sobre la manipulación de cargas.'
-        ],
-        practice: [
-          'Presentación física de la carretilla.',
-          'Normas básicas de utilización.',
-          'Control y mantenimiento de la máquina.',
-          'Comprobaciones previas de seguridad.',
-          'La puesta en funcionamiento.',
-          'Maniobras básicas de circulación.',
-          'Manipulación y movimiento de cargas.'
-        ]
-      }
-    ],
-    [
-      'Andamios',
-      {
-        theory: [
-          'Legislación vigente.',
-          'Generalidades de Prevención de Riesgos Laborales.',
-          'Equipos de Protección Individual (EPI) y herramientas.',
-          'Acceso por estructuras.',
-          'Líneas de Vida horizontales y verticales.',
-          'Elevación de cargas.',
-          'Manipulación de cargas.',
-          'Actuación en caso de emergencia.',
-          'Primeros Auxilios y RCP (Reanimación Cardiopulmonar).'
-        ],
-        practice: [
-          'Montaje y desmontaje de estructuras (ej. bastidas / andamios tipo Lyher y LITEC).',
-          'Elevación de cargas.',
-          'Manipulación de cargas.',
-          'Trabajos en suspensión, posicionamiento y uso de polipastos, truss, etc.',
-          'Técnicas de rescate, evacuación de víctima.',
-          'Simulacro de emergencia.'
-        ]
-      }
-    ],
-    [
-      'Operaciones Telco',
-      {
-        theory: [
-          'Definición de los trabajos.',
-          'Técnicas preventivas específicas.',
-          'Evaluación de riesgos y plan de seguridad y salud.',
-          'Protecciones colectivas (colocación, usos, obligaciones y mantenimiento).',
-          'Protecciones individuales (colocación, usos, obligaciones y mantenimiento).',
-          'Riesgo eléctrico.',
-          'Caída de personas al mismo nivel.',
-          'Espacios confinados.',
-          'Riesgos de protecciones de partículas, golpes y cortes.',
-          'Riesgos biológicos.',
-          'Riesgos químicos.',
-          'Iluminación, ruido, vibraciones, condiciones climatológicas.',
-          'Radiaciones no ionizantes (campos electromagnéticos en telefonía móvil).',
-          'Trabajos de fusionado de fibra óptica.',
-          'Trabajos en salas de equipos.',
-          'Manejo manual de cargas.',
-          'Trabajos en vía pública y seguridad vial.',
-          'Consignas de actuación ante emergencias y accidentes.',
-          'Protocolo PAS (P.A.S.).'
-        ],
-        practice: [
-          'Especialidad a elegir según necesidades reales del operario.',
-          'Aplicación práctica de identificaciones de origen y causas de riesgos.',
-          'Uso práctico de protecciones colectivas.',
-          'Uso práctico de protecciones individuales.'
-        ]
-      }
-    ],
-    [
-      'Riesgo Eléctrico Telco',
-      {
-        theory: [
-          'Definición de los trabajos.',
-          'Técnicas preventivas específicas.',
-          'Evaluación de riesgos y plan de seguridad y salud.',
-          'Protecciones colectivas (colocación, usos, obligaciones y mantenimiento).',
-          'Protecciones individuales (colocación, usos, obligaciones y mantenimiento).',
-          'Riesgo eléctrico.',
-          'Caída de personas al mismo nivel.',
-          'Caída de personas a distinto nivel.',
-          'Espacios confinados.',
-          'Riesgos de protecciones de partículas, golpes y cortes.',
-          'Riesgos biológicos.',
-          'Riesgos químicos.',
-          'Iluminación, ruido, vibraciones, condiciones climatológicas.',
-          'Radiaciones no ionizantes (campos electromagnéticos en telefonía móvil).',
-          'Trabajos de fusionado de fibra óptica.',
-          'Trabajos en salas de equipos.',
-          'Manejo manual de cargas.',
-          'Trabajos en vía pública y seguridad vial.',
-          'Consignas de actuación ante emergencias y accidentes.',
-          'Protocolo PAS.'
-        ],
-        practice: [
-          'Detectar situaciones con riesgo eléctrico.',
-          'Operar sin sobreexposición eléctrica, aplicando medidas correctas según tensión presente.'
-        ]
-      }
-    ],
-    [
-      'Espacios Confinados',
-      {
-        theory: [
-          'Legislación y normativa vigente en espacios confinados.',
-          'Tipología de espacios confinados.',
-          'Riesgos de los espacios confinados: asfixia, incendio, explosión e intoxicación.',
-          'Los equipos de trabajo y protección individuales y colectivos.',
-          'Atmósferas peligrosas.',
-          'El recurso preventivo.',
-          'Documentación y permiso de trabajo.',
-          'Señalización en los espacios confinados.'
-        ],
-        practice: [
-          'Procedimientos de trabajo en espacios confinados.',
-          'Utilización y características de los equipos de trabajo.',
-          'Entrada y salida del espacio confinado.',
-          'Técnicas de progresión.',
-          'Rescate del accidentado en un espacio confinado.'
-        ]
-      }
-    ],
-    [
-      'Jefes de Emergencias',
-      {
-        theory: [
-          'Plan de emergencia.',
-          'Perfil del mando.',
-          'IEDO (identificación, evaluación, decisión, organización).',
-          'Comunicación.',
-          'Control CACE.',
-          'Funciones de los Equipos de emergencias.',
-          'Medios externos e internos.',
-          'Comunicaciones internas / externas.',
-          'Características del riesgo químico.',
-          'Fichas de seguridad y fichas de intervención.',
-          'Señalización de riesgo.',
-          'Equipos de protección personal.',
-          'Equipos de protección respiratoria.',
-          'Intervención en riesgo químico.',
-          'Emergencias médicas: Valoración primaria.',
-          'PLS, ABC, RCP, DEA, OVACE.'
-        ],
-        practice: [
-          'Montaje de equipos de respiración.',
-          'Técnicas de intervención con ejercicios/simulacros de actuación en incendio.',
-          'Activación IEDO.',
-          'Comunicaciones.',
-          'Gestión de recursos técnicos y humanos.',
-          'Toma de decisiones.',
-          'Rescate de víctima.',
-          'Extinción.',
-          'Ejercicios/simulacros de vertido/fuga.',
-          'Nivel de protección.',
-          'Zonificación.',
-          'Vestido / desvestido.',
-          'Intervención.',
-          'Descontaminación.'
-        ]
-      }
-    ],
-    [
-      'SVD y DEA',
-      {
-        theory: [
-          'Introducción.',
-          'Causas y lugares más comunes del paro cardiorrespiratorio.',
-          'La cadena de supervivencia.',
-          'Protocolo de actuación P.A.S.',
-          'Activación del sistema de emergencias médicas (SEM) (112).',
-          'Importancia de la R.C.P. de gran calidad.',
-          'DEA: utilización, seguridad del dispositivo y aspectos legales.',
-          'Algoritmos de actuación con y sin DEA del European Resuscitation Council.'
-        ],
-        practice: [
-          'Seguridad en el escenario.',
-          'Valoración de la conciencia.',
-          'Apertura vía aérea.',
-          'Valoración respiración.',
-          'Activación del 112.',
-          'Maniobras de RCP.',
-          'Uso y manejo del DEA.',
-          'Posición lateral de seguridad.',
-          'Simulaciones prácticas integradas de SVB con y sin DEA.',
-          'Evaluación.'
-        ]
-      }
-    ],
-    [
-      'Implantación de PAU',
-      {
-        theory: [
-          'Presentación del Plan de Emergencia.',
-          'Explicación de los diferentes escenarios.',
-          'Planteamiento de actuación en las posibles emergencias.',
-          'Dudas y preguntas sobre los puntos tratados.'
-        ],
-        practice: [
-          'Recorrido por el centro en cuestión para conocer cuáles son sus características.',
-          'Práctica simulacro de algunas de las emergencias detalladas en el PAU.',
-          'Simulacros con víctimas.'
-        ]
-      }
-    ],
-    [
-      'Primeros Auxilios',
-      {
-        theory: [
-          'Introducción a los primeros auxilios.',
-          'Protocolo de actuación (P.A.S.).',
-          'Atención y valoración inicial.',
-          'Evaluación de la víctima.',
-          'Posiciones de espera y traslado (P.L.S.).',
-          'O.V.A.C.E. obstrucción vía aérea (Maniobra de Heimlich).',
-          'Control de sangrado.',
-          'Quemaduras.'
-        ],
-        practice: [
-          'Protocolo de actuación P.A.S.',
-          'Valoración primaria (XABC).',
-          'Consciencia, hemorragia masiva, respiración, circulación.',
-          'Posiciones de espera y traslado.',
-          'Obstrucción vía aérea.',
-          'Reanimación cardiopulmonar.'
-        ]
-      }
-    ]
+  const INFORME_TEMPLATE_LOOKUP = buildInformeTemplateLookup();
+  const CERTIFICATE_TO_INFORME_ALIASES = buildCertificateToInformeAliases();
+  const DEFAULT_DETAILS_SOURCE_NAMES = [
+    'Pack Emergencias',
+    'Trabajos en Altura',
+    'Trabajos Verticales',
+    'Carretilla elevadora',
+    'Espacios Confinados',
+    'Operaciones Telco',
+    'Riesgo Eléctrico Telco',
+    'Espacios Confinados Telco',
+    'Trabajos en altura Telco',
+    'Basico de Fuego',
+    'Avanzado de Fuego',
+    'Avanzado y Casa de Humo',
+    'Riesgo Químico',
+    'Primeros Auxilios',
+    'SVD y DEA',
+    'Implantación de PAU',
+    'Jefes de Emergencias',
+    'Andamios',
+    "Curso de ERA's"
   ];
+
+  function buildInformeTemplateLookup() {
+    const lookup = new Map();
+    if (!informesPlantillas || typeof informesPlantillas !== 'object') {
+      return lookup;
+    }
+    Object.entries(informesPlantillas).forEach(([title, content]) => {
+      const normalised = normaliseName(title);
+      if (!normalised) {
+        return;
+      }
+      const teorica = Array.isArray(content?.teorica) ? [...content.teorica] : [];
+      const practica = Array.isArray(content?.practica) ? [...content.practica] : [];
+      lookup.set(normalised, {
+        title,
+        teorica,
+        practica
+      });
+    });
+    return lookup;
+  }
+
+  function buildCertificateToInformeAliases() {
+    const entries = [
+      ['Pack Emergencias', 'Curso pack emergencias – Extinción de incendios básico y primeros auxilios'],
+      ['Trabajos en Altura', 'Curso de Trabajos en Altura'],
+      ['Trabajos Verticales', 'Curso de Trabajos Verticales'],
+      ['Carretilla elevadora', 'Curso Carretilla Elevadora'],
+      ['Andamios', 'Curso montaje y desmontaje de Andamios'],
+      ['Operaciones Telco', 'Curso especializado TELCO'],
+      ['Riesgo Eléctrico Telco', 'Curso especializado TELCO riesgo eléctrico'],
+      ['Espacios Confinados Telco', 'Curso especializado TELCO espacios confinados'],
+      ['Trabajos en altura Telco', 'Curso especializado TELCO trabajos en altura'],
+      ['Espacios Confinados', 'Curso Espacios Confinados'],
+      ['Basico de Fuego', 'Curso de extinción de incendios'],
+      ['Avanzado de Fuego', 'Curso avanzado de extinción de incendios'],
+      ['Avanzado y Casa de Humo', 'Curso avanzado de extinción de incendios con casa de humo y rescate'],
+      ['Riesgo Químico', 'Curso riesgo químico NBQ'],
+      ['Primeros Auxilios', 'Curso de Primeros Auxilios'],
+      ['SVD y DEA', 'Certificación SVB y DEA (Soporte Vital Básico y Desfibrilador Externo Automático)'],
+      ['Implantación de PAU', 'Curso implantación PAU'],
+      ['Jefes de Emergencias', 'Curso Jefes de Emergencia e Intervención'],
+      ["Curso de ERA's", 'Curso Equipos de Respiración Autónoma (ERA)']
+    ];
+
+    const map = new Map();
+    entries.forEach(([alias, source]) => {
+      const aliasKey = normaliseName(alias);
+      const sourceKey = normaliseName(source);
+      if (aliasKey && sourceKey) {
+        map.set(aliasKey, sourceKey);
+      }
+    });
+    return map;
+  }
+
+  function resolveInformeTemplateDetails(name) {
+    const normalisedName = normaliseName(name);
+    if (!normalisedName) {
+      return null;
+    }
+    const lookupKey = CERTIFICATE_TO_INFORME_ALIASES.get(normalisedName) || normalisedName;
+    const entry = INFORME_TEMPLATE_LOOKUP.get(lookupKey);
+    if (!entry) {
+      return null;
+    }
+    return {
+      title: sanitiseText(entry.title),
+      theory: sanitiseList(entry.teorica),
+      practice: sanitiseList(entry.practica)
+    };
+  }
+
+  function getDefaultDetailsEntries() {
+    return DEFAULT_DETAILS_SOURCE_NAMES.map((name) => {
+      const resolved = resolveInformeTemplateDetails(name);
+      return [
+        name,
+        {
+          title: resolved ? resolved.title : undefined,
+          theory: resolved ? resolved.theory : [],
+          practice: resolved ? resolved.practice : []
+        }
+      ];
+    });
+  }
 
   function normaliseName(value) {
     if (value === undefined || value === null) {
@@ -434,7 +234,7 @@
       templatesByName.set(normalisedName, existing);
     });
 
-    DEFAULT_DETAILS_ENTRIES.forEach(([name, details]) => {
+    getDefaultDetailsEntries().forEach(([name, details]) => {
       const normalisedName = normaliseName(name);
       if (!normalisedName) {
         return;
