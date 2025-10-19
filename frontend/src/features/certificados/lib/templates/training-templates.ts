@@ -1,4 +1,4 @@
-import informesPlantillas from '../../informes/utils/plantillas.json';
+import informesPlantillas from '../../../informes/utils/plantillas.json';
 
 (function (global) {
   const STORAGE_KEY = 'gep-certificados/training-templates/v1';
