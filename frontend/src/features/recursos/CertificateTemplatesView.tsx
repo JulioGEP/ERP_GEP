@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -41,6 +41,40 @@ type TemplateFormState = {
   persistId: boolean;
   isCustom: boolean;
 };
+
+type CertificateTemplatePointInputProps = {
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
+};
+
+function CertificateTemplatePointInput({ value, placeholder, onChange }: CertificateTemplatePointInputProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const syncHeight = useCallback(() => {
+    const element = textareaRef.current;
+    if (!element) {
+      return;
+    }
+    element.style.height = 'auto';
+    element.style.height = `${element.scrollHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    syncHeight();
+  }, [syncHeight, value]);
+
+  return (
+    <Form.Control
+      as="textarea"
+      ref={textareaRef}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      className="certificate-template-point-input"
+    />
+  );
+}
 
 function resolveProductLabel(product: Product): string {
   const candidates = [product.name, product.code, product.id_pipe, product.id];
@@ -683,19 +717,14 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                       <Col xs={12} lg={6} className="d-flex">
                         <Form.Group controlId="template-theory" className="d-grid gap-3 flex-grow-1">
                           <Form.Label>Contenido teórico</Form.Label>
-                          <div className="d-grid gap-3 flex-grow-1">
+                          <div className="d-grid gap-3 flex-grow-1 certificate-template-points-editor">
                             {theoryPoints.length > 0 ? (
                               theoryPoints.map((point, index) => (
                                 <div key={`theory-${index}`} className="d-flex flex-column flex-md-row gap-2">
-                                  <Form.Control
-                                    as="textarea"
-                                    rows={2}
+                                  <CertificateTemplatePointInput
                                     value={point}
-                                    onChange={(event) =>
-                                      handlePointChange('theoryPoints', index, event.target.value)
-                                    }
+                                    onChange={(value) => handlePointChange('theoryPoints', index, value)}
                                     placeholder={`Punto teórico ${index + 1}`}
-                                    className="certificate-template-point-input"
                                   />
                                   <Button
                                     variant="outline-danger"
@@ -728,19 +757,14 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                       <Col xs={12} lg={6} className="d-flex">
                         <Form.Group controlId="template-practice" className="d-grid gap-3 flex-grow-1">
                           <Form.Label>Contenido práctico</Form.Label>
-                          <div className="d-grid gap-3 flex-grow-1">
+                          <div className="d-grid gap-3 flex-grow-1 certificate-template-points-editor">
                             {practicePoints.length > 0 ? (
                               practicePoints.map((point, index) => (
                                 <div key={`practice-${index}`} className="d-flex flex-column flex-md-row gap-2">
-                                  <Form.Control
-                                    as="textarea"
-                                    rows={2}
+                                  <CertificateTemplatePointInput
                                     value={point}
-                                    onChange={(event) =>
-                                      handlePointChange('practicePoints', index, event.target.value)
-                                    }
+                                    onChange={(value) => handlePointChange('practicePoints', index, value)}
                                     placeholder={`Punto práctico ${index + 1}`}
-                                    className="certificate-template-point-input"
                                   />
                                   <Button
                                     variant="outline-danger"
