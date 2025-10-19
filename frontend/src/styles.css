@@ -200,6 +200,17 @@ body {
   font-weight: 600;
 }
 
+.certificate-template-points {
+  margin-top: 0.75rem;
+  padding-left: 1.25rem;
+  display: grid;
+  row-gap: 0.5rem;
+}
+
+.certificate-template-point {
+  line-height: 1.5;
+}
+
 .session-modal .modal-header .btn-close {
   filter: invert(1);
   opacity: 1;
