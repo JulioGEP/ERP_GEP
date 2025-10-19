@@ -332,7 +332,6 @@ ${headings.trabajos}
 ${headings.tareas}
 ${headings.observaciones}
 ${headings.incidencias}
-${headings.firma}
 ${headings.anexos}
 
 Indicaciones:
@@ -340,8 +339,7 @@ Indicaciones:
 - En "${headings.registro}" contextualiza el servicio prestado por nuestro equipo, la fecha de realización y, si procede, sintetiza en una frase los datos generales sin repetirlos literalmente.
 - Reescribe "${headings.trabajos}", "${headings.tareas}", "${headings.observaciones}" e "${headings.incidencias}" con una extensión de entre 350 y 450 palabras cada sección, interpretando profesionalmente el material original.
 - Si falta información relevante en alguna sección, explica cómo afecta al análisis sin inventar datos.
-- En "${headings.firma}" incluye una firma que comience con "Atentamente:" seguida de los nombres del bombero o bomberos facilitados y termine con "Recurso preventivo GEP".
-- En "${headings.anexos}" indica que las imágenes quedan adjuntas como anexo posterior a la firma.
+- En "${headings.anexos}" indica que las imágenes quedan adjuntas como anexo final del informe.
 
 Contexto disponible:
 ${contexto}
