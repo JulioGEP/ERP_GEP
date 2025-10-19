@@ -570,14 +570,27 @@ export const handler = async (event: any) => {
         return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
       }
 
-      await prisma.$transaction([
+      const commentsTableExistsResult = await prisma.$queryRaw<
+        Array<{ table_ref: string | null }>
+      >`SELECT to_regclass('public.comments') AS table_ref`;
+
+      const commentsTableExists = Array.isArray(commentsTableExistsResult)
+        ? commentsTableExistsResult.some((row) => Boolean(row?.table_ref))
+        : false;
+
+      const transactionOperations: Parameters<typeof prisma.$transaction>[0] = [
         prisma.deal_products.deleteMany({ where: { deal_id: id } }),
         prisma.deal_notes.deleteMany({ where: { deal_id: id } }),
         prisma.deal_files.deleteMany({ where: { deal_id: id } }),
-        prisma.comments.deleteMany({ where: { deal_id: id } }),
         prisma.sessions.deleteMany({ where: { deal_id: id } }),
         prisma.deals.delete({ where: { deal_id: id } }),
-      ]);
+      ];
+
+      if (commentsTableExists) {
+        transactionOperations.splice(3, 0, prisma.comments.deleteMany({ where: { deal_id: id } }));
+      }
+
+      await prisma.$transaction(transactionOperations);
 
       try {
         await deleteDealFolderFromGoogleDrive({
