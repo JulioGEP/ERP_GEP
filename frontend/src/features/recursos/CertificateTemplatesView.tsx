@@ -36,8 +36,8 @@ type TemplateFormState = {
   name: string;
   title: string;
   duration: string;
-  theoryText: string;
-  practiceText: string;
+  theoryPoints: string[];
+  practicePoints: string[];
   persistId: boolean;
   isCustom: boolean;
 };
@@ -89,11 +89,8 @@ function resolveErrorMessage(error: unknown): string {
   return 'Se ha producido un error inesperado.';
 }
 
-function normaliseListInput(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+function normaliseListEntries(entries: string[]): string[] {
+  return entries.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
 }
 
 function getTrainingTemplatesApi(): TrainingTemplatesApi {
@@ -112,8 +109,12 @@ function mapTemplateToFormState(template: TrainingTemplate, api: TrainingTemplat
     name: template.name ?? '',
     title: template.title ?? '',
     duration: template.duration ?? '',
-    theoryText: Array.isArray(template.theory) ? template.theory.join('\n') : '',
-    practiceText: Array.isArray(template.practice) ? template.practice.join('\n') : '',
+    theoryPoints: Array.isArray(template.theory)
+      ? template.theory.map((entry) => entry?.trim?.()).filter((entry): entry is string => Boolean(entry))
+      : [],
+    practicePoints: Array.isArray(template.practice)
+      ? template.practice.map((entry) => entry?.trim?.()).filter((entry): entry is string => Boolean(entry))
+      : [],
     persistId: hasPersistableId,
     isCustom,
   };
@@ -126,8 +127,8 @@ function buildEmptyFormState(api: TrainingTemplatesApi): TemplateFormState {
     name: empty.name ?? '',
     title: empty.title ?? '',
     duration: empty.duration ?? '',
-    theoryText: '',
-    practiceText: '',
+    theoryPoints: [],
+    practicePoints: [],
     persistId: false,
     isCustom: true,
   };
@@ -143,8 +144,8 @@ function buildPayloadFromState(
     name: state.name.trim(),
     title: state.title.trim(),
     duration: state.duration.trim(),
-    theory: normaliseListInput(state.theoryText),
-    practice: normaliseListInput(state.practiceText),
+    theory: normaliseListEntries(state.theoryPoints),
+    practice: normaliseListEntries(state.practicePoints),
   };
 
   const payload: TrainingTemplateInput = {
@@ -273,14 +274,58 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
     [api]
   );
 
-  const handleFormChange = useCallback((field: keyof TemplateFormState, value: string | boolean) => {
+  const handleFormChange = useCallback(
+    <Field extends keyof TemplateFormState>(field: Field, value: TemplateFormState[Field]) => {
+      setFormState((current) => {
+        if (!current) {
+          return current;
+        }
+        return {
+          ...current,
+          [field]: value,
+        };
+      });
+    },
+    [],
+  );
+
+  type PointsField = 'theoryPoints' | 'practicePoints';
+
+  const handlePointChange = useCallback((field: PointsField, index: number, value: string) => {
+    setFormState((current) => {
+      if (!current) {
+        return current;
+      }
+      const nextPoints = [...current[field]];
+      nextPoints[index] = value;
+      return {
+        ...current,
+        [field]: nextPoints,
+      };
+    });
+  }, []);
+
+  const handleAddPoint = useCallback((field: PointsField) => {
     setFormState((current) => {
       if (!current) {
         return current;
       }
       return {
         ...current,
-        [field]: value,
+        [field]: [...current[field], ''],
+      };
+    });
+  }, []);
+
+  const handleRemovePoint = useCallback((field: PointsField, index: number) => {
+    setFormState((current) => {
+      if (!current) {
+        return current;
+      }
+      const nextPoints = current[field].filter((_, position) => position !== index);
+      return {
+        ...current,
+        [field]: nextPoints,
       };
     });
   }, []);
@@ -522,14 +567,8 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
   const isLoadingAssociations = productsQuery.isLoading || productsQuery.isFetching;
   const associationsError = productsQuery.error ? resolveErrorMessage(productsQuery.error) : null;
   const canDuplicate = Boolean(formState?.id);
-  const theoryPoints = useMemo(
-    () => (formState ? normaliseListInput(formState.theoryText) : []),
-    [formState],
-  );
-  const practicePoints = useMemo(
-    () => (formState ? normaliseListInput(formState.practiceText) : []),
-    [formState],
-  );
+  const theoryPoints = formState?.theoryPoints ?? [];
+  const practicePoints = formState?.practicePoints ?? [];
   return (
     <div className="d-grid gap-4">
       <section className="d-grid gap-3 gap-md-2">
@@ -640,43 +679,89 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                         </div>
                       </Col>
                     </Row>
-                    <Form.Group controlId="template-theory">
+                    <Form.Group controlId="template-theory" className="d-grid gap-3">
                       <Form.Label>Contenido teórico</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={6}
-                        value={formState.theoryText}
-                        onChange={(event) => handleFormChange('theoryText', event.target.value)}
-                        placeholder="Introduce cada punto en una línea diferente"
-                      />
-                      {theoryPoints.length > 0 && (
-                        <ul className="certificate-template-points mb-0">
-                          {theoryPoints.map((point, index) => (
-                            <li key={`${point}-${index}`} className="certificate-template-point">
-                              {point}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                      <div className="d-grid gap-3">
+                        {theoryPoints.length > 0 ? (
+                          theoryPoints.map((point, index) => (
+                            <div key={`theory-${index}`} className="d-flex flex-column flex-md-row gap-2">
+                              <Form.Control
+                                as="textarea"
+                                rows={2}
+                                value={point}
+                                onChange={(event) =>
+                                  handlePointChange('theoryPoints', index, event.target.value)
+                                }
+                                placeholder={`Punto teórico ${index + 1}`}
+                              />
+                              <Button
+                                variant="outline-danger"
+                                type="button"
+                                onClick={() => handleRemovePoint('theoryPoints', index)}
+                                className="flex-shrink-0"
+                              >
+                                Eliminar
+                              </Button>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-muted small mb-0">
+                            No hay puntos teóricos. Añade un punto para comenzar.
+                          </p>
+                        )}
+                        <div>
+                          <Button
+                            variant="outline-primary"
+                            type="button"
+                            onClick={() => handleAddPoint('theoryPoints')}
+                            className="w-100 w-md-auto"
+                          >
+                            Añadir punto teórico
+                          </Button>
+                        </div>
+                      </div>
                     </Form.Group>
-                    <Form.Group controlId="template-practice">
+                    <Form.Group controlId="template-practice" className="d-grid gap-3">
                       <Form.Label>Contenido práctico</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={6}
-                        value={formState.practiceText}
-                        onChange={(event) => handleFormChange('practiceText', event.target.value)}
-                        placeholder="Introduce cada punto en una línea diferente"
-                      />
-                      {practicePoints.length > 0 && (
-                        <ul className="certificate-template-points mb-0">
-                          {practicePoints.map((point, index) => (
-                            <li key={`${point}-${index}`} className="certificate-template-point">
-                              {point}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                      <div className="d-grid gap-3">
+                        {practicePoints.length > 0 ? (
+                          practicePoints.map((point, index) => (
+                            <div key={`practice-${index}`} className="d-flex flex-column flex-md-row gap-2">
+                              <Form.Control
+                                as="textarea"
+                                rows={2}
+                                value={point}
+                                onChange={(event) =>
+                                  handlePointChange('practicePoints', index, event.target.value)
+                                }
+                                placeholder={`Punto práctico ${index + 1}`}
+                              />
+                              <Button
+                                variant="outline-danger"
+                                type="button"
+                                onClick={() => handleRemovePoint('practicePoints', index)}
+                                className="flex-shrink-0"
+                              >
+                                Eliminar
+                              </Button>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-muted small mb-0">
+                            No hay puntos prácticos. Añade un punto para comenzar.
+                          </p>
+                        )}
+                        <div>
+                          <Button
+                            variant="outline-primary"
+                            type="button"
+                            onClick={() => handleAddPoint('practicePoints')}
+                            className="w-100 w-md-auto"
+                          >
+                            Añadir punto práctico
+                          </Button>
+                        </div>
+                      </div>
                     </Form.Group>
                   </div>
 
