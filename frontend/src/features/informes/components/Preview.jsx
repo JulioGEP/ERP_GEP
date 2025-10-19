@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { generateReportPdfmake } from '../pdf/reportPdfmake'
 import { triesKey, htmlKey } from '../utils/keys'
+import { emitToast } from '../../../utils/toast'
+import { emitSessionDocumentsUpdated } from '../../../utils/sessionDocumentsEvents'
 
 const normalizeDisplay = (value) => {
   if (value === null || value === undefined) return ''
@@ -31,6 +33,49 @@ const formatSessionLabel = (session) => {
 }
 
 const maxTries = 3
+
+const toBase64FromArrayBuffer = (buffer) => {
+  if (!buffer) return null
+  try {
+    const source = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
+    let binary = ''
+    for (let i = 0; i < source.byteLength; i += 1) {
+      binary += String.fromCharCode(source[i])
+    }
+    if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+      return window.btoa(binary)
+    }
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(binary, 'binary').toString('base64')
+    }
+  } catch (error) {
+    console.warn('No se pudo convertir el PDF a Base64 desde ArrayBuffer.', error)
+  }
+  return null
+}
+
+const sanitizeBase64 = (value) => (typeof value === 'string' ? value.replace(/\s+/g, '').trim() : '')
+
+const extractPdfBase64 = (pdf) => {
+  if (!pdf || typeof pdf !== 'object') return null
+
+  const direct = sanitizeBase64(pdf.base64)
+  if (direct) return direct
+
+  if (typeof pdf.dataUrl === 'string') {
+    const [, encoded = ''] = pdf.dataUrl.split(',')
+    const normalized = sanitizeBase64(encoded)
+    if (normalized) return normalized
+  }
+
+  if (pdf.arrayBuffer) {
+    return toBase64FromArrayBuffer(pdf.arrayBuffer)
+  }
+
+  return null
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const stripImagesFromDatos = (value) => {
   if (Array.isArray(value)) {
@@ -391,7 +436,12 @@ export default function Preview(props) {
         try { sessionStorage.setItem(htmlKey(dealId), html) } catch {}
       }
 
-      await generateReportPdfmake({ dealId, datos, formador, imagenes, type, aiHtml: html })
+      try {
+        await generateReportPdfmake({ dealId, datos, formador, imagenes, type, aiHtml: html })
+      } catch (pdfError) {
+        console.error('[Preview] Error al generar el PDF tras mejorar informe', pdfError)
+        emitToast({ variant: 'danger', message: 'No se pudo generar el PDF.' })
+      }
 
       if (dealId) {
         const next = isPreventivoEbro ? tries + 1 : Math.min(tries + 1, maxTries)
@@ -400,8 +450,8 @@ export default function Preview(props) {
       }
     } catch (e) {
       console.error(e)
-      const message = e?.message ? `No se ha podido mejorar el informe.\n${e.message}` : 'No se ha podido mejorar el informe.'
-      alert(message)
+      const message = e?.message ? `No se ha podido mejorar el informe. ${e.message}` : 'No se ha podido mejorar el informe.'
+      emitToast({ variant: 'danger', message })
     } finally {
       setAiBusy(false)
     }
@@ -409,49 +459,35 @@ export default function Preview(props) {
 
   const guardarEnDrive = async () => {
     if (!dealId) {
-      alert('El Nº de presupuesto es obligatorio.')
+      emitToast({ variant: 'warning', message: 'El Nº de presupuesto es obligatorio.' })
       return
     }
     if (!session || !session.id) {
-      alert('Selecciona la sesión correspondiente en el formulario antes de guardar el informe.')
+      emitToast({ variant: 'warning', message: 'Selecciona la sesión correspondiente en el formulario antes de guardar el informe.' })
       return
     }
     if (!tieneContenido) {
-      alert('Completa el contenido del informe antes de guardarlo.')
+      emitToast({ variant: 'warning', message: 'Completa el contenido del informe antes de guardarlo.' })
       return
-    }
-
-    const toBase64FromArrayBuffer = (buffer) => {
-      if (!buffer) return null
-      try {
-        const bytes = new Uint8Array(buffer)
-        let binary = ''
-        for (let i = 0; i < bytes.length; i += 1) {
-          binary += String.fromCharCode(bytes[i])
-        }
-        return typeof window !== 'undefined' && window.btoa ? window.btoa(binary) : Buffer.from(binary, 'binary').toString('base64')
-      } catch (error) {
-        console.warn('No se pudo convertir el PDF a Base64 desde ArrayBuffer.', error)
-        return null
-      }
     }
 
     setUploading(true)
     try {
-      const pdf = await generateReportPdfmake({ dealId, datos, formador, imagenes, type, aiHtml })
+      let pdf
+      try {
+        pdf = await generateReportPdfmake({ dealId, datos, formador, imagenes, type, aiHtml })
+      } catch (error) {
+        console.error('[Preview] Error al generar el PDF antes de subirlo a Drive', error)
+        emitToast({ variant: 'danger', message: 'No se pudo generar el PDF.' })
+        return
+      }
 
-      let base64 = typeof pdf?.base64 === 'string' ? pdf.base64 : null
-      if (!base64 && typeof pdf?.dataUrl === 'string') {
-        const [, encoded] = pdf.dataUrl.split(',')
-        base64 = encoded || null
-      }
-      if (!base64 && pdf?.arrayBuffer) {
-        base64 = toBase64FromArrayBuffer(pdf.arrayBuffer)
-      }
+      const base64 = extractPdfBase64(pdf)
       if (!base64) {
-        throw new Error('No se pudo preparar el PDF para subirlo a Drive.')
+        const preparationError = new Error('No se pudo preparar el PDF para subirlo a Drive.')
+        preparationError.name = 'PDF_BASE64_ERROR'
+        throw preparationError
       }
-      base64 = base64.replace(/\s+/g, '')
 
       const payload = {
         dealId,
@@ -462,38 +498,85 @@ export default function Preview(props) {
         sessionName: session.nombre ?? null,
       }
 
-      const response = await fetch('/.netlify/functions/reportUpload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+      const uploadWithRetry = async (body) => {
+        let lastError = null
+        const attemptUpload = async () => {
+          try {
+            const response = await fetch('/.netlify/functions/reportUpload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            })
 
-      const raw = await response.text()
-      let data = null
-      if (raw) {
-        try {
-          data = JSON.parse(raw)
-        } catch (error) {
-          console.error('Respuesta reportUpload no JSON:', error, raw)
+            const raw = await response.text()
+            let data = null
+            if (raw) {
+              try {
+                data = JSON.parse(raw)
+              } catch (parseError) {
+                console.error('Respuesta reportUpload no JSON:', parseError, raw)
+              }
+            }
+
+            if (!response.ok) {
+              const message = data?.error || data?.message || raw || 'Error guardando el PDF en Drive.'
+              const uploadError = new Error(message)
+              uploadError.name = 'UPLOAD_ERROR'
+              uploadError.status = response.status
+              uploadError.response = data
+              uploadError.raw = raw
+              throw uploadError
+            }
+
+            return data || {}
+          } catch (error) {
+            const normalized = error instanceof Error ? error : new Error('Error guardando el PDF en Drive.')
+            if (!(normalized instanceof Error)) {
+              throw error
+            }
+            if (!normalized.name) normalized.name = 'UPLOAD_ERROR'
+            throw normalized
+          }
         }
+
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          try {
+            return await attemptUpload()
+          } catch (error) {
+            lastError = error
+            const status = typeof error?.status === 'number' ? error.status : null
+            const shouldRetry = status === null || status >= 500
+            if (!shouldRetry || attempt === 2) {
+              throw error
+            }
+            await delay(500 * attempt)
+          }
+        }
+
+        throw lastError || new Error('Error guardando el PDF en Drive.')
       }
 
-      if (!response.ok) {
-        const message = data?.error || data?.message || raw || 'Error guardando el PDF en Drive.'
-        throw new Error(message)
-      }
+      const data = await uploadWithRetry(payload)
 
       if (data?.document) {
         setLastUpload({ ...data.document, drive_url: data?.drive_url || null })
+        emitSessionDocumentsUpdated({ dealId, sessionId: session.id })
       } else {
         setLastUpload(null)
       }
 
-      alert('Documento guardado en Drive.')
+      const warningMessage = typeof data?.warning?.message === 'string' ? data.warning.message.trim() : ''
+      if (warningMessage) {
+        emitToast({ variant: 'warning', message: warningMessage })
+      } else {
+        emitToast({ variant: 'success', message: 'Documento guardado en Drive.' })
+      }
     } catch (error) {
-      console.error(error)
-      const message = error?.message ? `No se ha podido guardar el PDF.\n${error.message}` : 'No se ha podido guardar el PDF.'
-      alert(message)
+      console.error('[Preview] Error guardando el informe en Drive', error)
+      const message = error instanceof Error && typeof error.message === 'string'
+        ? error.message.trim()
+        : 'No se ha podido guardar el PDF.'
+      emitToast({ variant: 'danger', message: message || 'No se ha podido guardar el PDF.' })
     } finally {
       setUploading(false)
     }

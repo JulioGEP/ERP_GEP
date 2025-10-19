@@ -28,6 +28,7 @@ import type { SalasPageProps } from './pages/recursos/SalasPage';
 import type { TemplatesCertificadosPageProps } from './pages/recursos/TemplatesCertificadosPage';
 import type { ProductosPageProps } from './pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from './pages/certificados/CertificadosPage';
+import { TOAST_EVENT, type ToastEventDetail } from './utils/toast';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 
@@ -92,7 +93,7 @@ const DEFAULT_REDIRECT_PATH = '/presupuestos';
 
 type ToastMessage = {
   id: string;
-  variant: 'success' | 'danger' | 'info';
+  variant: 'success' | 'danger' | 'info' | 'warning';
   message: string;
 };
 
@@ -142,6 +143,24 @@ export default function App() {
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleGlobalToast = (event: Event) => {
+      const detail = (event as CustomEvent<ToastEventDetail>).detail;
+      if (!detail || typeof detail.message !== 'string') {
+        return;
+      }
+      const variant = detail.variant ?? 'info';
+      pushToast({ variant, message: detail.message });
+    };
+
+    window.addEventListener(TOAST_EVENT, handleGlobalToast as EventListener);
+    return () => {
+      window.removeEventListener(TOAST_EVENT, handleGlobalToast as EventListener);
+    };
+  }, [pushToast]);
 
   const importMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
@@ -461,17 +480,20 @@ export default function App() {
       />
 
       <ToastContainer position="bottom-end" className="p-3">
-        {toasts.map((toast) => (
-          <Toast
-            key={toast.id}
-            bg={toast.variant}
-            onClose={() => removeToast(toast.id)}
-            delay={5000}
-            autohide
-          >
-            <Toast.Body className="text-white">{toast.message}</Toast.Body>
-          </Toast>
-        ))}
+        {toasts.map((toast) => {
+          const textClass = toast.variant === 'warning' ? 'text-dark' : 'text-white';
+          return (
+            <Toast
+              key={toast.id}
+              bg={toast.variant}
+              onClose={() => removeToast(toast.id)}
+              delay={5000}
+              autohide
+            >
+              <Toast.Body className={textClass}>{toast.message}</Toast.Body>
+            </Toast>
+          );
+        })}
       </ToastContainer>
     </div>
   );
