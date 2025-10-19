@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -8,7 +8,6 @@ import {
   Form,
   Row,
   Spinner,
-  Table,
 } from 'react-bootstrap';
 
 import {
@@ -91,6 +90,37 @@ function buildEmptyFormState(api: TrainingTemplatesApi): TemplateFormState {
     persistId: false,
     isCustom: true,
   };
+}
+
+function buildPayloadFromState(
+  state: TemplateFormState,
+  overrides: Partial<TrainingTemplateInput> = {}
+): TrainingTemplateInput {
+  const base: TrainingTemplateInput = {
+    id: state.persistId ? state.id : undefined,
+    name: state.name.trim(),
+    title: state.title.trim(),
+    duration: state.duration.trim(),
+    theory: normaliseListInput(state.theoryText),
+    practice: normaliseListInput(state.practiceText),
+  };
+
+  const payload: TrainingTemplateInput = {
+    ...base,
+    ...overrides,
+  };
+
+  if (typeof payload.name === 'string') {
+    payload.name = payload.name.trim();
+  }
+  if (typeof payload.title === 'string') {
+    payload.title = payload.title.trim();
+  }
+  if (typeof payload.duration === 'string') {
+    payload.duration = payload.duration.trim();
+  }
+
+  return payload;
 }
 
 export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewProps) {
@@ -179,13 +209,17 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
     setFormState(buildEmptyFormState(api));
   }, [api]);
 
-  const handleSelectTemplate = useCallback(
-    (template: TrainingTemplate) => {
-      if (!api) {
+  const handleTemplateSelectionChange = useCallback(
+    (event: ChangeEvent<HTMLSelectElement>) => {
+      const value = event.target.value;
+      if (!value) {
+        setSelectedTemplateId('');
+        if (api) {
+          setFormState(buildEmptyFormState(api));
+        }
         return;
       }
-      setSelectedTemplateId(template.id);
-      setFormState(mapTemplateToFormState(template, api));
+      setSelectedTemplateId(value);
     },
     [api]
   );
@@ -202,33 +236,65 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
     });
   }, []);
 
-  const handleSave = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (!api || !formState) {
+  const updateTemplateInState = useCallback((updatedTemplate: TrainingTemplate) => {
+    setTemplates((current) => {
+      const index = current.findIndex((entry) => entry.id === updatedTemplate.id);
+      if (index >= 0) {
+        const next = [...current];
+        next[index] = updatedTemplate;
+        return next;
+      }
+      return [...current, updatedTemplate];
+    });
+  }, []);
+
+  const normaliseTemplateName = useCallback(
+    (value: string) => {
+      const trimmed = value?.trim?.() ?? '';
+      if (!trimmed) {
+        return '';
+      }
+      const normaliser = api?.normaliseName;
+      return typeof normaliser === 'function' ? normaliser(trimmed) : trimmed.toLowerCase();
+    },
+    [api]
+  );
+
+  const hasTemplateWithName = useCallback(
+    (name: string, ignoreId?: string) => {
+      const normalised = normaliseTemplateName(name);
+      if (!normalised) {
+        return false;
+      }
+      return templates.some((template) => {
+        if (ignoreId && template.id === ignoreId) {
+          return false;
+        }
+        return normaliseTemplateName(template.name) === normalised;
+      });
+    },
+    [normaliseTemplateName, templates]
+  );
+
+  const handlePersistTemplate = useCallback(
+    async (payload: TrainingTemplateInput, successMessage?: string) => {
+      if (!api) {
         return;
       }
-
       setIsSaving(true);
       try {
-        const payload: TrainingTemplateInput = {
-          id: formState.persistId ? formState.id : undefined,
-          name: formState.name.trim(),
-          title: formState.title.trim(),
-          duration: formState.duration.trim(),
-          theory: normaliseListInput(formState.theoryText),
-          practice: normaliseListInput(formState.practiceText),
-        };
-
         const saved = await api.saveTemplate(payload);
         if (!saved) {
           throw new Error('No se pudo guardar la plantilla.');
         }
+        updateTemplateInState(saved);
         setSelectedTemplateId(saved.id);
         setFormState(mapTemplateToFormState(saved, api));
         onNotify({
           variant: 'success',
-          message: `La plantilla "${saved.title || saved.name}" se ha guardado correctamente.`,
+          message:
+            successMessage ??
+            `La plantilla "${saved.title || saved.name}" se ha guardado correctamente.`,
         });
       } catch (error) {
         const message = resolveErrorMessage(error);
@@ -237,8 +303,80 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
         setIsSaving(false);
       }
     },
-    [api, formState, onNotify]
+    [api, onNotify, updateTemplateInState]
   );
+
+  const handleFormSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!api || !formState) {
+        return;
+      }
+
+      const name = formState.name.trim();
+      const ignoreId = formState.persistId ? formState.id : undefined;
+      if (hasTemplateWithName(name, ignoreId)) {
+        onNotify({ variant: 'danger', message: 'Ya existe una plantilla con ese nombre.' });
+        return;
+      }
+
+      const payload = buildPayloadFromState(formState);
+      await handlePersistTemplate(payload);
+    },
+    [api, formState, handlePersistTemplate, hasTemplateWithName, onNotify]
+  );
+
+  const handleSaveAsNew = useCallback(async () => {
+    if (!api || !formState) {
+      return;
+    }
+
+    const suggestedName = formState.name ? `${formState.name} (copia)` : '';
+    const requestedName = window.prompt('Introduce un nombre para la nueva plantilla:', suggestedName ?? '');
+    if (requestedName === null) {
+      return;
+    }
+
+    const trimmedName = requestedName.trim();
+    if (!trimmedName) {
+      onNotify({ variant: 'danger', message: 'Debes introducir un nombre para la nueva plantilla.' });
+      return;
+    }
+
+    if (hasTemplateWithName(trimmedName)) {
+      onNotify({ variant: 'danger', message: 'Ya existe una plantilla con ese nombre.' });
+      return;
+    }
+
+    const payload = buildPayloadFromState(formState, { id: undefined, name: trimmedName });
+    await handlePersistTemplate(payload, `La plantilla "${trimmedName}" se ha creado correctamente.`);
+  }, [api, formState, handlePersistTemplate, hasTemplateWithName, onNotify]);
+
+  const handleDuplicateTemplate = useCallback(async () => {
+    if (!api || !formState || !formState.id) {
+      return;
+    }
+
+    const duplicateName = formState.name ? `${formState.name} (copia)` : 'Nueva plantilla';
+    const requestedName = window.prompt('Introduce un nombre para la plantilla duplicada:', duplicateName);
+    if (requestedName === null) {
+      return;
+    }
+
+    const trimmedName = requestedName.trim();
+    if (!trimmedName) {
+      onNotify({ variant: 'danger', message: 'Debes introducir un nombre para la nueva plantilla.' });
+      return;
+    }
+
+    if (hasTemplateWithName(trimmedName)) {
+      onNotify({ variant: 'danger', message: 'Ya existe una plantilla con ese nombre.' });
+      return;
+    }
+
+    const payload = buildPayloadFromState(formState, { id: undefined, name: trimmedName });
+    await handlePersistTemplate(payload, `La plantilla "${trimmedName}" se ha duplicado correctamente.`);
+  }, [api, formState, handlePersistTemplate, hasTemplateWithName, onNotify]);
 
   const handleDelete = useCallback(async () => {
     if (!api || !formState || !formState.id || !formState.isCustom) {
@@ -274,6 +412,13 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
   }, [api, formState, onNotify]);
 
   const isLoading = !api && !initialisationError;
+  const selectedTemplate = selectedTemplateId
+    ? templates.find((template) => template.id === selectedTemplateId)
+    : null;
+  const isCustomSelected = selectedTemplate
+    ? Boolean(api?.isCustomTemplateId?.(selectedTemplate.id))
+    : formState?.isCustom;
+  const canDuplicate = Boolean(formState?.id);
   return (
     <div className="d-grid gap-4">
       <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
@@ -298,66 +443,48 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       )}
 
       <Row className="g-4">
-        <Col lg={5} className="d-flex flex-column gap-4">
-          <Card className="h-100">
-            <Card.Header className="d-flex justify-content-between align-items-center">
-              <span className="fw-semibold">Plantillas disponibles</span>
+        <Col lg={8} className="d-flex flex-column gap-3">
+          <Form.Group controlId="template-selector" className="d-grid gap-2">
+            <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+              <Form.Label className="mb-0 fw-semibold">Plantilla activa</Form.Label>
               <Badge bg="secondary">{templates.length}</Badge>
-            </Card.Header>
-            <Card.Body className="p-0">
-              <div className="table-responsive">
-                <Table hover className="mb-0 align-middle">
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 180 }}>Nombre</th>
-                      <th style={{ minWidth: 180 }}>Título</th>
-                      <th style={{ minWidth: 140 }}>Origen</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {templates.map((template) => {
-                      const isActive = template.id === selectedTemplateId;
-                      const isCustom = Boolean(api?.isCustomTemplateId?.(template.id));
-                      return (
-                        <tr
-                          key={template.id}
-                          className={isActive ? 'table-active' : undefined}
-                          role="button"
-                          onClick={() => handleSelectTemplate(template)}
-                        >
-                          <td>{template.name || 'Sin nombre'}</td>
-                          <td>{template.title || '—'}</td>
-                          <td>
-                            <Badge bg={isCustom ? 'info' : 'secondary'}>
-                              {isCustom ? 'Personalizada' : 'Predeterminada'}
-                            </Badge>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {!templates.length && (
-                      <tr>
-                        <td colSpan={3} className="text-center text-muted py-4">
-                          No hay plantillas disponibles.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </Table>
+            </div>
+            <Form.Select
+              value={selectedTemplateId}
+              onChange={handleTemplateSelectionChange}
+              disabled={!templates.length && !formState}
+            >
+              <option value="">Selecciona una plantilla</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name || template.title || 'Sin nombre'}
+                </option>
+              ))}
+            </Form.Select>
+            {selectedTemplate && (
+              <div className="d-flex align-items-center gap-2 text-muted small">
+                <Badge bg={isCustomSelected ? 'info' : 'secondary'}>
+                  {isCustomSelected ? 'Personalizada' : 'Predeterminada'}
+                </Badge>
+                <span>{selectedTemplate.title || 'Sin título asignado'}</span>
               </div>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col lg={7} className="d-flex flex-column gap-4">
+            )}
+          </Form.Group>
+
           <Card className="h-100">
-            <Card.Header>
+            <Card.Header className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
               <span className="fw-semibold">
                 {formState?.name ? `Editar plantilla: ${formState.name}` : 'Nueva plantilla personalizada'}
               </span>
+              {formState && (
+                <Badge bg={formState.isCustom ? 'info' : 'secondary'}>
+                  {formState.isCustom ? 'Personalizada' : 'Predeterminada'}
+                </Badge>
+              )}
             </Card.Header>
             <Card.Body>
               {formState ? (
-                <Form onSubmit={handleSave} className="d-grid gap-4">
+                <Form onSubmit={handleFormSubmit} className="d-grid gap-4">
                   <div className="d-grid gap-3 gap-md-4">
                     <Row className="g-3">
                       <Col md={6}>
@@ -420,17 +547,31 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                     </Form.Group>
                   </div>
 
-                  <div className="d-flex flex-column flex-md-row gap-3 justify-content-between align-items-md-center">
+                  <div className="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
                     <div className="text-muted small">
                       Los cambios se guardan en las plantillas utilizadas para generar los certificados.
                     </div>
-                    <div className="d-flex flex-column flex-md-row gap-2">
+                    <div className="d-flex flex-column flex-lg-row gap-2">
+                      <Button
+                        variant="outline-secondary"
+                        onClick={handleDuplicateTemplate}
+                        disabled={!canDuplicate || isSaving}
+                      >
+                        Duplicar plantilla
+                      </Button>
                       <Button
                         variant="outline-danger"
                         onClick={handleDelete}
                         disabled={!formState.isCustom || !formState.id || isSaving}
                       >
                         Eliminar plantilla
+                      </Button>
+                      <Button
+                        variant="outline-primary"
+                        onClick={handleSaveAsNew}
+                        disabled={!formState || isSaving}
+                      >
+                        ¿Añadir como plantilla nueva?
                       </Button>
                       <Button type="submit" disabled={isSaving}>
                         {isSaving ? 'Guardando…' : 'Guardar cambios'}
