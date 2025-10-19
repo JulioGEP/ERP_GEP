@@ -212,15 +212,9 @@ body {
 }
 
 .certificate-template-point-input {
-  min-height: 0;
-  resize: none;
+  min-height: 2.75rem;
+  resize: vertical;
   padding: 0.5rem 0.75rem;
-  overflow-y: hidden;
-}
-
-.certificate-template-points-editor {
-  align-content: start;
-  justify-content: start;
 }
 
 .session-modal .modal-header .btn-close {
