@@ -311,7 +311,6 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                     <tr>
                       <th style={{ minWidth: 180 }}>Nombre</th>
                       <th style={{ minWidth: 180 }}>Título</th>
-                      <th style={{ minWidth: 80 }}>Duración</th>
                       <th style={{ minWidth: 140 }}>Origen</th>
                     </tr>
                   </thead>
@@ -328,7 +327,6 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                         >
                           <td>{template.name || 'Sin nombre'}</td>
                           <td>{template.title || '—'}</td>
-                          <td>{template.duration || '—'}</td>
                           <td>
                             <Badge bg={isCustom ? 'info' : 'secondary'}>
                               {isCustom ? 'Personalizada' : 'Predeterminada'}
@@ -339,7 +337,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                     })}
                     {!templates.length && (
                       <tr>
-                        <td colSpan={4} className="text-center text-muted py-4">
+                        <td colSpan={3} className="text-center text-muted py-4">
                           No hay plantillas disponibles.
                         </td>
                       </tr>
@@ -387,29 +385,15 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                       </Col>
                     </Row>
                     <Row className="g-3">
-                      <Col md={6}>
-                        <Form.Group controlId="template-duration">
-                          <Form.Label>Duración</Form.Label>
-                          <Form.Control
-                            type="text"
-                            value={formState.duration}
-                            onChange={(event) => handleFormChange('duration', event.target.value)}
-                            placeholder="Ej. 8h"
-                          />
-                          <Form.Text className="text-muted">
-                            Se mostrará junto a los datos de la formación en el certificado.
-                          </Form.Text>
-                        </Form.Group>
-                      </Col>
-                      <Col md={6} className="d-flex align-items-center">
+                      <Col md={12} className="d-flex align-items-center">
                         <div>
-                          <p className="mb-1 small text-muted">
-                            {formState.isCustom
-                              ? 'Esta plantilla es personalizada y se puede eliminar.'
-                              : 'Las plantillas predeterminadas se pueden editar para crear una versión personalizada.'}
-                          </p>
                           {!formState.isCustom && (
-                            <Badge bg="secondary">Se creará una copia personalizada al guardar</Badge>
+                            <>
+                              <p className="mb-1 small text-muted">
+                                Las plantillas predeterminadas se pueden editar para crear una versión personalizada.
+                              </p>
+                              <Badge bg="secondary">Se creará una copia personalizada al guardar</Badge>
+                            </>
                           )}
                         </div>
                       </Col>
