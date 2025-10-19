@@ -327,7 +327,7 @@ const buildDocDefinition = ({
       ]
     : [
         { text: 'Jaime Martret', style: 'k', margin: [0, 18, 0, 2] },
-        { text: 'Director Tecnico', color: '#E1062C', margin: [0, 2, 0, 0] },
+        { text: 'Director Técnico', color: '#E1062C', margin: [0, 2, 0, 0] },
       ]
 
   if (datos?.tipo === 'simulacro') {
