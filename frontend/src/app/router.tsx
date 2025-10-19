@@ -95,7 +95,7 @@ export function AppRouter({
         />
         <Route path="/recursos/salas" element={<SalasPage {...salasPageProps} />} />
         <Route
-          path="/recursos/templates_certificados"
+          path="/certificados/templates_certificados"
           element={<TemplatesCertificadosPage {...templatesCertificadosPageProps} />}
         />
         <Route path="/recursos/productos" element={<ProductosPage {...productosPageProps} />} />
