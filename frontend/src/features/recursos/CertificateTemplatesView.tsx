@@ -1,4 +1,5 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
   Badge,
@@ -16,6 +17,8 @@ import {
   type TrainingTemplateInput,
   type TrainingTemplatesManager,
 } from '../certificados/lib/templates/training-templates';
+import type { Product } from '../../types/product';
+import { fetchProducts } from './products.api';
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -38,6 +41,19 @@ type TemplateFormState = {
   persistId: boolean;
   isCustom: boolean;
 };
+
+function resolveProductLabel(product: Product): string {
+  const candidates = [product.name, product.code, product.id_pipe, product.id];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return product.id;
+}
 
 function resolveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -129,6 +145,13 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
   const [formState, setFormState] = useState<TemplateFormState | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [initialisationError, setInitialisationError] = useState<string | null>(null);
+  const productsQuery = useQuery({
+    queryKey: ['products'],
+    queryFn: fetchProducts,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -415,20 +438,29 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
   const selectedTemplate = selectedTemplateId
     ? templates.find((template) => template.id === selectedTemplateId)
     : null;
-  const isCustomSelected = selectedTemplate
-    ? Boolean(api?.isCustomTemplateId?.(selectedTemplate.id))
-    : formState?.isCustom;
+  const products = productsQuery.data ?? [];
+  const associatedTrainingNames = useMemo(() => {
+    const templateId = selectedTemplate?.id?.trim();
+    if (!templateId) {
+      return [] as string[];
+    }
+
+    return products
+      .filter((product) => (product.template ?? '').trim() === templateId)
+      .map((product) => resolveProductLabel(product))
+      .filter((label, index, array) => label.length > 0 && array.indexOf(label) === index)
+      .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  }, [products, selectedTemplate?.id]);
+  const isLoadingAssociations = productsQuery.isLoading || productsQuery.isFetching;
+  const associationsError = productsQuery.error ? resolveErrorMessage(productsQuery.error) : null;
   const canDuplicate = Boolean(formState?.id);
   return (
     <div className="d-grid gap-4">
-      <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+      <section className="d-grid gap-3 gap-md-2">
         <div>
-          <h1 className="h3 fw-bold mb-1">Templates de Certificados</h1>
-          <p className="text-muted mb-0">
-            Gestiona la información que aparece en la generación automática de los certificados.
-          </p>
+          <h1 className="h3 fw-bold mb-0">Templates de Certificados</h1>
         </div>
-        <div className="d-flex align-items-center gap-3">
+        <div className="d-flex flex-wrap align-items-center gap-3">
           {(isLoading || isSaving) && <Spinner animation="border" role="status" size="sm" className="me-1" />}
           <Button onClick={handleCreateTemplate} disabled={!api || isSaving}>
             Nueva plantilla personalizada
@@ -461,14 +493,6 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                 </option>
               ))}
             </Form.Select>
-            {selectedTemplate && (
-              <div className="d-flex align-items-center gap-2 text-muted small">
-                <Badge bg={isCustomSelected ? 'info' : 'secondary'}>
-                  {isCustomSelected ? 'Personalizada' : 'Predeterminada'}
-                </Badge>
-                <span>{selectedTemplate.title || 'Sin título asignado'}</span>
-              </div>
-            )}
           </Form.Group>
 
           <Card className="h-100">
@@ -489,7 +513,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                     <Row className="g-3">
                       <Col md={6}>
                         <Form.Group controlId="template-name">
-                          <Form.Label>Nombre de la formación</Form.Label>
+                          <Form.Label>Nombre de la plantilla</Form.Label>
                           <Form.Control
                             type="text"
                             value={formState.name}
@@ -512,15 +536,30 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                       </Col>
                     </Row>
                     <Row className="g-3">
-                      <Col md={12} className="d-flex align-items-center">
-                        <div>
-                          {!formState.isCustom && (
-                            <>
-                              <p className="mb-1 small text-muted">
-                                Las plantillas predeterminadas se pueden editar para crear una versión personalizada.
-                              </p>
-                              <Badge bg="secondary">Se creará una copia personalizada al guardar</Badge>
-                            </>
+                      <Col md={12}>
+                        <div className="d-grid gap-2">
+                          <span className="text-muted small text-uppercase fw-semibold">
+                            Formaciones asociadas
+                          </span>
+                          {selectedTemplate && isLoadingAssociations ? (
+                            <div className="d-flex align-items-center gap-2 text-muted small">
+                              <Spinner animation="border" role="status" size="sm" />
+                              <span>Cargando formaciones asociadas…</span>
+                            </div>
+                          ) : selectedTemplate && associationsError ? (
+                            <div className="text-danger small">
+                              No se pudieron cargar las formaciones asociadas. {associationsError}
+                            </div>
+                          ) : associatedTrainingNames.length ? (
+                            <div className="d-flex flex-wrap gap-2">
+                              {associatedTrainingNames.map((name) => (
+                                <Badge key={name} bg="secondary">
+                                  {name}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mb-0 small text-muted">No hay formaciones asociadas.</p>
                           )}
                         </div>
                       </Col>
