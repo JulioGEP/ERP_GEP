@@ -162,11 +162,8 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
 
   useEffect(() => {
     if (!isPreventivoEbro) return
-    if (!dealId) return
-    if (autoPrefillDoneRef.current) return
     autoPrefillDoneRef.current = true
-    rellenarDesdePipedrive()
-  }, [dealId, isPreventivoEbro, rellenarDesdePipedrive])
+  }, [isPreventivoEbro])
 
   // Imágenes (opcional)
   const addImagenes = async (e) => {
