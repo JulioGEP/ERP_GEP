@@ -767,7 +767,7 @@ export async function generateReportPdfmake(draft) {
         ? 'Simulacro'
         : (datos?.formacionTitulo || 'Formación')
   const titulo = baseTitulo.replace(/[^\w\s\-._]/g, '').trim()
-  const nombre = `GEP Group – ${dealId || 'SinPresu'} – ${cliente} – ${titulo} – ${fecha || 'fecha'}.pdf`
+  const nombre = `Informe - ${dealId || 'SinPresu'} – ${cliente} – ${titulo} – ${fecha || 'fecha'}.pdf`
 
   const pdf = pdfMake.createPdf(docDefinition)
 
