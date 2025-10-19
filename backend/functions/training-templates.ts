@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { Buffer } from 'node:buffer';
 import { promises as fs } from 'node:fs';
 
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
@@ -265,11 +266,32 @@ function applyTemplateChanges(
   return { template, map: nextMap, order: nextOrder };
 }
 
-async function handleSaveTemplate(event: any) {
-  if (!event.body) {
-    return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
+function parsePayload(body: unknown, isBase64Encoded: unknown): TemplatePayload | null {
+  if (body === null || body === undefined) {
+    return {};
   }
-  const payload = JSON.parse(event.body || '{}') as TemplatePayload;
+
+  if (typeof body === 'object' && !Buffer.isBuffer(body)) {
+    return body as TemplatePayload;
+  }
+
+  if (typeof body !== 'string') {
+    return null;
+  }
+
+  const rawText = Boolean(isBase64Encoded) ? Buffer.from(body, 'base64').toString('utf8') : body;
+  try {
+    return JSON.parse(rawText || '{}') as TemplatePayload;
+  } catch {
+    return null;
+  }
+}
+
+async function handleSaveTemplate(event: any) {
+  const payload = parsePayload(event.body, event.isBase64Encoded);
+  if (!payload) {
+    return errorResponse('VALIDATION_ERROR', 'Cuerpo de la petición no válido.', 400);
+  }
   const { map, order } = await readTemplatesFile();
   const result = applyTemplateChanges(map, order, payload);
   if ('error' in result) {
@@ -283,11 +305,9 @@ async function handleDeleteTemplate(event: any) {
   const idFromQuery = toDisplayString(event.queryStringParameters?.id);
   let id = idFromQuery;
   if (!id && event.body) {
-    try {
-      const body = JSON.parse(event.body || '{}');
-      id = toDisplayString((body as { id?: unknown }).id);
-    } catch {
-      // ignore
+    const parsed = parsePayload(event.body, event.isBase64Encoded);
+    if (parsed) {
+      id = toDisplayString((parsed as { id?: unknown }).id);
     }
   }
   if (!id) {
