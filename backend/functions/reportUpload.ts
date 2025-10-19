@@ -127,28 +127,66 @@ export const handler = async (event: any) => {
     const now = nowInMadridDate()
     let record: any = null
     let persistenceError: unknown = null
+    const createPayload = {
+      id: randomUUID(),
+      deal_id: dealId,
+      sesion_id: sessionId,
+      file_type: 'pdf',
+      compartir_formador: true,
+      added_at: now,
+      created_at: now,
+      updated_at: now,
+      drive_file_name: uploadResult.driveFileName,
+      drive_web_view_link: uploadResult.driveWebViewLink,
+    }
+
     try {
       record = await prisma.session_files.create({
-        data: {
-          id: randomUUID(),
-          deal_id: dealId,
-          sesion_id: sessionId,
-          file_type: 'pdf',
-          compartir_formador: true,
-          added_at: now,
-          created_at: now,
-          updated_at: now,
-          drive_file_name: uploadResult.driveFileName,
-          drive_web_view_link: uploadResult.driveWebViewLink,
-        },
+        data: createPayload,
       })
-    } catch (error) {
-      persistenceError = error
-      console.error('[reportUpload] No se pudo registrar el documento en session_files', {
-        sessionId,
-        dealId,
-        error: error instanceof Error ? error.message : String(error),
-      })
+    } catch (error: any) {
+      const errorCode = error?.code ?? (typeof error === 'object' ? (error as any)?.code : null)
+      if (errorCode === 'P2002') {
+        try {
+          record = await prisma.session_files.update({
+            where: {
+              sesion_id_drive_file_name: {
+                sesion_id: sessionId,
+                drive_file_name: uploadResult.driveFileName,
+              },
+            },
+            data: {
+              deal_id: dealId,
+              file_type: 'pdf',
+              compartir_formador: true,
+              added_at: now,
+              updated_at: now,
+              drive_file_name: uploadResult.driveFileName,
+              drive_web_view_link: uploadResult.driveWebViewLink,
+            },
+          })
+          console.warn('[reportUpload] Documento existente actualizado en session_files', {
+            sessionId,
+            dealId,
+            driveFileName: uploadResult.driveFileName,
+          })
+        } catch (updateError) {
+          persistenceError = updateError
+          console.error('[reportUpload] No se pudo actualizar el documento existente en session_files', {
+            sessionId,
+            dealId,
+            error:
+              updateError instanceof Error ? updateError.message : String(updateError),
+          })
+        }
+      } else {
+        persistenceError = error
+        console.error('[reportUpload] No se pudo registrar el documento en session_files', {
+          sessionId,
+          dealId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
 
     const responseBody: any = {
