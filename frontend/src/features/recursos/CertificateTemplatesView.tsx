@@ -522,6 +522,14 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
   const isLoadingAssociations = productsQuery.isLoading || productsQuery.isFetching;
   const associationsError = productsQuery.error ? resolveErrorMessage(productsQuery.error) : null;
   const canDuplicate = Boolean(formState?.id);
+  const theoryPoints = useMemo(
+    () => (formState ? normaliseListInput(formState.theoryText) : []),
+    [formState],
+  );
+  const practicePoints = useMemo(
+    () => (formState ? normaliseListInput(formState.practiceText) : []),
+    [formState],
+  );
   return (
     <div className="d-grid gap-4">
       <section className="d-grid gap-3 gap-md-2">
@@ -641,6 +649,15 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                         onChange={(event) => handleFormChange('theoryText', event.target.value)}
                         placeholder="Introduce cada punto en una línea diferente"
                       />
+                      {theoryPoints.length > 0 && (
+                        <ul className="certificate-template-points mb-0">
+                          {theoryPoints.map((point, index) => (
+                            <li key={`${point}-${index}`} className="certificate-template-point">
+                              {point}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </Form.Group>
                     <Form.Group controlId="template-practice">
                       <Form.Label>Contenido práctico</Form.Label>
@@ -651,18 +668,25 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                         onChange={(event) => handleFormChange('practiceText', event.target.value)}
                         placeholder="Introduce cada punto en una línea diferente"
                       />
+                      {practicePoints.length > 0 && (
+                        <ul className="certificate-template-points mb-0">
+                          {practicePoints.map((point, index) => (
+                            <li key={`${point}-${index}`} className="certificate-template-point">
+                              {point}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </Form.Group>
                   </div>
 
-                  <div className="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
-                    <div className="text-muted small">
-                      Los cambios se guardan en las plantillas utilizadas para generar los certificados.
-                    </div>
-                    <div className="d-flex flex-column flex-lg-row gap-2">
+                  <div className="d-flex flex-column flex-lg-row gap-3 align-items-stretch">
+                    <div className="d-flex flex-column flex-lg-row gap-2 w-100 justify-content-lg-end">
                       <Button
                         variant="outline-secondary"
                         onClick={handleDuplicateTemplate}
                         disabled={!canDuplicate || isSaving}
+                        className="w-100 w-lg-auto px-4"
                       >
                         Duplicar plantilla
                       </Button>
@@ -670,6 +694,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                         variant="outline-danger"
                         onClick={handleDelete}
                         disabled={!formState.isCustom || !formState.id || isSaving}
+                        className="w-100 w-lg-auto px-4"
                       >
                         Eliminar plantilla
                       </Button>
@@ -677,10 +702,11 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                         variant="outline-primary"
                         onClick={handleSaveAsNew}
                         disabled={!formState || isSaving}
+                        className="w-100 w-lg-auto px-4"
                       >
                         ¿Añadir como plantilla nueva?
                       </Button>
-                      <Button type="submit" disabled={isSaving}>
+                      <Button type="submit" disabled={isSaving} className="w-100 w-lg-auto px-4">
                         {isSaving ? 'Guardando…' : 'Guardar cambios'}
                       </Button>
                     </div>
