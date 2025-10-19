@@ -29,40 +29,23 @@ import {
 import { pdfMakeReady } from './lib/pdf/pdfmake-initializer';
 import { certificateTemplateReady } from './lib/pdf/template-loader';
 
-import './lib/templates/training-templates';
+import {
+  getTrainingTemplatesManager,
+  type TrainingTemplate,
+  type TrainingTemplatesManager,
+} from './lib/templates/training-templates';
 
 import './styles/certificados.scss';
 
 const CERTIFICATES_STORAGE_KEY = 'certificadosState';
 
-type TrainingTemplate = {
-  id: string;
-  name: string;
-  title: string;
-  duration: string;
-  theory: string[];
-  practice: string[];
-};
-
-type TrainingTemplatesApi = {
-  listTemplates: () => TrainingTemplate[];
-  getTemplateById?: (id: string) => TrainingTemplate | null;
-  getTemplateByName?: (name: string) => TrainingTemplate | null;
-  subscribe?: (callback: () => void) => () => void;
-  normaliseName?: (name: string) => string;
-};
+type TrainingTemplatesApi = TrainingTemplatesManager;
 
 type CertificateTemplateOption = {
   key: string;
   label: string;
   template: TrainingTemplate;
 };
-
-declare global {
-  interface Window {
-    trainingTemplates?: TrainingTemplatesApi;
-  }
-}
 
 type PersistedCertificatePageState = {
   dealIdInput?: string;
@@ -74,10 +57,7 @@ type PersistedCertificatePageState = {
 };
 
 function resolveTrainingTemplatesApi(): TrainingTemplatesApi | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  return window.trainingTemplates ?? null;
+  return getTrainingTemplatesManager() ?? null;
 }
 
 function defaultNormaliseName(value: string): string {
