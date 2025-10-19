@@ -590,7 +590,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       )}
 
       <Row className="g-4">
-        <Col lg={8} className="d-flex flex-column gap-3">
+        <Col className="d-flex flex-column gap-3">
           <Form.Group controlId="template-selector" className="d-grid gap-2">
             <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
               <Form.Label className="mb-0 fw-semibold">Plantilla activa</Form.Label>
