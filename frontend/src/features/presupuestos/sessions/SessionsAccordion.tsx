@@ -71,6 +71,10 @@ import {
 import { isApiError } from '../api';
 import { buildFieldTooltip } from '../../../utils/fieldTooltip';
 import { formatSedeLabel } from '../formatSedeLabel';
+import {
+  SESSION_DOCUMENTS_EVENT,
+  type SessionDocumentsEventDetail,
+} from '../../../utils/sessionDocumentsEvents';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -973,6 +977,25 @@ function SessionDocumentsAccordionItem({
       fileInputRef.current.value = '';
     }
   }, [dealId, sessionId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const normalizedDealId = String(dealId ?? '').trim();
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedDealId || !normalizedSessionId) return undefined;
+
+    const handleDocumentsUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<SessionDocumentsEventDetail>).detail;
+      if (!detail) return;
+      if (detail.dealId !== normalizedDealId || detail.sessionId !== normalizedSessionId) return;
+      qc.invalidateQueries({ queryKey: ['session-documents', dealId, sessionId] });
+    };
+
+    window.addEventListener(SESSION_DOCUMENTS_EVENT, handleDocumentsUpdated as EventListener);
+    return () => {
+      window.removeEventListener(SESSION_DOCUMENTS_EVENT, handleDocumentsUpdated as EventListener);
+    };
+  }, [dealId, qc, sessionId]);
 
   const documents = documentsQuery.data?.documents ?? [];
   const documentsLoading = documentsQuery.isLoading;

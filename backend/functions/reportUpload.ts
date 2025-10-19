@@ -125,25 +125,45 @@ export const handler = async (event: any) => {
     }
 
     const now = nowInMadridDate()
-    const record = await prisma.session_files.create({
-      data: {
-        id: randomUUID(),
-        deal_id: dealId,
-        sesion_id: sessionId,
-        file_type: 'pdf',
-        compartir_formador: true,
-        added_at: now,
-        created_at: now,
-        updated_at: now,
-        drive_file_name: uploadResult.driveFileName,
-        drive_web_view_link: uploadResult.driveWebViewLink,
-      },
-    })
+    let record: any = null
+    let persistenceError: unknown = null
+    try {
+      record = await prisma.session_files.create({
+        data: {
+          id: randomUUID(),
+          deal_id: dealId,
+          sesion_id: sessionId,
+          file_type: 'pdf',
+          compartir_formador: true,
+          added_at: now,
+          created_at: now,
+          updated_at: now,
+          drive_file_name: uploadResult.driveFileName,
+          drive_web_view_link: uploadResult.driveWebViewLink,
+        },
+      })
+    } catch (error) {
+      persistenceError = error
+      console.error('[reportUpload] No se pudo registrar el documento en session_files', {
+        sessionId,
+        dealId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
 
-    return successResponse({
-      document: mapSessionFile(record),
+    const responseBody: any = {
+      document: record ? mapSessionFile(record) : null,
       drive_url: sessionDriveUrl,
-    })
+    }
+
+    if (persistenceError) {
+      responseBody.warning = {
+        code: 'PERSISTENCE_ERROR',
+        message: 'El archivo se guardó en Drive pero no se pudo registrar en la sesión.',
+      }
+    }
+
+    return successResponse(responseBody, persistenceError ? 207 : 200)
   } catch (error) {
     console.error('[reportUpload] handler error', error)
     return errorResponse('INTERNAL_ERROR', 'Error guardando el informe', 500)
