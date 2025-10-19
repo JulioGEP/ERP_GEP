@@ -63,8 +63,20 @@ const NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores_bomberos' },
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
-      { key: 'Recursos/Templates', label: 'Templates Certificados', path: '/recursos/templates_certificados' },
       { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
+    ],
+  },
+  {
+    key: 'Certificados',
+    label: 'Certificados',
+    path: '/certificados',
+    children: [
+      { key: 'Certificados/Principal', label: 'Certificados', path: '/certificados' },
+      {
+        key: 'Certificados/Templates',
+        label: 'Templates Certificados',
+        path: '/certificados/templates_certificados',
+      },
     ],
   },
   {
@@ -81,7 +93,6 @@ const NAVIGATION_ITEMS: NavItem[] = [
       },
     ],
   },
-  { key: 'Certificados', label: 'Certificados', path: '/certificados' },
 ];
 
 const KNOWN_APP_PATHS = new Set(
