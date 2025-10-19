@@ -270,6 +270,18 @@ export default function Preview(props) {
     ? bomberosRaw.split(/\s*(?:[,;]|\r?\n)+\s*/).map((name) => name.trim()).filter(Boolean)
     : []
   const bomberosDisplay = bomberosList.length ? bomberosList : bomberosRaw ? [bomberosRaw] : ['—']
+  const draftHeading = useMemo(() => {
+    const raw = (title || '').trim()
+    if (!raw) return 'Borrador del informe'
+    const match = raw.match(/^Informe\s+(de\s+)?(.+)$/i)
+    if (match) {
+      const [, hasDe, rest] = match
+      const detail = (rest || '').trim()
+      if (!detail) return 'Borrador del informe'
+      return hasDe ? `Borrador del informe de ${detail}` : `Borrador del informe ${detail}`
+    }
+    return /^Informe\b/i.test(raw) ? `Borrador del ${raw}` : `Borrador del informe ${raw}`
+  }, [title])
 
   const [aiHtml, setAiHtml] = useState(null)
   const [aiBusy, setAiBusy] = useState(false)
@@ -492,10 +504,8 @@ export default function Preview(props) {
 
   return (
     <div className="d-grid gap-4">
-      <h1 className="h5 my-3">{title}</h1>
-
       <div className="d-flex align-items-center justify-content-between">
-        <h2 className="h5 mb-0">Borrador del informe</h2>
+        <h2 className="h5 mb-0">{draftHeading}</h2>
         <div className="d-flex gap-2">
           <button className="btn btn-secondary" onClick={onBack}>Volver al formulario</button>
           {quedanIntentos && (
