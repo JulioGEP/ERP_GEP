@@ -34,6 +34,63 @@ const flattenPreventivoImagenes = (imagenesPorSeccion) => {
   )
 }
 
+const toTrimmedOrNull = (value) => {
+  if (value === null || value === undefined) return null
+  const text = typeof value === 'string' ? value : String(value)
+  const trimmed = text.trim()
+  return trimmed.length ? trimmed : null
+}
+
+const buildSessionLabel = (session) => {
+  if (!session) return ''
+  const explicit = toTrimmedOrNull(session.label)
+  if (explicit) return explicit
+
+  const parts = []
+  const number = toTrimmedOrNull(session.number)
+  if (number) parts.push(`Sesión ${number}`)
+
+  const nombre = toTrimmedOrNull(session.nombre)
+  if (nombre) parts.push(nombre)
+
+  if (!parts.length) {
+    const id = toTrimmedOrNull(session.id ? String(session.id) : '')
+    if (id) parts.push(`Sesión ${id.slice(0, 8)}`)
+  }
+
+  const direccion = toTrimmedOrNull(session.direccion)
+  const base = parts.join(' – ')
+  return `${base}${direccion ? ` (${direccion})` : ''}`.trim()
+}
+
+const sanitizeSessionOption = (session) => {
+  if (!session || session.id === null || session.id === undefined) return null
+
+  const id = toTrimmedOrNull(String(session.id))
+  if (!id) return null
+
+  const numberRaw = session.number ?? session.numero ?? session.session_number ?? null
+  const number = numberRaw !== null && numberRaw !== undefined ? toTrimmedOrNull(String(numberRaw)) : null
+
+  const nombre =
+    toTrimmedOrNull(session.nombre) ??
+    toTrimmedOrNull(session.nombre_cache) ??
+    toTrimmedOrNull(session.name)
+
+  const direccion =
+    toTrimmedOrNull(session.direccion) ??
+    toTrimmedOrNull(session.address)
+
+  const fecha =
+    toTrimmedOrNull(session.fecha) ??
+    toTrimmedOrNull(session.fecha_inicio) ??
+    toTrimmedOrNull(session.fecha_inicio_utc)
+
+  const label = buildSessionLabel({ id, number, nombre, direccion, label: session.label })
+
+  return { id, number, nombre, direccion, fecha, label }
+}
+
 export default function Form({ initial, onNext, title = 'Informe de Formación', onChooseAnother, type = 'formacion' }) {
   const formRef = useRef(null)
 
@@ -78,8 +135,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
 
   const [datos, setDatos] = useState(() => ({
     cliente: initial?.datos?.cliente || '',
-    cif: initial?.datos?.cif || '',
-    direccionOrg: initial?.datos?.direccionOrg || '',
     sede: initial?.datos?.sede || '',
     contacto: initial?.datos?.contacto || '',
     comercial: initial?.datos?.comercial || '',
@@ -102,8 +157,31 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   const [imagenes, setImagenes] = useState(() =>
     isPreventivoEbro ? flattenPreventivoImagenes(preventivoImagenesIniciales) : (initial?.imagenes || [])
   )
+  const initialSessionOptionsRaw = Array.isArray(initial?.sessionOptions) ? initial.sessionOptions : []
+  const sanitizedInitialOptions = initialSessionOptionsRaw
+    .map((session) => sanitizeSessionOption(session))
+    .filter(Boolean)
+  const initialSessionSanitized = initial?.session
+    ? sanitizeSessionOption(initial.session)
+    : sanitizedInitialOptions.length === 1
+      ? sanitizedInitialOptions[0]
+      : null
+  const initialOptions = initialSessionSanitized && !sanitizedInitialOptions.some((option) => option.id === initialSessionSanitized.id)
+    ? [...sanitizedInitialOptions, initialSessionSanitized]
+    : sanitizedInitialOptions
+  const [sessionOptions, setSessionOptions] = useState(initialOptions)
+  const [selectedSessionId, setSelectedSessionId] = useState(initialSessionSanitized?.id || null)
   const [selTitulo, setSelTitulo] = useState(isFormacion ? (datos.formacionTitulo || '') : '')
   const [loadingDeal, setLoadingDeal] = useState(false)
+  const dealChangeRef = useRef(true)
+  const selectedSession = useMemo(() => {
+    if (!sessionOptions.length) return null
+    if (selectedSessionId) {
+      return sessionOptions.find((s) => s.id === selectedSessionId) || null
+    }
+    if (sessionOptions.length === 1) return sessionOptions[0]
+    return null
+  }, [sessionOptions, selectedSessionId])
   const autoPrefillDoneRef = useRef(Boolean(initial?.dealId))
 
   // Reset de intentos/HTML si cambia el dealId
@@ -115,6 +193,15 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       } catch {}
       prevDealIdRef.current = dealId
     }
+  }, [dealId])
+
+  useEffect(() => {
+    if (dealChangeRef.current) {
+      dealChangeRef.current = false
+      return
+    }
+    setSessionOptions([])
+    setSelectedSessionId(null)
   }, [dealId])
 
   // Cargar plantilla al seleccionar formación
@@ -129,36 +216,78 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     }))
   }, [selTitulo, isFormacion])
 
-  // Pipedrive
-  const rellenarDesdePipedrive = useCallback(async () => {
+  // Datos del presupuesto / sesión
+  const buscarPresupuesto = useCallback(async () => {
     if (!dealId) { alert('Introduce el Nº Presupuesto'); return }
     setLoadingDeal(true)
     try {
-      const r = await fetch('/.netlify/functions/getDeal', {
+      const r = await fetch('/.netlify/functions/reportPrefill', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Reports-Intent': 'deal-autocomplete',
         },
         body: JSON.stringify({ dealId }),
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data?.error || 'Error Pipedrive')
-      setDatos(d => ({
+      if (!r.ok) throw new Error(data?.error || 'Error al buscar presupuesto')
+
+      const payload = data?.deal || data || {}
+      const sessions = Array.isArray(payload.sessions) ? payload.sessions : []
+      const normalizedSessions = sessions
+        .map((session) => sanitizeSessionOption(session))
+        .filter(Boolean)
+
+      const cliente = typeof payload.cliente === 'string' ? payload.cliente : ''
+      const contacto = typeof payload.contacto === 'string' ? payload.contacto : ''
+
+      let selected = null
+      if (normalizedSessions.length === 1) {
+        selected = normalizedSessions[0]
+        setSelectedSessionId(selected?.id || null)
+      } else {
+        setSelectedSessionId(null)
+      }
+
+      setSessionOptions(normalizedSessions)
+
+      if (!normalizedSessions.length) {
+        alert('No se han encontrado sesiones asociadas a este presupuesto.')
+      } else if (normalizedSessions.length > 1) {
+        alert('Selecciona la sesión a la que pertenece el informe.')
+      }
+
+      setDatos((d) => ({
         ...d,
-        cliente: data.cliente ?? d.cliente,
-        cif: data.cif ?? d.cif,
-        direccionOrg: data.direccionOrg ?? d.direccionOrg,
-        sede: data.sede ?? d.sede,
-        contacto: data.contacto ?? d.contacto,
-        comercial: data.comercial ?? d.comercial,
+        cliente: cliente || d.cliente,
+        contacto: contacto || d.contacto,
+        comercial: '',
+        sede: selected?.direccion || (normalizedSessions.length > 1 ? '' : d.sede),
       }))
     } catch (e) {
-      console.error(e); alert('No se ha podido autocompletar desde Pipedrive.')
+      console.error(e); alert('No se ha podido obtener el presupuesto.')
     } finally {
       setLoadingDeal(false)
     }
   }, [dealId])
+
+  const handleSessionChange = (event) => {
+    const value = event.target.value
+    const nextId = value ? String(value) : ''
+    const normalized = nextId.trim()
+    const resolvedId = normalized.length ? normalized : null
+    setSelectedSessionId(resolvedId)
+    const found = resolvedId
+      ? sessionOptions.find((session) => session.id === resolvedId) || null
+      : null
+    if (found) {
+      setDatos((d) => ({
+        ...d,
+        sede: typeof found.direccion === 'string' && found.direccion.trim() ? found.direccion : d.sede,
+      }))
+    } else if (sessionOptions.length) {
+      setDatos((d) => ({ ...d, sede: '' }))
+    }
+  }
 
   useEffect(() => {
     if (!isPreventivoEbro) return
@@ -269,6 +398,13 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       return
     }
 
+    if (!isPreventivoEbro) {
+      if (!selectedSession) {
+        alert('Selecciona la sesión a la que pertenece el informe.')
+        return
+      }
+    }
+
     // Validación extra saneando números (por si acaso)
     const numOk = (v) => {
       const n = Number(v)
@@ -313,7 +449,15 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     const finalImagenes = isPreventivoEbro
       ? flattenPreventivoImagenes(nextDatos.preventivo?.imagenes)
       : imagenes
-    onNext({ type, dealId, formador: { nombre: datos.formadorNombre, idioma: datos.idioma }, datos: nextDatos, imagenes: finalImagenes })
+    onNext({
+      type,
+      dealId,
+      formador: { nombre: datos.formadorNombre, idioma: datos.idioma },
+      datos: nextDatos,
+      imagenes: finalImagenes,
+      session: selectedSession || null,
+      sessionOptions,
+    })
   }
 
   const addTeorica = () => setDatos(d => ({ ...d, contenidoTeorica: [...(d.contenidoTeorica||[]), '' ] }))
@@ -668,10 +812,36 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
                     <input className="form-control" value={dealId} required onChange={(e)=>setDealId(e.target.value)} />
                   </div>
                   <div className="col-5 col-md-6">
-                    <button type="button" className="btn btn-outline-primary w-100" onClick={rellenarDesdePipedrive} disabled={loadingDeal}>
-                      {loadingDeal ? 'Rellenando…' : 'Rellenar'}
+                    <button type="button" className="btn btn-outline-primary w-100" onClick={buscarPresupuesto} disabled={loadingDeal}>
+                      {loadingDeal ? 'Buscando…' : 'Buscar'}
                     </button>
                   </div>
+                </div>
+              )}
+
+              {sessionOptions.length === 1 && (
+                <div className="alert alert-info mt-3 mb-0" role="alert">
+                  Sesión detectada: {buildSessionLabel(sessionOptions[0])}
+                </div>
+              )}
+
+              {sessionOptions.length > 1 && (
+                <div className="mt-3">
+                  <label className="form-label">Sesión</label>
+                  <select
+                    className="form-select"
+                    value={selectedSessionId || ''}
+                    onChange={handleSessionChange}
+                    required
+                  >
+                    <option value="">Selecciona una sesión…</option>
+                    {sessionOptions.map((session) => (
+                      <option key={session.id} value={session.id}>
+                        {buildSessionLabel(session)}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="form-text">Se usará su dirección para rellenar el informe.</div>
                 </div>
               )}
 
@@ -679,10 +849,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
                 <div className="col-md-7">
                   <label className="form-label">Cliente</label>
                   <input className="form-control" value={datos.cliente} required onChange={(e)=>setDatos(d=>({...d, cliente:e.target.value}))} />
-                </div>
-                <div className="col-md-5">
-                  <label className="form-label">CIF</label>
-                  <input className="form-control" value={datos.cif} required onChange={(e)=>setDatos(d=>({...d, cif:e.target.value}))} />
                 </div>
                 {!isPreventivoEbro && (
                   <div className="col-md-6">
@@ -694,12 +860,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
                   <label className="form-label">Persona de contacto</label>
                   <input className="form-control" value={datos.contacto} required onChange={(e)=>setDatos(d=>({...d, contacto:e.target.value}))} />
                 </div>
-                {!isPreventivoEbro && (
-                  <div className="col-md-6">
-                    <label className="form-label">Dirección fiscal</label>
-                    <input className="form-control" value={datos.direccionOrg} required onChange={(e)=>setDatos(d=>({...d, direccionOrg:e.target.value}))} />
-                  </div>
-                )}
                 <div className="col-md-6">
                   <label className="form-label">{direccionSedeLabel}</label>
                   <input className="form-control" value={datos.sede} required onChange={(e)=>setDatos(d=>({...d, sede:e.target.value}))} />

@@ -167,7 +167,7 @@ async function generarHtmlSimulacro({ apiKey, baseUrl, idioma, datos, formador }
 
   const ctx = [
     `Cliente: ${safe(datos?.cliente)}`,
-    `CIF: ${safe(datos?.cif)} | Dirección: ${safe(datos?.sede)}`,
+    `Dirección: ${safe(datos?.sede)}`,
     `Auditor: ${safe(formador?.nombre)} | Idioma: ${lang}`,
     `Sesiones: ${safe(datos?.sesiones)} | Duración(h): ${safe(datos?.duracion)}`,
     '',
@@ -309,8 +309,7 @@ async function generarInformePreventivo({ apiKey, baseUrl, idioma, datos, formad
   const prev = datos?.preventivo || {};
 
   const contexto = [
-    `Cliente: ${safe(datos?.cliente)} | CIF: ${safe(datos?.cif)}`,
-    `Dirección fiscal: ${safe(datos?.direccionOrg)}`,
+    `Cliente: ${safe(datos?.cliente)}`,
     `Dirección del Preventivo: ${safe(datos?.sede)}`,
     `Persona de contacto: ${safe(datos?.contacto)} | Comercial: ${safe(datos?.comercial)}`,
     `Bombero/a responsable: ${safe(formador?.nombre)} | Idioma solicitado: ${lang}`,
@@ -411,7 +410,7 @@ export async function handler(event) {
     }
 
     const ctx = `
-Deal: ${datos?.cliente || '-'} | CIF: ${datos?.cif || '-'}
+Deal: ${datos?.cliente || '-'}
 Sede: ${datos?.sede || '-'} | Fecha: ${datos?.fecha || '-'}
 Formador/a: ${formador?.nombre || '-'} | Idioma: ${idioma}
 Sesiones: ${datos?.sesiones || '-'} | Alumnos: ${datos?.alumnos || '-'} | Duración(h): ${datos?.duracion || '-'}

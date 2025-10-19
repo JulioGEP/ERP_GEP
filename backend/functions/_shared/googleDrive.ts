@@ -849,7 +849,7 @@ export async function syncDealDocumentsToGoogleDrive(params: {
       "[google-drive-sync] Sincronización completada",
       JSON.stringify({
         dealId: params.deal?.deal_id ?? params.deal?.id,
-        organization: organizationName,
+        organization: params.organizationName ?? organizationFolderName,
         totalDocuments: documents.length,
         uploaded: successCount,
       })
