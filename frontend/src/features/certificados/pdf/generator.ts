@@ -50,7 +50,7 @@ export type CertificateTemplatePreviewOptions = {
 const PAGE_WIDTH = 841.89;
 const PAGE_HEIGHT = 595.28;
 const DEFAULT_TEXT_START_Y = 48;
-const TEXT_RIGHT_MARGIN = 300;
+const TEXT_RIGHT_MARGIN = 180;
 const LEFT_OFFSET_RATIO = 0.35;
 const RIGHT_BLEED = 30;
 const LEFT_EXTRA_OFFSET_RATIO = 1.1;
@@ -59,13 +59,13 @@ const BACKGROUND_LEFT_SHIFT = 10;
 const LEFT_SIDEBAR_SIZE_REDUCTION = 0.9;
 const LEFT_SIDEBAR_RIGHT_SHIFT = 5;
 const FOOTER_SIZE_REDUCTION = 0.9;
-const PRACTICAL_COLUMN_LEFT_SHIFT = 100;
-const PRACTICAL_COLUMN_RIGHT_MARGIN = 200;
+const PRACTICAL_COLUMN_LEFT_SHIFT = 0;
+const PRACTICAL_COLUMN_RIGHT_MARGIN = 60;
 const MAX_TEXT_BLOCK_WIDTH = 900;
 const TABLE_CELL_PADDING = {
   left: 0,
-  right: 6,
-  top: 3,
+  right: 10,
+  top: 6,
   bottom: 6,
 } as const;
 
