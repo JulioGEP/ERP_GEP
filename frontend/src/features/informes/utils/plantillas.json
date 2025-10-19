@@ -20,9 +20,9 @@
       "Extinción y cubrimiento con extintor hídrico.",
       "Ejercicio/simulacro con diferentes grados de dificultad: corte de suministro, víctima consciente e inconsciente.",
       "Apertura de puertas y comprobación de temperatura."
-    ]
+    ],
+    "id": "default-curso-pack-emergencias-extincion-de-incendios-basico-y-primeros-auxilios"
   },
-
   "Curso de extinción de incendios": {
     "teorica": [
       "Proceso de la combustión.",
@@ -42,9 +42,9 @@
       "Extinción y cubrimiento con extintor hídrico.",
       "Ejercicio/simulacro con diferentes grados de dificultad: corte de suministro, víctima consciente e inconsciente.",
       "Apertura de puertas y comprobación de temperatura."
-    ]
+    ],
+    "id": "default-curso-de-extincion-de-incendios"
   },
-
   "Curso avanzado de extinción de incendios con casa de humo y rescate": {
     "teorica": [
       "Introducción al plan de emergencias.",
@@ -63,9 +63,9 @@
       "Manipulación de BIE’s y/o instalación.",
       "Utilización de los Equipos de Respiración Autónoma.",
       "Rescate de víctimas en ambientes con humo."
-    ]
+    ],
+    "id": "default-curso-avanzado-de-extincion-de-incendios-con-casa-de-humo-y-rescate"
   },
-
   "Curso riesgo químico NBQ": {
     "teorica": [
       "Introducción al plan de emergencia y organización operativa.",
@@ -80,9 +80,9 @@
       "Operativa de la descontaminación.",
       "Control y gestión de fugas.",
       "Control y gestión de residuos."
-    ]
+    ],
+    "id": "default-curso-riesgo-quimico-nbq"
   },
-
   "Curso avanzado de extinción de incendios": {
     "teorica": [
       "Proceso de la combustión.",
@@ -104,9 +104,9 @@
       "Extinción y cubrimiento con extintor hídrico.",
       "Ejercicio/simulacro con diferentes grados de dificultad: corte de suministro, víctima consciente e inconsciente.",
       "Apertura de puertas y comprobación de temperatura."
-    ]
+    ],
+    "id": "default-curso-avanzado-de-extincion-de-incendios"
   },
-
   "Curso avanzado en Campo de Fuego": {
     "teorica": [
       "Técnicas de extinción y procedimientos de seguridad.",
@@ -116,9 +116,9 @@
       "Escenarios realistas: incendios estructurales, químicos, industriales y de vehículos.",
       "Prácticas avanzadas en entornos controlados (Campos de fuego).",
       "Uso de material específico: grupos de bombas, equipos de espuma, mangueras, lanzas, extintores, equipos EPI."
-    ]
+    ],
+    "id": "default-curso-avanzado-en-campo-de-fuego"
   },
-
   "Curso Espacios Confinados": {
     "teorica": [
       "Legislación y normativa vigente en espacios confinados.",
@@ -136,9 +136,9 @@
       "Entrada y salida del espacio confinado.",
       "Técnicas de progresión.",
       "Rescate del accidentado en un espacio confinado."
-    ]
+    ],
+    "id": "default-curso-espacios-confinados"
   },
-
   "Curso de Trabajos Verticales": {
     "teorica": [
       "Legislación y normativa vigente.",
@@ -157,9 +157,9 @@
       "Paso de nudos.",
       "Ascenso y descenso con cuerdas, paso de nudos y cambios de cuerda.",
       "Rescate de víctimas y evacuación segura."
-    ]
+    ],
+    "id": "default-curso-de-trabajos-verticales"
   },
-
   "Curso de Trabajos en Altura": {
     "teorica": [
       "Legislación y normativa vigente.",
@@ -177,9 +177,9 @@
       "Puntos de anclaje.",
       "Técnicas de acceso y posicionamiento en altura.",
       "Rescate de emergencia."
-    ]
+    ],
+    "id": "default-curso-de-trabajos-en-altura"
   },
-
   "Curso Carretilla Elevadora": {
     "teorica": [
       "Introducción a las carretillas.",
@@ -199,9 +199,9 @@
       "Puesta en funcionamiento.",
       "Maniobras básicas de circulación.",
       "Manipulación y movimiento de cargas."
-    ]
+    ],
+    "id": "default-curso-carretilla-elevadora"
   },
-
   "Curso montaje y desmontaje de Andamios": {
     "teorica": [
       "Legislación vigente.",
@@ -221,9 +221,9 @@
       "Trabajos en suspensión, posicionamiento y uso de polipastos, truss, etc.",
       "Técnicas de rescate, evacuación de víctima.",
       "Simulacro de emergencia."
-    ]
+    ],
+    "id": "default-curso-montaje-y-desmontaje-de-andamios"
   },
-
   "Curso especializado TELCO": {
     "teorica": [
       "Definición de los trabajos.",
@@ -252,9 +252,9 @@
       "Aplicación práctica de identificaciones de origen y causas de riesgos.",
       "Uso práctico de protecciones colectivas.",
       "Uso práctico de protecciones individuales."
-    ]
+    ],
+    "id": "default-curso-especializado-telco"
   },
-
   "Curso especializado TELCO riesgo eléctrico": {
     "teorica": [
       "Definición de los trabajos.",
@@ -281,9 +281,9 @@
     "practica": [
       "Detectar situaciones con riesgo eléctrico.",
       "Operar sin sobreexposición eléctrica aplicando medidas correctas según la tensión presente."
-    ]
+    ],
+    "id": "default-curso-especializado-telco-riesgo-electrico"
   },
-
   "Curso especializado TELCO trabajos en altura": {
     "teorica": [
       "Definición de los trabajos.",
@@ -311,9 +311,9 @@
       "Identificación de riesgos al trabajar en altura (andamiajes, torres, mástiles).",
       "Uso de Equipos de Protección Individual (EPI) en trabajos en altura.",
       "Actuación en caso de accidente en altura."
-    ]
+    ],
+    "id": "default-curso-especializado-telco-trabajos-en-altura"
   },
-
   "Curso especializado TELCO espacios confinados": {
     "teorica": [
       "Definición de los trabajos.",
@@ -340,9 +340,9 @@
     "practica": [
       "Acceso, permanencia y rescate en espacios confinados.",
       "Aplicación de medidas preventivas en el entorno de telecomunicaciones."
-    ]
+    ],
+    "id": "default-curso-especializado-telco-espacios-confinados"
   },
-
   "Curso Jefes de Emergencia e Intervención": {
     "teorica": [
       "Plan de emergencia.",
@@ -378,9 +378,9 @@
       "Intervención.",
       "Descontaminación.",
       "Gestión del residuo."
-    ]
+    ],
+    "id": "default-curso-jefes-de-emergencia-e-intervencion"
   },
-
   "Curso Equipos de Respiración Autónoma (ERA)": {
     "teorica": [
       "Componentes y funcionamiento de las diferentes partes de los ERA de circuito abierto: botella, espaldera, manorreductor, manómetro analógico o digital, pulmón automático y máscara facial.",
@@ -394,9 +394,9 @@
       "Progresión, búsqueda y rescate sin visibilidad, con parafina.",
       "Práctica de plano neutro y posterior extinción.",
       "Práctica de extinción, incrementando el nivel en función de la experiencia."
-    ]
+    ],
+    "id": "default-curso-equipos-de-respiracion-autonoma-era"
   },
-
   "Curso de Primeros Auxilios": {
     "teorica": [
       "Introducción a los primeros auxilios.",
@@ -415,9 +415,9 @@
       "Posiciones de espera y traslado.",
       "Obstrucción vía aérea.",
       "Reanimación cardiopulmonar."
-    ]
+    ],
+    "id": "default-curso-de-primeros-auxilios"
   },
-
   "Certificación SVB y DEA (Soporte Vital Básico y Desfibrilador Externo Automático)": {
     "teorica": [
       "Introducción.",
@@ -440,9 +440,9 @@
       "Posición lateral de seguridad.",
       "Simulaciones prácticas integradas de SVB con y sin DEA.",
       "Evaluación."
-    ]
+    ],
+    "id": "default-certificacion-svb-y-dea-soporte-vital-basico-y-desfibrilador-externo-automatico"
   },
-
   "Curso implantación PAU": {
     "teorica": [
       "Presentación del Plan de Emergencia.",
@@ -454,6 +454,7 @@
       "Recorrido por el centro para conocer sus características.",
       "Práctica/simulacro de algunas de las emergencias detalladas en el PAU.",
       "Simulacros con víctimas."
-    ]
+    ],
+    "id": "default-curso-implantacion-pau"
   }
 }
