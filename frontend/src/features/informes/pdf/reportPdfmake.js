@@ -716,7 +716,7 @@ const buildDocDefinition = ({
 
 // ---------- API usada por Preview.jsx ----------
 export async function generateReportPdfmake(draft) {
-  const { dealId, datos, formador, imagenes, type } = draft || {}
+  const { dealId, datos, formador, imagenes, type, aiHtml: aiHtmlOverride } = draft || {}
 
   const [pdfMake, htmlToPdfmake, headerDataUrl, footerDataUrl] = await Promise.all([
     ensurePdfMake(),
@@ -728,9 +728,16 @@ export async function generateReportPdfmake(draft) {
   // Registrar Poppins (si se puede); si no, seguirá con Roboto por defecto
   await ensurePoppinsFont(pdfMake)
 
-  const aiHtml = (() => {
-    try { return sessionStorage.getItem(htmlKey(dealId)) || '' } catch { return '' }
-  })()
+  let aiHtml = typeof aiHtmlOverride === 'string' ? aiHtmlOverride : ''
+  if (!aiHtml) {
+    try { aiHtml = sessionStorage.getItem(htmlKey(dealId)) || '' } catch { aiHtml = '' }
+  }
+
+  aiHtml = (aiHtml || '').trim()
+
+  if (dealId && aiHtml) {
+    try { sessionStorage.setItem(htmlKey(dealId), aiHtml) } catch {}
+  }
 
   // Convertir IA HTML → estructura pdfmake
   let aiContent = null

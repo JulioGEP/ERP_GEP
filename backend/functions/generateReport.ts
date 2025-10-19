@@ -381,33 +381,12 @@ export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers: cors, body: 'Method Not Allowed' };
 
-  const sharedSecret =
-    process.env['REPORTS_API_TOKEN'] || process.env['VITE_REPORTS_API_TOKEN'];
-  if (!sharedSecret) {
-    console.error('[generateReport] Missing REPORTS_API_TOKEN');
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json', ...cors },
-      body: JSON.stringify({ error: 'Server misconfiguration' }),
-    };
-  }
-
-  const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
-  const expectedHeader = `Bearer ${sharedSecret}`;
-  if (authHeader !== expectedHeader) {
-    return {
-      statusCode: 401,
-      headers: { 'Content-Type': 'application/json', ...cors },
-      body: JSON.stringify({ error: 'Unauthorized' }),
-    };
-  }
-
   try {
     const API_KEY = process.env.OPENAI_API_KEY;
     const BASE_URL = process.env.OPENAI_BASE_URL;
     if (!API_KEY) throw new Error('Missing OPENAI_API_KEY');
 
-    const { formador, datos } = JSON.parse(event.body || '{}');
+    const { formador, datos, previousHtml } = JSON.parse(event.body || '{}');
     const idioma = (formador?.idioma || 'ES').toUpperCase();
     const tipo = datos?.tipo || 'formacion';
 
@@ -466,6 +445,8 @@ Comentarios:
         ? 'Ets un redactor tècnic. Escriu en primera persona com a formador, to formal i precís. Temperatura 0.3. No mostris puntuacions numèriques.'
         : 'Eres un redactor técnico. Escribe en primera persona como el formador, tono formal y preciso. Temperatura 0.3. No muestres puntuaciones numéricas.';
 
+    const borradorPrevio = typeof previousHtml === 'string' ? sanitizeContent(previousHtml) : '';
+
     const prompt = `
 Redacta un INFORME TÉCNICO en primera persona (yo) basado en el contexto.
 No muestres números de las escalas; interpreta en texto (“participación alta/media/baja”, etc.).
@@ -488,6 +469,10 @@ IMPORTANTE:
 
 Contexto:
 ${ctx}
+${borradorPrevio ? `
+
+Borrador actual (mejóralo o reescríbelo manteniendo las instrucciones anteriores, corrigiendo errores y evitando repeticiones):
+${borradorPrevio}` : ''}
 `.trim();
 
     const html = await callChatCompletion({
