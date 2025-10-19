@@ -106,7 +106,8 @@ function parseRawTemplates(): TrainingTemplate[] {
     if (!definition || typeof definition !== 'object') {
       return;
     }
-    const name = toOptionalString(key);
+    const storedName = toOptionalString((definition as { name?: unknown }).name);
+    const name = storedName || toOptionalString(key);
     const title =
       toOptionalString((definition as { titulo?: unknown }).titulo ?? (definition as { title?: unknown }).title) || name;
     const duration = toOptionalString((definition as { duracion?: unknown }).duracion ?? (definition as { duration?: unknown }).duration);
