@@ -1,26 +1,4 @@
-import rawTemplates from '../../../informes/utils/plantillas.json';
-
-type RawTemplateDefinition = {
-  id?: unknown;
-  teorica?: unknown;
-  practica?: unknown;
-  duracion?: unknown;
-  duration?: unknown;
-  titulo?: unknown;
-  title?: unknown;
-  name?: unknown;
-};
-
-type RawTemplatesRegistry = Record<string, RawTemplateDefinition>;
-
-type ApiTemplate = {
-  id?: unknown;
-  name?: unknown;
-  title?: unknown;
-  duration?: unknown;
-  theory?: unknown;
-  practice?: unknown;
-};
+const CUSTOM_TEMPLATE_PREFIX = 'custom-';
 
 export type TrainingTemplate = {
   id: string;
@@ -41,6 +19,15 @@ export type TrainingTemplateInput = {
   mode?: 'create' | 'update';
 };
 
+type ApiTemplate = {
+  id?: unknown;
+  name?: unknown;
+  title?: unknown;
+  duration?: unknown;
+  theory?: unknown;
+  practice?: unknown;
+};
+
 export type TrainingTemplatesManager = {
   listTemplates(): Promise<TrainingTemplate[]>;
   getTemplateById(id: string): Promise<TrainingTemplate | null>;
@@ -52,9 +39,6 @@ export type TrainingTemplatesManager = {
   normaliseName?(value: string): string;
   isCustomTemplateId?(id: string): boolean;
 };
-
-const CUSTOM_TEMPLATE_PREFIX = 'custom-';
-const rawRegistry: RawTemplatesRegistry = rawTemplates as RawTemplatesRegistry;
 
 function toOptionalString(value: unknown): string {
   if (value === null || value === undefined) {
@@ -100,35 +84,6 @@ function cloneTemplate(template: TrainingTemplate): TrainingTemplate {
   };
 }
 
-function parseRawTemplates(): TrainingTemplate[] {
-  const entries = Object.entries(rawRegistry ?? {});
-  const templates: TrainingTemplate[] = [];
-  entries.forEach(([key, definition]) => {
-    if (!definition || typeof definition !== 'object') {
-      return;
-    }
-    const storedName = toOptionalString((definition as { name?: unknown }).name);
-    const name = storedName || toOptionalString(key);
-    const title =
-      toOptionalString((definition as { titulo?: unknown }).titulo ?? (definition as { title?: unknown }).title) || name;
-    const duration = toOptionalString((definition as { duracion?: unknown }).duracion ?? (definition as { duration?: unknown }).duration);
-    const theory = toStringArray((definition as { teorica?: unknown }).teorica);
-    const practice = toStringArray((definition as { practica?: unknown }).practica);
-    const id =
-      toOptionalString((definition as { id?: unknown }).id) ||
-      `${normaliseName(title || name).replace(/\s+/g, '-') || 'plantilla'}`;
-    templates.push({
-      id,
-      name,
-      title,
-      duration,
-      theory,
-      practice,
-    });
-  });
-  return templates;
-}
-
 function normaliseApiTemplate(input: ApiTemplate): TrainingTemplate | null {
   const id = toOptionalString(input.id);
   const name = toOptionalString(input.name);
@@ -160,10 +115,9 @@ async function fetchTemplatesFromApi(): Promise<TrainingTemplate[] | null> {
     if (!payload?.ok || !Array.isArray(payload.templates)) {
       throw new Error('Respuesta no válida del servidor');
     }
-    const templates = payload.templates
+    return payload.templates
       .map((template) => normaliseApiTemplate(template))
       .filter((template): template is TrainingTemplate => Boolean(template));
-    return templates;
   } catch (error) {
     console.warn('No se pudo obtener la lista de plantillas desde la API.', error);
     return null;
@@ -211,7 +165,7 @@ async function removeTemplate(id: string): Promise<void> {
   }
 }
 
-let templatesCache: TrainingTemplate[] | null = parseRawTemplates();
+let templatesCache: TrainingTemplate[] | null = null;
 let initialised = false;
 const subscribers = new Set<() => void>();
 
@@ -224,12 +178,14 @@ async function ensureInitialised(): Promise<void> {
   if (Array.isArray(templates)) {
     templatesCache = templates;
     notifySubscribers();
+  } else if (!templatesCache) {
+    templatesCache = [];
   }
 }
 
 function ensureCache(): TrainingTemplate[] {
   if (!templatesCache) {
-    templatesCache = parseRawTemplates();
+    templatesCache = [];
   }
   return templatesCache;
 }
@@ -331,7 +287,7 @@ function isCustomTemplateId(id: string): boolean {
   if (!trimmed) {
     return false;
   }
-  return trimmed.startsWith(CUSTOM_TEMPLATE_PREFIX);
+  return trimmed.toLowerCase().startsWith(CUSTOM_TEMPLATE_PREFIX);
 }
 
 const manager: TrainingTemplatesManager = {
@@ -359,6 +315,6 @@ export function getTrainingTemplatesManager(): TrainingTemplatesManager {
 }
 
 export function resetTrainingTemplatesCache(): void {
-  templatesCache = parseRawTemplates();
+  templatesCache = null;
   initialised = false;
 }

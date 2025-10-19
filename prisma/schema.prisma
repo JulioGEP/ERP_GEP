@@ -361,3 +361,15 @@ enum dealproducttype {
   TRAINING
   EXTRA
 }
+
+model plantillas {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String   @unique
+  title      String
+  slug       String   @unique
+  puntos     Json     @db.JsonB
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("plantillas")
+}
