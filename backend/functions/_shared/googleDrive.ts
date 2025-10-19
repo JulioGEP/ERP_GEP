@@ -84,20 +84,42 @@ function resolveOrganizationIdFromDeal(deal: any): string | null {
   return null;
 }
 
-function buildOrganizationFolderName(params: { deal?: any; organizationName?: string | null }): string {
+function uniqueSanitizedNames(names: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const name of names) {
+    const sanitized = sanitizeName(name || "");
+    if (!sanitized || seen.has(sanitized)) continue;
+    seen.add(sanitized);
+    result.push(sanitized);
+  }
+  return result;
+}
+
+function resolveOrganizationFolderNames(params: {
+  deal?: any;
+  organizationName?: string | null;
+}): { preferredName: string; legacyNames: string[] } {
   const explicitName = toNonEmptyString(params.organizationName);
   const resolvedName = explicitName ?? resolveOrganizationNameFromDeal(params.deal) ?? "Sin organización";
-  const sanitizedName = sanitizeName(resolvedName) || "Sin organización";
+  const preferredName = sanitizeName(resolvedName) || "Sin organización";
 
+  const legacyNames: string[] = [];
   const organizationId = resolveOrganizationIdFromDeal(params.deal);
   const sanitizedId = organizationId ? sanitizeName(organizationId) : null;
 
-  if (sanitizedId && !sanitizedName.startsWith(sanitizedId)) {
-    const combined = `${sanitizedId} - ${sanitizedName}`;
-    return sanitizeName(combined) || combined;
+  if (sanitizedId && !preferredName.startsWith(sanitizedId)) {
+    const combined = sanitizeName(`${sanitizedId} - ${preferredName}`) || `${sanitizedId} - ${preferredName}`;
+    if (combined !== preferredName) {
+      legacyNames.push(combined);
+    }
   }
 
-  return sanitizedName;
+  return { preferredName, legacyNames };
+}
+
+function buildOrganizationFolderName(params: { deal?: any; organizationName?: string | null }): string {
+  return resolveOrganizationFolderNames(params).preferredName;
 }
 
 function isHttpUrl(value?: unknown): value is string {
@@ -324,103 +346,43 @@ async function renameDriveFile(fileId: string, name: string): Promise<void> {
   }
 }
 
-async function ensureSessionFolderUnderOrganization(params: {
+async function ensureFolderWithCandidates(params: {
   driveId: string;
-  organizationFolderId: string;
-  deal: any;
-  session: any;
-  sessionNumber: string;
-  sessionName?: string | null;
+  parentId: string;
+  preferredName: string;
+  legacyNames?: string[];
   createIfMissing?: boolean;
-}): Promise<{ folderId: string; folderName: string; legacyFolderName: string } | null> {
-  const { preferredName, legacyName } = buildOrganizationSessionFolderName({
-    deal: params.deal,
-    sessionNumber: params.sessionNumber,
-    sessionName: params.sessionName,
-    session: params.session,
-  });
+  context?: Record<string, unknown>;
+}): Promise<{ folderId: string; folderName: string } | null> {
+  const preferredName = sanitizeName(params.preferredName || "carpeta") || "carpeta";
+  const legacyNames = Array.isArray(params.legacyNames) ? params.legacyNames : [];
+  const candidates = uniqueSanitizedNames([preferredName, ...legacyNames]);
 
-  const candidates = preferredName === legacyName ? [preferredName] : [preferredName, legacyName];
   for (const name of candidates) {
     const existing = await findFolder({
       name,
-      parentId: params.organizationFolderId,
+      parentId: params.parentId,
       driveId: params.driveId,
     });
     if (existing) {
       if (name !== preferredName) {
         try {
           await renameDriveFile(existing, preferredName);
-          driveFolderCache.delete(cacheKey(params.organizationFolderId, name));
-          driveFolderCache.set(cacheKey(params.organizationFolderId, preferredName), existing);
-          return { folderId: existing, folderName: preferredName, legacyFolderName: legacyName };
+          removeFolderFromCache(params.parentId, name);
+          driveFolderCache.set(cacheKey(params.parentId, preferredName), existing);
+          return { folderId: existing, folderName: preferredName };
         } catch (err) {
-          console.warn("[google-drive-sync] No se pudo renombrar carpeta de sesión existente", {
-            sessionId: params.session?.id,
+          console.warn("[google-drive-sync] No se pudo renombrar carpeta en Drive", {
+            ...(params.context ?? {}),
             folderId: existing,
+            fromName: name,
+            toName: preferredName,
             error: err instanceof Error ? err.message : String(err),
           });
-          return { folderId: existing, folderName: name, legacyFolderName: legacyName };
+          return { folderId: existing, folderName: name };
         }
       }
-      return { folderId: existing, folderName: preferredName, legacyFolderName: legacyName };
-    }
-  }
-
-  const dealFolderName = sanitizeName(buildDealFolderName(params.deal));
-  const legacyDealFolderId = await findFolder({
-    name: dealFolderName,
-    parentId: params.organizationFolderId,
-    driveId: params.driveId,
-  });
-
-  if (legacyDealFolderId) {
-    const legacySessionFolderId = await findFolder({
-      name: legacyName,
-      parentId: legacyDealFolderId,
-      driveId: params.driveId,
-    });
-
-    if (legacySessionFolderId) {
-      try {
-        await moveFileToParent({
-          fileId: legacySessionFolderId,
-          newParentId: params.organizationFolderId,
-          previousParentId: legacyDealFolderId,
-        });
-        driveFolderCache.delete(cacheKey(legacyDealFolderId, legacyName));
-
-        let currentName = legacyName;
-        if (preferredName !== legacyName) {
-          try {
-            await renameDriveFile(legacySessionFolderId, preferredName);
-            currentName = preferredName;
-          } catch (err) {
-            console.warn("[google-drive-sync] No se pudo renombrar carpeta de sesión migrada", {
-              sessionId: params.session?.id,
-              folderId: legacySessionFolderId,
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-        }
-
-        driveFolderCache.set(
-          cacheKey(params.organizationFolderId, currentName),
-          legacySessionFolderId,
-        );
-
-        return {
-          folderId: legacySessionFolderId,
-          folderName: currentName,
-          legacyFolderName: legacyName,
-        };
-      } catch (err) {
-        console.warn("[google-drive-sync] No se pudo mover carpeta de sesión al nivel de organización", {
-          sessionId: params.session?.id,
-          folderId: legacySessionFolderId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+      return { folderId: existing, folderName: preferredName };
     }
   }
 
@@ -430,10 +392,216 @@ async function ensureSessionFolderUnderOrganization(params: {
 
   const folderId = await ensureFolder({
     name: preferredName,
-    parentId: params.organizationFolderId,
+    parentId: params.parentId,
     driveId: params.driveId,
   });
-  return { folderId, folderName: preferredName, legacyFolderName: legacyName };
+  return { folderId, folderName: preferredName };
+}
+
+async function ensureOrganizationFolder(params: {
+  driveId: string;
+  baseFolderId: string;
+  deal: any;
+  organizationName?: string | null;
+  createIfMissing?: boolean;
+}): Promise<
+  | { folderId: string; folderName: string; preferredName: string; legacyNames: string[] }
+  | null
+> {
+  const { preferredName, legacyNames } = resolveOrganizationFolderNames({
+    deal: params.deal,
+    organizationName: params.organizationName,
+  });
+
+  const result = await ensureFolderWithCandidates({
+    driveId: params.driveId,
+    parentId: params.baseFolderId,
+    preferredName,
+    legacyNames,
+    createIfMissing: params.createIfMissing,
+    context: { organizationName: preferredName },
+  });
+
+  if (!result) {
+    return null;
+  }
+
+  return {
+    folderId: result.folderId,
+    folderName: result.folderName,
+    preferredName,
+    legacyNames,
+  };
+}
+
+async function ensureDealFolder(params: {
+  driveId: string;
+  organizationFolderId: string;
+  deal: any;
+  createIfMissing?: boolean;
+}): Promise<
+  | { folderId: string; folderName: string; preferredName: string; legacyNames: string[] }
+  | null
+> {
+  const { preferredName, legacyNames } = resolveDealFolderNames(params.deal);
+
+  const result = await ensureFolderWithCandidates({
+    driveId: params.driveId,
+    parentId: params.organizationFolderId,
+    preferredName,
+    legacyNames,
+    createIfMissing: params.createIfMissing,
+    context: {
+      dealId: resolveDealId(params.deal),
+      organizationFolderId: params.organizationFolderId,
+    },
+  });
+
+  if (!result) {
+    return null;
+  }
+
+  return {
+    folderId: result.folderId,
+    folderName: result.folderName,
+    preferredName,
+    legacyNames,
+  };
+}
+
+async function ensureSessionFolderUnderOrganization(params: {
+  driveId: string;
+  organizationFolderId: string;
+  deal: any;
+  session: any;
+  sessionNumber: string;
+  sessionName?: string | null;
+  createIfMissing?: boolean;
+}): Promise<{ folderId: string; folderName: string; legacyFolderName: string } | null> {
+  const dealFolder = await ensureDealFolder({
+    driveId: params.driveId,
+    organizationFolderId: params.organizationFolderId,
+    deal: params.deal,
+    createIfMissing: params.createIfMissing,
+  });
+
+  if (!dealFolder) {
+    return null;
+  }
+
+  const { preferredName, legacyNames, legacyFolderName } = buildSessionFolderNameOptions({
+    deal: params.deal,
+    sessionNumber: params.sessionNumber,
+    sessionName: params.sessionName,
+    session: params.session,
+  });
+
+  const sessionFolderResult = await ensureFolderWithCandidates({
+    driveId: params.driveId,
+    parentId: dealFolder.folderId,
+    preferredName,
+    legacyNames,
+    createIfMissing: false,
+    context: {
+      dealId: resolveDealId(params.deal),
+      sessionId: params.session?.id,
+    },
+  });
+
+  if (sessionFolderResult) {
+    return {
+      folderId: sessionFolderResult.folderId,
+      folderName: sessionFolderResult.folderName,
+      legacyFolderName,
+    };
+  }
+
+  const searchParents = [params.organizationFolderId];
+  for (const legacyDealName of dealFolder.legacyNames) {
+    const legacyDealFolder = await findFolder({
+      name: legacyDealName,
+      parentId: params.organizationFolderId,
+      driveId: params.driveId,
+    });
+    if (legacyDealFolder) {
+      searchParents.push(legacyDealFolder);
+    }
+  }
+
+  for (const parentId of searchParents) {
+    for (const candidate of uniqueSanitizedNames([preferredName, ...legacyNames])) {
+      const existing = await findFolder({
+        name: candidate,
+        parentId,
+        driveId: params.driveId,
+      });
+      if (!existing) continue;
+
+      try {
+        await moveFileToParent({
+          fileId: existing,
+          newParentId: dealFolder.folderId,
+          previousParentId: parentId,
+        });
+        removeFolderFromCache(parentId, candidate);
+        driveFolderCache.set(cacheKey(dealFolder.folderId, candidate), existing);
+      } catch (err) {
+        console.warn("[google-drive-sync] No se pudo mover la carpeta de sesión a la carpeta del deal", {
+          dealId: resolveDealId(params.deal),
+          sessionId: params.session?.id,
+          folderId: existing,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
+
+      const renamed = await ensureFolderWithCandidates({
+        driveId: params.driveId,
+        parentId: dealFolder.folderId,
+        preferredName,
+        legacyNames,
+        createIfMissing: false,
+        context: {
+          dealId: resolveDealId(params.deal),
+          sessionId: params.session?.id,
+        },
+      });
+
+      if (renamed) {
+        return {
+          folderId: renamed.folderId,
+          folderName: renamed.folderName,
+          legacyFolderName,
+        };
+      }
+    }
+  }
+
+  if (params.createIfMissing === false) {
+    return null;
+  }
+
+  const finalResult = await ensureFolderWithCandidates({
+    driveId: params.driveId,
+    parentId: dealFolder.folderId,
+    preferredName,
+    legacyNames,
+    createIfMissing: true,
+    context: {
+      dealId: resolveDealId(params.deal),
+      sessionId: params.session?.id,
+    },
+  });
+
+  if (!finalResult) {
+    return null;
+  }
+
+  return {
+    folderId: finalResult.folderId,
+    folderName: finalResult.folderName,
+    legacyFolderName,
+  };
 }
 
 async function findFolder(params: { name: string; parentId: string; driveId: string }): Promise<string | null> {
@@ -707,11 +875,23 @@ function formatDealDate(deal: any): string {
   return datePart;
 }
 
+function resolveDealFolderNames(deal: any): { preferredName: string; legacyNames: string[] } {
+  const dealIdRaw = resolveDealId(deal) ?? "sin-id";
+  const dealId = sanitizeName(String(dealIdRaw)) || "sin-id";
+  const title = sanitizeName(deal?.title || deal?.name || "Sin título") || "Sin título";
+  const preferredName = sanitizeName(`${dealId} - ${title}`) || `${dealId} - ${title}`;
+
+  const legacyNames: string[] = [];
+  const legacyWithDate = sanitizeName(`${dealId} - ${formatDealDate(deal)} - ${title}`);
+  if (legacyWithDate && legacyWithDate !== preferredName) {
+    legacyNames.push(legacyWithDate);
+  }
+
+  return { preferredName, legacyNames };
+}
+
 function buildDealFolderName(deal: any): string {
-  const id = deal?.deal_id ?? deal?.id ?? "sin-id";
-  const title = sanitizeName(deal?.title || deal?.name || "Sin título");
-  const date = formatDealDate(deal);
-  return `${id} - ${date} - ${title}`;
+  return resolveDealFolderNames(deal).preferredName;
 }
 
 function resolveSessionFolderNames(params: {
@@ -734,25 +914,29 @@ function resolveSessionFolderNames(params: {
   return { sessionNumberLabel, baseSessionName, folderName };
 }
 
-function buildOrganizationSessionFolderName(params: {
+function buildSessionFolderNameOptions(params: {
   deal: any;
   sessionNumber: string;
   sessionName?: string | null;
   session?: any;
-}): { preferredName: string; legacyName: string } {
-  const { folderName: legacyName } = resolveSessionFolderNames({
+}): { preferredName: string; legacyNames: string[]; legacyFolderName: string } {
+  const { folderName: baseName } = resolveSessionFolderNames({
     sessionNumber: params.sessionNumber,
     sessionName: params.sessionName,
     session: params.session,
   });
 
+  const preferredName = baseName;
+  const legacyNames: string[] = [];
   const dealId = resolveDealId(params.deal);
-  if (!dealId) {
-    return { preferredName: legacyName, legacyName };
+  if (dealId) {
+    const prefixed = sanitizeName(`${dealId} - ${baseName}`);
+    if (prefixed && prefixed !== preferredName) {
+      legacyNames.push(prefixed);
+    }
   }
 
-  const prefixed = sanitizeName(`${dealId} - ${legacyName}`);
-  return { preferredName: prefixed || legacyName, legacyName };
+  return { preferredName, legacyNames, legacyFolderName: legacyNames[0] ?? preferredName };
 }
 
 function resolveDealId(deal: any): string | null {
@@ -946,26 +1130,30 @@ export async function syncDealDocumentsToGoogleDrive(params: {
       driveId,
     });
 
-    const organizationFolderName = buildOrganizationFolderName({
+    const organizationFolder = await ensureOrganizationFolder({
+      driveId,
+      baseFolderId,
       deal: params.deal,
       organizationName: params.organizationName,
     });
-    const organizationFolderId = await ensureFolder({
-      name: organizationFolderName,
-      parentId: baseFolderId,
+    if (!organizationFolder) {
+      console.warn("[google-drive-sync] No se pudo preparar la carpeta de la organización en Drive");
+      return;
+    }
+
+    const dealFolder = await ensureDealFolder({
       driveId,
+      organizationFolderId: organizationFolder.folderId,
+      deal: params.deal,
     });
+    if (!dealFolder) {
+      console.warn("[google-drive-sync] No se pudo preparar la carpeta del deal en Drive");
+      return;
+    }
 
-    const dealFolderName = sanitizeName(buildDealFolderName(params.deal));
-    const dealFolderId = await ensureFolder({
-      name: dealFolderName,
-      parentId: organizationFolderId,
-      driveId,
-    });
+    await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolder.folderId });
 
-    await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolderId });
-
-    await clearFolder(dealFolderId, driveId);
+    await clearFolder(dealFolder.folderId, driveId);
 
     let successCount = 0;
     for (const doc of documents) {
@@ -973,7 +1161,7 @@ export async function syncDealDocumentsToGoogleDrive(params: {
         const { data, fileName, mimeType } = await fetchDocumentData(doc);
         const safeName = sanitizeName(fileName || `documento_${doc?.id ?? successCount + 1}`) || "documento";
         const uploadResult = await uploadBufferToDrive({
-          parentId: dealFolderId,
+          parentId: dealFolder.folderId,
           name: safeName,
           mimeType: mimeType || "application/octet-stream",
           data,
@@ -1007,7 +1195,7 @@ export async function syncDealDocumentsToGoogleDrive(params: {
         }`;
         try {
           await uploadBufferToDrive({
-            parentId: dealFolderId,
+            parentId: dealFolder.folderId,
             name: sanitizeName(`ERROR - ${doc?.file_name || doc?.id || "documento"}.txt`),
             mimeType: "text/plain",
             data: Buffer.from(errorMessage, "utf8"),
@@ -1022,7 +1210,7 @@ export async function syncDealDocumentsToGoogleDrive(params: {
       "[google-drive-sync] Sincronización completada",
       JSON.stringify({
         dealId: params.deal?.deal_id ?? params.deal?.id,
-        organization: params.organizationName ?? organizationFolderName,
+        organization: params.organizationName ?? organizationFolder.folderName,
         totalDocuments: documents.length,
         uploaded: successCount,
       })
@@ -1061,30 +1249,28 @@ export async function deleteDealFolderFromGoogleDrive(params: {
       return;
     }
 
-    const organizationFolderName = buildOrganizationFolderName({
+    const organizationFolder = await ensureOrganizationFolder({
+      driveId,
+      baseFolderId,
       deal: params.deal,
       organizationName: params.organizationName,
+      createIfMissing: false,
     });
-    const organizationFolderId = await findFolder({
-      name: organizationFolderName,
-      parentId: baseFolderId,
-      driveId,
-    });
-    if (!organizationFolderId) {
+    if (!organizationFolder) {
       console.warn(
         "[google-drive-sync] Carpeta de organización no encontrada, no se borra carpeta del deal",
-        { organizationName: organizationFolderName }
+        { organizationName: params.organizationName }
       );
       return;
     }
 
-    const dealFolderName = sanitizeName(buildDealFolderName(params.deal));
-    const dealFolderId = await findFolder({
-      name: dealFolderName,
-      parentId: organizationFolderId,
+    const dealFolder = await ensureDealFolder({
       driveId,
+      organizationFolderId: organizationFolder.folderId,
+      deal: params.deal,
+      createIfMissing: false,
     });
-    if (!dealFolderId) {
+    if (!dealFolder) {
       console.warn("[google-drive-sync] Carpeta del deal no encontrada, no se borra en Drive", {
         dealId: params.deal?.deal_id ?? params.deal?.id,
       });
@@ -1092,7 +1278,7 @@ export async function deleteDealFolderFromGoogleDrive(params: {
     }
 
     try {
-      await driveDelete(dealFolderId);
+      await driveDelete(dealFolder.folderId);
       await updateDealFolderLink({ deal: params.deal, link: null });
     } catch (err) {
       console.error("[google-drive-sync] Error eliminando carpeta del deal en Drive", {
@@ -1102,12 +1288,24 @@ export async function deleteDealFolderFromGoogleDrive(params: {
       throw err;
     }
 
-    removeFolderFromCache(baseFolderId, organizationFolderName);
-    removeFolderFromCache(organizationFolderId, dealFolderName);
+    for (const name of uniqueSanitizedNames([
+      organizationFolder.folderName,
+      organizationFolder.preferredName,
+      ...(organizationFolder.legacyNames ?? []),
+    ])) {
+      removeFolderFromCache(baseFolderId, name);
+    }
+    for (const name of uniqueSanitizedNames([
+      dealFolder.folderName,
+      dealFolder.preferredName,
+      ...(dealFolder.legacyNames ?? []),
+    ])) {
+      removeFolderFromCache(organizationFolder.folderId, name);
+    }
 
     console.log("[google-drive-sync] Carpeta del deal eliminada en Drive", {
       dealId: params.deal?.deal_id ?? params.deal?.id,
-      organizationName: organizationFolderName,
+      organizationName: organizationFolder.folderName,
     });
   } catch (err) {
     console.error("[google-drive-sync] Error inesperado eliminando carpeta del deal", err);
@@ -1141,30 +1339,32 @@ export async function uploadDealDocumentToGoogleDrive(params: {
     driveId,
   });
 
-  const organizationDisplayName = buildOrganizationFolderName({
+  const organizationFolder = await ensureOrganizationFolder({
+    driveId,
+    baseFolderId,
     deal: params.deal,
     organizationName: params.organizationName,
   });
-  const organizationFolderId = await ensureFolder({
-    name: organizationDisplayName,
-    parentId: baseFolderId,
-    driveId,
-  });
+  if (!organizationFolder) {
+    throw new Error("No se pudo preparar la carpeta de la organización en Drive");
+  }
 
-  const dealFolderName = sanitizeName(buildDealFolderName(params.deal));
-  const dealFolderId = await ensureFolder({
-    name: dealFolderName,
-    parentId: organizationFolderId,
+  const dealFolder = await ensureDealFolder({
     driveId,
+    organizationFolderId: organizationFolder.folderId,
+    deal: params.deal,
   });
+  if (!dealFolder) {
+    throw new Error("No se pudo preparar la carpeta del deal en Drive");
+  }
 
-  await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolderId });
+  await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolder.folderId });
 
   const safeName = sanitizeName(params.fileName || "documento") || "documento";
   const mimeType = params.mimeType?.trim() || "application/octet-stream";
 
   const uploadResult = await uploadBufferToDrive({
-    parentId: dealFolderId,
+    parentId: dealFolder.folderId,
     name: safeName,
     mimeType,
     data: params.data,
@@ -1219,19 +1419,19 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
     driveId,
   });
 
-  const organizationDisplayName = buildOrganizationFolderName({
+  const organizationFolder = await ensureOrganizationFolder({
+    driveId,
+    baseFolderId,
     deal: params.deal,
     organizationName: params.organizationName,
   });
-  const organizationFolderId = await ensureFolder({
-    name: organizationDisplayName,
-    parentId: baseFolderId,
-    driveId,
-  });
+  if (!organizationFolder) {
+    throw new Error("No se pudo preparar la carpeta de la organización en Drive");
+  }
 
   const sessionFolderInfo = await ensureSessionFolderUnderOrganization({
     driveId,
-    organizationFolderId,
+    organizationFolderId: organizationFolder.folderId,
     deal: params.deal,
     session: params.session,
     sessionNumber: params.sessionNumber,
@@ -1400,26 +1600,24 @@ export async function deleteSessionDocumentFromGoogleDrive(params: {
     return { fileDeleted: false, sessionFolderDeleted: false };
   }
 
-  const organizationDisplayName = buildOrganizationFolderName({
+  const organizationFolder = await ensureOrganizationFolder({
+    driveId,
+    baseFolderId,
     deal: params.deal,
     organizationName: params.organizationName,
+    createIfMissing: false,
   });
-  const organizationFolderId = await findFolder({
-    name: organizationDisplayName,
-    parentId: baseFolderId,
-    driveId,
-  });
-  if (!organizationFolderId) {
+  if (!organizationFolder) {
     console.warn(
       "[google-drive-sync] Carpeta de organización no encontrada al eliminar documento de sesión",
-      { organizationName: organizationDisplayName },
+      { organizationName: params.organizationName },
     );
     return { fileDeleted: false, sessionFolderDeleted: false };
   }
 
   const sessionFolderInfo = await ensureSessionFolderUnderOrganization({
     driveId,
-    organizationFolderId,
+    organizationFolderId: organizationFolder.folderId,
     deal: params.deal,
     session: params.session,
     sessionNumber: params.sessionNumber,
@@ -1501,9 +1699,9 @@ export async function deleteSessionDocumentFromGoogleDrive(params: {
       const hasRemainingItems = Array.isArray(list.files) && list.files.length > 0;
       if (!hasRemainingItems) {
         await driveDelete(sessionFolderId);
-        removeFolderFromCache(organizationFolderId, sessionFolderName);
+        removeFolderFromCache(organizationFolder.folderId, sessionFolderName);
         if (legacySessionFolderName && legacySessionFolderName !== sessionFolderName) {
-          removeFolderFromCache(organizationFolderId, legacySessionFolderName);
+          removeFolderFromCache(organizationFolder.folderId, legacySessionFolderName);
         }
         sessionFolderDeleted = true;
       }
