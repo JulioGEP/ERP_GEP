@@ -679,90 +679,98 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                         </div>
                       </Col>
                     </Row>
-                    <Form.Group controlId="template-theory" className="d-grid gap-3">
-                      <Form.Label>Contenido teórico</Form.Label>
-                      <div className="d-grid gap-3">
-                        {theoryPoints.length > 0 ? (
-                          theoryPoints.map((point, index) => (
-                            <div key={`theory-${index}`} className="d-flex flex-column flex-md-row gap-2">
-                              <Form.Control
-                                as="textarea"
-                                rows={2}
-                                value={point}
-                                onChange={(event) =>
-                                  handlePointChange('theoryPoints', index, event.target.value)
-                                }
-                                placeholder={`Punto teórico ${index + 1}`}
-                              />
+                    <Row className="g-4 align-items-stretch">
+                      <Col xs={12} lg={6} className="d-flex">
+                        <Form.Group controlId="template-theory" className="d-grid gap-3 flex-grow-1">
+                          <Form.Label>Contenido teórico</Form.Label>
+                          <div className="d-grid gap-3 flex-grow-1">
+                            {theoryPoints.length > 0 ? (
+                              theoryPoints.map((point, index) => (
+                                <div key={`theory-${index}`} className="d-flex flex-column flex-md-row gap-2">
+                                  <Form.Control
+                                    as="textarea"
+                                    rows={2}
+                                    value={point}
+                                    onChange={(event) =>
+                                      handlePointChange('theoryPoints', index, event.target.value)
+                                    }
+                                    placeholder={`Punto teórico ${index + 1}`}
+                                    className="certificate-template-point-input"
+                                  />
+                                  <Button
+                                    variant="outline-danger"
+                                    type="button"
+                                    onClick={() => handleRemovePoint('theoryPoints', index)}
+                                    className="flex-shrink-0"
+                                  >
+                                    Eliminar
+                                  </Button>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-muted small mb-0">
+                                No hay puntos teóricos. Añade un punto para comenzar.
+                              </p>
+                            )}
+                            <div>
                               <Button
-                                variant="outline-danger"
+                                variant="outline-primary"
                                 type="button"
-                                onClick={() => handleRemovePoint('theoryPoints', index)}
-                                className="flex-shrink-0"
+                                onClick={() => handleAddPoint('theoryPoints')}
+                                className="w-100 w-md-auto"
                               >
-                                Eliminar
+                                Añadir punto teórico
                               </Button>
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-muted small mb-0">
-                            No hay puntos teóricos. Añade un punto para comenzar.
-                          </p>
-                        )}
-                        <div>
-                          <Button
-                            variant="outline-primary"
-                            type="button"
-                            onClick={() => handleAddPoint('theoryPoints')}
-                            className="w-100 w-md-auto"
-                          >
-                            Añadir punto teórico
-                          </Button>
-                        </div>
-                      </div>
-                    </Form.Group>
-                    <Form.Group controlId="template-practice" className="d-grid gap-3">
-                      <Form.Label>Contenido práctico</Form.Label>
-                      <div className="d-grid gap-3">
-                        {practicePoints.length > 0 ? (
-                          practicePoints.map((point, index) => (
-                            <div key={`practice-${index}`} className="d-flex flex-column flex-md-row gap-2">
-                              <Form.Control
-                                as="textarea"
-                                rows={2}
-                                value={point}
-                                onChange={(event) =>
-                                  handlePointChange('practicePoints', index, event.target.value)
-                                }
-                                placeholder={`Punto práctico ${index + 1}`}
-                              />
+                          </div>
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} lg={6} className="d-flex">
+                        <Form.Group controlId="template-practice" className="d-grid gap-3 flex-grow-1">
+                          <Form.Label>Contenido práctico</Form.Label>
+                          <div className="d-grid gap-3 flex-grow-1">
+                            {practicePoints.length > 0 ? (
+                              practicePoints.map((point, index) => (
+                                <div key={`practice-${index}`} className="d-flex flex-column flex-md-row gap-2">
+                                  <Form.Control
+                                    as="textarea"
+                                    rows={2}
+                                    value={point}
+                                    onChange={(event) =>
+                                      handlePointChange('practicePoints', index, event.target.value)
+                                    }
+                                    placeholder={`Punto práctico ${index + 1}`}
+                                    className="certificate-template-point-input"
+                                  />
+                                  <Button
+                                    variant="outline-danger"
+                                    type="button"
+                                    onClick={() => handleRemovePoint('practicePoints', index)}
+                                    className="flex-shrink-0"
+                                  >
+                                    Eliminar
+                                  </Button>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-muted small mb-0">
+                                No hay puntos prácticos. Añade un punto para comenzar.
+                              </p>
+                            )}
+                            <div>
                               <Button
-                                variant="outline-danger"
+                                variant="outline-primary"
                                 type="button"
-                                onClick={() => handleRemovePoint('practicePoints', index)}
-                                className="flex-shrink-0"
+                                onClick={() => handleAddPoint('practicePoints')}
+                                className="w-100 w-md-auto"
                               >
-                                Eliminar
+                                Añadir punto práctico
                               </Button>
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-muted small mb-0">
-                            No hay puntos prácticos. Añade un punto para comenzar.
-                          </p>
-                        )}
-                        <div>
-                          <Button
-                            variant="outline-primary"
-                            type="button"
-                            onClick={() => handleAddPoint('practicePoints')}
-                            className="w-100 w-md-auto"
-                          >
-                            Añadir punto práctico
-                          </Button>
-                        </div>
-                      </div>
-                    </Form.Group>
+                          </div>
+                        </Form.Group>
+                      </Col>
+                    </Row>
                   </div>
 
                   <div className="d-flex flex-column flex-lg-row gap-3 align-items-stretch">
