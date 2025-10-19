@@ -56,6 +56,20 @@ const toTrimmedOrNull = (value) => {
   return trimmed.length ? trimmed : null
 }
 
+const dedupePreservingOrder = (values) => {
+  const seen = new Set()
+  const result = []
+  values.forEach((value) => {
+    const trimmed = toTrimmedOrNull(value)
+    if (!trimmed) return
+    const key = trimmed.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    result.push(trimmed)
+  })
+  return result
+}
+
 const buildSessionLabel = (session) => {
   if (!session) return ''
   const explicit = toTrimmedOrNull(session.label)
@@ -191,6 +205,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   const [selectedSessionId, setSelectedSessionId] = useState(initialSessionSanitized?.id || null)
   const sessionSelectRef = useRef(null)
   const [selTitulo, setSelTitulo] = useState(isFormacion ? (datos.formacionTitulo || '') : '')
+  const [prefillTemplates, setPrefillTemplates] = useState([])
   const [loadingDeal, setLoadingDeal] = useState(false)
   const dealChangeRef = useRef(true)
   const selectedSession = useMemo(() => {
@@ -221,6 +236,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     }
     setSessionOptions([])
     setSelectedSessionId(null)
+    setPrefillTemplates([])
   }, [dealId])
 
   useEffect(() => {
@@ -397,12 +413,75 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
         comercial: '',
         sede: selected?.direccion || (normalizedSessions.length > 1 ? '' : d.sede),
       }))
+
+      if (isFormacion) {
+        const productsRaw = Array.isArray(payload.products)
+          ? payload.products
+          : Array.isArray(payload.deal_products)
+            ? payload.deal_products
+            : []
+
+        const templateCandidates = dedupePreservingOrder(
+          productsRaw
+            .map((product) => toTrimmedOrNull(product?.template))
+            .filter(Boolean)
+        )
+
+        const api = trainingTemplatesApiRef.current || getTrainingTemplatesManager()
+        const resolvedTemplates = []
+
+        for (const candidate of templateCandidates) {
+          let label = candidate
+          if (api && typeof api.getTemplateById === 'function') {
+            try {
+              const templateDetails = await api.getTemplateById(candidate)
+              if (templateDetails) {
+                label =
+                  toTrimmedOrNull(templateDetails.title) ||
+                  toTrimmedOrNull(templateDetails.name) ||
+                  templateDetails.id ||
+                  candidate
+              } else if (typeof api.getTrainingDetails === 'function') {
+                const byValue = await api.getTrainingDetails(candidate)
+                if (byValue) {
+                  label =
+                    toTrimmedOrNull(byValue.title) ||
+                    toTrimmedOrNull(byValue.name) ||
+                    byValue.id ||
+                    candidate
+                }
+              }
+            } catch (error) {
+              console.warn('No se pudo resolver la plantilla asociada al producto', error)
+            }
+          }
+          resolvedTemplates.push(label)
+        }
+
+        const uniqueResolved = dedupePreservingOrder(resolvedTemplates)
+        setPrefillTemplates(uniqueResolved)
+
+        if (uniqueResolved.length) {
+          setSelTitulo((current) => {
+            const currentKey = toTrimmedOrNull(current)
+            const hasCurrent = currentKey
+              ? uniqueResolved.some((value) => value.toLowerCase() === currentKey.toLowerCase())
+              : false
+            if (hasCurrent) {
+              return current
+            }
+            return uniqueResolved[0]
+          })
+        }
+      } else {
+        setPrefillTemplates([])
+      }
     } catch (e) {
       console.error(e); alert('No se ha podido obtener el presupuesto.')
     } finally {
       setLoadingDeal(false)
     }
-  }, [dealId])
+  }, [dealId, isFormacion])
 
   const handleSessionChange = (event) => {
     const value = event.target.value
@@ -609,6 +688,15 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   const opcionesOrdenadas = useMemo(() => {
     const seen = new Set()
     const options = []
+    const addOption = (value) => {
+      const trimmed = toTrimmedOrNull(value)
+      if (!trimmed) return
+      const key = trimmed.toLowerCase()
+      if (seen.has(key)) return
+      seen.add(key)
+      options.push(trimmed)
+    }
+
     trainingTemplates.forEach((template) => {
       if (!template) return
       const title = typeof template.title === 'string' && template.title.trim()
@@ -616,16 +704,14 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
         : typeof template.name === 'string'
           ? template.name.trim()
           : ''
-      if (title && !seen.has(title)) {
-        seen.add(title)
-        options.push(title)
-      }
+      addOption(title)
     })
-    if (selTitulo && !seen.has(selTitulo)) {
-      options.push(selTitulo)
-    }
+
+    prefillTemplates.forEach(addOption)
+    addOption(selTitulo)
+
     return options.sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
-  }, [trainingTemplates, selTitulo])
+  }, [trainingTemplates, prefillTemplates, selTitulo])
 
   let mainSection
   if (isSimulacro) {
