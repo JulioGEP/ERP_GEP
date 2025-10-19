@@ -211,6 +211,12 @@ body {
   line-height: 1.5;
 }
 
+.certificate-template-point-input {
+  min-height: 2.75rem;
+  resize: vertical;
+  padding: 0.5rem 0.75rem;
+}
+
 .session-modal .modal-header .btn-close {
   filter: invert(1);
   opacity: 1;
