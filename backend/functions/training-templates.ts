@@ -24,6 +24,7 @@ type RawTemplateDefinition = {
   duration?: unknown;
   teorica?: unknown;
   practica?: unknown;
+  name?: unknown;
 };
 
 type RawTemplatesRegistry = Record<string, RawTemplateDefinition>;
@@ -117,7 +118,8 @@ function toTrainingTemplate(key: string, definition: RawTemplateDefinition): Tra
   }
 
   const id = toDisplayString((definition as { id?: unknown }).id);
-  const name = toDisplayString(key);
+  const storedName = toDisplayString((definition as { name?: unknown }).name);
+  const name = storedName || toDisplayString(key);
   const title = toDisplayString((definition as { titulo?: unknown }).titulo ?? (definition as { title?: unknown }).title) || name;
   const duration = toDisplayString((definition as { duracion?: unknown }).duracion ?? (definition as { duration?: unknown }).duration);
   const theory = toStringArray((definition as { teorica?: unknown }).teorica);
@@ -145,6 +147,17 @@ function ensureUniqueCustomId(existingIds: Set<string>, base: string): string {
     index += 1;
   }
   existingIds.add(candidate);
+  return candidate;
+}
+
+function ensureUniqueTemplateKey(map: RawTemplatesRegistry, base: string): string {
+  const trimmed = toDisplayString(base) || 'Plantilla';
+  let candidate = trimmed;
+  let index = 2;
+  while (map[candidate]) {
+    candidate = `${trimmed} (${index})`;
+    index += 1;
+  }
   return candidate;
 }
 
@@ -208,19 +221,10 @@ function applyTemplateChanges(
 
   if (targetKey) {
     const currentDefinition = { ...(nextMap[targetKey] ?? {}) } as RawTemplateDefinition;
-    const nextKey = name;
-    if (nextKey !== targetKey && nextMap[nextKey] && resolveTemplateKeyById(nextMap, providedId) !== nextKey) {
-      return {
-        error: errorResponse(
-          'VALIDATION_ERROR',
-          'Ya existe otra plantilla con ese nombre. Usa un nombre diferente.',
-          400,
-        ),
-      };
-    }
 
     currentDefinition.id = providedId || currentDefinition.id || `${DEFAULT_TEMPLATE_PREFIX}${normalise(title || name).replace(/\s+/g, '-') || 'plantilla'}`;
     currentDefinition.titulo = title;
+    currentDefinition.name = name;
     if (duration) {
       currentDefinition.duracion = duration;
     } else {
@@ -229,36 +233,16 @@ function applyTemplateChanges(
     currentDefinition.teorica = theory;
     currentDefinition.practica = practice;
 
-    if (nextKey !== targetKey) {
-      delete nextMap[targetKey];
-      const index = nextOrder.indexOf(targetKey);
-      if (index >= 0) {
-        nextOrder.splice(index, 1, nextKey);
-      } else {
-        nextOrder.push(nextKey);
-      }
-      nextMap[nextKey] = currentDefinition;
-    } else {
-      nextMap[targetKey] = currentDefinition;
-    }
+    nextMap[targetKey] = currentDefinition;
 
-    const template = toTrainingTemplate(nextKey, currentDefinition);
+    const template = toTrainingTemplate(targetKey, currentDefinition);
     if (!template) {
       return { error: errorResponse('UNEXPECTED_ERROR', 'No se pudo procesar la plantilla.', 500) };
     }
     return { template, map: nextMap, order: nextOrder };
   }
 
-  const nextKey = name;
-  if (nextMap[nextKey]) {
-    return {
-      error: errorResponse(
-        'VALIDATION_ERROR',
-        'Ya existe otra plantilla con ese nombre. Usa un nombre diferente.',
-        400,
-      ),
-    };
-  }
+  const nextKey = ensureUniqueTemplateKey(nextMap, name);
 
   const generatedId = ensureUniqueCustomId(existingIds, title || name);
   const newDefinition: RawTemplateDefinition = {
@@ -266,6 +250,7 @@ function applyTemplateChanges(
     titulo: title,
     teorica: theory,
     practica: practice,
+    name,
   };
   if (duration) {
     newDefinition.duracion = duration;
