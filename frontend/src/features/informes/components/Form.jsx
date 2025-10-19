@@ -2,19 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import plantillasBase from '../utils/plantillas.json'
 import { triesKey, htmlKey } from '../utils/keys'
 
-let warnedMissingReportsToken = false
-const getReportsAuthHeaders = () => {
-  const token = import.meta.env.VITE_REPORTS_API_TOKEN
-  if (!token) {
-    if (!warnedMissingReportsToken) {
-      console.warn('VITE_REPORTS_API_TOKEN no está configurado; las peticiones a Netlify serán rechazadas.')
-      warnedMissingReportsToken = true
-    }
-    return {}
-  }
-  return { Authorization: `Bearer ${token}` }
-}
-
 const fileToDataURL = (file) =>
   new Promise((res, rej) => {
     const reader = new FileReader()
@@ -152,7 +139,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
         headers: {
           'Content-Type': 'application/json',
           'X-Reports-Intent': 'deal-autocomplete',
-          ...getReportsAuthHeaders(),
         },
         body: JSON.stringify({ dealId }),
       })

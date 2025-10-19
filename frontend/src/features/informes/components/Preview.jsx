@@ -2,19 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { generateReportPdfmake } from '../pdf/reportPdfmake'
 import { triesKey, htmlKey } from '../utils/keys'
 
-let warnedMissingReportsToken = false
-const getReportsAuthHeaders = () => {
-  const token = import.meta.env.VITE_REPORTS_API_TOKEN
-  if (!token) {
-    if (!warnedMissingReportsToken) {
-      console.warn('VITE_REPORTS_API_TOKEN no está configurado; las peticiones a Netlify serán rechazadas.')
-      warnedMissingReportsToken = true
-    }
-    return {}
-  }
-  return { Authorization: `Bearer ${token}` }
-}
-
 const maxTries = 3
 
 const stripImagesFromDatos = (value) => {
@@ -322,8 +309,12 @@ export default function Preview(props) {
     try {
       const r = await fetch('/.netlify/functions/generateReport', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getReportsAuthHeaders() },
-        body: JSON.stringify({ formador, datos: stripImagesFromDatos(datos) }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          formador,
+          datos: stripImagesFromDatos(datos),
+          previousHtml: aiHtml,
+        }),
       })
       const raw = await r.text()
       let data = null
@@ -351,6 +342,11 @@ export default function Preview(props) {
       setAiHtml(html)
       if (dealId) {
         try { sessionStorage.setItem(htmlKey(dealId), html) } catch {}
+      }
+
+      await generateReportPdfmake({ dealId, datos, formador, imagenes, type, aiHtml: html })
+
+      if (dealId) {
         const next = isPreventivoEbro ? tries + 1 : Math.min(tries + 1, maxTries)
         setTries(next)
         try { localStorage.setItem(triesKey(dealId), String(next)) } catch {}
@@ -366,7 +362,7 @@ export default function Preview(props) {
 
   const descargarPDF = async () => {
     try {
-      await generateReportPdfmake({ dealId, datos, formador, imagenes, type })
+      await generateReportPdfmake({ dealId, datos, formador, imagenes, type, aiHtml })
     } catch (e) {
       console.error('Error generando PDF (pdfmake):', e)
       alert('No se ha podido generar el PDF.')
