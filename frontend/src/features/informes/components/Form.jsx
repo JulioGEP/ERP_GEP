@@ -171,6 +171,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     : sanitizedInitialOptions
   const [sessionOptions, setSessionOptions] = useState(initialOptions)
   const [selectedSessionId, setSelectedSessionId] = useState(initialSessionSanitized?.id || null)
+  const sessionSelectRef = useRef(null)
   const [selTitulo, setSelTitulo] = useState(isFormacion ? (datos.formacionTitulo || '') : '')
   const [loadingDeal, setLoadingDeal] = useState(false)
   const dealChangeRef = useRef(true)
@@ -203,6 +204,12 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     setSessionOptions([])
     setSelectedSessionId(null)
   }, [dealId])
+
+  useEffect(() => {
+    if (sessionOptions.length > 1 && !selectedSessionId && sessionSelectRef.current) {
+      sessionSelectRef.current.focus()
+    }
+  }, [sessionOptions, selectedSessionId])
 
   // Cargar plantilla al seleccionar formación
   useEffect(() => {
@@ -253,7 +260,11 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       if (!normalizedSessions.length) {
         alert('No se han encontrado sesiones asociadas a este presupuesto.')
       } else if (normalizedSessions.length > 1) {
-        alert('Selecciona la sesión a la que pertenece el informe.')
+        setTimeout(() => {
+          if (sessionSelectRef.current) {
+            sessionSelectRef.current.focus()
+          }
+        }, 0)
       }
 
       setDatos((d) => ({
@@ -288,6 +299,15 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       setDatos((d) => ({ ...d, sede: '' }))
     }
   }
+
+  const handleDatePickerOpen = useCallback((event) => {
+    const target = event?.target
+    if (target && typeof target.showPicker === 'function') {
+      try {
+        target.showPicker()
+      } catch {}
+    }
+  }, [])
 
   useEffect(() => {
     if (!isPreventivoEbro) return
@@ -398,11 +418,11 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       return
     }
 
-    if (!isPreventivoEbro) {
-      if (!selectedSession) {
-        alert('Selecciona la sesión a la que pertenece el informe.')
-        return
+    if (!isPreventivoEbro && !selectedSession) {
+      if (sessionSelectRef.current) {
+        sessionSelectRef.current.focus()
       }
+      return
     }
 
     // Validación extra saneando números (por si acaso)
@@ -806,42 +826,48 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
               {isPreventivoEbro ? (
                 <input type="hidden" value={dealId} readOnly />
               ) : (
-                <div className="row g-3 align-items-end">
-                  <div className="col-7 col-md-6">
+                <div className="row g-2 align-items-end">
+                  <div className="col-12 col-md-4 col-lg-5">
                     <label className="form-label">Nº Presupuesto</label>
-                    <input className="form-control" value={dealId} required onChange={(e)=>setDealId(e.target.value)} />
+                    <input
+                      className="form-control form-control-sm"
+                      value={dealId}
+                      required
+                      onChange={(e)=>setDealId(e.target.value)}
+                    />
                   </div>
-                  <div className="col-5 col-md-6">
-                    <button type="button" className="btn btn-outline-primary w-100" onClick={buscarPresupuesto} disabled={loadingDeal}>
+                  <div className="col-6 col-md-3 col-lg-2">
+                    <label className="form-label d-md-none">&nbsp;</label>
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary btn-sm w-100"
+                      onClick={buscarPresupuesto}
+                      disabled={loadingDeal}
+                    >
                       {loadingDeal ? 'Buscando…' : 'Buscar'}
                     </button>
                   </div>
-                </div>
-              )}
-
-              {sessionOptions.length === 1 && (
-                <div className="alert alert-info mt-3 mb-0" role="alert">
-                  Sesión detectada: {buildSessionLabel(sessionOptions[0])}
-                </div>
-              )}
-
-              {sessionOptions.length > 1 && (
-                <div className="mt-3">
-                  <label className="form-label">Sesión</label>
-                  <select
-                    className="form-select"
-                    value={selectedSessionId || ''}
-                    onChange={handleSessionChange}
-                    required
-                  >
-                    <option value="">Selecciona una sesión…</option>
-                    {sessionOptions.map((session) => (
-                      <option key={session.id} value={session.id}>
-                        {buildSessionLabel(session)}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="form-text">Se usará su dirección para rellenar el informe.</div>
+                  {sessionOptions.length > 0 && (
+                    <div className="col-12 col-md-5 col-lg-5">
+                      <label className="form-label">Sesión</label>
+                      <select
+                        ref={sessionSelectRef}
+                        className="form-select form-select-sm"
+                        value={selectedSessionId || ''}
+                        onChange={handleSessionChange}
+                        required
+                        disabled={sessionOptions.length === 1 && Boolean(selectedSessionId)}
+                      >
+                        {sessionOptions.length > 1 && <option value="">Selecciona una sesión…</option>}
+                        {sessionOptions.map((session) => (
+                          <option key={session.id} value={session.id}>
+                            {buildSessionLabel(session)}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="form-text">Se usará su dirección para rellenar el informe.</div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -901,6 +927,8 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
                     value={datos.fecha}
                     required
                     onChange={(e)=>setDatos(d=>({...d, fecha:e.target.value}))}
+                    onClick={handleDatePickerOpen}
+                    onFocus={handleDatePickerOpen}
                   />
                 </div>
 
