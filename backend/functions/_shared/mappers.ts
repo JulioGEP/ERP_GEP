@@ -235,7 +235,7 @@ export async function resolveDealCustomLabels(deal: any) {
 
   const aFecha = toDateOrNull(deal?.[KEY_A_FECHA]);
   const wIdVariation = toNullableString(deal?.[KEY_W_ID_VARIATION]);
-  const presuHolded = toBooleanOrNull(deal?.[KEY_PRESU_HOLDED]);
+  const presuHolded = toNullableString(deal?.[KEY_PRESU_HOLDED]);
 
   const modoReservaRaw = fModoReserva ? deal?.[fModoReserva.key] : deal?.[KEY_MODO_RESERVA];
   const modoReservaLabel = fModoReserva
