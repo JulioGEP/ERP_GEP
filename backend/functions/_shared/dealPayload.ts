@@ -123,6 +123,8 @@ export function buildDealPayloadFromRecord(record: any) {
     training_address: trainingAddressFallback ?? trainingAddressPreferred,
 
     sede_label: toNullableString(record.sede_label) ?? toNullableString(record.sedeLabel),
+    service_label:
+      toNullableString(record.service_label) ?? toNullableString(record.serviceLabel),
     caes_label: toNullableString(record.caes_label) ?? toNullableString(record.caesLabel),
     fundae_label: toNullableString(record.fundae_label) ?? toNullableString(record.fundaeLabel),
     hotel_label: toNullableString(record.hotel_label) ?? toNullableString(record.hotelLabel),

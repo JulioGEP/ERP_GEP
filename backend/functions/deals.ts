@@ -18,6 +18,7 @@ import {
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
+  "service_label",
   "training_address_label", // alias de entrada…
   "training_address",       // …campo real en BD
   "caes_label",
@@ -714,10 +715,14 @@ export const handler = async (event: any) => {
           title: true,
           pipeline_id: true,
           sede_label: true,
+          service_label: true,
           training_address: true,
           caes_label: true,
           fundae_label: true,
           hotel_label: true,
+          tipo_servicio: true,
+          mail_invoice: true,
+          hours: true,
           transporte: true,
           po: true,
           org_id: true,

@@ -45,6 +45,7 @@ model deals {
   pipeline_id      String?
   training_address String?
   sede_label       String?
+  service_label    String?
   caes_label       String?
   fundae_label     String?
   hotel_label      String?
