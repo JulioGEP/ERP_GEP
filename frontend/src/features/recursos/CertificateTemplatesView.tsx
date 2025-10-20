@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
@@ -91,6 +91,56 @@ function resolveErrorMessage(error: unknown): string {
 
 function normaliseListEntries(entries: string[]): string[] {
   return entries.map((entry) => entry.trim()).filter((entry) => entry.length > 0);
+}
+
+function sanitisePointValue(raw: string): string {
+  let value = raw.replace(/\r/g, '').trim();
+  if (!value) {
+    return '';
+  }
+
+  // Remove leading separators or bullets
+  value = value.replace(/^[,\s]+/, '').replace(/^[-•·]\s*/, '').trim();
+
+  // Trim surrounding quotes if present
+  if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+    value = value.slice(1, -1).trim();
+  } else {
+    if (value.startsWith('"')) {
+      value = value.slice(1).trim();
+    }
+    if (value.endsWith('"')) {
+      value = value.slice(0, -1).trim();
+    }
+  }
+
+  // Remove trailing commas that may come from copied JSON arrays
+  if (value.endsWith(',')) {
+    value = value.slice(0, -1).trim();
+  }
+
+  return value;
+}
+
+function parseTrainingPoints(text: string): string[] {
+  if (!text) {
+    return [];
+  }
+
+  const quotedMatches = Array.from(text.matchAll(/"([^"\n]+)"/g))
+    .map((match) => sanitisePointValue(match[1]))
+    .filter((value) => value.length > 0);
+  if (quotedMatches.length > 1) {
+    return quotedMatches;
+  }
+
+  const normalised = text.replace(/",\s*/g, '"\n');
+  const lines = normalised
+    .split(/\r?\n+/)
+    .map((line) => sanitisePointValue(line))
+    .filter((value) => value.length > 0);
+
+  return lines;
 }
 
 function getTrainingTemplatesApi(): TrainingTemplatesApi {
@@ -329,6 +379,31 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       };
     });
   }, []);
+
+  const handlePointsPaste = useCallback(
+    (field: PointsField, index: number) => (event: ClipboardEvent<HTMLInputElement>) => {
+      const text = event.clipboardData.getData('text');
+      const parsedPoints = parseTrainingPoints(text);
+      if (parsedPoints.length <= 1) {
+        return;
+      }
+
+      event.preventDefault();
+      setFormState((current) => {
+        if (!current) {
+          return current;
+        }
+
+        const nextPoints = [...current[field]];
+        nextPoints.splice(index, 1, ...parsedPoints);
+        return {
+          ...current,
+          [field]: nextPoints,
+        };
+      });
+    },
+    [],
+  );
 
   const updateTemplateInState = useCallback((updatedTemplate: TrainingTemplate) => {
     setTemplates((current) => {
@@ -693,6 +768,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                                     onChange={(event) =>
                                       handlePointChange('theoryPoints', index, event.target.value)
                                     }
+                                    onPaste={handlePointsPaste('theoryPoints', index)}
                                     placeholder={`Punto teórico ${index + 1}`}
                                   />
                                   <Button
@@ -733,6 +809,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                                     onChange={(event) =>
                                       handlePointChange('practicePoints', index, event.target.value)
                                     }
+                                    onPaste={handlePointsPaste('practicePoints', index)}
                                     placeholder={`Punto práctico ${index + 1}`}
                                   />
                                   <Button
