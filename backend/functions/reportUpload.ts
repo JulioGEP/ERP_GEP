@@ -4,15 +4,10 @@ import { getPrisma } from './_shared/prisma'
 import { successResponse, errorResponse, preflightResponse } from './_shared/response'
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone'
 import { ensureSessionContext, resolveSessionNumber, toStringOrNull } from './_shared/sessions'
+import { normalizeDriveUrl } from './_shared/drive'
 import { uploadSessionDocumentToGoogleDrive } from './_shared/googleDrive'
 
 const METHOD_NOT_ALLOWED = errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405)
-
-const normalizeDriveUrl = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return trimmed.length ? trimmed : null
-}
 
 const sanitizeFileName = (name: unknown, fallback = 'Informe.pdf'): string => {
   if (typeof name !== 'string') return fallback

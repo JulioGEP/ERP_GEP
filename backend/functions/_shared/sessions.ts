@@ -7,6 +7,36 @@ export function toStringOrNull(value: unknown): string | null {
   return str.length ? str : null;
 }
 
+type SessionLike = {
+  id?: unknown;
+  number?: unknown;
+  nombre?: unknown;
+  nombre_cache?: unknown;
+  direccion?: unknown;
+  label?: unknown;
+};
+
+export function formatSessionLabel(session: SessionLike): string {
+  const explicit = toStringOrNull(session.label);
+  if (explicit) return explicit;
+
+  const parts: string[] = [];
+  const number = toStringOrNull(session.number);
+  if (number) parts.push(`Sesión ${number}`);
+
+  const nombre = toStringOrNull(session.nombre ?? session.nombre_cache);
+  if (nombre) parts.push(nombre);
+
+  if (!parts.length) {
+    const id = toStringOrNull(session.id);
+    if (id) parts.push(`Sesión ${id.slice(0, 8)}`);
+  }
+
+  const direccion = toStringOrNull(session.direccion);
+  const base = parts.join(' – ');
+  return `${base}${direccion ? ` (${direccion})` : ''}`.trim();
+}
+
 type EnsureSessionContextResult =
   | { session: any; error?: undefined }
   | { session?: undefined; error: ReturnType<typeof errorResponse> };
@@ -39,15 +69,15 @@ function extractPersistedSessionNumber(session: any): string | null {
 }
 
 function toTimestamp(value: unknown): number | null {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value as string);
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
   const time = date.getTime();
   return Number.isFinite(time) ? time : null;
 }
 
-function compareSessionsForOrder(
-  a: { id: string; fecha_inicio_utc: Date | null; created_at: Date | null },
-  b: { id: string; fecha_inicio_utc: Date | null; created_at: Date | null },
+export function compareSessionsForOrder(
+  a: { id?: unknown; fecha_inicio_utc?: Date | string | null; created_at?: Date | string | null },
+  b: { id?: unknown; fecha_inicio_utc?: Date | string | null; created_at?: Date | string | null },
 ): number {
   const startA = toTimestamp(a.fecha_inicio_utc);
   const startB = toTimestamp(b.fecha_inicio_utc);
@@ -59,7 +89,9 @@ function compareSessionsForOrder(
   const createdA = toTimestamp(a.created_at) ?? 0;
   const createdB = toTimestamp(b.created_at) ?? 0;
   if (createdA !== createdB) return createdA - createdB;
-  return a.id.localeCompare(b.id);
+  const idA = toStringOrNull(a.id) ?? '';
+  const idB = toStringOrNull(b.id) ?? '';
+  return idA.localeCompare(idB);
 }
 
 export async function resolveSessionNumber(

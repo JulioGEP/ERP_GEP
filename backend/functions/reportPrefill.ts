@@ -2,7 +2,7 @@
 import { getPrisma } from './_shared/prisma'
 import { successResponse, errorResponse, preflightResponse } from './_shared/response'
 import { toMadridISOString } from './_shared/timezone'
-import { toStringOrNull } from './_shared/sessions'
+import { compareSessionsForOrder, formatSessionLabel, toStringOrNull } from './_shared/sessions'
 
 const METHOD_NOT_ALLOWED = errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405)
 
@@ -29,68 +29,17 @@ type NormalizedSession = {
   label: string
 }
 
-const toTimestamp = (value: Date | string | null | undefined): number | null => {
-  if (!value) return null
-  const date = value instanceof Date ? value : new Date(value)
-  const time = date.getTime()
-  return Number.isFinite(time) ? time : null
-}
-
-const compareSessions = (a: RawSession, b: RawSession): number => {
-  const startA = toTimestamp(a.fecha_inicio_utc ?? null)
-  const startB = toTimestamp(b.fecha_inicio_utc ?? null)
-  if (startA !== null && startB !== null && startA !== startB) {
-    return startA - startB
-  }
-  if (startA === null && startB !== null) return 1
-  if (startA !== null && startB === null) return -1
-  const createdA = toTimestamp(a.created_at ?? null) ?? 0
-  const createdB = toTimestamp(b.created_at ?? null) ?? 0
-  if (createdA !== createdB) return createdA - createdB
-  return String(a.id ?? '').localeCompare(String(b.id ?? ''))
-}
-
-const normalizeString = (value: unknown): string | null => {
-  if (value === null || value === undefined) return null
-  const text = typeof value === 'string' ? value : String(value)
-  const trimmed = text.trim()
-  return trimmed.length ? trimmed : null
-}
-
 const normalizeKey = (value: unknown): string => {
-  if (value === null || value === undefined) return ''
-  const text = typeof value === 'string' ? value : String(value)
-  const trimmed = text.trim()
-  return trimmed.length ? trimmed.toLowerCase() : ''
-}
-
-const formatSessionLabel = (session: { id?: string; number?: string | null; nombre?: string | null; direccion?: string | null; label?: string | null }): string => {
-  const explicit = normalizeString(session.label)
-  if (explicit) return explicit
-
-  const parts: string[] = []
-  const number = normalizeString(session.number)
-  if (number) parts.push(`Sesión ${number}`)
-
-  const nombre = normalizeString(session.nombre)
-  if (nombre) parts.push(nombre)
-
-  if (!parts.length) {
-    const id = normalizeString(session.id)
-    if (id) parts.push(`Sesión ${id.slice(0, 8)}`)
-  }
-
-  const direccion = normalizeString(session.direccion)
-  const base = parts.join(' – ')
-  return `${base}${direccion ? ` (${direccion})` : ''}`.trim()
+  const normalized = toStringOrNull(value)
+  return normalized ? normalized.toLowerCase() : ''
 }
 
 const mapSession = (session: RawSession, index: number): NormalizedSession | null => {
-  const id = normalizeString(session.id)
+  const id = toStringOrNull(session.id)
   if (!id) return null
 
-  const nombre = normalizeString(session.nombre ?? session.nombre_cache)
-  const direccion = normalizeString(session.direccion)
+  const nombre = toStringOrNull(session.nombre ?? session.nombre_cache)
+  const direccion = toStringOrNull(session.direccion)
   const fecha = session.fecha_inicio_utc ? toMadridISOString(session.fecha_inicio_utc) : null
   const number = String(index + 1)
   const label = formatSessionLabel({ id, number, nombre, direccion })
@@ -150,7 +99,7 @@ export const handler = async (event: any) => {
     }
 
     const sessionsRaw: RawSession[] = Array.isArray(deal.sessions) ? deal.sessions : []
-    const sortedSessions = sessionsRaw.slice().sort(compareSessions)
+    const sortedSessions = sessionsRaw.slice().sort(compareSessionsForOrder)
     const normalizedSessions: NormalizedSession[] = []
 
     sortedSessions.forEach((session, index) => {
@@ -163,8 +112,8 @@ export const handler = async (event: any) => {
       : []
 
     const normalizedDealProducts = dealProductsRaw.map((product) => {
-      const name = normalizeString(product?.name)
-      const code = normalizeString(product?.code)
+      const name = toStringOrNull(product?.name)
+      const code = toStringOrNull(product?.code)
       return {
         name,
         code,
@@ -204,8 +153,9 @@ export const handler = async (event: any) => {
         select: { name: true, code: true, template: true },
       })
 
-      catalogProducts.forEach((product) => {
-        const template = normalizeString(product?.template)
+      catalogProducts.forEach(
+        (product: { name: string | null | undefined; code: string | null | undefined; template: string | null | undefined }) => {
+        const template = toStringOrNull(product?.template)
         const nameKey = normalizeKey(product?.name)
         const codeKey = normalizeKey(product?.code)
 
@@ -226,7 +176,7 @@ export const handler = async (event: any) => {
         if (!key) continue
         if (!templatesByKey.has(key)) continue
         const candidate = templatesByKey.get(key) ?? null
-        const normalized = normalizeString(candidate)
+        const normalized = toStringOrNull(candidate)
         if (normalized) {
           template = normalized
           break
@@ -240,9 +190,9 @@ export const handler = async (event: any) => {
       }
     })
 
-    const organizationName = normalizeString(deal.organization?.name)
-    const contactFirst = normalizeString(deal.person?.first_name)
-    const contactLast = normalizeString(deal.person?.last_name)
+    const organizationName = toStringOrNull(deal.organization?.name)
+    const contactFirst = toStringOrNull(deal.person?.first_name)
+    const contactLast = toStringOrNull(deal.person?.last_name)
     const contacto = [contactFirst, contactLast].filter(Boolean).join(' ').trim()
 
     return successResponse({

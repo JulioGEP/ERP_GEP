@@ -12,6 +12,7 @@ import {
   resolveSessionNumber,
   toStringOrNull,
 } from './_shared/sessions';
+import { normalizeDriveUrl } from './_shared/drive';
 import { uploadSessionCertificateToGoogleDrive } from './_shared/googleDrive';
 import { nowInMadridDate } from './_shared/timezone';
 
@@ -41,12 +42,6 @@ function normalizeIncomingFileName(name: string): string {
 
 function toBufferFromBase64(contentBase64: string): Buffer {
   return Buffer.from(String(contentBase64), 'base64');
-}
-
-function normalizeDriveUrl(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
 }
 
 export const handler = async (event: any) => {
