@@ -22,6 +22,10 @@ const KEY_TRANSPORTE    = "30dccde5faa7c09a3b380f8597d4f9acfe403877";
 const KEY_PO            = "9cf8ccb7ef293494974f98ddbc72ec726486310e";
 const KEY_TIPO_SERVICIO = "1d78d202448ee549a86e0881ec06f3ff7842c5ea";
 const KEY_MAIL_INVOICE  = "8b0652b56fd17d4547149f1ae26b1b74b527eaf0";
+const KEY_A_FECHA       = "98f072a788090ac2ae52017daaf9618c3a189033";
+const KEY_W_ID_VARIATION = "478b2a7f79323212032ab2344aff193c4bf77523";
+const KEY_PRESU_HOLDED  = "4118257ffc3bad107769f69d05e5bd1d7415cadd";
+const KEY_MODO_RESERVA  = "c6eabce7c04f864646aa72c944f875fd71cdf178";
 
 // HORAS en la **línea del deal** (si existe ese custom en tu instancia)
 const KEY_PRODUCT_HOURS_IN_LINE = "38f11c8876ecde803a027fbf3c9041fda2ae7eb7";
@@ -41,6 +45,72 @@ function toMoney(val: any, def = 0): number {
   if (val === null || val === undefined || val === "") return def;
   const n = Number(typeof val === "string" ? val.replace(",", ".") : val);
   return Number.isFinite(n) ? n : def;
+}
+
+function toNullableString(val: any): string | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (typeof val === "number" || typeof val === "boolean") {
+    return String(val);
+  }
+  if (typeof val === "object") {
+    const candidates = [
+      (val as any).name,
+      (val as any).label,
+      (val as any).value,
+      (val as any).id,
+      (val as any).email,
+    ];
+    for (const candidate of candidates) {
+      if (candidate === val) continue;
+      const resolved = toNullableString(candidate);
+      if (resolved) return resolved;
+    }
+  }
+  return null;
+}
+
+function toBooleanOrNull(val: any): boolean | null {
+  if (val === null || val === undefined || val === "") return null;
+  if (typeof val === "boolean") return val;
+  if (typeof val === "number") {
+    if (!Number.isFinite(val)) return null;
+    if (val === 1) return true;
+    if (val === 0) return false;
+  }
+  if (typeof val === "string") {
+    const normalized = val.trim().toLowerCase();
+    if (!normalized.length) return null;
+    if (["1", "true", "si", "sí", "yes", "y"].includes(normalized)) return true;
+    if (["0", "false", "no", "n"].includes(normalized)) return false;
+  }
+  if (typeof val === "object") {
+    const candidates = [(val as any).value, (val as any).id, (val as any).label, (val as any).name];
+    for (const candidate of candidates) {
+      if (candidate === val) continue;
+      const resolved = toBooleanOrNull(candidate);
+      if (resolved !== null) return resolved;
+    }
+  }
+  return null;
+}
+
+function toDateOrNull(val: any): Date | null {
+  if (val === null || val === undefined || val === "") return null;
+  if (val instanceof Date && !Number.isNaN(val.getTime())) {
+    return val;
+  }
+  if (typeof val === "number") {
+    const dateFromNumber = new Date(val);
+    return Number.isNaN(dateFromNumber.getTime()) ? null : dateFromNumber;
+  }
+  const str = typeof val === "string" ? val.trim() : String(val);
+  if (!str.length) return null;
+  const parsed = new Date(str);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function pickFirstEmail(val: any): string | null {
@@ -124,6 +194,7 @@ export async function resolveDealCustomLabels(deal: any) {
   const fHotel  = findFieldDef(dealFields, KEY_HOTEL);
   const fTransporte = findFieldDef(dealFields, KEY_TRANSPORTE);
   const fTipoServicio = findFieldDef(dealFields, KEY_TIPO_SERVICIO);
+  const fModoReserva = findFieldDef(dealFields, KEY_MODO_RESERVA);
 
   // Dirección (no es options): prioriza *_formatted_address
   const trainingAddress = resolveAddressFromDeal(deal, KEY_TRAINING_ADDRESS_BASE);
@@ -157,6 +228,20 @@ export async function resolveDealCustomLabels(deal: any) {
       ? null
       : String(mailInvoiceRaw).trim() || null;
 
+  const ownerName =
+    toNullableString(deal?.owner_name) ??
+    toNullableString(deal?.user_id) ??
+    toNullableString(deal?.owner_id);
+
+  const aFecha = toDateOrNull(deal?.[KEY_A_FECHA]);
+  const wIdVariation = toNullableString(deal?.[KEY_W_ID_VARIATION]);
+  const presuHolded = toBooleanOrNull(deal?.[KEY_PRESU_HOLDED]);
+
+  const modoReservaRaw = fModoReserva ? deal?.[fModoReserva.key] : deal?.[KEY_MODO_RESERVA];
+  const modoReservaLabel = fModoReserva
+    ? optionLabelOf(fModoReserva, modoReservaRaw) ?? toNullableString(modoReservaRaw)
+    : toNullableString(modoReservaRaw);
+
   return {
     trainingAddress,
     sedeLabel,
@@ -167,6 +252,11 @@ export async function resolveDealCustomLabels(deal: any) {
     poValue,
     tipoServicioLabel,
     mailInvoice,
+    ownerName,
+    aFecha,
+    wIdVariation,
+    presuHolded,
+    modoReserva: modoReservaLabel,
   };
 }
 
@@ -203,6 +293,11 @@ export async function mapAndUpsertDealTree({
     poValue,
     tipoServicioLabel,
     mailInvoice,
+    ownerName,
+    aFecha,
+    wIdVariation,
+    presuHolded,
+    modoReserva,
   } =
     await resolveDealCustomLabels(deal);
 
@@ -268,6 +363,11 @@ export async function mapAndUpsertDealTree({
       po: poValue ?? null,
       tipo_servicio: tipoServicioLabel ?? null,
       mail_invoice: mailInvoice ?? null,
+      comercial: ownerName ?? null,
+      a_fecha: aFecha ?? null,
+      w_id_variation: wIdVariation ?? null,
+      presu_holded: presuHolded,
+      modo_reserva: modoReserva ?? null,
       org_id: orgIdForDeal,
       person_id: dbPersonId,
     },
@@ -283,6 +383,11 @@ export async function mapAndUpsertDealTree({
       po: poValue ?? null,
       tipo_servicio: tipoServicioLabel ?? null,
       mail_invoice: mailInvoice ?? null,
+      comercial: ownerName ?? null,
+      a_fecha: aFecha ?? null,
+      w_id_variation: wIdVariation ?? null,
+      presu_holded: presuHolded,
+      modo_reserva: modoReserva ?? null,
       org_id: orgIdForDeal,
       person_id: dbPersonId,
     },

@@ -200,7 +200,7 @@ export const handler = async (event: any) => {
         id: deal.deal_id,
         cliente: organizationName || '',
         contacto: contacto || '',
-        comercial: '',
+        comercial: toStringOrNull(deal.comercial) || '',
         sessions: normalizedSessions,
         products: mappedDealProducts,
       },

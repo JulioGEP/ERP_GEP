@@ -86,6 +86,12 @@ export interface DealSummary {
   tipo_servicio?: string | null;
   mail_invoice?: string | null;
 
+  comercial?: string | null;
+  a_fecha?: string | null;
+  w_id_variation?: string | null;
+  presu_holded?: boolean | null;
+  modo_reserva?: string | null;
+
   hours?: number | null;    // editable en ERP (no autocalculado)
 
   organization?: DealOrganization | null;
@@ -112,6 +118,12 @@ export interface DealDetail {
   po?: string | null;
   tipo_servicio?: string | null;
   mail_invoice?: string | null;
+
+  comercial?: string | null;
+  a_fecha?: string | null;
+  w_id_variation?: string | null;
+  presu_holded?: boolean | null;
+  modo_reserva?: string | null;
 
   hours?: number | null;    // editable en ERP
 
@@ -153,6 +165,12 @@ export interface DealDetailViewModel {
   caesLabel: string | null;
   fundaeLabel: string | null;
   hotelLabel: string | null;
+
+  comercial?: string | null;
+  aFecha?: string | null;
+  wIdVariation?: string | null;
+  presuHolded?: boolean | null;
+  modoReserva?: string | null;
 
   // 'extras' se deja por compatibilidad si la vista lo usaba (no llega ya del backend)
   extras?: unknown;

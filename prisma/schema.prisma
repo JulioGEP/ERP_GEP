@@ -53,6 +53,11 @@ model deals {
   po               String?                @db.VarChar(191)
   tipo_servicio    String?                @db.VarChar(50)
   mail_invoice     String?                @db.VarChar(255)
+  comercial        String?                @db.VarChar(255)
+  a_fecha          DateTime?              @db.Timestamptz(6)
+  w_id_variation   String?                @db.VarChar(255)
+  presu_holded     Boolean?
+  modo_reserva     String?                @db.VarChar(255)
   comments         comments[]
   deal_files       deal_files[]
   deal_notes       deal_notes[]
