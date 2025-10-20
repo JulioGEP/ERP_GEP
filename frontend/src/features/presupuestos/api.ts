@@ -221,36 +221,6 @@ function toStringValue(value: unknown): string | null {
   return str.length ? str : null;
 }
 
-function toBooleanValue(value: unknown): boolean | null {
-  if (value === null || value === undefined || value === "") return null;
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) return null;
-    if (value === 1) return true;
-    if (value === 0) return false;
-  }
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized.length) return null;
-    if (["1", "true", "si", "sí", "yes", "y"].includes(normalized)) return true;
-    if (["0", "false", "no", "n"].includes(normalized)) return false;
-  }
-  if (typeof value === "object") {
-    const candidates = [
-      (value as any)?.value,
-      (value as any)?.id,
-      (value as any)?.label,
-      (value as any)?.name,
-    ];
-    for (const candidate of candidates) {
-      if (candidate === value) continue;
-      const resolved = toBooleanValue(candidate);
-      if (resolved !== null) return resolved;
-    }
-  }
-  return null;
-}
-
 function isHttpUrl(value: unknown): boolean {
   if (value === null || value === undefined) return false;
   try {
@@ -411,7 +381,7 @@ function normalizeDealSummary(row: Json): DealSummary {
     comercial: toStringValue(row?.comercial) ?? null,
     a_fecha: toStringValue(row?.a_fecha) ?? null,
     w_id_variation: toStringValue(row?.w_id_variation) ?? null,
-    presu_holded: toBooleanValue(row?.presu_holded),
+    presu_holded: toStringValue(row?.presu_holded) ?? null,
     modo_reserva: toStringValue(row?.modo_reserva) ?? null,
 
     hours: toNumber(row?.hours) ?? null,
@@ -2066,7 +2036,10 @@ export function buildDealDetailViewModel(
     detail?.w_id_variation ?? null,
     summary?.w_id_variation ?? null
   );
-  const presuHolded = detail?.presu_holded ?? (summary?.presu_holded ?? null);
+  const presuHolded = pickNonEmptyString(
+    detail?.presu_holded ?? null,
+    summary?.presu_holded ?? null
+  );
   const modoReserva = pickNonEmptyString(detail?.modo_reserva ?? null, summary?.modo_reserva ?? null);
 
   return {
