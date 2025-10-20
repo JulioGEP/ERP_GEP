@@ -576,7 +576,7 @@ export const handler = async (event: any) => {
 
       const commentsTableExistsResult = await prisma.$queryRaw<
         Array<{ table_ref: string | null }>
-      >`SELECT to_regclass('public.comments') AS table_ref`;
+      >`SELECT to_regclass('public.comments')::text AS table_ref`;
 
       const commentsTableExists = Array.isArray(commentsTableExistsResult)
         ? commentsTableExistsResult.some((row) => Boolean(row?.table_ref))
