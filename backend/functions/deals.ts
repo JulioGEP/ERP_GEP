@@ -722,7 +722,6 @@ export const handler = async (event: any) => {
           hotel_label: true,
           tipo_servicio: true,
           mail_invoice: true,
-          hours: true,
           transporte: true,
           po: true,
           org_id: true,
