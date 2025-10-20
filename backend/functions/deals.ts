@@ -26,6 +26,46 @@ const EDITABLE_FIELDS = new Set([
   "hotel_label",
 ]);
 
+type OptionalDealColumn = "service_label";
+
+const OPTIONAL_DEAL_COLUMNS: Record<OptionalDealColumn, { table: string; column: string }> = {
+  service_label: { table: "deals", column: "service_label" },
+};
+
+const optionalDealColumnAvailability: Partial<Record<OptionalDealColumn, boolean>> = {};
+
+async function isOptionalDealColumnAvailable(
+  prisma: ReturnType<typeof getPrisma>,
+  column: OptionalDealColumn
+): Promise<boolean> {
+  if (optionalDealColumnAvailability[column] !== undefined) {
+    return optionalDealColumnAvailability[column] as boolean;
+  }
+
+  const { table, column: columnName } = OPTIONAL_DEAL_COLUMNS[column];
+  try {
+    const result = await prisma.$queryRaw<{ exists: boolean }[]>
+      `SELECT EXISTS (
+         SELECT 1
+         FROM information_schema.columns
+         WHERE table_schema = current_schema()
+           AND table_name = ${table}
+           AND column_name = ${columnName}
+       ) AS exists`;
+
+    const exists = Boolean(result?.[0]?.exists);
+    optionalDealColumnAvailability[column] = exists;
+    return exists;
+  } catch (err) {
+    console.warn("[deals] Error comprobando columna opcional", {
+      column,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    optionalDealColumnAvailability[column] = false;
+    return false;
+  }
+}
+
 /* -------------------- Helpers -------------------- */
 function parsePathId(path: any): string | null {
   if (!path) return null;
@@ -621,6 +661,16 @@ export const handler = async (event: any) => {
         }
       }
 
+      if ("service_label" in patch) {
+        const serviceLabelAvailable = await isOptionalDealColumnAvailable(
+          prisma,
+          "service_label"
+        );
+        if (!serviceLabelAvailable) {
+          delete patch.service_label;
+        }
+      }
+
       // Normaliza alias de dirección de formación al campo real de BD
       if ("training_address_label" in patch && patch.training_address_label != null) {
         patch.training_address = patch.training_address_label;
@@ -709,13 +759,18 @@ export const handler = async (event: any) => {
     /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
     if (method === "GET" && event.queryStringParameters?.noSessions === "true") {
       // listamos deals + organización/persona + productos (sin sessions)
+      const serviceLabelAvailable = await isOptionalDealColumnAvailable(
+        prisma,
+        "service_label"
+      );
+
       const rowsRaw = await prisma.deals.findMany({
         select: {
           deal_id: true,
           title: true,
           pipeline_id: true,
           sede_label: true,
-          service_label: true,
+          ...(serviceLabelAvailable ? { service_label: true } : {}),
           training_address: true,
           caes_label: true,
           fundae_label: true,
@@ -745,7 +800,7 @@ export const handler = async (event: any) => {
               quantity: true,
               price: true,
               type: true,
-              hours: true,       // hours existe en deal_products
+              hours: true, // hours existe en deal_products
               created_at: true,
             },
             orderBy: { created_at: "asc" },
