@@ -10,8 +10,7 @@ import {
   Alert,
   Spinner,
   Table,
-  Accordion,
-  Badge
+  Accordion
 } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -83,13 +82,12 @@ function mergeDealDetailData(current: DealDetail | undefined, next: DealDetail):
 
 const EMPTY_DOCUMENTS: DealDocument[] = [];
 
-export interface BudgetDetailModalProps {
+interface Props {
   dealId: string | null;
   summary?: DealSummary | null;
   onClose: () => void;
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
-  initialSections?: string[];
 }
 
 function useAuth() {
@@ -183,8 +181,7 @@ export function BudgetDetailModal({
   onClose,
   onShowProductComment,
   onNotify,
-  initialSections,
-}: BudgetDetailModalProps) {
+}: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 
@@ -264,21 +261,7 @@ export function BudgetDetailModal({
   const [saving, setSaving] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
-  const normalizedInitialSections = useMemo(() => {
-    if (!Array.isArray(initialSections)) return [] as string[];
-    const seen = new Set<string>();
-    const sections: string[] = [];
-    for (const entry of initialSections) {
-      if (typeof entry !== 'string') continue;
-      const normalized = entry.trim();
-      if (!normalized.length || seen.has(normalized)) continue;
-      seen.add(normalized);
-      sections.push(normalized);
-    }
-    return sections;
-  }, [initialSections]);
-
-  const [openSections, setOpenSections] = useState<string[]>(normalizedInitialSections);
+  const [openSections, setOpenSections] = useState<string[]>([]);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [creatingNote, setCreatingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -492,10 +475,6 @@ export function BudgetDetailModal({
     setShowConfirm(false);
   }, [dealId]);
 
-  useEffect(() => {
-    setOpenSections(normalizedInitialSections);
-  }, [normalizedInitialSections, dealId]);
-
   const initialEditable = useMemo(() => {
     const source = deal ?? summary;
     if (!source) return null;
@@ -583,15 +562,6 @@ export function BudgetDetailModal({
   if (!dealId) return null;
 
   const presupuestoDisplay = detailView.dealId;
-  const pipelineLabelCandidates = [
-    detailView.pipelineLabel,
-    summary?.pipeline_label ?? null,
-    summary?.pipeline_id ?? null,
-    deal?.pipeline_label ?? null,
-  ];
-  const pipelineDisplay = pipelineLabelCandidates
-    .map((value) => (typeof value === 'string' ? value.trim() : ''))
-    .find((value) => value.length) || null;
   const titleDisplay = detailView.title ?? '';
   const organizationDisplay = detailView.organizationName ?? '';
   const clientDisplay = detailView.clientName ?? '';
@@ -960,13 +930,8 @@ export function BudgetDetailModal({
             {truncatedModalTitle}
           </div>
           {presupuestoDisplay ? (
-            <div className="erp-modal-subtitle text-truncate d-flex align-items-center gap-2">
-              <span>Presupuesto {presupuestoDisplay}</span>
-              {pipelineDisplay ? (
-                <Badge bg="light" text="dark" className="text-uppercase small fw-semibold">
-                  {pipelineDisplay}
-                </Badge>
-              ) : null}
+            <div className="erp-modal-subtitle text-truncate">
+              Presupuesto {presupuestoDisplay}
             </div>
           ) : null}
         </Modal.Title>
