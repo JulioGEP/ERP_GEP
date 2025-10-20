@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
 import { fetchDealsWithoutSessions } from './api'; // ← usar API común
-import { formatSedeLabel } from './formatSedeLabel';
 import { useDataTable } from '../../hooks/useDataTable';
 import { SortableHeader } from '../../components/table/SortableHeader';
 import { DataTablePagination } from '../../components/table/DataTablePagination';
@@ -75,8 +74,8 @@ function getTitleLabel(budget: DealSummary): string {
   return safeTrim(budget.title ?? '') ?? '—';
 }
 
-function getSedeLabel(budget: DealSummary): string {
-  return safeTrim(formatSedeLabel(budget.sede_label) ?? '') ?? '—';
+function getNegocioLabel(budget: DealSummary): string {
+  return safeTrim(budget.pipeline_id ?? budget.pipeline_label ?? '') ?? '—';
 }
 
 function getBudgetId(budget: DealSummary): string | null {
@@ -103,7 +102,10 @@ function normalizeRowMinimal(row: any) {
     dealNumericId: Number.isFinite(Number(dealId)) ? Number(dealId) : null,
     title: toStringValue(row?.title ?? row?.deal_title) ?? '—',
     sede_label: toStringValue(row?.sede_label) ?? null,
-    pipeline_id: toStringValue(row?.pipeline_id) ?? null,
+    pipeline_label:
+      toStringValue(row?.pipeline_label) ?? toStringValue(row?.deal_pipeline_label) ?? null,
+    pipeline_id:
+      toStringValue(row?.pipeline_id) ?? toStringValue(row?.deal_pipeline_id) ?? null,
     training_address: toStringValue(row?.training_address) ?? null, // schema vigente
     hours: typeof row?.hours === 'number' ? row.hours : Number(row?.hours) || null,
     caes_label: toStringValue(row?.caes_label) ?? null,
@@ -155,8 +157,8 @@ export function BudgetTable({
         return getTitleLabel(budget);
       case 'formacion':
         return getProductNames(budget).join(', ');
-      case 'sede':
-        return getSedeLabel(budget);
+      case 'negocio':
+        return getNegocioLabel(budget);
       default:
         return null;
     }
@@ -335,8 +337,8 @@ export function BudgetTable({
               onSort={requestSort}
             />
             <SortableHeader
-              columnKey="sede"
-              label="Sede"
+              columnKey="negocio"
+              label="Negocio"
               sortState={sortState}
               onSort={requestSort}
               style={{ width: showDeleteAction ? 120 : 140 }}
@@ -358,7 +360,7 @@ export function BudgetTable({
             const presupuestoTitle = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
             const organizationLabel = getOrganizationLabel(budget);
             const titleLabel = getTitleLabel(budget);
-            const sedeLabel = getSedeLabel(budget);
+            const negocioLabel = getNegocioLabel(budget);
 
             const rowKey = id ?? `${organizationLabel}-${titleLabel}-${index}`;
 
@@ -370,7 +372,7 @@ export function BudgetTable({
                 <td>{organizationLabel}</td>
                 <td title={budget.title ?? ''}>{titleLabel}</td>
                 <td title={names.join(', ')}>{productLabel}</td>
-                <td>{sedeLabel}</td>
+                <td>{negocioLabel}</td>
                 {showDeleteAction && (
                   <td className="text-end">
                     <button
