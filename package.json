@@ -2,6 +2,9 @@
   "name": "erp_gep_monorepo",
   "private": true,
   "version": "1.0.7",
+  "workspaces": [
+    "frontend"
+  ],
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=10.8.0"
@@ -9,7 +12,8 @@
   "scripts": {
     "clean": "rm -rf node_modules .prisma",
     "build": "npm run build:frontend",
-    "build:frontend": "npm install --prefix frontend && npm run build --prefix frontend",
+    "prebuild:frontend": "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ]; then npm install --prefer-offline --include-workspace-root --workspaces; fi",
+    "build:frontend": "npm run build --workspace frontend",
     "build:functions": "echo \"Functions bundled by Netlify\"",
     "generate": "prisma generate --schema prisma/schema.prisma",
     "postinstall": "prisma generate --schema prisma/schema.prisma",
