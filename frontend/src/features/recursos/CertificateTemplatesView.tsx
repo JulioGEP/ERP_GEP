@@ -683,25 +683,22 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                       <Col xs={12} lg={6} className="d-flex">
                         <Form.Group controlId="template-theory" className="d-grid gap-3 flex-grow-1">
                           <Form.Label>Contenido teórico</Form.Label>
-                          <div className="d-grid gap-3 flex-grow-1">
+                          <div className="d-grid gap-2 flex-grow-1">
                             {theoryPoints.length > 0 ? (
                               theoryPoints.map((point, index) => (
-                                <div key={`theory-${index}`} className="d-flex flex-column flex-md-row gap-2">
+                                <div key={`theory-${index}`} className="input-group">
                                   <Form.Control
-                                    as="textarea"
-                                    rows={2}
+                                    type="text"
                                     value={point}
                                     onChange={(event) =>
                                       handlePointChange('theoryPoints', index, event.target.value)
                                     }
                                     placeholder={`Punto teórico ${index + 1}`}
-                                    className="certificate-template-point-input"
                                   />
                                   <Button
                                     variant="outline-danger"
                                     type="button"
                                     onClick={() => handleRemovePoint('theoryPoints', index)}
-                                    className="flex-shrink-0"
                                   >
                                     Eliminar
                                   </Button>
@@ -712,41 +709,36 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                                 No hay puntos teóricos. Añade un punto para comenzar.
                               </p>
                             )}
-                            <div>
-                              <Button
-                                variant="outline-primary"
-                                type="button"
-                                onClick={() => handleAddPoint('theoryPoints')}
-                                className="w-100 w-md-auto"
-                              >
-                                Añadir punto teórico
-                              </Button>
-                            </div>
+                            <Button
+                              variant="outline-primary"
+                              type="button"
+                              onClick={() => handleAddPoint('theoryPoints')}
+                              className="align-self-start"
+                            >
+                              Añadir punto teórico
+                            </Button>
                           </div>
                         </Form.Group>
                       </Col>
                       <Col xs={12} lg={6} className="d-flex">
                         <Form.Group controlId="template-practice" className="d-grid gap-3 flex-grow-1">
                           <Form.Label>Contenido práctico</Form.Label>
-                          <div className="d-grid gap-3 flex-grow-1">
+                          <div className="d-grid gap-2 flex-grow-1">
                             {practicePoints.length > 0 ? (
                               practicePoints.map((point, index) => (
-                                <div key={`practice-${index}`} className="d-flex flex-column flex-md-row gap-2">
+                                <div key={`practice-${index}`} className="input-group">
                                   <Form.Control
-                                    as="textarea"
-                                    rows={2}
+                                    type="text"
                                     value={point}
                                     onChange={(event) =>
                                       handlePointChange('practicePoints', index, event.target.value)
                                     }
                                     placeholder={`Punto práctico ${index + 1}`}
-                                    className="certificate-template-point-input"
                                   />
                                   <Button
                                     variant="outline-danger"
                                     type="button"
                                     onClick={() => handleRemovePoint('practicePoints', index)}
-                                    className="flex-shrink-0"
                                   >
                                     Eliminar
                                   </Button>
@@ -757,16 +749,14 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                                 No hay puntos prácticos. Añade un punto para comenzar.
                               </p>
                             )}
-                            <div>
-                              <Button
-                                variant="outline-primary"
-                                type="button"
-                                onClick={() => handleAddPoint('practicePoints')}
-                                className="w-100 w-md-auto"
-                              >
-                                Añadir punto práctico
-                              </Button>
-                            </div>
+                            <Button
+                              variant="outline-primary"
+                              type="button"
+                              onClick={() => handleAddPoint('practicePoints')}
+                              className="align-self-start"
+                            >
+                              Añadir punto práctico
+                            </Button>
                           </div>
                         </Form.Group>
                       </Col>
