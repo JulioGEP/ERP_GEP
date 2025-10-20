@@ -4,7 +4,14 @@
 
 [build.environment]
   NODE_VERSION = "22"
-  NPM_FLAGS = "--no-audit --fund=false --progress=false --prefer-offline"
+  # Allow npm to keep reporting succinct logs but give it more leeway to
+  # download Netlify plugins from remote tarballs during CI. The previous
+  # configuration forced a "prefer-offline" strategy which could time out
+  # when Netlify needed to fetch private packages (see deploy failure for
+  # task #458). We keep the useful flags while increasing the fetch timeout
+  # and retry window so that transient network hiccups do not break the
+  # build.
+  NPM_FLAGS = "--no-audit --fund=false --progress=false --fetch-timeout=600000 --fetch-retries=5 --fetch-retry-maxtimeout=600000"
 
 [functions]
   directory = "backend/functions"
