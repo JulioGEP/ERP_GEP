@@ -97,6 +97,32 @@ body {
   color: #ffffff;
 }
 
+.training-points-list .input-group {
+  background-color: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.training-points-list .input-group .form-control {
+  border: none;
+  box-shadow: none;
+}
+
+.training-points-list .input-group .form-control:focus {
+  box-shadow: none;
+}
+
+.training-points-list .input-group .btn {
+  border: none;
+  border-left: 1px solid #dee2e6;
+  border-radius: 0;
+}
+
+.training-points-list .input-group .btn:last-child {
+  border-radius: 0 0.75rem 0.75rem 0;
+}
+
 .modal-content {
   border-radius: 18px;
 }
