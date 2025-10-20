@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import type { ChangeEvent, DragEvent, ReactNode } from 'react';
+import type { ChangeEvent, DragEvent } from 'react';
 import {
   Modal,
   Button,
@@ -32,12 +32,7 @@ import { normalizeImportDealResult } from './importDealUtils';
 import { formatSedeLabel } from './formatSedeLabel';
 import { SessionsAccordion } from './sessions/SessionsAccordion';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
-import type {
-  DealDetail,
-  DealDetailViewModel,
-  DealDocument,
-  DealSummary,
-} from '../../types/deal';
+import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
 import { buildFieldTooltip } from '../../utils/fieldTooltip';
 
 function normalizeId(value: unknown): string {
@@ -47,33 +42,6 @@ function normalizeId(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();
 }
-
-type PrimaryFieldKey = 'sede_label' | 'service_label';
-
-type DealPrimaryFieldRenderParams = {
-  value: string;
-  formattedValue: string;
-  onChange: (nextValue: string) => void;
-  options: string[];
-  helpText?: string;
-  inputId: string;
-  tooltip: string;
-};
-
-export interface DealPrimaryFieldConfig {
-  fieldKey: PrimaryFieldKey;
-  label: string;
-  formatValue?: (value: string | null | undefined) => string | null;
-  parseOptions?: (ctx: { deal: DealDetail | null; summary: DealSummary | null }) => string[];
-  emptyOptionsHelp?: string;
-  renderInput?: (params: DealPrimaryFieldRenderParams) => ReactNode;
-}
-
-const DEFAULT_PRIMARY_FIELD_CONFIG: DealPrimaryFieldConfig = {
-  fieldKey: 'sede_label',
-  label: 'Sede',
-  formatValue: formatSedeLabel,
-};
 
 function mergeById<T extends { id?: string | null }>(
   primary: readonly T[] | null | undefined,
@@ -114,17 +82,13 @@ function mergeDealDetailData(current: DealDetail | undefined, next: DealDetail):
 
 const EMPTY_DOCUMENTS: DealDocument[] = [];
 
-interface BaseProps {
+interface Props {
   dealId: string | null;
   summary?: DealSummary | null;
   onClose: () => void;
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
-  fieldConfig?: DealPrimaryFieldConfig;
-  initialSections?: string[];
 }
-
-export type BudgetDetailModalProps = BaseProps;
 
 function useAuth() {
   // Ajusta a tu sistema real de auth
@@ -135,11 +99,12 @@ function useAuth() {
 }
 
 type EditableDealForm = {
+  sede_label: string;
   training_address: string; // <- schema vigente
   caes_label: string;
   fundae_label: string;
   hotel_label: string;
-} & Partial<Record<PrimaryFieldKey, string>>;
+};
 
 type DealNoteView = DealDetailViewModel['notes'][number];
 
@@ -216,33 +181,12 @@ export function BudgetDetailModal({
   onClose,
   onShowProductComment,
   onNotify,
-  fieldConfig = DEFAULT_PRIMARY_FIELD_CONFIG,
-  initialSections,
-}: BudgetDetailModalProps) {
+}: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 
-  const primaryFieldKey = fieldConfig.fieldKey;
-  const primaryFieldLabel = fieldConfig.label;
-  const formatPrimaryValue = useMemo(
-    () =>
-      fieldConfig.formatValue
-        ? fieldConfig.formatValue
-        : (value: string | null | undefined) => {
-            if (value == null) return null;
-            const trimmed = value.trim();
-            return trimmed.length ? trimmed : null;
-          },
-    [fieldConfig.formatValue],
-  );
-
   const normalizedDealId =
     typeof dealId === 'string' ? dealId.trim() : dealId != null ? String(dealId) : '';
-
-  const primaryFieldInputId = useMemo(
-    () => `deal-${primaryFieldKey}-input-${normalizedDealId || 'new'}`,
-    [primaryFieldKey, normalizedDealId],
-  );
 
   const detailQueryKey = ['deal', normalizedDealId] as const;
 
@@ -258,26 +202,6 @@ export function BudgetDetailModal({
 
   const deal = detailQuery.data ?? null;
   const isLoading = detailQuery.isLoading;
-
-  const primaryOptions = useMemo(() => {
-    if (!fieldConfig.parseOptions) return [] as string[];
-    const raw = fieldConfig.parseOptions({ deal, summary: summary ?? null });
-    if (!Array.isArray(raw)) return [] as string[];
-
-    const seen = new Set<string>();
-    const normalized: string[] = [];
-    raw.forEach((option) => {
-      if (typeof option !== 'string') return;
-      const trimmed = option.trim();
-      if (!trimmed.length) return;
-      const key = trimmed.toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      normalized.push(trimmed);
-    });
-
-    return normalized;
-  }, [deal, fieldConfig, summary]);
 
   const refreshMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
@@ -332,20 +256,12 @@ export function BudgetDetailModal({
     [deal, summary]
   );
 
-  const initialSectionsKey = Array.isArray(initialSections)
-    ? initialSections.join('|')
-    : '';
-  const normalizedInitialSections = useMemo(
-    () => (Array.isArray(initialSections) ? [...initialSections] : []),
-    [initialSectionsKey],
-  );
-
   const [form, setForm] = useState<EditableDealForm | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
-  const [openSections, setOpenSections] = useState<string[]>(normalizedInitialSections);
+  const [openSections, setOpenSections] = useState<string[]>([]);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [creatingNote, setCreatingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -370,10 +286,6 @@ export function BudgetDetailModal({
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    setOpenSections(normalizedInitialSections);
-  }, [normalizedDealId, normalizedInitialSections]);
 
   const getDocumentDisplayName = (doc: DealDocument | null | undefined): string => {
     if (!doc) return 'Documento';
@@ -538,28 +450,26 @@ export function BudgetDetailModal({
   // Inicializa solo los campos editables (schema con training_address)
   useEffect(() => {
     if (deal) {
-      const primaryValue = (deal?.[primaryFieldKey] ?? '') as string;
       setForm({
-        [primaryFieldKey]: primaryValue,
-        training_address: deal.training_address ?? '',
+        sede_label: deal.sede_label ?? '',
+        training_address: deal.training_address ?? '', // <- aquí
         caes_label: deal.caes_label ?? '',
         fundae_label: deal.fundae_label ?? '',
-        hotel_label: deal.hotel_label ?? '',
+        hotel_label: deal.hotel_label ?? ''
       });
     } else if (summary) {
-      const primaryValue = (summary?.[primaryFieldKey] ?? '') as string;
       setForm({
-        [primaryFieldKey]: primaryValue,
-        training_address: summary.training_address ?? '',
+        sede_label: summary.sede_label ?? '',
+        training_address: summary.training_address ?? '', // <- aquí
         caes_label: summary.caes_label ?? '',
         fundae_label: summary.fundae_label ?? '',
-        hotel_label: summary.hotel_label ?? '',
+        hotel_label: summary.hotel_label ?? ''
       });
     } else {
       setForm(null);
     }
     setShowConfirm(false);
-  }, [deal, summary, primaryFieldKey]);
+  }, [deal, summary]);
 
   useEffect(() => {
     setShowConfirm(false);
@@ -568,15 +478,14 @@ export function BudgetDetailModal({
   const initialEditable = useMemo(() => {
     const source = deal ?? summary;
     if (!source) return null;
-    const primaryValue = (source?.[primaryFieldKey] ?? '') as string;
     return {
-      [primaryFieldKey]: primaryValue,
-      training_address: source.training_address ?? '',
+      sede_label: source.sede_label ?? '',
+      training_address: source.training_address ?? '', // <- aquí
       caes_label: source.caes_label ?? '',
       fundae_label: source.fundae_label ?? '',
-      hotel_label: source.hotel_label ?? '',
-    } as EditableDealForm;
-  }, [deal, summary, primaryFieldKey]);
+      hotel_label: source.hotel_label ?? ''
+    };
+  }, [deal, summary]);
 
   const detailProducts = detailView.products;
   const detailNotes = detailView.notes;
@@ -604,17 +513,11 @@ export function BudgetDetailModal({
       ? form.training_address
       : deal?.training_address ?? summary?.training_address ?? null;
 
-  const rawPrimaryFieldValue = form?.[primaryFieldKey];
-  const primaryFieldValue =
-    typeof rawPrimaryFieldValue === 'string' ? rawPrimaryFieldValue : '';
-  const detailPrimaryValue =
-    primaryFieldKey === 'sede_label' ? detailView.sedeLabel : detailView.serviceLabel;
   const rawDealSedeLabel =
-    primaryFieldValue.trim().length ? primaryFieldValue : detailPrimaryValue ?? null;
-  const dealSedeLabel = formatPrimaryValue(rawDealSedeLabel);
-  const formattedPrimaryFieldValue = formatPrimaryValue(primaryFieldValue) ?? '';
-  const primaryFieldTooltip = buildFieldTooltip(primaryFieldValue);
-  const primaryFieldHelp = primaryOptions.length ? undefined : fieldConfig.emptyOptionsHelp;
+    form?.sede_label?.trim()?.length
+      ? form.sede_label
+      : detailView.sedeLabel ?? null;
+  const dealSedeLabel = formatSedeLabel(rawDealSedeLabel);
 
   const trainingProducts = useMemo(
     () =>
@@ -877,11 +780,8 @@ export function BudgetDetailModal({
       return trimmed.length ? trimmed : null;
     };
 
-    if (
-      normalizeString(form?.[primaryFieldKey]) !==
-      normalizeString(initialEditable?.[primaryFieldKey])
-    ) {
-      patch[primaryFieldKey] = toNullableString(form?.[primaryFieldKey]);
+    if (normalizeString(form?.sede_label) !== normalizeString(initialEditable?.sede_label)) {
+      patch.sede_label = toNullableString(form?.sede_label);
     }
     if (normalizeString(form?.training_address) !== normalizeString(initialEditable?.training_address)) {
       patch.training_address = toNullableString(form?.training_address); // <- schema correcto
@@ -1123,33 +1023,12 @@ export function BudgetDetailModal({
             {/* Editables */}
             <Row className="g-3">
               <Col md={4}>
-                <Form.Label>{primaryFieldLabel}</Form.Label>
-                {fieldConfig.renderInput ? (
-                  fieldConfig.renderInput({
-                    value: primaryFieldValue,
-                    formattedValue: formattedPrimaryFieldValue,
-                    onChange: (nextValue) =>
-                      updateForm(primaryFieldKey as keyof EditableDealForm, nextValue),
-                    options: primaryOptions,
-                    helpText: primaryFieldHelp,
-                    inputId: primaryFieldInputId,
-                    tooltip: primaryFieldTooltip,
-                  })
-                ) : (
-                  <>
-                    <Form.Control
-                      id={primaryFieldInputId}
-                      value={formattedPrimaryFieldValue}
-                      onChange={(e) =>
-                        updateForm(primaryFieldKey as keyof EditableDealForm, e.target.value)
-                      }
-                      title={primaryFieldTooltip}
-                    />
-                    {primaryFieldHelp ? (
-                      <Form.Text className="text-muted">{primaryFieldHelp}</Form.Text>
-                    ) : null}
-                  </>
-                )}
+                <Form.Label>Sede</Form.Label>
+                <Form.Control
+                  value={formatSedeLabel(form.sede_label) ?? ''}
+                  onChange={(e) => updateForm('sede_label', e.target.value)}
+                  title={buildFieldTooltip(form.sede_label)}
+                />
               </Col>
               <Col md={8}>
                 <Form.Label>Dirección</Form.Label>
