@@ -99,7 +99,7 @@ type DeleteDialogState = {
   error: string | null;
 };
 
-const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
+const SESSION_CODE_PREFIXES = ['prev-'];
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
   PLANIFICADA: 'Planificada',
@@ -1853,10 +1853,7 @@ export function SessionsAccordion({
   const shouldShow = applicableProducts.length > 0;
 
   const generationKey = useMemo(
-    () =>
-      applicableProducts
-        .map((product) => `${product.id}|${Number.isFinite(product.quantity) ? product.quantity : 0}`)
-        .join('|'),
+    () => applicableProducts.map((product) => product.id).join('|'),
     [applicableProducts],
   );
 

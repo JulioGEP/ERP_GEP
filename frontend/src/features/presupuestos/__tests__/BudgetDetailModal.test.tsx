@@ -69,6 +69,15 @@ const detailFixtures: Record<string, DealDetail> = {
         drive_web_view_link: 'https://docs.example.com/drive/doc-a-1',
         mime_type: 'application/pdf',
         url: 'https://s3.example.com/doc-a-1'
+      },
+      {
+        id: 'doc-a-folder',
+        source: 'PIPEDRIVE',
+        name: 'Carpeta Drive',
+        drive_file_name: 'Carpeta Drive',
+        drive_web_view_link: 'https://drive.example.com/folders/deal-a',
+        mime_type: 'application/vnd.google-apps.folder',
+        url: null
       }
     ]
   },
@@ -108,6 +117,11 @@ vi.mock('../api', () => {
     getDocPreviewUrl: vi.fn(),
     uploadManualDocument: vi.fn(),
     deleteDocument: vi.fn(),
+    fetchActiveTrainers: vi.fn(async () => []),
+    fetchRoomsCatalog: vi.fn(async () => []),
+    fetchMobileUnitsCatalog: vi.fn(async () => []),
+    fetchDealSessions: vi.fn(async () => []),
+    generateSessionsFromDeal: vi.fn(async () => 0),
     buildDealDetailViewModel: vi.fn(
       (deal: DealDetail | null, summary: DealSummary | null): DealDetailViewModel => {
         const source = deal ?? summary;
