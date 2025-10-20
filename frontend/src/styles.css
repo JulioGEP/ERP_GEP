@@ -198,6 +198,11 @@ body {
   color: rgba(255, 255, 255, 0.85);
 }
 
+.erp-modal-subtitle .badge {
+  background-color: #ffffff !important;
+  color: var(--color-red) !important;
+}
+
 .erp-modal-body {
   background-color: var(--color-background);
 }
