@@ -76,6 +76,7 @@ export interface DealSummary {
   title: string;
 
   pipeline_label?: string | null;     // label (no ID)
+  pipeline_id?: string | null;        // identificador numérico/string del pipeline
   training_address?: string | null;   // <-- schema vigente
 
   sede_label?: string | null;
