@@ -1834,17 +1834,11 @@ export function SessionsAccordionServices({
         id: String(product.id),
         name: product.name ?? null,
         code: product.code ?? null,
-        quantity:
+        hours:
           typeof product.quantity === 'number'
             ? product.quantity
             : product.quantity != null
             ? Number(product.quantity)
-            : 0,
-        hours:
-          typeof product.hours === 'number'
-            ? product.hours
-            : product.hours != null
-            ? Number(product.hours)
             : null,
       })),
     [products],
@@ -1855,7 +1849,8 @@ export function SessionsAccordionServices({
   const generationKey = useMemo(
     () =>
       applicableProducts
-        .map((product) => `${product.id}|${Number.isFinite(product.quantity) ? product.quantity : 0}`)
+        .map((product) => product.id)
+        .sort()
         .join('|'),
     [applicableProducts],
   );
