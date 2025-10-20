@@ -99,7 +99,7 @@ type DeleteDialogState = {
   error: string | null;
 };
 
-const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
+const SESSION_PRODUCT_PREFIX = 'prev-';
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
   PLANIFICADA: 'Planificada',
@@ -1559,10 +1559,17 @@ type SaveStatus = {
   savedAt?: number;
 };
 
+function matchesSessionPrefix(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  return value.trim().toLowerCase().startsWith(SESSION_PRODUCT_PREFIX);
+}
+
 function isApplicableProduct(product: DealProduct): product is DealProduct & { id: string } {
-  const code = typeof product?.code === 'string' ? product.code.toLowerCase() : '';
   const id = product?.id;
-  return Boolean(id) && SESSION_CODE_PREFIXES.some((prefix) => code.startsWith(prefix));
+  if (!id) return false;
+  const codeMatches = matchesSessionPrefix(product?.code ?? null);
+  const nameMatches = matchesSessionPrefix(product?.name ?? null);
+  return codeMatches || nameMatches;
 }
 
 function formatDateForInput(iso: string | null): string | null {
@@ -1883,9 +1890,13 @@ export function SessionsAccordionServices({
       setGenerationDone(true);
       return;
     }
+    if (!shouldShow) {
+      setGenerationDone(true);
+      return;
+    }
     setGenerationDone(false);
     generateMutation.mutate(dealId);
-  }, [dealId, generationKey]);
+  }, [dealId, generationKey, shouldShow]);
 
   const [pageByProduct, setPageByProduct] = useState<Record<string, number>>({});
 
@@ -1975,13 +1986,7 @@ export function SessionsAccordionServices({
 
   const queriesUpdatedKey = sessionQueries.map((query) => query.dataUpdatedAt).join('|');
 
-  const totalSessionsCount = generationDone
-    ? sessionQueries.reduce((total, query) => {
-        const group = (query.data as SessionGroupDTO | null) ?? null;
-        const pagination = group?.pagination;
-        return total + (pagination?.total ?? 0);
-      }, 0)
-    : 0;
+  const sessionLineCount = applicableProducts.length;
 
   useEffect(() => {
     if (!generationDone) return;
@@ -2405,8 +2410,6 @@ export function SessionsAccordionServices({
     }
   }, [activeSession, forms]);
 
-  if (!shouldShow) return null;
-
   const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
 
   const trainers = trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
@@ -2440,8 +2443,8 @@ export function SessionsAccordionServices({
         <div className="d-flex justify-content-between align-items-center w-100">
           <span className="erp-accordion-title">
             Sesiones
-            {totalSessionsCount > 0 ? (
-              <span className="erp-accordion-count">{totalSessionsCount}</span>
+            {sessionLineCount > 0 ? (
+              <span className="erp-accordion-count">{sessionLineCount}</span>
             ) : null}
           </span>
         </div>
