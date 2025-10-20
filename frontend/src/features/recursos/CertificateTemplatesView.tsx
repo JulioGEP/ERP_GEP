@@ -242,11 +242,6 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
           return;
         }
         setTemplates(list);
-        if (list.length > 0) {
-          const initial = list[0];
-          setSelectedTemplateId(initial.id);
-          setFormState(mapTemplateToFormState(initial, api));
-        }
 
         if (typeof api.subscribe === 'function') {
           unsubscribe = api.subscribe(async () => {
@@ -279,6 +274,12 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
 
   useEffect(() => {
     if (!selectedTemplateId) {
+      setFormState((current) => {
+        if (current && current.id) {
+          return null;
+        }
+        return current;
+      });
       return;
     }
 
@@ -287,6 +288,14 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       const selected = templates.find((template) => template.id === selectedTemplateId);
       if (selected) {
         setFormState(mapTemplateToFormState(selected, api));
+      } else {
+        setSelectedTemplateId('');
+        setFormState((current) => {
+          if (current && current.id === selectedTemplateId) {
+            return null;
+          }
+          return current;
+        });
       }
     } catch (error) {
       setInitialisationError((current) => current ?? resolveErrorMessage(error));
@@ -314,9 +323,12 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       const value = event.target.value;
       if (!value) {
         setSelectedTemplateId('');
-        if (api) {
-          setFormState(buildEmptyFormState(api));
-        }
+        setFormState((current) => {
+          if (current && current.id) {
+            return null;
+          }
+          return current;
+        });
         return;
       }
       setSelectedTemplateId(value);
@@ -568,23 +580,24 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
       return;
     }
 
+    const deletedTemplateId = formState.id;
+
     try {
-      const deleted = await api.deleteTemplate(formState.id);
+      const deleted = await api.deleteTemplate(deletedTemplateId);
       if (deleted) {
         onNotify({ variant: 'success', message: 'La plantilla personalizada se ha eliminado correctamente.' });
         const remainingTemplates = await api.listTemplates();
         setTemplates(remainingTemplates);
-        if (remainingTemplates.length > 0) {
-          const nextTemplate = remainingTemplates[0];
-          setSelectedTemplateId(nextTemplate.id);
-          setFormState(mapTemplateToFormState(nextTemplate, api));
-        } else {
-          setSelectedTemplateId('');
-          setFormState(buildEmptyFormState(api));
-        }
+        setSelectedTemplateId('');
+        setFormState((current) => {
+          if (!current || current.id !== deletedTemplateId) {
+            return current;
+          }
+          return null;
+        });
       } else {
-        onNotify({ variant: 'danger', message: 'No se ha podido eliminar la plantilla seleccionada.' });
-      }
+          onNotify({ variant: 'danger', message: 'No se ha podido eliminar la plantilla seleccionada.' });
+        }
     } catch (error) {
       const message = resolveErrorMessage(error);
       onNotify({ variant: 'danger', message });
@@ -688,7 +701,11 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
           <Card className="h-100">
             <Card.Header className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
               <span className="fw-semibold">
-                {formState?.name ? `Editar plantilla: ${formState.name}` : 'Nueva plantilla personalizada'}
+                {formState
+                  ? formState.name
+                    ? `Editar plantilla: ${formState.name}`
+                    : 'Nueva plantilla personalizada'
+                  : 'Selecciona una plantilla'}
               </span>
               {formState && (
                 <Badge bg={formState.isCustom ? 'info' : 'secondary'}>
