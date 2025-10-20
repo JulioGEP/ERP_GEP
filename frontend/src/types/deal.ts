@@ -80,10 +80,12 @@ export interface DealSummary {
   training_address?: string | null;   // <-- schema vigente
 
   sede_label?: string | null;
+  service_label?: string | null;
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
-  tipo_servicio?: string | null;
+  /** Puede provenir como string (separado por comas) o array pre-normalizado */
+  tipo_servicio?: string | string[] | null;
   mail_invoice?: string | null;
 
   hours?: number | null;    // editable en ERP (no autocalculado)
@@ -101,16 +103,19 @@ export interface DealDetail {
   deal_id: string;
   title?: string | null;
 
+  pipeline_id?: string | null;
   pipeline_label?: string | null;     // label (no ID)
   training_address?: string | null;   // <-- schema vigente
 
   sede_label?: string | null;
+  service_label?: string | null;
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
   transporte?: "Si" | "Sí" | "No" | null;
   po?: string | null;
-  tipo_servicio?: string | null;
+  /** Puede provenir como string (separado por comas) o array pre-normalizado */
+  tipo_servicio?: string | string[] | null;
   mail_invoice?: string | null;
 
   hours?: number | null;    // editable en ERP
@@ -150,6 +155,7 @@ export interface DealDetailViewModel {
   hours: number | null;
 
   sedeLabel: string | null;
+  serviceLabel: string | null;
   caesLabel: string | null;
   fundaeLabel: string | null;
   hotelLabel: string | null;

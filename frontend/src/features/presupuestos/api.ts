@@ -325,6 +325,18 @@ function normalizeProducts(
   return result;
 }
 
+function normalizeTipoServicioValue(value: unknown): string | string[] | null {
+  if (Array.isArray(value)) {
+    const entries = value
+      .map((entry) => toStringValue(entry))
+      .filter((entry): entry is string => entry !== null);
+    return entries.length ? entries : null;
+  }
+
+  const text = toStringValue(value);
+  return text ?? null;
+}
+
 function normalizeDealSummary(row: Json): DealSummary {
   const rawDealId = row?.deal_id ?? row?.dealId ?? row?.id;
   const resolvedDealId =
@@ -365,14 +377,16 @@ function normalizeDealSummary(row: Json): DealSummary {
     dealId: resolvedDealId, // compat
     title,
 
+    pipeline_id: toStringValue(row?.pipeline_id ?? row?.deal_pipeline_id) ?? null,
     pipeline_label: toStringValue(row?.pipeline_label) ?? null,
     training_address: toStringValue(row?.training_address) ?? null,
 
     sede_label: toStringValue(row?.sede_label) ?? null,
+    service_label: toStringValue(row?.service_label) ?? null,
     caes_label: toStringValue(row?.caes_label) ?? null,
     fundae_label: toStringValue(row?.fundae_label) ?? null,
     hotel_label: toStringValue(row?.hotel_label) ?? null,
-    tipo_servicio: toStringValue(row?.tipo_servicio) ?? null,
+    tipo_servicio: normalizeTipoServicioValue(row?.tipo_servicio),
     mail_invoice: toStringValue(row?.mail_invoice) ?? null,
 
     hours: toNumber(row?.hours) ?? null,
@@ -402,11 +416,13 @@ function normalizeDealDetail(raw: Json): DealDetail {
     deal_id: detailId,
     title: toStringValue(raw.title ?? raw.deal_title) ?? null,
 
+    pipeline_id: toStringValue(raw.pipeline_id ?? raw.deal_pipeline_id) ?? null,
     pipeline_label: toStringValue(raw.pipeline_label) ?? null,
     training_address:
       toStringValue(raw.training_address) ?? null,
 
     sede_label: toStringValue(raw.sede_label) ?? null,
+    service_label: toStringValue(raw.service_label) ?? null,
     caes_label: toStringValue(raw.caes_label) ?? null,
     fundae_label: toStringValue(raw.fundae_label) ?? null,
     hotel_label: toStringValue(raw.hotel_label) ?? null,
@@ -415,7 +431,7 @@ function normalizeDealDetail(raw: Json): DealDetail {
         ? null
         : (toStringValue(raw.transporte) as "Si" | "Sí" | "No"),
     po: toStringValue(raw.po) ?? null,
-    tipo_servicio: toStringValue(raw.tipo_servicio) ?? null,
+    tipo_servicio: normalizeTipoServicioValue(raw.tipo_servicio),
     mail_invoice: toStringValue(raw.mail_invoice) ?? null,
 
     hours: toNumber(raw.hours) ?? null,
@@ -889,6 +905,7 @@ export async function deleteDeal(dealId: string): Promise<void> {
 
 export type DealEditablePatch = {
   sede_label?: string | null;
+  service_label?: string | null;
   hours?: number | null;
   training_address?: string | null; // dirección de formación
   caes_label?: string | null;
@@ -2018,6 +2035,10 @@ export function buildDealDetailViewModel(
 
   const hours = detail?.hours ?? summary?.hours ?? null;
   const sedeLabel = pickNonEmptyString(detail?.sede_label ?? null, summary?.sede_label ?? null);
+  const serviceLabel = pickNonEmptyString(
+    detail?.service_label ?? null,
+    summary?.service_label ?? null,
+  );
   const caesLabel = pickNonEmptyString(detail?.caes_label ?? null, summary?.caes_label ?? null);
   const fundaeLabel = pickNonEmptyString(detail?.fundae_label ?? null, summary?.fundae_label ?? null);
   const hotelLabel = pickNonEmptyString(detail?.hotel_label ?? null, summary?.hotel_label ?? null);
@@ -2034,6 +2055,7 @@ export function buildDealDetailViewModel(
     productName: productName ?? null,
     hours,
     sedeLabel: sedeLabel ?? null,
+    serviceLabel: serviceLabel ?? null,
     caesLabel: caesLabel ?? null,
     fundaeLabel: fundaeLabel ?? null,
     hotelLabel: hotelLabel ?? null,

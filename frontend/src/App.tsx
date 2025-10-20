@@ -4,6 +4,8 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
+import { PreventiveModal } from './features/presupuestos/PreventiveModal';
+import { PreventiveSessionModal } from './features/presupuestos/PreventiveSessionModal';
 import { ProductCommentWindow } from './features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from './features/presupuestos/ProductCommentWindow';
 import {
@@ -108,6 +110,33 @@ type ToastMessage = {
   message: string;
 };
 
+function resolveDealIdFromAny(input: any): string | null {
+  const raw = input?.dealId ?? input?.deal_id ?? input?.id ?? null;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (raw != null) {
+    const trimmed = String(raw).trim();
+    return trimmed.length ? trimmed : null;
+  }
+  return null;
+}
+
+function resolvePipelineIdFromAny(input: any): string | null {
+  const rawId = input?.pipeline_id ?? input?.pipelineId ?? null;
+  if (typeof rawId === 'string') {
+    const trimmed = rawId.trim();
+    if (trimmed.length) return trimmed;
+  } else if (rawId != null) {
+    const trimmed = String(rawId).trim();
+    if (trimmed.length) return trimmed;
+  }
+
+  const label = typeof input?.pipeline_label === 'string' ? input.pipeline_label.trim() : '';
+  return label.length ? label : null;
+}
+
 export default function App() {
   const isPublicStudentsPage =
     typeof window !== 'undefined' && /\/public\/sesiones\/[^/]+\/alumnos/i.test(window.location.pathname);
@@ -120,18 +149,24 @@ export default function App() {
   const navigate = useNavigate();
 
   const [showImportModal, setShowImportModal] = useState(false);
-  const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
-  const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
+  type DealModalType = 'budget' | 'session';
+  type ActiveDealModalState = {
+    type: DealModalType;
+    dealId: string;
+    summary: DealSummary | null;
+    pipelineId: string | null;
+  };
+  const [activeDealModal, setActiveDealModal] = useState<ActiveDealModalState | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [productComment, setProductComment] = useState<ProductCommentPayload | null>(null);
 
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!selectedBudgetId) {
+    if (!activeDealModal) {
       setProductComment(null);
     }
-  }, [selectedBudgetId]);
+  }, [activeDealModal]);
 
   const budgetsQuery = useQuery({
     queryKey: ['deals', 'noSessions'],
@@ -154,6 +189,29 @@ export default function App() {
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  const openDealModal = useCallback(
+    (
+      deal: (DealSummary & { [key: string]: unknown }) | DealSummary | null,
+      type: DealModalType,
+    ) => {
+      if (!deal) {
+        setActiveDealModal(null);
+        return;
+      }
+
+      const resolvedId = resolveDealIdFromAny(deal);
+      const pipelineId = resolvePipelineIdFromAny(deal);
+
+      setActiveDealModal({
+        type,
+        dealId: resolvedId ?? '',
+        summary: deal as DealSummary,
+        pipelineId,
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -179,14 +237,9 @@ export default function App() {
       const { deal } = normalizeImportDealResult(payload);
 
       if (deal) {
-        setSelectedBudgetSummary(deal as DealSummary);
-        // Acepta dealId o deal_id y fuerza string|null
-        setSelectedBudgetId(
-          ((deal as any).dealId ?? (deal as any).deal_id ?? null) as string | null,
-        );
+        openDealModal(deal as DealSummary, 'budget');
       } else {
-        setSelectedBudgetSummary(null);
-        setSelectedBudgetId(null);
+        setActiveDealModal(null);
       }
 
       pushToast({ variant: 'success', message: 'Presupuesto importado' });
@@ -225,11 +278,9 @@ export default function App() {
   const deleteDealMutation = useMutation({
     mutationFn: (dealId: string) => deleteDeal(dealId),
     onSuccess: (_, dealId) => {
-      setSelectedBudgetId((current) => (current === dealId ? null : current));
-      setSelectedBudgetSummary((current) => {
+      setActiveDealModal((current) => {
         if (!current) return current;
-        const currentId = current.dealId ?? current.deal_id;
-        return currentId === dealId ? null : current;
+        return current.dealId === dealId ? null : current;
       });
       pushToast({ variant: 'success', message: 'Presupuesto eliminado' });
       queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
@@ -245,11 +296,12 @@ export default function App() {
     },
   });
 
-  const handleSelectBudget = useCallback((budget: DealSummary) => {
-    setSelectedBudgetSummary(budget);
-    // 👇 asegura string | null
-    setSelectedBudgetId(budget.dealId ?? null);
-  }, []);
+  const handleSelectBudget = useCallback(
+    (budget: DealSummary) => {
+      openDealModal(budget, 'budget');
+    },
+    [openDealModal],
+  );
 
   const handleDeleteBudget = useCallback(
     async (budget: DealSummary) => {
@@ -265,8 +317,7 @@ export default function App() {
   );
 
   const handleCloseDetail = useCallback(() => {
-    setSelectedBudgetSummary(null);
-    setSelectedBudgetId(null);
+    setActiveDealModal(null);
   }, []);
 
   const handleShowProductComment = useCallback((payload: ProductCommentPayload) => {
@@ -276,6 +327,13 @@ export default function App() {
   const handleCloseProductComment = useCallback(() => {
     setProductComment(null);
   }, []);
+
+  const activeDealId = activeDealModal && activeDealModal.dealId ? activeDealModal.dealId : null;
+  const activeSummary = activeDealModal?.summary ?? null;
+  const activePipelineId =
+    activeDealModal?.pipelineId ?? resolvePipelineIdFromAny(activeSummary);
+  const isPreventivePipeline = activePipelineId === 'Gep Services';
+  const shouldOpenSessions = activeDealModal?.type === 'session';
 
   const handleOpenCalendarSession = useCallback(
     (session: CalendarSession) => {
@@ -309,6 +367,7 @@ export default function App() {
         deal_id: id,
         dealId: id,
         title: summaryTitle,
+        pipeline_id: session.dealPipelineId?.trim() ?? null,
         training_address: session.dealAddress,
         organization: null,
         person: null,
@@ -330,10 +389,9 @@ export default function App() {
         productNames,
       };
 
-      setSelectedBudgetSummary(summaryFromSession);
-      setSelectedBudgetId(id);
+      openDealModal(summaryFromSession, 'session');
     },
-    [pushToast],
+    [openDealModal, pushToast],
   );
 
   const budgetsPageProps: BudgetsPageProps = {
@@ -475,13 +533,34 @@ export default function App() {
         onSubmit={(dealId) => importMutation.mutate(dealId)}
       />
 
-      <BudgetDetailModal
-        dealId={selectedBudgetId}
-        summary={selectedBudgetSummary}
-        onClose={handleCloseDetail}
-        onShowProductComment={handleShowProductComment}
-        onNotify={pushToast}
-      />
+      {isPreventivePipeline ? (
+        shouldOpenSessions ? (
+          <PreventiveSessionModal
+            dealId={activeDealId}
+            summary={activeSummary}
+            onClose={handleCloseDetail}
+            onShowProductComment={handleShowProductComment}
+            onNotify={pushToast}
+          />
+        ) : (
+          <PreventiveModal
+            dealId={activeDealId}
+            summary={activeSummary}
+            onClose={handleCloseDetail}
+            onShowProductComment={handleShowProductComment}
+            onNotify={pushToast}
+          />
+        )
+      ) : (
+        <BudgetDetailModal
+          dealId={activeDealId}
+          summary={activeSummary}
+          onClose={handleCloseDetail}
+          onShowProductComment={handleShowProductComment}
+          onNotify={pushToast}
+          initialSections={shouldOpenSessions ? ['sessions'] : undefined}
+        />
+      )}
 
       <ProductCommentWindow
         show={!!productComment}
