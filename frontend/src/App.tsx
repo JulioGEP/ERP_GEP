@@ -4,6 +4,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetDetailModal } from './features/presupuestos/BudgetDetailModal';
+import { SessionModal } from './features/presupuestos/SessionModal';
 import { ProductCommentWindow } from './features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from './features/presupuestos/ProductCommentWindow';
 import {
@@ -13,6 +14,14 @@ import {
   deleteDeal,
 } from './features/presupuestos/api';
 import { normalizeImportDealResult } from './features/presupuestos/importDealUtils';
+import {
+  GepServicesBudgetModal,
+  GepServicesSessionModal,
+  MaterialsBudgetModal,
+  MaterialsSessionModal,
+  OpenTrainingBudgetModal,
+  OpenTrainingSessionModal,
+} from './features/presupuestos/pipelines';
 import type { CalendarSession } from './features/calendar/api';
 import type { DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
@@ -108,6 +117,103 @@ type ToastMessage = {
   message: string;
 };
 
+type PipelineKey =
+  | 'FORMACION_EMPRESAS'
+  | 'FORMACION_ABIERTA'
+  | 'GEP_SERVICES'
+  | 'MATERIALES'
+  | 'UNKNOWN';
+
+function resolveDealIdFromAny(input: any): string | null {
+  if (!input) return null;
+  const candidateKeys = ['dealId', 'deal_id', 'id'];
+  for (const key of candidateKeys) {
+    const value = input[key];
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length) return trimmed;
+    } else if (value != null) {
+      const trimmed = String(value).trim();
+      if (trimmed.length) return trimmed;
+    }
+  }
+  return null;
+}
+
+function resolvePipelineIdFromAny(input: any): string | null {
+  if (!input) return null;
+  const candidateKeys = ['pipeline_id', 'pipelineId', 'deal_pipeline_id', 'dealPipelineId'];
+  for (const key of candidateKeys) {
+    const value = input[key];
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length) return trimmed;
+    } else if (value != null) {
+      const trimmed = String(value).trim();
+      if (trimmed.length) return trimmed;
+    }
+  }
+  return null;
+}
+
+function resolvePipelineLabelFromAny(input: any): string | null {
+  if (!input) return null;
+  const candidateKeys = ['pipeline_label', 'pipelineLabel', 'deal_pipeline_label', 'dealPipelineLabel'];
+  for (const key of candidateKeys) {
+    const value = input[key];
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length) return trimmed;
+    }
+  }
+  return null;
+}
+
+function normalizePipelineValue(value: string | null | undefined): string {
+  if (typeof value !== 'string') return '';
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/['"«»“”]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function resolvePipelineKey(...values: (string | null | undefined)[]): PipelineKey {
+  for (const value of values) {
+    const normalized = normalizePipelineValue(value);
+    if (!normalized.length) continue;
+
+    if (
+      normalized === '1' ||
+      (normalized.includes('formacion') && normalized.includes('empresa'))
+    ) {
+      return 'FORMACION_EMPRESAS';
+    }
+
+    if (
+      normalized === '2' ||
+      (normalized.includes('formacion') && normalized.includes('abierta'))
+    ) {
+      return 'FORMACION_ABIERTA';
+    }
+
+    if (
+      normalized === '3' ||
+      (normalized.includes('gep') && normalized.includes('service'))
+    ) {
+      return 'GEP_SERVICES';
+    }
+
+    if (normalized === '4' || normalized.includes('material')) {
+      return 'MATERIALES';
+    }
+  }
+
+  return 'UNKNOWN';
+}
+
 export default function App() {
   const isPublicStudentsPage =
     typeof window !== 'undefined' && /\/public\/sesiones\/[^/]+\/alumnos/i.test(window.location.pathname);
@@ -120,18 +226,25 @@ export default function App() {
   const navigate = useNavigate();
 
   const [showImportModal, setShowImportModal] = useState(false);
-  const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
-  const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
+  type DealModalType = 'budget' | 'session';
+  type ActiveDealModalState = {
+    type: DealModalType;
+    dealId: string;
+    summary: DealSummary | null;
+    pipelineId: string | null;
+    pipelineLabel: string | null;
+  };
+  const [activeDealModal, setActiveDealModal] = useState<ActiveDealModalState | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [productComment, setProductComment] = useState<ProductCommentPayload | null>(null);
 
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!selectedBudgetId) {
+    if (!activeDealModal) {
       setProductComment(null);
     }
-  }, [selectedBudgetId]);
+  }, [activeDealModal]);
 
   const budgetsQuery = useQuery({
     queryKey: ['deals', 'noSessions'],
@@ -154,6 +267,30 @@ export default function App() {
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  const openDealModal = useCallback(
+    (deal: (DealSummary & { [key: string]: unknown }) | DealSummary | null, type: DealModalType) => {
+      if (!deal) {
+        setActiveDealModal(null);
+        return;
+      }
+
+      const resolvedId = resolveDealIdFromAny(deal);
+      if (!resolvedId) {
+        console.warn('No se pudo determinar el identificador del presupuesto.');
+        return;
+      }
+
+      setActiveDealModal({
+        type,
+        dealId: resolvedId,
+        summary: deal as DealSummary,
+        pipelineId: resolvePipelineIdFromAny(deal),
+        pipelineLabel: resolvePipelineLabelFromAny(deal),
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -179,14 +316,9 @@ export default function App() {
       const { deal } = normalizeImportDealResult(payload);
 
       if (deal) {
-        setSelectedBudgetSummary(deal as DealSummary);
-        // Acepta dealId o deal_id y fuerza string|null
-        setSelectedBudgetId(
-          ((deal as any).dealId ?? (deal as any).deal_id ?? null) as string | null,
-        );
+        openDealModal(deal as DealSummary, 'budget');
       } else {
-        setSelectedBudgetSummary(null);
-        setSelectedBudgetId(null);
+        setActiveDealModal(null);
       }
 
       pushToast({ variant: 'success', message: 'Presupuesto importado' });
@@ -225,12 +357,7 @@ export default function App() {
   const deleteDealMutation = useMutation({
     mutationFn: (dealId: string) => deleteDeal(dealId),
     onSuccess: (_, dealId) => {
-      setSelectedBudgetId((current) => (current === dealId ? null : current));
-      setSelectedBudgetSummary((current) => {
-        if (!current) return current;
-        const currentId = current.dealId ?? current.deal_id;
-        return currentId === dealId ? null : current;
-      });
+      setActiveDealModal((current) => (current && current.dealId === dealId ? null : current));
       pushToast({ variant: 'success', message: 'Presupuesto eliminado' });
       queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
     },
@@ -245,11 +372,12 @@ export default function App() {
     },
   });
 
-  const handleSelectBudget = useCallback((budget: DealSummary) => {
-    setSelectedBudgetSummary(budget);
-    // 👇 asegura string | null
-    setSelectedBudgetId(budget.dealId ?? null);
-  }, []);
+  const handleSelectBudget = useCallback(
+    (budget: DealSummary) => {
+      openDealModal(budget, 'budget');
+    },
+    [openDealModal],
+  );
 
   const handleDeleteBudget = useCallback(
     async (budget: DealSummary) => {
@@ -265,8 +393,7 @@ export default function App() {
   );
 
   const handleCloseDetail = useCallback(() => {
-    setSelectedBudgetSummary(null);
-    setSelectedBudgetId(null);
+    setActiveDealModal(null);
   }, []);
 
   const handleShowProductComment = useCallback((payload: ProductCommentPayload) => {
@@ -309,6 +436,8 @@ export default function App() {
         deal_id: id,
         dealId: id,
         title: summaryTitle,
+        pipeline_id: session.dealPipelineId?.trim() ?? null,
+        pipeline_label: session.dealPipelineId?.trim() ?? null,
         training_address: session.dealAddress,
         organization: null,
         person: null,
@@ -330,10 +459,9 @@ export default function App() {
         productNames,
       };
 
-      setSelectedBudgetSummary(summaryFromSession);
-      setSelectedBudgetId(id);
+      openDealModal(summaryFromSession, 'session');
     },
-    [pushToast],
+    [openDealModal, pushToast],
   );
 
   const budgetsPageProps: BudgetsPageProps = {
@@ -384,6 +512,37 @@ export default function App() {
   };
 
   const certificadosPageProps: CertificadosPageProps = {};
+
+  const activeDealId = activeDealModal?.dealId ?? null;
+  const activeSummary = activeDealModal?.summary ?? null;
+  const activePipelineId =
+    activeDealModal?.pipelineId ?? resolvePipelineIdFromAny(activeSummary);
+  const activePipelineLabel =
+    activeDealModal?.pipelineLabel ?? resolvePipelineLabelFromAny(activeSummary);
+  const pipelineKey = resolvePipelineKey(activePipelineId, activePipelineLabel);
+  const shouldOpenSessions = activeDealModal?.type === 'session';
+
+  let BudgetModalComponent = BudgetDetailModal;
+  let SessionModalComponent = SessionModal;
+
+  switch (pipelineKey) {
+    case 'GEP_SERVICES':
+      BudgetModalComponent = GepServicesBudgetModal;
+      SessionModalComponent = GepServicesSessionModal;
+      break;
+    case 'FORMACION_ABIERTA':
+      BudgetModalComponent = OpenTrainingBudgetModal;
+      SessionModalComponent = OpenTrainingSessionModal;
+      break;
+    case 'MATERIALES':
+      BudgetModalComponent = MaterialsBudgetModal;
+      SessionModalComponent = MaterialsSessionModal;
+      break;
+    default:
+      BudgetModalComponent = BudgetDetailModal;
+      SessionModalComponent = SessionModal;
+      break;
+  }
 
   return (
     <div className="min-vh-100 d-flex flex-column">
@@ -475,13 +634,25 @@ export default function App() {
         onSubmit={(dealId) => importMutation.mutate(dealId)}
       />
 
-      <BudgetDetailModal
-        dealId={selectedBudgetId}
-        summary={selectedBudgetSummary}
-        onClose={handleCloseDetail}
-        onShowProductComment={handleShowProductComment}
-        onNotify={pushToast}
-      />
+      {activeDealId ? (
+        shouldOpenSessions ? (
+          <SessionModalComponent
+            dealId={activeDealId}
+            summary={activeSummary}
+            onClose={handleCloseDetail}
+            onShowProductComment={handleShowProductComment}
+            onNotify={pushToast}
+          />
+        ) : (
+          <BudgetModalComponent
+            dealId={activeDealId}
+            summary={activeSummary}
+            onClose={handleCloseDetail}
+            onShowProductComment={handleShowProductComment}
+            onNotify={pushToast}
+          />
+        )
+      ) : null}
 
       <ProductCommentWindow
         show={!!productComment}
