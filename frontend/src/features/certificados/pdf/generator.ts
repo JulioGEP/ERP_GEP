@@ -1,7 +1,7 @@
-import { PDFDocument } from 'pdf-lib';
 import type { Content, StyleDictionary, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { getPdfMakeInstance } from '../lib/pdf/pdfmake-initializer';
 import { loadCertificateTemplateBytes } from '../lib/pdf/template-loader';
+import { loadPdfLib } from '../lib/pdf/pdf-lib-loader';
 
 export interface CertificateStudentData {
   nombre: string;
@@ -800,6 +800,7 @@ async function getPdfMakeDocumentBytes(pdfDoc: unknown): Promise<Uint8Array> {
 
 async function mergeCertificateWithTemplate(textPdfBytes: Uint8Array): Promise<Uint8Array> {
   const templateBytes = await loadCertificateTemplateBytes();
+  const { PDFDocument } = await loadPdfLib();
   const templateDocument = await PDFDocument.load(templateBytes);
   const [embeddedPage] = await templateDocument.embedPdf(textPdfBytes);
   const [templatePage] = templateDocument.getPages();
