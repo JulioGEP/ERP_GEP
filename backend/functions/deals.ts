@@ -714,7 +714,6 @@ export const handler = async (event: any) => {
           deal_id: true,
           title: true,
           pipeline_id: true,
-          pipeline_label: true,
           sede_label: true,
           service_label: true,
           training_address: true,
