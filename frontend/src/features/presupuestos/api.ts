@@ -366,6 +366,10 @@ function normalizeDealSummary(row: Json): DealSummary {
     title,
 
     pipeline_label: toStringValue(row?.pipeline_label) ?? null,
+    pipeline_id:
+      toStringValue(row?.pipeline_id) ??
+      toStringValue(row?.deal_pipeline_id) ??
+      null,
     training_address: toStringValue(row?.training_address) ?? null,
 
     sede_label: toStringValue(row?.sede_label) ?? null,
