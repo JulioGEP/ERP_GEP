@@ -108,14 +108,54 @@ const DEFAULT_REDIRECT_PATH = '/presupuestos';
 
 type BudgetModalProps = ComponentProps<typeof BudgetDetailModalEmpresas>;
 
-const BUDGET_MODAL_COMPONENTS: Record<string, ComponentType<BudgetModalProps>> = {
-  'Formación Empresas': BudgetDetailModalEmpresas,
-  'Formación Abierta': BudgetDetailModalAbierta,
-  'GEP Services': BudgetDetailModalServices,
-  Material: BudgetDetailModalMaterial,
+function normalizePipelineKey(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+type BudgetModalConfig = {
+  component: ComponentType<BudgetModalProps>;
+  keys: readonly string[];
 };
 
-const KNOWN_PIPELINE_LABELS = new Set(Object.keys(BUDGET_MODAL_COMPONENTS));
+const BUDGET_MODAL_CONFIG: readonly BudgetModalConfig[] = [
+  { component: BudgetDetailModalEmpresas, keys: ['Formación Empresas'] },
+  { component: BudgetDetailModalAbierta, keys: ['Formación Abierta'] },
+  { component: BudgetDetailModalServices, keys: ['GEP Services'] },
+  { component: BudgetDetailModalMaterial, keys: ['Material'] },
+];
+
+const BUDGET_MODAL_COMPONENTS = new Map<string, ComponentType<BudgetModalProps>>(
+  BUDGET_MODAL_CONFIG.flatMap(({ component, keys }) =>
+    keys
+      .map(normalizePipelineKey)
+      .filter((key) => key.length > 0)
+      .map((key) => [key, component] as const),
+  ),
+);
+
+const KNOWN_PIPELINE_KEYS = new Set(BUDGET_MODAL_COMPONENTS.keys());
+
+function resolveBudgetModalComponent(
+  keyCandidates: readonly unknown[],
+): ComponentType<BudgetModalProps> {
+  for (const candidate of keyCandidates) {
+    const normalized = normalizePipelineKey(candidate);
+    if (!normalized.length) {
+      continue;
+    }
+    const component = BUDGET_MODAL_COMPONENTS.get(normalized);
+    if (component) {
+      return component;
+    }
+  }
+  return BudgetDetailModalEmpresas;
+}
 
 type ToastMessage = {
   id: string;
@@ -347,8 +387,9 @@ export default function App() {
         };
 
         const pipelineCandidate = session.dealPipelineId?.trim() ?? null;
+        const pipelineCandidateKey = normalizePipelineKey(pipelineCandidate);
         let pipelineLabel =
-          pipelineCandidate && KNOWN_PIPELINE_LABELS.has(pipelineCandidate) ? pipelineCandidate : null;
+          pipelineCandidate && KNOWN_PIPELINE_KEYS.has(pipelineCandidateKey) ? pipelineCandidate : null;
         let pipelineId = pipelineCandidate;
 
         if (!pipelineLabel) {
@@ -448,10 +489,8 @@ export default function App() {
     selectedBudgetSummary?.pipeline_id != null
       ? String(selectedBudgetSummary.pipeline_id).trim()
       : '';
-  const pipelineKey = pipelineLabelKey.length ? pipelineLabelKey : pipelineIdKey;
 
-  const BudgetModalComponent =
-    (pipelineKey.length ? BUDGET_MODAL_COMPONENTS[pipelineKey] : undefined) ?? BudgetDetailModalEmpresas;
+  const BudgetModalComponent = resolveBudgetModalComponent([pipelineLabelKey, pipelineIdKey]);
 
   const budgetModalProps: BudgetModalProps = {
     dealId: selectedBudgetId,
