@@ -683,7 +683,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                       <Col xs={12} lg={6} className="d-flex">
                         <Form.Group controlId="template-theory" className="d-grid gap-3 flex-grow-1">
                           <Form.Label>Contenido teórico</Form.Label>
-                          <div className="d-grid gap-2 flex-grow-1">
+                          <div className="d-grid gap-2 flex-grow-1 training-points-list">
                             {theoryPoints.length > 0 ? (
                               theoryPoints.map((point, index) => (
                                 <div key={`theory-${index}`} className="input-group">
@@ -723,7 +723,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
                       <Col xs={12} lg={6} className="d-flex">
                         <Form.Group controlId="template-practice" className="d-grid gap-3 flex-grow-1">
                           <Form.Label>Contenido práctico</Form.Label>
-                          <div className="d-grid gap-2 flex-grow-1">
+                          <div className="d-grid gap-2 flex-grow-1 training-points-list">
                             {practicePoints.length > 0 ? (
                               practicePoints.map((point, index) => (
                                 <div key={`practice-${index}`} className="input-group">
