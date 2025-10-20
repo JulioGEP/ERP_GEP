@@ -149,6 +149,10 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
     delete out.deal_files;
   }
 
+  if ("a_fecha" in out) {
+    out.a_fecha = toMadridISOString(out.a_fecha);
+  }
+
   return out as T;
 }
 
@@ -720,6 +724,11 @@ export const handler = async (event: any) => {
           hotel_label: true,
           transporte: true,
           po: true,
+          comercial: true,
+          a_fecha: true,
+          w_id_variation: true,
+          presu_holded: true,
+          modo_reserva: true,
           org_id: true,
           person_id: true,
           created_at: true,

@@ -221,6 +221,36 @@ function toStringValue(value: unknown): string | null {
   return str.length ? str : null;
 }
 
+function toBooleanValue(value: unknown): boolean | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized.length) return null;
+    if (["1", "true", "si", "sí", "yes", "y"].includes(normalized)) return true;
+    if (["0", "false", "no", "n"].includes(normalized)) return false;
+  }
+  if (typeof value === "object") {
+    const candidates = [
+      (value as any)?.value,
+      (value as any)?.id,
+      (value as any)?.label,
+      (value as any)?.name,
+    ];
+    for (const candidate of candidates) {
+      if (candidate === value) continue;
+      const resolved = toBooleanValue(candidate);
+      if (resolved !== null) return resolved;
+    }
+  }
+  return null;
+}
+
 function isHttpUrl(value: unknown): boolean {
   if (value === null || value === undefined) return false;
   try {
@@ -378,6 +408,11 @@ function normalizeDealSummary(row: Json): DealSummary {
     hotel_label: toStringValue(row?.hotel_label) ?? null,
     tipo_servicio: toStringValue(row?.tipo_servicio) ?? null,
     mail_invoice: toStringValue(row?.mail_invoice) ?? null,
+    comercial: toStringValue(row?.comercial) ?? null,
+    a_fecha: toStringValue(row?.a_fecha) ?? null,
+    w_id_variation: toStringValue(row?.w_id_variation) ?? null,
+    presu_holded: toBooleanValue(row?.presu_holded),
+    modo_reserva: toStringValue(row?.modo_reserva) ?? null,
 
     hours: toNumber(row?.hours) ?? null,
 
@@ -2025,6 +2060,14 @@ export function buildDealDetailViewModel(
   const caesLabel = pickNonEmptyString(detail?.caes_label ?? null, summary?.caes_label ?? null);
   const fundaeLabel = pickNonEmptyString(detail?.fundae_label ?? null, summary?.fundae_label ?? null);
   const hotelLabel = pickNonEmptyString(detail?.hotel_label ?? null, summary?.hotel_label ?? null);
+  const comercial = pickNonEmptyString(detail?.comercial ?? null, summary?.comercial ?? null);
+  const aFecha = pickNonEmptyString(detail?.a_fecha ?? null, summary?.a_fecha ?? null);
+  const wIdVariation = pickNonEmptyString(
+    detail?.w_id_variation ?? null,
+    summary?.w_id_variation ?? null
+  );
+  const presuHolded = detail?.presu_holded ?? (summary?.presu_holded ?? null);
+  const modoReserva = pickNonEmptyString(detail?.modo_reserva ?? null, summary?.modo_reserva ?? null);
 
   return {
     dealId: dealId ?? "",
@@ -2041,6 +2084,11 @@ export function buildDealDetailViewModel(
     caesLabel: caesLabel ?? null,
     fundaeLabel: fundaeLabel ?? null,
     hotelLabel: hotelLabel ?? null,
+    comercial: comercial ?? null,
+    aFecha: aFecha ?? null,
+    wIdVariation: wIdVariation ?? null,
+    presuHolded,
+    modoReserva: modoReserva ?? null,
     extras: undefined,
     products: resolveProducts(detail, summary),
     notes: (detail?.notes ?? []).map((n) => ({

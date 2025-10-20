@@ -44,6 +44,21 @@ function toNonNegativeIntOrNull(v: unknown): number | null {
   return Math.trunc(n);
 }
 
+function toBooleanOrNull(v: unknown): boolean | null {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) return null;
+    if (v === 1) return true;
+    if (v === 0) return false;
+  }
+  const normalized = String(v).trim().toLowerCase();
+  if (!normalized.length) return null;
+  if (['1', 'true', 'si', 'sí', 'yes', 'y'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'n'].includes(normalized)) return false;
+  return null;
+}
+
 /**
  * Construye un payload normalizado de Deal a partir de un "record" heterogéneo.
  * Soporta alias usados en el proyecto (trainingAddress/training_address, *_label, etc.).
@@ -112,6 +127,20 @@ export function buildDealPayloadFromRecord(record: any) {
     // Metadatos del deal
     title: toNullableString(record.title),
     pipeline_id: toNullableString(record.trainingType) ?? toNullableString(record.pipeline_id),
+
+    comercial:
+      toNullableString(record.comercial) ??
+      toNullableString(record.owner_name) ??
+      toNullableString(record.ownerName),
+    a_fecha:
+      record.a_fecha instanceof Date
+        ? record.a_fecha.toISOString()
+        : record.aFecha instanceof Date
+        ? record.aFecha.toISOString()
+        : toNullableString(record.a_fecha) ?? toNullableString(record.aFecha),
+    w_id_variation: toNullableString(record.w_id_variation) ?? toNullableString(record.wIdVariation),
+    presu_holded: toBooleanOrNull(record.presu_holded ?? record.presuHolded),
+    modo_reserva: toNullableString(record.modo_reserva) ?? toNullableString(record.modoReserva),
 
     // Formación y extras
     training,
