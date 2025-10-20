@@ -6,16 +6,6 @@
   NODE_VERSION = "22"
   NPM_FLAGS = "--no-audit --fund=false --progress=false --prefer-offline"
 
-[[plugins]]
-  package = "@netlify/plugin-cache"
-
-  [plugins.inputs]
-    paths = [
-      "node_modules/.prisma",
-      "node_modules/@prisma/client",
-      "frontend/node_modules"
-    ]
-
 [functions]
   directory = "backend/functions"
   node_bundler = "esbuild"
