@@ -310,11 +310,6 @@ export default function Preview(props) {
       ? 'Dirección del simulacro'
       : 'Dirección de la formación'
   const sessionLabel = useMemo(() => formatSessionLabel(session), [session])
-  const bomberosRaw = (formador?.nombre || '').trim()
-  const bomberosList = bomberosRaw
-    ? bomberosRaw.split(/\s*(?:[,;]|\r?\n)+\s*/).map((name) => name.trim()).filter(Boolean)
-    : []
-  const bomberosDisplay = bomberosList.length ? bomberosList : bomberosRaw ? [bomberosRaw] : ['—']
   const draftHeading = useMemo(() => {
     const raw = (title || '').trim()
     if (!raw) return 'Borrador del informe'
@@ -789,15 +784,6 @@ export default function Preview(props) {
               <EditableHtml dealId={dealId} initialHtml={aiHtml} onChange={setAiHtml} />
             </>
           )}
-
-          <hr className="my-4" />
-          <div>
-            <p className="mb-1">Atentamente:</p>
-            {bomberosDisplay.map((name, idx) => (
-              <div key={`${name}-${idx}`}><strong>{name}</strong></div>
-            ))}
-            <div className="text-danger">Recurso preventivo GEP</div>
-          </div>
 
           {globalImagesAvailable && (
             <>
