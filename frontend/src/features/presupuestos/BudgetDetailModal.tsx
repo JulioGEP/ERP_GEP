@@ -101,29 +101,31 @@ function useAuth() {
 }
 
 type EditableDealForm = {
+  sede_label: string;
   training_address: string; // <- schema vigente
   caes_label: string;
+  fundae_label: string;
   hotel_label: string;
 };
 
 type DealNoteView = DealDetailViewModel['notes'][number];
 
-function normalizeProductMapValue(value?: string): string {
+function normalizeHoursMapValue(value?: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function areProductMapsEqual(
+function areHourMapsEqual(
   a: Record<string, string>,
   b: Record<string, string>
 ): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const key of keys) {
-    if (normalizeProductMapValue(a[key]) !== normalizeProductMapValue(b[key])) return false;
+    if (normalizeHoursMapValue(a[key]) !== normalizeHoursMapValue(b[key])) return false;
   }
   return true;
 }
 
-function formatInitialQuantity(value: unknown): string {
+function formatInitialHours(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (typeof value === 'number' && Number.isFinite(value)) {
     return String(Math.round(value));
@@ -285,7 +287,7 @@ export function BudgetDetailModal({
   const [updatingNote, setUpdatingNote] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   const [viewingNote, setViewingNote] = useState<DealNoteView | null>(null);
-  const [productQuantities, setProductQuantities] = useState<Record<string, string>>({});
+  const [productHours, setProductHours] = useState<Record<string, string>>({});
   const [viewingComment, setViewingComment] = useState<
     { productName: string; comment: string } | null
   >(null);
@@ -466,14 +468,18 @@ export function BudgetDetailModal({
   useEffect(() => {
     if (deal) {
       setForm({
+        sede_label: deal.sede_label ?? '',
         training_address: deal.training_address ?? '', // <- aquí
         caes_label: deal.caes_label ?? '',
+        fundae_label: deal.fundae_label ?? '',
         hotel_label: deal.hotel_label ?? ''
       });
     } else if (summary) {
       setForm({
+        sede_label: summary.sede_label ?? '',
         training_address: summary.training_address ?? '', // <- aquí
         caes_label: summary.caes_label ?? '',
+        fundae_label: summary.fundae_label ?? '',
         hotel_label: summary.hotel_label ?? ''
       });
     } else {
@@ -494,8 +500,10 @@ export function BudgetDetailModal({
     const source = deal ?? summary;
     if (!source) return null;
     return {
+      sede_label: source.sede_label ?? '',
       training_address: source.training_address ?? '', // <- aquí
       caes_label: source.caes_label ?? '',
+      fundae_label: source.fundae_label ?? '',
       hotel_label: source.hotel_label ?? ''
     };
   }, [deal, summary]);
@@ -526,7 +534,11 @@ export function BudgetDetailModal({
       ? form.training_address
       : deal?.training_address ?? summary?.training_address ?? null;
 
-  const dealSedeLabel = formatSedeLabel(detailView.sedeLabel ?? null);
+  const rawDealSedeLabel =
+    form?.sede_label?.trim()?.length
+      ? form.sede_label
+      : detailView.sedeLabel ?? null;
+  const dealSedeLabel = formatSedeLabel(rawDealSedeLabel);
 
   const trainingProducts = useMemo(
     () =>
@@ -537,31 +549,31 @@ export function BudgetDetailModal({
     [detailProducts]
   );
 
-  const initialProductQuantities = useMemo(() => {
+  const initialProductHours = useMemo(() => {
     const map: Record<string, string> = {};
     trainingProducts.forEach((product) => {
       const productId = product?.id != null ? String(product.id) : null;
       if (!productId) return;
-      map[productId] = formatInitialQuantity(product?.quantity ?? null);
+      map[productId] = formatInitialHours(product?.hours ?? null);
     });
     return map;
   }, [trainingProducts]);
 
   useEffect(() => {
-    setProductQuantities((current) => {
-      if (areProductMapsEqual(current, initialProductQuantities)) return current;
-      return { ...initialProductQuantities };
+    setProductHours((current) => {
+      if (areHourMapsEqual(current, initialProductHours)) return current;
+      return { ...initialProductHours };
     });
-  }, [initialProductQuantities]);
+  }, [initialProductHours]);
 
   const trainingProductIds = useMemo(
-    () => new Set(Object.keys(initialProductQuantities)),
-    [initialProductQuantities]
+    () => new Set(Object.keys(initialProductHours)),
+    [initialProductHours]
   );
 
   const dirtyProducts = useMemo(
-    () => !areProductMapsEqual(productQuantities, initialProductQuantities),
-    [productQuantities, initialProductQuantities]
+    () => !areHourMapsEqual(productHours, initialProductHours),
+    [productHours, initialProductHours]
   );
 
   const dirtyDeal = !!initialEditable && !!form && JSON.stringify(initialEditable) !== JSON.stringify(form);
@@ -585,8 +597,6 @@ export function BudgetDetailModal({
   const clientDisplay = detailView.clientName ?? '';
   const clientPhoneDisplay = detailView.clientPhone ?? '';
   const clientEmailDisplay = detailView.clientEmail ?? '';
-  const comercialDisplay =
-    detailView.comercial ?? deal?.comercial ?? summary?.comercial ?? '';
 
   const extraProducts = detailProducts.filter((product) => {
     const code = product?.code ?? '';
@@ -603,10 +613,10 @@ export function BudgetDetailModal({
     return trimmed.length ? trimmed : '—';
   };
 
-  const handleQuantityChange = (productId: string, value: string) => {
+  const handleHoursChange = (productId: string, value: string) => {
     if (!trainingProductIds.has(productId)) return;
     if (value === '' || /^\d+$/.test(value)) {
-      setProductQuantities((current) => ({ ...current, [productId]: value }));
+      setProductHours((current) => ({ ...current, [productId]: value }));
     }
   };
 
@@ -800,11 +810,17 @@ export function BudgetDetailModal({
       return trimmed.length ? trimmed : null;
     };
 
+    if (normalizeString(form?.sede_label) !== normalizeString(initialEditable?.sede_label)) {
+      patch.sede_label = toNullableString(form?.sede_label);
+    }
     if (normalizeString(form?.training_address) !== normalizeString(initialEditable?.training_address)) {
       patch.training_address = toNullableString(form?.training_address); // <- schema correcto
     }
     if (normalizeString(form?.caes_label) !== normalizeString(initialEditable?.caes_label)) {
       patch.caes_label = toNullableString(form?.caes_label);
+    }
+    if (normalizeString(form?.fundae_label) !== normalizeString(initialEditable?.fundae_label)) {
+      patch.fundae_label = toNullableString(form?.fundae_label);
     }
     if (normalizeString(form?.hotel_label) !== normalizeString(initialEditable?.hotel_label)) {
       patch.hotel_label = toNullableString(form?.hotel_label);
@@ -812,10 +828,10 @@ export function BudgetDetailModal({
 
     const productPatches: DealProductEditablePatch[] = [];
 
-    for (const [productId, currentValueRaw] of Object.entries(productQuantities)) {
+    for (const [productId, currentValueRaw] of Object.entries(productHours)) {
       if (!trainingProductIds.has(productId)) continue;
       const currentValue = currentValueRaw.trim();
-      const initialValue = (initialProductQuantities[productId] ?? '').trim();
+      const initialValue = (initialProductHours[productId] ?? '').trim();
 
       if (currentValue === initialValue) continue;
 
@@ -1042,11 +1058,11 @@ export function BudgetDetailModal({
             {/* Editables */}
             <Row className="g-3">
               <Col md={4}>
-                <Form.Label>Comercial</Form.Label>
+                <Form.Label>Sede</Form.Label>
                 <Form.Control
-                  value={displayOrDash(comercialDisplay)}
-                  readOnly
-                  title={buildFieldTooltip(comercialDisplay)}
+                  value={formatSedeLabel(form.sede_label) ?? ''}
+                  onChange={(e) => updateForm('sede_label', e.target.value)}
+                  title={buildFieldTooltip(form.sede_label)}
                 />
               </Col>
               <Col md={8}>
@@ -1077,12 +1093,30 @@ export function BudgetDetailModal({
                 />
               </Col>
               <Col md={2} className="budget-field-narrow">
+                <Form.Label>FUNDAE</Form.Label>
+                <Form.Control
+                  value={form.fundae_label}
+                  onChange={(e) => updateForm('fundae_label', e.target.value)}
+                  style={affirmativeBorder(form.fundae_label)}
+                  title={buildFieldTooltip(form.fundae_label)}
+                />
+              </Col>
+              <Col md={2} className="budget-field-narrow">
                 <Form.Label>Hotel</Form.Label>
                 <Form.Control
                   value={form.hotel_label}
                   onChange={(e) => updateForm('hotel_label', e.target.value)}
                   style={affirmativeBorder(form.hotel_label)}
                   title={buildFieldTooltip(form.hotel_label)}
+                />
+              </Col>
+              <Col md={2}>
+                <Form.Label>Transporte</Form.Label>
+                <Form.Control
+                  value={displayOrDash(deal.transporte ?? null)}
+                  readOnly
+                  style={affirmativeBorder(deal.transporte ?? null)}
+                  title={buildFieldTooltip(deal.transporte ?? null)}
                 />
               </Col>
               <Col md={2} className="budget-field-wide">
@@ -1108,7 +1142,7 @@ export function BudgetDetailModal({
               <Table size="sm" bordered responsive className="mb-4">
                 <thead>
                   <tr>
-                    <th>Servicio</th>
+                    <th>Formación</th>
                     <th style={{ width: 60 }}>Horas</th>
                     <th style={{ width: 189 }}>Comentarios</th>
                   </tr>
@@ -1118,9 +1152,9 @@ export function BudgetDetailModal({
                     const productId = product?.id != null ? String(product.id) : null;
                     const productLabel = displayOrDash(product?.name ?? product?.code ?? '');
                     const isEditable = !!productId && trainingProductIds.has(productId);
-                    const quantityValue = isEditable
-                      ? productQuantities[productId] ?? ''
-                      : formatInitialQuantity(product?.quantity ?? null);
+                    const hoursValue = isEditable
+                      ? productHours[productId] ?? ''
+                      : formatInitialHours(product?.hours ?? null);
                     const commentText = (product?.comments ?? '').trim();
                     const commentPreview = buildCommentPreview(commentText);
                     return (
@@ -1133,15 +1167,15 @@ export function BudgetDetailModal({
                               size="sm"
                               inputMode="numeric"
                               pattern="[0-9]*"
-                              value={quantityValue}
+                              value={hoursValue}
                               placeholder="0"
-                              onChange={(event) => handleQuantityChange(productId!, event.target.value)}
+                              onChange={(event) => handleHoursChange(productId!, event.target.value)}
                               className="text-center"
                               aria-label={`Horas de ${productLabel}`}
-                              title={buildFieldTooltip(quantityValue)}
+                              title={buildFieldTooltip(hoursValue)}
                             />
                           ) : (
-                            <span className="text-muted">{displayOrDash(product?.quantity ?? null)}</span>
+                            <span className="text-muted">{displayOrDash(product?.hours ?? null)}</span>
                           )}
                         </td>
                         <td style={{ width: 189 }}>
@@ -1353,20 +1387,15 @@ export function BudgetDetailModal({
                     >
                       Subir Documento
                     </Button>
-                    {driveFolderLink ? (
-                      <a
-                        className="btn btn-outline-secondary"
-                        href={driveFolderLink}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      >
-                        Ir a G.Drive
-                      </a>
-                    ) : (
-                      <Button variant="outline-secondary" disabled>
-                        Ir a G.Drive
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline-secondary"
+                      href={driveFolderLink ?? undefined}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      disabled={!driveFolderLink}
+                    >
+                      Ir a G.Drive
+                    </Button>
                   </div>
                   {documents.length ? (
                     <ListGroup>
@@ -1644,12 +1673,7 @@ export function BudgetDetailModal({
     ) : null}
 
     {/* Confirmación cambios pendientes */}
-    <Modal
-      show={showConfirm}
-      onHide={() => setShowConfirm(false)}
-      centered
-      aria-label="Cambios sin guardar"
-    >
+    <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
       <Modal.Header closeButton>
         <Modal.Title>Cambios sin guardar</Modal.Title>
       </Modal.Header>
