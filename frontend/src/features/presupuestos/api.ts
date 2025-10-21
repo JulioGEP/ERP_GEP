@@ -412,6 +412,10 @@ function normalizeDealDetail(raw: Json): DealDetail {
     title: toStringValue(raw.title ?? raw.deal_title) ?? null,
 
     pipeline_label: toStringValue(raw.pipeline_label) ?? null,
+    pipeline_id:
+      toStringValue(raw.pipeline_id) ??
+      toStringValue(raw.deal_pipeline_id) ??
+      null,
     training_address:
       toStringValue(raw.training_address) ?? null,
 
