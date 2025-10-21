@@ -3089,7 +3089,7 @@ function SessionEditor({
       <Row className="g-3 mt-1">
         <Col md={6}>
           <Form.Group controlId={`session-${form.id}-trainers`}>
-            <Form.Label>Formadores / Bomberos</Form.Label>
+            <Form.Label>Formadores</Form.Label>
             <div ref={trainerFieldRef} className="session-multiselect">
               <Form.Control
                 type="text"
