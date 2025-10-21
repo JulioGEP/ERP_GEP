@@ -35,7 +35,6 @@ import {
   fetchDealSessions,
   fetchMobileUnitsCatalog,
   fetchRoomsCatalog,
-  fetchSessionAvailability,
   fetchSessionCounts,
   patchSession,
   createSession,
@@ -124,8 +123,6 @@ const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
 };
 const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['BORRADOR', 'SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
 const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
-
-const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 
 function formatErrorMessage(error: unknown, fallback: string): string {
   if (isApiError(error)) {
@@ -1553,19 +1550,12 @@ function SessionStateBadge({ estado }: { estado: SessionEstado }) {
 type SessionFormState = {
   id: string;
   nombre_cache: string;
-  fecha_inicio_local: string | null;
-  fecha_fin_local: string | null;
   sala_id: string | null;
   direccion: string;
   estado: SessionEstado;
   drive_url: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
-};
-
-type IsoRange = {
-  startIso: string;
-  endIso?: string;
 };
 
 type SaveStatus = {
@@ -1581,129 +1571,10 @@ function isApplicableProduct(product: DealProduct): product is DealProduct & { i
   return Boolean(id) && SESSION_CODE_PREFIXES.some((prefix) => code.startsWith(prefix));
 }
 
-function formatDateForInput(iso: string | null): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return null;
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: MADRID_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
-  const values: Record<string, string> = {};
-  for (const part of parts) {
-    if (part.type !== 'literal') values[part.type] = part.value;
-  }
-  if (!values.year || !values.month || !values.day || !values.hour || !values.minute) {
-    return null;
-  }
-  return `${values.year}-${values.month}-${values.day}T${values.hour}:${values.minute}`;
-}
-
-function getTimeZoneOffset(date: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
-  const values: Record<string, string> = {};
-  for (const part of parts) {
-    if (part.type !== 'literal') values[part.type] = part.value;
-  }
-  const utcTime = Date.UTC(
-    Number(values.year),
-    Number(values.month) - 1,
-    Number(values.day),
-    Number(values.hour),
-    Number(values.minute),
-    Number(values.second),
-  );
-  return utcTime - date.getTime();
-}
-
-function localInputToUtc(value: string | null): string | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  const trimmed = value.trim();
-  if (!trimmed.length) return null;
-  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-  if (!match) return undefined;
-  const [, yearStr, monthStr, dayStr, hourStr, minuteStr] = match;
-  const year = Number(yearStr);
-  const monthIndex = Number(monthStr) - 1;
-  const day = Number(dayStr);
-  const hour = Number(hourStr);
-  const minute = Number(minuteStr);
-  const baseDate = new Date(Date.UTC(year, monthIndex, day, hour, minute, 0));
-  if (!Number.isFinite(baseDate.getTime())) return undefined;
-  const offset = getTimeZoneOffset(baseDate, MADRID_TIMEZONE);
-  return new Date(baseDate.getTime() - offset).toISOString();
-}
-
-function buildIsoRangeFromInputs(
-  startInput: string | null,
-  endInput: string | null,
-): IsoRange | null {
-  const startIso = localInputToUtc(startInput ?? null);
-  if (typeof startIso !== 'string') {
-    return null;
-  }
-
-  const endIso = localInputToUtc(endInput ?? null);
-  if (endIso === undefined) {
-    return null;
-  }
-
-  if (typeof endIso === 'string') {
-    const startTime = new Date(startIso).getTime();
-    const endTime = new Date(endIso).getTime();
-    if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime < startTime) {
-      return null;
-    }
-    return { startIso, endIso };
-  }
-
-  return { startIso };
-}
-
-function addHoursToLocalDateTime(value: string, hours: number): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (!Number.isFinite(hours)) return null;
-  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-  if (!match) return null;
-  const [, yearStr, monthStr, dayStr, hourStr, minuteStr] = match;
-  const year = Number(yearStr);
-  const monthIndex = Number(monthStr) - 1;
-  const day = Number(dayStr);
-  const hour = Number(hourStr);
-  const minute = Number(minuteStr);
-  const baseDate = new Date(year, monthIndex, day, hour, minute, 0, 0);
-  if (!Number.isFinite(baseDate.getTime())) return null;
-  const minutesToAdd = Math.round(hours * 60);
-  if (!Number.isFinite(minutesToAdd)) return null;
-  baseDate.setMinutes(baseDate.getMinutes() + minutesToAdd);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${baseDate.getFullYear()}-${pad(baseDate.getMonth() + 1)}-${pad(baseDate.getDate())}T${pad(
-    baseDate.getHours(),
-  )}:${pad(baseDate.getMinutes())}`;
-}
-
 function mapSessionToForm(session: SessionDTO): SessionFormState {
   return {
     id: session.id,
     nombre_cache: session.nombre_cache,
-    fecha_inicio_local: formatDateForInput(session.fecha_inicio_utc),
-    fecha_fin_local: formatDateForInput(session.fecha_fin_utc),
     sala_id: session.sala_id ?? null,
     direccion: session.direccion ?? '',
     estado: session.estado,
@@ -1723,12 +1594,10 @@ function areStringArraysEqual(a: string[], b: string[]): boolean {
 function buildSessionPatchPayload(
   form: SessionFormState,
   saved: SessionFormState | undefined,
-): Parameters<typeof patchSession>[1] | null | 'INVALID_DATES' | 'INVALID_START' | 'INVALID_END' {
+): Parameters<typeof patchSession>[1] | null {
   if (!saved) {
     const payload: Parameters<typeof patchSession>[1] = {
       nombre_cache: form.nombre_cache,
-      fecha_inicio_utc: localInputToUtc(form.fecha_inicio_local) ?? null,
-      fecha_fin_utc: localInputToUtc(form.fecha_fin_local) ?? null,
     };
     if (ENABLE_ROOMS) {
       payload.sala_id = form.sala_id;
@@ -1737,10 +1606,13 @@ function buildSessionPatchPayload(
       payload.direccion = form.direccion;
     }
     if (ENABLE_TRAINERS) {
-      payload.trainer_ids = form.trainer_ids;
+      payload.trainer_ids = [...form.trainer_ids];
     }
     if (ENABLE_MOBILE_UNITS) {
-      payload.unidad_movil_ids = form.unidad_movil_ids;
+      payload.unidad_movil_ids = [...form.unidad_movil_ids];
+    }
+    if (ENABLE_SESSION_STATE) {
+      payload.estado = form.estado;
     }
 
     return payload;
@@ -1749,27 +1621,9 @@ function buildSessionPatchPayload(
   const patch: Parameters<typeof patchSession>[1] = {};
   let hasChanges = false;
 
-  const startIso = localInputToUtc(form.fecha_inicio_local ?? null);
-  if (startIso === undefined && form.fecha_inicio_local) return 'INVALID_START';
-  const endIso = localInputToUtc(form.fecha_fin_local ?? null);
-  if (endIso === undefined && form.fecha_fin_local) return 'INVALID_END';
-
-  if (form.fecha_inicio_local !== saved.fecha_inicio_local) {
-    patch.fecha_inicio_utc = startIso ?? null;
+  if (form.nombre_cache !== saved.nombre_cache) {
+    patch.nombre_cache = form.nombre_cache;
     hasChanges = true;
-  }
-
-  if (form.fecha_fin_local !== saved.fecha_fin_local) {
-    patch.fecha_fin_utc = endIso ?? null;
-    hasChanges = true;
-  }
-
-  const effectiveStart =
-    patch.fecha_inicio_utc !== undefined ? patch.fecha_inicio_utc : localInputToUtc(saved.fecha_inicio_local);
-  const effectiveEnd =
-    patch.fecha_fin_utc !== undefined ? patch.fecha_fin_utc : localInputToUtc(saved.fecha_fin_local);
-  if (effectiveStart && effectiveEnd && new Date(effectiveEnd).getTime() < new Date(effectiveStart).getTime()) {
-    return 'INVALID_DATES';
   }
 
   if (ENABLE_ROOMS && form.sala_id !== saved.sala_id) {
@@ -1792,11 +1646,6 @@ function buildSessionPatchPayload(
     hasChanges = true;
   }
 
-  if (form.nombre_cache !== saved.nombre_cache) {
-    patch.nombre_cache = form.nombre_cache;
-    hasChanges = true;
-  }
-
   if (ENABLE_SESSION_STATE && form.estado !== saved.estado) {
     if (MANUAL_SESSION_ESTADO_SET.has(form.estado)) {
       (patch as Record<string, SessionEstado>).estado = form.estado;
@@ -1813,34 +1662,12 @@ function sortOptionsByName<T extends { name: string }>(options: T[]): T[] {
   return [...options].sort((a, b) => a.name.localeCompare(b.name, 'es'));
 }
 
-type SessionTimeRange = {
-  startMs: number;
-  endMs: number;
-};
-
-function getSessionRangeFromForm(form: SessionFormState): SessionTimeRange | null {
-  const range = buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local);
-  if (!range || !range.endIso) {
-    return null;
-  }
-
-  const startMs = new Date(range.startIso).getTime();
-  const endMs = new Date(range.endIso).getTime();
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
-    return null;
-  }
-
-  return { startMs, endMs };
-}
-
-function rangesOverlap(a: SessionTimeRange, b: SessionTimeRange): boolean {
-  return a.startMs <= b.endMs && b.startMs <= a.endMs;
-}
-
 interface SessionsAccordionAbiertaProps {
   dealId: string;
   dealAddress: string | null;
   dealSedeLabel: string | null;
+  dealTrainingDate: string | null;
+  dealVariation: string | null;
   products: DealProduct[];
   onNotify?: (toast: ToastParams) => void;
 }
@@ -1849,6 +1676,8 @@ export function SessionsAccordionAbierta({
   dealId,
   dealAddress,
   dealSedeLabel,
+  dealTrainingDate,
+  dealVariation,
   products,
   onNotify,
 }: SessionsAccordionAbiertaProps) {
@@ -2118,33 +1947,6 @@ export function SessionsAccordionAbierta({
           [sessionId]: { saving: false, error: null, dirty: false, savedAt: Date.now() },
         }));
         return true;
-      }
-      if (patchResult === 'INVALID_START') {
-        const message = 'Fecha de inicio inválida';
-        setSaveStatus((current) => ({
-          ...current,
-          [sessionId]: { saving: false, error: message, dirty: true },
-        }));
-        onNotify?.({ variant: 'danger', message });
-        return false;
-      }
-      if (patchResult === 'INVALID_END') {
-        const message = 'Fecha de fin inválida';
-        setSaveStatus((current) => ({
-          ...current,
-          [sessionId]: { saving: false, error: message, dirty: true },
-        }));
-        onNotify?.({ variant: 'danger', message });
-        return false;
-      }
-      if (patchResult === 'INVALID_DATES') {
-        const message = 'Fin no puede ser anterior al inicio';
-        setSaveStatus((current) => ({
-          ...current,
-          [sessionId]: { saving: false, error: message, dirty: true },
-        }));
-        onNotify?.({ variant: 'danger', message });
-        return false;
       }
 
       const payload = patchResult;
@@ -2432,22 +2234,6 @@ export function SessionsAccordionAbierta({
   };
 
   const activeForm = activeSession ? forms[activeSession.sessionId] ?? null : null;
-  const activeProductHours = activeSession
-    ? (() => {
-        const directProduct = applicableProducts.find((product) => product.id === activeSession.productId);
-        if (directProduct && typeof directProduct.hours === 'number' && Number.isFinite(directProduct.hours)) {
-          return directProduct.hours;
-        }
-        const fallbackProductId = sessionProductRef.current[activeSession.sessionId];
-        if (!fallbackProductId) return null;
-        const fallbackProduct = applicableProducts.find((product) => product.id === fallbackProductId);
-        if (fallbackProduct && typeof fallbackProduct.hours === 'number' && Number.isFinite(fallbackProduct.hours)) {
-          return fallbackProduct.hours;
-        }
-        return null;
-      })()
-    : null;
-
   useEffect(() => {
     if (activeSession && !forms[activeSession.sessionId]) {
       setActiveSession(null);
@@ -2525,40 +2311,6 @@ export function SessionsAccordionAbierta({
                 <div>
                   <h5 className="mb-1">{product.name ?? product.code ?? 'Producto'}</h5>
                   <div className="text-muted small">Total sesiones: {pagination.total}</div>
-                </div>
-                <div className="d-flex align-items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline-primary"
-                    onClick={() => {
-                      const payload: Parameters<typeof createSession>[0] = {
-                        deal_id: dealId,
-                        deal_product_id: product.id,
-                      };
-                      if (ENABLE_ADDRESS) {
-                        payload.direccion = dealAddress ?? '';
-                      }
-
-                      createMutation
-                        .mutateAsync(payload)
-                        .then(() => invalidateProductSessions(product.id))
-                        .catch((error: unknown) => {
-                          const message = isApiError(error)
-                            ? error.message
-                            : error instanceof Error
-                            ? error.message
-                            : 'No se pudo crear la sesión';
-                          alert(message);
-                        });
-                    }}
-                    disabled={createMutation.isPending}
-                  >
-                    {createMutation.isPending ? (
-                      <Spinner size="sm" animation="border" />
-                    ) : (
-                      'Añadir sesión'
-                    )}
-                  </Button>
                 </div>
               </div>
               {isLoading && (
@@ -2790,13 +2542,13 @@ export function SessionsAccordionAbierta({
                   trainers={trainers}
                   rooms={rooms}
                   units={units}
-                  defaultDurationHours={activeProductHours}
-                  allForms={forms}
                   onChange={(updater) => handleFieldChange(activeSession.sessionId, updater)}
                   onOpenMap={handleOpenMap}
                   onSave={(options) => handleSaveSession(activeSession.sessionId, options)}
                   dealId={dealId}
                   dealSede={normalizedDealSede}
+                  dealTrainingDate={dealTrainingDate}
+                  dealVariation={dealVariation}
                   onNotify={onNotify}
                 />
               ) : (
@@ -2836,13 +2588,13 @@ interface SessionEditorProps {
   trainers: TrainerOption[];
   rooms: RoomOption[];
   units: MobileUnitOption[];
-  defaultDurationHours: number | null;
-  allForms: Record<string, SessionFormState>;
   onChange: (updater: (current: SessionFormState) => SessionFormState) => void;
   onOpenMap: (address: string) => void;
   onSave: (options?: { notifyOnSuccess?: boolean }) => Promise<boolean> | boolean;
   dealId: string;
   dealSede: string | null;
+  dealTrainingDate: string | null;
+  dealVariation: string | null;
   onNotify?: (toast: ToastParams) => void;
 }
 
@@ -2852,13 +2604,13 @@ function SessionEditor({
   trainers,
   rooms,
   units,
-  defaultDurationHours,
-  allForms,
   onChange,
   onOpenMap,
   onSave,
   dealId,
   dealSede,
+  dealTrainingDate,
+  dealVariation,
   onNotify,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
@@ -2871,7 +2623,6 @@ function SessionEditor({
   const effectiveTrainers = ENABLE_TRAINERS ? trainers : [];
   const effectiveUnits = ENABLE_MOBILE_UNITS ? units : [];
   const effectiveRooms = ENABLE_ROOMS ? rooms : [];
-  const shouldCheckAvailability = ENABLE_TRAINERS || ENABLE_ROOMS || ENABLE_MOBILE_UNITS;
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
@@ -2913,102 +2664,9 @@ function SessionEditor({
     .map((unit) => (unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name))
     .join(', ');
 
-  const availabilityRange = useMemo(() => {
-    if (!shouldCheckAvailability) return null;
-    return buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local);
-  }, [form.fecha_fin_local, form.fecha_inicio_local, shouldCheckAvailability]);
-
-  const availabilityQuery = shouldCheckAvailability
-    ? useQuery({
-        queryKey: availabilityRange
-          ? ['session-availability', form.id, availabilityRange.startIso, availabilityRange.endIso]
-          : ['session-availability', form.id, 'no-range'],
-        queryFn: () =>
-          fetchSessionAvailability({
-            start: availabilityRange!.startIso,
-            end: availabilityRange!.endIso,
-            excludeSessionId: form.id,
-          }),
-        enabled: Boolean(availabilityRange),
-        staleTime: 60_000,
-      })
-    : ({ data: undefined, error: null, isFetching: false } as const);
-
-  const availabilityError =
-    availabilityQuery.error instanceof Error ? availabilityQuery.error : null;
-  const availabilityFetching = availabilityQuery.isFetching;
-
-  const localLocks = useMemo(() => {
-    if (!shouldCheckAvailability) {
-      return {
-        trainers: new Set<string>(),
-        rooms: new Set<string>(),
-        units: new Set<string>(),
-      };
-    }
-    const currentRange = getSessionRangeFromForm(form);
-    if (!currentRange) {
-      return {
-        trainers: new Set<string>(),
-        rooms: new Set<string>(),
-        units: new Set<string>(),
-      };
-    }
-
-    const trainerSet = new Set<string>();
-    const roomSet = new Set<string>();
-    const unitSet = new Set<string>();
-
-    for (const [sessionId, otherForm] of Object.entries(allForms)) {
-      if (sessionId === form.id) continue;
-      const otherRange = getSessionRangeFromForm(otherForm);
-      if (!otherRange) continue;
-      if (!rangesOverlap(currentRange, otherRange)) continue;
-      if (ENABLE_TRAINERS) {
-        otherForm.trainer_ids.forEach((trainerId) => trainerSet.add(trainerId));
-      }
-      if (ENABLE_ROOMS && otherForm.sala_id) roomSet.add(otherForm.sala_id);
-      if (ENABLE_MOBILE_UNITS) {
-        otherForm.unidad_movil_ids.forEach((unidadId) => unitSet.add(unidadId));
-      }
-    }
-
-    return { trainers: trainerSet, rooms: roomSet, units: unitSet };
-  }, [allForms, form.id, form.fecha_fin_local, form.fecha_inicio_local, shouldCheckAvailability]);
-
-  const availability = availabilityQuery.data;
-
-  const blockedTrainers = useMemo(() => {
-    if (!ENABLE_TRAINERS) return new Set<string>();
-    const set = new Set<string>();
-    localLocks.trainers.forEach((id) => set.add(id));
-    availability?.trainers?.forEach((id) => set.add(id));
-    return set;
-  }, [availability, localLocks]);
-
-  const blockedRooms = useMemo(() => {
-    if (!ENABLE_ROOMS) return new Set<string>();
-    const set = new Set<string>();
-    localLocks.rooms.forEach((id) => set.add(id));
-    availability?.rooms?.forEach((id) => set.add(id));
-    return set;
-  }, [availability, localLocks]);
-
-  const blockedUnits = useMemo(() => {
-    if (!ENABLE_MOBILE_UNITS) return new Set<string>();
-    const set = new Set<string>();
-    localLocks.units.forEach((id) => {
-      if (!ALWAYS_AVAILABLE_UNIT_IDS.has(id)) {
-        set.add(id);
-      }
-    });
-    availability?.units?.forEach((id) => {
-      if (!ALWAYS_AVAILABLE_UNIT_IDS.has(id)) {
-        set.add(id);
-      }
-    });
-    return set;
-  }, [availability, localLocks]);
+  const blockedTrainers = useMemo(() => new Set<string>(), []);
+  const blockedRooms = useMemo(() => new Set<string>(), []);
+  const blockedUnits = useMemo(() => new Set<string>(), []);
 
   const selectedRoomLabel = useMemo(() => {
     if (!ENABLE_ROOMS) return '';
@@ -3021,9 +2679,36 @@ function SessionEditor({
     return blocked ? `${baseLabel} · No disponible` : baseLabel;
   }, [blockedRooms, form.sala_id, isInCompany, rooms]);
 
-  const hasDateRange = Boolean(availabilityRange);
-  const roomWarningVisible =
-    ENABLE_ROOMS && !isInCompany && hasDateRange && blockedRooms.size > 0;
+  const variationDisplay = useMemo(() => {
+    if (typeof dealVariation !== 'string') return '—';
+    const trimmed = dealVariation.trim();
+    return trimmed.length ? trimmed : '—';
+  }, [dealVariation]);
+
+  const variationTooltip = useMemo(() => {
+    if (typeof dealVariation !== 'string') return '';
+    return dealVariation.trim();
+  }, [dealVariation]);
+
+  const trainingDateDisplay = useMemo(() => {
+    if (typeof dealTrainingDate !== 'string') return '—';
+    const trimmed = dealTrainingDate.trim();
+    if (!trimmed.length) return '—';
+    const parsed = new Date(trimmed);
+    if (Number.isFinite(parsed.getTime())) {
+      try {
+        return new Intl.DateTimeFormat('es-ES').format(parsed);
+      } catch (error) {
+        return trimmed;
+      }
+    }
+    return trimmed;
+  }, [dealTrainingDate]);
+
+  const trainingDateTooltip = useMemo(() => {
+    if (typeof dealTrainingDate !== 'string') return '';
+    return dealTrainingDate.trim();
+  }, [dealTrainingDate]);
 
   useEffect(() => {
     if (!ENABLE_ROOMS) return;
@@ -3072,77 +2757,30 @@ function SessionEditor({
   return (
     <div className="session-editor bg-white rounded-3 p-3">
       <Row className="g-3">
-        <Col md={6} lg={3}>
-          <Form.Group controlId={`session-${form.id}-nombre`}>
-            <Form.Label>Nombre</Form.Label>
+        <Col md={6} lg={4}>
+          <Form.Group controlId={`session-${form.id}-variation`}>
+            <Form.Label>Variación</Form.Label>
             <Form.Control
-              value={form.nombre_cache}
-              placeholder="Introduce el nombre de la sesión"
-              onChange={(event) =>
-                onChange((current) => ({ ...current, nombre_cache: event.target.value }))
-              }
-              title={buildFieldTooltip(form.nombre_cache)}
+              plaintext
+              readOnly
+              value={variationDisplay}
+              title={buildFieldTooltip(variationTooltip || variationDisplay)}
             />
           </Form.Group>
         </Col>
-        <Col md={6} lg={3}>
-          <Form.Group controlId={`session-${form.id}-inicio`}>
-            <Form.Label>Fecha inicio</Form.Label>
+        <Col md={6} lg={4}>
+          <Form.Group controlId={`session-${form.id}-training-date`}>
+            <Form.Label>Fecha Formación</Form.Label>
             <Form.Control
-              type="datetime-local"
-              step={300}
-              value={form.fecha_inicio_local ?? ''}
-              onChange={(event) => {
-                const rawValue = event.target.value ?? '';
-                const normalizedValue = rawValue.trim() ? rawValue : null;
-                const durationHours =
-                  typeof defaultDurationHours === 'number' &&
-                  Number.isFinite(defaultDurationHours) &&
-                  defaultDurationHours > 0
-                    ? defaultDurationHours
-                    : null;
-                onChange((current) => {
-                  const next: SessionFormState = { ...current, fecha_inicio_local: normalizedValue };
-                  if (normalizedValue && durationHours !== null) {
-                    const computedEnd = addHoursToLocalDateTime(normalizedValue, durationHours);
-                    if (computedEnd) {
-                      next.fecha_fin_local = computedEnd;
-                    }
-                  } else if (!normalizedValue) {
-                    const previousStart = current.fecha_inicio_local;
-                    const previousEnd = current.fecha_fin_local;
-                    if (
-                      durationHours !== null &&
-                      previousStart &&
-                      previousEnd &&
-                      addHoursToLocalDateTime(previousStart, durationHours) === previousEnd
-                    ) {
-                      next.fecha_fin_local = null;
-                    }
-                  }
-                  return next;
-                });
-              }}
-              title={buildFieldTooltip(form.fecha_inicio_local)}
-            />
-          </Form.Group>
-        </Col>
-        <Col md={6} lg={3}>
-          <Form.Group controlId={`session-${form.id}-fin`}>
-            <Form.Label>Fecha fin</Form.Label>
-            <Form.Control
-              type="datetime-local"
-              step={300}
-              value={form.fecha_fin_local ?? ''}
-              onChange={(event) =>
-                onChange((current) => ({ ...current, fecha_fin_local: event.target.value || null }))
-              }
-              title={buildFieldTooltip(form.fecha_fin_local)}
+              plaintext
+              readOnly
+              value={trainingDateDisplay}
+              title={buildFieldTooltip(trainingDateTooltip || trainingDateDisplay)}
             />
           </Form.Group>
         </Col>
         {ENABLE_SESSION_STATE ? (
-          <Col md={6} lg={3}>
+          <Col md={6} lg={4}>
             <Form.Group controlId={`session-${form.id}-estado`}>
               <Form.Label>Estado</Form.Label>
               <Form.Select
@@ -3250,12 +2888,6 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
-            {shouldCheckAvailability && availabilityError && (
-              <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
-            )}
-            {shouldCheckAvailability && hasDateRange && availabilityFetching && !availabilityError && (
-              <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
-            )}
           </Form.Group>
         </Col>
         ) : null}
@@ -3334,12 +2966,6 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
-            {shouldCheckAvailability && availabilityError && (
-              <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
-            )}
-            {shouldCheckAvailability && hasDateRange && availabilityFetching && !availabilityError && (
-              <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
-            )}
           </Form.Group>
           </Col>
         ) : null}
@@ -3377,12 +3003,6 @@ function SessionEditor({
                   );
                 })}
             </Form.Select>
-            {shouldCheckAvailability && availabilityError && (
-              <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
-            )}
-            {shouldCheckAvailability && hasDateRange && availabilityFetching && !availabilityError && (
-              <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
-            )}
           </Form.Group>
         </Col>
         ) : null}
