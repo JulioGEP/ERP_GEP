@@ -806,7 +806,6 @@ export function BudgetDetailModalAbierta({
       : 'No se pudieron cargar los alumnos.'
     : null;
   const studentsEnabled = Boolean(normalizedDealId);
-  const noteStudentsSyncing = importStudentsFromNoteMutation.isPending;
 
   const noteStudentsInfo = useMemo(
     () => extractNoteStudents(deal?.notes ?? []),
@@ -909,6 +908,8 @@ export function BudgetDetailModalAbierta({
       }
     },
   });
+
+  const noteStudentsSyncing = importStudentsFromNoteMutation.isPending;
 
   useEffect(() => {
     processedNoteSignatureRef.current = null;
