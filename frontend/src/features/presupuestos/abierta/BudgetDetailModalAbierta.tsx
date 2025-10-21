@@ -1690,6 +1690,7 @@ export function BudgetDetailModalAbierta({
                   onNotify={onNotify}
                   eventKey="students"
                   bodyPrefix={studentsAccordionBodyPrefix}
+                  enablePublicLink={false}
                 />
               ) : (
                 <Accordion.Item eventKey="students">
