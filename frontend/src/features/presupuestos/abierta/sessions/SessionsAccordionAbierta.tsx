@@ -245,7 +245,7 @@ export function SessionStudentsAccordionItem({
   const publicLinkQuery = useQuery({
     queryKey: ['session-public-link', dealId, sessionId],
     queryFn: () => fetchSessionPublicLink(dealId, sessionId),
-    enabled: Boolean(dealId && sessionId),
+    enabled: enablePublicLink && Boolean(dealId && sessionId),
     staleTime: 300_000,
     refetchOnWindowFocus: false,
   });
@@ -276,12 +276,12 @@ export function SessionStudentsAccordionItem({
     setSaving(false);
     setUpdatingId(null);
     setDeletingId(null);
-    if (typeof resetPublicLinkMutation === 'function') {
+    if (enablePublicLink && typeof resetPublicLinkMutation === 'function') {
       resetPublicLinkMutation();
     }
     setGeneratedLinks([]);
     setDeletingLinkKey(null);
-  }, [dealId, sessionId, resetPublicLinkMutation]);
+  }, [dealId, sessionId, resetPublicLinkMutation, enablePublicLink]);
 
   const students = studentsQuery.data ?? [];
   const studentsLoading = studentsQuery.isLoading;
@@ -296,17 +296,24 @@ export function SessionStudentsAccordionItem({
   const editingStudentId = editingId && editingId !== 'new' ? editingId : null;
   const isNewRow = editingId === 'new';
 
-  const publicLink = publicLinkQuery.data ?? null;
-  const publicLinkLoading = publicLinkQuery.isLoading;
-  const publicLinkFetching = publicLinkQuery.isFetching;
-  const publicLinkError = publicLinkQuery.error
-    ? publicLinkQuery.error instanceof Error
-      ? publicLinkQuery.error.message
-      : 'No se pudo cargar la URL pública'
+  const publicLink = enablePublicLink ? publicLinkQuery.data ?? null : null;
+  const publicLinkLoading = enablePublicLink ? publicLinkQuery.isLoading : false;
+  const publicLinkFetching = enablePublicLink ? publicLinkQuery.isFetching : false;
+  const publicLinkError = enablePublicLink
+    ? publicLinkQuery.error
+      ? publicLinkQuery.error instanceof Error
+        ? publicLinkQuery.error.message
+        : 'No se pudo cargar la URL pública'
+      : null
     : null;
-  const publicLinkGenerating = createPublicLinkMutation.isPending;
+  const publicLinkGenerating = enablePublicLink && createPublicLinkMutation.isPending;
 
   useEffect(() => {
+    if (!enablePublicLink) {
+      setGeneratedLinks([]);
+      return;
+    }
+
     setGeneratedLinks((current) => {
       if (!publicLink) {
         return [];
@@ -331,7 +338,7 @@ export function SessionStudentsAccordionItem({
         normalizedLink,
       ];
     });
-  }, [publicLink]);
+  }, [enablePublicLink, publicLink]);
 
   const resolvePublicLinkUrl = useCallback((link: SessionPublicLink | null) => {
     if (!link) return null;
@@ -345,7 +352,7 @@ export function SessionStudentsAccordionItem({
   }, []);
 
   const publicLinkCreatedAt = useMemo(() => {
-    if (!publicLink?.created_at) return null;
+    if (!enablePublicLink || !publicLink?.created_at) return null;
     try {
       const dt = new Date(publicLink.created_at);
       if (!Number.isFinite(dt.getTime())) return null;
@@ -353,7 +360,7 @@ export function SessionStudentsAccordionItem({
     } catch {
       return null;
     }
-  }, [publicLink?.created_at]);
+  }, [enablePublicLink, publicLink?.created_at]);
 
   const handleOpenPublicLink = (target: string | null) => {
     if (!target || typeof window === 'undefined') return;
@@ -361,7 +368,7 @@ export function SessionStudentsAccordionItem({
   };
 
   const handleGeneratePublicLink = async () => {
-    if (!dealId || !sessionId) return;
+    if (!enablePublicLink || !dealId || !sessionId) return;
 
     try {
       const link = await createPublicLinkMutation.mutateAsync({ regenerate: true });
@@ -383,7 +390,7 @@ export function SessionStudentsAccordionItem({
   };
 
   const handleCopyPublicLink = async (url: string | null) => {
-    if (!url || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    if (!enablePublicLink || !url || typeof navigator === 'undefined' || !navigator.clipboard) return;
     try {
       await navigator.clipboard.writeText(url);
       onNotify?.({ variant: 'success', message: 'URL de alumnos copiada al portapapeles' });
@@ -393,7 +400,7 @@ export function SessionStudentsAccordionItem({
   };
 
   const handleDeletePublicLink = async (link: SessionPublicLink, label: string) => {
-    if (!dealId || !sessionId) return;
+    if (!enablePublicLink || !dealId || !sessionId) return;
 
     if (typeof window !== 'undefined') {
       const confirmMessage = `¿Seguro que quieres eliminar ${label}?`;
@@ -762,95 +769,102 @@ export function SessionStudentsAccordionItem({
               >
                 Agregar alumno
               </Button>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={handleGeneratePublicLink}
-                disabled={publicLinkGenerating || publicLinkLoading}
-                className="d-flex align-items-center gap-2"
-              >
-                {publicLinkGenerating ? (
-                  <>
-                    <Spinner animation="border" size="sm" role="status" />
-                    <span>Generando URL…</span>
-                  </>
-                ) : (
-                  'Generar URL'
-                )}
-              </Button>
-              {generatedLinks.length ? (
-                <div className="d-flex flex-wrap align-items-center gap-2">
-                  {generatedLinks.map((link, index) => {
-                    const url = resolvePublicLinkUrl(link);
-                    const label = `URL #${index + 1}`;
-                    const isActive = Boolean(link.active);
-                    const deleteKey = `${link.id ?? ''}-${link.token ?? ''}`;
-                    const isDeletingLink = deletePublicLinkMutation.isPending && deletingLinkKey === deleteKey;
-                    return (
-                      <div
-                        key={link.id || `${link.token}-${index}`}
-                        className="d-flex align-items-center gap-1"
-                      >
-                        <Button
-                          variant={isActive ? 'outline-primary' : 'outline-secondary'}
-                          size="sm"
-                          onClick={() => handleOpenPublicLink(url)}
-                          disabled={!url}
-                          title={url ?? undefined}
-                        >
-                          {label}
-                        </Button>
-                        <Button
-                          variant="outline-secondary"
-                          size="sm"
-                          className="d-flex align-items-center justify-content-center p-1"
-                          onClick={() => handleCopyPublicLink(url)}
-                          disabled={!url}
-                          title={url ? `Copiar ${label}` : undefined}
-                        >
-                          <CopyIcon aria-hidden="true" width={16} height={16} />
-                          <span className="visually-hidden">Copiar {label}</span>
-                        </Button>
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          className="d-flex align-items-center justify-content-center p-1"
-                          onClick={() => handleDeletePublicLink(link, label)}
-                          disabled={deletePublicLinkMutation.isPending}
-                          title={`Eliminar ${label}`}
-                        >
-                          {isDeletingLink ? (
-                            <Spinner animation="border" size="sm" role="status" />
-                          ) : (
-                            <TrashIcon width={16} height={16} />
-                          )}
-                          <span className="visually-hidden">Eliminar {label}</span>
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
+              {enablePublicLink ? (
+                <>
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={handleGeneratePublicLink}
+                    disabled={publicLinkGenerating || publicLinkLoading}
+                    className="d-flex align-items-center gap-2"
+                  >
+                    {publicLinkGenerating ? (
+                      <>
+                        <Spinner animation="border" size="sm" role="status" />
+                        <span>Generando URL…</span>
+                      </>
+                    ) : (
+                      'Generar URL'
+                    )}
+                  </Button>
+                  {generatedLinks.length ? (
+                    <div className="d-flex flex-wrap align-items-center gap-2">
+                      {generatedLinks.map((link, index) => {
+                        const url = resolvePublicLinkUrl(link);
+                        const label = `URL #${index + 1}`;
+                        const isActive = Boolean(link.active);
+                        const deleteKey = `${link.id ?? ''}-${link.token ?? ''}`;
+                        const isDeletingLink =
+                          deletePublicLinkMutation.isPending && deletingLinkKey === deleteKey;
+                        return (
+                          <div
+                            key={link.id || `${link.token}-${index}`}
+                            className="d-flex align-items-center gap-1"
+                          >
+                            <Button
+                              variant={isActive ? 'outline-primary' : 'outline-secondary'}
+                              size="sm"
+                              onClick={() => handleOpenPublicLink(url)}
+                              disabled={!url}
+                              title={url ?? undefined}
+                            >
+                              {label}
+                            </Button>
+                            <Button
+                              variant="outline-secondary"
+                              size="sm"
+                              className="d-flex align-items-center justify-content-center p-1"
+                              onClick={() => handleCopyPublicLink(url)}
+                              disabled={!url}
+                              title={url ? `Copiar ${label}` : undefined}
+                            >
+                              <CopyIcon aria-hidden="true" width={16} height={16} />
+                              <span className="visually-hidden">Copiar {label}</span>
+                            </Button>
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              className="d-flex align-items-center justify-content-center p-1"
+                              onClick={() => handleDeletePublicLink(link, label)}
+                              disabled={deletePublicLinkMutation.isPending}
+                              title={`Eliminar ${label}`}
+                            >
+                              {isDeletingLink ? (
+                                <Spinner animation="border" size="sm" role="status" />
+                              ) : (
+                                <TrashIcon width={16} height={16} />
+                              )}
+                              <span className="visually-hidden">Eliminar {label}</span>
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
             <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2 text-muted small">
               {!studentsLoading && studentsFetching ? <span>Actualizando alumnos…</span> : null}
-              {publicLinkFetching && !publicLinkLoading ? <span>Actualizando enlace…</span> : null}
+              {enablePublicLink && publicLinkFetching && !publicLinkLoading ? (
+                <span>Actualizando enlace…</span>
+              ) : null}
             </div>
           </div>
 
-          {publicLinkLoading ? (
+          {enablePublicLink && publicLinkLoading ? (
             <div className="d-flex align-items-center gap-2 text-muted small">
               <Spinner animation="border" size="sm" role="status" /> Cargando URL pública…
             </div>
           ) : null}
 
-          {publicLinkError ? (
+          {enablePublicLink && publicLinkError ? (
             <Alert variant="warning" className="mb-0">
               {publicLinkError}
             </Alert>
           ) : null}
 
-          {generatedLinks.length && publicLinkCreatedAt ? (
+          {enablePublicLink && generatedLinks.length && publicLinkCreatedAt ? (
             <div className="d-flex flex-column gap-2">
               <span className="text-muted small">Creada {publicLinkCreatedAt}</span>
             </div>
@@ -1670,6 +1684,7 @@ interface SessionsAccordionAbiertaProps {
   dealVariation: string | null;
   products: DealProduct[];
   onNotify?: (toast: ToastParams) => void;
+  allowPublicLinkGeneration?: boolean;
 }
 
 export function SessionsAccordionAbierta({
@@ -1680,8 +1695,10 @@ export function SessionsAccordionAbierta({
   dealVariation,
   products,
   onNotify,
+  allowPublicLinkGeneration = true,
 }: SessionsAccordionAbiertaProps) {
   const qc = useQueryClient();
+  const enablePublicLink = allowPublicLinkGeneration;
 
   const applicableProducts = useMemo(
     () =>
