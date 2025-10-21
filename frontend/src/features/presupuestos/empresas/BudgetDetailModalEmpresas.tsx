@@ -560,6 +560,11 @@ export function BudgetDetailModalEmpresas({
     [productHours, initialProductHours]
   );
 
+  const extraProducts = useMemo(
+    () => detailProducts.filter((product) => !isTrainingProduct(product)),
+    [detailProducts],
+  );
+
   const dirtyDeal = !!initialEditable && !!form && JSON.stringify(initialEditable) !== JSON.stringify(form);
   const isDirty = dirtyDeal || dirtyProducts;
   const isRefetching = detailQuery.isRefetching || refreshMutation.isPending;
@@ -575,11 +580,6 @@ export function BudgetDetailModalEmpresas({
   const clientDisplay = detailView.clientName ?? '';
   const clientPhoneDisplay = detailView.clientPhone ?? '';
   const clientEmailDisplay = detailView.clientEmail ?? '';
-
-  const extraProducts = useMemo(
-    () => detailProducts.filter((product) => !isTrainingProduct(product)),
-    [detailProducts],
-  );
 
   const modalTitle = organizationDisplay || 'Detalle presupuesto';
   const truncatedModalTitle = truncateText(modalTitle, 60);
