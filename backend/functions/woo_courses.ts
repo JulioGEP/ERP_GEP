@@ -37,6 +37,71 @@ function removeImageFields(input: any): any {
   return input;
 }
 
+const ESSENTIAL_VARIATION_FIELDS = new Set([
+  'id',
+  'name',
+  'status',
+  'sku',
+  'price',
+  'regular_price',
+  'sale_price',
+  'manage_stock',
+  'stock_quantity',
+  'stock_status',
+  'parent_id',
+  'attributes',
+]);
+
+const ESSENTIAL_VARIATION_ATTRIBUTE_FIELDS = new Set(['id', 'name', 'option', 'slug']);
+
+function pickFields(input: Record<string, any>, allowedKeys: Set<string>) {
+  const output: Record<string, any> = {};
+
+  for (const key of allowedKeys) {
+    if (Object.prototype.hasOwnProperty.call(input, key)) {
+      output[key] = input[key];
+    }
+  }
+
+  return output;
+}
+
+function sanitizeVariationAttributes(attributes: unknown): unknown {
+  if (!Array.isArray(attributes)) return [];
+
+  return attributes
+    .filter((attribute) => attribute && typeof attribute === 'object')
+    .map((attribute) => pickFields(attribute as Record<string, any>, ESSENTIAL_VARIATION_ATTRIBUTE_FIELDS));
+}
+
+function sanitizeVariation(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+
+  const variation = input as Record<string, any>;
+  const sanitized = pickFields(variation, ESSENTIAL_VARIATION_FIELDS);
+
+  if (Array.isArray(variation.attributes)) {
+    sanitized.attributes = sanitizeVariationAttributes(variation.attributes);
+  }
+
+  return sanitized;
+}
+
+function sanitizeByResource(resource: string, data: unknown): unknown {
+  const withoutImages = removeImageFields(data);
+  const isVariationResource = /\/variations(\/|$)/.test(resource);
+
+  if (!isVariationResource) {
+    return withoutImages;
+  }
+
+  if (Array.isArray(withoutImages)) {
+    return withoutImages.map((item) => sanitizeVariation(item));
+  }
+
+  return sanitizeVariation(withoutImages);
+}
+
 function buildWooUrl(resource: string, params: Record<string, string | undefined>) {
   const normalizedResource = resource.replace(/^\/+/, '');
   const baseUrl = `${WOO_BASE}/wp-json/wc/v3/${normalizedResource}`;
@@ -80,7 +145,7 @@ async function fetchWooResource(resource: string, params: Record<string, string 
     return errorResponse('WOO_ERROR', message, response.status || 502);
   }
 
-  const sanitized = removeImageFields(data);
+  const sanitized = sanitizeByResource(resource, data);
   return successResponse({ data: sanitized, status: response.status });
 }
 
