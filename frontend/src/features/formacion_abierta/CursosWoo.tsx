@@ -1,6 +1,6 @@
 // frontend/src/features/formacion_abierta/CursosWoo.tsx
-import { FormEvent, useMemo, useState } from 'react';
-import { Button, Card, Form, Stack } from 'react-bootstrap';
+import { FormEvent, useState } from 'react';
+import { Badge, Button, Card, Form, Stack } from 'react-bootstrap';
 import { API_BASE, ApiError, isApiError } from '../presupuestos/api';
 
 type WooResponse = {
@@ -9,6 +9,37 @@ type WooResponse = {
   status?: number;
   message?: string;
   error_code?: string;
+};
+
+type WooAttribute = {
+  id?: number;
+  name?: string;
+  option?: string;
+  options?: string[];
+  slug?: string;
+};
+
+type WooProduct = {
+  id?: number;
+  name?: string;
+  status?: string;
+  price?: string;
+  total_sales?: number;
+  manage_stock?: boolean;
+  stock_quantity?: number | null;
+  attributes?: WooAttribute[];
+  variations?: number[];
+};
+
+type WooVariation = {
+  id?: number;
+  price?: string;
+  status?: string;
+  stock_quantity?: number | null;
+  stock_status?: string;
+  parent_id?: number;
+  name?: string;
+  attributes?: WooAttribute[];
 };
 
 type FetchErrorState = {
@@ -53,29 +84,64 @@ async function requestWooResource(resource: string, params?: Record<string, stri
   return json.data ?? null;
 }
 
-function formatJson(value: unknown): string {
-  if (value === null || value === undefined) {
-    return 'null';
+function normalizeText(value?: string) {
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function getAttributeOptions(attribute?: WooAttribute): string[] {
+  if (!attribute) return [];
+
+  if (Array.isArray(attribute.options) && attribute.options.length > 0) {
+    return attribute.options.map((option) => String(option));
   }
-  return JSON.stringify(value, null, 2);
+
+  if (attribute.option) {
+    return [String(attribute.option)];
+  }
+
+  return [];
+}
+
+function findAttributeValues(attributes: WooAttribute[] | undefined, keywords: string[]): string[] {
+  if (!attributes?.length) return [];
+
+  const normalizedKeywords = keywords.map((keyword) => normalizeText(keyword));
+
+  for (const attribute of attributes) {
+    const normalizedName = normalizeText(attribute.name) || normalizeText(attribute.slug);
+
+    if (!normalizedName) continue;
+
+    const matches = normalizedKeywords.some((keyword) => normalizedName.includes(keyword));
+
+    if (matches) {
+      return getAttributeOptions(attribute);
+    }
+  }
+
+  return [];
+}
+
+function findVariationAttribute(variation: WooVariation, keywords: string[]): string {
+  const values = findAttributeValues(variation.attributes, keywords);
+  return values[0] ?? '—';
 }
 
 export default function CursosWoo() {
   const [productId, setProductId] = useState('');
-  const [parentData, setParentData] = useState<unknown | null>(null);
-  const [variationsData, setVariationsData] = useState<unknown>(null);
+  const [productData, setProductData] = useState<WooProduct | null>(null);
+  const [variationsData, setVariationsData] = useState<WooVariation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<FetchErrorState | null>(null);
   const [hasFetched, setHasFetched] = useState(false);
 
-  const parentJson = useMemo(() => formatJson(parentData), [parentData]);
-  const variationsJson = useMemo(() => {
-    if (Array.isArray(variationsData)) {
-      return formatJson(variationsData);
-    }
-
-    return formatJson([]);
-  }, [variationsData]);
+  const productLocations = findAttributeValues(productData?.attributes, ['localizacion', 'ubicacion']);
+  const productDates = findAttributeValues(productData?.attributes, ['fecha']);
+  const productPipedriveIds = findAttributeValues(productData?.attributes, ['pipedrive', 'pipe']);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -83,8 +149,8 @@ export default function CursosWoo() {
     const trimmedId = productId.trim();
     if (!trimmedId) {
       setError(null);
-      setParentData(null);
-      setVariationsData(null);
+      setProductData(null);
+      setVariationsData([]);
       setHasFetched(false);
       return;
     }
@@ -96,13 +162,13 @@ export default function CursosWoo() {
 
     try {
       const parentPromise = requestWooResource(`products/${encodedId}`);
-      let variationsResult: unknown = [];
+      let variationsResult: WooVariation[] = [];
 
       try {
         const variationsRaw = await requestWooResource(`products/${encodedId}/variations`, {
           per_page: 100,
         });
-        variationsResult = Array.isArray(variationsRaw) ? variationsRaw : [];
+        variationsResult = Array.isArray(variationsRaw) ? (variationsRaw as WooVariation[]) : [];
       } catch (err) {
         if (isApiError(err) && err.status === 404) {
           variationsResult = [];
@@ -113,12 +179,12 @@ export default function CursosWoo() {
 
       const parentResult = await parentPromise;
 
-      setParentData(parentResult);
+      setProductData(parentResult && typeof parentResult === 'object' ? (parentResult as WooProduct) : null);
       setVariationsData(variationsResult);
       setHasFetched(true);
     } catch (err) {
-      setParentData(null);
-      setVariationsData(null);
+      setProductData(null);
+      setVariationsData([]);
       setHasFetched(true);
 
       if (isApiError(err)) {
@@ -168,10 +234,90 @@ export default function CursosWoo() {
           <div className="d-flex flex-column gap-3">
             <section>
               <h3 className="h6 mb-2">Producto</h3>
-              {parentData ? (
-                <pre className="bg-light border rounded p-3 small mb-0">
-                  {parentJson}
-                </pre>
+              {productData ? (
+                <div className="d-flex flex-column gap-3">
+                  <dl className="row mb-0 small">
+                    <dt className="col-sm-4 col-lg-3">ID</dt>
+                    <dd className="col-sm-8 col-lg-9">{productData.id ?? '—'}</dd>
+
+                    <dt className="col-sm-4 col-lg-3">Nombre</dt>
+                    <dd className="col-sm-8 col-lg-9">{productData.name ?? '—'}</dd>
+
+                    <dt className="col-sm-4 col-lg-3">Estado</dt>
+                    <dd className="col-sm-8 col-lg-9">{productData.status ?? '—'}</dd>
+
+                    <dt className="col-sm-4 col-lg-3">Precio</dt>
+                    <dd className="col-sm-8 col-lg-9">{productData.price ?? '—'}</dd>
+
+                    <dt className="col-sm-4 col-lg-3">Ventas totales</dt>
+                    <dd className="col-sm-8 col-lg-9">{productData.total_sales ?? '—'}</dd>
+
+                    <dt className="col-sm-4 col-lg-3">Gestiona stock</dt>
+                    <dd className="col-sm-8 col-lg-9">
+                      {productData.manage_stock === undefined
+                        ? '—'
+                        : productData.manage_stock
+                        ? 'Sí'
+                        : 'No'}
+                    </dd>
+
+                    <dt className="col-sm-4 col-lg-3">Stock disponible</dt>
+                    <dd className="col-sm-8 col-lg-9">{productData.stock_quantity ?? '—'}</dd>
+
+                    <dt className="col-sm-4 col-lg-3">Nº de variaciones</dt>
+                    <dd className="col-sm-8 col-lg-9">{variationsData.length}</dd>
+                  </dl>
+
+                  <div>
+                    <h4 className="h6">Atributos</h4>
+                    <div className="d-flex flex-column gap-2">
+                      <div>
+                        <span className="d-block text-muted small mb-1">Localizaciones</span>
+                        <div className="d-flex flex-wrap gap-2">
+                          {productLocations.length ? (
+                            productLocations.map((value) => (
+                              <Badge bg="secondary" key={`loc-${value}`}>
+                                {value}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-muted small">Sin datos</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="d-block text-muted small mb-1">Fechas</span>
+                        <div className="d-flex flex-wrap gap-2">
+                          {productDates.length ? (
+                            productDates.map((value) => (
+                              <Badge bg="info" key={`date-${value}`}>
+                                {value}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-muted small">Sin datos</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="d-block text-muted small mb-1">ID de Pipedrive</span>
+                        <div className="d-flex flex-wrap gap-2">
+                          {productPipedriveIds.length ? (
+                            productPipedriveIds.map((value) => (
+                              <Badge bg="dark" key={`pipe-${value}`}>
+                                {value}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-muted small">Sin datos</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <p className="text-muted mb-0">Sin datos.</p>
               )}
@@ -179,9 +325,51 @@ export default function CursosWoo() {
 
             <section>
               <h3 className="h6 mb-2">Variaciones</h3>
-              <pre className="bg-light border rounded p-3 small mb-0">
-                {variationsJson}
-              </pre>
+              {variationsData.length ? (
+                <div className="d-flex flex-column gap-3">
+                  {variationsData.map((variation, index) => (
+                    <div
+                      key={variation.id ?? `variation-${index}`}
+                      className="border rounded p-3 small bg-light"
+                    >
+                      <dl className="row mb-0">
+                        <dt className="col-sm-5 col-lg-3">ID</dt>
+                        <dd className="col-sm-7 col-lg-9">{variation.id ?? '—'}</dd>
+
+                        <dt className="col-sm-5 col-lg-3">Nombre</dt>
+                        <dd className="col-sm-7 col-lg-9">{variation.name ?? '—'}</dd>
+
+                        <dt className="col-sm-5 col-lg-3">Estado</dt>
+                        <dd className="col-sm-7 col-lg-9">{variation.status ?? '—'}</dd>
+
+                        <dt className="col-sm-5 col-lg-3">Precio</dt>
+                        <dd className="col-sm-7 col-lg-9">{variation.price ?? '—'}</dd>
+
+                        <dt className="col-sm-5 col-lg-3">Stock disponible</dt>
+                        <dd className="col-sm-7 col-lg-9">{variation.stock_quantity ?? '—'}</dd>
+
+                        <dt className="col-sm-5 col-lg-3">Estado de stock</dt>
+                        <dd className="col-sm-7 col-lg-9">{variation.stock_status ?? '—'}</dd>
+
+                        <dt className="col-sm-5 col-lg-3">Localización</dt>
+                        <dd className="col-sm-7 col-lg-9">
+                          {findVariationAttribute(variation, ['localizacion', 'ubicacion'])}
+                        </dd>
+
+                        <dt className="col-sm-5 col-lg-3">Fechas</dt>
+                        <dd className="col-sm-7 col-lg-9">
+                          {findVariationAttribute(variation, ['fecha'])}
+                        </dd>
+
+                        <dt className="col-sm-5 col-lg-3">ID padre</dt>
+                        <dd className="col-sm-7 col-lg-9">{variation.parent_id ?? '—'}</dd>
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted mb-0">Sin variaciones disponibles.</p>
+              )}
             </section>
           </div>
         )}
