@@ -2856,7 +2856,7 @@ function SessionCommentsSection({
                             type="switch"
                             id={`session-comment-share-edit-${comment.id}`}
                             className="mt-2"
-                            label="Compartir con formador"
+                            label="Compartir con Bombero"
                             checked={editingCommentShare}
                             onChange={(event) => setEditingCommentShare(event.target.checked)}
                             onClick={(event) => event.stopPropagation()}
@@ -2897,7 +2897,7 @@ function SessionCommentsSection({
                               type="switch"
                               id={`session-comment-share-${comment.id}`}
                               className="mt-sm-1"
-                              label="Compartir con formador"
+                              label="Compartir con Bombero"
                               checked={Boolean(comment.compartir_formador)}
                               onChange={(event) => {
                                 event.stopPropagation();
@@ -2965,7 +2965,7 @@ function SessionCommentsSection({
                   type="switch"
                   id={`session-${sessionId}-comment-share`}
                   className="mt-2"
-                  label="Compartir con formador"
+                  label="Compartir con Bombero"
                   checked={newCommentShare}
                   onChange={(event) => setNewCommentShare(event.target.checked)}
                   disabled={createCommentMutation.isPending}
