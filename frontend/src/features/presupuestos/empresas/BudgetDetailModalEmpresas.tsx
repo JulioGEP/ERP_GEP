@@ -83,6 +83,13 @@ function mergeDealDetailData(current: DealDetail | undefined, next: DealDetail):
 
 const EMPTY_DOCUMENTS: DealDocument[] = [];
 const PIPELINE_LABEL = 'Formación Empresas';
+const TRAINING_PRODUCT_PREFIXES = ['form-', 'ces-'] as const;
+
+function isTrainingProduct(product: DealDetailViewModel['products'][number] | null | undefined) {
+  const code = typeof product?.code === 'string' ? product.code.trim().toLowerCase() : '';
+  if (!code.length) return false;
+  return TRAINING_PRODUCT_PREFIXES.some((prefix) => code.startsWith(prefix));
+}
 
 interface Props {
   dealId: string | null;
@@ -522,12 +529,8 @@ export function BudgetDetailModalEmpresas({
   const dealSedeLabel = formatSedeLabel(rawDealSedeLabel);
 
   const trainingProducts = useMemo(
-    () =>
-      detailProducts.filter((product) => {
-        const code = product?.code ?? '';
-        return typeof code === 'string' ? !code.toLowerCase().startsWith('ext-') : true;
-      }),
-    [detailProducts]
+    () => detailProducts.filter((product) => isTrainingProduct(product)),
+    [detailProducts],
   );
 
   const initialProductHours = useMemo(() => {
@@ -573,10 +576,10 @@ export function BudgetDetailModalEmpresas({
   const clientPhoneDisplay = detailView.clientPhone ?? '';
   const clientEmailDisplay = detailView.clientEmail ?? '';
 
-  const extraProducts = detailProducts.filter((product) => {
-    const code = product?.code ?? '';
-    return typeof code === 'string' ? code.toLowerCase().startsWith('ext-') : false;
-  });
+  const extraProducts = useMemo(
+    () => detailProducts.filter((product) => !isTrainingProduct(product)),
+    [detailProducts],
+  );
 
   const modalTitle = organizationDisplay || 'Detalle presupuesto';
   const truncatedModalTitle = truncateText(modalTitle, 60);
