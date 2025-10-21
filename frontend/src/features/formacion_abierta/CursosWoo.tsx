@@ -11,7 +11,7 @@ type WooResponse = {
   error_code?: string;
 };
 
-type WooAttribute = {
+export type WooAttribute = {
   id?: number;
   name?: string;
   option?: string;
@@ -19,7 +19,7 @@ type WooAttribute = {
   slug?: string;
 };
 
-type WooProduct = {
+export type WooProduct = {
   id?: number;
   name?: string;
   status?: string;
@@ -44,6 +44,12 @@ type WooVariation = {
 
 type FetchErrorState = {
   status?: number;
+};
+
+export type WooProductSummary = {
+  id?: number;
+  name?: string;
+  pipedriveIds: string[];
 };
 
 function buildEndpoint(resource: string, params?: Record<string, string | number | undefined>) {
@@ -131,7 +137,11 @@ function findVariationAttribute(variation: WooVariation, keywords: string[]): st
   return values[0] ?? '—';
 }
 
-export default function CursosWoo() {
+type CursosWooProps = {
+  onProductsFetched?: (products: WooProductSummary[]) => void;
+};
+
+export default function CursosWoo({ onProductsFetched }: CursosWooProps) {
   const [productId, setProductId] = useState('');
   const [productData, setProductData] = useState<WooProduct | null>(null);
   const [variationsData, setVariationsData] = useState<WooVariation[]>([]);
@@ -152,6 +162,9 @@ export default function CursosWoo() {
       setProductData(null);
       setVariationsData([]);
       setHasFetched(false);
+      if (onProductsFetched) {
+        onProductsFetched([]);
+      }
       return;
     }
 
@@ -162,6 +175,9 @@ export default function CursosWoo() {
 
     try {
       const parentPromise = requestWooResource(`products/${encodedId}`);
+      const allProductsPromise = requestWooResource('products', {
+        per_page: 100,
+      }).catch(() => null);
       let variationsResult: WooVariation[] = [];
 
       try {
@@ -182,10 +198,32 @@ export default function CursosWoo() {
       setProductData(parentResult && typeof parentResult === 'object' ? (parentResult as WooProduct) : null);
       setVariationsData(variationsResult);
       setHasFetched(true);
+
+      try {
+        const allProductsRaw = await allProductsPromise;
+
+        const summaries: WooProductSummary[] = Array.isArray(allProductsRaw)
+          ? (allProductsRaw as WooProduct[]).map((product) => ({
+              id: product.id,
+              name: product.name,
+              pipedriveIds: findAttributeValues(product.attributes, ['pipedrive', 'pipe']),
+            }))
+          : [];
+
+        onProductsFetched?.(summaries);
+      } catch (err) {
+        if (onProductsFetched) {
+          onProductsFetched([]);
+        }
+      }
     } catch (err) {
       setProductData(null);
       setVariationsData([]);
       setHasFetched(true);
+
+      if (onProductsFetched) {
+        onProductsFetched([]);
+      }
 
       if (isApiError(err)) {
         setError({ status: err.status });
