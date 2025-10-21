@@ -11,10 +11,16 @@
   node_bundler = "esbuild"
   # Sólo runtime, fuera la CLI 'prisma' para no engordar el zip
   external_node_modules = ["@prisma/client"]
-  # Aseguramos TODA la carpeta .prisma y el paquete @prisma/client
+  # Netlify sólo necesita el runtime de Prisma y el binario RHEL para Amazon Linux.
+  # Evitamos subir todos los motores y tipos duplicados por cada función (16MB extra cada uno).
   included_files = [
-    "node_modules/.prisma/**",
-    "node_modules/@prisma/client/**"
+    "node_modules/.prisma/client/default.*",
+    "node_modules/.prisma/client/index.*",
+    "node_modules/.prisma/client/edge.*",
+    "node_modules/.prisma/client/package.json",
+    "node_modules/.prisma/client/schema.prisma",
+    "node_modules/.prisma/client/wasm.*",
+    "node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node"
   ]
 
 # --------- Redirects ---------

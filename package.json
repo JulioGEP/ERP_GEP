@@ -19,7 +19,8 @@
     "postinstall": "prisma generate --schema prisma/schema.prisma",
     "db:init": "dotenv -e .env -- node scripts/init-db.mjs",
     "typecheck:functions": "tsc -p backend/tsconfig.json",
-    "netlify:build": "npm run generate && npm run build",
+    "prisma:prune": "node scripts/prisma-prune-binaries.mjs",
+    "netlify:build": "npm run generate && node scripts/prisma-prune-binaries.mjs && npm run build",
     "dev": "echo \"Dev local: usa 'npx netlify dev -p 8888' si tienes Netlify CLI disponible\""
   },
   "dependencies": {
