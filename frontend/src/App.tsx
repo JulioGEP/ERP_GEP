@@ -32,7 +32,7 @@ import type { SalasPageProps } from './pages/recursos/SalasPage';
 import type { TemplatesCertificadosPageProps } from './pages/recursos/TemplatesCertificadosPage';
 import type { ProductosPageProps } from './pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from './pages/certificados/CertificadosPage';
-import type { FormacionAbiertaCursosPageProps } from './pages/formacion-abierta/CursosPage';
+import type { RecursosFormacionAbiertaPageProps } from './pages/recursos/FormacionAbiertaPage';
 import { TOAST_EVENT, type ToastEventDetail } from './utils/toast';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
@@ -68,13 +68,6 @@ const NAVIGATION_ITEMS: NavItem[] = [
     ],
   },
   {
-    key: 'FormacionAbierta',
-    label: 'Formación Abierta',
-    children: [
-      { key: 'FormacionAbierta/Cursos', label: 'Cursos', path: '/formacion_abierta/cursos' },
-    ],
-  },
-  {
     key: 'Recursos',
     label: 'Recursos',
     children: [
@@ -82,6 +75,7 @@ const NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
+      { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
     ],
   },
   {
@@ -113,9 +107,13 @@ const NAVIGATION_ITEMS: NavItem[] = [
   },
 ];
 
+const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
+
 const KNOWN_APP_PATHS = new Set(
-  NAVIGATION_ITEMS.flatMap((item) => [item.path, ...(item.children?.map((child) => child.path) ?? [])])
-    .filter((path): path is string => Boolean(path))
+  [
+    ...NAVIGATION_ITEMS.flatMap((item) => [item.path, ...(item.children?.map((child) => child.path) ?? [])]),
+    ...LEGACY_APP_PATHS,
+  ].filter((path): path is string => Boolean(path))
 );
 
 const DEFAULT_REDIRECT_PATH = '/presupuestos/sinplanificar';
@@ -583,7 +581,7 @@ export default function App() {
   };
 
   const certificadosPageProps: CertificadosPageProps = {};
-  const formacionAbiertaCursosPageProps: FormacionAbiertaCursosPageProps = {};
+  const recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps = {};
 
   const pipelineLabelKey = (selectedBudgetSummary?.pipeline_label ?? '').trim();
   const pipelineIdKey =
@@ -670,7 +668,7 @@ export default function App() {
             templatesCertificadosPageProps={templatesCertificadosPageProps}
             productosPageProps={productosPageProps}
             certificadosPageProps={certificadosPageProps}
-            formacionAbiertaCursosPageProps={formacionAbiertaCursosPageProps}
+            recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
             defaultRedirectPath={DEFAULT_REDIRECT_PATH}
             knownPaths={KNOWN_APP_PATHS}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}

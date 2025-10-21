@@ -10,7 +10,7 @@ import type { SalasPageProps } from '../pages/recursos/SalasPage';
 import type { TemplatesCertificadosPageProps } from '../pages/recursos/TemplatesCertificadosPage';
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
-import type { FormacionAbiertaCursosPageProps } from '../pages/formacion-abierta/CursosPage';
+import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
@@ -22,8 +22,8 @@ const SalasPage = lazy(() => import('../pages/recursos/SalasPage'));
 const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/TemplatesCertificadosPage'));
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
-const FormacionAbiertaCursosPage = lazy(
-  () => import('../pages/formacion-abierta/CursosPage'),
+const RecursosFormacionAbiertaPage = lazy(
+  () => import('../pages/recursos/FormacionAbiertaPage'),
 );
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
 const InformesPreventivoPage = lazy(() => import('../pages/informes/PreventivoReportPage'));
@@ -43,7 +43,7 @@ type AppRouterProps = {
   templatesCertificadosPageProps: TemplatesCertificadosPageProps;
   productosPageProps: ProductosPageProps;
   certificadosPageProps: CertificadosPageProps;
-  formacionAbiertaCursosPageProps: FormacionAbiertaCursosPageProps;
+  recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
   defaultRedirectPath: string;
   knownPaths: ReadonlySet<string>;
   activePathStorageKey: string;
@@ -60,7 +60,7 @@ export function AppRouter({
   templatesCertificadosPageProps,
   productosPageProps,
   certificadosPageProps,
-  formacionAbiertaCursosPageProps,
+  recursosFormacionAbiertaPageProps,
   defaultRedirectPath,
   knownPaths,
   activePathStorageKey,
@@ -107,9 +107,10 @@ export function AppRouter({
         />
         <Route path="/recursos/productos" element={<ProductosPage {...productosPageProps} />} />
         <Route
-          path="/formacion_abierta/cursos"
-          element={<FormacionAbiertaCursosPage {...formacionAbiertaCursosPageProps} />}
+          path="/recursos/formacion_abierta"
+          element={<RecursosFormacionAbiertaPage {...recursosFormacionAbiertaPageProps} />}
         />
+        <Route path="/formacion_abierta/cursos" element={<Navigate to="/recursos/formacion_abierta" replace />} />
         <Route path="/informes/formacion" element={<InformesFormacionPage />} />
         <Route path="/informes/preventivo" element={<InformesPreventivoPage />} />
         <Route path="/informes/simulacro" element={<InformesSimulacroPage />} />
