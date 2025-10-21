@@ -1677,6 +1677,8 @@ export function BudgetDetailModalAbierta({
                 dealId={normalizedDealId}
                 dealAddress={defaultSessionAddress ?? null}
                 dealSedeLabel={dealSedeLabel ?? null}
+                dealTrainingDate={detailView.aFecha ?? null}
+                dealVariation={detailView.wIdVariation ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
               />
