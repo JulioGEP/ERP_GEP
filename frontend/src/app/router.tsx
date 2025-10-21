@@ -78,7 +78,8 @@ export function AppRouter({
             />
           }
         />
-        <Route path="/presupuestos" element={<BudgetsPage {...budgetsPageProps} />} />
+        <Route path="/presupuestos" element={<Navigate to="/presupuestos/sinplanificar" replace />} />
+        <Route path="/presupuestos/sinplanificar" element={<BudgetsPage {...budgetsPageProps} />} />
         <Route
           path="/calendario/por_sesiones"
           element={createElement(PorSesionesPage, { ...porSesionesPageProps, key: 'calendar-sesiones' })}

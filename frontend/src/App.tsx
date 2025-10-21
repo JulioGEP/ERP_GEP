@@ -51,7 +51,13 @@ type NavItem = {
 };
 
 const NAVIGATION_ITEMS: NavItem[] = [
-  { key: 'Presupuestos', label: 'Presupuestos', path: '/presupuestos' },
+  {
+    key: 'Presupuestos',
+    label: 'Presupuestos',
+    children: [
+      { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
+    ],
+  },
   {
     key: 'Calendario',
     label: 'Calendario',
@@ -112,7 +118,7 @@ const KNOWN_APP_PATHS = new Set(
     .filter((path): path is string => Boolean(path))
 );
 
-const DEFAULT_REDIRECT_PATH = '/presupuestos';
+const DEFAULT_REDIRECT_PATH = '/presupuestos/sinplanificar';
 
 type BudgetModalProps = ComponentProps<typeof BudgetDetailModalEmpresas>;
 
@@ -602,7 +608,7 @@ export default function App() {
             className="d-flex align-items-center gap-3"
             onClick={(event) => {
               event.preventDefault();
-              navigate('/presupuestos');
+              navigate(DEFAULT_REDIRECT_PATH);
             }}
           >
             <img src={logo} height={64} alt="GEP Group" />
