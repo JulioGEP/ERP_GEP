@@ -1671,7 +1671,7 @@ export function CertificadosPage() {
                       Generando previsualización…
                     </>
                   ) : (
-                    'Previsualizar template'
+                    'Previsualizar'
                   )}
                 </Button>
               </div>
