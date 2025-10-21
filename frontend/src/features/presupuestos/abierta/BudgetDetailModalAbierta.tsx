@@ -1681,6 +1681,7 @@ export function BudgetDetailModalAbierta({
                 dealVariation={detailView.wIdVariation ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
+                allowPublicLinkGeneration={false}
               />
               {effectiveStudentsSessionId ? (
                 <SessionStudentsAccordionItem
