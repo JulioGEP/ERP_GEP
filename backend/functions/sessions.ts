@@ -50,6 +50,14 @@ function hasApplicableCode(code: unknown): boolean {
   return APPLICABLE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
+function hasPrevencionPrefix(name: unknown, code: unknown): boolean {
+  const values = [name, code]
+    .map((value) => (value == null ? null : String(value).trim().toLowerCase()))
+    .filter((value): value is string => Boolean(value));
+
+  return values.some((value) => value.startsWith('prev-'));
+}
+
 function toPositiveInt(value: unknown, fallback = 0): number {
   if (value === null || value === undefined) return fallback;
   const num = Number(value);
@@ -264,7 +272,9 @@ async function syncSessionsForProduct(
   product: { id: string; deal_id: string | null; quantity: any; name: string | null; code: string | null },
   defaultAddress: string | null,
 ) {
-  const targetQuantity = toNonNegativeInt(product.quantity, 0);
+  const targetQuantity = hasPrevencionPrefix(product.name, product.code)
+    ? 1
+    : toNonNegativeInt(product.quantity, 0);
   const baseName = buildNombreBase(product.name, product.code);
 
   const existing = await tx.sessions.findMany({
