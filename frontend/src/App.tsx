@@ -32,6 +32,7 @@ import type { SalasPageProps } from './pages/recursos/SalasPage';
 import type { TemplatesCertificadosPageProps } from './pages/recursos/TemplatesCertificadosPage';
 import type { ProductosPageProps } from './pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from './pages/certificados/CertificadosPage';
+import type { FormacionAbiertaCursosPageProps } from './pages/formacion-abierta/CursosPage';
 import { TOAST_EVENT, type ToastEventDetail } from './utils/toast';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
@@ -58,6 +59,13 @@ const NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Calendario/Sesiones', label: 'Por sesiones', path: '/calendario/por_sesiones' },
       { key: 'Calendario/Formadores', label: 'Por formador', path: '/calendario/por_formador' },
       { key: 'Calendario/Unidades', label: 'Por unidad móvil', path: '/calendario/por_unidad_movil' },
+    ],
+  },
+  {
+    key: 'FormacionAbierta',
+    label: 'Formación Abierta',
+    children: [
+      { key: 'FormacionAbierta/Cursos', label: 'Cursos', path: '/formacion_abierta/cursos' },
     ],
   },
   {
@@ -567,6 +575,7 @@ export default function App() {
   };
 
   const certificadosPageProps: CertificadosPageProps = {};
+  const formacionAbiertaCursosPageProps: FormacionAbiertaCursosPageProps = {};
 
   const pipelineLabelKey = (selectedBudgetSummary?.pipeline_label ?? '').trim();
   const pipelineIdKey =
@@ -653,6 +662,7 @@ export default function App() {
             templatesCertificadosPageProps={templatesCertificadosPageProps}
             productosPageProps={productosPageProps}
             certificadosPageProps={certificadosPageProps}
+            formacionAbiertaCursosPageProps={formacionAbiertaCursosPageProps}
             defaultRedirectPath={DEFAULT_REDIRECT_PATH}
             knownPaths={KNOWN_APP_PATHS}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}
