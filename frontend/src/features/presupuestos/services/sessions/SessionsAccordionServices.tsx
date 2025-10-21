@@ -48,14 +48,6 @@ import {
   uploadSessionDocuments,
   updateSessionDocumentShare,
   deleteSessionDocument,
-  fetchSessionStudents,
-  createSessionStudent,
-  updateSessionStudent,
-  deleteSessionStudent,
-  fetchSessionPublicLink,
-  createSessionPublicLink,
-  deleteSessionPublicLink,
-  type SessionPublicLink,
   SESSION_DOCUMENT_SIZE_LIMIT_BYTES,
   SESSION_DOCUMENT_SIZE_LIMIT_LABEL,
   SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE,
@@ -65,7 +57,6 @@ import {
   type SessionEstado,
   type SessionComment,
   type SessionDocument,
-  type SessionStudent,
   type SessionCounts,
 } from '../../api';
 import { isApiError } from '../../api';
@@ -150,762 +141,6 @@ function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function CopyIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} {...props}>
-      <rect x={9} y={9} width={11} height={11} rx={2} ry={2} />
-      <path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1" />
-    </svg>
-  );
-}
-
-function TrashIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false" {...props}>
-      <path d="M5.5 5.5a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z" />
-      <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zm8.382-1 .5-.5H11V2z" />
-    </svg>
-  );
-}
-
-type StudentDraft = {
-  nombre: string;
-  apellido: string;
-  dni: string;
-  apto: boolean;
-  certificado: boolean;
-};
-
-const EMPTY_STUDENT_DRAFT: StudentDraft = {
-  nombre: '',
-  apellido: '',
-  dni: '',
-  apto: false,
-  certificado: false,
-};
-
-function normalizeStudentDniInput(value: string): string {
-  return value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
-}
-
-function validateStudentDraft(draft: StudentDraft): string | null {
-  const nombre = draft.nombre.trim();
-  const apellido = draft.apellido.trim();
-  const dni = normalizeStudentDniInput(draft.dni);
-
-  if (!nombre.length || !apellido.length || !dni.length) {
-    return 'Nombre, apellidos y DNI son obligatorios';
-  }
-
-  if (dni.length < 7 || dni.length > 12 || !/^[A-Z0-9]+$/.test(dni)) {
-    return 'El DNI debe tener entre 7 y 12 caracteres alfanuméricos';
-  }
-
-  return null;
-}
-
-function SessionStudentsAccordionItem({
-  dealId,
-  sessionId,
-  onNotify,
-}: {
-  dealId: string;
-  sessionId: string;
-  onNotify?: (toast: ToastParams) => void;
-}) {
-  const qc = useQueryClient();
-  const [editingId, setEditingId] = useState<'new' | string | null>(null);
-  const [draft, setDraft] = useState<StudentDraft>(EMPTY_STUDENT_DRAFT);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [duplicateTarget, setDuplicateTarget] = useState<SessionStudent | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [generatedLinks, setGeneratedLinks] = useState<SessionPublicLink[]>([]);
-  const [deletingLinkKey, setDeletingLinkKey] = useState<string | null>(null);
-
-  const studentsQuery = useQuery({
-    queryKey: ['session-students', dealId, sessionId],
-    queryFn: () => fetchSessionStudents(dealId, sessionId),
-    enabled: Boolean(dealId && sessionId),
-    staleTime: 30_000,
-  });
-
-  const publicLinkQuery = useQuery({
-    queryKey: ['session-public-link', dealId, sessionId],
-    queryFn: () => fetchSessionPublicLink(dealId, sessionId),
-    enabled: Boolean(dealId && sessionId),
-    staleTime: 300_000,
-    refetchOnWindowFocus: false,
-  });
-
-  const createPublicLinkMutation = useMutation({
-    mutationFn: (options?: { regenerate?: boolean }) =>
-      createSessionPublicLink(dealId, sessionId, options),
-    onSuccess: (link) => {
-      qc.setQueryData(['session-public-link', dealId, sessionId], link);
-    },
-  });
-  const deletePublicLinkMutation = useMutation({
-    mutationFn: (link: SessionPublicLink) =>
-      deleteSessionPublicLink(dealId, sessionId, { tokenId: link.id, token: link.token }),
-    onSuccess: () => {
-      qc.setQueryData(['session-public-link', dealId, sessionId], null);
-      setGeneratedLinks([]);
-      void qc.invalidateQueries({ queryKey: ['session-public-link', dealId, sessionId] });
-    },
-  });
-  const resetPublicLinkMutation = createPublicLinkMutation.reset;
-
-  useEffect(() => {
-    setEditingId(null);
-    setDraft(EMPTY_STUDENT_DRAFT);
-    setFormError(null);
-    setDuplicateTarget(null);
-    setSaving(false);
-    setUpdatingId(null);
-    setDeletingId(null);
-    if (typeof resetPublicLinkMutation === 'function') {
-      resetPublicLinkMutation();
-    }
-    setGeneratedLinks([]);
-    setDeletingLinkKey(null);
-  }, [dealId, sessionId, resetPublicLinkMutation]);
-
-  const students = studentsQuery.data ?? [];
-  const studentsLoading = studentsQuery.isLoading;
-  const studentsFetching = studentsQuery.isFetching;
-  const queryError = studentsQuery.error
-    ? studentsQuery.error instanceof Error
-      ? studentsQuery.error.message
-      : 'No se pudieron cargar los alumnos'
-    : null;
-
-  const studentCount = students.length;
-  const editingStudentId = editingId && editingId !== 'new' ? editingId : null;
-  const isNewRow = editingId === 'new';
-
-  const publicLink = publicLinkQuery.data ?? null;
-  const publicLinkLoading = publicLinkQuery.isLoading;
-  const publicLinkFetching = publicLinkQuery.isFetching;
-  const publicLinkError = publicLinkQuery.error
-    ? publicLinkQuery.error instanceof Error
-      ? publicLinkQuery.error.message
-      : 'No se pudo cargar la URL pública'
-    : null;
-  const publicLinkGenerating = createPublicLinkMutation.isPending;
-
-  useEffect(() => {
-    setGeneratedLinks((current) => {
-      if (!publicLink) {
-        return [];
-      }
-
-      const normalizedLink = { ...publicLink, active: true };
-      const currentKey = `${normalizedLink.id}-${normalizedLink.token ?? ''}`;
-      const existingIndex = current.findIndex(
-        (item) => `${item.id}-${item.token ?? ''}` === currentKey,
-      );
-
-      if (existingIndex >= 0) {
-        return current.map((item, index) =>
-          index === existingIndex
-            ? { ...normalizedLink }
-            : { ...item, active: false },
-        );
-      }
-
-      return [
-        ...current.map((item) => ({ ...item, active: false })),
-        normalizedLink,
-      ];
-    });
-  }, [publicLink]);
-
-  const resolvePublicLinkUrl = useCallback((link: SessionPublicLink | null) => {
-    if (!link) return null;
-    if (link.public_url && link.public_url.trim().length) {
-      return link.public_url;
-    }
-    if (link.public_path && link.public_path.trim().length && typeof window !== 'undefined') {
-      return `${window.location.origin}${link.public_path}`;
-    }
-    return link.public_path ?? null;
-  }, []);
-
-  const publicLinkCreatedAt = useMemo(() => {
-    if (!publicLink?.created_at) return null;
-    try {
-      const dt = new Date(publicLink.created_at);
-      if (!Number.isFinite(dt.getTime())) return null;
-      return new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(dt);
-    } catch {
-      return null;
-    }
-  }, [publicLink?.created_at]);
-
-  const handleOpenPublicLink = (target: string | null) => {
-    if (!target || typeof window === 'undefined') return;
-    window.open(target, '_blank', 'noopener,noreferrer');
-  };
-
-  const handleGeneratePublicLink = async () => {
-    if (!dealId || !sessionId) return;
-
-    try {
-      const link = await createPublicLinkMutation.mutateAsync({ regenerate: true });
-      const targetUrl = resolvePublicLinkUrl(link);
-
-      if (!targetUrl) {
-        onNotify?.({ variant: 'danger', message: 'No se pudo abrir la URL pública generada' });
-        return;
-      }
-
-      handleOpenPublicLink(targetUrl);
-      onNotify?.({ variant: 'success', message: 'URL pública generada correctamente' });
-    } catch (error: any) {
-      const message = isApiError(error)
-        ? error.message
-        : 'No se pudo generar la URL pública, inténtalo de nuevo';
-      onNotify?.({ variant: 'danger', message });
-    }
-  };
-
-  const handleCopyPublicLink = async (url: string | null) => {
-    if (!url || typeof navigator === 'undefined' || !navigator.clipboard) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      onNotify?.({ variant: 'success', message: 'URL de alumnos copiada al portapapeles' });
-    } catch {
-      onNotify?.({ variant: 'danger', message: 'No se pudo copiar la URL, copia manualmente' });
-    }
-  };
-
-  const handleDeletePublicLink = async (link: SessionPublicLink, label: string) => {
-    if (!dealId || !sessionId) return;
-
-    if (typeof window !== 'undefined') {
-      const confirmMessage = `¿Seguro que quieres eliminar ${label}?`;
-      if (!window.confirm(confirmMessage)) {
-        return;
-      }
-    }
-
-    const key = `${link.id}-${link.token ?? ''}`;
-    setDeletingLinkKey(key);
-
-    try {
-      await deletePublicLinkMutation.mutateAsync(link);
-      onNotify?.({ variant: 'success', message: `${label} eliminada correctamente` });
-    } catch (error: unknown) {
-      const message = isApiError(error)
-        ? error.message
-        : 'No se pudo eliminar la URL pública, inténtalo de nuevo';
-      onNotify?.({ variant: 'danger', message });
-    } finally {
-      setDeletingLinkKey((current) => (current === key ? null : current));
-    }
-  };
-
-  const resetDraft = () => {
-    setDraft(EMPTY_STUDENT_DRAFT);
-    setFormError(null);
-    setDuplicateTarget(null);
-  };
-
-  const handleAdd = () => {
-    resetDraft();
-    setEditingId('new');
-  };
-
-  const handleEdit = (student: SessionStudent) => {
-    setDraft({
-      nombre: student.nombre,
-      apellido: student.apellido,
-      dni: student.dni,
-      apto: student.apto,
-      certificado: student.certificado,
-    });
-    setFormError(null);
-    setDuplicateTarget(null);
-    setEditingId(student.id);
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-    resetDraft();
-  };
-
-  const handleDraftChange = (field: keyof StudentDraft, value: string | boolean) => {
-    setDraft((current) => {
-      if (field === 'dni' && typeof value === 'string') {
-        return { ...current, dni: normalizeStudentDniInput(value) };
-      }
-      if ((field === 'apto' || field === 'certificado') && typeof value === 'boolean') {
-        return { ...current, [field]: value } as StudentDraft;
-      }
-      if (typeof value === 'string') {
-        return { ...current, [field]: value } as StudentDraft;
-      }
-      return current;
-    });
-    if (formError) {
-      setFormError(null);
-      setDuplicateTarget(null);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!dealId || !sessionId || !editingId) return;
-    const validation = validateStudentDraft(draft);
-    const normalizedDni = normalizeStudentDniInput(draft.dni);
-    if (validation) {
-      setFormError(validation);
-      setDuplicateTarget(null);
-      return;
-    }
-
-    const currentId = editingId === 'new' ? null : editingId;
-    const duplicate = students.find(
-      (student) => student.dni.toUpperCase() === normalizedDni && student.id !== currentId,
-    );
-    if (duplicate) {
-      setFormError('Ya existe un alumno con este DNI en la sesión.');
-      setDuplicateTarget(duplicate);
-      return;
-    }
-
-    setSaving(true);
-    setFormError(null);
-    setDuplicateTarget(null);
-
-    try {
-      if (editingId === 'new') {
-        await createMutation.mutateAsync({
-          dealId,
-          sessionId,
-          nombre: draft.nombre.trim(),
-          apellido: draft.apellido.trim(),
-          dni: normalizedDni,
-          apto: draft.apto,
-          certificado: draft.certificado,
-        });
-        onNotify?.({ variant: 'success', message: 'Alumno añadido correctamente' });
-      } else {
-        await updateMutation.mutateAsync({
-          id: editingId,
-          data: {
-            nombre: draft.nombre.trim(),
-            apellido: draft.apellido.trim(),
-            dni: normalizedDni,
-            apto: draft.apto,
-            certificado: draft.certificado,
-          },
-        });
-        onNotify?.({ variant: 'success', message: 'Alumno actualizado correctamente' });
-      }
-      await qc.invalidateQueries({ queryKey: ['session-students', dealId, sessionId] });
-      handleCancel();
-    } catch (error: unknown) {
-      const message = isApiError(error)
-        ? error.message
-        : error instanceof Error
-        ? error.message
-        : 'No se pudo guardar el alumno';
-      setFormError(message);
-      onNotify?.({ variant: 'danger', message });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const createMutation = useMutation({
-    mutationFn: createSessionStudent,
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: (input: { id: string; data: Parameters<typeof updateSessionStudent>[1] }) =>
-      updateSessionStudent(input.id, input.data),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (studentId: string) => deleteSessionStudent(studentId),
-  });
-
-  const handleToggleBoolean = async (
-    student: SessionStudent,
-    field: 'apto' | 'certificado',
-    value: boolean,
-  ) => {
-    setFormError(null);
-    setDuplicateTarget(null);
-    setUpdatingId(student.id);
-    try {
-      await updateMutation.mutateAsync({ id: student.id, data: { [field]: value } });
-      await qc.invalidateQueries({ queryKey: ['session-students', dealId, sessionId] });
-    } catch (error: unknown) {
-      const message = isApiError(error)
-        ? error.message
-        : error instanceof Error
-        ? error.message
-        : 'No se pudo actualizar el alumno';
-      setFormError(message);
-      onNotify?.({ variant: 'danger', message });
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const handleDelete = async (student: SessionStudent) => {
-    if (!window.confirm('¿Seguro que quieres eliminar a este alumno?')) {
-      return;
-    }
-    setFormError(null);
-    setDuplicateTarget(null);
-    setDeletingId(student.id);
-    try {
-      await deleteMutation.mutateAsync(student.id);
-      onNotify?.({ variant: 'success', message: 'Alumno eliminado correctamente' });
-      if (editingStudentId === student.id) {
-        handleCancel();
-      }
-      await qc.invalidateQueries({ queryKey: ['session-students', dealId, sessionId] });
-    } catch (error: unknown) {
-      const message = isApiError(error)
-        ? error.message
-        : error instanceof Error
-        ? error.message
-        : 'No se pudo eliminar el alumno';
-      setFormError(message);
-      onNotify?.({ variant: 'danger', message });
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const renderEditingRow = (key: string) => {
-    const disableInputs = saving;
-    const canSave = !validateStudentDraft(draft) && !saving;
-
-    return (
-      <tr key={key}>
-        <td className="align-middle">
-          <Form.Control
-            type="text"
-            value={draft.nombre}
-            onChange={(event) => handleDraftChange('nombre', event.target.value)}
-            placeholder="Nombre"
-            disabled={disableInputs}
-            title={buildFieldTooltip(draft.nombre)}
-          />
-        </td>
-        <td className="align-middle">
-          <Form.Control
-            type="text"
-            value={draft.apellido}
-            onChange={(event) => handleDraftChange('apellido', event.target.value)}
-            placeholder="Apellidos"
-            disabled={disableInputs}
-            title={buildFieldTooltip(draft.apellido)}
-          />
-        </td>
-        <td className="align-middle">
-          <Form.Control
-            type="text"
-            value={draft.dni}
-            onChange={(event) => handleDraftChange('dni', event.target.value)}
-            placeholder="DNI"
-            disabled={disableInputs}
-            title={buildFieldTooltip(draft.dni)}
-          />
-        </td>
-        <td className="align-middle text-center">
-          <Form.Check
-            type="checkbox"
-            label=""
-            checked={draft.apto}
-            onChange={(event) => handleDraftChange('apto', event.target.checked)}
-            disabled={disableInputs}
-            aria-label="Marcar alumno como apto"
-          />
-        </td>
-        <td className="align-middle text-center">
-          <Form.Check
-            type="checkbox"
-            label=""
-            checked={draft.certificado}
-            onChange={(event) => handleDraftChange('certificado', event.target.checked)}
-            disabled={disableInputs}
-            aria-label="Marcar alumno como certificado"
-          />
-        </td>
-        <td className="align-middle text-nowrap">
-          <div className="d-flex gap-2 justify-content-end">
-            <Button
-              size="sm"
-              variant="outline-secondary"
-              onClick={handleCancel}
-              disabled={disableInputs}
-            >
-              Cancelar
-            </Button>
-            <Button size="sm" variant="primary" onClick={handleSave} disabled={!canSave}>
-              {saving ? <Spinner animation="border" size="sm" role="status" /> : 'Guardar'}
-            </Button>
-          </div>
-        </td>
-      </tr>
-    );
-  };
-
-  const renderStudentRow = (student: SessionStudent) => {
-    const rowDisabled = Boolean(editingId && editingId !== student.id);
-    const isUpdating = updatingId === student.id && updateMutation.isPending;
-    const isDeleting = deletingId === student.id && deleteMutation.isPending;
-    const driveUrl = typeof student.drive_url === 'string' ? student.drive_url.trim() : '';
-    const nameContent = student.nombre;
-
-    return (
-      <tr key={student.id}>
-        <td className="align-middle">
-          {driveUrl ? (
-            <a
-              href={driveUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Abrir certificado en una nueva pestaña"
-            >
-              {nameContent}
-            </a>
-          ) : (
-            nameContent
-          )}
-        </td>
-        <td className="align-middle">{student.apellido}</td>
-        <td className="align-middle text-uppercase">{student.dni}</td>
-        <td className="align-middle text-center">
-          <Form.Check
-            type="checkbox"
-            label=""
-            checked={student.apto}
-            disabled={rowDisabled || isUpdating || isDeleting}
-            onChange={(event) => handleToggleBoolean(student, 'apto', event.target.checked)}
-            aria-label={`Cambiar estado apto de ${student.nombre} ${student.apellido}`}
-          />
-        </td>
-        <td className="align-middle text-center">
-          <Form.Check
-            type="checkbox"
-            label=""
-            checked={student.certificado}
-            disabled={rowDisabled || isUpdating || isDeleting}
-            onChange={(event) => handleToggleBoolean(student, 'certificado', event.target.checked)}
-            aria-label={`Cambiar certificado de ${student.nombre} ${student.apellido}`}
-          />
-        </td>
-        <td className="align-middle text-nowrap">
-          <div className="d-flex gap-2 justify-content-end">
-            <Button
-              size="sm"
-              variant="outline-primary"
-              onClick={() => handleEdit(student)}
-              disabled={Boolean(editingId)}
-            >
-              Editar
-            </Button>
-            <Button
-              size="sm"
-              variant="outline-danger"
-              onClick={() => handleDelete(student)}
-              disabled={rowDisabled || isDeleting || isUpdating}
-            >
-              {isDeleting ? <Spinner animation="border" size="sm" role="status" /> : 'Eliminar'}
-            </Button>
-          </div>
-        </td>
-      </tr>
-    );
-  };
-
-  return (
-    <Accordion.Item eventKey={`session-students-${sessionId}`}>
-      <Accordion.Header>
-        <div className="d-flex justify-content-between align-items-center w-100">
-          <span className="erp-accordion-title">
-            Alumnos
-            {studentCount > 0 ? <span className="erp-accordion-count">{studentCount}</span> : null}
-          </span>
-        </div>
-      </Accordion.Header>
-      <Accordion.Body>
-        <div className="d-flex flex-column gap-3 mb-3">
-          <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2">
-            <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2 flex-wrap">
-              <Button
-                variant="outline-primary"
-                size="sm"
-                onClick={handleAdd}
-                disabled={isNewRow || Boolean(editingStudentId) || saving || studentsLoading}
-              >
-                Agregar alumno
-              </Button>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={handleGeneratePublicLink}
-                disabled={publicLinkGenerating || publicLinkLoading}
-                className="d-flex align-items-center gap-2"
-              >
-                {publicLinkGenerating ? (
-                  <>
-                    <Spinner animation="border" size="sm" role="status" />
-                    <span>Generando URL…</span>
-                  </>
-                ) : (
-                  'Generar URL'
-                )}
-              </Button>
-              {generatedLinks.length ? (
-                <div className="d-flex flex-wrap align-items-center gap-2">
-                  {generatedLinks.map((link, index) => {
-                    const url = resolvePublicLinkUrl(link);
-                    const label = `URL #${index + 1}`;
-                    const isActive = Boolean(link.active);
-                    const deleteKey = `${link.id ?? ''}-${link.token ?? ''}`;
-                    const isDeletingLink = deletePublicLinkMutation.isPending && deletingLinkKey === deleteKey;
-                    return (
-                      <div
-                        key={link.id || `${link.token}-${index}`}
-                        className="d-flex align-items-center gap-1"
-                      >
-                        <Button
-                          variant={isActive ? 'outline-primary' : 'outline-secondary'}
-                          size="sm"
-                          onClick={() => handleOpenPublicLink(url)}
-                          disabled={!url}
-                          title={url ?? undefined}
-                        >
-                          {label}
-                        </Button>
-                        <Button
-                          variant="outline-secondary"
-                          size="sm"
-                          className="d-flex align-items-center justify-content-center p-1"
-                          onClick={() => handleCopyPublicLink(url)}
-                          disabled={!url}
-                          title={url ? `Copiar ${label}` : undefined}
-                        >
-                          <CopyIcon aria-hidden="true" width={16} height={16} />
-                          <span className="visually-hidden">Copiar {label}</span>
-                        </Button>
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          className="d-flex align-items-center justify-content-center p-1"
-                          onClick={() => handleDeletePublicLink(link, label)}
-                          disabled={deletePublicLinkMutation.isPending}
-                          title={`Eliminar ${label}`}
-                        >
-                          {isDeletingLink ? (
-                            <Spinner animation="border" size="sm" role="status" />
-                          ) : (
-                            <TrashIcon width={16} height={16} />
-                          )}
-                          <span className="visually-hidden">Eliminar {label}</span>
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-            <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2 text-muted small">
-              {!studentsLoading && studentsFetching ? <span>Actualizando alumnos…</span> : null}
-              {publicLinkFetching && !publicLinkLoading ? <span>Actualizando enlace…</span> : null}
-            </div>
-          </div>
-
-          {publicLinkLoading ? (
-            <div className="d-flex align-items-center gap-2 text-muted small">
-              <Spinner animation="border" size="sm" role="status" /> Cargando URL pública…
-            </div>
-          ) : null}
-
-          {publicLinkError ? (
-            <Alert variant="warning" className="mb-0">
-              {publicLinkError}
-            </Alert>
-          ) : null}
-
-          {generatedLinks.length && publicLinkCreatedAt ? (
-            <div className="d-flex flex-column gap-2">
-              <span className="text-muted small">Creada {publicLinkCreatedAt}</span>
-            </div>
-          ) : null}
-        </div>
-
-        {queryError ? (
-          <Alert variant="danger" className="mb-3">
-            {queryError}
-          </Alert>
-        ) : null}
-
-        {formError ? (
-          <Alert
-            variant={duplicateTarget ? 'warning' : 'danger'}
-            className="mb-3 d-flex flex-column flex-sm-row align-items-sm-center gap-2"
-          >
-            <span className="flex-grow-1">{formError}</span>
-            {duplicateTarget ? (
-              <Button
-                size="sm"
-                variant="outline-primary"
-                onClick={() => handleEdit(duplicateTarget)}
-              >
-                Editar alumno existente
-              </Button>
-            ) : null}
-          </Alert>
-        ) : null}
-
-        {studentsLoading ? (
-          <div className="d-flex align-items-center gap-2 mb-3">
-            <Spinner animation="border" size="sm" /> Cargando alumnos…
-          </div>
-        ) : null}
-
-        <div className="table-responsive">
-          <Table striped bordered hover size="sm" className="mb-0">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Apellidos</th>
-                <th>DNI</th>
-                <th className="text-center">APTO</th>
-                <th className="text-center">Certificado</th>
-                <th className="text-end">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isNewRow ? renderEditingRow('new-student') : null}
-              {students.map((student) =>
-                editingStudentId === student.id ? renderEditingRow(student.id) : renderStudentRow(student),
-              )}
-              {!isNewRow && !students.length && !studentsLoading ? (
-                <tr>
-                  <td colSpan={6} className="text-center text-muted py-4">
-                    Sin alumnos registrados
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </Table>
-        </div>
-      </Accordion.Body>
-    </Accordion.Item>
-
-  );
-}
 
 function SessionDocumentsAccordionItem({
   sessionId,
@@ -1821,7 +1056,6 @@ function rangesOverlap(a: SessionTimeRange, b: SessionTimeRange): boolean {
 interface SessionsAccordionServicesProps {
   dealId: string;
   dealAddress: string | null;
-  dealSedeLabel: string | null;
   products: DealProduct[];
   onNotify?: (toast: ToastParams) => void;
 }
@@ -1829,7 +1063,6 @@ interface SessionsAccordionServicesProps {
 export function SessionsAccordionServices({
   dealId,
   dealAddress,
-  dealSedeLabel,
   products,
   onNotify,
 }: SessionsAccordionServicesProps) {
@@ -2361,7 +1594,6 @@ export function SessionsAccordionServices({
 
       await invalidateProductSessions(productId);
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ['session-students', dealId, sessionId] }),
         qc.invalidateQueries({ queryKey: ['session-documents', dealId, sessionId] }),
         qc.invalidateQueries({ queryKey: ['session-comments', sessionId] }),
         qc.invalidateQueries({ queryKey: ['deal', dealId] }),
@@ -2410,7 +1642,8 @@ export function SessionsAccordionServices({
     }
   }, [activeSession, forms]);
 
-  const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
+  const normalizedDealSede = 'In Company';
+  const isInCompany = true;
 
   const trainers = trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
   const allRooms = roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
@@ -2739,7 +1972,7 @@ export function SessionsAccordionServices({
                   onOpenMap={handleOpenMap}
                   onSave={(options) => handleSaveSession(activeSession.sessionId, options)}
                   dealId={dealId}
-                  dealSede={normalizedDealSede}
+                  isInCompany
                   onNotify={onNotify}
                 />
               ) : (
@@ -2783,7 +2016,7 @@ interface SessionEditorProps {
   onOpenMap: (address: string) => void;
   onSave: (options?: { notifyOnSuccess?: boolean }) => Promise<boolean> | boolean;
   dealId: string;
-  dealSede: string | null;
+  isInCompany: boolean;
   onNotify?: (toast: ToastParams) => void;
 }
 
@@ -2799,7 +2032,7 @@ function SessionEditor({
   onOpenMap,
   onSave,
   dealId,
-  dealSede,
+  isInCompany,
   onNotify,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
@@ -2808,7 +2041,6 @@ function SessionEditor({
   const [unitListOpen, setUnitListOpen] = useState(false);
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
-  const isInCompany = dealSede === 'In Company';
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
@@ -3087,7 +2319,7 @@ function SessionEditor({
       <Row className="g-3 mt-1">
         <Col md={6}>
           <Form.Group controlId={`session-${form.id}-trainers`}>
-            <Form.Label>Formadores / Bomberos</Form.Label>
+            <Form.Label>Bomberos</Form.Label>
             <div ref={trainerFieldRef} className="session-multiselect">
               <Form.Control
                 type="text"
@@ -3767,11 +2999,6 @@ function SessionCommentsSection({
           dealId={dealId}
           onNotify={onNotify}
           initialDriveUrl={driveUrl ?? null}
-        />
-        <SessionStudentsAccordionItem
-          dealId={dealId}
-          sessionId={sessionId}
-          onNotify={onNotify}
         />
       </Accordion>
 
