@@ -1642,7 +1642,7 @@ export function CertificadosPage() {
             <div className="certificate-panel">
               <div className="certificate-template-controls">
                 <Form.Group controlId="certificate-template" className="mb-0">
-                  <Form.Label className="mb-1">Template del certificado</Form.Label>
+                  <Form.Label className="mb-1">Plantilla del certificado</Form.Label>
                   <Form.Select
                     value={selectedTemplateKey}
                     onChange={handleTemplateChange}
