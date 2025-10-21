@@ -30,7 +30,6 @@ import {
   MANUAL_DOCUMENT_SIZE_LIMIT_MESSAGE
 } from '../api';
 import { normalizeImportDealResult } from '../importDealUtils';
-import { formatSedeLabel } from '../formatSedeLabel';
 import { SessionsAccordionServices } from './sessions/SessionsAccordionServices';
 import type { DealEditablePatch } from '../api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../../types/deal';
@@ -490,8 +489,6 @@ export function BudgetDetailModalServices({
     form?.training_address?.trim()?.length
       ? form.training_address
       : deal?.training_address ?? summary?.training_address ?? null;
-
-  const dealSedeLabel = formatSedeLabel(detailView.sedeLabel ?? null);
 
   const trainingProducts = useMemo(
     () =>
@@ -1054,7 +1051,6 @@ export function BudgetDetailModalServices({
               <SessionsAccordionServices
                 dealId={normalizedDealId}
                 dealAddress={defaultSessionAddress ?? null}
-                dealSedeLabel={dealSedeLabel ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
               />
