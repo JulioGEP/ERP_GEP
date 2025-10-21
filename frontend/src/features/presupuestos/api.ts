@@ -1710,24 +1710,68 @@ export async function uploadSessionCertificate(params: {
  * Alumnos de sesión
  * ========================= */
 
+function sortStudentsByName(students: SessionStudent[]): SessionStudent[] {
+  return students.slice().sort((a, b) => {
+    const nameA = `${(a.apellido ?? '').trim()} ${(a.nombre ?? '').trim()}`.trim().toLowerCase();
+    const nameB = `${(b.apellido ?? '').trim()} ${(b.nombre ?? '').trim()}`.trim().toLowerCase();
+    if (nameA && nameB) {
+      const compare = nameA.localeCompare(nameB, 'es');
+      if (compare !== 0) {
+        return compare;
+      }
+    }
+    if (nameA) return -1;
+    if (nameB) return 1;
+    const dniA = (a.dni ?? '').trim().toUpperCase();
+    const dniB = (b.dni ?? '').trim().toUpperCase();
+    if (dniA && dniB) {
+      const compare = dniA.localeCompare(dniB, 'es');
+      if (compare !== 0) {
+        return compare;
+      }
+    }
+    if (dniA) return -1;
+    if (dniB) return 1;
+    return (a.id ?? '').localeCompare(b.id ?? '', 'es');
+  });
+}
+
+async function fetchStudentsRequest(params: {
+  dealId: string;
+  sessionId?: string | null;
+  sort?: boolean;
+}): Promise<SessionStudent[]> {
+  const normalizedDealId = String(params.dealId ?? '').trim();
+  const normalizedSessionId = String(params.sessionId ?? '').trim();
+
+  if (!normalizedDealId) {
+    throw new ApiError('VALIDATION_ERROR', 'dealId es obligatorio');
+  }
+  if (params.sessionId !== undefined && !normalizedSessionId) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId es obligatorio');
+  }
+
+  const searchParams = new URLSearchParams({ deal_id: normalizedDealId });
+  if (normalizedSessionId) {
+    searchParams.set('sesion_id', normalizedSessionId);
+  }
+
+  const data = await request(`/alumnos?${searchParams.toString()}`);
+  const rows: any[] = Array.isArray(data?.students) ? data.students : [];
+  const students = rows.map((row) => normalizeSessionStudent(row));
+
+  return params.sort ? sortStudentsByName(students) : students;
+}
+
 export async function fetchSessionStudents(
   dealId: string,
   sessionId: string,
 ): Promise<SessionStudent[]> {
-  const normalizedDealId = String(dealId ?? '').trim();
-  const normalizedSessionId = String(sessionId ?? '').trim();
-  if (!normalizedDealId || !normalizedSessionId) {
-    throw new ApiError('VALIDATION_ERROR', 'dealId y sessionId son obligatorios');
-  }
+  return fetchStudentsRequest({ dealId, sessionId });
+}
 
-  const params = new URLSearchParams({
-    deal_id: normalizedDealId,
-    sesion_id: normalizedSessionId,
-  });
-
-  const data = await request(`/alumnos?${params.toString()}`);
-  const students: any[] = Array.isArray(data?.students) ? data.students : [];
-  return students.map((student) => normalizeSessionStudent(student));
+export async function fetchDealStudents(dealId: string): Promise<SessionStudent[]> {
+  return fetchStudentsRequest({ dealId, sort: true });
 }
 
 export type CreateSessionStudentInput = {
