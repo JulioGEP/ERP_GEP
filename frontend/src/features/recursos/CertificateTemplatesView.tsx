@@ -661,7 +661,7 @@ export function CertificateTemplatesView({ onNotify }: CertificateTemplatesViewP
     <div className="d-grid gap-4">
       <section className="d-grid gap-3 gap-md-2">
         <div>
-          <h1 className="h3 fw-bold mb-0">Templates de Certificados</h1>
+          <h1 className="h3 fw-bold mb-0">Plantillas de Certificados</h1>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-3">
           {(isLoading || isSaving) && <Spinner animation="border" role="status" size="sm" className="me-1" />}

@@ -78,7 +78,7 @@ const NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Certificados/Principal', label: 'Certificados', path: '/certificados' },
       {
         key: 'Certificados/Templates',
-        label: 'Templates Certificados',
+        label: 'Plantillas de Certificados',
         path: '/certificados/templates_certificados',
       },
     ],
