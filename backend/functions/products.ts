@@ -6,6 +6,7 @@ import { toMadridISOString } from './_shared/timezone';
 type ProductRecord = {
   id: string;
   id_pipe: string;
+  id_woo: bigint | number | null;
   name: string | null;
   code: string | null;
   category: string | null;
@@ -33,6 +34,7 @@ function normalizeProduct(record: ProductRecord) {
   return {
     id: record.id,
     id_pipe: record.id_pipe,
+    id_woo: record.id_woo == null ? null : Number(record.id_woo),
     name: record.name ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
@@ -68,6 +70,35 @@ function buildUpdateData(body: any) {
   if (Object.prototype.hasOwnProperty.call(body, 'active')) {
     data.active = Boolean(body.active);
     hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'id_woo')) {
+    const rawValue = body.id_woo;
+
+    if (rawValue === '' || rawValue === null || rawValue === undefined) {
+      data.id_woo = null;
+      hasChanges = true;
+    } else if (typeof rawValue === 'bigint') {
+      data.id_woo = rawValue;
+      hasChanges = true;
+    } else {
+      const text = String(rawValue).trim();
+      if (!/^[-+]?\d+$/.test(text)) {
+        return {
+          error: errorResponse('VALIDATION_ERROR', 'El campo id_woo debe ser un número entero válido', 400),
+        } as const;
+      }
+
+      try {
+        data.id_woo = BigInt(text);
+        hasChanges = true;
+      } catch (error) {
+        console.error('[products] invalid id_woo value', error);
+        return {
+          error: errorResponse('VALIDATION_ERROR', 'El campo id_woo debe ser un número entero válido', 400),
+        } as const;
+      }
+    }
   }
 
   if (!hasChanges) {

@@ -6,6 +6,7 @@ export type ProductUpdatePayload = {
   template?: string | null;
   url_formacion?: string | null;
   active?: boolean | null;
+  id_woo?: number | null;
 };
 
 export type ProductSyncSummary = {
@@ -52,6 +53,16 @@ function toNullableString(value: unknown): string | null {
   return text.length ? text : null;
 }
 
+function toNullableNumber(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const numberValue = typeof value === 'string' ? Number(value.trim()) : Number(value);
+  if (!Number.isFinite(numberValue)) {
+    throw new ApiError('VALIDATION_ERROR', 'El campo id_woo debe ser un número válido');
+  }
+
+  return numberValue;
+}
+
 function normalizeProduct(row: any): Product {
   if (!row || typeof row !== 'object') {
     throw new ApiError('INVALID_RESPONSE', 'Formato de producto no válido');
@@ -63,6 +74,7 @@ function normalizeProduct(row: any): Product {
   return {
     id: String(row.id ?? ''),
     id_pipe: String(row.id_pipe ?? ''),
+    id_woo: row.id_woo == null ? null : Number(row.id_woo),
     name: row.name == null ? null : String(row.name),
     code: row.code == null ? null : String(row.code),
     category: row.category == null ? null : String(row.category),
@@ -88,6 +100,10 @@ function buildUpdateBody(payload: ProductUpdatePayload): Record<string, any> {
 
   if ('active' in payload) {
     body.active = Boolean(payload.active);
+  }
+
+  if ('id_woo' in payload) {
+    body.id_woo = toNullableNumber(payload.id_woo);
   }
 
   return body;
