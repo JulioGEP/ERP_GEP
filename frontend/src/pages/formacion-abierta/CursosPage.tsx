@@ -1,4 +1,5 @@
 import { Card } from 'react-bootstrap';
+import CursosWoo from '../../features/formacion_abierta/CursosWoo';
 
 export type FormacionAbiertaCursosPageProps = Record<string, never>;
 
@@ -11,6 +12,8 @@ export default function FormacionAbiertaCursosPage(
         <p className="text-uppercase text-muted fw-semibold mb-1">Formación Abierta</p>
         <h1 className="h3 text-uppercase mb-0">Cursos</h1>
       </header>
+
+      <CursosWoo />
 
       <Card className="border-0 shadow-sm">
         <Card.Body className="py-5 text-center text-muted">
