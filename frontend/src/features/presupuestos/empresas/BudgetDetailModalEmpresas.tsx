@@ -108,6 +108,7 @@ function useAuth() {
 }
 
 type BudgetFormValuesEmpresas = {
+  comercial: string;
   sede_label: string;
   training_address: string; // <- schema vigente
   caes_label: string;
@@ -460,6 +461,7 @@ export function BudgetDetailModalEmpresas({
   useEffect(() => {
     if (deal) {
       setForm({
+        comercial: deal.comercial ?? '',
         sede_label: deal.sede_label ?? '',
         training_address: deal.training_address ?? '', // <- aquí
         caes_label: deal.caes_label ?? '',
@@ -468,6 +470,7 @@ export function BudgetDetailModalEmpresas({
       });
     } else if (summary) {
       setForm({
+        comercial: summary.comercial ?? '',
         sede_label: summary.sede_label ?? '',
         training_address: summary.training_address ?? '', // <- aquí
         caes_label: summary.caes_label ?? '',
@@ -488,6 +491,7 @@ export function BudgetDetailModalEmpresas({
     const source = deal ?? summary;
     if (!source) return null;
     return {
+      comercial: source.comercial ?? '',
       sede_label: source.sede_label ?? '',
       training_address: source.training_address ?? '', // <- aquí
       caes_label: source.caes_label ?? '',
@@ -791,6 +795,9 @@ export function BudgetDetailModalEmpresas({
     if (normalizeString(form?.sede_label) !== normalizeString(initialEditable?.sede_label)) {
       patch.sede_label = toNullableString(form?.sede_label);
     }
+    if (normalizeString(form?.comercial) !== normalizeString(initialEditable?.comercial)) {
+      patch.comercial = toNullableString(form?.comercial);
+    }
     if (normalizeString(form?.training_address) !== normalizeString(initialEditable?.training_address)) {
       patch.training_address = toNullableString(form?.training_address); // <- schema correcto
     }
@@ -1031,7 +1038,15 @@ export function BudgetDetailModalEmpresas({
           <>
             {/* Editables */}
             <Row className="g-3">
-              <Col md={4}>
+              <Col md={3}>
+                <Form.Label>Comercial</Form.Label>
+                <Form.Control
+                  value={form.comercial}
+                  onChange={(e) => updateForm('comercial', e.target.value)}
+                  title={buildFieldTooltip(form.comercial)}
+                />
+              </Col>
+              <Col md={2}>
                 <Form.Label>Sede</Form.Label>
                 <Form.Control
                   value={formatSedeLabel(form.sede_label) ?? ''}
@@ -1039,7 +1054,7 @@ export function BudgetDetailModalEmpresas({
                   title={buildFieldTooltip(form.sede_label)}
                 />
               </Col>
-              <Col md={8}>
+              <Col md={7}>
                 <Form.Label>Dirección</Form.Label>
                 <div className="d-flex gap-2 align-items-start">
                   <Form.Control
