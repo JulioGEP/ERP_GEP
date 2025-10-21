@@ -118,13 +118,72 @@ function normalizePipelineKey(value: unknown): string {
     .toLowerCase();
 }
 
+function normalizeOptionalString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+}
+
+function normalizeDealId(value: unknown): string | null {
+  return normalizeOptionalString(value);
+}
+
+function buildSummaryFromDeal(deal: DealDetail | DealSummary): DealSummary {
+  const base = deal as DealSummary;
+  const resolvedDealId =
+    normalizeDealId((deal as any)?.dealId) ??
+    normalizeDealId((deal as any)?.deal_id) ??
+    normalizeDealId(base?.dealId) ??
+    normalizeDealId(base?.deal_id) ??
+    '';
+
+  const pipelineLabel =
+    normalizeOptionalString((deal as any)?.pipeline_label) ?? base.pipeline_label ?? null;
+
+  const pipelineId =
+    normalizeOptionalString((deal as any)?.pipeline_id) ??
+    normalizeOptionalString((deal as any)?.deal_pipeline_id) ??
+    pipelineLabel ??
+    (base.pipeline_id ?? null);
+
+  const trainingAddress =
+    normalizeOptionalString((deal as any)?.training_address) ??
+    base.training_address ??
+    null;
+
+  const title =
+    normalizeOptionalString((deal as any)?.title) ??
+    normalizeOptionalString(base?.title) ??
+    resolvedDealId;
+
+  const summary: DealSummary = {
+    ...base,
+    deal_id: resolvedDealId,
+    dealId: resolvedDealId,
+    title,
+    pipeline_label: pipelineLabel,
+    pipeline_id: pipelineId,
+    training_address: trainingAddress,
+    organization: (deal as any)?.organization ?? base.organization ?? null,
+    person: (deal as any)?.person ?? base.person ?? null,
+  };
+
+  return summary;
+}
+
 type BudgetModalConfig = {
   component: ComponentType<BudgetModalProps>;
   keys: readonly string[];
 };
 
 const BUDGET_MODAL_CONFIG: readonly BudgetModalConfig[] = [
-  { component: BudgetDetailModalEmpresas, keys: ['Formación Empresas'] },
+  { component: BudgetDetailModalEmpresas, keys: ['Formación Empresas', 'Formación Empresa'] },
   { component: BudgetDetailModalAbierta, keys: ['Formación Abierta'] },
   { component: BudgetDetailModalServices, keys: ['GEP Services'] },
   { component: BudgetDetailModalMaterial, keys: ['Material'] },
@@ -230,15 +289,40 @@ export default function App() {
 
   const importMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
-    onSuccess: (payload) => {
+    onSuccess: async (payload) => {
       const { deal } = normalizeImportDealResult(payload);
 
+      let summary: DealSummary | null = null;
+      let normalizedDealId: string | null = null;
+
       if (deal) {
-        setSelectedBudgetSummary(deal as DealSummary);
-        // Acepta dealId o deal_id y fuerza string|null
-        setSelectedBudgetId(
-          ((deal as any).dealId ?? (deal as any).deal_id ?? null) as string | null,
-        );
+        summary = buildSummaryFromDeal(deal as DealDetail | DealSummary);
+        normalizedDealId = summary.dealId ?? summary.deal_id ?? null;
+
+        const hasPipelineInfo =
+          normalizeOptionalString(summary.pipeline_label) ??
+          normalizeOptionalString(summary.pipeline_id);
+
+        if (normalizedDealId && !hasPipelineInfo) {
+          try {
+            const refreshedDetail = await queryClient.fetchQuery({
+              queryKey: ['deal', normalizedDealId],
+              queryFn: () => fetchDealDetail(normalizedDealId!),
+            });
+            summary = buildSummaryFromDeal(refreshedDetail);
+            normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
+          } catch (error) {
+            console.error(
+              '[App] No se pudo obtener el pipeline del presupuesto importado',
+              error,
+            );
+          }
+        }
+      }
+
+      if (summary) {
+        setSelectedBudgetSummary(summary);
+        setSelectedBudgetId(summary.dealId ?? summary.deal_id ?? null);
       } else {
         setSelectedBudgetSummary(null);
         setSelectedBudgetId(null);
@@ -246,7 +330,7 @@ export default function App() {
 
       pushToast({ variant: 'success', message: 'Presupuesto importado' });
       setShowImportModal(false);
-      queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+      await queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
