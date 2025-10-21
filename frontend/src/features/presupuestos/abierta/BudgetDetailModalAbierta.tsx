@@ -25,9 +25,13 @@ import {
   createDealNote,
   updateDealNote,
   deleteDealNote,
+  fetchDealSessions,
+  fetchSessionStudents,
   isApiError,
   MANUAL_DOCUMENT_SIZE_LIMIT_BYTES,
-  MANUAL_DOCUMENT_SIZE_LIMIT_MESSAGE
+  MANUAL_DOCUMENT_SIZE_LIMIT_MESSAGE,
+  type SessionDTO,
+  type SessionStudent,
 } from '../api';
 import { normalizeImportDealResult } from '../importDealUtils';
 import { formatSedeLabel } from '../formatSedeLabel';
@@ -102,10 +106,7 @@ function useAuth() {
 
 type BudgetFormValuesAbierta = {
   sede_label: string;
-  training_address: string; // <- schema vigente
-  caes_label: string;
   fundae_label: string;
-  hotel_label: string;
 };
 
 type DealNoteView = DealDetailViewModel['notes'][number];
@@ -261,8 +262,6 @@ export function BudgetDetailModalAbierta({
   const [form, setForm] = useState<BudgetFormValuesAbierta | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showMapModal, setShowMapModal] = useState(false);
-  const [mapAddress, setMapAddress] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<string[]>([]);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [creatingNote, setCreatingNote] = useState(false);
@@ -449,23 +448,17 @@ export function BudgetDetailModalAbierta({
     setForm((current) => (current ? { ...current, [field]: value } : current));
   };
 
-  // Inicializa solo los campos editables (schema con training_address)
+  // Inicializa solo los campos editables
   useEffect(() => {
     if (deal) {
       setForm({
         sede_label: deal.sede_label ?? '',
-        training_address: deal.training_address ?? '', // <- aquí
-        caes_label: deal.caes_label ?? '',
         fundae_label: deal.fundae_label ?? '',
-        hotel_label: deal.hotel_label ?? ''
       });
     } else if (summary) {
       setForm({
         sede_label: summary.sede_label ?? '',
-        training_address: summary.training_address ?? '', // <- aquí
-        caes_label: summary.caes_label ?? '',
         fundae_label: summary.fundae_label ?? '',
-        hotel_label: summary.hotel_label ?? ''
       });
     } else {
       setForm(null);
@@ -482,10 +475,7 @@ export function BudgetDetailModalAbierta({
     if (!source) return null;
     return {
       sede_label: source.sede_label ?? '',
-      training_address: source.training_address ?? '', // <- aquí
-      caes_label: source.caes_label ?? '',
       fundae_label: source.fundae_label ?? '',
-      hotel_label: source.hotel_label ?? ''
     };
   }, [deal, summary]);
 
@@ -510,10 +500,7 @@ export function BudgetDetailModalAbierta({
     return null;
   }, [documents]);
 
-  const defaultSessionAddress =
-    form?.training_address?.trim()?.length
-      ? form.training_address
-      : deal?.training_address ?? summary?.training_address ?? null;
+  const defaultSessionAddress = deal?.training_address ?? summary?.training_address ?? null;
 
   const rawDealSedeLabel =
     form?.sede_label?.trim()?.length
@@ -547,10 +534,105 @@ export function BudgetDetailModalAbierta({
     });
   }, [initialProductHours]);
 
-  const trainingProductIds = useMemo(
-    () => new Set(Object.keys(initialProductHours)),
+  const trainingProductIdList = useMemo(
+    () => Object.keys(initialProductHours),
     [initialProductHours]
   );
+
+  const trainingProductIds = useMemo(
+    () => new Set(trainingProductIdList),
+    [trainingProductIdList]
+  );
+
+  const trainingProductKey = useMemo(
+    () => trainingProductIdList.slice().sort().join('|'),
+    [trainingProductIdList]
+  );
+
+  const dealStudentsQuery = useQuery({
+    queryKey: ['dealStudents', normalizedDealId, trainingProductKey],
+    enabled: Boolean(normalizedDealId && trainingProductIdList.length > 0),
+    queryFn: async (): Promise<SessionStudent[]> => {
+      if (!normalizedDealId || !trainingProductIdList.length) return [];
+
+      const allSessions: SessionDTO[] = [];
+      const pageSize = 200;
+
+      for (const productId of trainingProductIdList) {
+        if (!productId?.trim().length) continue;
+
+        let page = 1;
+        // Recupera todas las sesiones de cada producto para poder listar a sus alumnos
+        while (true) {
+          const groups = await fetchDealSessions(normalizedDealId, {
+            productId,
+            page,
+            limit: pageSize,
+          });
+
+          const group = groups?.[0] ?? null;
+          if (!group) break;
+
+          if (Array.isArray(group.sessions)) {
+            allSessions.push(...group.sessions);
+          }
+
+          const pagination = group.pagination ?? null;
+          if (!pagination) break;
+
+          const totalPages = Number(pagination.totalPages ?? 1);
+          if (!Number.isFinite(totalPages) || totalPages <= page) {
+            break;
+          }
+
+          page += 1;
+        }
+      }
+
+      const sessionIds = Array.from(
+        new Set(
+          allSessions
+            .map((session) => session?.id)
+            .filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
+        ),
+      );
+
+      if (!sessionIds.length) return [];
+
+      const studentChunks = await Promise.all(
+        sessionIds.map((sessionId) => fetchSessionStudents(normalizedDealId, sessionId)),
+      );
+
+      const studentsMap = new Map<string, SessionStudent>();
+
+      studentChunks.forEach((chunk) => {
+        chunk.forEach((student) => {
+          const normalizedId = student.id?.trim();
+          const compositeId = `${student.dni ?? ''}|${student.nombre ?? ''}|${student.apellido ?? ''}`;
+          const key = normalizedId?.length ? normalizedId : compositeId;
+          if (!key.length || studentsMap.has(key)) return;
+          studentsMap.set(key, student);
+        });
+      });
+
+      return Array.from(studentsMap.values()).sort((a, b) => {
+        const nameA = `${(a.apellido ?? '').trim()} ${(a.nombre ?? '').trim()}`.trim().toLowerCase();
+        const nameB = `${(b.apellido ?? '').trim()} ${(b.nombre ?? '').trim()}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+    },
+    staleTime: 60 * 1000,
+  });
+
+  const students = dealStudentsQuery.data ?? [];
+  const studentsLoading = dealStudentsQuery.isLoading;
+  const studentsFetching = dealStudentsQuery.isFetching;
+  const studentsError = dealStudentsQuery.isError
+    ? dealStudentsQuery.error instanceof Error
+      ? dealStudentsQuery.error.message
+      : 'No se pudieron cargar los alumnos.'
+    : null;
+  const studentsEnabled = Boolean(normalizedDealId && trainingProductIdList.length > 0);
 
   const dirtyProducts = useMemo(
     () => !areHourMapsEqual(productHours, initialProductHours),
@@ -739,18 +821,6 @@ export function BudgetDetailModalAbierta({
   const affirmativeBorder = (value?: string | number | null) =>
     isAffirmative(value) ? { borderColor: '#e4032d' } : undefined;
 
-  const handleOpenMap = () => {
-    const address = form?.training_address?.trim();
-    if (!address) return;
-    setMapAddress(address);
-    setShowMapModal(true);
-  };
-
-  const handleCloseMap = () => {
-    setShowMapModal(false);
-    setMapAddress(null);
-  };
-
   const handleAccordionSelect = (eventKey: string | string[] | null | undefined) => {
     if (eventKey === null || eventKey === undefined) {
       setOpenSections([]);
@@ -788,17 +858,8 @@ export function BudgetDetailModalAbierta({
     if (normalizeString(form?.sede_label) !== normalizeString(initialEditable?.sede_label)) {
       patch.sede_label = toNullableString(form?.sede_label);
     }
-    if (normalizeString(form?.training_address) !== normalizeString(initialEditable?.training_address)) {
-      patch.training_address = toNullableString(form?.training_address); // <- schema correcto
-    }
-    if (normalizeString(form?.caes_label) !== normalizeString(initialEditable?.caes_label)) {
-      patch.caes_label = toNullableString(form?.caes_label);
-    }
     if (normalizeString(form?.fundae_label) !== normalizeString(initialEditable?.fundae_label)) {
       patch.fundae_label = toNullableString(form?.fundae_label);
-    }
-    if (normalizeString(form?.hotel_label) !== normalizeString(initialEditable?.hotel_label)) {
-      patch.hotel_label = toNullableString(form?.hotel_label);
     }
 
     const productPatches: DealProductEditablePatch[] = [];
@@ -1027,8 +1088,8 @@ export function BudgetDetailModalAbierta({
         {!isLoading && deal && form && (
           <>
             {/* Editables */}
-            <Row className="g-3">
-              <Col md={4}>
+            <Row className="g-3 align-items-end">
+              <Col md={3}>
                 <Form.Label>Sede</Form.Label>
                 <Form.Control
                   value={formatSedeLabel(form.sede_label) ?? ''}
@@ -1036,34 +1097,7 @@ export function BudgetDetailModalAbierta({
                   title={buildFieldTooltip(form.sede_label)}
                 />
               </Col>
-              <Col md={8}>
-                <Form.Label>Dirección</Form.Label>
-                <div className="d-flex gap-2 align-items-start">
-                  <Form.Control
-                    className="flex-grow-1"
-                    value={form.training_address}
-                    onChange={(e) => updateForm('training_address', e.target.value)}
-                    title={buildFieldTooltip(form.training_address)}
-                  />
-                  <Button
-                    variant="outline-primary"
-                    onClick={handleOpenMap}
-                    disabled={!form.training_address?.trim()}
-                  >
-                    Ver
-                  </Button>
-                </div>
-              </Col>
-              <Col md={2} className="budget-field-narrow">
-                <Form.Label>CAES</Form.Label>
-                <Form.Control
-                  value={form.caes_label}
-                  onChange={(e) => updateForm('caes_label', e.target.value)}
-                  style={affirmativeBorder(form.caes_label)}
-                  title={buildFieldTooltip(form.caes_label)}
-                />
-              </Col>
-              <Col md={2} className="budget-field-narrow">
+              <Col md={3} className="budget-field-narrow">
                 <Form.Label>FUNDAE</Form.Label>
                 <Form.Control
                   value={form.fundae_label}
@@ -1072,25 +1106,7 @@ export function BudgetDetailModalAbierta({
                   title={buildFieldTooltip(form.fundae_label)}
                 />
               </Col>
-              <Col md={2} className="budget-field-narrow">
-                <Form.Label>Hotel</Form.Label>
-                <Form.Control
-                  value={form.hotel_label}
-                  onChange={(e) => updateForm('hotel_label', e.target.value)}
-                  style={affirmativeBorder(form.hotel_label)}
-                  title={buildFieldTooltip(form.hotel_label)}
-                />
-              </Col>
-              <Col md={2}>
-                <Form.Label>Transporte</Form.Label>
-                <Form.Control
-                  value={displayOrDash(deal.transporte ?? null)}
-                  readOnly
-                  style={affirmativeBorder(deal.transporte ?? null)}
-                  title={buildFieldTooltip(deal.transporte ?? null)}
-                />
-              </Col>
-              <Col md={2} className="budget-field-wide">
+              <Col md={3} className="budget-field-wide">
                 <Form.Label>PO</Form.Label>
                 <Form.Control
                   value={displayOrDash(deal.po ?? null)}
@@ -1098,7 +1114,7 @@ export function BudgetDetailModalAbierta({
                   title={buildFieldTooltip(deal.po ?? null)}
                 />
               </Col>
-              <Col md={2} className="budget-field-wide">
+              <Col md={3} className="budget-field-wide">
                 <Form.Label>Mail Factura</Form.Label>
                 <Form.Control
                   value={displayOrDash(deal.mail_invoice ?? null)}
@@ -1107,6 +1123,54 @@ export function BudgetDetailModalAbierta({
                 />
               </Col>
             </Row>
+
+            <div className="mt-3 mb-4">
+              <h6 className="fw-semibold mb-2">Alumnos</h6>
+              {studentsEnabled ? (
+                <>
+                  {studentsError ? (
+                    <Alert variant="warning" className="mb-2">
+                      {studentsError}
+                    </Alert>
+                  ) : null}
+                  {studentsLoading ? (
+                    <div className="d-flex align-items-center gap-2 text-muted small mb-2">
+                      <Spinner size="sm" /> Cargando alumnos…
+                    </div>
+                  ) : null}
+                  {!studentsLoading && students.length === 0 && !studentsError ? (
+                    <p className="text-muted small mb-0">No hay alumnos registrados.</p>
+                  ) : null}
+                  {students.length > 0 ? (
+                    <Table size="sm" bordered responsive className="mb-0">
+                      <thead>
+                        <tr>
+                          <th>Nombre y apellidos</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {students.map((student) => {
+                          const key = student.id || `${student.dni}-${student.nombre}-${student.apellido}`;
+                          const fullName = [student.nombre, student.apellido]
+                            .filter((value) => Boolean(value && value.trim().length))
+                            .join(' ');
+                          return (
+                            <tr key={key}>
+                              <td>{fullName.trim().length ? fullName : '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                  ) : null}
+                  {studentsFetching && !studentsLoading ? (
+                    <div className="text-muted small mt-2">Actualizando alumnos…</div>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-muted small mb-0">No hay alumnos disponibles.</p>
+              )}
+            </div>
 
             <hr className="my-4" />
             {trainingProducts.length ? (
@@ -1659,24 +1723,6 @@ export function BudgetDetailModalAbierta({
       </Modal.Footer>
     </Modal>
 
-    <Modal show={showMapModal} onHide={handleCloseMap} size="lg" centered>
-      <Modal.Header closeButton>
-        <Modal.Title>Ubicación</Modal.Title>
-      </Modal.Header>
-      <Modal.Body>
-        {mapAddress ? (
-          <div className="ratio ratio-16x9">
-            <iframe
-              src={`https://www.google.com/maps?q=${encodeURIComponent(mapAddress)}&output=embed`}
-              title={`Mapa de ${mapAddress}`}
-              allowFullScreen
-            />
-          </div>
-        ) : (
-          <p className="text-muted mb-0">No se ha especificado una dirección.</p>
-        )}
-      </Modal.Body>
-    </Modal>
   </>
   );
 }
