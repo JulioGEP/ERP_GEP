@@ -1026,11 +1026,6 @@ export function BudgetDetailModalAbierta({
   const clientPhoneDisplay = detailView.clientPhone ?? '';
   const clientEmailDisplay = detailView.clientEmail ?? '';
 
-  const extraProducts = detailProducts.filter((product) => {
-    const code = product?.code ?? '';
-    return typeof code === 'string' ? code.toLowerCase().startsWith('ext-') : false;
-  });
-
   const modalTitle = organizationDisplay || 'Detalle presupuesto';
   const truncatedModalTitle = truncateText(modalTitle, 60);
   const modalTitleTooltip = truncatedModalTitle !== modalTitle ? modalTitle : undefined;
@@ -1869,34 +1864,6 @@ export function BudgetDetailModalAbierta({
                 </Accordion.Body>
               </Accordion.Item>
 
-              <Accordion.Item eventKey="extra-products">
-                <Accordion.Header>
-                  <div className="d-flex justify-content-between align-items-center w-100">
-                    <span className="erp-accordion-title">
-                      Productos Extra
-                      {extraProducts.length > 0 ? (
-                        <span className="erp-accordion-count">{extraProducts.length}</span>
-                      ) : null}
-                    </span>
-                  </div>
-                </Accordion.Header>
-                <Accordion.Body>
-                  {extraProducts.length ? (
-                    <ListGroup>
-                      {extraProducts.map((product, index) => (
-                        <ListGroup.Item key={product?.id ?? `${product?.code ?? 'extra'}-${index}`}>
-                          <div className="fw-semibold">{displayOrDash(product?.name ?? product?.code ?? '')}</div>
-                          {product?.comments ? (
-                            <div className="text-muted small">{product.comments}</div>
-                          ) : null}
-                        </ListGroup.Item>
-                      ))}
-                    </ListGroup>
-                  ) : (
-                    <p className="text-muted small mb-0">Sin Extras</p>
-                  )}
-                </Accordion.Body>
-              </Accordion.Item>
             </Accordion>
 
           </>
