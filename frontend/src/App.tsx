@@ -246,6 +246,7 @@ export default function App() {
 
   const location = useLocation();
   const navigate = useNavigate();
+  const isBudgetsRoute = location.pathname.startsWith('/presupuestos');
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
@@ -268,7 +269,8 @@ export default function App() {
     refetchOnReconnect: false,
     refetchInterval: false,
     retry: 0,
-    staleTime: Infinity
+    staleTime: Infinity,
+    enabled: isBudgetsRoute,
   });
 
   const pushToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
