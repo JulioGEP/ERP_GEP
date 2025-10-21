@@ -216,6 +216,7 @@ export function SessionStudentsAccordionItem({
   eventKey,
   headerAddon,
   bodyPrefix,
+  enablePublicLink = true,
 }: {
   dealId: string;
   sessionId: string;
@@ -223,6 +224,7 @@ export function SessionStudentsAccordionItem({
   eventKey?: string;
   headerAddon?: ReactNode;
   bodyPrefix?: ReactNode;
+  enablePublicLink?: boolean;
 }) {
   const qc = useQueryClient();
   const [editingId, setEditingId] = useState<'new' | string | null>(null);
