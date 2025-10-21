@@ -844,13 +844,6 @@ export function BudgetDetailModalAbierta({
 
   const students = dealStudentsQuery.data ?? [];
   const studentsLoading = dealStudentsQuery.isLoading;
-  const studentsFetching = dealStudentsQuery.isFetching;
-  const studentsError = dealStudentsQuery.isError
-    ? dealStudentsQuery.error instanceof Error
-      ? dealStudentsQuery.error.message
-      : 'No se pudieron cargar los alumnos.'
-    : null;
-  const studentsEnabled = Boolean(normalizedDealId);
 
   const noteStudentsInfo = useMemo(
     () => extractNoteStudents(deal?.notes ?? []),
@@ -953,8 +946,6 @@ export function BudgetDetailModalAbierta({
       }
     },
   });
-
-  const noteStudentsSyncing = importStudentsFromNoteMutation.isPending;
 
   const performNoteStudentsSync = useCallback(
     (
@@ -1088,81 +1079,13 @@ export function BudgetDetailModalAbierta({
     });
   }, [dealSessions, defaultSessionId]);
 
-  const handleManualSyncStudents = useCallback(() => {
-    const targetSessionId = (selectedStudentsSessionId ?? '').trim() || effectiveStudentsSessionId;
-    if (!targetSessionId) {
-      onNotify?.({ variant: 'info', message: 'Selecciona una sesión para sincronizar alumnos.' });
-      return;
-    }
-
-    performNoteStudentsSync(targetSessionId, {
-      notifyOnNoChanges: true,
-      notifyOnMissingNote: true,
-    });
-  }, [
-    performNoteStudentsSync,
-    selectedStudentsSessionId,
-    effectiveStudentsSessionId,
-    onNotify,
-  ]);
-
-  const studentsAccordionBodyPrefix = (
-    <div className="d-flex flex-column gap-3">
-      <Form.Group controlId="deal-students-session-select">
-        <Form.Label className="fw-semibold">Sesión</Form.Label>
-        <Form.Select
-          value={effectiveStudentsSessionId}
-          onChange={(event) => {
-            const value = event.target.value.trim();
-            setSelectedStudentsSessionId(value.length ? value : null);
-          }}
-          disabled={sessionsLoading || !studentsSessionOptions.length}
-        >
-          {studentsSessionOptions.length ? (
-            studentsSessionOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))
-          ) : (
-            <option value="">Sin sesiones disponibles</option>
-          )}
-        </Form.Select>
-      </Form.Group>
-      <div>
-        {noteStudents.length ? (
-          <Alert
-            variant="secondary"
-            className="mb-0 d-flex flex-column flex-lg-row align-items-lg-center gap-2"
-          >
-            <span className="flex-grow-1">
-              {noteStudents.length === 1
-                ? 'Se ha detectado 1 alumno en las notas.'
-                : `Se han detectado ${noteStudents.length} alumnos en las notas.`}
-            </span>
-            <Button
-              size="sm"
-              variant="outline-primary"
-              onClick={handleManualSyncStudents}
-              disabled={!effectiveStudentsSessionId || noteStudentsSyncing}
-            >
-              {noteStudentsSyncing ? (
-                <span className="d-inline-flex align-items-center gap-2">
-                  <Spinner animation="border" size="sm" role="status" /> Sincronizando…
-                </span>
-              ) : (
-                'Sincronizar con la sesión seleccionada'
-              )}
-            </Button>
-          </Alert>
-        ) : (
-          <Alert variant="secondary" className="mb-0">
-            No se encontraron alumnos en las notas.
-          </Alert>
-        )}
-      </div>
-    </div>
-  );
+  const studentsAccordionBodyPrefix = noteStudents.length
+    ? null
+    : (
+        <Alert variant="secondary" className="mb-0">
+          No se encontraron alumnos en las notas.
+        </Alert>
+      );
 
   useEffect(() => {
     if (!noteSignature || !noteStudents.length) {
@@ -1673,54 +1596,6 @@ export function BudgetDetailModalAbierta({
                 />
               </Col>
             </Row>
-
-            <div className="mt-3 mb-4">
-              <h6 className="fw-semibold mb-2">Alumnos</h6>
-              {studentsEnabled ? (
-                <>
-                  {studentsError ? (
-                    <Alert variant="warning" className="mb-2">
-                      {studentsError}
-                    </Alert>
-                  ) : null}
-                  {studentsLoading ? (
-                    <div className="d-flex align-items-center gap-2 text-muted small mb-2">
-                      <Spinner size="sm" /> Cargando alumnos…
-                    </div>
-                  ) : null}
-                  {!studentsLoading && students.length === 0 && !studentsError ? (
-                    <p className="text-muted small mb-0">No hay alumnos registrados.</p>
-                  ) : null}
-                  {students.length > 0 ? (
-                    <Table size="sm" bordered responsive className="mb-0">
-                      <thead>
-                        <tr>
-                          <th>Nombre y apellidos</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {students.map((student) => {
-                          const key = student.id || `${student.dni}-${student.nombre}-${student.apellido}`;
-                          const fullName = [student.nombre, student.apellido]
-                            .filter((value) => Boolean(value && value.trim().length))
-                            .join(' ');
-                          return (
-                            <tr key={key}>
-                              <td>{fullName.trim().length ? fullName : '—'}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </Table>
-                  ) : null}
-                  {studentsFetching && !studentsLoading ? (
-                    <div className="text-muted small mt-2">Actualizando alumnos…</div>
-                  ) : null}
-                </>
-              ) : (
-                <p className="text-muted small mb-0">No hay alumnos disponibles.</p>
-              )}
-            </div>
 
             <hr className="my-4" />
             {trainingProducts.length ? (
