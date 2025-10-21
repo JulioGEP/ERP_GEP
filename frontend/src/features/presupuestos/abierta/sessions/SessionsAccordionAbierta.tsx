@@ -79,6 +79,14 @@ import {
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
 
+const ENABLE_SESSION_DOCUMENTS = false;
+const ENABLE_SESSION_COMMENTS = false;
+const ENABLE_SESSION_STATE = false;
+const ENABLE_TRAINERS = false;
+const ENABLE_MOBILE_UNITS = false;
+const ENABLE_ROOMS = false;
+const ENABLE_ADDRESS = false;
+
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
   message: string;
@@ -1709,15 +1717,25 @@ function buildSessionPatchPayload(
   saved: SessionFormState | undefined,
 ): Parameters<typeof patchSession>[1] | null | 'INVALID_DATES' | 'INVALID_START' | 'INVALID_END' {
   if (!saved) {
-    return {
+    const payload: Parameters<typeof patchSession>[1] = {
       nombre_cache: form.nombre_cache,
       fecha_inicio_utc: localInputToUtc(form.fecha_inicio_local) ?? null,
       fecha_fin_utc: localInputToUtc(form.fecha_fin_local) ?? null,
-      sala_id: form.sala_id,
-      direccion: form.direccion,
-      trainer_ids: form.trainer_ids,
-      unidad_movil_ids: form.unidad_movil_ids,
     };
+    if (ENABLE_ROOMS) {
+      payload.sala_id = form.sala_id;
+    }
+    if (ENABLE_ADDRESS) {
+      payload.direccion = form.direccion;
+    }
+    if (ENABLE_TRAINERS) {
+      payload.trainer_ids = form.trainer_ids;
+    }
+    if (ENABLE_MOBILE_UNITS) {
+      payload.unidad_movil_ids = form.unidad_movil_ids;
+    }
+
+    return payload;
   }
 
   const patch: Parameters<typeof patchSession>[1] = {};
@@ -1746,22 +1764,22 @@ function buildSessionPatchPayload(
     return 'INVALID_DATES';
   }
 
-  if (form.sala_id !== saved.sala_id) {
+  if (ENABLE_ROOMS && form.sala_id !== saved.sala_id) {
     patch.sala_id = form.sala_id ?? null;
     hasChanges = true;
   }
 
-  if (form.direccion !== saved.direccion) {
+  if (ENABLE_ADDRESS && form.direccion !== saved.direccion) {
     patch.direccion = form.direccion ?? '';
     hasChanges = true;
   }
 
-  if (!areStringArraysEqual(form.trainer_ids, saved.trainer_ids)) {
+  if (ENABLE_TRAINERS && !areStringArraysEqual(form.trainer_ids, saved.trainer_ids)) {
     patch.trainer_ids = [...form.trainer_ids];
     hasChanges = true;
   }
 
-  if (!areStringArraysEqual(form.unidad_movil_ids, saved.unidad_movil_ids)) {
+  if (ENABLE_MOBILE_UNITS && !areStringArraysEqual(form.unidad_movil_ids, saved.unidad_movil_ids)) {
     patch.unidad_movil_ids = [...form.unidad_movil_ids];
     hasChanges = true;
   }
@@ -1771,7 +1789,7 @@ function buildSessionPatchPayload(
     hasChanges = true;
   }
 
-  if (form.estado !== saved.estado) {
+  if (ENABLE_SESSION_STATE && form.estado !== saved.estado) {
     if (MANUAL_SESSION_ESTADO_SET.has(form.estado)) {
       (patch as Record<string, SessionEstado>).estado = form.estado;
       hasChanges = true;
@@ -1895,6 +1913,7 @@ export function SessionsAccordionAbierta({
   const [pageByProduct, setPageByProduct] = useState<Record<string, number>>({});
 
   const handleOpenMap = (address: string) => {
+    if (!ENABLE_ADDRESS) return;
     const trimmed = address.trim();
     if (!trimmed) return;
     setMapAddress(trimmed);
@@ -1902,6 +1921,7 @@ export function SessionsAccordionAbierta({
   };
 
   const handleCloseMap = () => {
+    if (!ENABLE_ADDRESS) return;
     setShowMapModal(false);
     setMapAddress(null);
   };
@@ -1916,26 +1936,32 @@ export function SessionsAccordionAbierta({
     });
   }, [applicableProducts]);
 
-  const trainersQuery = useQuery({
-    queryKey: ['trainers', 'active'],
-    queryFn: fetchActiveTrainers,
-    enabled: shouldShow,
-    staleTime: 5 * 60 * 1000,
-  });
+  const trainersQuery = ENABLE_TRAINERS
+    ? useQuery({
+        queryKey: ['trainers', 'active'],
+        queryFn: fetchActiveTrainers,
+        enabled: shouldShow,
+        staleTime: 5 * 60 * 1000,
+      })
+    : ({ data: undefined, isLoading: false, isFetching: false, error: null } as const);
 
-  const roomsQuery = useQuery({
-    queryKey: ['rooms', 'catalog'],
-    queryFn: fetchRoomsCatalog,
-    enabled: shouldShow,
-    staleTime: 5 * 60 * 1000,
-  });
+  const roomsQuery = ENABLE_ROOMS
+    ? useQuery({
+        queryKey: ['rooms', 'catalog'],
+        queryFn: fetchRoomsCatalog,
+        enabled: shouldShow,
+        staleTime: 5 * 60 * 1000,
+      })
+    : ({ data: undefined, isLoading: false, isFetching: false, error: null } as const);
 
-  const unitsQuery = useQuery({
-    queryKey: ['mobile-units', 'catalog'],
-    queryFn: fetchMobileUnitsCatalog,
-    enabled: shouldShow,
-    staleTime: 5 * 60 * 1000,
-  });
+  const unitsQuery = ENABLE_MOBILE_UNITS
+    ? useQuery({
+        queryKey: ['mobile-units', 'catalog'],
+        queryFn: fetchMobileUnitsCatalog,
+        enabled: shouldShow,
+        staleTime: 5 * 60 * 1000,
+      })
+    : ({ data: undefined, isLoading: false, isFetching: false, error: null } as const);
 
   const sessionQueries = useQueries({
     queries: applicableProducts.map((product) => {
@@ -2256,14 +2282,24 @@ export function SessionsAccordionAbierta({
     const productId = sessionProductRef.current[sessionId];
     if (!session || !productId) return;
     try {
-      await createMutation.mutateAsync({
+      const payload: Parameters<typeof createSession>[0] = {
         deal_id: dealId,
         deal_product_id: productId,
-        direccion: session.direccion ?? dealAddress ?? '',
-        trainer_ids: session.trainer_ids,
-        unidad_movil_ids: session.unidad_movil_ids,
-        sala_id: session.sala_id,
-      });
+      };
+      if (ENABLE_ADDRESS) {
+        payload.direccion = session.direccion ?? dealAddress ?? '';
+      }
+      if (ENABLE_TRAINERS) {
+        payload.trainer_ids = session.trainer_ids;
+      }
+      if (ENABLE_MOBILE_UNITS) {
+        payload.unidad_movil_ids = session.unidad_movil_ids;
+      }
+      if (ENABLE_ROOMS) {
+        payload.sala_id = session.sala_id;
+      }
+
+      await createMutation.mutateAsync(payload);
       await invalidateProductSessions(productId);
     } catch (error) {
       const message = isApiError(error)
@@ -2414,9 +2450,10 @@ export function SessionsAccordionAbierta({
 
   const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
 
-  const trainers = trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
-  const allRooms = roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
+  const trainers = ENABLE_TRAINERS && trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
+  const allRooms = ENABLE_ROOMS && roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
   const rooms = useMemo(() => {
+    if (!ENABLE_ROOMS) return [];
     if (!allRooms.length) return allRooms;
     if (!normalizedDealSede) return allRooms;
     if (normalizedDealSede === 'In Company') {
@@ -2424,15 +2461,15 @@ export function SessionsAccordionAbierta({
     }
     return allRooms.filter((room) => formatSedeLabel(room.sede) === normalizedDealSede);
   }, [allRooms, normalizedDealSede]);
-  const units = unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
+  const units = ENABLE_MOBILE_UNITS && unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
   const activeStatus = activeSession
     ? saveStatus[activeSession.sessionId] ?? { saving: false, error: null, dirty: false }
     : { saving: false, error: null, dirty: false };
 
   const deleteDialogCounts = deleteDialog?.counts ?? null;
   const deleteDialogHasContent = deleteDialogCounts
-    ? deleteDialogCounts.comentarios > 0 ||
-      deleteDialogCounts.documentos > 0 ||
+    ? (ENABLE_SESSION_COMMENTS && deleteDialogCounts.comentarios > 0) ||
+      (ENABLE_SESSION_DOCUMENTS && deleteDialogCounts.documentos > 0) ||
       deleteDialogCounts.alumnos > 0 ||
       deleteDialogCounts.tokens > 0
     : false;
@@ -2486,12 +2523,16 @@ export function SessionsAccordionAbierta({
                     size="sm"
                     variant="outline-primary"
                     onClick={() => {
+                      const payload: Parameters<typeof createSession>[0] = {
+                        deal_id: dealId,
+                        deal_product_id: product.id,
+                      };
+                      if (ENABLE_ADDRESS) {
+                        payload.direccion = dealAddress ?? '';
+                      }
+
                       createMutation
-                        .mutateAsync({
-                          deal_id: dealId,
-                          deal_product_id: product.id,
-                          direccion: dealAddress ?? '',
-                        })
+                        .mutateAsync(payload)
                         .then(() => invalidateProductSessions(product.id))
                         .catch((error: unknown) => {
                           const message = isApiError(error)
@@ -2588,9 +2629,9 @@ export function SessionsAccordionAbierta({
                               <span className="text-danger">{status.error}</span>
                             ) : status.dirty ? (
                               <span className="text-warning">Cambios sin guardar</span>
-                            ) : (
+                            ) : ENABLE_SESSION_STATE ? (
                               <SessionStateBadge estado={form.estado} />
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </ListGroup.Item>
@@ -2659,19 +2700,23 @@ export function SessionsAccordionAbierta({
                         <Alert variant="warning" className="mb-0">
                           <p className="mb-2">Esta sesión tiene contenido asociado:</p>
                           <ul className="mb-2 ps-3">
+                            {ENABLE_SESSION_COMMENTS ? (
+                              <li>
+                                <strong>{deleteDialogCounts.comentarios}</strong> comentarios
+                              </li>
+                            ) : null}
+                            {ENABLE_SESSION_DOCUMENTS ? (
+                              <li>
+                                <strong>{deleteDialogCounts.documentos}</strong> documentos
+                              </li>
+                            ) : null}
                             <li>
-                              <strong>{deleteDialogCounts.comentarios}</strong> comentarios
+                              <strong>{deleteDialogCounts.alumnos}</strong> alumnos
                             </li>
                             <li>
-                              <strong>{deleteDialogCounts.documentos}</strong> documentos
+                              <strong>{deleteDialogCounts.tokens}</strong> tokens de URL generadas
                             </li>
-                          <li>
-                            <strong>{deleteDialogCounts.alumnos}</strong> alumnos
-                          </li>
-                          <li>
-                            <strong>{deleteDialogCounts.tokens}</strong> tokens de URL generadas
-                          </li>
-                        </ul>
+                          </ul>
                           <p className="mb-0">
                             ¿Seguro que quieres eliminarla? Se borrará todo y no se podrá deshacer.
                           </p>
@@ -2724,7 +2769,9 @@ export function SessionsAccordionAbierta({
             <Modal.Header closeButton closeVariant="white" className="border-0">
               <Modal.Title className="session-modal-title d-flex align-items-center justify-content-between gap-3">
                 <span>{activeForm?.nombre_cache?.trim() || `Sesión ${activeSession.displayIndex}`}</span>
-                {activeForm ? <SessionStateBadge estado={activeForm.estado} /> : null}
+                {ENABLE_SESSION_STATE && activeForm ? (
+                  <SessionStateBadge estado={activeForm.estado} />
+                ) : null}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
@@ -2750,24 +2797,26 @@ export function SessionsAccordionAbierta({
             </Modal.Body>
           </Modal>
         )}
-        <Modal show={showMapModal} onHide={handleCloseMap} size="lg" centered>
-          <Modal.Header closeButton>
-            <Modal.Title>Ubicación</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            {mapAddress ? (
-              <div className="ratio ratio-16x9">
-                <iframe
-                  src={`https://www.google.com/maps?q=${encodeURIComponent(mapAddress)}&output=embed`}
-                  title={`Mapa de ${mapAddress}`}
-                  allowFullScreen
-                />
-              </div>
-            ) : (
-              <p className="text-muted mb-0">No se ha especificado una dirección.</p>
-            )}
-          </Modal.Body>
-        </Modal>
+        {ENABLE_ADDRESS ? (
+          <Modal show={showMapModal} onHide={handleCloseMap} size="lg" centered>
+            <Modal.Header closeButton>
+              <Modal.Title>Ubicación</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {mapAddress ? (
+                <div className="ratio ratio-16x9">
+                  <iframe
+                    src={`https://www.google.com/maps?q=${encodeURIComponent(mapAddress)}&output=embed`}
+                    title={`Mapa de ${mapAddress}`}
+                    allowFullScreen
+                  />
+                </div>
+              ) : (
+                <p className="text-muted mb-0">No se ha especificado una dirección.</p>
+              )}
+            </Modal.Body>
+          </Modal>
+        ) : null}
       </Accordion.Body>
     </Accordion.Item>
   );
@@ -2811,37 +2860,43 @@ function SessionEditor({
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const isInCompany = dealSede === 'In Company';
+  const effectiveTrainers = ENABLE_TRAINERS ? trainers : [];
+  const effectiveUnits = ENABLE_MOBILE_UNITS ? units : [];
+  const effectiveRooms = ENABLE_ROOMS ? rooms : [];
+  const shouldCheckAvailability = ENABLE_TRAINERS || ENABLE_ROOMS || ENABLE_MOBILE_UNITS;
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
 
   const filteredTrainers = useMemo(() => {
     const search = trainerFilter.trim().toLowerCase();
-    if (!search) return trainers;
-    return trainers.filter((trainer) => {
+    if (!search) return effectiveTrainers;
+    return effectiveTrainers.filter((trainer) => {
       const label = `${trainer.name} ${trainer.apellido ?? ''}`.toLowerCase();
       return label.includes(search);
     });
-  }, [trainerFilter, trainers]);
+  }, [effectiveTrainers, trainerFilter]);
 
   const filteredUnits = useMemo(() => {
     const search = unitFilter.trim().toLowerCase();
-    if (!search) return units;
-    return units.filter((unit) => {
+    if (!search) return effectiveUnits;
+    return effectiveUnits.filter((unit) => {
       const label = `${unit.name} ${unit.matricula ?? ''}`.toLowerCase();
       return label.includes(search);
     });
-  }, [unitFilter, units]);
+  }, [effectiveUnits, unitFilter]);
 
   const selectedTrainers = useMemo(() => {
+    if (!ENABLE_TRAINERS) return [];
     const selected = new Set(form.trainer_ids);
-    return trainers.filter((trainer) => selected.has(trainer.trainer_id));
-  }, [form.trainer_ids, trainers]);
+    return effectiveTrainers.filter((trainer) => selected.has(trainer.trainer_id));
+  }, [effectiveTrainers, form.trainer_ids]);
 
   const selectedUnits = useMemo(() => {
+    if (!ENABLE_MOBILE_UNITS) return [];
     const selected = new Set(form.unidad_movil_ids);
-    return units.filter((unit) => selected.has(unit.unidad_id));
-  }, [form.unidad_movil_ids, units]);
+    return effectiveUnits.filter((unit) => selected.has(unit.unidad_id));
+  }, [effectiveUnits, form.unidad_movil_ids]);
 
   const trainerSummary = selectedTrainers
     .map((trainer) => `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`)
@@ -2850,30 +2905,39 @@ function SessionEditor({
     .map((unit) => (unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name))
     .join(', ');
 
-  const availabilityRange = useMemo(
-    () => buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local),
-    [form.fecha_inicio_local, form.fecha_fin_local],
-  );
+  const availabilityRange = useMemo(() => {
+    if (!shouldCheckAvailability) return null;
+    return buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local);
+  }, [form.fecha_fin_local, form.fecha_inicio_local, shouldCheckAvailability]);
 
-  const availabilityQuery = useQuery({
-    queryKey: availabilityRange
-      ? ['session-availability', form.id, availabilityRange.startIso, availabilityRange.endIso]
-      : ['session-availability', form.id, 'no-range'],
-    queryFn: () =>
-      fetchSessionAvailability({
-        start: availabilityRange!.startIso,
-        end: availabilityRange!.endIso,
-        excludeSessionId: form.id,
-      }),
-    enabled: Boolean(availabilityRange),
-    staleTime: 60_000,
-  });
+  const availabilityQuery = shouldCheckAvailability
+    ? useQuery({
+        queryKey: availabilityRange
+          ? ['session-availability', form.id, availabilityRange.startIso, availabilityRange.endIso]
+          : ['session-availability', form.id, 'no-range'],
+        queryFn: () =>
+          fetchSessionAvailability({
+            start: availabilityRange!.startIso,
+            end: availabilityRange!.endIso,
+            excludeSessionId: form.id,
+          }),
+        enabled: Boolean(availabilityRange),
+        staleTime: 60_000,
+      })
+    : ({ data: undefined, error: null, isFetching: false } as const);
 
   const availabilityError =
     availabilityQuery.error instanceof Error ? availabilityQuery.error : null;
   const availabilityFetching = availabilityQuery.isFetching;
 
   const localLocks = useMemo(() => {
+    if (!shouldCheckAvailability) {
+      return {
+        trainers: new Set<string>(),
+        rooms: new Set<string>(),
+        units: new Set<string>(),
+      };
+    }
     const currentRange = getSessionRangeFromForm(form);
     if (!currentRange) {
       return {
@@ -2892,17 +2956,22 @@ function SessionEditor({
       const otherRange = getSessionRangeFromForm(otherForm);
       if (!otherRange) continue;
       if (!rangesOverlap(currentRange, otherRange)) continue;
-      otherForm.trainer_ids.forEach((trainerId) => trainerSet.add(trainerId));
-      if (otherForm.sala_id) roomSet.add(otherForm.sala_id);
-      otherForm.unidad_movil_ids.forEach((unidadId) => unitSet.add(unidadId));
+      if (ENABLE_TRAINERS) {
+        otherForm.trainer_ids.forEach((trainerId) => trainerSet.add(trainerId));
+      }
+      if (ENABLE_ROOMS && otherForm.sala_id) roomSet.add(otherForm.sala_id);
+      if (ENABLE_MOBILE_UNITS) {
+        otherForm.unidad_movil_ids.forEach((unidadId) => unitSet.add(unidadId));
+      }
     }
 
     return { trainers: trainerSet, rooms: roomSet, units: unitSet };
-  }, [allForms, form.id, form.fecha_fin_local, form.fecha_inicio_local]);
+  }, [allForms, form.id, form.fecha_fin_local, form.fecha_inicio_local, shouldCheckAvailability]);
 
   const availability = availabilityQuery.data;
 
   const blockedTrainers = useMemo(() => {
+    if (!ENABLE_TRAINERS) return new Set<string>();
     const set = new Set<string>();
     localLocks.trainers.forEach((id) => set.add(id));
     availability?.trainers?.forEach((id) => set.add(id));
@@ -2910,6 +2979,7 @@ function SessionEditor({
   }, [availability, localLocks]);
 
   const blockedRooms = useMemo(() => {
+    if (!ENABLE_ROOMS) return new Set<string>();
     const set = new Set<string>();
     localLocks.rooms.forEach((id) => set.add(id));
     availability?.rooms?.forEach((id) => set.add(id));
@@ -2917,6 +2987,7 @@ function SessionEditor({
   }, [availability, localLocks]);
 
   const blockedUnits = useMemo(() => {
+    if (!ENABLE_MOBILE_UNITS) return new Set<string>();
     const set = new Set<string>();
     localLocks.units.forEach((id) => {
       if (!ALWAYS_AVAILABLE_UNIT_IDS.has(id)) {
@@ -2932,6 +3003,7 @@ function SessionEditor({
   }, [availability, localLocks]);
 
   const selectedRoomLabel = useMemo(() => {
+    if (!ENABLE_ROOMS) return '';
     if (isInCompany) return 'In Company';
     if (!form.sala_id) return '';
     const room = rooms.find((item) => item.sala_id === form.sala_id);
@@ -2942,9 +3014,11 @@ function SessionEditor({
   }, [blockedRooms, form.sala_id, isInCompany, rooms]);
 
   const hasDateRange = Boolean(availabilityRange);
-  const roomWarningVisible = !isInCompany && hasDateRange && blockedRooms.size > 0;
+  const roomWarningVisible =
+    ENABLE_ROOMS && !isInCompany && hasDateRange && blockedRooms.size > 0;
 
   useEffect(() => {
+    if (!ENABLE_ROOMS) return;
     if (isInCompany) {
       if (form.sala_id !== null) {
         const hadDirtyFields = status.dirty;
@@ -2955,6 +3029,7 @@ function SessionEditor({
       }
       return;
     }
+    if (!ENABLE_ROOMS) return;
     if (!form.sala_id) return;
     if (rooms.some((room) => room.sala_id === form.sala_id)) return;
     const hadDirtyFields = status.dirty;
@@ -3058,37 +3133,40 @@ function SessionEditor({
             />
           </Form.Group>
         </Col>
-        <Col md={6} lg={3}>
-          <Form.Group controlId={`session-${form.id}-estado`}>
-            <Form.Label>Estado</Form.Label>
-            <Form.Select
-              value={form.estado}
-              onChange={(event) => {
-                const nextValue = event.target.value as SessionEstado;
-                if (!MANUAL_SESSION_ESTADO_SET.has(nextValue)) {
-                  return;
-                }
-                onChange((current) => ({ ...current, estado: nextValue }));
-              }}
-              title={buildFieldTooltip(SESSION_ESTADO_LABELS[form.estado])}
-            >
-              <option value="BORRADOR">
-                {SESSION_ESTADO_LABELS.BORRADOR}
-              </option>
-              <option value="PLANIFICADA" disabled>
-                {SESSION_ESTADO_LABELS.PLANIFICADA}
-              </option>
-              <option value="SUSPENDIDA">{SESSION_ESTADO_LABELS.SUSPENDIDA}</option>
-              <option value="CANCELADA">{SESSION_ESTADO_LABELS.CANCELADA}</option>
-              <option value="FINALIZADA">{SESSION_ESTADO_LABELS.FINALIZADA}</option>
-            </Form.Select>
-          </Form.Group>
-        </Col>
+        {ENABLE_SESSION_STATE ? (
+          <Col md={6} lg={3}>
+            <Form.Group controlId={`session-${form.id}-estado`}>
+              <Form.Label>Estado</Form.Label>
+              <Form.Select
+                value={form.estado}
+                onChange={(event) => {
+                  const nextValue = event.target.value as SessionEstado;
+                  if (!MANUAL_SESSION_ESTADO_SET.has(nextValue)) {
+                    return;
+                  }
+                  onChange((current) => ({ ...current, estado: nextValue }));
+                }}
+                title={buildFieldTooltip(SESSION_ESTADO_LABELS[form.estado])}
+              >
+                <option value="BORRADOR">
+                  {SESSION_ESTADO_LABELS.BORRADOR}
+                </option>
+                <option value="PLANIFICADA" disabled>
+                  {SESSION_ESTADO_LABELS.PLANIFICADA}
+                </option>
+                <option value="SUSPENDIDA">{SESSION_ESTADO_LABELS.SUSPENDIDA}</option>
+                <option value="CANCELADA">{SESSION_ESTADO_LABELS.CANCELADA}</option>
+                <option value="FINALIZADA">{SESSION_ESTADO_LABELS.FINALIZADA}</option>
+              </Form.Select>
+            </Form.Group>
+          </Col>
+        ) : null}
       </Row>
 
       <Row className="g-3 mt-1">
-        <Col md={6}>
-          <Form.Group controlId={`session-${form.id}-trainers`}>
+        {ENABLE_TRAINERS ? (
+          <Col md={6}>
+            <Form.Group controlId={`session-${form.id}-trainers`}>
             <Form.Label>Formadores / Bomberos</Form.Label>
             <div ref={trainerFieldRef} className="session-multiselect">
               <Form.Control
@@ -3164,15 +3242,17 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
-            {availabilityError && (
+            {shouldCheckAvailability && availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
             )}
-            {hasDateRange && availabilityFetching && !availabilityError && (
+            {shouldCheckAvailability && hasDateRange && availabilityFetching && !availabilityError && (
               <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
             )}
           </Form.Group>
         </Col>
-        <Col md={6}>
+        ) : null}
+        {ENABLE_MOBILE_UNITS ? (
+          <Col md={6}>
           <Form.Group controlId={`session-${form.id}-units`}>
             <Form.Label>Unidades móviles</Form.Label>
             <div ref={unitFieldRef} className="session-multiselect">
@@ -3246,19 +3326,21 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
-            {availabilityError && (
+            {shouldCheckAvailability && availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
             )}
-            {hasDateRange && availabilityFetching && !availabilityError && (
+            {shouldCheckAvailability && hasDateRange && availabilityFetching && !availabilityError && (
               <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
             )}
           </Form.Group>
-        </Col>
+          </Col>
+        ) : null}
       </Row>
 
       <Row className="g-3 mt-1">
-        <Col md={6} lg={4}>
-          <Form.Group controlId={`session-${form.id}-sala`}>
+        {ENABLE_ROOMS ? (
+          <Col md={6} lg={4}>
+            <Form.Group controlId={`session-${form.id}-sala`}>
             <Form.Label>Sala</Form.Label>
             <Form.Select
               value={form.sala_id ?? ''}
@@ -3287,39 +3369,42 @@ function SessionEditor({
                   );
                 })}
             </Form.Select>
-            {availabilityError && (
+            {shouldCheckAvailability && availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
             )}
-            {hasDateRange && availabilityFetching && !availabilityError && (
+            {shouldCheckAvailability && hasDateRange && availabilityFetching && !availabilityError && (
               <div className="text-muted small mt-1">Comprobando disponibilidad…</div>
             )}
           </Form.Group>
         </Col>
-        <Col md={12} lg={8}>
-          <Form.Group controlId={`session-${form.id}-direccion`}>
-            <Form.Label>Dirección</Form.Label>
-            <div className="d-flex gap-2">
-              <Form.Control
-                value={form.direccion}
-                onChange={(event) =>
-                  onChange((current) => ({ ...current, direccion: event.target.value ?? '' }))
-                }
-                title={buildFieldTooltip(form.direccion)}
-              />
-              <Button
-                variant="outline-primary"
-                onClick={() => {
-                  if (form.direccion.trim()) {
-                    onOpenMap(form.direccion);
+        ) : null}
+        {ENABLE_ADDRESS ? (
+          <Col md={ENABLE_ROOMS ? 6 : 12} lg={ENABLE_ROOMS ? 8 : 8}>
+            <Form.Group controlId={`session-${form.id}-direccion`}>
+              <Form.Label>Dirección</Form.Label>
+              <div className="d-flex gap-2">
+                <Form.Control
+                  value={form.direccion}
+                  onChange={(event) =>
+                    onChange((current) => ({ ...current, direccion: event.target.value ?? '' }))
                   }
-                }}
-                disabled={!form.direccion.trim()}
-              >
-                Ver
-              </Button>
-            </div>
-          </Form.Group>
-        </Col>
+                  title={buildFieldTooltip(form.direccion)}
+                />
+                <Button
+                  variant="outline-primary"
+                  onClick={() => {
+                    if (form.direccion.trim()) {
+                      onOpenMap(form.direccion);
+                    }
+                  }}
+                  disabled={!form.direccion.trim()}
+                >
+                  Ver
+                </Button>
+              </div>
+            </Form.Group>
+          </Col>
+        ) : null}
       </Row>
 
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mt-3">
@@ -3349,12 +3434,14 @@ function SessionEditor({
         </div>
       </div>
 
-      <SessionCommentsSection
-        sessionId={form.id}
-        dealId={dealId}
-        onNotify={onNotify}
-        driveUrl={form.drive_url ?? null}
-      />
+      {ENABLE_SESSION_COMMENTS ? (
+        <SessionCommentsSection
+          sessionId={form.id}
+          dealId={dealId}
+          onNotify={onNotify}
+          driveUrl={form.drive_url ?? null}
+        />
+      ) : null}
     </div>
   );
 }
@@ -3764,12 +3851,14 @@ function SessionCommentsSection({
             ) : null}
           </Accordion.Body>
         </Accordion.Item>
-        <SessionDocumentsAccordionItem
-          sessionId={sessionId}
-          dealId={dealId}
-          onNotify={onNotify}
-          initialDriveUrl={driveUrl ?? null}
-        />
+        {ENABLE_SESSION_DOCUMENTS ? (
+          <SessionDocumentsAccordionItem
+            sessionId={sessionId}
+            dealId={dealId}
+            onNotify={onNotify}
+            initialDriveUrl={driveUrl ?? null}
+          />
+        ) : null}
         <SessionStudentsAccordionItem
           dealId={dealId}
           sessionId={sessionId}
