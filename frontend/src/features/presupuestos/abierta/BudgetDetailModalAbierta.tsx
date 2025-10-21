@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import {
   Modal,
@@ -37,7 +37,7 @@ import {
 } from '../api';
 import { normalizeImportDealResult } from '../importDealUtils';
 import { formatSedeLabel } from '../formatSedeLabel';
-import { SessionsAccordionAbierta } from './sessions/SessionsAccordionAbierta';
+import { SessionStudentsAccordionItem, SessionsAccordionAbierta } from './sessions/SessionsAccordionAbierta';
 import type { DealEditablePatch, DealProductEditablePatch } from '../api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../../types/deal';
 import { buildFieldTooltip } from '../../../utils/fieldTooltip';
@@ -436,6 +436,7 @@ export function BudgetDetailModalAbierta({
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [openSections, setOpenSections] = useState<string[]>([]);
+  const [selectedStudentsSessionId, setSelectedStudentsSessionId] = useState<string | null>(null);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [creatingNote, setCreatingNote] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -789,6 +790,50 @@ export function BudgetDetailModalAbierta({
   const dealSessions = dealSessionsQuery.data ?? [];
   const sessionsLoading = dealSessionsQuery.isLoading;
   const defaultSessionId = useMemo(() => pickDefaultSessionId(dealSessions), [dealSessions]);
+  const sessionsById = useMemo(() => {
+    const map = new Map<string, SessionDTO>();
+    dealSessions.forEach((session) => {
+      if (!session || typeof session.id !== 'string') return;
+      const trimmedId = session.id.trim();
+      if (!trimmedId.length) return;
+      map.set(trimmedId, session);
+    });
+    return map;
+  }, [dealSessions]);
+  const selectedStudentsSession = useMemo(() => {
+    if (!selectedStudentsSessionId) return null;
+    const trimmedId = selectedStudentsSessionId.trim();
+    if (!trimmedId.length) return null;
+    return sessionsById.get(trimmedId) ?? null;
+  }, [selectedStudentsSessionId, sessionsById]);
+  const selectedStudentsSessionLabel = useMemo(() => {
+    if (!selectedStudentsSession) return null;
+    const name = (selectedStudentsSession.nombre_cache ?? '').trim();
+    if (name.length) return name;
+    const id = (selectedStudentsSession.id ?? '').trim();
+    return id.length ? `Sesión ${id}` : 'Sesión sin nombre';
+  }, [selectedStudentsSession]);
+  const studentsSessionOptions = useMemo(
+    () =>
+      dealSessions
+        .map((session) => {
+          if (!session || typeof session.id !== 'string') return null;
+          const trimmedId = session.id.trim();
+          if (!trimmedId.length) return null;
+          const name = (session.nombre_cache ?? '').trim();
+          const label = name.length ? name : `Sesión ${trimmedId}`;
+          return { id: trimmedId, label };
+        })
+        .filter((option): option is { id: string; label: string } => Boolean(option)),
+    [dealSessions],
+  );
+  const effectiveStudentsSessionId = useMemo(() => {
+    const trimmed = (selectedStudentsSessionId ?? '').trim();
+    if (trimmed.length) {
+      return trimmed;
+    }
+    return studentsSessionOptions[0]?.id ?? '';
+  }, [selectedStudentsSessionId, studentsSessionOptions]);
 
   const dealStudentsQuery = useQuery({
     queryKey: ['dealStudents', normalizedDealId],
@@ -911,6 +956,91 @@ export function BudgetDetailModalAbierta({
 
   const noteStudentsSyncing = importStudentsFromNoteMutation.isPending;
 
+  const performNoteStudentsSync = useCallback(
+    (
+      sessionId: string,
+      options?: { notifyOnNoChanges?: boolean; notifyOnMissingNote?: boolean },
+    ): boolean => {
+      if (!normalizedDealId) return false;
+      const trimmedSessionId = sessionId.trim();
+      if (!trimmedSessionId.length) return false;
+      if (!noteSignature || !noteStudents.length) {
+        if (options?.notifyOnMissingNote && onNotify) {
+          onNotify({
+            variant: 'info',
+            message: 'No se encontraron alumnos en las notas para sincronizar.',
+          });
+        }
+        return false;
+      }
+      if (importStudentsFromNoteMutation.isPending) {
+        return false;
+      }
+
+      const normalizeName = (value: string) => normalizeNoteWhitespace(value).toUpperCase();
+      const existingByDni = new Map<string, SessionStudent>();
+
+      students.forEach((student) => {
+        const dni = (student.dni ?? '').trim().toUpperCase();
+        if (!dni.length || existingByDni.has(dni)) return;
+        existingByDni.set(dni, student);
+      });
+
+      const toCreate: NoteStudentEntry[] = [];
+      const toUpdate: { id: string; nombre: string; apellido: string }[] = [];
+
+      noteStudents.forEach((student) => {
+        const dni = student.dni.trim().toUpperCase();
+        if (!dni.length) return;
+        const existing = existingByDni.get(dni);
+        if (!existing) {
+          toCreate.push(student);
+          return;
+        }
+
+        const existingNombre = normalizeName(existing.nombre ?? '');
+        const existingApellido = normalizeName(existing.apellido ?? '');
+        const incomingNombre = normalizeName(student.nombre);
+        const incomingApellido = normalizeName(student.apellido);
+
+        if (existingNombre !== incomingNombre || existingApellido !== incomingApellido) {
+          toUpdate.push({ id: existing.id, nombre: student.nombre, apellido: student.apellido });
+        }
+      });
+
+      if (!toCreate.length && !toUpdate.length) {
+        processedNoteSignatureRef.current = noteSignature;
+        if (options?.notifyOnNoChanges && onNotify) {
+          onNotify({
+            variant: 'info',
+            message: 'Los alumnos de la nota ya están sincronizados.',
+          });
+        }
+        return false;
+      }
+
+      processedNoteSignatureRef.current = noteSignature;
+
+      importStudentsFromNoteMutation.mutate({
+        dealId: normalizedDealId,
+        sessionId: trimmedSessionId,
+        toCreate,
+        toUpdate,
+        noteSignature,
+      });
+
+      return true;
+    },
+    [
+      normalizedDealId,
+      noteSignature,
+      noteStudents,
+      students,
+      importStudentsFromNoteMutation,
+      onNotify,
+    ],
+  );
+
   useEffect(() => {
     processedNoteSignatureRef.current = null;
     noteWarningSignatureRef.current = null;
@@ -921,64 +1051,118 @@ export function BudgetDetailModalAbierta({
     if (!noteSignature || !noteStudents.length) return;
     if (!defaultSessionId) return;
     if (studentsLoading || sessionsLoading) return;
-    if (importStudentsFromNoteMutation.isPending) return;
     if (processedNoteSignatureRef.current === noteSignature) return;
 
-    const normalizeName = (value: string) => normalizeNoteWhitespace(value).toUpperCase();
-    const existingByDni = new Map<string, SessionStudent>();
-
-    students.forEach((student) => {
-      const dni = (student.dni ?? '').trim().toUpperCase();
-      if (!dni.length || existingByDni.has(dni)) return;
-      existingByDni.set(dni, student);
-    });
-
-    const toCreate: NoteStudentEntry[] = [];
-    const toUpdate: { id: string; nombre: string; apellido: string }[] = [];
-
-    noteStudents.forEach((student) => {
-      const dni = student.dni.trim().toUpperCase();
-      if (!dni.length) return;
-      const existing = existingByDni.get(dni);
-      if (!existing) {
-        toCreate.push(student);
-        return;
-      }
-
-      const existingNombre = normalizeName(existing.nombre ?? '');
-      const existingApellido = normalizeName(existing.apellido ?? '');
-      const incomingNombre = normalizeName(student.nombre);
-      const incomingApellido = normalizeName(student.apellido);
-
-      if (existingNombre !== incomingNombre || existingApellido !== incomingApellido) {
-        toUpdate.push({ id: existing.id, nombre: student.nombre, apellido: student.apellido });
-      }
-    });
-
-    if (!toCreate.length && !toUpdate.length) {
-      processedNoteSignatureRef.current = noteSignature;
-      return;
-    }
-
-    processedNoteSignatureRef.current = noteSignature;
-
-    importStudentsFromNoteMutation.mutate({
-      dealId: normalizedDealId,
-      sessionId: defaultSessionId,
-      toCreate,
-      toUpdate,
-      noteSignature,
-    });
+    performNoteStudentsSync(defaultSessionId);
   }, [
     normalizedDealId,
     noteSignature,
     noteStudents,
     defaultSessionId,
-    students,
     studentsLoading,
     sessionsLoading,
-    importStudentsFromNoteMutation,
+    performNoteStudentsSync,
   ]);
+
+  useEffect(() => {
+    setSelectedStudentsSessionId((current) => {
+      const available = dealSessions
+        .map((session) => (session?.id ?? '').trim())
+        .filter((value) => value.length);
+      if (!available.length) {
+        return null;
+      }
+      if (current) {
+        const normalizedCurrent = current.trim();
+        if (normalizedCurrent.length && available.includes(normalizedCurrent)) {
+          return normalizedCurrent;
+        }
+      }
+      if (defaultSessionId) {
+        const normalizedDefault = defaultSessionId.trim();
+        if (normalizedDefault.length && available.includes(normalizedDefault)) {
+          return normalizedDefault;
+        }
+      }
+      return available[0];
+    });
+  }, [dealSessions, defaultSessionId]);
+
+  const handleManualSyncStudents = useCallback(() => {
+    const targetSessionId = (selectedStudentsSessionId ?? '').trim() || effectiveStudentsSessionId;
+    if (!targetSessionId) {
+      onNotify?.({ variant: 'info', message: 'Selecciona una sesión para sincronizar alumnos.' });
+      return;
+    }
+
+    performNoteStudentsSync(targetSessionId, {
+      notifyOnNoChanges: true,
+      notifyOnMissingNote: true,
+    });
+  }, [
+    performNoteStudentsSync,
+    selectedStudentsSessionId,
+    effectiveStudentsSessionId,
+    onNotify,
+  ]);
+
+  const studentsAccordionBodyPrefix = (
+    <div className="d-flex flex-column gap-3">
+      <Form.Group controlId="deal-students-session-select">
+        <Form.Label className="fw-semibold">Sesión</Form.Label>
+        <Form.Select
+          value={effectiveStudentsSessionId}
+          onChange={(event) => {
+            const value = event.target.value.trim();
+            setSelectedStudentsSessionId(value.length ? value : null);
+          }}
+          disabled={sessionsLoading || !studentsSessionOptions.length}
+        >
+          {studentsSessionOptions.length ? (
+            studentsSessionOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))
+          ) : (
+            <option value="">Sin sesiones disponibles</option>
+          )}
+        </Form.Select>
+      </Form.Group>
+      <div>
+        {noteStudents.length ? (
+          <Alert
+            variant="secondary"
+            className="mb-0 d-flex flex-column flex-lg-row align-items-lg-center gap-2"
+          >
+            <span className="flex-grow-1">
+              {noteStudents.length === 1
+                ? 'Se ha detectado 1 alumno en las notas.'
+                : `Se han detectado ${noteStudents.length} alumnos en las notas.`}
+            </span>
+            <Button
+              size="sm"
+              variant="outline-primary"
+              onClick={handleManualSyncStudents}
+              disabled={!effectiveStudentsSessionId || noteStudentsSyncing}
+            >
+              {noteStudentsSyncing ? (
+                <span className="d-inline-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" role="status" /> Sincronizando…
+                </span>
+              ) : (
+                'Sincronizar con la sesión seleccionada'
+              )}
+            </Button>
+          </Alert>
+        ) : (
+          <Alert variant="secondary" className="mb-0">
+            No se encontraron alumnos en las notas.
+          </Alert>
+        )}
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     if (!noteSignature || !noteStudents.length) {
@@ -1529,9 +1713,6 @@ export function BudgetDetailModalAbierta({
                       </tbody>
                     </Table>
                   ) : null}
-                  {noteStudentsSyncing ? (
-                    <div className="text-muted small mt-2">Sincronizando alumnos de la nota…</div>
-                  ) : null}
                   {studentsFetching && !studentsLoading ? (
                     <div className="text-muted small mt-2">Actualizando alumnos…</div>
                   ) : null}
@@ -1624,6 +1805,41 @@ export function BudgetDetailModalAbierta({
                 products={detailProducts}
                 onNotify={onNotify}
               />
+              {effectiveStudentsSessionId ? (
+                <SessionStudentsAccordionItem
+                  dealId={normalizedDealId}
+                  sessionId={effectiveStudentsSessionId}
+                  onNotify={onNotify}
+                  eventKey="students"
+                  headerAddon={
+                    selectedStudentsSessionLabel ? (
+                      <Badge bg="secondary" className="text-uppercase fw-normal">
+                        {selectedStudentsSessionLabel}
+                      </Badge>
+                    ) : null
+                  }
+                  bodyPrefix={studentsAccordionBodyPrefix}
+                />
+              ) : (
+                <Accordion.Item eventKey="students">
+                  <Accordion.Header>
+                    <div className="d-flex justify-content-between align-items-center w-100">
+                      <span className="erp-accordion-title">Alumnos</span>
+                    </div>
+                  </Accordion.Header>
+                  <Accordion.Body>
+                    {sessionsLoading ? (
+                      <div className="d-flex align-items-center gap-2 text-muted small">
+                        <Spinner animation="border" size="sm" role="status" /> Cargando sesiones…
+                      </div>
+                    ) : (
+                      <p className="text-muted small mb-0">
+                        No hay sesiones disponibles para gestionar alumnos.
+                      </p>
+                    )}
+                  </Accordion.Body>
+                </Accordion.Item>
+              )}
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>
                   <div className="d-flex justify-content-between align-items-center w-100">

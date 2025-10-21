@@ -212,14 +212,20 @@ function validateStudentDraft(draft: StudentDraft): string | null {
   return null;
 }
 
-function SessionStudentsAccordionItem({
+export function SessionStudentsAccordionItem({
   dealId,
   sessionId,
   onNotify,
+  eventKey,
+  headerAddon,
+  bodyPrefix,
 }: {
   dealId: string;
   sessionId: string;
   onNotify?: (toast: ToastParams) => void;
+  eventKey?: string;
+  headerAddon?: ReactNode;
+  bodyPrefix?: ReactNode;
 }) {
   const qc = useQueryClient();
   const [editingId, setEditingId] = useState<'new' | string | null>(null);
@@ -736,16 +742,18 @@ function SessionStudentsAccordionItem({
   };
 
   return (
-    <Accordion.Item eventKey={`session-students-${sessionId}`}>
+    <Accordion.Item eventKey={eventKey ?? `session-students-${sessionId}`}>
       <Accordion.Header>
-        <div className="d-flex justify-content-between align-items-center w-100">
+        <div className="d-flex justify-content-between align-items-center w-100 gap-3">
           <span className="erp-accordion-title">
             Alumnos
             {studentCount > 0 ? <span className="erp-accordion-count">{studentCount}</span> : null}
           </span>
+          {headerAddon ? <div className="ms-auto">{headerAddon}</div> : null}
         </div>
       </Accordion.Header>
       <Accordion.Body>
+        {bodyPrefix ? <div className="mb-3">{bodyPrefix}</div> : null}
         <div className="d-flex flex-column gap-3 mb-3">
           <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-2">
             <div className="d-flex flex-column flex-sm-row align-items-sm-center gap-2 flex-wrap">
