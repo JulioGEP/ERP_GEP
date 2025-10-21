@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { Button, Card, Table } from 'react-bootstrap';
-import CursosWoo from '../../features/formacion_abierta/CursosWoo';
+import CursosWoo, { WooProductSummary } from '../../features/formacion_abierta/CursosWoo';
 
 export type RecursosFormacionAbiertaPageProps = Record<string, never>;
 
 export default function RecursosFormacionAbiertaPage(
   _props: RecursosFormacionAbiertaPageProps,
 ) {
+  const [products, setProducts] = useState<WooProductSummary[]>([]);
+
   return (
     <section className="d-flex flex-column gap-4">
       <header>
@@ -13,7 +16,7 @@ export default function RecursosFormacionAbiertaPage(
         <h1 className="h3 text-uppercase mb-0">Formación Abierta</h1>
       </header>
 
-      <CursosWoo />
+      <CursosWoo onProductsFetched={setProducts} />
 
       <Card className="border-0 shadow-sm">
         <Card.Body className="d-flex flex-column gap-3">
@@ -39,21 +42,21 @@ export default function RecursosFormacionAbiertaPage(
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td>Curso de ejemplo A</td>
-                  <td>1001</td>
-                  <td>PD-4587</td>
-                </tr>
-                <tr>
-                  <td>Curso de ejemplo B</td>
-                  <td>1002</td>
-                  <td>PD-4588</td>
-                </tr>
-                <tr>
-                  <td>Curso de ejemplo C</td>
-                  <td>1003</td>
-                  <td>PD-4589</td>
-                </tr>
+                {products.length ? (
+                  products.map((product, index) => (
+                    <tr key={product.id ?? `${product.name ?? 'producto'}-${index}`}>
+                      <td>{product.name ?? '—'}</td>
+                      <td>{product.id ?? '—'}</td>
+                      <td>{product.pipedriveIds.length ? product.pipedriveIds.join(', ') : '—'}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td className="text-center text-muted" colSpan={3}>
+                      No hay productos disponibles. Importa un producto para actualizar la lista.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </Table>
           </div>
