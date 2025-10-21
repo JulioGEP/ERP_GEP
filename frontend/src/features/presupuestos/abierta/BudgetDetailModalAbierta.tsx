@@ -1686,13 +1686,6 @@ export function BudgetDetailModalAbierta({
                   sessionId={effectiveStudentsSessionId}
                   onNotify={onNotify}
                   eventKey="students"
-                  headerAddon={
-                    selectedStudentsSessionLabel ? (
-                      <Badge bg="secondary" className="text-uppercase fw-normal">
-                        {selectedStudentsSessionLabel}
-                      </Badge>
-                    ) : null
-                  }
                   bodyPrefix={studentsAccordionBodyPrefix}
                 />
               ) : (
