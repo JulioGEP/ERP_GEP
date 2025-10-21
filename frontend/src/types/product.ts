@@ -2,6 +2,7 @@
 export type Product = {
   id: string;
   id_pipe: string;
+  id_woo: number | null;
   name: string | null;
   code: string | null;
   category: string | null;

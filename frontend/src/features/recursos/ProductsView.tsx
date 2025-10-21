@@ -36,7 +36,7 @@ type UpdateVariables = {
   id: string;
   payload: ProductUpdatePayload;
   product: Product;
-  field: 'template' | 'url_formacion' | 'active';
+  field: 'template' | 'url_formacion' | 'active' | 'id_woo';
 };
 
 type TrainingTemplatesApi = TrainingTemplatesManager;
@@ -96,6 +96,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>([]);
   const [urlDrafts, setUrlDrafts] = useState<Record<string, string>>({});
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, string>>({});
+  const [idWooDrafts, setIdWooDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const api = getTrainingTemplatesApi();
@@ -176,11 +177,21 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
         });
       }
 
+      if (variables.field === 'id_woo') {
+        setIdWooDrafts((current) => {
+          const next = { ...current };
+          delete next[variables.id];
+          return next;
+        });
+      }
+
       const fieldLabel =
         variables.field === 'template'
           ? 'template'
           : variables.field === 'url_formacion'
           ? 'URL de formación'
+          : variables.field === 'id_woo'
+          ? 'Id Producto WC'
           : 'estado';
 
       onNotify({
@@ -200,6 +211,14 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
 
       if (variables.field === 'template') {
         setTemplateDrafts((current) => {
+          const next = { ...current };
+          delete next[variables.id];
+          return next;
+        });
+      }
+
+      if (variables.field === 'id_woo') {
+        setIdWooDrafts((current) => {
           const next = { ...current };
           delete next[variables.id];
           return next;
@@ -244,6 +263,10 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     setUrlDrafts((current) => ({ ...current, [productId]: value }));
   }, []);
 
+  const handleIdWooChange = useCallback((productId: string, value: string) => {
+    setIdWooDrafts((current) => ({ ...current, [productId]: value }));
+  }, []);
+
   const handleUrlCommit = useCallback(
     (product: Product) => {
       const draft = urlDrafts[product.id];
@@ -272,8 +295,58 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     [updateMutation, urlDrafts]
   );
 
+  const handleIdWooCommit = useCallback(
+    (product: Product) => {
+      const draft = idWooDrafts[product.id];
+      const currentValue = product.id_woo;
+      const normalizedDraft = (draft ?? '').trim();
+      const normalized = normalizedDraft.length ? Number(normalizedDraft) : null;
+
+      if (normalizedDraft.length && !Number.isFinite(normalized ?? NaN)) {
+        setIdWooDrafts((currentDrafts) => {
+          const next = { ...currentDrafts };
+          delete next[product.id];
+          return next;
+        });
+        onNotify({ variant: 'danger', message: 'El Id Producto WC debe ser un número válido.' });
+        return;
+      }
+
+      if (normalized === currentValue || (normalized === null && currentValue == null)) {
+        setIdWooDrafts((currentDrafts) => {
+          if (currentDrafts[product.id] === undefined) {
+            return currentDrafts;
+          }
+          const next = { ...currentDrafts };
+          delete next[product.id];
+          return next;
+        });
+        return;
+      }
+
+      updateMutation.mutate({
+        id: product.id,
+        payload: { id_woo: normalized },
+        product,
+        field: 'id_woo',
+      });
+    },
+    [idWooDrafts, onNotify, updateMutation]
+  );
+
+  const handleIdWooKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>, product: Product) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.currentTarget.blur();
+        handleIdWooCommit(product);
+      }
+    },
+    [handleIdWooCommit]
+  );
+
   const handleUrlKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>, product: Product) => {
+    (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>, product: Product) => {
       if (event.key === 'Enter') {
         event.preventDefault();
         event.currentTarget.blur();
@@ -317,6 +390,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
             <thead>
               <tr className="text-muted text-uppercase small">
                 <th className="fw-semibold">ID de Pipedrive</th>
+                <th className="fw-semibold">Id Producto WC</th>
                 <th className="fw-semibold">Nombre</th>
                 <th className="fw-semibold">Código</th>
                 <th className="fw-semibold">Categoría</th>
@@ -328,13 +402,13 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-5 text-center">
+                  <td colSpan={8} className="py-5 text-center">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-5 text-center text-muted">
+                  <td colSpan={8} className="py-5 text-center text-muted">
                     No hay productos disponibles. Pulsa "Actualizar Productos" para sincronizar.
                   </td>
                 </tr>
@@ -342,9 +416,23 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
                 products.map((product) => {
                   const urlValue = urlDrafts[product.id] ?? product.url_formacion ?? '';
                   const templateValue = templateDrafts[product.id] ?? product.template ?? '';
+                  const idWooValue = idWooDrafts[product.id] ?? (product.id_woo?.toString() ?? '');
                   return (
                     <tr key={product.id}>
                       <td className="font-monospace">{product.id_pipe}</td>
+                      <td style={{ minWidth: 160 }}>
+                        <Form.Control
+                          type="number"
+                          placeholder="—"
+                          value={idWooValue}
+                          onChange={(event) => handleIdWooChange(product.id, event.target.value)}
+                          onBlur={() => handleIdWooCommit(product)}
+                          onKeyDown={(event) => handleIdWooKeyDown(event, product)}
+                          disabled={isUpdating}
+                          min={0}
+                          step={1}
+                        />
+                      </td>
                       <td>
                         <div className="d-flex flex-column gap-1">
                           <span className="fw-semibold">{product.name ?? '—'}</span>
