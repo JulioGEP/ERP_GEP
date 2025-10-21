@@ -907,6 +907,7 @@ export type DealEditablePatch = {
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
+  comercial?: string | null;
 };
 
 export type DealProductEditablePatch = {
