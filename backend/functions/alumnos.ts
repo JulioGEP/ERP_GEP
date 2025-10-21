@@ -90,15 +90,22 @@ export const handler = async (event: any) => {
       if (!dealId) {
         return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
       }
-      if (!sessionIdRaw) {
-        return errorResponse('VALIDATION_ERROR', 'sesion_id requerido', 400);
+
+      let sessionId: string | null = null;
+      if (sessionIdRaw) {
+        if (!isUUID(sessionIdRaw)) {
+          return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
+        }
+        sessionId = sessionIdRaw;
       }
-      if (!isUUID(sessionIdRaw)) {
-        return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
+
+      const where: Record<string, unknown> = { deal_id: dealId };
+      if (sessionId) {
+        where.sesion_id = sessionId;
       }
 
       const students = await prisma.alumnos.findMany({
-        where: { deal_id: dealId, sesion_id: sessionIdRaw },
+        where,
         orderBy: { created_at: 'desc' },
       });
 
