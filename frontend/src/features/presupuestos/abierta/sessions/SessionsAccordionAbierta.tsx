@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type ChangeEvent,
   type DragEvent,
@@ -34,7 +35,10 @@ import {
   fetchDealSessions,
   fetchMobileUnitsCatalog,
   fetchRoomsCatalog,
+  fetchSessionCounts,
   patchSession,
+  createSession,
+  deleteSession,
   fetchSessionComments,
   createSessionComment,
   updateSessionComment,
@@ -61,6 +65,7 @@ import {
   type SessionComment,
   type SessionDocument,
   type SessionStudent,
+  type SessionCounts,
 } from '../../api';
 import { isApiError } from '../../api';
 import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
@@ -91,6 +96,15 @@ function normalizeDriveUrlValue(value: unknown): string | null {
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
 }
+
+type DeleteDialogState = {
+  sessionId: string;
+  productId: string;
+  sessionName: string;
+  status: 'loading' | 'ready' | 'failed';
+  counts: SessionCounts | null;
+  error: string | null;
+};
 
 const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
@@ -130,6 +144,15 @@ function formatErrorMessage(error: unknown, fallback: string): string {
     return baseMessage;
   }
   return fallback;
+}
+
+function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} {...props}>
+      <rect x={7} y={7} width={11} height={11} rx={2.2} ry={2.2} />
+      <path d="M5.5 15.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.6" />
+    </svg>
+  );
 }
 
 function CopyIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -1492,6 +1515,40 @@ function DeleteIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+type SessionActionIconProps = {
+  label: string;
+  onActivate: () => void;
+  children: ReactNode;
+  variant?: 'default' | 'danger';
+};
+
+function SessionActionIcon({ label, onActivate, children, variant = 'default' }: SessionActionIconProps) {
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLSpanElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
+      onActivate();
+    }
+  };
+
+  return (
+    <span
+      role="button"
+      aria-label={label}
+      title={label}
+      tabIndex={0}
+      className={`session-action-icon${variant === 'danger' ? ' danger' : ''}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onActivate();
+      }}
+      onKeyDown={handleKeyDown}
+    >
+      {children}
+    </span>
+  );
+}
+
 function SessionStateBadge({ estado }: { estado: SessionEstado }) {
   const label = SESSION_ESTADO_LABELS[estado] ?? estado;
   const variant = SESSION_ESTADO_VARIANTS[estado] ?? 'secondary';
@@ -1796,6 +1853,9 @@ export function SessionsAccordionAbierta({
       }
     | null
   >(null);
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+
   useEffect(() => {
     formsRef.current = forms;
   }, [forms]);
@@ -1845,6 +1905,26 @@ export function SessionsAccordionAbierta({
   const patchMutation = useMutation({
     mutationFn: ({ sessionId, payload }: { sessionId: string; payload: Parameters<typeof patchSession>[1] }) =>
       patchSession(sessionId, payload),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (input: {
+      deal_id: string;
+      deal_product_id: string;
+      direccion?: string | null;
+      trainer_ids?: string[];
+      unidad_movil_ids?: string[];
+      sala_id?: string | null;
+    }) =>
+      createSession({
+        ...input,
+        fecha_inicio_utc: null,
+        fecha_fin_utc: null,
+      }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (sessionId: string) => deleteSession(sessionId),
   });
 
   const handleFieldChange = (sessionId: string, updater: (current: SessionFormState) => SessionFormState) => {
@@ -2016,11 +2096,198 @@ export function SessionsAccordionAbierta({
     [activeSession, hasSessionChanges, onNotify, revertSessionChanges, runSave, saveStatus],
   );
 
-  const units = ENABLE_MOBILE_UNITS && unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
+  const invalidateProductSessions = async (productId: string) => {
+    const currentPage = pageByProduct[productId] ?? 1;
+    await qc.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey;
+        return Array.isArray(key) && key[0] === 'dealSessions' && key[1] === dealId && key[2] === productId;
+      },
+    });
+  };
+
+  const handleDuplicate = async (sessionId: string) => {
+    const session = formsRef.current[sessionId];
+    const productId = sessionProductRef.current[sessionId];
+    if (!session || !productId) return;
+    try {
+      const payload: Parameters<typeof createSession>[0] = {
+        deal_id: dealId,
+        deal_product_id: productId,
+      };
+      if (ENABLE_ADDRESS) {
+        payload.direccion = session.direccion ?? dealAddress ?? '';
+      }
+      if (ENABLE_TRAINERS) {
+        payload.trainer_ids = session.trainer_ids;
+      }
+      if (ENABLE_MOBILE_UNITS) {
+        payload.unidad_movil_ids = session.unidad_movil_ids;
+      }
+      if (ENABLE_ROOMS) {
+        payload.sala_id = session.sala_id;
+      }
+
+      await createMutation.mutateAsync(payload);
+      await invalidateProductSessions(productId);
+    } catch (error) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo duplicar la sesión';
+      alert(message);
+    }
+  };
+
+  const loadDeleteDialogCounts = async (sessionId: string) => {
+    try {
+      const counts = await fetchSessionCounts(sessionId);
+      setDeleteDialog((current) => {
+        if (!current || current.sessionId !== sessionId) return current;
+        return { ...current, counts, status: 'ready', error: null };
+      });
+    } catch (error) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudieron obtener los contenidos asociados a la sesión';
+      setDeleteDialog((current) => {
+        if (!current || current.sessionId !== sessionId) return current;
+        return { ...current, status: 'failed', error: message };
+      });
+    }
+  };
+
+  const handleOpenDeleteDialog = ({
+    sessionId,
+    productId,
+    sessionName,
+  }: {
+    sessionId: string;
+    productId: string;
+    sessionName: string;
+  }) => {
+    if (!sessionId || !productId) return;
+    setDeleteDialog({
+      sessionId,
+      productId,
+      sessionName,
+      status: 'loading',
+      counts: null,
+      error: null,
+    });
+    void loadDeleteDialogCounts(sessionId);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    if (deleteDialog && deleteMutation.isPending && deletingSessionId === deleteDialog.sessionId) {
+      return;
+    }
+    setDeleteDialog(null);
+    setDeletingSessionId(null);
+  };
+
+  const handleConfirmDeleteDialog = async () => {
+    if (!deleteDialog) return;
+    const { sessionId, productId } = deleteDialog;
+    setDeletingSessionId(sessionId);
+    try {
+      await deleteMutation.mutateAsync(sessionId);
+
+      setForms((current) => {
+        if (!current[sessionId]) return current;
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
+
+      const nextFormsRef = { ...formsRef.current };
+      delete nextFormsRef[sessionId];
+      formsRef.current = nextFormsRef;
+
+      const nextSavedRef = { ...lastSavedRef.current };
+      delete nextSavedRef[sessionId];
+      lastSavedRef.current = nextSavedRef;
+
+      const nextSessionProducts = { ...sessionProductRef.current };
+      delete nextSessionProducts[sessionId];
+      sessionProductRef.current = nextSessionProducts;
+
+      setSaveStatus((current) => {
+        if (!current[sessionId]) return current;
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
+
+      setActiveSession((current) => (current?.sessionId === sessionId ? null : current));
+
+      await invalidateProductSessions(productId);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['session-students', dealId, sessionId] }),
+        qc.invalidateQueries({ queryKey: ['session-documents', dealId, sessionId] }),
+        qc.invalidateQueries({ queryKey: ['session-comments', sessionId] }),
+        qc.invalidateQueries({ queryKey: ['deal', dealId] }),
+        qc.invalidateQueries({ queryKey: ['calendarSessions'] }),
+      ]);
+
+      setDeleteDialog(null);
+      setDeletingSessionId(null);
+      onNotify?.({ variant: 'success', message: 'Sesión eliminada correctamente' });
+    } catch (error) {
+      const message = isApiError(error)
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'No se pudo eliminar la sesión';
+      setDeleteDialog((current) => {
+        if (!current || current.sessionId !== sessionId) return current;
+        return { ...current, error: message };
+      });
+      onNotify?.({ variant: 'danger', message });
+    } finally {
+      setDeletingSessionId(null);
+    }
+  };
+
   const activeForm = activeSession ? forms[activeSession.sessionId] ?? null : null;
+  useEffect(() => {
+    if (activeSession && !forms[activeSession.sessionId]) {
+      setActiveSession(null);
+    }
+  }, [activeSession, forms]);
+
+  if (!shouldShow) return null;
+
+  const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
+
+  const trainers = ENABLE_TRAINERS && trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
+  const allRooms = ENABLE_ROOMS && roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
+  const rooms = useMemo(() => {
+    if (!ENABLE_ROOMS) return [];
+    if (!allRooms.length) return allRooms;
+    if (!normalizedDealSede) return allRooms;
+    if (normalizedDealSede === 'In Company') {
+      return [];
+    }
+    return allRooms.filter((room) => formatSedeLabel(room.sede) === normalizedDealSede);
+  }, [allRooms, normalizedDealSede]);
+  const units = ENABLE_MOBILE_UNITS && unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
   const activeStatus = activeSession
     ? saveStatus[activeSession.sessionId] ?? { saving: false, error: null, dirty: false }
     : { saving: false, error: null, dirty: false };
+
+  const deleteDialogCounts = deleteDialog?.counts ?? null;
+  const deleteDialogHasContent = deleteDialogCounts
+    ? (ENABLE_SESSION_COMMENTS && deleteDialogCounts.comentarios > 0) ||
+      (ENABLE_SESSION_DOCUMENTS && deleteDialogCounts.documentos > 0) ||
+      deleteDialogCounts.alumnos > 0 ||
+      deleteDialogCounts.tokens > 0
+    : false;
+  const isDeleteDialogDeleting =
+    !!deleteDialog && deleteMutation.isPending && deletingSessionId === deleteDialog.sessionId;
 
   return (
     <Accordion.Item eventKey="sessions">
@@ -2110,18 +2377,41 @@ export function SessionsAccordionAbierta({
                         >
                           <div className="fw-semibold text-truncate">{sessionName}</div>
                         </div>
-                        <div className="text-end text-nowrap">
-                          {status.saving ? (
-                            <span className="text-primary d-inline-flex align-items-center gap-1">
-                              <Spinner animation="border" size="sm" /> Guardando…
-                            </span>
-                          ) : status.error ? (
-                            <span className="text-danger">{status.error}</span>
-                          ) : status.dirty ? (
-                            <span className="text-warning">Cambios sin guardar</span>
-                          ) : ENABLE_SESSION_STATE ? (
-                            <SessionStateBadge estado={form.estado} />
-                          ) : null}
+                        <div className="d-flex align-items-center gap-3">
+                          <div className="session-item-actions d-inline-flex align-items-center gap-2">
+                            <SessionActionIcon
+                              label="Duplicar sesión"
+                              onActivate={() => handleDuplicate(session.id)}
+                            >
+                              <DuplicateIcon aria-hidden="true" />
+                            </SessionActionIcon>
+                            <SessionActionIcon
+                              label="Eliminar sesión"
+                              variant="danger"
+                              onActivate={() =>
+                                handleOpenDeleteDialog({
+                                  sessionId: session.id,
+                                  productId: product.id,
+                                  sessionName,
+                                })
+                              }
+                            >
+                              <DeleteIcon aria-hidden="true" />
+                            </SessionActionIcon>
+                          </div>
+                          <div className="text-end text-nowrap">
+                            {status.saving ? (
+                              <span className="text-primary d-inline-flex align-items-center gap-1">
+                                <Spinner animation="border" size="sm" /> Guardando…
+                              </span>
+                            ) : status.error ? (
+                              <span className="text-danger">{status.error}</span>
+                            ) : status.dirty ? (
+                              <span className="text-warning">Cambios sin guardar</span>
+                            ) : ENABLE_SESSION_STATE ? (
+                              <SessionStateBadge estado={form.estado} />
+                            ) : null}
+                          </div>
                         </div>
                       </ListGroup.Item>
                     );
@@ -2153,6 +2443,97 @@ export function SessionsAccordionAbierta({
             </div>
           );
         })}
+        <Modal
+          show={!!deleteDialog}
+          onHide={handleCloseDeleteDialog}
+          centered
+          backdrop={isDeleteDialogDeleting ? 'static' : true}
+          keyboard={!isDeleteDialogDeleting}
+        >
+          <Modal.Header closeButton={!!deleteDialog && !isDeleteDialogDeleting}>
+            <Modal.Title>Eliminar sesión</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {deleteDialog ? (
+              <>
+                <p>
+                  Estás a punto de eliminar la sesión{' '}
+                  <strong>{deleteDialog.sessionName}</strong>.
+                </p>
+                {deleteDialog.status === 'loading' ? (
+                  <div className="d-flex align-items-center gap-2 text-muted">
+                    <Spinner animation="border" size="sm" /> Consultando contenido asociado…
+                  </div>
+                ) : (
+                  <>
+                    {deleteDialog.error ? (
+                      <Alert
+                        variant={deleteDialog.status === 'failed' ? 'warning' : 'danger'}
+                        className="mb-3"
+                      >
+                        {deleteDialog.error}
+                      </Alert>
+                    ) : null}
+                    {deleteDialog.status === 'ready' && deleteDialogCounts ? (
+                      deleteDialogHasContent ? (
+                        <Alert variant="warning" className="mb-0">
+                          <p className="mb-2">Esta sesión tiene contenido asociado:</p>
+                          <ul className="mb-2 ps-3">
+                            {ENABLE_SESSION_COMMENTS ? (
+                              <li>
+                                <strong>{deleteDialogCounts.comentarios}</strong> comentarios
+                              </li>
+                            ) : null}
+                            {ENABLE_SESSION_DOCUMENTS ? (
+                              <li>
+                                <strong>{deleteDialogCounts.documentos}</strong> documentos
+                              </li>
+                            ) : null}
+                            <li>
+                              <strong>{deleteDialogCounts.alumnos}</strong> alumnos
+                            </li>
+                            <li>
+                              <strong>{deleteDialogCounts.tokens}</strong> tokens de URL generadas
+                            </li>
+                          </ul>
+                          <p className="mb-0">
+                            ¿Seguro que quieres eliminarla? Se borrará todo y no se podrá deshacer.
+                          </p>
+                        </Alert>
+                      ) : (
+                        <p className="mb-0">
+                          ¿Seguro que quieres eliminar esta sesión? Esta acción no se puede deshacer.
+                        </p>
+                      )
+                    ) : (
+                      <p className="mb-0">
+                        ¿Seguro que quieres eliminar esta sesión? Esta acción no se puede deshacer.
+                      </p>
+                    )}
+                  </>
+                )}
+              </>
+            ) : null}
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={handleCloseDeleteDialog} disabled={isDeleteDialogDeleting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleConfirmDeleteDialog}
+              disabled={!deleteDialog || deleteDialog.status === 'loading' || isDeleteDialogDeleting}
+            >
+              {isDeleteDialogDeleting ? (
+                <span className="d-inline-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" role="status" aria-hidden="true" /> Eliminando…
+                </span>
+              ) : (
+                'Eliminar definitivamente'
+              )}
+            </Button>
+          </Modal.Footer>
+        </Modal>
         {activeSession && (
           <Modal
             show={Boolean(activeForm)}
