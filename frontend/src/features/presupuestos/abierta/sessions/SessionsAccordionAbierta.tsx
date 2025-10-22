@@ -2017,6 +2017,7 @@ export function SessionsAccordionAbierta({
   );
 
   const units = ENABLE_MOBILE_UNITS && unitsQuery.data ? sortOptionsByName(unitsQuery.data) : [];
+  const activeForm = activeSession ? forms[activeSession.sessionId] ?? null : null;
   const activeStatus = activeSession
     ? saveStatus[activeSession.sessionId] ?? { saving: false, error: null, dirty: false }
     : { saving: false, error: null, dirty: false };
