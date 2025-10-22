@@ -3,6 +3,7 @@ import {
   Accordion,
   Alert,
   Badge,
+  Button,
   Card,
   ListGroup,
   Modal,
@@ -44,6 +45,12 @@ type ProductsVariantsResponse = {
   ok?: boolean;
   products?: ProductInfo[];
   message?: string;
+};
+
+type DeleteVariantResponse = {
+  ok?: boolean;
+  message?: string;
+  error_code?: string;
 };
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', {
@@ -118,6 +125,130 @@ async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
   }));
 }
 
+async function deleteProductVariant(variantId: string): Promise<string | null> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/products-variants/${encodeURIComponent(variantId)}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+  } catch (error) {
+    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
+  }
+
+  const text = await response.text();
+  let json: DeleteVariantResponse = {};
+
+  if (text) {
+    try {
+      json = JSON.parse(text);
+    } catch (error) {
+      console.error('[deleteProductVariant] invalid JSON response', error);
+      json = {};
+    }
+  }
+
+  if (!response.ok || json.ok === false) {
+    const message = json.message || 'No se pudo eliminar la variante.';
+    throw new ApiError(json.error_code ?? 'DELETE_ERROR', message, response.status || undefined);
+  }
+
+  return json.message ?? null;
+}
+
+type VariantSortKey = {
+  location: string | null;
+  year: number | null;
+  month: number | null;
+  day: number | null;
+};
+
+function extractVariantSortKey(variant: VariantInfo): VariantSortKey {
+  const name = variant.name?.trim() ?? '';
+  const dateMatch = name.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})/);
+
+  let locationSegment = name;
+  let day: number | null = null;
+  let month: number | null = null;
+  let year: number | null = null;
+
+  if (dateMatch) {
+    const [, dayText, monthText, yearText] = dateMatch;
+    const parsedDay = Number.parseInt(dayText ?? '', 10);
+    const parsedMonth = Number.parseInt(monthText ?? '', 10);
+    let parsedYear = Number.parseInt(yearText ?? '', 10);
+
+    day = Number.isFinite(parsedDay) ? parsedDay : null;
+    month = Number.isFinite(parsedMonth) ? parsedMonth : null;
+
+    if (Number.isFinite(parsedYear)) {
+      if (yearText && yearText.length === 2) {
+        parsedYear += parsedYear < 50 ? 2000 : 1900;
+      }
+      year = parsedYear;
+    }
+
+    const index = dateMatch.index ?? -1;
+    if (index >= 0) {
+      locationSegment = name.slice(0, index);
+    }
+  }
+
+  let location = locationSegment.replace(/[\s,.;:-]+$/u, '').trim();
+  if (!location) {
+    location = variant.sede?.trim() ?? '';
+  }
+  if (!location && name) {
+    location = name;
+  }
+
+  return {
+    location: location || null,
+    year,
+    month,
+    day,
+  };
+}
+
+function compareNullableStrings(a: string | null, b: string | null): number {
+  const hasA = !!(a && a.trim().length);
+  const hasB = !!(b && b.trim().length);
+  if (hasA && hasB) {
+    return a!.trim().localeCompare(b!.trim(), 'es', { sensitivity: 'base' });
+  }
+  if (hasA) return -1;
+  if (hasB) return 1;
+  return 0;
+}
+
+function compareNullableNumbers(a: number | null, b: number | null): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+function compareVariants(a: VariantInfo, b: VariantInfo): number {
+  const keyA = extractVariantSortKey(a);
+  const keyB = extractVariantSortKey(b);
+
+  const locationCompare = compareNullableStrings(keyA.location, keyB.location);
+  if (locationCompare !== 0) return locationCompare;
+
+  const yearCompare = compareNullableNumbers(keyA.year, keyB.year);
+  if (yearCompare !== 0) return yearCompare;
+
+  const monthCompare = compareNullableNumbers(keyA.month, keyB.month);
+  if (monthCompare !== 0) return monthCompare;
+
+  const dayCompare = compareNullableNumbers(keyA.day, keyB.day);
+  if (dayCompare !== 0) return dayCompare;
+
+  return (a.name ?? '').localeCompare(b.name ?? '', 'es', { sensitivity: 'base' });
+}
+
 function VariantModal({ active, onHide }: { active: ActiveVariant | null; onHide: () => void }) {
   const variant = active?.variant;
   const product = active?.product;
@@ -181,6 +312,8 @@ export default function ProductVariantsList() {
   const [error, setError] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductInfo[]>([]);
   const [activeVariant, setActiveVariant] = useState<ActiveVariant | null>(null);
+  const [pendingDeletes, setPendingDeletes] = useState<Record<string, boolean>>({});
+  const [feedback, setFeedback] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -216,6 +349,56 @@ export default function ProductVariantsList() {
 
   const handleCloseModal = () => setActiveVariant(null);
 
+  const setVariantDeleting = (variantId: string, deleting: boolean) => {
+    setPendingDeletes((prev) => {
+      const next = { ...prev };
+      if (deleting) {
+        next[variantId] = true;
+      } else {
+        delete next[variantId];
+      }
+      return next;
+    });
+  };
+
+  const handleDeleteVariant = async (product: ProductInfo, variant: VariantInfo) => {
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm('¿Quieres eliminar esta variante? Esta acción no se puede deshacer.');
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setFeedback(null);
+    setVariantDeleting(variant.id, true);
+
+    try {
+      const message = await deleteProductVariant(variant.id);
+
+      setProducts((prev) =>
+        prev.map((item) =>
+          item.id === product.id
+            ? { ...item, variants: item.variants.filter((current) => current.id !== variant.id) }
+            : item,
+        ),
+      );
+
+      if (activeVariant?.variant.id === variant.id) {
+        setActiveVariant(null);
+      }
+
+      setFeedback({
+        tone: 'success',
+        text: message ?? 'Variante eliminada correctamente.',
+      });
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'No se pudo eliminar la variante.';
+      setFeedback({ tone: 'danger', text: message });
+    } finally {
+      setVariantDeleting(variant.id, false);
+    }
+  };
+
   return (
     <>
       <Card className="border-0 shadow-sm">
@@ -227,6 +410,17 @@ export default function ProductVariantsList() {
             </p>
           </div>
 
+          {feedback ? (
+            <Alert
+              variant={feedback.tone}
+              dismissible
+              onClose={() => setFeedback(null)}
+              className="mb-0"
+            >
+              {feedback.text}
+            </Alert>
+          ) : null}
+
           {error ? (
             <Alert variant="danger" className="mb-0">
               {error}
@@ -235,7 +429,7 @@ export default function ProductVariantsList() {
 
           {isLoading ? (
             <div className="d-flex align-items-center gap-2 text-muted small">
-              <Spinner animation="border" size="sm" role="status" aria-hidden />
+              <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
               <span>Cargando productos…</span>
             </div>
           ) : null}
@@ -254,28 +448,58 @@ export default function ProductVariantsList() {
                     <Accordion.Body>
                       {product.variants.length > 0 ? (
                         <ListGroup>
-                          {product.variants.map((variant) => (
-                            <ListGroup.Item
-                              action
-                              key={variant.id}
-                              onClick={() => handleSelectVariant(product, variant)}
-                              className="d-flex flex-column gap-1"
-                            >
-                              <div className="d-flex justify-content-between align-items-start gap-3">
-                                <div>
-                                  <div className="fw-semibold">{variant.name ?? 'Variante sin nombre'}</div>
-                                  <div className="text-muted small">ID Woo: {variant.id_woo}</div>
+                          {[...product.variants].sort(compareVariants).map((variant) => {
+                            const isDeleting = !!pendingDeletes[variant.id];
+
+                            return (
+                              <ListGroup.Item
+                                action
+                                key={variant.id}
+                                onClick={() => handleSelectVariant(product, variant)}
+                                className="d-flex flex-column gap-1"
+                              >
+                                <div className="d-flex justify-content-between align-items-start gap-3">
+                                  <div>
+                                    <div className="fw-semibold">{variant.name ?? 'Variante sin nombre'}</div>
+                                    <div className="text-muted small">ID Woo: {variant.id_woo}</div>
+                                  </div>
+                                  <Stack direction="horizontal" gap={2} className="flex-wrap">
+                                    {variant.status && <Badge bg="info">{variant.status}</Badge>}
+                                    {variant.date && (
+                                      <span className="text-muted small">{formatDate(variant.date)}</span>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      variant="outline-danger"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        handleDeleteVariant(product, variant);
+                                      }}
+                                      disabled={isDeleting}
+                                    >
+                                      {isDeleting ? (
+                                        <>
+                                          <Spinner
+                                            as="span"
+                                            animation="border"
+                                            size="sm"
+                                            role="status"
+                                            aria-hidden="true"
+                                            className="me-2"
+                                          />
+                                          Eliminando…
+                                        </>
+                                      ) : (
+                                        'Eliminar'
+                                      )}
+                                    </Button>
+                                  </Stack>
                                 </div>
-                                <Stack direction="horizontal" gap={2} className="flex-wrap">
-                                  {variant.status && <Badge bg="info">{variant.status}</Badge>}
-                                  {variant.date && (
-                                    <span className="text-muted small">{formatDate(variant.date)}</span>
-                                  )}
-                                </Stack>
-                              </div>
-                              {variant.sede && <div className="text-muted small">Sede: {variant.sede}</div>}
-                            </ListGroup.Item>
-                          ))}
+                                {variant.sede && <div className="text-muted small">Sede: {variant.sede}</div>}
+                              </ListGroup.Item>
+                            );
+                          })}
                         </ListGroup>
                       ) : (
                         <p className="text-muted small mb-0">No hay variantes registradas para este producto.</p>
