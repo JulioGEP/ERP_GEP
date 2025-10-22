@@ -1,5 +1,5 @@
 import { Card } from 'react-bootstrap';
-import CursosWoo from '../../features/formacion_abierta/CursosWoo';
+import VariationsSync from '../../features/formacion_abierta/VariationsSync';
 
 export type RecursosFormacionAbiertaPageProps = Record<string, never>;
 
@@ -13,7 +13,7 @@ export default function RecursosFormacionAbiertaPage(
         <h1 className="h3 text-uppercase mb-0">Formación Abierta</h1>
       </header>
 
-      <CursosWoo />
+      <VariationsSync />
 
       <Card className="border-0 shadow-sm">
         <Card.Body className="py-5 text-center text-muted">
