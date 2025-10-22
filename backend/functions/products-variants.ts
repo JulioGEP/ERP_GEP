@@ -352,6 +352,11 @@ type ProductRecord = {
   name: string | null;
   code: string | null;
   category: string | null;
+  default_variant_start: Date | string | null;
+  default_variant_end: Date | string | null;
+  default_variant_stock_status: string | null;
+  default_variant_stock_quantity: number | null;
+  default_variant_price: Prisma.Decimal | string | null;
   variants: VariantRecord[];
 };
 
@@ -374,12 +379,24 @@ function normalizeVariant(record: VariantRecord) {
 }
 
 function normalizeProduct(record: ProductRecord) {
+  const defaultPrice =
+    record.default_variant_price == null
+      ? null
+      : typeof record.default_variant_price === 'string'
+        ? record.default_variant_price
+        : record.default_variant_price.toString();
+
   return {
     id: record.id,
     id_woo: record.id_woo ? record.id_woo.toString() : null,
     name: record.name ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
+    default_variant_start: toMadridISOString(record.default_variant_start),
+    default_variant_end: toMadridISOString(record.default_variant_end),
+    default_variant_stock_status: record.default_variant_stock_status ?? null,
+    default_variant_stock_quantity: record.default_variant_stock_quantity ?? null,
+    default_variant_price: defaultPrice,
     variants: record.variants.map(normalizeVariant),
   } as const;
 }
@@ -631,6 +648,11 @@ export const handler = async (event: any) => {
         name: true,
         code: true,
         category: true,
+        default_variant_start: true,
+        default_variant_end: true,
+        default_variant_stock_status: true,
+        default_variant_stock_quantity: true,
+        default_variant_price: true,
         variants: {
           orderBy: [
             { date: 'asc' },
