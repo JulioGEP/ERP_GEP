@@ -64,6 +64,7 @@ type VariantUpdatePayload = {
   price?: string | null;
   stock?: number | null;
   stock_status?: string | null;
+  status?: string | null;
   sede?: string | null;
   date?: string | null;
 };
@@ -365,6 +366,7 @@ type VariantFormValues = {
   price: string;
   stock: string;
   stock_status: string;
+  status: string;
   sede: string;
   date: string;
 };
@@ -374,6 +376,22 @@ const STOCK_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'outofstock', label: 'Sin stock' },
   { value: 'onbackorder', label: 'En reserva' },
 ];
+
+const PUBLICATION_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'publish', label: 'Publicado' },
+  { value: 'private', label: 'Privado' },
+];
+
+function getStatusBadgeVariant(status: string | null): string {
+  const normalized = status?.toLowerCase();
+  if (normalized === 'publish') {
+    return 'success';
+  }
+  if (normalized === 'private') {
+    return 'danger';
+  }
+  return 'secondary';
+}
 
 function formatDateForInputValue(value: string | null): string {
   if (!value) return '';
@@ -392,6 +410,7 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
     price: variant.price ?? '',
     stock: variant.stock != null ? String(variant.stock) : '',
     stock_status: variant.stock_status ?? 'instock',
+    status: variant.status ?? 'publish',
     sede: variant.sede ?? '',
     date: formatDateForInputValue(variant.date),
   };
@@ -413,6 +432,7 @@ function VariantModal({
     price: '',
     stock: '',
     stock_status: 'instock',
+    status: 'publish',
     sede: '',
     date: '',
   });
@@ -420,6 +440,7 @@ function VariantModal({
     price: '',
     stock: '',
     stock_status: 'instock',
+    status: 'publish',
     sede: '',
     date: '',
   });
@@ -432,8 +453,22 @@ function VariantModal({
 
   useEffect(() => {
     if (!variant) {
-      setFormValues({ price: '', stock: '', stock_status: 'instock', sede: '', date: '' });
-      setInitialValues({ price: '', stock: '', stock_status: 'instock', sede: '', date: '' });
+      setFormValues({
+        price: '',
+        stock: '',
+        stock_status: 'instock',
+        status: 'publish',
+        sede: '',
+        date: '',
+      });
+      setInitialValues({
+        price: '',
+        stock: '',
+        stock_status: 'instock',
+        status: 'publish',
+        sede: '',
+        date: '',
+      });
       setSaveError(null);
       setSaveSuccess(null);
       setDeals([]);
@@ -489,7 +524,7 @@ function VariantModal({
   }, [variant?.id_woo]);
 
   const handleChange = (field: keyof VariantFormValues) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       const value = event.target.value;
       setFormValues((prev) => ({ ...prev, [field]: value }));
       setSaveSuccess(null);
@@ -499,6 +534,7 @@ function VariantModal({
     formValues.price !== initialValues.price ||
     formValues.stock !== initialValues.stock ||
     formValues.stock_status !== initialValues.stock_status ||
+    formValues.status !== initialValues.status ||
     formValues.sede !== initialValues.sede ||
     formValues.date !== initialValues.date;
 
@@ -520,7 +556,12 @@ function VariantModal({
       }
     }
     if (formValues.stock_status !== initialValues.stock_status) {
-      payload.stock_status = formValues.stock_status;
+      payload.stock_status = formValues.stock_status.trim()
+        ? formValues.stock_status.trim()
+        : 'instock';
+    }
+    if (formValues.status !== initialValues.status) {
+      payload.status = formValues.status.trim() ? formValues.status.trim() : null;
     }
     if (formValues.sede !== initialValues.sede) {
       payload.sede = formValues.sede.trim() ? formValues.sede.trim() : null;
@@ -596,7 +637,9 @@ function VariantModal({
               <p className="text-uppercase text-muted small fw-semibold mb-2">Variante</p>
               <Stack direction="horizontal" gap={2} className="flex-wrap mb-2">
                 <span className="fw-semibold h5 mb-0">{variant.name ?? 'Variante sin nombre'}</span>
-                {variant.status && <Badge bg="info">{variant.status}</Badge>}
+                {variant.status && (
+                  <Badge bg={getStatusBadgeVariant(variant.status)}>{variant.status}</Badge>
+                )}
               </Stack>
               <div className="text-muted small">ID Woo: {variant.id_woo}</div>
             </div>
@@ -605,6 +648,25 @@ function VariantModal({
             {saveSuccess && <Alert variant="success" className="mb-0">{saveSuccess}</Alert>}
 
             <Form>
+              <Form.Group className="mb-3" controlId="variantStatus">
+                <Form.Label>Estado de publicación</Form.Label>
+                <Form.Select
+                  value={formValues.status}
+                  onChange={handleChange('status')}
+                  disabled={isSaving}
+                >
+                  {!PUBLICATION_STATUS_OPTIONS.some((option) => option.value === formValues.status) &&
+                    formValues.status && (
+                      <option value={formValues.status}>{formValues.status}</option>
+                    )}
+                  {PUBLICATION_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+
               <Form.Group className="mb-3" controlId="variantPrice">
                 <Form.Label>Precio</Form.Label>
                 <Form.Control
@@ -909,7 +971,11 @@ export default function ProductVariantsList() {
                                     <div className="text-muted small">ID Woo: {variant.id_woo}</div>
                                   </div>
                                   <Stack direction="horizontal" gap={2} className="flex-wrap">
-                                    {variant.status && <Badge bg="info">{variant.status}</Badge>}
+                                    {variant.status && (
+                                      <Badge bg={getStatusBadgeVariant(variant.status)}>
+                                        {variant.status}
+                                      </Badge>
+                                    )}
                                     {variant.date && (
                                       <span className="text-muted small">{formatDate(variant.date)}</span>
                                     )}

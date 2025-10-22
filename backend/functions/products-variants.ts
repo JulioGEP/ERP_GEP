@@ -68,6 +68,7 @@ type VariantUpdateInput = {
   price?: string | null;
   stock?: number | null;
   stock_status?: string | null;
+  status?: string | null;
   sede?: string | null;
   date?: Date | null;
 };
@@ -159,6 +160,10 @@ async function updateVariantInWooCommerce(
 
   if (Object.prototype.hasOwnProperty.call(updates, 'stock_status')) {
     body.stock_status = updates.stock_status ?? 'instock';
+  }
+
+  if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+    body.status = updates.status ?? 'publish';
   }
 
   if (
@@ -442,6 +447,18 @@ export const handler = async (event: any) => {
         }
       }
 
+      if (Object.prototype.hasOwnProperty.call(payload, 'status')) {
+        if (payload.status === null || payload.status === undefined || payload.status === '') {
+          updates.status = 'publish';
+        } else {
+          const text = String(payload.status).trim().toLowerCase();
+          if (text !== 'publish' && text !== 'private') {
+            return errorResponse('VALIDATION_ERROR', 'Estado de publicación inválido', 400);
+          }
+          updates.status = text;
+        }
+      }
+
       if (Object.prototype.hasOwnProperty.call(payload, 'sede')) {
         if (payload.sede === null || payload.sede === undefined) {
           updates.sede = null;
@@ -529,6 +546,9 @@ export const handler = async (event: any) => {
       }
       if (Object.prototype.hasOwnProperty.call(updates, 'stock_status')) {
         data.stock_status = updates.stock_status ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+        data.status = updates.status ?? null;
       }
       if (Object.prototype.hasOwnProperty.call(updates, 'sede')) {
         data.sede = updates.sede ?? null;
