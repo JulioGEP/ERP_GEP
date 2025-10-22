@@ -1,3 +1,4 @@
+import ProductVariantsList from '../../features/formacion_abierta/ProductVariantsList';
 import VariationsSync from '../../features/formacion_abierta/VariationsSync';
 
 export type RecursosFormacionAbiertaPageProps = Record<string, never>;
@@ -13,6 +14,7 @@ export default function RecursosFormacionAbiertaPage(
       </header>
 
       <VariationsSync />
+      <ProductVariantsList />
     </section>
   );
 }
