@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Accordion,
   Alert,
@@ -210,8 +210,6 @@ export default function ProductVariantsList() {
     };
   }, []);
 
-  const defaultActiveKey = useMemo(() => (products.length > 0 ? products[0].id : undefined), [products]);
-
   const handleSelectVariant = (product: ProductInfo, variant: VariantInfo) => {
     setActiveVariant({ product, variant });
   };
@@ -244,7 +242,7 @@ export default function ProductVariantsList() {
 
           {!isLoading && !error ? (
             products.length > 0 ? (
-              <Accordion alwaysOpen defaultActiveKey={defaultActiveKey ? [defaultActiveKey] : undefined}>
+              <Accordion alwaysOpen>
                 {products.map((product) => (
                   <Accordion.Item eventKey={product.id} key={product.id}>
                     <Accordion.Header>
