@@ -1,7 +1,14 @@
 // frontend/src/features/formacion_abierta/CursosWoo.tsx
 import { FormEvent, useState } from 'react';
-import { Badge, Button, Card, Form, Stack } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Form, Stack } from 'react-bootstrap';
 import { API_BASE, ApiError, isApiError } from '../presupuestos/api';
+
+type VariationSyncResult = {
+  ok?: boolean;
+  count?: number;
+  parent_id?: string | number | null;
+  message?: string;
+};
 
 type WooResponse = {
   ok?: boolean;
@@ -9,6 +16,9 @@ type WooResponse = {
   status?: number;
   message?: string;
   error_code?: string;
+  meta?: {
+    stored_variations?: VariationSyncResult;
+  };
 };
 
 type WooAttribute = {
@@ -40,6 +50,10 @@ type WooVariation = {
   parent_id?: number;
   name?: string;
   attributes?: WooAttribute[];
+  date_created?: string;
+  date_created_gmt?: string;
+  date_modified?: string;
+  date_modified_gmt?: string;
 };
 
 type FetchErrorState = {
@@ -61,7 +75,10 @@ function buildEndpoint(resource: string, params?: Record<string, string | number
   return `${API_BASE}/woo_courses${query ? `?${query}` : ''}`;
 }
 
-async function requestWooResource(resource: string, params?: Record<string, string | number | undefined>) {
+async function requestWooResource(
+  resource: string,
+  params?: Record<string, string | number | undefined>,
+): Promise<WooResponse> {
   const endpoint = buildEndpoint(resource, params);
   const response = await fetch(endpoint);
   const text = await response.text();
@@ -81,7 +98,7 @@ async function requestWooResource(resource: string, params?: Record<string, stri
     throw new ApiError(json.error_code ?? `HTTP_${status}`, message, status);
   }
 
-  return json.data ?? null;
+  return json;
 }
 
 function normalizeText(value?: string) {
@@ -138,6 +155,7 @@ export default function CursosWoo() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<FetchErrorState | null>(null);
   const [hasFetched, setHasFetched] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<VariationSyncResult | null>(null);
 
   const productLocations = findAttributeValues(productData?.attributes, ['localizacion', 'ubicacion']);
   const productDates = findAttributeValues(productData?.attributes, ['fecha']);
@@ -152,6 +170,7 @@ export default function CursosWoo() {
       setProductData(null);
       setVariationsData([]);
       setHasFetched(false);
+      setSyncStatus(null);
       return;
     }
 
@@ -159,16 +178,22 @@ export default function CursosWoo() {
 
     setIsLoading(true);
     setError(null);
+    setSyncStatus(null);
 
     try {
       const parentPromise = requestWooResource(`products/${encodedId}`);
       let variationsResult: WooVariation[] = [];
+      let variationsMeta: VariationSyncResult | null = null;
 
       try {
         const variationsRaw = await requestWooResource(`products/${encodedId}/variations`, {
           per_page: 100,
         });
-        variationsResult = Array.isArray(variationsRaw) ? (variationsRaw as WooVariation[]) : [];
+        const variationsDataRaw = Array.isArray(variationsRaw.data)
+          ? (variationsRaw.data as WooVariation[])
+          : [];
+        variationsResult = variationsDataRaw;
+        variationsMeta = variationsRaw.meta?.stored_variations ?? null;
       } catch (err) {
         if (isApiError(err) && err.status === 404) {
           variationsResult = [];
@@ -178,14 +203,19 @@ export default function CursosWoo() {
       }
 
       const parentResult = await parentPromise;
+      const parentData = parentResult?.data && typeof parentResult.data === 'object'
+        ? (parentResult.data as WooProduct)
+        : null;
 
-      setProductData(parentResult && typeof parentResult === 'object' ? (parentResult as WooProduct) : null);
+      setProductData(parentData);
       setVariationsData(variationsResult);
+      setSyncStatus(variationsMeta);
       setHasFetched(true);
     } catch (err) {
       setProductData(null);
       setVariationsData([]);
       setHasFetched(true);
+      setSyncStatus(null);
 
       if (isApiError(err)) {
         setError({ status: err.status });
@@ -325,6 +355,21 @@ export default function CursosWoo() {
 
             <section>
               <h3 className="h6 mb-2">Variaciones</h3>
+              {syncStatus && (
+                <Alert
+                  variant={syncStatus.ok === false ? 'warning' : 'success'}
+                  className="mb-0"
+                >
+                  {syncStatus.message
+                    ? syncStatus.message
+                    : syncStatus.ok === false
+                    ? 'No se pudieron guardar las variaciones en la base de datos.'
+                    : 'Variaciones guardadas correctamente.'}
+                  {typeof syncStatus.count === 'number'
+                    ? ` (variaciones registradas: ${syncStatus.count})`
+                    : null}
+                </Alert>
+              )}
               {variationsData.length ? (
                 <div className="d-flex flex-column gap-3">
                   {variationsData.map((variation, index) => (
