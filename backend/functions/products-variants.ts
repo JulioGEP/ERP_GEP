@@ -1,5 +1,6 @@
 // backend/functions/products-variants.ts
 import { Prisma } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
@@ -360,6 +361,126 @@ type ProductRecord = {
   variants: VariantRecord[];
 };
 
+type LegacyProductRecord = Omit<
+  ProductRecord,
+  'default_variant_start' | 'default_variant_end' | 'default_variant_stock_status' | 'default_variant_stock_quantity' | 'default_variant_price'
+>;
+
+let productsDefaultFieldsSupported: boolean | null = null;
+
+function isMissingProductDefaultColumns(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2021') {
+    return true;
+  }
+
+  if (error instanceof Error) {
+    return /default_variant_(start|end|stock_status|stock_quantity|price)/i.test(error.message);
+  }
+
+  return false;
+}
+
+async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
+  const baseWhere = {
+    id_woo: { not: null },
+    variants: { some: {} },
+  };
+
+  const variantsSelection = {
+    orderBy: [
+      { date: 'asc' as Prisma.SortOrder },
+      { name: 'asc' as Prisma.SortOrder },
+    ],
+    select: {
+      id: true,
+      id_woo: true,
+      name: true,
+      status: true,
+      price: true,
+      stock: true,
+      stock_status: true,
+      sede: true,
+      date: true,
+      created_at: true,
+      updated_at: true,
+    },
+  };
+
+  const selectWithDefaults: Record<string, any> = {
+    id: true,
+    id_woo: true,
+    name: true,
+    code: true,
+    category: true,
+    default_variant_start: true,
+    default_variant_end: true,
+    default_variant_stock_status: true,
+    default_variant_stock_quantity: true,
+    default_variant_price: true,
+    variants: variantsSelection,
+  };
+
+  const selectLegacy: Record<string, any> = {
+    id: true,
+    id_woo: true,
+    name: true,
+    code: true,
+    category: true,
+    variants: variantsSelection,
+  };
+
+  const orderByName: Array<Record<string, Prisma.SortOrder>> = [{ name: 'asc' as Prisma.SortOrder }];
+
+  const mapLegacyProducts = (products: LegacyProductRecord[]): ProductRecord[] =>
+    products.map((product) => ({
+      ...product,
+      default_variant_start: null,
+      default_variant_end: null,
+      default_variant_stock_status: null,
+      default_variant_stock_quantity: null,
+      default_variant_price: null,
+    }));
+
+  if (productsDefaultFieldsSupported === false) {
+    const legacyProducts = (await prisma.products.findMany({
+      where: baseWhere,
+      select: selectLegacy,
+      orderBy: orderByName,
+    })) as unknown as LegacyProductRecord[];
+
+    return mapLegacyProducts(legacyProducts);
+  }
+
+  try {
+    const products = (await prisma.products.findMany({
+      where: baseWhere,
+      select: selectWithDefaults,
+      orderBy: orderByName,
+    })) as unknown as ProductRecord[];
+
+    productsDefaultFieldsSupported = true;
+    return products;
+  } catch (error) {
+    if (!isMissingProductDefaultColumns(error)) {
+      throw error;
+    }
+
+    productsDefaultFieldsSupported = false;
+    console.warn(
+      '[products-variants] falling back to legacy product query (missing default variant columns)',
+      { error },
+    );
+
+    const legacyProducts = (await prisma.products.findMany({
+      where: baseWhere,
+      select: selectLegacy,
+      orderBy: orderByName,
+    })) as unknown as LegacyProductRecord[];
+
+    return mapLegacyProducts(legacyProducts);
+  }
+}
+
 function normalizeVariant(record: VariantRecord) {
   const price = record.price == null ? null : typeof record.price === 'string' ? record.price : record.price.toString();
 
@@ -637,44 +758,7 @@ export const handler = async (event: any) => {
       return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
     }
 
-    const productsRaw = await prisma.products.findMany({
-      where: {
-        id_woo: { not: null },
-        variants: { some: {} },
-      },
-      select: {
-        id: true,
-        id_woo: true,
-        name: true,
-        code: true,
-        category: true,
-        default_variant_start: true,
-        default_variant_end: true,
-        default_variant_stock_status: true,
-        default_variant_stock_quantity: true,
-        default_variant_price: true,
-        variants: {
-          orderBy: [
-            { date: 'asc' },
-            { name: 'asc' },
-          ],
-          select: {
-            id: true,
-            id_woo: true,
-            name: true,
-            status: true,
-            price: true,
-            stock: true,
-            stock_status: true,
-            sede: true,
-            date: true,
-            created_at: true,
-            updated_at: true,
-          },
-        },
-      },
-      orderBy: [{ name: 'asc' }],
-    });
+    const productsRaw = await findProducts(prisma);
 
     const products = productsRaw.map(normalizeProduct);
 
