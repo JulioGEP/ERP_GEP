@@ -709,6 +709,64 @@ export const handler = async (event: any) => {
       return successResponse({ ok: true, deal });
     }
 
+    if (method === "GET" && event.queryStringParameters?.w_id_variation) {
+      const rawVariationId = event.queryStringParameters.w_id_variation;
+      const variationId = typeof rawVariationId === "string" ? rawVariationId.trim() : String(rawVariationId ?? "").trim();
+
+      if (!variationId) {
+        return successResponse({ deals: [] });
+      }
+
+      const rowsRaw = await prisma.deals.findMany({
+        where: { w_id_variation: variationId },
+        select: {
+          deal_id: true,
+          title: true,
+          pipeline_id: true,
+          sede_label: true,
+          training_address: true,
+          caes_label: true,
+          fundae_label: true,
+          hotel_label: true,
+          comercial: true,
+          a_fecha: true,
+          w_id_variation: true,
+          presu_holded: true,
+          modo_reserva: true,
+          org_id: true,
+          person_id: true,
+          created_at: true,
+          organization: { select: { org_id: true, name: true } },
+          person: {
+            select: {
+              person_id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
+            },
+          },
+          deal_products: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              quantity: true,
+              price: true,
+              type: true,
+              hours: true,
+              created_at: true,
+            },
+            orderBy: { created_at: "asc" },
+          },
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      const deals = rowsRaw.map((row: any) => mapDealForApi(row));
+      return successResponse({ deals });
+    }
+
     /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
     if (method === "GET" && event.queryStringParameters?.noSessions === "true") {
       // listamos deals + organización/persona + productos (sin sessions)

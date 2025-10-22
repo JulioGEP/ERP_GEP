@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { ChangeEvent, useEffect, useState } from 'react';
 import {
   Accordion,
   Alert,
   Badge,
   Button,
   Card,
+  Form,
   ListGroup,
   Modal,
   Spinner,
@@ -53,15 +54,34 @@ type DeleteVariantResponse = {
   error_code?: string;
 };
 
+type VariantUpdateResponse = {
+  ok?: boolean;
+  variant?: Partial<VariantInfo> | null;
+  message?: string;
+};
+
+type VariantUpdatePayload = {
+  price?: string | null;
+  stock?: number | null;
+  stock_status?: string | null;
+  sede?: string | null;
+  date?: string | null;
+};
+
+type DealsByVariationResponse = {
+  ok?: boolean;
+  deals?: Array<{ deal_id?: string | null; title?: string | null }>;
+  message?: string;
+};
+
+type DealTag = {
+  deal_id: string;
+  title: string;
+};
+
 const dateFormatter = new Intl.DateTimeFormat('es-ES', {
   dateStyle: 'medium',
   timeStyle: 'short',
-});
-
-const currencyFormatter = new Intl.NumberFormat('es-ES', {
-  style: 'currency',
-  currency: 'EUR',
-  maximumFractionDigits: 2,
 });
 
 function formatDate(value: string | null) {
@@ -69,13 +89,6 @@ function formatDate(value: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return dateFormatter.format(date);
-}
-
-function formatPrice(value: string | null) {
-  if (!value) return null;
-  const amount = Number(value);
-  if (Number.isNaN(amount)) return value;
-  return currencyFormatter.format(amount);
 }
 
 async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
@@ -154,6 +167,105 @@ async function deleteProductVariant(variantId: string): Promise<string | null> {
   }
 
   return json.message ?? null;
+}
+
+function normalizeVariantFromResponse(input: any, fallbackId: string): VariantInfo {
+  const stockValue =
+    typeof input?.stock === 'number'
+      ? input.stock
+      : input?.stock != null && !Number.isNaN(Number(input.stock))
+        ? Number(input.stock)
+        : null;
+
+  return {
+    id: String(input?.id ?? fallbackId),
+    id_woo: input?.id_woo != null ? String(input.id_woo) : '',
+    name: input?.name ?? null,
+    status: input?.status ?? null,
+    price: input?.price != null ? String(input.price) : null,
+    stock: stockValue,
+    stock_status: input?.stock_status ?? null,
+    sede: input?.sede ?? null,
+    date: input?.date ?? null,
+    created_at: input?.created_at ?? null,
+    updated_at: input?.updated_at ?? null,
+  };
+}
+
+async function updateProductVariant(
+  variantId: string,
+  updates: VariantUpdatePayload,
+): Promise<VariantInfo> {
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE}/products-variants/${encodeURIComponent(variantId)}`, {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updates),
+    });
+  } catch (error) {
+    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
+  }
+
+  const text = await response.text();
+  let json: VariantUpdateResponse = {};
+
+  if (text) {
+    try {
+      json = JSON.parse(text) as VariantUpdateResponse;
+    } catch (error) {
+      console.error('[updateProductVariant] invalid JSON response', error);
+      json = {};
+    }
+  }
+
+  if (!response.ok || json.ok === false || !json.variant) {
+    const message = json.message || 'No se pudo actualizar la variante.';
+    throw new ApiError('UPDATE_ERROR', message, response.status || undefined);
+  }
+
+  return normalizeVariantFromResponse(json.variant, variantId);
+}
+
+async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]> {
+  let response: Response;
+  const url = `${API_BASE}/deals?w_id_variation=${encodeURIComponent(variationWooId)}`;
+
+  try {
+    response = await fetch(url, { headers: { Accept: 'application/json' } });
+  } catch (error) {
+    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
+  }
+
+  const text = await response.text();
+  let json: DealsByVariationResponse = {};
+
+  if (text) {
+    try {
+      json = JSON.parse(text) as DealsByVariationResponse;
+    } catch (error) {
+      console.error('[fetchDealsByVariation] invalid JSON response', error);
+      json = {};
+    }
+  }
+
+  if (!response.ok || json.ok === false) {
+    const message = json.message || 'No se pudieron obtener los deals.';
+    throw new ApiError('FETCH_ERROR', message, response.status || undefined);
+  }
+
+  const deals = Array.isArray(json.deals) ? json.deals : [];
+
+  return deals
+    .map((deal) => ({
+      deal_id: deal?.deal_id != null ? String(deal.deal_id) : '',
+      title: deal?.title ?? '',
+    }))
+    .filter((deal): deal is DealTag => Boolean(deal.deal_id) && Boolean(deal.title));
 }
 
 type VariantSortKey = {
@@ -249,12 +361,223 @@ function compareVariants(a: VariantInfo, b: VariantInfo): number {
   return (a.name ?? '').localeCompare(b.name ?? '', 'es', { sensitivity: 'base' });
 }
 
-function VariantModal({ active, onHide }: { active: ActiveVariant | null; onHide: () => void }) {
+type VariantFormValues = {
+  price: string;
+  stock: string;
+  stock_status: string;
+  sede: string;
+  date: string;
+};
+
+const STOCK_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'instock', label: 'En stock' },
+  { value: 'outofstock', label: 'Sin stock' },
+  { value: 'onbackorder', label: 'En reserva' },
+];
+
+function formatDateForInputValue(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function variantToFormValues(variant: VariantInfo): VariantFormValues {
+  return {
+    price: variant.price ?? '',
+    stock: variant.stock != null ? String(variant.stock) : '',
+    stock_status: variant.stock_status ?? 'instock',
+    sede: variant.sede ?? '',
+    date: formatDateForInputValue(variant.date),
+  };
+}
+
+function VariantModal({
+  active,
+  onHide,
+  onVariantUpdated,
+}: {
+  active: ActiveVariant | null;
+  onHide: () => void;
+  onVariantUpdated: (variant: VariantInfo) => void;
+}) {
   const variant = active?.variant;
   const product = active?.product;
 
+  const [formValues, setFormValues] = useState<VariantFormValues>({
+    price: '',
+    stock: '',
+    stock_status: 'instock',
+    sede: '',
+    date: '',
+  });
+  const [initialValues, setInitialValues] = useState<VariantFormValues>({
+    price: '',
+    stock: '',
+    stock_status: 'instock',
+    sede: '',
+    date: '',
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [deals, setDeals] = useState<DealTag[]>([]);
+  const [dealsError, setDealsError] = useState<string | null>(null);
+  const [isDealsLoading, setIsDealsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!variant) {
+      setFormValues({ price: '', stock: '', stock_status: 'instock', sede: '', date: '' });
+      setInitialValues({ price: '', stock: '', stock_status: 'instock', sede: '', date: '' });
+      setSaveError(null);
+      setSaveSuccess(null);
+      setDeals([]);
+      setDealsError(null);
+      setIsDealsLoading(false);
+      return;
+    }
+
+    const nextValues = variantToFormValues(variant);
+    setFormValues(nextValues);
+    setInitialValues(nextValues);
+    setSaveError(null);
+    setSaveSuccess(null);
+  }, [variant?.id]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    if (!variant?.id_woo) {
+      setDeals([]);
+      setDealsError(null);
+      setIsDealsLoading(false);
+      return () => {
+        ignore = true;
+      };
+    }
+
+    setIsDealsLoading(true);
+    setDealsError(null);
+
+    (async () => {
+      try {
+        const items = await fetchDealsByVariation(variant.id_woo);
+        if (!ignore) {
+          setDeals(items);
+        }
+      } catch (error) {
+        if (!ignore) {
+          const message =
+            error instanceof ApiError ? error.message : 'No se pudieron cargar los deals asociados.';
+          setDealsError(message);
+        }
+      } finally {
+        if (!ignore) {
+          setIsDealsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [variant?.id_woo]);
+
+  const handleChange = (field: keyof VariantFormValues) =>
+    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const value = event.target.value;
+      setFormValues((prev) => ({ ...prev, [field]: value }));
+      setSaveSuccess(null);
+    };
+
+  const isDirty =
+    formValues.price !== initialValues.price ||
+    formValues.stock !== initialValues.stock ||
+    formValues.stock_status !== initialValues.stock_status ||
+    formValues.sede !== initialValues.sede ||
+    formValues.date !== initialValues.date;
+
+  const handleSave = async (closeAfter: boolean) => {
+    if (!variant) return;
+    if (isSaving) return;
+
+    const payload: VariantUpdatePayload = {};
+
+    if (formValues.price !== initialValues.price) {
+      payload.price = formValues.price.trim() ? formValues.price.trim() : null;
+    }
+    if (formValues.stock !== initialValues.stock) {
+      if (!formValues.stock.trim()) {
+        payload.stock = null;
+      } else {
+        const parsed = Number(formValues.stock);
+        payload.stock = Number.isFinite(parsed) ? parsed : null;
+      }
+    }
+    if (formValues.stock_status !== initialValues.stock_status) {
+      payload.stock_status = formValues.stock_status;
+    }
+    if (formValues.sede !== initialValues.sede) {
+      payload.sede = formValues.sede.trim() ? formValues.sede.trim() : null;
+    }
+    if (formValues.date !== initialValues.date) {
+      payload.date = formValues.date || null;
+    }
+
+    if (!Object.keys(payload).length) {
+      if (closeAfter) {
+        onHide();
+      }
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const updated = await updateProductVariant(variant.id, payload);
+      onVariantUpdated(updated);
+
+      const nextValues = variantToFormValues(updated);
+      setFormValues(nextValues);
+      setInitialValues(nextValues);
+      setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
+
+      if (closeAfter) {
+        onHide();
+      }
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : 'No se pudo actualizar la variante.';
+      setSaveError(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAttemptClose = () => {
+    if (isSaving) return;
+    if (isDirty) {
+      void handleSave(true);
+    } else {
+      onHide();
+    }
+  };
+
   return (
-    <Modal show={!!variant} onHide={onHide} centered size="lg">
+    <Modal
+      show={!!variant}
+      onHide={handleAttemptClose}
+      centered
+      size="lg"
+      backdrop={isSaving ? 'static' : true}
+      keyboard={!isSaving}
+    >
       <Modal.Header closeButton>
         <Modal.Title>Detalle de la variante</Modal.Title>
       </Modal.Header>
@@ -278,22 +601,97 @@ function VariantModal({ active, onHide }: { active: ActiveVariant | null; onHide
               <div className="text-muted small">ID Woo: {variant.id_woo}</div>
             </div>
 
+            {saveError && <Alert variant="danger" className="mb-0">{saveError}</Alert>}
+            {saveSuccess && <Alert variant="success" className="mb-0">{saveSuccess}</Alert>}
+
+            <Form>
+              <Form.Group className="mb-3" controlId="variantPrice">
+                <Form.Label>Precio</Form.Label>
+                <Form.Control
+                  type="number"
+                  step="0.01"
+                  value={formValues.price}
+                  onChange={handleChange('price')}
+                  disabled={isSaving}
+                  placeholder="Introduce el precio"
+                />
+                <Form.Text className="text-muted">Se guardará también en WooCommerce.</Form.Text>
+              </Form.Group>
+
+              <Form.Group className="mb-3" controlId="variantStock">
+                <Form.Label>Stock</Form.Label>
+                <Form.Control
+                  type="number"
+                  step="1"
+                  value={formValues.stock}
+                  onChange={handleChange('stock')}
+                  disabled={isSaving}
+                  placeholder="Cantidad disponible"
+                />
+              </Form.Group>
+
+              <Form.Group className="mb-3" controlId="variantStockStatus">
+                <Form.Label>Estado de stock</Form.Label>
+                <Form.Select
+                  value={formValues.stock_status}
+                  onChange={handleChange('stock_status')}
+                  disabled={isSaving}
+                >
+                  {STOCK_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+
+              <Form.Group className="mb-3" controlId="variantSede">
+                <Form.Label>Sede</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={formValues.sede}
+                  onChange={handleChange('sede')}
+                  disabled={isSaving}
+                  placeholder="Sede de la formación"
+                />
+              </Form.Group>
+
+              <Form.Group className="mb-3" controlId="variantDate">
+                <Form.Label>Fecha</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={formValues.date}
+                  onChange={handleChange('date')}
+                  disabled={isSaving}
+                />
+              </Form.Group>
+            </Form>
+
+            <div>
+              <p className="text-uppercase text-muted small fw-semibold mb-2">Deals asociados</p>
+              {dealsError ? (
+                <Alert variant="danger" className="mb-0">
+                  {dealsError}
+                </Alert>
+              ) : isDealsLoading ? (
+                <div className="d-flex align-items-center gap-2 text-muted">
+                  <Spinner animation="border" size="sm" />
+                  <span>Cargando deals…</span>
+                </div>
+              ) : deals.length ? (
+                <Stack direction="horizontal" gap={2} className="flex-wrap">
+                  {deals.map((deal) => (
+                    <Badge bg="secondary" key={deal.deal_id} className="mb-1">
+                      {deal.title}
+                    </Badge>
+                  ))}
+                </Stack>
+              ) : (
+                <div className="text-muted small">No hay deals asociados a esta variación.</div>
+              )}
+            </div>
+
             <dl className="row mb-0">
-              <dt className="col-sm-4 text-muted">Precio</dt>
-              <dd className="col-sm-8">{formatPrice(variant.price) ?? '—'}</dd>
-
-              <dt className="col-sm-4 text-muted">Stock</dt>
-              <dd className="col-sm-8">{variant.stock ?? '—'}</dd>
-
-              <dt className="col-sm-4 text-muted">Estado de stock</dt>
-              <dd className="col-sm-8">{variant.stock_status ?? '—'}</dd>
-
-              <dt className="col-sm-4 text-muted">Sede</dt>
-              <dd className="col-sm-8">{variant.sede ?? '—'}</dd>
-
-              <dt className="col-sm-4 text-muted">Fecha</dt>
-              <dd className="col-sm-8">{formatDate(variant.date) ?? '—'}</dd>
-
               <dt className="col-sm-4 text-muted">Creada</dt>
               <dd className="col-sm-8">{formatDate(variant.created_at) ?? '—'}</dd>
 
@@ -303,6 +701,19 @@ function VariantModal({ active, onHide }: { active: ActiveVariant | null; onHide
           </Stack>
         ) : null}
       </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
+          Cerrar
+        </Button>
+        <Button
+          variant="primary"
+          onClick={() => handleSave(false)}
+          disabled={isSaving || !isDirty}
+        >
+          {isSaving ? <Spinner as="span" animation="border" size="sm" role="status" className="me-2" /> : null}
+          {isSaving ? 'Guardando…' : 'Guardar cambios'}
+        </Button>
+      </Modal.Footer>
     </Modal>
   );
 }
@@ -397,6 +808,40 @@ export default function ProductVariantsList() {
     } finally {
       setVariantDeleting(variant.id, false);
     }
+  };
+
+  const handleVariantUpdated = (updatedVariant: VariantInfo) => {
+    setProducts((prev) =>
+      prev.map((product) => {
+        const hasVariant = product.variants.some((item) => item.id === updatedVariant.id);
+        if (!hasVariant) {
+          return product;
+        }
+
+        return {
+          ...product,
+          variants: product.variants.map((item) =>
+            item.id === updatedVariant.id ? { ...item, ...updatedVariant } : item,
+          ),
+        };
+      }),
+    );
+
+    setActiveVariant((prev) => {
+      if (!prev || prev.variant.id !== updatedVariant.id) {
+        return prev;
+      }
+
+      return {
+        product: {
+          ...prev.product,
+          variants: prev.product.variants.map((item) =>
+            item.id === updatedVariant.id ? { ...item, ...updatedVariant } : item,
+          ),
+        },
+        variant: { ...prev.variant, ...updatedVariant },
+      };
+    });
   };
 
   return (
@@ -515,7 +960,11 @@ export default function ProductVariantsList() {
         </Card.Body>
       </Card>
 
-      <VariantModal active={activeVariant} onHide={handleCloseModal} />
+      <VariantModal
+        active={activeVariant}
+        onHide={handleCloseModal}
+        onVariantUpdated={handleVariantUpdated}
+      />
     </>
   );
 }
