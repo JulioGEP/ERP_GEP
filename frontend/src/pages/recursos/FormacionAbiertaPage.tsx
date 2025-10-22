@@ -1,4 +1,3 @@
-import { Card } from 'react-bootstrap';
 import VariationsSync from '../../features/formacion_abierta/VariationsSync';
 
 export type RecursosFormacionAbiertaPageProps = Record<string, never>;
@@ -14,14 +13,6 @@ export default function RecursosFormacionAbiertaPage(
       </header>
 
       <VariationsSync />
-
-      <Card className="border-0 shadow-sm">
-        <Card.Body className="py-5 text-center text-muted">
-          <p className="mb-0">
-            Todavía no hay cursos disponibles. Próximamente añadiremos contenidos para esta sección.
-          </p>
-        </Card.Body>
-      </Card>
     </section>
   );
 }
