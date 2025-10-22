@@ -118,6 +118,12 @@ const dateOnlyFormatter = new Intl.DateTimeFormat('es-ES', {
   dateStyle: 'medium',
 });
 
+const STOCK_STATUS_SUMMARY_LABELS: Record<string, string> = {
+  instock: 'En stock',
+  outofstock: 'Sin stock',
+  onbackorder: 'Reservar por adelantado',
+};
+
 function formatDate(value: string | null) {
   if (!value) return null;
   const date = new Date(value);
@@ -144,7 +150,10 @@ function buildProductDefaultsSummary(product: ProductInfo): string | null {
   }
 
   if (product.default_variant_stock_status) {
-    parts.push(`Estado: ${product.default_variant_stock_status}`);
+    const statusLabel =
+      STOCK_STATUS_SUMMARY_LABELS[product.default_variant_stock_status.trim().toLowerCase()] ??
+      product.default_variant_stock_status;
+    parts.push(`Estado: ${statusLabel}`);
   }
 
   const startLabel = formatDateOnly(product.default_variant_start);

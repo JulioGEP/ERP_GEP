@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
+import { mapApiStockStatusToDbValue, mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
 type ProductDefaultsRecord = {
   id: string;
@@ -22,14 +23,12 @@ type ProductDefaultsPayload = {
   price?: string | null;
 };
 
-const ALLOWED_STOCK_STATUS = new Set(['instock', 'outofstock', 'onbackorder']);
-
 function normalizeDefaults(record: ProductDefaultsRecord) {
   return {
     id: record.id,
     default_variant_start: toMadridISOString(record.default_variant_start),
     default_variant_end: toMadridISOString(record.default_variant_end),
-    default_variant_stock_status: record.default_variant_stock_status ?? null,
+    default_variant_stock_status: mapDbStockStatusToApiValue(record.default_variant_stock_status),
     default_variant_stock_quantity: record.default_variant_stock_quantity ?? null,
     default_variant_price:
       record.default_variant_price == null
@@ -66,17 +65,11 @@ function parseDateInput(value: unknown): Date | null {
 }
 
 function parseStockStatus(value: unknown): string | null {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-  const normalized = String(value).trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-  if (!ALLOWED_STOCK_STATUS.has(normalized)) {
+  try {
+    return mapApiStockStatusToDbValue(value as string | null | undefined);
+  } catch (error) {
     throw new Error('INVALID_STOCK_STATUS');
   }
-  return normalized;
 }
 
 function parseStockQuantity(value: unknown): number | null {
