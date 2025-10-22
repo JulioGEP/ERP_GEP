@@ -1,4 +1,3 @@
-// backend/functions/woo_courses.ts
 import type { Prisma } from '@prisma/client';
 
 import { getPrisma } from './_shared/prisma';
@@ -6,39 +5,67 @@ import { errorResponse, preflightResponse, successResponse } from './_shared/res
 
 type Event = {
   httpMethod: string;
-  queryStringParameters?: Record<string, string | undefined> | null;
 };
 
 type WooErrorBody = {
   message?: string;
 };
 
+type ProductWithWooId = {
+  id: string;
+  id_woo: bigint;
+  name: string | null;
+};
+
+type VariationsSyncChange = {
+  id_woo: string;
+  name: string | null;
+  changes?: string[];
+};
+
+type ProductSyncReport = {
+  productId: string;
+  productWooId: string;
+  productName: string | null;
+  fetchedVariations: number;
+  validVariations: number;
+  skippedVariations: number;
+  added: VariationsSyncChange[];
+  updated: VariationsSyncChange[];
+  removed: VariationsSyncChange[];
+  error?: string;
+};
+
+type SyncTotals = {
+  added: number;
+  updated: number;
+  removed: number;
+};
+
+type SyncLogEntry = {
+  type: 'info' | 'success' | 'warning' | 'error';
+  message: string;
+  productWooId?: string | null;
+  productName?: string | null;
+};
+
+type SyncSummary = {
+  totalProducts: number;
+  processedProducts: number;
+  failedProducts: number;
+  totals: SyncTotals;
+  products: ProductSyncReport[];
+};
+
+type SyncResult = {
+  ok: true;
+  logs: SyncLogEntry[];
+  summary: SyncSummary;
+};
+
 const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
 const WOO_KEY = process.env.WOO_KEY || '';
 const WOO_SECRET = process.env.WOO_SECRET || '';
-
-function ensureConfigured() {
-  if (!WOO_BASE || !WOO_KEY || !WOO_SECRET) {
-    throw new Error('WooCommerce env vars missing');
-  }
-}
-
-function removeImageFields(input: any): any {
-  if (Array.isArray(input)) {
-    return input.map((item) => removeImageFields(item));
-  }
-
-  if (input && typeof input === 'object') {
-    const result: Record<string, any> = {};
-    for (const [key, value] of Object.entries(input)) {
-      if (key.toLowerCase().includes('image')) continue;
-      result[key] = removeImageFields(value);
-    }
-    return result;
-  }
-
-  return input;
-}
 
 const ESSENTIAL_VARIATION_FIELDS = new Set([
   'id',
@@ -61,7 +88,6 @@ const ESSENTIAL_VARIATION_FIELDS = new Set([
 
 const ESSENTIAL_VARIATION_ATTRIBUTE_FIELDS = new Set(['id', 'name', 'option', 'slug']);
 
-const VARIATIONS_RESOURCE_REGEX = /^products\/(\d+)\/variations\/?$/i;
 const LOCATION_KEYWORDS = ['localizacion', 'ubicacion', 'sede'];
 const DATE_KEYWORDS = ['fecha'];
 
@@ -87,12 +113,39 @@ type SanitizedVariation = {
   date_modified_gmt?: string | null;
 };
 
-type VariationStoreResult = {
-  ok: boolean;
-  count: number;
-  parent_id: string | null;
-  message: string;
+type VariationPersistence = {
+  idWoo: bigint;
+  name: string | null;
+  status: string | null;
+  price: number | null;
+  stock: number | null;
+  stock_status: string | null;
+  sede: string | null;
+  date: Date | null;
 };
+
+function ensureConfigured() {
+  if (!WOO_BASE || !WOO_KEY || !WOO_SECRET) {
+    throw new Error('WooCommerce env vars missing');
+  }
+}
+
+function removeImageFields(input: any): any {
+  if (Array.isArray(input)) {
+    return input.map((item) => removeImageFields(item));
+  }
+
+  if (input && typeof input === 'object') {
+    const result: Record<string, any> = {};
+    for (const [key, value] of Object.entries(input)) {
+      if (key.toLowerCase().includes('image')) continue;
+      result[key] = removeImageFields(value);
+    }
+    return result;
+  }
+
+  return input;
+}
 
 function pickFields(input: Record<string, any>, allowedKeys: Set<string>) {
   const output: Record<string, any> = {};
@@ -106,41 +159,41 @@ function pickFields(input: Record<string, any>, allowedKeys: Set<string>) {
   return output;
 }
 
-function sanitizeVariationAttributes(attributes: unknown): unknown {
+function sanitizeVariationAttributes(attributes: unknown): VariationAttribute[] {
   if (!Array.isArray(attributes)) return [];
 
   return attributes
     .filter((attribute) => attribute && typeof attribute === 'object')
-    .map((attribute) => pickFields(attribute as Record<string, any>, ESSENTIAL_VARIATION_ATTRIBUTE_FIELDS));
+    .map((attribute) =>
+      pickFields(attribute as Record<string, any>, ESSENTIAL_VARIATION_ATTRIBUTE_FIELDS),
+    )
+    .map((attribute) => attribute as VariationAttribute);
 }
 
-function sanitizeVariation(input: unknown): unknown {
-  if (!input || typeof input !== 'object') return input;
+function sanitizeVariation(input: unknown): SanitizedVariation {
+  if (!input || typeof input !== 'object') return {};
 
   const variation = input as Record<string, any>;
-  const sanitized = pickFields(variation, ESSENTIAL_VARIATION_FIELDS);
+  const sanitized = pickFields(variation, ESSENTIAL_VARIATION_FIELDS) as SanitizedVariation;
 
-  if (Array.isArray(variation.attributes)) {
-    sanitized.attributes = sanitizeVariationAttributes(variation.attributes);
-  }
+  sanitized.attributes = sanitizeVariationAttributes(variation.attributes);
 
   return sanitized;
 }
 
-function isVariationsResource(resource: string): boolean {
-  return VARIATIONS_RESOURCE_REGEX.test(resource);
+function sanitizeVariationList(data: unknown[]): SanitizedVariation[] {
+  return data
+    .map((item) => sanitizeVariation(removeImageFields(item)))
+    .filter((item): item is SanitizedVariation => item !== null && typeof item === 'object');
 }
 
-function extractProductIdFromResource(resource: string): bigint | null {
-  const match = resource.match(VARIATIONS_RESOURCE_REGEX);
-  if (!match) return null;
-
-  try {
-    return BigInt(match[1]);
-  } catch (error) {
-    console.error('[woo_courses] invalid product id in resource', { resource, error });
-    return null;
-  }
+function normalizeAttributeText(value: string | undefined | null): string {
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
 }
 
 function toNullableString(value: unknown): string | null {
@@ -194,15 +247,6 @@ function parseIntegerValue(value: unknown): number | null {
   if (!Number.isFinite(numberValue)) return null;
 
   return Math.trunc(numberValue);
-}
-
-function normalizeAttributeText(value: string | undefined | null): string {
-  if (!value) return '';
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
 }
 
 function findAttributeOptionByKeywords(
@@ -274,22 +318,17 @@ function resolveVariationDate(variation: SanitizedVariation): Date | null {
   return null;
 }
 
-function mapVariationToCreateInput(
-  variation: SanitizedVariation,
-  defaultParentId: bigint,
-  timestamp: Date,
-): Prisma.variantsCreateManyInput | null {
+function mapVariationToPersistence(variation: SanitizedVariation): VariationPersistence | null {
   const idWoo = parseBigIntValue(variation.id);
   if (!idWoo) return null;
 
-  const parentId = parseBigIntValue(variation.parent_id) ?? defaultParentId;
   const price = parseDecimalValue(variation.price);
   const stock = parseIntegerValue(variation.stock_quantity);
   const sede = findAttributeOptionByKeywords(variation.attributes, LOCATION_KEYWORDS);
   const date = resolveVariationDate(variation);
 
   return {
-    id_woo: idWoo,
+    idWoo,
     name: toNullableString(variation.name),
     status: toNullableString(variation.status),
     price,
@@ -297,91 +336,46 @@ function mapVariationToCreateInput(
     stock_status: toNullableString(variation.stock_status),
     sede,
     date,
-    id_padre: parentId,
-    created_at: timestamp,
-    updated_at: timestamp,
   };
 }
 
-async function storeProductVariations(
-  resource: string,
-  data: unknown,
-): Promise<VariationStoreResult> {
-  const parentId = extractProductIdFromResource(resource);
-  if (!parentId) {
-    return {
-      ok: false,
-      count: 0,
-      parent_id: null,
-      message: 'No se pudo determinar el ID del producto padre',
-    };
+function decimalToNumber(value: Prisma.Decimal | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+
+  try {
+    return Number(value);
+  } catch (error) {
+    console.error('[woo_courses] invalid decimal value', { value, error });
+    return null;
   }
-
-  if (!Array.isArray(data)) {
-    return {
-      ok: false,
-      count: 0,
-      parent_id: parentId.toString(),
-      message: 'Formato de variaciones inválido en la respuesta de WooCommerce',
-    };
-  }
-
-  const prisma = getPrisma();
-  const product = await prisma.products.findUnique({ where: { id_woo: parentId } });
-
-  if (!product) {
-    return {
-      ok: false,
-      count: 0,
-      parent_id: parentId.toString(),
-      message: `Producto con id_woo ${parentId.toString()} no encontrado en la base de datos`,
-    };
-  }
-
-  const timestamp = new Date();
-  const records = (data as SanitizedVariation[])
-    .map((variation) => mapVariationToCreateInput(variation, parentId, timestamp))
-    .filter((record): record is Prisma.variantsCreateManyInput => record !== null);
-
-  const insertedCount = await prisma.$transaction(async (tx) => {
-    await tx.variants.deleteMany({ where: { id_padre: parentId } });
-
-    if (!records.length) {
-      return 0;
-    }
-
-    const result = await tx.variants.createMany({ data: records });
-    return result.count;
-  });
-
-  const message = records.length
-    ? `Se guardaron ${insertedCount} variaciones para el producto ${parentId.toString()}.`
-    : `No se encontraron variaciones para el producto ${parentId.toString()}; se eliminaron las existentes.`;
-
-  return {
-    ok: true,
-    count: insertedCount,
-    parent_id: parentId.toString(),
-    message,
-  };
 }
 
-function sanitizeByResource(resource: string, data: unknown): unknown {
-  const withoutImages = removeImageFields(data);
-  const isVariationResource = /\/variations(\/|$)/.test(resource);
-
-  if (!isVariationResource) {
-    return withoutImages;
-  }
-
-  if (Array.isArray(withoutImages)) {
-    return withoutImages.map((item) => sanitizeVariation(item));
-  }
-
-  return sanitizeVariation(withoutImages);
+function numbersEqual(a: number | null, b: number | null): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  return Math.abs(a - b) < 1e-6;
 }
 
-function buildWooUrl(resource: string, params: Record<string, string | undefined>) {
+function integersEqual(a: number | null | undefined, b: number | null): boolean {
+  if (a === null || a === undefined) return b === null;
+  if (b === null || b === undefined) return false;
+  return a === b;
+}
+
+function stringsEqual(a: string | null | undefined, b: string | null): boolean {
+  const left = a ?? null;
+  const right = b ?? null;
+  return left === right;
+}
+
+function datesEqual(a: Date | null | undefined, b: Date | null): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return a.getTime() === b.getTime();
+}
+
+function buildWooUrl(resource: string, params: Record<string, string | number | undefined>) {
   const normalizedResource = resource.replace(/^\/+/, '');
   const baseUrl = `${WOO_BASE}/wp-json/wc/v3/${normalizedResource}`;
   const url = new URL(baseUrl);
@@ -395,61 +389,393 @@ function buildWooUrl(resource: string, params: Record<string, string | undefined
   return url;
 }
 
-async function fetchWooResource(resource: string, params: Record<string, string | undefined>) {
+async function fetchWooVariations(productId: bigint): Promise<SanitizedVariation[]> {
   ensureConfigured();
 
-  const url = buildWooUrl(resource, params);
+  const resource = `products/${productId.toString()}/variations`;
+  const perPage = 100;
+  const all: SanitizedVariation[] = [];
   const authToken = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Basic ${authToken}`,
-    },
-  });
+  for (let page = 1; ; page += 1) {
+    const url = buildWooUrl(resource, { per_page: perPage, page });
+    let response: any;
 
-  const text = await response.text();
-  let data: any = null;
-
-  if (text) {
     try {
-      data = JSON.parse(text);
-    } catch (error) {
-      console.error('[woo_courses] invalid JSON response', { url: url.toString(), error });
-      return errorResponse('INVALID_RESPONSE', 'Respuesta JSON inválida de WooCommerce', 502);
-    }
-  }
-
-  if (!response.ok) {
-    const message = (data as WooErrorBody)?.message || 'Error al consultar WooCommerce';
-    return errorResponse('WOO_ERROR', message, response.status || 502);
-  }
-
-  const sanitized = sanitizeByResource(resource, data);
-  let meta: { stored_variations: VariationStoreResult } | undefined;
-
-  if (isVariationsResource(resource)) {
-    try {
-      const result = await storeProductVariations(resource, sanitized);
-      meta = { stored_variations: result };
-    } catch (error) {
-      console.error('[woo_courses] error storing product variations', { resource, error });
-      const parentId = extractProductIdFromResource(resource);
-      meta = {
-        stored_variations: {
-          ok: false,
-          count: 0,
-          parent_id: parentId ? parentId.toString() : null,
-          message: 'Error al guardar las variaciones en la base de datos',
+      response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Basic ${authToken}`,
         },
-      };
+      });
+    } catch (error) {
+      console.error('[woo_courses] network error while fetching variations', {
+        productId: productId.toString(),
+        error,
+      });
+      throw new Error('No se pudo conectar con WooCommerce');
+    }
+
+    const text = await response.text();
+    let data: unknown = null;
+
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (error) {
+        console.error('[woo_courses] invalid JSON response', { url: url.toString(), error });
+        throw new Error('Respuesta JSON inválida de WooCommerce');
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        data && typeof data === 'object' && typeof (data as WooErrorBody).message === 'string'
+          ? (data as WooErrorBody).message!
+          : `Error al consultar WooCommerce (status ${response.status})`;
+      throw new Error(message);
+    }
+
+    const rawArray = Array.isArray(data) ? data : [];
+    const sanitized = sanitizeVariationList(rawArray);
+    all.push(...sanitized);
+
+    if (!Array.isArray(data) || rawArray.length < perPage) {
+      break;
     }
   }
 
-  return successResponse({
-    data: sanitized,
-    status: response.status,
-    ...(meta ? { meta } : {}),
+  return all;
+}
+
+type ExistingVariant = {
+  id_woo: bigint;
+  name: string | null;
+  status: string | null;
+  price: Prisma.Decimal | null;
+  stock: number | null;
+  stock_status: string | null;
+  sede: string | null;
+  date: Date | null;
+};
+
+function buildUpdateData(
+  existing: ExistingVariant,
+  incoming: VariationPersistence,
+  timestamp: Date,
+): { data: Record<string, any>; changes: string[] } {
+  const data: Record<string, any> = {};
+  const changes: string[] = [];
+
+  if (!stringsEqual(existing.name, incoming.name)) {
+    data.name = incoming.name;
+    changes.push('name');
+  }
+
+  if (!stringsEqual(existing.status, incoming.status)) {
+    data.status = incoming.status;
+    changes.push('status');
+  }
+
+  if (!numbersEqual(decimalToNumber(existing.price), incoming.price)) {
+    data.price = incoming.price;
+    changes.push('price');
+  }
+
+  if (!integersEqual(existing.stock, incoming.stock)) {
+    data.stock = incoming.stock;
+    changes.push('stock');
+  }
+
+  if (!stringsEqual(existing.stock_status, incoming.stock_status)) {
+    data.stock_status = incoming.stock_status;
+    changes.push('stock_status');
+  }
+
+  if (!stringsEqual(existing.sede, incoming.sede)) {
+    data.sede = incoming.sede;
+    changes.push('sede');
+  }
+
+  if (!datesEqual(existing.date, incoming.date)) {
+    data.date = incoming.date;
+    changes.push('date');
+  }
+
+  if (changes.length > 0) {
+    data.updated_at = timestamp;
+  }
+
+  return { data, changes };
+}
+
+async function syncProductVariations(
+  prisma: ReturnType<typeof getPrisma>,
+  product: ProductWithWooId,
+  variations: SanitizedVariation[],
+): Promise<{ summary: ProductSyncReport; totals: SyncTotals; logs: SyncLogEntry[] }> {
+  const logs: SyncLogEntry[] = [];
+  const productWooId = product.id_woo.toString();
+
+  const uniqueVariations = new Map<string, VariationPersistence>();
+  let skipped = 0;
+
+  for (const variation of variations) {
+    const mapped = mapVariationToPersistence(variation);
+    if (!mapped) {
+      skipped += 1;
+      continue;
+    }
+
+    const key = mapped.idWoo.toString();
+    if (uniqueVariations.has(key)) {
+      skipped += 1;
+      continue;
+    }
+
+    uniqueVariations.set(key, mapped);
+  }
+
+  const persistable = Array.from(uniqueVariations.values());
+  const timestamp = new Date();
+
+  const transactionResult = await prisma.$transaction(async (tx) => {
+    const client = tx as any;
+
+    const existing = (await client.variants.findMany({
+      where: { id_padre: product.id_woo },
+      select: {
+        id_woo: true,
+        name: true,
+        status: true,
+        price: true,
+        stock: true,
+        stock_status: true,
+        sede: true,
+        date: true,
+      },
+    })) as ExistingVariant[];
+
+    const existingMap = new Map(existing.map((variant) => [variant.id_woo.toString(), variant]));
+    const processedIds = new Set<string>();
+
+    const added: VariationsSyncChange[] = [];
+    const updated: VariationsSyncChange[] = [];
+
+    for (const incoming of persistable) {
+      const key = incoming.idWoo.toString();
+      processedIds.add(key);
+      const current = existingMap.get(key);
+
+      if (!current) {
+        await client.variants.create({
+          data: {
+            id_woo: incoming.idWoo,
+            id_padre: product.id_woo,
+            name: incoming.name,
+            status: incoming.status,
+            price: incoming.price,
+            stock: incoming.stock,
+            stock_status: incoming.stock_status,
+            sede: incoming.sede,
+            date: incoming.date,
+            created_at: timestamp,
+            updated_at: timestamp,
+          },
+        });
+
+        added.push({
+          id_woo: key,
+          name: incoming.name,
+        });
+        continue;
+      }
+
+      const { data: updateData, changes } = buildUpdateData(current, incoming, timestamp);
+      if (changes.length > 0) {
+        await client.variants.update({
+          where: { id_woo: incoming.idWoo },
+          data: updateData,
+        });
+
+        updated.push({
+          id_woo: key,
+          name: incoming.name ?? current.name,
+          changes,
+        });
+      }
+    }
+
+    const removedRecords = existing.filter((variant) => !processedIds.has(variant.id_woo.toString()));
+    if (removedRecords.length > 0) {
+      await client.variants.deleteMany({
+        where: { id_woo: { in: removedRecords.map((variant) => variant.id_woo) } },
+      });
+    }
+
+    const removed: VariationsSyncChange[] = removedRecords.map((variant) => ({
+      id_woo: variant.id_woo.toString(),
+      name: variant.name,
+    }));
+
+    return { added, updated, removed };
   });
+
+  const totals: SyncTotals = {
+    added: transactionResult.added.length,
+    updated: transactionResult.updated.length,
+    removed: transactionResult.removed.length,
+  };
+
+  const summary: ProductSyncReport = {
+    productId: product.id,
+    productWooId: productWooId,
+    productName: product.name ?? null,
+    fetchedVariations: variations.length,
+    validVariations: persistable.length,
+    skippedVariations: skipped,
+    added: transactionResult.added,
+    updated: transactionResult.updated,
+    removed: transactionResult.removed,
+  };
+
+  logs.push({
+    type: 'info',
+    message: `WooCommerce devolvió ${variations.length} variaciones (${persistable.length} válidas).`,
+    productWooId,
+    productName: product.name ?? null,
+  });
+
+  if (skipped > 0) {
+    logs.push({
+      type: 'warning',
+      message: `Se omitieron ${skipped} variaciones sin identificador válido o duplicadas.`,
+      productWooId,
+      productName: product.name ?? null,
+    });
+  }
+
+  if (totals.added || totals.updated || totals.removed) {
+    logs.push({
+      type: 'success',
+      message: `Cambios aplicados → añadidas: ${totals.added}, actualizadas: ${totals.updated}, eliminadas: ${totals.removed}.`,
+      productWooId,
+      productName: product.name ?? null,
+    });
+  } else {
+    logs.push({
+      type: 'info',
+      message: 'No se detectaron cambios para este producto.',
+      productWooId,
+      productName: product.name ?? null,
+    });
+  }
+
+  return { summary, totals, logs };
+}
+
+async function syncAllProducts(): Promise<SyncResult> {
+  ensureConfigured();
+
+  const prisma = getPrisma();
+  const productsRaw = await prisma.products.findMany({
+    where: { id_woo: { not: null } },
+    select: { id: true, id_woo: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+
+  const logs: SyncLogEntry[] = [];
+  const summary: SyncSummary = {
+    totalProducts: productsRaw.length,
+    processedProducts: 0,
+    failedProducts: 0,
+    totals: { added: 0, updated: 0, removed: 0 },
+    products: [],
+  };
+
+  if (productsRaw.length === 0) {
+    logs.push({
+      type: 'info',
+      message: 'No se encontraron productos con ID de WooCommerce configurado.',
+    });
+
+    return { ok: true, logs, summary };
+  }
+
+  for (const product of productsRaw) {
+    const productWooId = product.id_woo;
+
+    if (productWooId === null) {
+      logs.push({
+        type: 'warning',
+        message: 'Producto sin ID de WooCommerce; se omite la sincronización.',
+        productName: product.name ?? null,
+      });
+      summary.products.push({
+        productId: product.id,
+        productWooId: '—',
+        productName: product.name ?? null,
+        fetchedVariations: 0,
+        validVariations: 0,
+        skippedVariations: 0,
+        added: [],
+        updated: [],
+        removed: [],
+        error: 'Producto sin ID de WooCommerce en la base de datos.',
+      });
+      summary.failedProducts += 1;
+      continue;
+    }
+
+    const normalizedProduct: ProductWithWooId = {
+      id: product.id,
+      id_woo: productWooId,
+      name: product.name ?? null,
+    };
+
+    logs.push({
+      type: 'info',
+      message: `Analizando producto ${productWooId.toString()}.`,
+      productWooId: productWooId.toString(),
+      productName: product.name ?? null,
+    });
+
+    try {
+      const variations = await fetchWooVariations(productWooId);
+      const result = await syncProductVariations(prisma, normalizedProduct, variations);
+
+      logs.push(...result.logs);
+      summary.products.push(result.summary);
+      summary.processedProducts += 1;
+      summary.totals.added += result.totals.added;
+      summary.totals.updated += result.totals.updated;
+      summary.totals.removed += result.totals.removed;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error inesperado';
+      logs.push({
+        type: 'error',
+        message: `Error al sincronizar el producto ${productWooId.toString()}: ${message}`,
+        productWooId: productWooId.toString(),
+        productName: product.name ?? null,
+      });
+
+      summary.products.push({
+        productId: product.id,
+        productWooId: productWooId.toString(),
+        productName: product.name ?? null,
+        fetchedVariations: 0,
+        validVariations: 0,
+        skippedVariations: 0,
+        added: [],
+        updated: [],
+        removed: [],
+        error: message,
+      });
+
+      summary.failedProducts += 1;
+    }
+  }
+
+  return { ok: true, logs, summary };
 }
 
 export const handler = async (event: Event) => {
@@ -458,18 +784,12 @@ export const handler = async (event: Event) => {
       return preflightResponse();
     }
 
-    if (event.httpMethod !== 'GET') {
+    if (event.httpMethod !== 'POST') {
       return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
     }
 
-    const params = event.queryStringParameters || {};
-    const resource = params.resource?.trim();
-
-    if (!resource) {
-      return errorResponse('VALIDATION_ERROR', 'Parámetro "resource" requerido', 400);
-    }
-
-    return await fetchWooResource(resource, params);
+    const result = await syncAllProducts();
+    return successResponse(result);
   } catch (error) {
     console.error('[woo_courses] handler error', error);
     return errorResponse('UNEXPECTED_ERROR', 'Se ha producido un error inesperado', 500);
