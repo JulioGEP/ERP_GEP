@@ -5,6 +5,91 @@ import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
 
+const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
+const WOO_KEY = process.env.WOO_KEY || '';
+const WOO_SECRET = process.env.WOO_SECRET || '';
+
+type VariantDeletionResult = {
+  success: boolean;
+  message?: string;
+};
+
+function ensureWooConfigured() {
+  if (!WOO_BASE || !WOO_KEY || !WOO_SECRET) {
+    throw new Error('WooCommerce configuration missing');
+  }
+}
+
+function parseVariantIdFromPath(path: string): string | null {
+  const value = String(path || '');
+  const match = value.match(/\/(?:\.netlify\/functions\/)?products-variants\/([^/?#]+)/i);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+type FetchResponse = Awaited<ReturnType<typeof fetch>>;
+
+async function deleteVariantFromWooCommerce(
+  productWooId: bigint,
+  variantWooId: bigint,
+): Promise<VariantDeletionResult> {
+  ensureWooConfigured();
+
+  const token = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
+  const productId = productWooId.toString();
+  const variationId = variantWooId.toString();
+  const url = `${WOO_BASE}/wp-json/wc/v3/products/${productId}/variations/${variationId}?force=true`;
+
+  let response: FetchResponse;
+  try {
+    response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Basic ${token}`,
+        Accept: 'application/json',
+      },
+    });
+  } catch (error) {
+    console.error('[products-variants] network error deleting WooCommerce variation', {
+      productId,
+      variationId,
+      error,
+    });
+    throw new Error('No se pudo conectar con WooCommerce');
+  }
+
+  if (response.status === 404) {
+    // Consideramos la ausencia en WooCommerce como éxito para mantener consistencia
+    return {
+      success: true,
+      message: 'La variante no existe en WooCommerce, se eliminará localmente.',
+    };
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    let message = `Error al eliminar la variante en WooCommerce (status ${response.status})`;
+
+    if (text) {
+      try {
+        const data = JSON.parse(text);
+        if (data && typeof data === 'object' && typeof data.message === 'string') {
+          message = data.message;
+        }
+      } catch (error) {
+        console.error('[products-variants] invalid JSON deleting WooCommerce variation', {
+          productId,
+          variationId,
+          error,
+        });
+      }
+    }
+
+    throw new Error(message);
+  }
+
+  return { success: true };
+}
+
 type VariantRecord = {
   id: string;
   id_woo: bigint;
@@ -63,11 +148,46 @@ export const handler = async (event: any) => {
       return preflightResponse();
     }
 
-    if (event.httpMethod !== 'GET') {
-      return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
+    const method = event.httpMethod;
+    const prisma = getPrisma();
+
+    if (method === 'DELETE') {
+      const variantId = parseVariantIdFromPath(event.path || '');
+
+      if (!variantId) {
+        return errorResponse('VALIDATION_ERROR', 'ID de variante requerido', 400);
+      }
+
+      const variant = await prisma.variants.findUnique({
+        where: { id: variantId },
+        select: { id: true, id_padre: true, id_woo: true },
+      });
+
+      if (!variant) {
+        return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
+      }
+
+      let wooMessage: string | undefined;
+      try {
+        const result = await deleteVariantFromWooCommerce(variant.id_padre, variant.id_woo);
+        wooMessage = result.message;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'No se pudo eliminar la variante en WooCommerce';
+        return errorResponse('WOO_DELETE_ERROR', message, 502);
+      }
+
+      await prisma.variants.delete({ where: { id: variantId } });
+
+      return successResponse({
+        ok: true,
+        message: wooMessage ?? 'Variante eliminada correctamente',
+      });
     }
 
-    const prisma = getPrisma();
+    if (method !== 'GET') {
+      return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
+    }
 
     const productsRaw = await prisma.products.findMany({
       where: {
