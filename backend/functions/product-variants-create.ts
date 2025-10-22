@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
+import { getWooStockStatusFromDb } from './_shared/variant-defaults';
 
 const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
 const WOO_KEY = process.env.WOO_KEY || '';
@@ -363,7 +364,7 @@ export const handler = async (event: any) => {
       return errorResponse('VALIDATION_ERROR', 'Configura un precio por defecto antes de crear variantes', 400);
     }
 
-    const stockStatus = (product.default_variant_stock_status ?? 'instock').trim().toLowerCase();
+    const stockStatus = getWooStockStatusFromDb(product.default_variant_stock_status);
     const priceText = product.default_variant_price.toString();
 
     ensureWooConfigured();

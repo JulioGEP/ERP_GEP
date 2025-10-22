@@ -5,6 +5,7 @@ import type { PrismaClient } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
+import { mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
 const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
 const WOO_KEY = process.env.WOO_KEY || '';
@@ -515,7 +516,7 @@ function normalizeProduct(record: ProductRecord) {
     category: record.category ?? null,
     default_variant_start: toMadridISOString(record.default_variant_start),
     default_variant_end: toMadridISOString(record.default_variant_end),
-    default_variant_stock_status: record.default_variant_stock_status ?? null,
+    default_variant_stock_status: mapDbStockStatusToApiValue(record.default_variant_stock_status),
     default_variant_stock_quantity: record.default_variant_stock_quantity ?? null,
     default_variant_price: defaultPrice,
     variants: record.variants.map(normalizeVariant),
