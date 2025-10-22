@@ -28,7 +28,15 @@ type VariantInfo = {
   updated_at: string | null;
 };
 
-type ProductInfo = {
+type ProductDefaults = {
+  default_variant_start: string | null;
+  default_variant_end: string | null;
+  default_variant_stock_status: string | null;
+  default_variant_stock_quantity: number | null;
+  default_variant_price: string | null;
+};
+
+type ProductInfo = ProductDefaults & {
   id: string;
   id_woo: string | null;
   name: string | null;
@@ -45,6 +53,27 @@ type ActiveVariant = {
 type ProductsVariantsResponse = {
   ok?: boolean;
   products?: ProductInfo[];
+  message?: string;
+};
+
+type ProductDefaultsUpdateResponse = {
+  ok?: boolean;
+  product?: ProductDefaults | null;
+  message?: string;
+};
+
+type ProductDefaultsUpdatePayload = {
+  start_date?: string | null;
+  end_date?: string | null;
+  stock_status?: string | null;
+  stock_quantity?: number | null;
+  price?: string | null;
+};
+
+type VariantBulkCreateResponse = {
+  ok?: boolean;
+  created?: VariantInfo[];
+  skipped?: number;
   message?: string;
 };
 
@@ -85,11 +114,55 @@ const dateFormatter = new Intl.DateTimeFormat('es-ES', {
   timeStyle: 'short',
 });
 
+const dateOnlyFormatter = new Intl.DateTimeFormat('es-ES', {
+  dateStyle: 'medium',
+});
+
 function formatDate(value: string | null) {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return dateFormatter.format(date);
+}
+
+function formatDateOnly(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return dateOnlyFormatter.format(date);
+}
+
+function buildProductDefaultsSummary(product: ProductInfo): string | null {
+  const parts: string[] = [];
+
+  if (product.default_variant_price) {
+    parts.push(`Precio: ${product.default_variant_price}`);
+  }
+
+  if (product.default_variant_stock_quantity != null) {
+    parts.push(`Stock: ${product.default_variant_stock_quantity}`);
+  }
+
+  if (product.default_variant_stock_status) {
+    parts.push(`Estado: ${product.default_variant_stock_status}`);
+  }
+
+  const startLabel = formatDateOnly(product.default_variant_start);
+  const endLabel = formatDateOnly(product.default_variant_end);
+
+  if (startLabel && endLabel) {
+    parts.push(`Fechas: ${startLabel} → ${endLabel}`);
+  } else if (startLabel) {
+    parts.push(`Fecha inicio: ${startLabel}`);
+  } else if (endLabel) {
+    parts.push(`Fecha fin: ${endLabel}`);
+  }
+
+  if (!parts.length) {
+    return null;
+  }
+
+  return parts.join(' · ');
 }
 
 async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
@@ -106,37 +179,52 @@ async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
 
   const products = Array.isArray(json.products) ? json.products : [];
 
-  return products.map((product) => ({
-    id: product.id,
-    id_woo: product.id_woo != null ? String(product.id_woo) : null,
-    name: product.name ?? null,
-    code: product.code ?? null,
-    category: product.category ?? null,
-    variants: Array.isArray(product.variants)
-      ? product.variants.map((variant) => {
-          const stockValue =
-            typeof variant.stock === 'number'
-              ? variant.stock
-              : variant.stock != null && !Number.isNaN(Number(variant.stock))
-                ? Number(variant.stock)
-                : null;
+  return products.map((product) => {
+    const defaultStockQuantity =
+      typeof (product as any).default_variant_stock_quantity === 'number'
+        ? (product as any).default_variant_stock_quantity
+        : (product as any).default_variant_stock_quantity != null &&
+            !Number.isNaN(Number((product as any).default_variant_stock_quantity))
+          ? Number((product as any).default_variant_stock_quantity)
+          : null;
 
-          return {
-            id: variant.id,
-            id_woo: String(variant.id_woo),
-            name: variant.name ?? null,
-            status: variant.status ?? null,
-            price: variant.price != null ? String(variant.price) : null,
-            stock: stockValue,
-            stock_status: variant.stock_status ?? null,
-            sede: variant.sede ?? null,
-            date: variant.date ?? null,
-            created_at: variant.created_at ?? null,
-            updated_at: variant.updated_at ?? null,
-          };
-        })
-      : [],
-  }));
+    return {
+      id: product.id,
+      id_woo: product.id_woo != null ? String(product.id_woo) : null,
+      name: product.name ?? null,
+      code: product.code ?? null,
+      category: product.category ?? null,
+      default_variant_start: product.default_variant_start ?? null,
+      default_variant_end: product.default_variant_end ?? null,
+      default_variant_stock_status: product.default_variant_stock_status ?? null,
+      default_variant_stock_quantity: defaultStockQuantity,
+      default_variant_price: product.default_variant_price != null ? String(product.default_variant_price) : null,
+      variants: Array.isArray(product.variants)
+        ? product.variants.map((variant) => {
+            const stockValue =
+              typeof variant.stock === 'number'
+                ? variant.stock
+                : variant.stock != null && !Number.isNaN(Number(variant.stock))
+                  ? Number(variant.stock)
+                  : null;
+
+            return {
+              id: variant.id,
+              id_woo: String(variant.id_woo),
+              name: variant.name ?? null,
+              status: variant.status ?? null,
+              price: variant.price != null ? String(variant.price) : null,
+              stock: stockValue,
+              stock_status: variant.stock_status ?? null,
+              sede: variant.sede ?? null,
+              date: variant.date ?? null,
+              created_at: variant.created_at ?? null,
+              updated_at: variant.updated_at ?? null,
+            };
+          })
+        : [],
+    };
+  });
 }
 
 async function deleteProductVariant(variantId: string): Promise<string | null> {
@@ -168,6 +256,107 @@ async function deleteProductVariant(variantId: string): Promise<string | null> {
   }
 
   return json.message ?? null;
+}
+
+async function updateProductVariantDefaults(
+  productId: string,
+  updates: ProductDefaultsUpdatePayload,
+): Promise<ProductDefaults> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/product-variant-settings`, {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ product_id: productId, ...updates }),
+    });
+  } catch (error) {
+    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
+  }
+
+  const text = await response.text();
+  let json: ProductDefaultsUpdateResponse = {};
+
+  if (text) {
+    try {
+      json = JSON.parse(text) as ProductDefaultsUpdateResponse;
+    } catch (error) {
+      console.error('[updateProductVariantDefaults] invalid JSON response', error);
+      json = {};
+    }
+  }
+
+  if (!response.ok || json.ok === false || !json.product) {
+    const message = json.message || 'No se pudo actualizar la configuración del producto.';
+    throw new ApiError('UPDATE_DEFAULTS_ERROR', message, response.status || undefined);
+  }
+
+  const stockQuantity =
+    typeof json.product.default_variant_stock_quantity === 'number'
+      ? json.product.default_variant_stock_quantity
+      : json.product.default_variant_stock_quantity != null &&
+          !Number.isNaN(Number(json.product.default_variant_stock_quantity))
+        ? Number(json.product.default_variant_stock_quantity)
+        : null;
+
+  return {
+    default_variant_start: json.product.default_variant_start ?? null,
+    default_variant_end: json.product.default_variant_end ?? null,
+    default_variant_stock_status: json.product.default_variant_stock_status ?? null,
+    default_variant_stock_quantity: stockQuantity,
+    default_variant_price:
+      json.product.default_variant_price != null ? String(json.product.default_variant_price) : null,
+  };
+}
+
+async function createProductVariantsForProduct(
+  productId: string,
+  sedes: string[],
+  dates: string[],
+): Promise<{ created: VariantInfo[]; skipped: number; message: string | null }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/product-variants-create`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ product_id: productId, sedes, dates }),
+    });
+  } catch (error) {
+    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
+  }
+
+  const text = await response.text();
+  let json: VariantBulkCreateResponse = {};
+
+  if (text) {
+    try {
+      json = JSON.parse(text) as VariantBulkCreateResponse;
+    } catch (error) {
+      console.error('[createProductVariantsForProduct] invalid JSON response', error);
+      json = {};
+    }
+  }
+
+  if (!response.ok || json.ok === false) {
+    const message = json.message || 'No se pudieron crear las variantes.';
+    throw new ApiError('CREATE_VARIANTS_ERROR', message, response.status || undefined);
+  }
+
+  const createdRaw = Array.isArray(json.created) ? json.created : [];
+  const created = createdRaw.map((item, index) =>
+    normalizeVariantFromResponse(item, `${productId}-new-${index}`),
+  );
+
+  return {
+    created,
+    skipped: typeof json.skipped === 'number' ? json.skipped : 0,
+    message: typeof json.message === 'string' ? json.message : null,
+  };
 }
 
 function normalizeVariantFromResponse(input: any, fallbackId: string): VariantInfo {
@@ -414,6 +603,430 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
     sede: variant.sede ?? '',
     date: formatDateForInputValue(variant.date),
   };
+}
+
+type ProductDefaultsFormValues = {
+  start_date: string;
+  end_date: string;
+  stock_status: string;
+  stock_quantity: string;
+  price: string;
+};
+
+function ProductDefaultsModal({
+  product,
+  onHide,
+  onSaved,
+}: {
+  product: ProductInfo | null;
+  onHide: () => void;
+  onSaved: (productId: string, defaults: ProductDefaults) => void;
+}) {
+  const [formValues, setFormValues] = useState<ProductDefaultsFormValues>({
+    start_date: '',
+    end_date: '',
+    stock_status: '',
+    stock_quantity: '',
+    price: '',
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!product) {
+      setFormValues({ start_date: '', end_date: '', stock_status: '', stock_quantity: '', price: '' });
+      setError(null);
+      setSuccess(null);
+      setIsSaving(false);
+      return;
+    }
+
+    setFormValues({
+      start_date: formatDateForInputValue(product.default_variant_start),
+      end_date: formatDateForInputValue(product.default_variant_end),
+      stock_status: product.default_variant_stock_status ?? '',
+      stock_quantity:
+        product.default_variant_stock_quantity != null
+          ? String(product.default_variant_stock_quantity)
+          : '',
+      price: product.default_variant_price ?? '',
+    });
+    setError(null);
+    setSuccess(null);
+    setIsSaving(false);
+  }, [product]);
+
+  const handleChange = (field: keyof ProductDefaultsFormValues) =>
+    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const value = event.target.value;
+      setFormValues((prev) => ({ ...prev, [field]: value }));
+      setSuccess(null);
+    };
+
+  const handleSave = async () => {
+    if (!product) return;
+    if (isSaving) return;
+
+    let stockQuantityValue: number | null = null;
+    const stockQuantityText = formValues.stock_quantity.trim();
+    if (stockQuantityText) {
+      const parsed = Number(stockQuantityText);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        setError('La cantidad de stock debe ser un número positivo.');
+        return;
+      }
+      stockQuantityValue = Math.floor(parsed);
+    }
+
+    const payload: ProductDefaultsUpdatePayload = {
+      start_date: formValues.start_date || null,
+      end_date: formValues.end_date || null,
+      stock_status: formValues.stock_status || null,
+      stock_quantity: stockQuantityValue,
+      price: formValues.price.trim() ? formValues.price.trim() : null,
+    };
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const defaults = await updateProductVariantDefaults(product.id, payload);
+      onSaved(product.id, defaults);
+      setFormValues({
+        start_date: formatDateForInputValue(defaults.default_variant_start),
+        end_date: formatDateForInputValue(defaults.default_variant_end),
+        stock_status: defaults.default_variant_stock_status ?? '',
+        stock_quantity:
+          defaults.default_variant_stock_quantity != null
+            ? String(defaults.default_variant_stock_quantity)
+            : '',
+        price: defaults.default_variant_price ?? '',
+      });
+      setSuccess('Configuración guardada correctamente.');
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : 'No se pudo guardar la configuración del producto.';
+      setError(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAttemptClose = () => {
+    if (isSaving) return;
+    onHide();
+  };
+
+  return (
+    <Modal show={!!product} onHide={handleAttemptClose} centered backdrop={isSaving ? 'static' : true}>
+      <Modal.Header closeButton={!isSaving} closeLabel="Cerrar">
+        <Modal.Title>Configurar producto</Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="d-flex flex-column gap-3">
+        {error && (
+          <Alert variant="danger" className="mb-0">
+            {error}
+          </Alert>
+        )}
+        {success && (
+          <Alert variant="success" className="mb-0">
+            {success}
+          </Alert>
+        )}
+        <Form.Group controlId="product-default-start-date">
+          <Form.Label>Fecha de inicio por defecto</Form.Label>
+          <Form.Control
+            type="date"
+            value={formValues.start_date}
+            onChange={handleChange('start_date')}
+            disabled={isSaving}
+          />
+        </Form.Group>
+        <Form.Group controlId="product-default-end-date">
+          <Form.Label>Fecha de fin por defecto</Form.Label>
+          <Form.Control
+            type="date"
+            value={formValues.end_date}
+            onChange={handleChange('end_date')}
+            disabled={isSaving}
+          />
+        </Form.Group>
+        <Form.Group controlId="product-default-price">
+          <Form.Label>Precio por defecto</Form.Label>
+          <Form.Control
+            type="number"
+            step="0.01"
+            min="0"
+            value={formValues.price}
+            onChange={handleChange('price')}
+            placeholder="Ej. 120"
+            disabled={isSaving}
+          />
+        </Form.Group>
+        <Form.Group controlId="product-default-stock-quantity">
+          <Form.Label>Cantidad de stock por defecto</Form.Label>
+          <Form.Control
+            type="number"
+            min="0"
+            step="1"
+            value={formValues.stock_quantity}
+            onChange={handleChange('stock_quantity')}
+            placeholder="Ej. 10"
+            disabled={isSaving}
+          />
+          <Form.Text className="text-muted">Déjalo vacío para no gestionar stock.</Form.Text>
+        </Form.Group>
+        <Form.Group controlId="product-default-stock-status">
+          <Form.Label>Estado de stock por defecto</Form.Label>
+          <Form.Select
+            value={formValues.stock_status}
+            onChange={handleChange('stock_status')}
+            disabled={isSaving}
+          >
+            <option value="">— Sin valor —</option>
+            <option value="instock">En stock</option>
+            <option value="outofstock">Sin stock</option>
+            <option value="onbackorder">Reservar por adelantado</option>
+          </Form.Select>
+        </Form.Group>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
+          Cancelar
+        </Button>
+        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Spinner
+                as="span"
+                animation="border"
+                size="sm"
+                role="status"
+                aria-hidden="true"
+                className="me-2"
+              />
+              Guardando…
+            </>
+          ) : (
+            'Guardar'
+          )}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
+function VariantCreationModal({
+  product,
+  onHide,
+  onVariantsCreated,
+}: {
+  product: ProductInfo | null;
+  onHide: () => void;
+  onVariantsCreated: (
+    productId: string,
+    result: { created: VariantInfo[]; skipped: number; message: string | null },
+  ) => void;
+}) {
+  const [sedesInput, setSedesInput] = useState('');
+  const [datesInput, setDatesInput] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!product) {
+      setSedesInput('');
+      setDatesInput('');
+      setError(null);
+      setSuccess(null);
+      setIsSaving(false);
+      return;
+    }
+
+    setSedesInput('');
+    setDatesInput('');
+    setError(null);
+    setSuccess(null);
+    setIsSaving(false);
+  }, [product]);
+
+  const parseSedesInput = (value: string): string[] => {
+    return value
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .filter((item, index, array) => array.findIndex((current) => current.toLowerCase() === item.toLowerCase()) === index);
+  };
+
+  const parseDatesInput = (value: string): { values: string[]; invalid: string | null } => {
+    const raw = value.split(',');
+    const seen = new Set<string>();
+    const values: string[] = [];
+
+    for (const chunk of raw) {
+      const trimmed = chunk.trim();
+      if (!trimmed) continue;
+      const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (!match) {
+        return { values: [], invalid: trimmed };
+      }
+      const day = match[1].padStart(2, '0');
+      const month = match[2].padStart(2, '0');
+      const year = match[3];
+      const normalized = `${day}/${month}/${year}`;
+      if (seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      values.push(normalized);
+    }
+
+    return { values, invalid: null };
+  };
+
+  const handleSave = async () => {
+    if (!product) return;
+    if (isSaving) return;
+
+    const sedes = parseSedesInput(sedesInput);
+    const { values: dates, invalid } = parseDatesInput(datesInput);
+
+    if (!sedes.length) {
+      setError('Debes indicar al menos una sede.');
+      return;
+    }
+
+    if (invalid) {
+      setError(`Formato de fecha inválido: ${invalid}`);
+      return;
+    }
+
+    if (!dates.length) {
+      setError('Debes indicar al menos una fecha.');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const result = await createProductVariantsForProduct(product.id, sedes, dates);
+      onVariantsCreated(product.id, result);
+
+      const createdMessage = `Se crearon ${result.created.length} variantes.`;
+      const skippedMessage = result.skipped
+        ? ` ${result.skipped} combinaciones ya existían.`
+        : '';
+
+      setSuccess(result.message ?? `${createdMessage}${skippedMessage}`);
+
+      if (result.created.length) {
+        setSedesInput('');
+        setDatesInput('');
+      }
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : 'No se pudieron crear las variantes.';
+      setError(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAttemptClose = () => {
+    if (isSaving) return;
+    onHide();
+  };
+
+  const sedesPreview = parseSedesInput(sedesInput);
+  const { values: datesPreview, invalid: invalidDatePreview } = parseDatesInput(datesInput);
+  const combinationsPreview = invalidDatePreview ? 0 : sedesPreview.length * datesPreview.length;
+
+  return (
+    <Modal show={!!product} onHide={handleAttemptClose} centered backdrop={isSaving ? 'static' : true}>
+      <Modal.Header closeButton={!isSaving} closeLabel="Cerrar">
+        <Modal.Title>Añadir variantes</Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="d-flex flex-column gap-3">
+        {error && (
+          <Alert variant="danger" className="mb-0">
+            {error}
+          </Alert>
+        )}
+        {success && (
+          <Alert variant="success" className="mb-0">
+            {success}
+          </Alert>
+        )}
+        <Form.Group controlId="variant-create-sedes">
+          <Form.Label>Sedes</Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={3}
+            value={sedesInput}
+            onChange={(event) => {
+              setSedesInput(event.target.value);
+              setSuccess(null);
+            }}
+            placeholder="Introduce una sede por línea o separadas por comas"
+            disabled={isSaving}
+          />
+          <Form.Text className="text-muted">
+            Se ignorarán las sedes duplicadas automáticamente.
+          </Form.Text>
+        </Form.Group>
+        <Form.Group controlId="variant-create-dates">
+          <Form.Label>Fechas</Form.Label>
+          <Form.Control
+            value={datesInput}
+            onChange={(event) => {
+              setDatesInput(event.target.value);
+              setSuccess(null);
+            }}
+            placeholder="dd/mm/aaaa, dd/mm/aaaa"
+            disabled={isSaving}
+          />
+          <Form.Text className="text-muted">
+            Usa el formato dd/mm/aaaa y separa las fechas con comas.
+          </Form.Text>
+        </Form.Group>
+        {invalidDatePreview ? (
+          <div className="text-danger small">Formato de fecha inválido detectado: {invalidDatePreview}</div>
+        ) : null}
+        {combinationsPreview > 0 ? (
+          <div className="text-muted small">
+            Se crearán hasta {combinationsPreview} variantes nuevas (combinaciones de sede y fecha).
+          </div>
+        ) : null}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
+          Cancelar
+        </Button>
+        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Spinner
+                as="span"
+                animation="border"
+                size="sm"
+                role="status"
+                aria-hidden="true"
+                className="me-2"
+              />
+              Creando…
+            </>
+          ) : (
+            'Crear variantes'
+          )}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
 }
 
 function VariantModal({
@@ -786,7 +1399,11 @@ export default function ProductVariantsList() {
   const [products, setProducts] = useState<ProductInfo[]>([]);
   const [activeVariant, setActiveVariant] = useState<ActiveVariant | null>(null);
   const [pendingDeletes, setPendingDeletes] = useState<Record<string, boolean>>({});
-  const [feedback, setFeedback] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<
+    { tone: 'success' | 'danger' | 'info'; text: string } | null
+  >(null);
+  const [activeProductConfig, setActiveProductConfig] = useState<ProductInfo | null>(null);
+  const [activeVariantCreator, setActiveVariantCreator] = useState<ProductInfo | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -832,6 +1449,74 @@ export default function ProductVariantsList() {
       }
       return next;
     });
+  };
+
+  const handleOpenProductConfig = (product: ProductInfo) => {
+    setActiveProductConfig(product);
+  };
+
+  const handleProductDefaultsSaved = (productId: string, defaults: ProductDefaults) => {
+    setProducts((prev) =>
+      prev.map((product) => (product.id === productId ? { ...product, ...defaults } : product)),
+    );
+
+    setActiveProductConfig((prev) =>
+      prev && prev.id === productId ? { ...prev, ...defaults } : prev,
+    );
+
+    setFeedback({
+      tone: 'success',
+      text: 'Configuración del producto guardada correctamente.',
+    });
+  };
+
+  const handleCloseProductConfig = () => {
+    setActiveProductConfig(null);
+  };
+
+  const handleOpenVariantCreator = (product: ProductInfo) => {
+    setActiveVariantCreator(product);
+  };
+
+  const handleCloseVariantCreator = () => {
+    setActiveVariantCreator(null);
+  };
+
+  const handleVariantsCreated = (
+    productId: string,
+    result: { created: VariantInfo[]; skipped: number; message: string | null },
+  ) => {
+    if (result.created.length) {
+      setProducts((prev) =>
+        prev.map((product) =>
+          product.id === productId
+            ? { ...product, variants: [...product.variants, ...result.created].sort(compareVariants) }
+            : product,
+        ),
+      );
+    }
+
+    setActiveVariantCreator((prev) =>
+      prev && prev.id === productId
+        ? { ...prev, variants: [...prev.variants, ...result.created].sort(compareVariants) }
+        : prev,
+    );
+
+    if (result.created.length) {
+      setFeedback({
+        tone: 'success',
+        text:
+          result.message ??
+          `Se añadieron ${result.created.length} variantes nuevas.${
+            result.skipped ? ` ${result.skipped} combinaciones ya existían.` : ''
+          }`,
+      });
+    } else if (result.skipped) {
+      setFeedback({
+        tone: 'info',
+        text: result.message ?? 'Las combinaciones indicadas ya existen.',
+      });
+    }
   };
 
   const handleDeleteVariant = async (product: ProductInfo, variant: VariantInfo) => {
@@ -944,17 +1629,50 @@ export default function ProductVariantsList() {
           {!isLoading && !error ? (
             products.length > 0 ? (
               <Accordion alwaysOpen>
-                {products.map((product) => (
-                  <Accordion.Item eventKey={product.id} key={product.id}>
-                    <Accordion.Header>
-                      <div className="d-flex flex-column">
-                        <span className="fw-semibold">{product.name ?? 'Producto sin nombre'}</span>
-                        <small className="text-muted">ID Woo: {product.id_woo ?? '—'}</small>
-                      </div>
-                    </Accordion.Header>
-                    <Accordion.Body>
-                      {product.variants.length > 0 ? (
-                        <ListGroup>
+                {products.map((product) => {
+                  const defaultsSummary = buildProductDefaultsSummary(product);
+
+                  return (
+                    <Accordion.Item eventKey={product.id} key={product.id}>
+                      <Accordion.Header>
+                        <div className="d-flex flex-column">
+                          <span className="fw-semibold">{product.name ?? 'Producto sin nombre'}</span>
+                          <small className="text-muted">ID Woo: {product.id_woo ?? '—'}</small>
+                        </div>
+                      </Accordion.Header>
+                      <Accordion.Body>
+                        <Stack direction="horizontal" gap={2} className="flex-wrap mb-3">
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              handleOpenProductConfig(product);
+                            }}
+                          >
+                            Configurar producto
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              handleOpenVariantCreator(product);
+                            }}
+                          >
+                            Añadir variantes
+                          </Button>
+                        </Stack>
+
+                        {defaultsSummary ? (
+                          <div className="text-muted small mb-3">
+                            Configuración por defecto: {defaultsSummary}
+                          </div>
+                        ) : null}
+
+                        {product.variants.length > 0 ? (
+                          <ListGroup>
                           {[...product.variants].sort(compareVariants).map((variant) => {
                             const isDeleting = !!pendingDeletes[variant.id];
 
@@ -1017,7 +1735,8 @@ export default function ProductVariantsList() {
                       )}
                     </Accordion.Body>
                   </Accordion.Item>
-                ))}
+                  );
+                })}
               </Accordion>
             ) : (
               <p className="text-muted small mb-0">No hay productos con variantes sincronizadas.</p>
@@ -1030,6 +1749,16 @@ export default function ProductVariantsList() {
         active={activeVariant}
         onHide={handleCloseModal}
         onVariantUpdated={handleVariantUpdated}
+      />
+      <ProductDefaultsModal
+        product={activeProductConfig}
+        onHide={handleCloseProductConfig}
+        onSaved={handleProductDefaultsSaved}
+      />
+      <VariantCreationModal
+        product={activeVariantCreator}
+        onHide={handleCloseVariantCreator}
+        onVariantsCreated={handleVariantsCreated}
       />
     </>
   );
