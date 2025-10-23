@@ -338,6 +338,7 @@ async function deleteVariantFromWooCommerce(
 type VariantRecord = {
   id: string;
   id_woo: bigint;
+  id_padre: bigint;
   name: string | null;
   status: string | null;
   price: Prisma.Decimal | string | null;
@@ -423,6 +424,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
     select: {
       id: true,
       id_woo: true,
+      id_padre: true,
       name: true,
       status: true,
       price: true,
@@ -522,6 +524,7 @@ function normalizeVariant(record: VariantRecord) {
   return {
     id: record.id,
     id_woo: record.id_woo?.toString(),
+    id_padre: record.id_padre?.toString(),
     name: record.name ?? null,
     status: record.status ?? null,
     price,
@@ -743,6 +746,7 @@ export const handler = async (event: any) => {
         select: {
           id: true,
           id_woo: true,
+          id_padre: true,
           name: true,
           status: true,
           price: true,
