@@ -105,8 +105,8 @@ model products {
   type          String?
   template      String?
   url_formacion String?
-  hora_inicio   String?  @db.VarChar(10)
-  hora_fin      String?  @db.VarChar(10)
+  hora_inicio   DateTime? @db.Time(6)
+  hora_fin      DateTime? @db.Time(6)
   active        Boolean  @default(true)
   created_at    DateTime @default(now()) @db.Timestamptz(6)
   updated_at    DateTime @default(now()) @db.Timestamptz(6)
