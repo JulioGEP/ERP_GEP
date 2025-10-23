@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, MouseEvent, useEffect, useRef, useState } from 'react';
 import {
   Accordion,
   Alert,
@@ -1468,6 +1468,14 @@ function VariantModal({
     setSelectedDealId(rawId);
   };
 
+  const handleDealClick =
+    (deal: DealTag) =>
+    (event: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      handleOpenDealModal(deal);
+    };
+
   const handleCloseDealModal = () => {
     setSelectedDealId(null);
     setSelectedDealSummary(null);
@@ -1638,7 +1646,7 @@ function VariantModal({
                             <ListGroup.Item
                               action
                               key={deal.deal_id}
-                              onClick={() => handleOpenDealModal(deal)}
+                              onClick={handleDealClick(deal)}
                               className="d-flex justify-content-between align-items-center"
                             >
                               <span className="fw-semibold">{dealTitle}</span>
