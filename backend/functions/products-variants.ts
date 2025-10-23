@@ -76,7 +76,7 @@ type VariantUpdateInput = {
 };
 
 async function fetchWooVariation(
-  productWooId: bigint | string,
+  productWooId: bigint,
   variantWooId: bigint,
   authToken: string,
 ): Promise<{ attributes: WooVariationAttribute[] }> {
@@ -132,7 +132,7 @@ async function fetchWooVariation(
 }
 
 async function updateVariantInWooCommerce(
-  productWooId: bigint | string,
+  productWooId: bigint,
   variantWooId: bigint,
   updates: VariantUpdateInput,
 ): Promise<void> {
@@ -273,7 +273,7 @@ async function updateVariantInWooCommerce(
 }
 
 async function deleteVariantFromWooCommerce(
-  productWooId: bigint | string,
+  productWooId: bigint,
   variantWooId: bigint,
 ): Promise<VariantDeletionResult> {
   ensureWooConfigured();
@@ -350,7 +350,7 @@ type VariantRecord = {
 
 type ProductRecord = {
   id: string;
-  id_woo: bigint | string | null;
+  id_woo: bigint | null;
   name: string | null;
   code: string | null;
   category: string | null;
@@ -376,37 +376,6 @@ const PRODUCT_DEFAULT_COLUMN_PATTERNS = [
   /variant_(start|end|stock_status|stock_quantity|price)/i,
 ];
 
-function extractErrorMessages(error: unknown): string[] {
-  if (!error || typeof error !== 'object') {
-    return error == null ? [] : [String(error)];
-  }
-
-  const messages: string[] = [];
-
-  if (typeof (error as { message?: unknown }).message === 'string') {
-    messages.push((error as { message: string }).message);
-  }
-
-  const meta = (error as { meta?: unknown }).meta;
-  if (meta && typeof meta === 'object') {
-    const metaValues = meta as Record<string, unknown>;
-    const possibleKeys = ['cause', 'message'];
-
-    for (const key of possibleKeys) {
-      const value = metaValues[key];
-      if (typeof value === 'string') {
-        messages.push(value);
-      }
-    }
-  }
-
-  if (!messages.length) {
-    messages.push(String(error));
-  }
-
-  return messages;
-}
-
 function isPrismaErrorInstance(
   error: unknown,
   ctor: unknown,
@@ -424,20 +393,18 @@ function isPrismaErrorInstance(
 
 function isMissingProductDefaultColumns(error: unknown): boolean {
   if (isPrismaErrorInstance(error, Prisma.PrismaClientKnownRequestError)) {
-    if ((error as Prisma.PrismaClientKnownRequestError).code === 'P2021') {
-      return true;
-    }
+    return (error as Prisma.PrismaClientKnownRequestError).code === 'P2021';
   }
 
   if (isPrismaErrorInstance(error, Prisma.PrismaClientUnknownRequestError)) {
-    return extractErrorMessages(error).some((message) =>
-      PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test(message)),
-    );
+    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test((error as Error).message));
   }
 
-  return extractErrorMessages(error).some((message) =>
-    PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test(message)),
-  );
+  if (error instanceof Error) {
+    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test(error.message));
+  }
+
+  return false;
 }
 
 async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
