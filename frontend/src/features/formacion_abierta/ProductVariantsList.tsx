@@ -1,4 +1,4 @@
-import { ChangeEvent, MouseEvent, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Accordion,
   Alert,
@@ -118,6 +118,8 @@ type DealsByVariationResponse = {
     deal_id?: string | null;
     title?: string | null;
     products?: unknown;
+    students_count?: unknown;
+    _count?: { alumnos?: unknown };
   }>;
   message?: string;
 };
@@ -128,6 +130,7 @@ type DealTag = {
   products: DealProductInfo[];
   w_id_variation: string | null;
   a_fecha: string | null;
+  students_count: number;
 };
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', {
@@ -540,6 +543,26 @@ function normalizeDealProducts(raw: unknown): DealProductInfo[] {
   return products;
 }
 
+function normalizeDealStudentsCount(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value < 0 ? 0 : value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) {
+      return 0;
+    }
+
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) {
+      return parsed < 0 ? 0 : parsed;
+    }
+  }
+
+  return 0;
+}
+
 function findDealProductPriceForProduct(deals: DealTag[], product: ProductInfo): string | null {
   const normalizedName = product.name?.trim().toLowerCase() ?? null;
   const normalizedCode = product.code?.trim().toLowerCase() ?? null;
@@ -606,6 +629,8 @@ async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]>
       const rawDealId = deal?.deal_id != null ? String(deal.deal_id) : '';
       const rawVariation = (deal as any)?.w_id_variation;
       const rawDate = (deal as any)?.a_fecha;
+      const rawStudentsCount =
+        (deal as any)?.students_count ?? (deal as any)?._count?.alumnos ?? null;
 
       const wIdVariation =
         typeof rawVariation === 'string'
@@ -621,6 +646,8 @@ async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]>
           ? String(rawDate)
           : null;
 
+      const studentsCount = normalizeDealStudentsCount(rawStudentsCount);
+
       return {
         deal_id: rawDealId,
         title: deal?.title ?? '',
@@ -629,6 +656,7 @@ async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]>
         ),
         w_id_variation: wIdVariation,
         a_fecha: trainingDate,
+        students_count: studentsCount,
       };
     })
     .filter((deal): deal is DealTag => Boolean(deal.deal_id) && Boolean(deal.title));
@@ -1417,6 +1445,15 @@ function VariantModal({
   const [isDealsLoading, setIsDealsLoading] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDealSummary, setSelectedDealSummary] = useState<DealSummary | null>(null);
+  const totalDealStudents = useMemo(
+    () => deals.reduce((sum, deal) => sum + deal.students_count, 0),
+    [deals],
+  );
+  const totalDealStudentsDisplay = isDealsLoading
+    ? 'Cargando…'
+    : dealsError
+    ? 'No disponible'
+    : String(totalDealStudents);
 
   const productHeaderLabel = (() => {
     const rawName = product?.name ?? '';
@@ -1711,6 +1748,9 @@ function VariantModal({
               <p className="text-uppercase text-muted small fw-semibold mb-1">Producto</p>
               <div className="fw-semibold">{product.name ?? 'Producto sin nombre'}</div>
               <div className="text-muted small">ID Woo: {product.id_woo ?? '—'}</div>
+              <div className="text-muted small">
+                Alumnos en deals: {totalDealStudentsDisplay}
+              </div>
             </div>
 
             {saveError && <Alert variant="danger" className="mb-0">{saveError}</Alert>}
