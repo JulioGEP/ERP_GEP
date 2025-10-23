@@ -784,11 +784,32 @@ export const handler = async (event: any) => {
             },
             orderBy: { created_at: "asc" },
           },
+          _count: {
+            select: {
+              alumnos: true,
+            },
+          },
         },
         orderBy: { created_at: "desc" },
       });
 
-      const deals = rowsRaw.map((row: any) => mapDealForApi(row));
+      const deals = rowsRaw.map((row: any) => {
+        const mapped = mapDealForApi(row);
+        if (!mapped) return mapped;
+
+        const studentsCountRaw = row?._count?.alumnos;
+        const studentsCount =
+          typeof studentsCountRaw === "number" && Number.isFinite(studentsCountRaw)
+            ? studentsCountRaw
+            : 0;
+
+        const result: any = { ...mapped, students_count: studentsCount };
+        if ("_count" in result) {
+          delete result._count;
+        }
+
+        return result;
+      });
       return successResponse({ deals });
     }
 
