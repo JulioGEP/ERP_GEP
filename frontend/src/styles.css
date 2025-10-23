@@ -270,6 +270,20 @@ body {
   font-weight: 400;
 }
 
+.variant-detail-modal-header {
+  background-color: var(--color-red);
+  color: #ffffff;
+}
+
+.variant-detail-modal-header .modal-title {
+  color: inherit;
+}
+
+.variant-detail-modal-header .btn-close {
+  filter: invert(1);
+  opacity: 1;
+}
+
 .session-editor {
   background-color: #ffffff;
   border-radius: 14px;

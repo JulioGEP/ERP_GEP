@@ -1464,11 +1464,11 @@ function VariantModal({
       backdrop={isSaving ? 'static' : true}
       keyboard={!isSaving}
     >
-      <Modal.Header closeButton>
+      <Modal.Header closeButton className="variant-detail-modal-header">
         <div className="d-flex flex-column">
-          <Modal.Title className="mb-1">Detalle de la variante</Modal.Title>
+          <Modal.Title className="mb-1 text-white">Detalle de la variante</Modal.Title>
           {variant ? (
-            <div className="text-muted small">ID Woo: {variant.id_woo ?? '—'}</div>
+            <div className="text-white small">ID Woo: {variant.id_woo ?? '—'}</div>
           ) : null}
         </div>
       </Modal.Header>
