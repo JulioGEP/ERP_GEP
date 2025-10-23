@@ -2100,6 +2100,10 @@ export default function ProductVariantsList() {
                             const wooId = typeof variant.id_woo === 'string' ? variant.id_woo.trim() : '';
                             const leadsCount = wooId ? variantLeadCounts[wooId] ?? 0 : null;
                             const isLeadCountLoading = wooId ? !!variantLeadCountsLoading[wooId] : false;
+                            const budgetsBadgeBg =
+                              !isLeadCountLoading && typeof leadsCount === 'number' && leadsCount > 0
+                                ? 'primary'
+                                : 'light';
 
                             return (
                               <ListGroup.Item
@@ -2116,8 +2120,8 @@ export default function ProductVariantsList() {
                                   <Stack direction="horizontal" gap={2} className="flex-wrap">
                                     {wooId ? (
                                       <Badge
-                                        bg="light"
-                                        text="dark"
+                                        bg={budgetsBadgeBg}
+                                        text={budgetsBadgeBg === 'light' ? 'dark' : undefined}
                                         className="d-inline-flex align-items-center gap-2"
                                         title={`Presupuestos asociados: ${isLeadCountLoading ? 'cargando…' : leadsCount}`}
                                       >
