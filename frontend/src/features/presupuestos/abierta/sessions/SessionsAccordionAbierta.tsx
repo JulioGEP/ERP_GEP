@@ -26,7 +26,7 @@ import {
   Table,
 } from 'react-bootstrap';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DealProduct } from '../../../../types/deal';
+import type { DealDetail, DealProduct } from '../../../../types/deal';
 import {
   SessionDTO,
   SessionGroupDTO,
@@ -58,6 +58,8 @@ import {
   SESSION_DOCUMENT_SIZE_LIMIT_BYTES,
   SESSION_DOCUMENT_SIZE_LIMIT_LABEL,
   SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE,
+  patchDealEditable,
+  fetchProductVariants,
   type TrainerOption,
   type RoomOption,
   type MobileUnitOption,
@@ -66,6 +68,7 @@ import {
   type SessionDocument,
   type SessionStudent,
   type SessionCounts,
+  type ProductVariantOption,
 } from '../../api';
 import { isApiError } from '../../api';
 import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
@@ -1581,6 +1584,12 @@ type SaveStatus = {
   savedAt?: number;
 };
 
+type DealVariantSelectOption = {
+  value: string;
+  label: string;
+  date: string | null;
+};
+
 function isApplicableProduct(product: DealProduct): product is DealProduct & { id: string } {
   const code = typeof product?.code === 'string' ? product.code.toLowerCase() : '';
   const id = product?.id;
@@ -1725,6 +1734,198 @@ export function SessionsAccordionAbierta({
   );
 
   const shouldShow = applicableProducts.length > 0;
+
+  const [currentDealVariation, setCurrentDealVariation] = useState<string | null>(dealVariation ?? null);
+  const [currentDealTrainingDate, setCurrentDealTrainingDate] = useState<string | null>(
+    dealTrainingDate ?? null,
+  );
+
+  useEffect(() => {
+    setCurrentDealVariation(dealVariation ?? null);
+  }, [dealVariation]);
+
+  useEffect(() => {
+    setCurrentDealTrainingDate(dealTrainingDate ?? null);
+  }, [dealTrainingDate]);
+
+  const variantProductIds = useMemo(
+    () => Array.from(new Set(applicableProducts.map((product) => product.id))),
+    [applicableProducts],
+  );
+
+  const variantProductKey = useMemo(
+    () =>
+      variantProductIds
+        .slice()
+        .sort((a, b) => a.localeCompare(b, 'es'))
+        .join('|'),
+    [variantProductIds],
+  );
+
+  const variantDateFormatter = useMemo(() => new Intl.DateTimeFormat('es-ES'), []);
+
+  const productVariantsQuery = useQuery({
+    queryKey: ['deal', dealId, 'product-variants', variantProductKey],
+    queryFn: () => fetchProductVariants({ productIds: variantProductIds }),
+    enabled: variantProductIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const productVariants = productVariantsQuery.data ?? [];
+
+  const variantLookup = useMemo(() => {
+    const map = new Map<string, ProductVariantOption>();
+    for (const variant of productVariants) {
+      map.set(variant.variantId, variant);
+      if (variant.wooId) {
+        map.set(variant.wooId, variant);
+      }
+    }
+    return map;
+  }, [productVariants]);
+
+  const normalizedCurrentVariation = useMemo(
+    () => (typeof currentDealVariation === 'string' ? currentDealVariation.trim() : ''),
+    [currentDealVariation],
+  );
+
+  const currentVariantInfo = useMemo(() => {
+    if (!normalizedCurrentVariation) return null;
+    return variantLookup.get(normalizedCurrentVariation) ?? null;
+  }, [normalizedCurrentVariation, variantLookup]);
+
+  const currentVariantName = useMemo(() => {
+    const label = currentVariantInfo?.name?.trim() ?? '';
+    return label.length ? label : null;
+  }, [currentVariantInfo]);
+
+  const activeVariantProductId = useMemo(() => {
+    if (currentVariantInfo?.productId) return currentVariantInfo.productId;
+    return variantProductIds.length === 1 ? variantProductIds[0] : null;
+  }, [currentVariantInfo, variantProductIds]);
+
+  const includeProductInVariantLabel = variantProductIds.length > 1;
+
+  const variantSelectOptions = useMemo(() => {
+    if (!activeVariantProductId) return [] as DealVariantSelectOption[];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const options: Array<{ option: DealVariantSelectOption; sortKey: number }> = [];
+
+    for (const variant of productVariants) {
+      if (variant.productId !== activeVariantProductId) continue;
+      if (!variant.wooId) continue;
+
+      const rawDate = typeof variant.date === 'string' ? variant.date.trim() : '';
+      if (!rawDate) continue;
+
+      const parsedDate = new Date(rawDate);
+      const timestamp = parsedDate.getTime();
+      if (!Number.isFinite(timestamp)) continue;
+      if (!(timestamp > today.getTime())) continue;
+
+      const dateLabel = variantDateFormatter.format(parsedDate);
+      const baseName = variant.name?.trim() || `Variante ${variant.wooId}`;
+      const labelParts: string[] = [baseName];
+
+      if (!baseName.includes(dateLabel)) {
+        labelParts.push(dateLabel);
+      }
+
+      if (includeProductInVariantLabel) {
+        const productLabel =
+          variant.productName?.trim() || variant.productCode?.trim() || variant.productId;
+        if (productLabel && !labelParts.includes(productLabel)) {
+          labelParts.push(productLabel);
+        }
+      }
+
+      options.push({
+        option: { value: variant.wooId, label: labelParts.join(' · '), date: variant.date ?? null },
+        sortKey: timestamp,
+      });
+    }
+
+    return options
+      .sort((a, b) => {
+        if (a.sortKey !== b.sortKey) {
+          return a.sortKey - b.sortKey;
+        }
+        return a.option.label.localeCompare(b.option.label, 'es');
+      })
+      .map((entry) => entry.option);
+  }, [
+    activeVariantProductId,
+    includeProductInVariantLabel,
+    productVariants,
+    variantDateFormatter,
+  ]);
+
+  const variantOptionsLoading = productVariantsQuery.isLoading || productVariantsQuery.isFetching;
+  const [variantSaving, setVariantSaving] = useState(false);
+
+  const handleVariantSelect = useCallback(
+    async (nextWooId: string) => {
+      const normalizedNext = typeof nextWooId === 'string' ? nextWooId.trim() : '';
+      if (!normalizedNext) return false;
+
+      const currentNormalized = normalizedCurrentVariation;
+      if (currentNormalized && normalizedNext === currentNormalized) {
+        onNotify?.({ variant: 'info', message: 'La variante seleccionada ya está asignada.' });
+        return true;
+      }
+
+      if (!dealId) {
+        onNotify?.({ variant: 'danger', message: 'No se pudo determinar el presupuesto.' });
+        return false;
+      }
+
+      const variantInfo = variantLookup.get(normalizedNext);
+      if (!variantInfo) {
+        onNotify?.({ variant: 'danger', message: 'No se encontró la variante seleccionada.' });
+        return false;
+      }
+
+      setVariantSaving(true);
+      try {
+        await patchDealEditable(dealId, {
+          w_id_variation: normalizedNext,
+          a_fecha: variantInfo.date ?? null,
+        });
+
+        setCurrentDealVariation(normalizedNext);
+        setCurrentDealTrainingDate(variantInfo.date ?? null);
+
+        qc.setQueryData<DealDetail | undefined>(['deal', dealId], (current) => {
+          if (!current) return current;
+          return { ...current, w_id_variation: normalizedNext, a_fecha: variantInfo.date ?? null };
+        });
+
+        void qc.invalidateQueries({ queryKey: ['deal', dealId] });
+
+        onNotify?.({ variant: 'success', message: 'Variante actualizada correctamente' });
+        return true;
+      } catch (error) {
+        const message = isApiError(error)
+          ? error.message
+          : error instanceof Error
+          ? error.message
+          : 'No se pudo actualizar la variante';
+        onNotify?.({ variant: 'danger', message });
+        return false;
+      } finally {
+        setVariantSaving(false);
+      }
+    },
+    [
+      normalizedCurrentVariation,
+      onNotify,
+      dealId,
+      variantLookup,
+      qc,
+    ],
+  );
 
   const generationKey = useMemo(
     () =>
@@ -2566,8 +2767,13 @@ export function SessionsAccordionAbierta({
                   onSave={(options) => handleSaveSession(activeSession.sessionId, options)}
                   dealId={dealId}
                   dealSede={normalizedDealSede}
-                  dealTrainingDate={dealTrainingDate}
-                  dealVariation={dealVariation}
+                  dealTrainingDate={currentDealTrainingDate}
+                  dealVariation={currentDealVariation}
+                  dealVariationName={currentVariantName}
+                  variantOptions={variantSelectOptions}
+                  variantOptionsLoading={variantOptionsLoading}
+                  variantSaving={variantSaving}
+                  onVariantSelect={handleVariantSelect}
                   onNotify={onNotify}
                 />
               ) : (
@@ -2614,6 +2820,11 @@ interface SessionEditorProps {
   dealSede: string | null;
   dealTrainingDate: string | null;
   dealVariation: string | null;
+  dealVariationName: string | null;
+  variantOptions: DealVariantSelectOption[];
+  variantOptionsLoading?: boolean;
+  variantSaving?: boolean;
+  onVariantSelect?: (variantWooId: string) => Promise<boolean>;
   onNotify?: (toast: ToastParams) => void;
 }
 
@@ -2630,12 +2841,18 @@ function SessionEditor({
   dealSede,
   dealTrainingDate,
   dealVariation,
+  dealVariationName,
+  variantOptions,
+  variantOptionsLoading,
+  variantSaving,
+  onVariantSelect,
   onNotify,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
   const [trainerListOpen, setTrainerListOpen] = useState(false);
   const [unitListOpen, setUnitListOpen] = useState(false);
+  const [variantSelection, setVariantSelection] = useState('');
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const trainerPointerInteractingRef = useRef(false);
@@ -2701,15 +2918,23 @@ function SessionEditor({
   }, [blockedRooms, form.sala_id, isInCompany, rooms]);
 
   const variationDisplay = useMemo(() => {
-    if (typeof dealVariation !== 'string') return '—';
-    const trimmed = dealVariation.trim();
-    return trimmed.length ? trimmed : '—';
-  }, [dealVariation]);
+    const name = typeof dealVariationName === 'string' ? dealVariationName.trim() : '';
+    if (name.length) return name;
+    if (typeof dealVariation === 'string') {
+      const trimmed = dealVariation.trim();
+      return trimmed.length ? trimmed : '—';
+    }
+    return '—';
+  }, [dealVariation, dealVariationName]);
 
   const variationTooltip = useMemo(() => {
-    if (typeof dealVariation !== 'string') return '';
-    return dealVariation.trim();
-  }, [dealVariation]);
+    const name = typeof dealVariationName === 'string' ? dealVariationName.trim() : '';
+    const id = typeof dealVariation === 'string' ? dealVariation.trim() : '';
+    if (name && id && name !== id) {
+      return `${name} · ID ${id}`;
+    }
+    return name || id;
+  }, [dealVariation, dealVariationName]);
 
   const trainingDateDisplay = useMemo(() => {
     if (typeof dealTrainingDate !== 'string') return '—';
@@ -2730,6 +2955,34 @@ function SessionEditor({
     if (typeof dealTrainingDate !== 'string') return '';
     return dealTrainingDate.trim();
   }, [dealTrainingDate]);
+
+  const variantSelectDisabled = variantSaving || variantOptionsLoading || variantOptions.length === 0;
+
+  const variantSelectPlaceholder = useMemo(() => {
+    if (variantOptionsLoading) return 'Cargando variantes…';
+    if (!variantOptions.length) return 'No hay variantes futuras disponibles';
+    return 'Selecciona una variante futura…';
+  }, [variantOptionsLoading, variantOptions.length]);
+
+  const handleVariantSelectChange = useCallback(
+    async (event: ChangeEvent<HTMLSelectElement>) => {
+      const value = event.target.value;
+      if (!value || variantSelectDisabled) {
+        setVariantSelection('');
+        return;
+      }
+
+      setVariantSelection(value);
+      try {
+        if (onVariantSelect) {
+          await onVariantSelect(value);
+        }
+      } finally {
+        setVariantSelection('');
+      }
+    },
+    [onVariantSelect, variantSelectDisabled],
+  );
 
   useEffect(() => {
     if (!ENABLE_ROOMS) return;
@@ -2773,20 +3026,51 @@ function SessionEditor({
   useEffect(() => {
     setTrainerListOpen(false);
     setUnitListOpen(false);
+    setVariantSelection('');
   }, [form.id]);
+
+  useEffect(() => {
+    setVariantSelection('');
+  }, [dealVariation]);
 
   return (
     <div className="session-editor bg-white rounded-3 p-3">
       <Row className="g-3">
         <Col md={6} lg={4}>
           <Form.Group controlId={`session-${form.id}-variation`}>
-            <Form.Label>Variación</Form.Label>
+            <Form.Label>Variante</Form.Label>
             <Form.Control
               plaintext
               readOnly
               value={variationDisplay}
               title={buildFieldTooltip(variationTooltip || variationDisplay)}
             />
+            <Form.Select
+              className="mt-2"
+              value={variantSelection}
+              onChange={handleVariantSelectChange}
+              disabled={variantSelectDisabled}
+              aria-label="Seleccionar variante para el presupuesto"
+            >
+              <option value="">{variantSelectPlaceholder}</option>
+              {variantOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Form.Select>
+            {variantOptionsLoading ? (
+              <div className="d-flex align-items-center gap-2 text-muted mt-1 small">
+                <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                Cargando variantes…
+              </div>
+            ) : null}
+            {variantSaving ? (
+              <div className="d-flex align-items-center gap-2 text-muted mt-1 small">
+                <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                Actualizando variante…
+              </div>
+            ) : null}
           </Form.Group>
         </Col>
         <Col md={6} lg={4}>

@@ -19,10 +19,12 @@ import {
 const EDITABLE_FIELDS = new Set([
   "sede_label",
   "training_address_label", // alias de entrada…
-  "training_address",       // …campo real en BD
+  "training_address", // …campo real en BD
   "caes_label",
   "fundae_label",
   "hotel_label",
+  "w_id_variation",
+  "a_fecha",
 ]);
 
 /* -------------------- Helpers -------------------- */
@@ -628,6 +630,29 @@ export const handler = async (event: any) => {
       if ("training_address_label" in patch && patch.training_address_label != null) {
         patch.training_address = patch.training_address_label;
         delete patch.training_address_label;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(patch, "w_id_variation")) {
+        const raw = patch.w_id_variation;
+        if (raw === null || raw === undefined || raw === "") {
+          patch.w_id_variation = null;
+        } else {
+          const normalized = typeof raw === "string" ? raw.trim() : String(raw).trim();
+          patch.w_id_variation = normalized.length ? normalized : null;
+        }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(patch, "a_fecha")) {
+        const rawDate = patch.a_fecha;
+        if (rawDate === null || rawDate === undefined || rawDate === "") {
+          patch.a_fecha = null;
+        } else {
+          const parsed = new Date(rawDate);
+          if (Number.isNaN(parsed.getTime())) {
+            return errorResponse("VALIDATION_ERROR", "Fecha de formación inválida", 400);
+          }
+          patch.a_fecha = parsed;
+        }
       }
 
       const productPatches: Array<{ id: string; data: Record<string, any> }> = [];
