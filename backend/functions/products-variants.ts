@@ -4,6 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { formatTimeFromDb } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
 import { mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
@@ -354,8 +355,8 @@ type ProductRecord = {
   name: string | null;
   code: string | null;
   category: string | null;
-  hora_inicio: string | null;
-  hora_fin: string | null;
+  hora_inicio: Date | string | null;
+  hora_fin: Date | string | null;
   default_variant_start: Date | string | null;
   default_variant_end: Date | string | null;
   default_variant_stock_status: string | null;
@@ -544,8 +545,8 @@ function normalizeProduct(record: ProductRecord) {
     name: record.name ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
-    hora_inicio: record.hora_inicio ?? null,
-    hora_fin: record.hora_fin ?? null,
+    hora_inicio: formatTimeFromDb(record.hora_inicio),
+    hora_fin: formatTimeFromDb(record.hora_fin),
     default_variant_start: toMadridISOString(record.default_variant_start),
     default_variant_end: toMadridISOString(record.default_variant_end),
     default_variant_stock_status: mapDbStockStatusToApiValue(record.default_variant_stock_status),

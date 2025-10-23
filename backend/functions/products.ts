@@ -1,6 +1,7 @@
 // backend/functions/products.ts
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { formatTimeFromDb, parseHHMMToDate } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
 
 type ProductRecord = {
@@ -10,8 +11,8 @@ type ProductRecord = {
   name: string | null;
   code: string | null;
   category: string | null;
-  hora_inicio: string | null;
-  hora_fin: string | null;
+  hora_inicio: Date | string | null;
+  hora_fin: Date | string | null;
   type: string | null;
   template: string | null;
   url_formacion: string | null;
@@ -40,8 +41,8 @@ function normalizeProduct(record: ProductRecord) {
     name: record.name ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
-    hora_inicio: record.hora_inicio ?? null,
-    hora_fin: record.hora_fin ?? null,
+    hora_inicio: formatTimeFromDb(record.hora_inicio),
+    hora_fin: formatTimeFromDb(record.hora_fin),
     type: record.type ?? null,
     template: record.template ?? null,
     url_formacion: record.url_formacion ?? null,
@@ -72,14 +73,32 @@ function buildUpdateData(body: any) {
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'hora_inicio')) {
-    const value = toNullableTrimmedString(body.hora_inicio);
-    data.hora_inicio = value;
+    try {
+      data.hora_inicio = parseHHMMToDate(body.hora_inicio);
+    } catch (error) {
+      return {
+        error: errorResponse(
+          'VALIDATION_ERROR',
+          'El campo hora_inicio debe tener el formato HH:MM',
+          400,
+        ),
+      } as const;
+    }
     hasChanges = true;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'hora_fin')) {
-    const value = toNullableTrimmedString(body.hora_fin);
-    data.hora_fin = value;
+    try {
+      data.hora_fin = parseHHMMToDate(body.hora_fin);
+    } catch (error) {
+      return {
+        error: errorResponse(
+          'VALIDATION_ERROR',
+          'El campo hora_fin debe tener el formato HH:MM',
+          400,
+        ),
+      } as const;
+    }
     hasChanges = true;
   }
 

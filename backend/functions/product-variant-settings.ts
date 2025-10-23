@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { formatTimeFromDb, parseHHMMToDate } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
 import { mapApiStockStatusToDbValue, mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
@@ -16,8 +17,8 @@ type ProductDefaultsRecord = {
   default_variant_stock_status?: string | null;
   default_variant_stock_quantity?: number | null;
   default_variant_price?: Prisma.Decimal | string | null;
-  hora_inicio?: string | null;
-  hora_fin?: string | null;
+  hora_inicio?: Date | string | null;
+  hora_fin?: Date | string | null;
 };
 
 type ProductDefaultsPayload = {
@@ -47,8 +48,8 @@ function normalizeDefaults(record: ProductDefaultsRecord) {
         : typeof record.default_variant_price === 'string'
           ? record.default_variant_price
           : record.default_variant_price.toString(),
-    hora_inicio: record.hora_inicio ?? null,
-    hora_fin: record.hora_fin ?? null,
+    hora_inicio: formatTimeFromDb(record.hora_inicio),
+    hora_fin: formatTimeFromDb(record.hora_fin),
   } as const;
 }
 
@@ -128,38 +129,16 @@ function parseProductId(value: unknown): string {
   return trimmed;
 }
 
-function parseTimeInput(value: unknown): string | null {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
+function parseTimeInput(value: unknown): Date | null {
+  try {
+    return parseHHMMToDate(value);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'INVALID_TIME') {
+      throw error;
+    }
 
-  if (typeof value !== 'string') {
     throw new Error('INVALID_TIME');
   }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const match = trimmed.match(/^(\d{2}):(\d{2})$/);
-  if (!match) {
-    throw new Error('INVALID_TIME');
-  }
-
-  const [, hoursText, minutesText] = match;
-  const hours = Number.parseInt(hoursText, 10);
-  const minutes = Number.parseInt(minutesText, 10);
-
-  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
-    throw new Error('INVALID_TIME');
-  }
-
-  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-    throw new Error('INVALID_TIME');
-  }
-
-  return `${hoursText.padStart(2, '0')}:${minutesText.padStart(2, '0')}`;
 }
 
 function isMissingVariantDateColumns(error: unknown): boolean {
@@ -254,8 +233,8 @@ function buildUpdateData(params: {
   stockStatus: string | null;
   stockQuantity: number | null;
   price: Prisma.Decimal | null;
-  horaInicio: string | null;
-  horaFin: string | null;
+  horaInicio: Date | null;
+  horaFin: Date | null;
 }): Prisma.productsUpdateInput {
   const {
     timestamp,
@@ -297,10 +276,10 @@ function buildUpdateData(params: {
     data.default_variant_price = price;
   }
   if (hasHoraInicio) {
-    data.hora_inicio = horaInicio;
+    data.hora_inicio = (horaInicio ?? null) as Prisma.productsUpdateInput['hora_inicio'];
   }
   if (hasHoraFin) {
-    data.hora_fin = horaFin;
+    data.hora_fin = (horaFin ?? null) as Prisma.productsUpdateInput['hora_fin'];
   }
 
   return data;
@@ -359,8 +338,8 @@ export const handler = async (event: any) => {
     let stockStatus: string | null = null;
     let stockQuantity: number | null = null;
     let price: Prisma.Decimal | null = null;
-    let horaInicio: string | null = null;
-    let horaFin: string | null = null;
+    let horaInicio: Date | null = null;
+    let horaFin: Date | null = null;
 
     const hasStartDate = Object.prototype.hasOwnProperty.call(payload, 'start_date');
     const hasEndDate = Object.prototype.hasOwnProperty.call(payload, 'end_date');
