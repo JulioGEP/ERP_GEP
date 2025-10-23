@@ -1763,6 +1763,16 @@ export function SessionsAccordionAbierta({
   );
 
   const variantDateFormatter = useMemo(() => new Intl.DateTimeFormat('es-ES'), []);
+  const variantDateKeyFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Madrid',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }),
+    [],
+  );
 
   const productVariantsQuery = useQuery({
     queryKey: ['deal', dealId, 'product-variants', variantProductKey],
@@ -1808,8 +1818,7 @@ export function SessionsAccordionAbierta({
 
   const variantSelectOptions = useMemo(() => {
     if (!activeVariantProductId) return [] as DealVariantSelectOption[];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayKey = variantDateKeyFormatter.format(new Date());
 
     const options: Array<{ option: DealVariantSelectOption; sortKey: number }> = [];
 
@@ -1823,7 +1832,8 @@ export function SessionsAccordionAbierta({
       const parsedDate = new Date(rawDate);
       const timestamp = parsedDate.getTime();
       if (!Number.isFinite(timestamp)) continue;
-      if (!(timestamp > today.getTime())) continue;
+      const variantKey = variantDateKeyFormatter.format(parsedDate);
+      if (variantKey < todayKey) continue;
 
       const dateLabel = variantDateFormatter.format(parsedDate);
       const baseName = variant.name?.trim() || `Variante ${variant.wooId}`;
@@ -1860,6 +1870,7 @@ export function SessionsAccordionAbierta({
     includeProductInVariantLabel,
     productVariants,
     variantDateFormatter,
+    variantDateKeyFormatter,
   ]);
 
   const variantOptionsLoading = productVariantsQuery.isLoading || productVariantsQuery.isFetching;
