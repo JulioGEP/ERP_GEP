@@ -1103,7 +1103,7 @@ export function BudgetDetailModalAbierta({
     noteWarningSignatureRef.current = noteSignature;
 
     const message =
-      'Se ha encontrado una nota de alumnos pero no hay sesiones disponibles para sincronizarlos automáticamente.';
+      'Se ha detectado un alumno en notas, en unos segundos se añadirá al deal';
 
     if (onNotify) {
       onNotify({ variant: 'info', message });
