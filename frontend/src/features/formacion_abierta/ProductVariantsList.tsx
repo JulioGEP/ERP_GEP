@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useState } from 'react';
+import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import {
   Accordion,
   Alert,
@@ -63,8 +63,6 @@ type ProductDefaultsUpdateResponse = {
 };
 
 type ProductDefaultsUpdatePayload = {
-  start_date?: string | null;
-  end_date?: string | null;
   stock_status?: string | null;
   stock_quantity?: number | null;
   price?: string | null;
@@ -98,24 +96,32 @@ type VariantUpdatePayload = {
   date?: string | null;
 };
 
+type DealProductInfo = {
+  id: string;
+  name: string | null;
+  code: string | null;
+  price: string | null;
+};
+
 type DealsByVariationResponse = {
   ok?: boolean;
-  deals?: Array<{ deal_id?: string | null; title?: string | null }>;
+  deals?: Array<{
+    deal_id?: string | null;
+    title?: string | null;
+    products?: unknown;
+  }>;
   message?: string;
 };
 
 type DealTag = {
   deal_id: string;
   title: string;
+  products: DealProductInfo[];
 };
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', {
   dateStyle: 'medium',
   timeStyle: 'short',
-});
-
-const dateOnlyFormatter = new Intl.DateTimeFormat('es-ES', {
-  dateStyle: 'medium',
 });
 
 const STOCK_STATUS_SUMMARY_LABELS: Record<string, string> = {
@@ -129,13 +135,6 @@ function formatDate(value: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return dateFormatter.format(date);
-}
-
-function formatDateOnly(value: string | null) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return dateOnlyFormatter.format(date);
 }
 
 function buildProductDefaultsSummary(product: ProductInfo): string | null {
@@ -154,17 +153,6 @@ function buildProductDefaultsSummary(product: ProductInfo): string | null {
       STOCK_STATUS_SUMMARY_LABELS[product.default_variant_stock_status.trim().toLowerCase()] ??
       product.default_variant_stock_status;
     parts.push(`Estado: ${statusLabel}`);
-  }
-
-  const startLabel = formatDateOnly(product.default_variant_start);
-  const endLabel = formatDateOnly(product.default_variant_end);
-
-  if (startLabel && endLabel) {
-    parts.push(`Fechas: ${startLabel} → ${endLabel}`);
-  } else if (startLabel) {
-    parts.push(`Fecha inicio: ${startLabel}`);
-  } else if (endLabel) {
-    parts.push(`Fecha fin: ${endLabel}`);
   }
 
   if (!parts.length) {
@@ -430,6 +418,124 @@ async function updateProductVariant(
   return normalizeVariantFromResponse(json.variant, variantId);
 }
 
+function normalizeDealProductPrice(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value.toString() : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  if (typeof value === 'object') {
+    const record = value as { toNumber?: () => number; valueOf?: () => unknown; toString?: () => string };
+
+    if (typeof record.toNumber === 'function') {
+      try {
+        const numeric = record.toNumber();
+        if (Number.isFinite(numeric)) {
+          return numeric.toString();
+        }
+      } catch (error) {
+        console.warn('[normalizeDealProductPrice] could not convert decimal to number', error);
+      }
+    }
+
+    if (typeof record.valueOf === 'function') {
+      const primitive = record.valueOf();
+      if (typeof primitive === 'number' && Number.isFinite(primitive)) {
+        return primitive.toString();
+      }
+      if (typeof primitive === 'string') {
+        const text = primitive.trim();
+        if (text.length) {
+          return text;
+        }
+      }
+    }
+
+    if (typeof record.toString === 'function') {
+      const text = record.toString();
+      if (text && text !== '[object Object]') {
+        return text;
+      }
+    }
+  }
+
+  return null;
+}
+
+function normalizeDealProducts(raw: unknown): DealProductInfo[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const products: DealProductInfo[] = [];
+
+  raw.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+
+    const item = entry as Record<string, any>;
+    const price = normalizeDealProductPrice(item.price);
+    const name = typeof item.name === 'string' ? item.name : null;
+    const code = typeof item.code === 'string' ? item.code : null;
+    const id =
+      item.id != null && item.id !== ''
+        ? String(item.id)
+        : item.deal_product_id != null && item.deal_product_id !== ''
+          ? String(item.deal_product_id)
+          : `deal-product-${index}`;
+
+    products.push({
+      id,
+      name,
+      code,
+      price,
+    });
+  });
+
+  return products;
+}
+
+function findDealProductPriceForProduct(deals: DealTag[], product: ProductInfo): string | null {
+  const normalizedName = product.name?.trim().toLowerCase() ?? null;
+  const normalizedCode = product.code?.trim().toLowerCase() ?? null;
+
+  for (const deal of deals) {
+    let fallbackPrice: string | null = null;
+
+    for (const dealProduct of deal.products) {
+      if (!dealProduct.price) {
+        continue;
+      }
+
+      const productName = dealProduct.name?.trim().toLowerCase() ?? null;
+      const productCode = dealProduct.code?.trim().toLowerCase() ?? null;
+
+      if ((normalizedCode && productCode === normalizedCode) || (normalizedName && productName === normalizedName)) {
+        return dealProduct.price;
+      }
+
+      if (!fallbackPrice) {
+        fallbackPrice = dealProduct.price;
+      }
+    }
+
+    if (fallbackPrice) {
+      return fallbackPrice;
+    }
+  }
+
+  return null;
+}
+
 async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]> {
   let response: Response;
   const url = `${API_BASE}/deals?w_id_variation=${encodeURIComponent(variationWooId)}`;
@@ -463,6 +569,7 @@ async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]>
     .map((deal) => ({
       deal_id: deal?.deal_id != null ? String(deal.deal_id) : '',
       title: deal?.title ?? '',
+      products: normalizeDealProducts((deal as any)?.products ?? (deal as any)?.deal_products ?? []),
     }))
     .filter((deal): deal is DealTag => Boolean(deal.deal_id) && Boolean(deal.title));
 }
@@ -615,8 +722,6 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
 }
 
 type ProductDefaultsFormValues = {
-  start_date: string;
-  end_date: string;
   stock_status: string;
   stock_quantity: string;
   price: string;
@@ -632,8 +737,6 @@ function ProductDefaultsModal({
   onSaved: (productId: string, defaults: ProductDefaults) => void;
 }) {
   const [formValues, setFormValues] = useState<ProductDefaultsFormValues>({
-    start_date: '',
-    end_date: '',
     stock_status: '',
     stock_quantity: '',
     price: '',
@@ -641,19 +744,24 @@ function ProductDefaultsModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [didUserEditPrice, setDidUserEditPrice] = useState(false);
+  const didUserEditPriceRef = useRef(didUserEditPrice);
+
+  useEffect(() => {
+    didUserEditPriceRef.current = didUserEditPrice;
+  }, [didUserEditPrice]);
 
   useEffect(() => {
     if (!product) {
-      setFormValues({ start_date: '', end_date: '', stock_status: '', stock_quantity: '', price: '' });
+      setFormValues({ stock_status: '', stock_quantity: '', price: '' });
       setError(null);
       setSuccess(null);
       setIsSaving(false);
+      setDidUserEditPrice(false);
       return;
     }
 
     setFormValues({
-      start_date: formatDateForInputValue(product.default_variant_start),
-      end_date: formatDateForInputValue(product.default_variant_end),
       stock_status: product.default_variant_stock_status ?? '',
       stock_quantity:
         product.default_variant_stock_quantity != null
@@ -664,13 +772,74 @@ function ProductDefaultsModal({
     setError(null);
     setSuccess(null);
     setIsSaving(false);
+    setDidUserEditPrice(false);
   }, [product]);
 
+  useEffect(() => {
+    if (!product) {
+      return;
+    }
+
+    if (didUserEditPriceRef.current) {
+      return;
+    }
+
+    if (formValues.price && formValues.price.trim().length) {
+      return;
+    }
+
+    if (product.default_variant_price && product.default_variant_price.trim().length) {
+      return;
+    }
+
+    const variantWithWooId = product.variants.find((variant) => variant.id_woo);
+    const wooId = variantWithWooId?.id_woo;
+
+    if (!wooId) {
+      return;
+    }
+
+    let ignore = false;
+
+    (async () => {
+      try {
+        const deals = await fetchDealsByVariation(wooId);
+        if (ignore) {
+          return;
+        }
+
+        if (didUserEditPriceRef.current) {
+          return;
+        }
+
+        const priceFromDeals = findDealProductPriceForProduct(deals, product);
+
+        if (priceFromDeals) {
+          setFormValues((prev) => {
+            if (prev.price && prev.price.trim().length) {
+              return prev;
+            }
+            return { ...prev, price: priceFromDeals };
+          });
+        }
+      } catch (error) {
+        console.warn('[ProductDefaultsModal] could not prefill price from deals', error);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [product, formValues.price]);
+
   const handleChange = (field: keyof ProductDefaultsFormValues) =>
-    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       const value = event.target.value;
       setFormValues((prev) => ({ ...prev, [field]: value }));
       setSuccess(null);
+      if (field === 'price') {
+        setDidUserEditPrice(true);
+      }
     };
 
   const handleSave = async () => {
@@ -689,8 +858,6 @@ function ProductDefaultsModal({
     }
 
     const payload: ProductDefaultsUpdatePayload = {
-      start_date: formValues.start_date || null,
-      end_date: formValues.end_date || null,
       stock_status: formValues.stock_status || null,
       stock_quantity: stockQuantityValue,
       price: formValues.price.trim() ? formValues.price.trim() : null,
@@ -703,8 +870,6 @@ function ProductDefaultsModal({
       const defaults = await updateProductVariantDefaults(product.id, payload);
       onSaved(product.id, defaults);
       setFormValues({
-        start_date: formatDateForInputValue(defaults.default_variant_start),
-        end_date: formatDateForInputValue(defaults.default_variant_end),
         stock_status: defaults.default_variant_stock_status ?? '',
         stock_quantity:
           defaults.default_variant_stock_quantity != null
@@ -712,6 +877,7 @@ function ProductDefaultsModal({
             : '',
         price: defaults.default_variant_price ?? '',
       });
+      setDidUserEditPrice(false);
       setSuccess('Configuración guardada correctamente.');
     } catch (error) {
       const message =
@@ -745,24 +911,6 @@ function ProductDefaultsModal({
             {success}
           </Alert>
         )}
-        <Form.Group controlId="product-default-start-date">
-          <Form.Label>Fecha de inicio por defecto</Form.Label>
-          <Form.Control
-            type="date"
-            value={formValues.start_date}
-            onChange={handleChange('start_date')}
-            disabled={isSaving}
-          />
-        </Form.Group>
-        <Form.Group controlId="product-default-end-date">
-          <Form.Label>Fecha de fin por defecto</Form.Label>
-          <Form.Control
-            type="date"
-            value={formValues.end_date}
-            onChange={handleChange('end_date')}
-            disabled={isSaving}
-          />
-        </Form.Group>
         <Form.Group controlId="product-default-price">
           <Form.Label>Precio por defecto</Form.Label>
           <Form.Control
