@@ -1602,8 +1602,8 @@ function VariantModal({
                     <Form.Control
                       type="text"
                       value={formValues.sede}
-                      onChange={handleChange('sede')}
-                      disabled={isSaving}
+                      disabled
+                      readOnly
                       placeholder="Sede de la formación"
                     />
                   </Form.Group>
@@ -1614,8 +1614,8 @@ function VariantModal({
                     <Form.Control
                       type="date"
                       value={formValues.date}
-                      onChange={handleChange('date')}
-                      disabled={isSaving}
+                      disabled
+                      readOnly
                     />
                   </Form.Group>
                 </Col>
@@ -1695,8 +1695,8 @@ function VariantModal({
                       type="number"
                       step="0.01"
                       value={formValues.price}
-                      onChange={handleChange('price')}
-                      disabled={isSaving}
+                      disabled
+                      readOnly
                       placeholder="Introduce el precio"
                     />
                   </Form.Group>
