@@ -14,16 +14,7 @@ import {
   Stack,
 } from 'react-bootstrap';
 
-import {
-  API_BASE,
-  ApiError,
-  fetchActiveTrainers,
-  fetchMobileUnitsCatalog,
-  fetchRoomsCatalog,
-  type MobileUnitOption,
-  type RoomOption,
-  type TrainerOption,
-} from '../presupuestos/api';
+import { API_BASE, ApiError } from '../presupuestos/api';
 import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailModalAbierta';
 import type { DealSummary } from '../../types/deal';
 import { emitToast } from '../../utils/toast';
@@ -38,12 +29,6 @@ export type VariantInfo = {
   stock_status: string | null;
   sede: string | null;
   date: string | null;
-  sala_id: string | null;
-  sala_name: string | null;
-  trainer_id: string | null;
-  trainer_name: string | null;
-  unidad_movil_id: string | null;
-  unidad_movil_name: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -118,9 +103,6 @@ type VariantUpdatePayload = {
   status?: string | null;
   sede?: string | null;
   date?: string | null;
-  trainer_id?: string | null;
-  unidad_movil_id?: string | null;
-  sala_id?: string | null;
 };
 
 type DealProductInfo = {
@@ -252,9 +234,28 @@ async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
       default_variant_stock_quantity: defaultStockQuantity,
       default_variant_price: product.default_variant_price != null ? String(product.default_variant_price) : null,
       variants: Array.isArray(product.variants)
-        ? product.variants.map((variant: any, index: number) =>
-            normalizeVariantFromResponse(variant, `${product.id}-variant-${index}`),
-          )
+        ? product.variants.map((variant) => {
+            const stockValue =
+              typeof variant.stock === 'number'
+                ? variant.stock
+                : variant.stock != null && !Number.isNaN(Number(variant.stock))
+                  ? Number(variant.stock)
+                  : null;
+
+            return {
+              id: variant.id,
+              id_woo: String(variant.id_woo),
+              name: variant.name ?? null,
+              status: variant.status ?? null,
+              price: variant.price != null ? String(variant.price) : null,
+              stock: stockValue,
+              stock_status: variant.stock_status ?? null,
+              sede: variant.sede ?? null,
+              date: variant.date ?? null,
+              created_at: variant.created_at ?? null,
+              updated_at: variant.updated_at ?? null,
+            };
+          })
         : [],
     };
   });
@@ -401,9 +402,6 @@ function normalizeVariantFromResponse(input: any, fallbackId: string): VariantIn
       : input?.stock != null && !Number.isNaN(Number(input.stock))
         ? Number(input.stock)
         : null;
-  const salaIdText = input?.sala_id != null ? String(input.sala_id).trim() : '';
-  const trainerIdText = input?.trainer_id != null ? String(input.trainer_id).trim() : '';
-  const unidadIdText = input?.unidad_movil_id != null ? String(input.unidad_movil_id).trim() : '';
 
   return {
     id: String(input?.id ?? fallbackId),
@@ -415,12 +413,6 @@ function normalizeVariantFromResponse(input: any, fallbackId: string): VariantIn
     stock_status: input?.stock_status ?? null,
     sede: input?.sede ?? null,
     date: input?.date ?? null,
-    sala_id: salaIdText.length ? salaIdText : null,
-    sala_name: typeof input?.sala_name === 'string' ? input.sala_name : null,
-    trainer_id: trainerIdText.length ? trainerIdText : null,
-    trainer_name: typeof input?.trainer_name === 'string' ? input.trainer_name : null,
-    unidad_movil_id: unidadIdText.length ? unidadIdText : null,
-    unidad_movil_name: typeof input?.unidad_movil_name === 'string' ? input.unidad_movil_name : null,
     created_at: input?.created_at ?? null,
     updated_at: input?.updated_at ?? null,
   };
@@ -877,9 +869,6 @@ type VariantFormValues = {
   status: string;
   sede: string;
   date: string;
-  sala_id: string;
-  trainer_id: string;
-  unidad_movil_id: string;
 };
 
 const STOCK_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
@@ -924,9 +913,6 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
     status: variant.status ?? 'publish',
     sede: variant.sede ?? '',
     date: formatDateForInputValue(variant.date),
-    sala_id: variant.sala_id ?? '',
-    trainer_id: variant.trainer_id ?? '',
-    unidad_movil_id: variant.unidad_movil_id ?? '',
   };
 }
 
@@ -1442,9 +1428,6 @@ export function VariantModal({
     status: 'publish',
     sede: '',
     date: '',
-    sala_id: '',
-    trainer_id: '',
-    unidad_movil_id: '',
   });
   const [initialValues, setInitialValues] = useState<VariantFormValues>({
     price: '',
@@ -1453,9 +1436,6 @@ export function VariantModal({
     status: 'publish',
     sede: '',
     date: '',
-    sala_id: '',
-    trainer_id: '',
-    unidad_movil_id: '',
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1465,12 +1445,6 @@ export function VariantModal({
   const [isDealsLoading, setIsDealsLoading] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDealSummary, setSelectedDealSummary] = useState<DealSummary | null>(null);
-  const [roomOptions, setRoomOptions] = useState<RoomOption[]>([]);
-  const [trainerOptions, setTrainerOptions] = useState<TrainerOption[]>([]);
-  const [unitOptions, setUnitOptions] = useState<MobileUnitOption[]>([]);
-  const [resourcesLoading, setResourcesLoading] = useState(false);
-  const [resourcesError, setResourcesError] = useState<string | null>(null);
-  const presetAppliedRef = useRef(false);
   const totalDealStudents = useMemo(
     () => deals.reduce((sum, deal) => sum + deal.students_count, 0),
     [deals],
@@ -1480,43 +1454,6 @@ export function VariantModal({
     : dealsError
     ? 'No disponible'
     : String(totalDealStudents);
-
-  useEffect(() => {
-    let ignore = false;
-
-    const loadResources = async () => {
-      setResourcesLoading(true);
-      setResourcesError(null);
-      try {
-        const [rooms, trainers, units] = await Promise.all([
-          fetchRoomsCatalog(),
-          fetchActiveTrainers(),
-          fetchMobileUnitsCatalog(),
-        ]);
-        if (ignore) return;
-        setRoomOptions(rooms);
-        setTrainerOptions(trainers);
-        setUnitOptions(units);
-      } catch (error) {
-        if (ignore) return;
-        const message =
-          error instanceof ApiError
-            ? error.message
-            : 'No se pudieron cargar los recursos.';
-        setResourcesError(message);
-      } finally {
-        if (!ignore) {
-          setResourcesLoading(false);
-        }
-      }
-    };
-
-    void loadResources();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
 
   const productHeaderLabel = (() => {
     const rawName = product?.name ?? '';
@@ -1557,9 +1494,6 @@ export function VariantModal({
         status: 'publish',
         sede: '',
         date: '',
-        sala_id: '',
-        trainer_id: '',
-        unidad_movil_id: '',
       });
       setInitialValues({
         price: '',
@@ -1568,9 +1502,6 @@ export function VariantModal({
         status: 'publish',
         sede: '',
         date: '',
-        sala_id: '',
-        trainer_id: '',
-        unidad_movil_id: '',
       });
       setSaveError(null);
       setSaveSuccess(null);
@@ -1579,46 +1510,17 @@ export function VariantModal({
       setIsDealsLoading(false);
       setSelectedDealId(null);
       setSelectedDealSummary(null);
-      presetAppliedRef.current = false;
       return;
     }
 
     const nextValues = variantToFormValues(variant);
     setFormValues(nextValues);
     setInitialValues(nextValues);
-    presetAppliedRef.current = Boolean(nextValues.sala_id);
     setSaveError(null);
     setSaveSuccess(null);
     setSelectedDealId(null);
     setSelectedDealSummary(null);
   }, [variant?.id]);
-
-  useEffect(() => {
-    if (!variant) return;
-    if (variant.sala_id) return;
-    if (presetAppliedRef.current) return;
-    if (!roomOptions.length) return;
-    if (formValues.sala_id && formValues.sala_id.trim().length) return;
-
-    const sedeText = variant.sede?.toLowerCase() ?? '';
-    let presetName: string | null = null;
-    if (sedeText.includes('sabadell')) {
-      presetName = 'GEP Sabadell';
-    } else if (sedeText.includes('madrid') || sedeText.includes('arganda')) {
-      presetName = 'GEP Arganda';
-    }
-
-    if (!presetName) return;
-
-    const match = roomOptions.find(
-      (room) => room.name.toLowerCase() === presetName!.toLowerCase(),
-    );
-    if (!match) return;
-
-    setFormValues((prev) => ({ ...prev, sala_id: match.sala_id }));
-    setSaveSuccess(null);
-    presetAppliedRef.current = true;
-  }, [variant?.id, variant?.sede, roomOptions, formValues.sala_id]);
 
   useEffect(() => {
     let ignore = false;
@@ -1749,10 +1651,7 @@ export function VariantModal({
     formValues.stock_status !== initialValues.stock_status ||
     formValues.status !== initialValues.status ||
     formValues.sede !== initialValues.sede ||
-    formValues.date !== initialValues.date ||
-    formValues.sala_id !== initialValues.sala_id ||
-    formValues.trainer_id !== initialValues.trainer_id ||
-    formValues.unidad_movil_id !== initialValues.unidad_movil_id;
+    formValues.date !== initialValues.date;
 
   const handleSave = async (closeAfter: boolean) => {
     if (!variant) return;
@@ -1784,17 +1683,6 @@ export function VariantModal({
     }
     if (formValues.date !== initialValues.date) {
       payload.date = formValues.date || null;
-    }
-    if (formValues.trainer_id !== initialValues.trainer_id) {
-      payload.trainer_id = formValues.trainer_id.trim() ? formValues.trainer_id.trim() : null;
-    }
-    if (formValues.unidad_movil_id !== initialValues.unidad_movil_id) {
-      payload.unidad_movil_id = formValues.unidad_movil_id.trim()
-        ? formValues.unidad_movil_id.trim()
-        : null;
-    }
-    if (formValues.sala_id !== initialValues.sala_id) {
-      payload.sala_id = formValues.sala_id.trim() ? formValues.sala_id.trim() : null;
     }
 
     if (!Object.keys(payload).length) {
@@ -1871,94 +1759,34 @@ export function VariantModal({
             {saveSuccess && <Alert variant="success" className="mb-0">{saveSuccess}</Alert>}
 
             <Form className="d-flex flex-column gap-3">
-      <Row className="g-3">
-        <Col md={6}>
-          <Form.Group controlId="variantSede" className="mb-0">
-            <Form.Label>Sede</Form.Label>
-            <Form.Select
-              value={formValues.sala_id}
-              onChange={handleChange('sala_id')}
-              disabled={isSaving || resourcesLoading}
-            >
-              <option value="">
-                {resourcesLoading ? 'Cargando sedes…' : 'Sin asignar'}
-              </option>
-              {roomOptions.map((room) => (
-                <option key={room.sala_id} value={room.sala_id}>
-                  {room.name}
-                </option>
-              ))}
-            </Form.Select>
-            {resourcesError ? (
-              <div className="text-danger small mt-1">{resourcesError}</div>
-            ) : null}
-            <Form.Text className="text-muted">
-              Sede WooCommerce: {formValues.sede?.trim().length ? formValues.sede : '—'}
-            </Form.Text>
-          </Form.Group>
-        </Col>
-        <Col md={6}>
-          <Form.Group controlId="variantDate" className="mb-0">
-            <Form.Label>Fecha</Form.Label>
-            <Form.Control
-              type="date"
-              value={formValues.date}
-              disabled
-              readOnly
-            />
-          </Form.Group>
-        </Col>
-      </Row>
+              <Row className="g-3">
+                <Col md={6}>
+                  <Form.Group controlId="variantSede" className="mb-0">
+                    <Form.Label>Sede</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={formValues.sede}
+                      disabled
+                      readOnly
+                      placeholder="Sede de la formación"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group controlId="variantDate" className="mb-0">
+                    <Form.Label>Fecha</Form.Label>
+                    <Form.Control
+                      type="date"
+                      value={formValues.date}
+                      disabled
+                      readOnly
+                    />
+                  </Form.Group>
+                </Col>
+              </Row>
 
-      <Row className="g-3">
-        <Col md={6}>
-          <Form.Group controlId="variantTrainer" className="mb-0">
-            <Form.Label>Formador</Form.Label>
-            <Form.Select
-              value={formValues.trainer_id}
-              onChange={handleChange('trainer_id')}
-              disabled={isSaving || resourcesLoading}
-            >
-              <option value="">
-                {resourcesLoading ? 'Cargando formadores…' : 'Sin asignar'}
-              </option>
-              {trainerOptions.map((trainer) => {
-                const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
-                return (
-                  <option key={trainer.trainer_id} value={trainer.trainer_id}>
-                    {label || trainer.trainer_id}
-                  </option>
-                );
-              })}
-            </Form.Select>
-          </Form.Group>
-        </Col>
-        <Col md={6}>
-          <Form.Group controlId="variantUnit" className="mb-0">
-            <Form.Label>Unidad móvil</Form.Label>
-            <Form.Select
-              value={formValues.unidad_movil_id}
-              onChange={handleChange('unidad_movil_id')}
-              disabled={isSaving || resourcesLoading}
-            >
-              <option value="">
-                {resourcesLoading ? 'Cargando unidades…' : 'Sin asignar'}
-              </option>
-              {unitOptions.map((unit) => {
-                const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
-                return (
-                  <option key={unit.unidad_id} value={unit.unidad_id}>
-                    {label}
-                  </option>
-                );
-              })}
-            </Form.Select>
-          </Form.Group>
-        </Col>
-      </Row>
-
-      <Accordion className="variant-deals-accordion">
-        <Accordion.Item eventKey="variant-deals">
+              <Accordion className="variant-deals-accordion">
+                <Accordion.Item eventKey="variant-deals">
                   <Accordion.Header>
                     <span className="text-uppercase small fw-semibold">Presupuestos asociados</span>
                     {deals.length ? (
