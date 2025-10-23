@@ -101,27 +101,10 @@ function parsePrice(value: unknown): Prisma.Decimal | null {
 }
 
 function parseProductId(value: unknown): string {
-  if (value === null || value === undefined || value === '') {
+  if (typeof value !== 'string' || !value.trim()) {
     throw new Error('INVALID_PRODUCT_ID');
   }
-
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      throw new Error('INVALID_PRODUCT_ID');
-    }
-    return String(value);
-  }
-
-  if (typeof value !== 'string') {
-    throw new Error('INVALID_PRODUCT_ID');
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    throw new Error('INVALID_PRODUCT_ID');
-  }
-
-  return trimmed;
+  return value.trim();
 }
 
 function parseTimeInput(value: unknown): string | null {
