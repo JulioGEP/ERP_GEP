@@ -1619,7 +1619,7 @@ function VariantModal({
               <Accordion className="variant-deals-accordion">
                 <Accordion.Item eventKey="variant-deals">
                   <Accordion.Header>
-                    <span className="text-uppercase small fw-semibold">Deals asociados</span>
+                    <span className="text-uppercase small fw-semibold">Presupuestos asociados</span>
                     {deals.length ? (
                       <Badge bg="light" text="dark" className="ms-2">
                         {deals.length}
