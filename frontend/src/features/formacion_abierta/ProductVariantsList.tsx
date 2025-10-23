@@ -15,6 +15,9 @@ import {
 } from 'react-bootstrap';
 
 import { API_BASE, ApiError } from '../presupuestos/api';
+import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailModalAbierta';
+import type { DealSummary } from '../../types/deal';
+import { emitToast } from '../../utils/toast';
 
 type VariantInfo = {
   id: string;
@@ -1292,6 +1295,38 @@ function VariantModal({
   const [deals, setDeals] = useState<DealTag[]>([]);
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [isDealsLoading, setIsDealsLoading] = useState(false);
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [selectedDealSummary, setSelectedDealSummary] = useState<DealSummary | null>(null);
+
+  const productHeaderLabel = (() => {
+    const rawName = product?.name ?? '';
+    const trimmedName = rawName.trim();
+    if (trimmedName.length) {
+      return trimmedName;
+    }
+
+    const rawCode = product?.code ?? '';
+    const trimmedCode = rawCode.trim();
+    if (trimmedCode.length) {
+      return trimmedCode;
+    }
+
+    return 'Producto sin nombre';
+  })();
+
+  const variantSummaryParts: string[] = [];
+  const variantSede = variant?.sede ? variant.sede.trim() : '';
+  if (variantSede.length) {
+    variantSummaryParts.push(variantSede);
+  }
+
+  const formattedVariantDate = variant?.date ? formatDate(variant.date) : null;
+  if (formattedVariantDate) {
+    variantSummaryParts.push(formattedVariantDate);
+  }
+
+  const variantSummary = variantSummaryParts.join(' · ');
+  const variantIdWoo = variant?.id_woo ? String(variant.id_woo).trim() : '';
 
   useEffect(() => {
     if (!variant) {
@@ -1316,6 +1351,8 @@ function VariantModal({
       setDeals([]);
       setDealsError(null);
       setIsDealsLoading(false);
+      setSelectedDealId(null);
+      setSelectedDealSummary(null);
       return;
     }
 
@@ -1324,6 +1361,8 @@ function VariantModal({
     setInitialValues(nextValues);
     setSaveError(null);
     setSaveSuccess(null);
+    setSelectedDealId(null);
+    setSelectedDealSummary(null);
   }, [variant?.id]);
 
   useEffect(() => {
@@ -1333,6 +1372,8 @@ function VariantModal({
       setDeals([]);
       setDealsError(null);
       setIsDealsLoading(false);
+      setSelectedDealId(null);
+      setSelectedDealSummary(null);
       return () => {
         ignore = true;
       };
@@ -1371,6 +1412,66 @@ function VariantModal({
       setFormValues((prev) => ({ ...prev, [field]: value }));
       setSaveSuccess(null);
     };
+
+  const handleOpenDealModal = (deal: DealTag) => {
+    const rawId = deal.deal_id?.trim();
+    if (!rawId) {
+      emitToast({ variant: 'danger', message: 'No se pudo determinar el presupuesto.' });
+      return;
+    }
+
+    const products = deal.products.map((item) => {
+      const rawPrice = item.price?.trim();
+      const numericPrice = rawPrice && !Number.isNaN(Number(rawPrice)) ? Number(rawPrice) : null;
+      return {
+        id: item.id,
+        deal_id: rawId,
+        name: item.name ?? null,
+        code: item.code ?? null,
+        quantity: null,
+        price: numericPrice,
+        type: null,
+        hours: null,
+        comments: null,
+        typeLabel: null,
+        categoryLabel: null,
+        template: null,
+      };
+    });
+
+    const productNames = products
+      .map((item) => {
+        const rawName = item.name ?? '';
+        const trimmedName = rawName.trim();
+        if (trimmedName.length) {
+          return trimmedName;
+        }
+
+        const rawCode = item.code ?? '';
+        const trimmedCode = rawCode.trim();
+        return trimmedCode;
+      })
+      .filter((value): value is string => value.length > 0);
+
+    setSelectedDealSummary({
+      deal_id: rawId,
+      dealId: rawId,
+      title: deal.title?.trim().length ? deal.title : `Presupuesto ${rawId}`,
+      pipeline_label: 'Formación Abierta',
+      pipeline_id: 'Formación Abierta',
+      training_address: null,
+      organization: null,
+      person: null,
+      products,
+      productNames: productNames.length ? productNames : undefined,
+    });
+    setSelectedDealId(rawId);
+  };
+
+  const handleCloseDealModal = () => {
+    setSelectedDealId(null);
+    setSelectedDealSummary(null);
+  };
 
   const isDirty =
     formValues.price !== initialValues.price ||
@@ -1453,20 +1554,19 @@ function VariantModal({
   };
 
   return (
-    <Modal
-      show={!!variant}
-      onHide={handleAttemptClose}
-      centered
-      size="lg"
-      backdrop={isSaving ? 'static' : true}
-      keyboard={!isSaving}
-    >
+    <>
+      <Modal
+        show={!!variant}
+        onHide={handleAttemptClose}
+        centered
+        size="lg"
+        backdrop={isSaving ? 'static' : true}
+        keyboard={!isSaving}
+      >
       <Modal.Header closeButton className="variant-detail-modal-header">
         <div className="d-flex flex-column">
-          <Modal.Title className="mb-1 text-white">Detalle de la variante</Modal.Title>
-          {variant ? (
-            <div className="text-white small">ID Woo: {variant.id_woo ?? '—'}</div>
-          ) : null}
+          <Modal.Title className="mb-1 text-white">Formación en Abierto</Modal.Title>
+          {variant ? <div className="text-white small">{productHeaderLabel}</div> : null}
         </div>
       </Modal.Header>
       <Modal.Body className="d-flex flex-column gap-3">
@@ -1476,16 +1576,6 @@ function VariantModal({
               <p className="text-uppercase text-muted small fw-semibold mb-1">Producto</p>
               <div className="fw-semibold">{product.name ?? 'Producto sin nombre'}</div>
               <div className="text-muted small">ID Woo: {product.id_woo ?? '—'}</div>
-            </div>
-
-            <div className="d-flex flex-column gap-2">
-              <p className="text-uppercase text-muted small fw-semibold mb-0">Variante</p>
-              <Stack direction="horizontal" gap={2} className="flex-wrap">
-                <span className="fw-semibold h5 mb-0">{variant.name ?? 'Variante sin nombre'}</span>
-                {variant.status && (
-                  <Badge bg={getStatusBadgeVariant(variant.status)}>{variant.status}</Badge>
-                )}
-              </Stack>
             </div>
 
             {saveError && <Alert variant="danger" className="mb-0">{saveError}</Alert>}
@@ -1518,29 +1608,51 @@ function VariantModal({
                 </Col>
               </Row>
 
-              <div>
-                <p className="text-uppercase text-muted small fw-semibold mb-2">Deals asociados</p>
-                {dealsError ? (
-                  <Alert variant="danger" className="mb-0">
-                    {dealsError}
-                  </Alert>
-                ) : isDealsLoading ? (
-                  <div className="d-flex align-items-center gap-2 text-muted">
-                    <Spinner animation="border" size="sm" />
-                    <span>Cargando deals…</span>
-                  </div>
-                ) : deals.length ? (
-                  <Stack direction="horizontal" gap={2} className="flex-wrap">
-                    {deals.map((deal) => (
-                      <Badge bg="secondary" key={deal.deal_id} className="mb-1">
-                        {deal.title}
+              <Accordion className="variant-deals-accordion">
+                <Accordion.Item eventKey="variant-deals">
+                  <Accordion.Header>
+                    <span className="text-uppercase small fw-semibold">Deals asociados</span>
+                    {deals.length ? (
+                      <Badge bg="light" text="dark" className="ms-2">
+                        {deals.length}
                       </Badge>
-                    ))}
-                  </Stack>
-                ) : (
-                  <div className="text-muted small">No hay deals asociados a esta variación.</div>
-                )}
-              </div>
+                    ) : null}
+                  </Accordion.Header>
+                  <Accordion.Body>
+                    {dealsError ? (
+                      <Alert variant="danger" className="mb-0">
+                        {dealsError}
+                      </Alert>
+                    ) : isDealsLoading ? (
+                      <div className="d-flex align-items-center gap-2 text-muted">
+                        <Spinner animation="border" size="sm" />
+                        <span>Cargando deals…</span>
+                      </div>
+                    ) : deals.length ? (
+                      <ListGroup variant="flush" className="mb-0">
+                        {deals.map((deal) => {
+                          const dealTitle = deal.title?.trim().length
+                            ? deal.title
+                            : `Presupuesto ${deal.deal_id}`;
+                          return (
+                            <ListGroup.Item
+                              action
+                              key={deal.deal_id}
+                              onClick={() => handleOpenDealModal(deal)}
+                              className="d-flex justify-content-between align-items-center"
+                            >
+                              <span className="fw-semibold">{dealTitle}</span>
+                              <span className="text-muted small">{deal.deal_id}</span>
+                            </ListGroup.Item>
+                          );
+                        })}
+                      </ListGroup>
+                    ) : (
+                      <div className="text-muted small mb-0">No hay deals asociados a esta variación.</div>
+                    )}
+                  </Accordion.Body>
+                </Accordion.Item>
+              </Accordion>
 
               <Row className="g-3">
                 <Col md={3}>
@@ -1608,6 +1720,18 @@ function VariantModal({
               </Row>
             </Form>
 
+            <div className="d-flex flex-column gap-1">
+              <p className="text-uppercase text-muted small fw-semibold mb-1">Variante</p>
+              <Stack direction="horizontal" gap={2} className="flex-wrap align-items-center">
+                <span className="fw-semibold h5 mb-0">{variant.name ?? 'Variante sin nombre'}</span>
+                {variant.status && (
+                  <Badge bg={getStatusBadgeVariant(variant.status)}>{variant.status}</Badge>
+                )}
+              </Stack>
+              {variantSummary ? <div className="text-muted small">{variantSummary}</div> : null}
+              {variantIdWoo ? <div className="text-muted small">ID Woo: {variantIdWoo}</div> : null}
+            </div>
+
             <dl className="row mb-0">
               <dt className="col-sm-4 text-muted">Creada</dt>
               <dd className="col-sm-8">{formatDate(variant.created_at) ?? '—'}</dd>
@@ -1618,12 +1742,12 @@ function VariantModal({
           </div>
         ) : null}
       </Modal.Body>
-      <Modal.Footer>
-        <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
-          Cerrar
-        </Button>
-        <Button
-          variant="primary"
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
+            Cerrar
+          </Button>
+          <Button
+            variant="primary"
           onClick={() => handleSave(false)}
           disabled={isSaving || !isDirty}
         >
@@ -1631,7 +1755,15 @@ function VariantModal({
           {isSaving ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </Modal.Footer>
-    </Modal>
+      </Modal>
+
+      <BudgetDetailModalAbierta
+        dealId={selectedDealId}
+        summary={selectedDealSummary}
+        onClose={handleCloseDealModal}
+        onNotify={emitToast}
+      />
+    </>
   );
 }
 
