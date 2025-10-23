@@ -1591,9 +1591,19 @@ type DealVariantSelectOption = {
 };
 
 function isApplicableProduct(product: DealProduct): product is DealProduct & { id: string } {
-  const code = typeof product?.code === 'string' ? product.code.toLowerCase() : '';
   const id = product?.id;
-  return Boolean(id) && SESSION_CODE_PREFIXES.some((prefix) => code.startsWith(prefix));
+  if (!id) return false;
+
+  const type = typeof product?.type === 'string' ? product.type.trim().toUpperCase() : null;
+  if (type === 'TRAINING') return true;
+
+  const template = typeof product?.template === 'string' ? product.template.trim().toLowerCase() : '';
+  if (template.includes('formacion')) return true;
+
+  const code = typeof product?.code === 'string' ? product.code.trim().toLowerCase() : '';
+  if (!code) return false;
+
+  return SESSION_CODE_PREFIXES.some((prefix) => code.startsWith(prefix));
 }
 
 function mapSessionToForm(session: SessionDTO): SessionFormState {
