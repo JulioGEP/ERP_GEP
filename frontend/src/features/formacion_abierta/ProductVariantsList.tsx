@@ -1773,6 +1773,8 @@ export default function ProductVariantsList() {
   const [products, setProducts] = useState<ProductInfo[]>([]);
   const [activeVariant, setActiveVariant] = useState<ActiveVariant | null>(null);
   const [pendingDeletes, setPendingDeletes] = useState<Record<string, boolean>>({});
+  const [variantLeadCounts, setVariantLeadCounts] = useState<Record<string, number>>({});
+  const [variantLeadCountsLoading, setVariantLeadCountsLoading] = useState<Record<string, boolean>>({});
   const [feedback, setFeedback] = useState<
     { tone: 'success' | 'danger' | 'info'; text: string } | null
   >(null);
@@ -1806,6 +1808,39 @@ export default function ProductVariantsList() {
       ignore = true;
     };
   }, []);
+
+  useEffect(() => {
+    const wooIdsToFetch = new Set<string>();
+
+    products.forEach((product) => {
+      product.variants.forEach((variant) => {
+        const wooId = typeof variant.id_woo === 'string' ? variant.id_woo.trim() : '';
+        if (wooId.length && variantLeadCounts[wooId] === undefined && !variantLeadCountsLoading[wooId]) {
+          wooIdsToFetch.add(wooId);
+        }
+      });
+    });
+
+    wooIdsToFetch.forEach((wooId) => {
+      setVariantLeadCountsLoading((prev) => ({ ...prev, [wooId]: true }));
+
+      (async () => {
+        try {
+          const deals = await fetchDealsByVariation(wooId);
+          setVariantLeadCounts((prev) => ({ ...prev, [wooId]: deals.length }));
+        } catch (error) {
+          console.warn('[ProductVariantsList] could not load lead count for variant', wooId, error);
+          setVariantLeadCounts((prev) => ({ ...prev, [wooId]: 0 }));
+        } finally {
+          setVariantLeadCountsLoading((prev) => {
+            const next = { ...prev };
+            delete next[wooId];
+            return next;
+          });
+        }
+      })();
+    });
+  }, [products, variantLeadCounts, variantLeadCountsLoading]);
 
   const handleSelectVariant = (product: ProductInfo, variant: VariantInfo) => {
     setActiveVariant({ product, variant });
@@ -2049,6 +2084,9 @@ export default function ProductVariantsList() {
                           <ListGroup>
                           {[...product.variants].sort(compareVariants).map((variant) => {
                             const isDeleting = !!pendingDeletes[variant.id];
+                            const wooId = typeof variant.id_woo === 'string' ? variant.id_woo.trim() : '';
+                            const leadsCount = wooId ? variantLeadCounts[wooId] ?? 0 : null;
+                            const isLeadCountLoading = wooId ? !!variantLeadCountsLoading[wooId] : false;
 
                             return (
                               <ListGroup.Item
@@ -2063,6 +2101,21 @@ export default function ProductVariantsList() {
                                     <div className="text-muted small">ID Woo: {variant.id_woo}</div>
                                   </div>
                                   <Stack direction="horizontal" gap={2} className="flex-wrap">
+                                    {wooId ? (
+                                      <Badge
+                                        bg="light"
+                                        text="dark"
+                                        className="d-inline-flex align-items-center gap-2"
+                                        title={`Leads asociados: ${isLeadCountLoading ? 'cargando…' : leadsCount}`}
+                                      >
+                                        <span className="text-uppercase small mb-0">Leads</span>
+                                        {isLeadCountLoading ? (
+                                          <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                                        ) : (
+                                          <span className="fw-semibold">{leadsCount}</span>
+                                        )}
+                                      </Badge>
+                                    ) : null}
                                     {variant.status && (
                                       <Badge bg={getStatusBadgeVariant(variant.status)}>
                                         {variant.status}
