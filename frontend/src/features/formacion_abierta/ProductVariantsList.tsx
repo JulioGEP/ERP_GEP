@@ -879,7 +879,7 @@ const STOCK_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
 
 const PUBLICATION_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'publish', label: 'Publicado' },
-  { value: 'private', label: 'Privado' },
+  { value: 'private', label: 'Cancelado' },
 ];
 
 function getStatusBadgeVariant(status: string | null): string {
@@ -1834,7 +1834,7 @@ export function VariantModal({
               <Row className="g-3">
                 <Col md={3}>
                   <Form.Group controlId="variantStatus" className="mb-0">
-                    <Form.Label>Estado de publicación</Form.Label>
+                    <Form.Label>Estado</Form.Label>
                     <Form.Select
                       value={formValues.status}
                       onChange={handleChange('status')}
