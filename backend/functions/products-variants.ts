@@ -371,13 +371,22 @@ type LegacyProductRecord = Omit<
 
 let productsDefaultFieldsSupported: boolean | null = null;
 
+const PRODUCT_DEFAULT_COLUMN_PATTERNS = [
+  /default_variant_(start|end|stock_status|stock_quantity|price)/i,
+  /variant_(start|end|stock_status|stock_quantity|price)/i,
+];
+
 function isMissingProductDefaultColumns(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2021') {
     return true;
   }
 
+  if (error instanceof Prisma.PrismaClientUnknownRequestError) {
+    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test(error.message));
+  }
+
   if (error instanceof Error) {
-    return /default_variant_(start|end|stock_status|stock_quantity|price)/i.test(error.message);
+    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test(error.message));
   }
 
   return false;
