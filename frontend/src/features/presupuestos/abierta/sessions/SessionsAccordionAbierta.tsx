@@ -1689,9 +1689,8 @@ export function SessionsAccordionAbierta({
 
   const applicableProducts = useMemo<ApplicableProductInfo[]>(() => {
     return products.filter(isApplicableProduct).map((product) => {
-      const normalizedId =
-        typeof product.id === 'string' ? product.id.trim() : String(product.id ?? '').trim();
-      const id = normalizedId.length ? normalizedId : String(product.id);
+      const id = String(product.id);
+      const normalizedId = typeof product.id === 'string' ? product.id.trim() : String(product.id ?? '').trim();
       const normalizedCode = typeof product.code === 'string' ? product.code.trim() : '';
       const normalizedName = typeof product.name === 'string' ? product.name.trim() : '';
 
@@ -1727,8 +1726,6 @@ export function SessionsAccordionAbierta({
   }, [products]);
 
   const shouldShow = applicableProducts.length > 0;
-
-  const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
 
   const [currentDealVariation, setCurrentDealVariation] = useState<string | null>(dealVariation ?? null);
   const [currentDealTrainingDate, setCurrentDealTrainingDate] = useState<string | null>(
@@ -1800,49 +1797,6 @@ export function SessionsAccordionAbierta({
     return label.length ? label : null;
   }, [currentVariantInfo]);
 
-  const variantLocationFilter = useMemo(() => {
-    const candidates: Array<string | null> = [currentVariantName, normalizedDealSede];
-    const normalizedVariation =
-      typeof dealVariation === 'string' ? dealVariation.trim() : '';
-    if (normalizedVariation) {
-      candidates.push(normalizedVariation);
-    }
-
-    for (const candidate of candidates) {
-      const normalized = candidate?.toLocaleLowerCase('es');
-      if (!normalized) continue;
-      if (normalized.includes('sabadell')) return 'sabadell';
-      if (normalized.includes('madrid')) return 'madrid';
-    }
-
-    return null;
-  }, [currentVariantName, dealVariation, normalizedDealSede]);
-
-  const parseVariantDate = useCallback((value: string | null | undefined) => {
-    if (typeof value !== 'string') return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-
-    const direct = new Date(trimmed);
-    if (Number.isFinite(direct.getTime())) {
-      return direct;
-    }
-
-    const parts = trimmed.match(/^([0-3]?\d)\/([0-1]?\d)\/(\d{4})$/);
-    if (!parts) return null;
-
-    const day = Number(parts[1]);
-    const month = Number(parts[2]);
-    const year = Number(parts[3]);
-
-    if (!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) {
-      return null;
-    }
-
-    const parsed = new Date(year, month - 1, day);
-    return Number.isFinite(parsed.getTime()) ? parsed : null;
-  }, []);
-
   const normalizeExact = useCallback((value: string | null | undefined) => {
     if (typeof value === 'string') return value.trim();
     if (typeof value === 'number') return String(value).trim();
@@ -1859,28 +1813,8 @@ export function SessionsAccordionAbierta({
 
   const matchesProduct = useCallback(
     (variant: ProductVariantOption, product: ApplicableProductInfo) => {
-      const productIds = new Set<string>();
-      const normalizedProductId = normalizeExact(product.id);
-      if (normalizedProductId) {
-        productIds.add(normalizedProductId);
-      }
-
-      const variantProductIds = new Set<string>();
-      [variant.productId, variant.productPipeId].forEach((value) => {
-        const normalized = normalizeExact(value);
-        if (normalized) variantProductIds.add(normalized);
-      });
-
-      if (productIds.size > 0 && variantProductIds.size > 0) {
-        const hasDirectMatch = Array.from(variantProductIds).some((id) => productIds.has(id));
-        if (!hasDirectMatch) {
-          return false;
-        }
-        return true;
-      }
-
-      const variantIds = new Set<string>(variantProductIds);
-      [variant.productCode].forEach((value) => {
+      const variantIds = new Set<string>();
+      [variant.productId, variant.productPipeId, variant.productCode].forEach((value) => {
         const normalized = normalizeExact(value);
         if (normalized) variantIds.add(normalized);
       });
@@ -1921,26 +1855,11 @@ export function SessionsAccordionAbierta({
     const relevantProducts = activeVariantProduct ? [activeVariantProduct] : applicableProducts;
     const options: DealVariantSelectOption[] = [];
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     for (const variant of productVariants) {
       if (!variant.wooId) continue;
 
       const matchedProduct = relevantProducts.find((product) => matchesProduct(variant, product));
       if (!matchedProduct) continue;
-
-      if (variantLocationFilter) {
-        const variantName = normalizeText(variant.name);
-        if (!variantName.includes(variantLocationFilter)) {
-          continue;
-        }
-      }
-
-      const parsedDate = parseVariantDate(variant.date);
-      if (parsedDate && parsedDate < today) {
-        continue;
-      }
 
       const baseName = variant.name?.trim();
       const labelParts: string[] = [];
@@ -1972,16 +1891,7 @@ export function SessionsAccordionAbierta({
     }
 
     return options.sort((a, b) => a.label.localeCompare(b.label, 'es'));
-  }, [
-    activeVariantProduct,
-    applicableProducts,
-    includeProductInVariantLabel,
-    matchesProduct,
-    normalizeText,
-    parseVariantDate,
-    productVariants,
-    variantLocationFilter,
-  ]);
+  }, [activeVariantProduct, applicableProducts, includeProductInVariantLabel, matchesProduct, productVariants]);
 
   const variantOptionsLoading = productVariantsQuery.isLoading || productVariantsQuery.isFetching;
   const [variantSaving, setVariantSaving] = useState(false);
@@ -2582,6 +2492,8 @@ export function SessionsAccordionAbierta({
   }, [activeSession, forms]);
 
   if (!shouldShow) return null;
+
+  const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
 
   const trainers = ENABLE_TRAINERS && trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
   const allRooms = ENABLE_ROOMS && roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
