@@ -162,6 +162,7 @@ export type MobileUnitOption = {
 
 export type ProductVariantOption = {
   productId: string;
+  productPipeId: string | null;
   productName: string | null;
   productCode: string | null;
   variantId: string;
@@ -1378,21 +1379,41 @@ export async function fetchProductVariants(options?: {
   const data = await request(`/products-variants`);
   const products = Array.isArray(data?.products) ? (data.products as unknown[]) : [];
 
-  const allowedIds = new Set(
-    Array.isArray(options?.productIds)
-      ? options!.productIds.map((id) => String(id ?? '').trim()).filter((id) => id.length)
-      : [],
-  );
+  const allowedValues = Array.isArray(options?.productIds) ? options!.productIds : [];
+  const allowedExact = new Set<string>();
+  const allowedLower = new Set<string>();
+
+  for (const value of allowedValues) {
+    const text = toStringValue(value);
+    if (!text) continue;
+    allowedExact.add(text);
+    allowedLower.add(text.toLocaleLowerCase('es'));
+  }
 
   const variants: ProductVariantOption[] = [];
 
   for (const product of products) {
     const productId = toStringValue((product as any)?.id);
     if (!productId) continue;
-    if (allowedIds.size > 0 && !allowedIds.has(productId)) continue;
 
+    const productPipeId = toStringValue((product as any)?.id_pipe);
     const productName = toStringValue((product as any)?.name);
     const productCode = toStringValue((product as any)?.code);
+
+    if (allowedExact.size > 0) {
+      const matchesExact =
+        (productId && allowedExact.has(productId)) ||
+        (productPipeId && allowedExact.has(productPipeId)) ||
+        (productCode && allowedExact.has(productCode));
+      const matchesText =
+        (productName && allowedLower.has(productName.toLocaleLowerCase('es'))) ||
+        (productCode && allowedLower.has(productCode.toLocaleLowerCase('es')));
+
+      if (!matchesExact && !matchesText) {
+        continue;
+      }
+    }
+
     const productVariants = Array.isArray((product as any)?.variants)
       ? ((product as any)?.variants as unknown[])
       : [];
@@ -1408,6 +1429,7 @@ export async function fetchProductVariants(options?: {
 
       variants.push({
         productId,
+        productPipeId,
         productName,
         productCode,
         variantId,

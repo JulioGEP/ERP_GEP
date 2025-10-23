@@ -351,6 +351,7 @@ type VariantRecord = {
 
 type ProductRecord = {
   id: string;
+  id_pipe: string;
   id_woo: bigint | null;
   name: string | null;
   code: string | null;
@@ -436,6 +437,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
 
   const selectWithDefaults: Record<string, any> = {
     id: true,
+    id_pipe: true,
     id_woo: true,
     name: true,
     code: true,
@@ -452,6 +454,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
 
   const selectLegacy: Record<string, any> = {
     id: true,
+    id_pipe: true,
     id_woo: true,
     name: true,
     code: true,
@@ -541,6 +544,7 @@ function normalizeProduct(record: ProductRecord) {
 
   return {
     id: record.id,
+    id_pipe: record.id_pipe,
     id_woo: record.id_woo ? record.id_woo.toString() : null,
     name: record.name ?? null,
     code: record.code ?? null,

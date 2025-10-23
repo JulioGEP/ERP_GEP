@@ -1590,6 +1590,16 @@ type DealVariantSelectOption = {
   date: string | null;
 };
 
+type ApplicableProductInfo = {
+  id: string;
+  name: string | null;
+  code: string | null;
+  quantity: number;
+  hours: number | null;
+  matchIds: string[];
+  matchTexts: string[];
+};
+
 function isApplicableProduct(product: DealProduct): product is DealProduct & { id: string } {
   const id = product?.id;
   if (!id) return false;
@@ -1721,12 +1731,26 @@ export function SessionsAccordionAbierta({
   const qc = useQueryClient();
   const enablePublicLink = allowPublicLinkGeneration;
 
-  const applicableProducts = useMemo(
-    () =>
-      products.filter(isApplicableProduct).map((product) => ({
-        id: String(product.id),
-        name: product.name ?? null,
-        code: product.code ?? null,
+  const applicableProducts = useMemo<ApplicableProductInfo[]>(() => {
+    return products.filter(isApplicableProduct).map((product) => {
+      const id = String(product.id);
+      const normalizedId = typeof product.id === 'string' ? product.id.trim() : String(product.id ?? '').trim();
+      const normalizedCode = typeof product.code === 'string' ? product.code.trim() : '';
+      const normalizedName = typeof product.name === 'string' ? product.name.trim() : '';
+
+      const matchIds = new Set<string>();
+      const matchTexts = new Set<string>();
+
+      if (normalizedId) matchIds.add(normalizedId);
+      if (normalizedCode) matchIds.add(normalizedCode);
+
+      if (normalizedCode) matchTexts.add(normalizedCode.toLocaleLowerCase('es'));
+      if (normalizedName) matchTexts.add(normalizedName.toLocaleLowerCase('es'));
+
+      return {
+        id,
+        name: normalizedName || null,
+        code: normalizedCode || null,
         quantity:
           typeof product.quantity === 'number'
             ? product.quantity
@@ -1739,9 +1763,11 @@ export function SessionsAccordionAbierta({
             : product.hours != null
             ? Number(product.hours)
             : null,
-      })),
-    [products],
-  );
+        matchIds: Array.from(matchIds),
+        matchTexts: Array.from(matchTexts),
+      };
+    });
+  }, [products]);
 
   const shouldShow = applicableProducts.length > 0;
 
@@ -1758,24 +1784,32 @@ export function SessionsAccordionAbierta({
     setCurrentDealTrainingDate(dealTrainingDate ?? null);
   }, [dealTrainingDate]);
 
-  const variantProductIds = useMemo(
-    () => Array.from(new Set(applicableProducts.map((product) => product.id))),
-    [applicableProducts],
-  );
+  const variantProductFilters = useMemo(() => {
+    const filters = new Set<string>();
+    for (const product of applicableProducts) {
+      product.matchIds.forEach((value) => {
+        if (value) filters.add(value);
+      });
+      product.matchTexts.forEach((value) => {
+        if (value) filters.add(value);
+      });
+    }
+    return Array.from(filters);
+  }, [applicableProducts]);
 
   const variantProductKey = useMemo(
     () =>
-      variantProductIds
+      variantProductFilters
         .slice()
         .sort((a, b) => a.localeCompare(b, 'es'))
         .join('|'),
-    [variantProductIds],
+    [variantProductFilters],
   );
 
   const productVariantsQuery = useQuery({
     queryKey: ['deal', dealId, 'product-variants', variantProductKey],
-    queryFn: () => fetchProductVariants({ productIds: variantProductIds }),
-    enabled: variantProductIds.length > 0,
+    queryFn: () => fetchProductVariants({ productIds: variantProductFilters }),
+    enabled: variantProductFilters.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -1807,20 +1841,69 @@ export function SessionsAccordionAbierta({
     return label.length ? label : null;
   }, [currentVariantInfo]);
 
-  const activeVariantProductId = useMemo(() => {
-    if (currentVariantInfo?.productId) return currentVariantInfo.productId;
-    return variantProductIds.length === 1 ? variantProductIds[0] : null;
-  }, [currentVariantInfo, variantProductIds]);
+  const normalizeExact = useCallback((value: string | null | undefined) => {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number') return String(value).trim();
+    return '';
+  }, []);
 
-  const includeProductInVariantLabel = variantProductIds.length > 1;
+  const normalizeText = useCallback(
+    (value: string | null | undefined) => {
+      const text = normalizeExact(value);
+      return text ? text.toLocaleLowerCase('es') : '';
+    },
+    [normalizeExact],
+  );
+
+  const matchesProduct = useCallback(
+    (variant: ProductVariantOption, product: ApplicableProductInfo) => {
+      const variantIds = new Set<string>();
+      [variant.productId, variant.productPipeId, variant.productCode].forEach((value) => {
+        const normalized = normalizeExact(value);
+        if (normalized) variantIds.add(normalized);
+      });
+
+      if (product.matchIds.some((id) => variantIds.has(id))) {
+        return true;
+      }
+
+      const variantTexts = new Set<string>();
+      [variant.productName, variant.name].forEach((value) => {
+        const normalized = normalizeText(value);
+        if (normalized) variantTexts.add(normalized);
+      });
+
+      if (!variantTexts.size) {
+        return false;
+      }
+
+      return product.matchTexts.some((text) => variantTexts.has(text));
+    },
+    [normalizeExact, normalizeText],
+  );
+
+  const activeVariantProduct = useMemo(() => {
+    if (currentVariantInfo) {
+      return (
+        applicableProducts.find((product) => matchesProduct(currentVariantInfo, product)) ?? null
+      );
+    }
+    return applicableProducts.length === 1 ? applicableProducts[0] : null;
+  }, [applicableProducts, currentVariantInfo, matchesProduct]);
+
+  const includeProductInVariantLabel = applicableProducts.length > 1;
 
   const variantSelectOptions = useMemo(() => {
-    if (!activeVariantProductId) return [] as DealVariantSelectOption[];
+    if (!applicableProducts.length) return [] as DealVariantSelectOption[];
+
+    const relevantProducts = activeVariantProduct ? [activeVariantProduct] : applicableProducts;
     const options: DealVariantSelectOption[] = [];
 
     for (const variant of productVariants) {
-      if (variant.productId !== activeVariantProductId) continue;
       if (!variant.wooId) continue;
+
+      const matchedProduct = relevantProducts.find((product) => matchesProduct(variant, product));
+      if (!matchedProduct) continue;
 
       const baseName = variant.name?.trim();
       const labelParts: string[] = [];
@@ -1831,7 +1914,14 @@ export function SessionsAccordionAbierta({
 
       if (includeProductInVariantLabel) {
         const productLabel =
-          variant.productName?.trim() || variant.productCode?.trim() || variant.productId;
+          matchedProduct.name ||
+          matchedProduct.code ||
+          variant.productName?.trim() ||
+          variant.productCode?.trim() ||
+          matchedProduct.id ||
+          variant.productId ||
+          variant.productPipeId ||
+          null;
         if (productLabel && !labelParts.includes(productLabel)) {
           labelParts.push(productLabel);
         }
@@ -1845,7 +1935,7 @@ export function SessionsAccordionAbierta({
     }
 
     return options.sort((a, b) => a.label.localeCompare(b.label, 'es'));
-  }, [activeVariantProductId, includeProductInVariantLabel, productVariants]);
+  }, [activeVariantProduct, applicableProducts, includeProductInVariantLabel, matchesProduct, productVariants]);
 
   const variantOptionsLoading = productVariantsQuery.isLoading || productVariantsQuery.isFetching;
   const [variantSaving, setVariantSaving] = useState(false);
