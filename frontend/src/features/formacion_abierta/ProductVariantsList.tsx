@@ -5,9 +5,11 @@ import {
   Badge,
   Button,
   Card,
+  Col,
   Form,
   ListGroup,
   Modal,
+  Row,
   Spinner,
   Stack,
 } from 'react-bootstrap';
@@ -1460,138 +1462,151 @@ function VariantModal({
       keyboard={!isSaving}
     >
       <Modal.Header closeButton>
-        <Modal.Title>Detalle de la variante</Modal.Title>
+        <div className="d-flex flex-column">
+          <Modal.Title className="mb-1">Detalle de la variante</Modal.Title>
+          {variant ? (
+            <div className="text-muted small">ID Woo: {variant.id_woo ?? '—'}</div>
+          ) : null}
+        </div>
       </Modal.Header>
-      <Modal.Body>
+      <Modal.Body className="d-flex flex-column gap-3">
         {variant && product ? (
-          <Stack gap={3}>
+          <div className="d-flex flex-column gap-3">
             <div>
               <p className="text-uppercase text-muted small fw-semibold mb-1">Producto</p>
               <div className="fw-semibold">{product.name ?? 'Producto sin nombre'}</div>
               <div className="text-muted small">ID Woo: {product.id_woo ?? '—'}</div>
-              {product.code && <div className="text-muted small">Código: {product.code}</div>}
-              {product.category && <div className="text-muted small">Categoría: {product.category}</div>}
             </div>
 
-            <div>
-              <p className="text-uppercase text-muted small fw-semibold mb-2">Variante</p>
-              <Stack direction="horizontal" gap={2} className="flex-wrap mb-2">
+            <div className="d-flex flex-column gap-2">
+              <p className="text-uppercase text-muted small fw-semibold mb-0">Variante</p>
+              <Stack direction="horizontal" gap={2} className="flex-wrap">
                 <span className="fw-semibold h5 mb-0">{variant.name ?? 'Variante sin nombre'}</span>
                 {variant.status && (
                   <Badge bg={getStatusBadgeVariant(variant.status)}>{variant.status}</Badge>
                 )}
               </Stack>
-              <div className="text-muted small">ID Woo: {variant.id_woo}</div>
             </div>
 
             {saveError && <Alert variant="danger" className="mb-0">{saveError}</Alert>}
             {saveSuccess && <Alert variant="success" className="mb-0">{saveSuccess}</Alert>}
 
-            <Form>
-              <Form.Group className="mb-3" controlId="variantStatus">
-                <Form.Label>Estado de publicación</Form.Label>
-                <Form.Select
-                  value={formValues.status}
-                  onChange={handleChange('status')}
-                  disabled={isSaving}
-                >
-                  {!PUBLICATION_STATUS_OPTIONS.some((option) => option.value === formValues.status) &&
-                    formValues.status && (
-                      <option value={formValues.status}>{formValues.status}</option>
-                    )}
-                  {PUBLICATION_STATUS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
+            <Form className="d-flex flex-column gap-3">
+              <Row className="g-3">
+                <Col md={6}>
+                  <Form.Group controlId="variantSede" className="mb-0">
+                    <Form.Label>Sede</Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={formValues.sede}
+                      onChange={handleChange('sede')}
+                      disabled={isSaving}
+                      placeholder="Sede de la formación"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={6}>
+                  <Form.Group controlId="variantDate" className="mb-0">
+                    <Form.Label>Fecha</Form.Label>
+                    <Form.Control
+                      type="date"
+                      value={formValues.date}
+                      onChange={handleChange('date')}
+                      disabled={isSaving}
+                    />
+                  </Form.Group>
+                </Col>
+              </Row>
 
-              <Form.Group className="mb-3" controlId="variantPrice">
-                <Form.Label>Precio</Form.Label>
-                <Form.Control
-                  type="number"
-                  step="0.01"
-                  value={formValues.price}
-                  onChange={handleChange('price')}
-                  disabled={isSaving}
-                  placeholder="Introduce el precio"
-                />
-                <Form.Text className="text-muted">Se guardará también en WooCommerce.</Form.Text>
-              </Form.Group>
+              <div>
+                <p className="text-uppercase text-muted small fw-semibold mb-2">Deals asociados</p>
+                {dealsError ? (
+                  <Alert variant="danger" className="mb-0">
+                    {dealsError}
+                  </Alert>
+                ) : isDealsLoading ? (
+                  <div className="d-flex align-items-center gap-2 text-muted">
+                    <Spinner animation="border" size="sm" />
+                    <span>Cargando deals…</span>
+                  </div>
+                ) : deals.length ? (
+                  <Stack direction="horizontal" gap={2} className="flex-wrap">
+                    {deals.map((deal) => (
+                      <Badge bg="secondary" key={deal.deal_id} className="mb-1">
+                        {deal.title}
+                      </Badge>
+                    ))}
+                  </Stack>
+                ) : (
+                  <div className="text-muted small">No hay deals asociados a esta variación.</div>
+                )}
+              </div>
 
-              <Form.Group className="mb-3" controlId="variantStock">
-                <Form.Label>Stock</Form.Label>
-                <Form.Control
-                  type="number"
-                  step="1"
-                  value={formValues.stock}
-                  onChange={handleChange('stock')}
-                  disabled={isSaving}
-                  placeholder="Cantidad disponible"
-                />
-              </Form.Group>
-
-              <Form.Group className="mb-3" controlId="variantStockStatus">
-                <Form.Label>Estado de stock</Form.Label>
-                <Form.Select
-                  value={formValues.stock_status}
-                  onChange={handleChange('stock_status')}
-                  disabled={isSaving}
-                >
-                  {STOCK_STATUS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
-
-              <Form.Group className="mb-3" controlId="variantSede">
-                <Form.Label>Sede</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={formValues.sede}
-                  onChange={handleChange('sede')}
-                  disabled={isSaving}
-                  placeholder="Sede de la formación"
-                />
-              </Form.Group>
-
-              <Form.Group className="mb-3" controlId="variantDate">
-                <Form.Label>Fecha</Form.Label>
-                <Form.Control
-                  type="date"
-                  value={formValues.date}
-                  onChange={handleChange('date')}
-                  disabled={isSaving}
-                />
-              </Form.Group>
+              <Row className="g-3">
+                <Col md={3}>
+                  <Form.Group controlId="variantStatus" className="mb-0">
+                    <Form.Label>Estado de publicación</Form.Label>
+                    <Form.Select
+                      value={formValues.status}
+                      onChange={handleChange('status')}
+                      disabled={isSaving}
+                    >
+                      {!PUBLICATION_STATUS_OPTIONS.some((option) => option.value === formValues.status) &&
+                        formValues.status && (
+                          <option value={formValues.status}>{formValues.status}</option>
+                        )}
+                      {PUBLICATION_STATUS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={3}>
+                  <Form.Group controlId="variantPrice" className="mb-0">
+                    <Form.Label>Precio</Form.Label>
+                    <Form.Control
+                      type="number"
+                      step="0.01"
+                      value={formValues.price}
+                      onChange={handleChange('price')}
+                      disabled={isSaving}
+                      placeholder="Introduce el precio"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={3}>
+                  <Form.Group controlId="variantStock" className="mb-0">
+                    <Form.Label>Stock</Form.Label>
+                    <Form.Control
+                      type="number"
+                      step="1"
+                      value={formValues.stock}
+                      onChange={handleChange('stock')}
+                      disabled={isSaving}
+                      placeholder="Cantidad disponible"
+                    />
+                  </Form.Group>
+                </Col>
+                <Col md={3}>
+                  <Form.Group controlId="variantStockStatus" className="mb-0">
+                    <Form.Label>Estado de stock</Form.Label>
+                    <Form.Select
+                      value={formValues.stock_status}
+                      onChange={handleChange('stock_status')}
+                      disabled={isSaving}
+                    >
+                      {STOCK_STATUS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+              </Row>
             </Form>
-
-            <div>
-              <p className="text-uppercase text-muted small fw-semibold mb-2">Deals asociados</p>
-              {dealsError ? (
-                <Alert variant="danger" className="mb-0">
-                  {dealsError}
-                </Alert>
-              ) : isDealsLoading ? (
-                <div className="d-flex align-items-center gap-2 text-muted">
-                  <Spinner animation="border" size="sm" />
-                  <span>Cargando deals…</span>
-                </div>
-              ) : deals.length ? (
-                <Stack direction="horizontal" gap={2} className="flex-wrap">
-                  {deals.map((deal) => (
-                    <Badge bg="secondary" key={deal.deal_id} className="mb-1">
-                      {deal.title}
-                    </Badge>
-                  ))}
-                </Stack>
-              ) : (
-                <div className="text-muted small">No hay deals asociados a esta variación.</div>
-              )}
-            </div>
 
             <dl className="row mb-0">
               <dt className="col-sm-4 text-muted">Creada</dt>
@@ -1600,7 +1615,7 @@ function VariantModal({
               <dt className="col-sm-4 text-muted">Actualizada</dt>
               <dd className="col-sm-8">{formatDate(variant.updated_at) ?? '—'}</dd>
             </dl>
-          </Stack>
+          </div>
         ) : null}
       </Modal.Body>
       <Modal.Footer>
