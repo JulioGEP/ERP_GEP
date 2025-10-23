@@ -39,6 +39,8 @@ type ProductDefaults = {
   default_variant_stock_status: string | null;
   default_variant_stock_quantity: number | null;
   default_variant_price: string | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
 };
 
 type ProductInfo = ProductDefaults & {
@@ -71,6 +73,8 @@ type ProductDefaultsUpdatePayload = {
   stock_status?: string | null;
   stock_quantity?: number | null;
   price?: string | null;
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
 };
 
 type VariantBulkCreateResponse = {
@@ -162,6 +166,12 @@ function buildProductDefaultsSummary(product: ProductInfo): string | null {
     parts.push(`Estado: ${statusLabel}`);
   }
 
+  if (product.hora_inicio || product.hora_fin) {
+    const inicio = product.hora_inicio ?? '—';
+    const fin = product.hora_fin ?? '—';
+    parts.push(`Horario: ${inicio} - ${fin}`);
+  }
+
   if (!parts.length) {
     return null;
   }
@@ -198,6 +208,8 @@ async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
       name: product.name ?? null,
       code: product.code ?? null,
       category: product.category ?? null,
+      hora_inicio: product.hora_inicio ?? null,
+      hora_fin: product.hora_fin ?? null,
       default_variant_start: product.default_variant_start ?? null,
       default_variant_end: product.default_variant_end ?? null,
       default_variant_stock_status: product.default_variant_stock_status ?? null,
@@ -312,6 +324,8 @@ async function updateProductVariantDefaults(
     default_variant_stock_quantity: stockQuantity,
     default_variant_price:
       json.product.default_variant_price != null ? String(json.product.default_variant_price) : null,
+    hora_inicio: json.product.hora_inicio ?? null,
+    hora_fin: json.product.hora_fin ?? null,
   };
 }
 
@@ -756,6 +770,8 @@ type ProductDefaultsFormValues = {
   stock_status: string;
   stock_quantity: string;
   price: string;
+  hora_inicio: string;
+  hora_fin: string;
 };
 
 function ProductDefaultsModal({
@@ -771,6 +787,8 @@ function ProductDefaultsModal({
     stock_status: '',
     stock_quantity: '',
     price: '',
+    hora_inicio: '',
+    hora_fin: '',
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -784,7 +802,7 @@ function ProductDefaultsModal({
 
   useEffect(() => {
     if (!product) {
-      setFormValues({ stock_status: '', stock_quantity: '', price: '' });
+      setFormValues({ stock_status: '', stock_quantity: '', price: '', hora_inicio: '', hora_fin: '' });
       setError(null);
       setSuccess(null);
       setIsSaving(false);
@@ -799,6 +817,8 @@ function ProductDefaultsModal({
           ? String(product.default_variant_stock_quantity)
           : '',
       price: product.default_variant_price ?? '',
+      hora_inicio: product.hora_inicio ?? '',
+      hora_fin: product.hora_fin ?? '',
     });
     setError(null);
     setSuccess(null);
@@ -892,6 +912,8 @@ function ProductDefaultsModal({
       stock_status: formValues.stock_status || null,
       stock_quantity: stockQuantityValue,
       price: formValues.price.trim() ? formValues.price.trim() : null,
+      hora_inicio: formValues.hora_inicio.trim() ? formValues.hora_inicio.trim() : null,
+      hora_fin: formValues.hora_fin.trim() ? formValues.hora_fin.trim() : null,
     };
 
     setIsSaving(true);
@@ -907,6 +929,8 @@ function ProductDefaultsModal({
             ? String(defaults.default_variant_stock_quantity)
             : '',
         price: defaults.default_variant_price ?? '',
+        hora_inicio: defaults.hora_inicio ?? '',
+        hora_fin: defaults.hora_fin ?? '',
       });
       setDidUserEditPrice(false);
       setSuccess('Configuración guardada correctamente.');
@@ -951,6 +975,24 @@ function ProductDefaultsModal({
             value={formValues.price}
             onChange={handleChange('price')}
             placeholder="Ej. 120"
+            disabled={isSaving}
+          />
+        </Form.Group>
+        <Form.Group controlId="product-default-start-time">
+          <Form.Label>Hora de inicio</Form.Label>
+          <Form.Control
+            type="time"
+            value={formValues.hora_inicio}
+            onChange={handleChange('hora_inicio')}
+            disabled={isSaving}
+          />
+        </Form.Group>
+        <Form.Group controlId="product-default-end-time">
+          <Form.Label>Hora de fin</Form.Label>
+          <Form.Control
+            type="time"
+            value={formValues.hora_fin}
+            onChange={handleChange('hora_fin')}
             disabled={isSaving}
           />
         </Form.Group>

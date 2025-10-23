@@ -5,13 +5,8 @@ import { errorResponse, preflightResponse, successResponse } from './_shared/res
 import { toMadridISOString } from './_shared/timezone';
 import { mapApiStockStatusToDbValue, mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
-const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
-const WOO_KEY = process.env.WOO_KEY || '';
-const WOO_SECRET = process.env.WOO_SECRET || '';
-
 type ProductDefaultsRecord = {
   id: string;
-  id_woo: bigint | number | null;
   default_variant_start: Date | string | null;
   default_variant_end: Date | string | null;
   default_variant_stock_status: string | null;
@@ -160,113 +155,11 @@ function parseTimeInput(value: unknown): string | null {
   return `${hoursText.padStart(2, '0')}:${minutesText.padStart(2, '0')}`;
 }
 
-function ensureWooConfigured() {
-  if (!WOO_BASE || !WOO_KEY || !WOO_SECRET) {
-    throw new Error('WooCommerce configuration missing');
-  }
-}
-
-type WooProductUpdateInput = {
-  price?: Prisma.Decimal | null;
-  stockQuantity?: number | null;
-  stockStatus?: string | null;
-};
-
-async function updateWooProductDefaults(
-  productWooId: bigint | number,
-  updates: WooProductUpdateInput,
-): Promise<void> {
-  if (!updates || Object.keys(updates).length === 0) {
-    return;
-  }
-
-  ensureWooConfigured();
-
-  const body: Record<string, any> = {};
-
-  if (Object.prototype.hasOwnProperty.call(updates, 'price')) {
-    const priceValue = updates.price;
-    const priceText = priceValue == null ? '' : priceValue.toString();
-    body.price = priceText;
-    body.regular_price = priceText;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(updates, 'stockQuantity')) {
-    const quantityValue = updates.stockQuantity;
-    if (quantityValue === null || quantityValue === undefined) {
-      body.manage_stock = false;
-      body.stock_quantity = null;
-    } else {
-      body.manage_stock = true;
-      body.stock_quantity = quantityValue;
-    }
-  }
-
-  if (Object.prototype.hasOwnProperty.call(updates, 'stockStatus')) {
-    const wooStatus = mapDbStockStatusToApiValue(updates.stockStatus ?? null) ?? 'instock';
-    body.stock_status = wooStatus;
-  }
-
-  if (Object.keys(body).length === 0) {
-    return;
-  }
-
-  const productId = productWooId.toString();
-  const url = `${WOO_BASE}/wp-json/wc/v3/products/${productId}`;
-  const token = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Basic ${token}`,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (error) {
-    console.error('[product-variant-settings] network error updating WooCommerce product', {
-      productId,
-      body,
-      error,
-    });
-    throw new Error('No se pudo conectar con WooCommerce');
-  }
-
-  const text = await response.text();
-  let data: any = {};
-
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch (error) {
-      console.error('[product-variant-settings] invalid JSON updating WooCommerce product', {
-        productId,
-        body,
-        error,
-        text,
-      });
-      throw new Error('Respuesta inválida de WooCommerce');
-    }
-  }
-
-  if (!response.ok) {
-    const message =
-      data && typeof data === 'object' && typeof data.message === 'string'
-        ? data.message
-        : `Error al actualizar el producto en WooCommerce (status ${response.status})`;
-    throw new Error(message);
-  }
-}
-
 async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: string) {
   const product = await prisma.products.findUnique({
     where: { id: productId },
     select: {
       id: true,
-      id_woo: true,
       default_variant_start: true,
       default_variant_end: true,
       default_variant_stock_status: true,
@@ -387,32 +280,6 @@ export const handler = async (event: any) => {
 
     if (startDate && endDate && endDate.getTime() < startDate.getTime()) {
       return errorResponse('VALIDATION_ERROR', 'La fecha fin no puede ser anterior a la fecha inicio', 400);
-    }
-
-    const wooUpdates: WooProductUpdateInput = {};
-    if (hasPrice) {
-      wooUpdates.price = price;
-    }
-    if (hasStockQuantity) {
-      wooUpdates.stockQuantity = stockQuantity;
-    }
-    if (hasStockStatus) {
-      wooUpdates.stockStatus = stockStatus;
-    }
-
-    if (product.id_woo != null && Object.keys(wooUpdates).length > 0) {
-      try {
-        await updateWooProductDefaults(product.id_woo, wooUpdates);
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'No se pudo actualizar el producto en WooCommerce';
-        if (message === 'WooCommerce configuration missing') {
-          return errorResponse('CONFIG_ERROR', 'Configuración de WooCommerce incompleta', 500);
-        }
-        return errorResponse('WOO_UPDATE_ERROR', message, 502);
-      }
     }
 
     const timestamp = new Date();
