@@ -39,8 +39,6 @@ type ProductDefaults = {
   default_variant_stock_status: string | null;
   default_variant_stock_quantity: number | null;
   default_variant_price: string | null;
-  hora_inicio: string | null;
-  hora_fin: string | null;
 };
 
 type ProductInfo = ProductDefaults & {
@@ -73,8 +71,6 @@ type ProductDefaultsUpdatePayload = {
   stock_status?: string | null;
   stock_quantity?: number | null;
   price?: string | null;
-  hora_inicio?: string | null;
-  hora_fin?: string | null;
 };
 
 type VariantBulkCreateResponse = {
@@ -155,14 +151,6 @@ function buildProductDefaultsSummary(product: ProductInfo): string | null {
     parts.push(`Precio: ${product.default_variant_price}`);
   }
 
-  const hasStart = product.hora_inicio && product.hora_inicio.trim().length;
-  const hasEnd = product.hora_fin && product.hora_fin.trim().length;
-  if (hasStart || hasEnd) {
-    const start = hasStart ? product.hora_inicio!.trim() : '—';
-    const end = hasEnd ? product.hora_fin!.trim() : '—';
-    parts.push(`Horario: ${start} - ${end}`);
-  }
-
   if (product.default_variant_stock_quantity != null) {
     parts.push(`Stock: ${product.default_variant_stock_quantity}`);
   }
@@ -210,8 +198,6 @@ async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
       name: product.name ?? null,
       code: product.code ?? null,
       category: product.category ?? null,
-      hora_inicio: product.hora_inicio ?? null,
-      hora_fin: product.hora_fin ?? null,
       default_variant_start: product.default_variant_start ?? null,
       default_variant_end: product.default_variant_end ?? null,
       default_variant_stock_status: product.default_variant_stock_status ?? null,
@@ -326,8 +312,6 @@ async function updateProductVariantDefaults(
     default_variant_stock_quantity: stockQuantity,
     default_variant_price:
       json.product.default_variant_price != null ? String(json.product.default_variant_price) : null,
-    hora_inicio: json.product.hora_inicio ?? null,
-    hora_fin: json.product.hora_fin ?? null,
   };
 }
 
@@ -772,8 +756,6 @@ type ProductDefaultsFormValues = {
   stock_status: string;
   stock_quantity: string;
   price: string;
-  hora_inicio: string;
-  hora_fin: string;
 };
 
 function ProductDefaultsModal({
@@ -789,8 +771,6 @@ function ProductDefaultsModal({
     stock_status: '',
     stock_quantity: '',
     price: '',
-    hora_inicio: '',
-    hora_fin: '',
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -804,7 +784,7 @@ function ProductDefaultsModal({
 
   useEffect(() => {
     if (!product) {
-      setFormValues({ stock_status: '', stock_quantity: '', price: '', hora_inicio: '', hora_fin: '' });
+      setFormValues({ stock_status: '', stock_quantity: '', price: '' });
       setError(null);
       setSuccess(null);
       setIsSaving(false);
@@ -819,8 +799,6 @@ function ProductDefaultsModal({
           ? String(product.default_variant_stock_quantity)
           : '',
       price: product.default_variant_price ?? '',
-      hora_inicio: product.hora_inicio ?? '',
-      hora_fin: product.hora_fin ?? '',
     });
     setError(null);
     setSuccess(null);
@@ -916,32 +894,6 @@ function ProductDefaultsModal({
       price: formValues.price.trim() ? formValues.price.trim() : null,
     };
 
-    const trimmedHoraInicio = formValues.hora_inicio.trim();
-    const trimmedHoraFin = formValues.hora_fin.trim();
-
-    const validateTime = (value: string) => {
-      if (!/^[0-9]{2}:[0-9]{2}$/.test(value)) {
-        return false;
-      }
-      const [hoursText, minutesText] = value.split(':');
-      const hours = Number.parseInt(hoursText, 10);
-      const minutes = Number.parseInt(minutesText, 10);
-      return Number.isInteger(hours) && Number.isInteger(minutes) && hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
-    };
-
-    if (trimmedHoraInicio && !validateTime(trimmedHoraInicio)) {
-      setError('La hora de inicio debe tener el formato HH:MM.');
-      return;
-    }
-
-    if (trimmedHoraFin && !validateTime(trimmedHoraFin)) {
-      setError('La hora de fin debe tener el formato HH:MM.');
-      return;
-    }
-
-    payload.hora_inicio = trimmedHoraInicio || null;
-    payload.hora_fin = trimmedHoraFin || null;
-
     setIsSaving(true);
     setError(null);
 
@@ -955,8 +907,6 @@ function ProductDefaultsModal({
             ? String(defaults.default_variant_stock_quantity)
             : '',
         price: defaults.default_variant_price ?? '',
-        hora_inicio: defaults.hora_inicio ?? '',
-        hora_fin: defaults.hora_fin ?? '',
       });
       setDidUserEditPrice(false);
       setSuccess('Configuración guardada correctamente.');
@@ -992,26 +942,6 @@ function ProductDefaultsModal({
             {success}
           </Alert>
         )}
-        <Form.Group controlId="product-default-hora-inicio">
-          <Form.Label>Hora de inicio</Form.Label>
-          <Form.Control
-            type="time"
-            value={formValues.hora_inicio}
-            onChange={handleChange('hora_inicio')}
-            placeholder="Ej. 08:00"
-            disabled={isSaving}
-          />
-        </Form.Group>
-        <Form.Group controlId="product-default-hora-fin">
-          <Form.Label>Hora de fin</Form.Label>
-          <Form.Control
-            type="time"
-            value={formValues.hora_fin}
-            onChange={handleChange('hora_fin')}
-            placeholder="Ej. 16:00"
-            disabled={isSaving}
-          />
-        </Form.Group>
         <Form.Group controlId="product-default-price">
           <Form.Label>Precio por defecto</Form.Label>
           <Form.Control
