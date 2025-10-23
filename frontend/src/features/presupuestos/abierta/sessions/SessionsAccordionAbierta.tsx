@@ -1792,11 +1792,6 @@ export function SessionsAccordionAbierta({
     return variantLookup.get(normalizedCurrentVariation) ?? null;
   }, [normalizedCurrentVariation, variantLookup]);
 
-  const currentVariantName = useMemo(() => {
-    const label = currentVariantInfo?.name?.trim() ?? '';
-    return label.length ? label : null;
-  }, [currentVariantInfo]);
-
   const normalizeExact = useCallback((value: string | null | undefined) => {
     if (typeof value === 'string') return value.trim();
     if (typeof value === 'number') return String(value).trim();
@@ -1811,10 +1806,36 @@ export function SessionsAccordionAbierta({
     [normalizeExact],
   );
 
+  const currentVariantName = useMemo(() => {
+    const label = currentVariantInfo?.name?.trim() ?? '';
+    return label.length ? label : null;
+  }, [currentVariantInfo]);
+
+  const normalizedCurrentVariantWooId = useMemo(
+    () => normalizeExact(currentVariantInfo?.wooId),
+    [currentVariantInfo, normalizeExact],
+  );
+
+  const normalizedCurrentVariantId = useMemo(
+    () => normalizeExact(currentVariantInfo?.variantId),
+    [currentVariantInfo, normalizeExact],
+  );
+
+  const normalizedCurrentVariantSede = useMemo(
+    () => normalizeText(currentVariantInfo?.sede),
+    [currentVariantInfo, normalizeText],
+  );
+
   const matchesProduct = useCallback(
     (variant: ProductVariantOption, product: ApplicableProductInfo) => {
       const variantIds = new Set<string>();
-      [variant.productId, variant.productPipeId, variant.productCode].forEach((value) => {
+      [
+        variant.productId,
+        variant.productPipeId,
+        variant.productCode,
+        variant.productWooId,
+        variant.parentWooId,
+      ].forEach((value) => {
         const normalized = normalizeExact(value);
         if (normalized) variantIds.add(normalized);
       });
@@ -1847,51 +1868,96 @@ export function SessionsAccordionAbierta({
     return applicableProducts.length === 1 ? applicableProducts[0] : null;
   }, [applicableProducts, currentVariantInfo, matchesProduct]);
 
-  const includeProductInVariantLabel = applicableProducts.length > 1;
-
   const variantSelectOptions = useMemo(() => {
     if (!applicableProducts.length) return [] as DealVariantSelectOption[];
 
     const relevantProducts = activeVariantProduct ? [activeVariantProduct] : applicableProducts;
-    const options: DealVariantSelectOption[] = [];
+    const options: Array<{ option: DealVariantSelectOption; sortKey: number }> = [];
+    const seenValues = new Set<string>();
+    const dateFormatter = new Intl.DateTimeFormat('es-ES', {
+      timeZone: MADRID_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const comparisonFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: MADRID_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    const todayKey = comparisonFormatter.format(new Date());
 
     for (const variant of productVariants) {
-      if (!variant.wooId) continue;
+      const value = variant.wooId;
+      if (!value) continue;
+      if (seenValues.has(value)) continue;
 
       const matchedProduct = relevantProducts.find((product) => matchesProduct(variant, product));
       if (!matchedProduct) continue;
 
-      const baseName = variant.name?.trim();
-      const labelParts: string[] = [];
+      const normalizedVariantSede = normalizeText(variant.sede);
+      const isCurrentVariant =
+        (normalizedCurrentVariantWooId && normalizeExact(variant.wooId) === normalizedCurrentVariantWooId) ||
+        (normalizedCurrentVariantId && normalizeExact(variant.variantId) === normalizedCurrentVariantId);
 
-      if (baseName?.length) {
-        labelParts.push(baseName);
-      }
-
-      if (includeProductInVariantLabel) {
-        const productLabel =
-          matchedProduct.name ||
-          matchedProduct.code ||
-          variant.productName?.trim() ||
-          variant.productCode?.trim() ||
-          matchedProduct.id ||
-          variant.productId ||
-          variant.productPipeId ||
-          null;
-        if (productLabel && !labelParts.includes(productLabel)) {
-          labelParts.push(productLabel);
+      if (normalizedCurrentVariantSede && normalizedVariantSede !== normalizedCurrentVariantSede) {
+        if (!isCurrentVariant) {
+          continue;
         }
       }
 
-      if (!labelParts.length) {
-        labelParts.push(`Variante ${variant.wooId}`);
+      let sortKey = Number.POSITIVE_INFINITY;
+      let label: string | null = null;
+      let variantDateKey: string | null = null;
+
+      if (variant.date) {
+        const parsed = new Date(variant.date);
+        if (!Number.isNaN(parsed.getTime())) {
+          sortKey = parsed.getTime();
+          variantDateKey = comparisonFormatter.format(parsed);
+          label = dateFormatter.format(parsed);
+        }
       }
 
-      options.push({ value: variant.wooId, label: labelParts.join(' · '), date: variant.date ?? null });
+      if (!variantDateKey) {
+        if (!isCurrentVariant) {
+          continue;
+        }
+        if (!label) {
+          const baseName = variant.name?.trim();
+          label = baseName && baseName.length ? baseName : `Variante ${value}`;
+        }
+      } else if (!isCurrentVariant && variantDateKey < todayKey) {
+        continue;
+      } else if (!label) {
+        const baseName = variant.name?.trim();
+        label = baseName && baseName.length ? baseName : `Variante ${value}`;
+      }
+
+      options.push({ option: { value, label, date: variant.date ?? null }, sortKey });
+      seenValues.add(value);
     }
 
-    return options.sort((a, b) => a.label.localeCompare(b.label, 'es'));
-  }, [activeVariantProduct, applicableProducts, includeProductInVariantLabel, matchesProduct, productVariants]);
+    return options
+      .sort((a, b) => {
+        if (a.sortKey !== b.sortKey) {
+          return a.sortKey - b.sortKey;
+        }
+        return a.option.label.localeCompare(b.option.label, 'es');
+      })
+      .map((item) => item.option);
+  }, [
+    activeVariantProduct,
+    applicableProducts,
+    matchesProduct,
+    normalizeExact,
+    normalizeText,
+    productVariants,
+    normalizedCurrentVariantId,
+    normalizedCurrentVariantSede,
+    normalizedCurrentVariantWooId,
+  ]);
 
   const variantOptionsLoading = productVariantsQuery.isLoading || productVariantsQuery.isFetching;
   const [variantSaving, setVariantSaving] = useState(false);

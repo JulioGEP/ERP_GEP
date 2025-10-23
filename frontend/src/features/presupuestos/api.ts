@@ -163,6 +163,7 @@ export type MobileUnitOption = {
 export type ProductVariantOption = {
   productId: string;
   productPipeId: string | null;
+  productWooId: string | null;
   productName: string | null;
   productCode: string | null;
   variantId: string;
@@ -170,6 +171,8 @@ export type ProductVariantOption = {
   name: string | null;
   date: string | null;
   status: string | null;
+  parentWooId: string | null;
+  sede: string | null;
 };
 
 export type SessionAvailability = {
@@ -1398,6 +1401,7 @@ export async function fetchProductVariants(options?: {
 
     const productPipeId = toStringValue((product as any)?.id_pipe);
     const productName = toStringValue((product as any)?.name);
+    const productWooId = toStringValue((product as any)?.id_woo);
     const productCode = toStringValue((product as any)?.code);
 
     if (allowedExact.size > 0) {
@@ -1423,13 +1427,16 @@ export async function fetchProductVariants(options?: {
       if (!variantId) continue;
 
       const wooId = toStringValue((rawVariant as any)?.id_woo);
+      const parentWooId = toStringValue((rawVariant as any)?.id_padre);
       const name = toStringValue((rawVariant as any)?.name);
       const date = toStringValue((rawVariant as any)?.date);
       const status = toStringValue((rawVariant as any)?.status);
+      const sede = toStringValue((rawVariant as any)?.sede);
 
       variants.push({
         productId,
         productPipeId,
+        productWooId,
         productName,
         productCode,
         variantId,
@@ -1437,6 +1444,8 @@ export async function fetchProductVariants(options?: {
         name,
         date,
         status,
+        parentWooId,
+        sede,
       });
     }
   }
