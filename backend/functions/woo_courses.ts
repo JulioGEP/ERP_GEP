@@ -13,7 +13,7 @@ type WooErrorBody = {
 
 type ProductWithWooId = {
   id: string;
-  id_woo: bigint | string;
+  id_woo: bigint;
   name: string | null;
 };
 
@@ -389,7 +389,7 @@ function buildWooUrl(resource: string, params: Record<string, string | number | 
   return url;
 }
 
-async function fetchWooVariations(productId: bigint | string): Promise<SanitizedVariation[]> {
+async function fetchWooVariations(productId: bigint): Promise<SanitizedVariation[]> {
   ensureConfigured();
 
   const resource = `products/${productId.toString()}/variations`;
@@ -542,7 +542,7 @@ async function syncProductVariations(
     const client = tx as any;
 
     const existing = (await client.variants.findMany({
-      where: { id_padre: productWooId },
+      where: { id_padre: product.id_woo },
       select: {
         id_woo: true,
         name: true,
@@ -570,7 +570,7 @@ async function syncProductVariations(
         await client.variants.create({
           data: {
             id_woo: incoming.idWoo,
-            id_padre: productWooId,
+            id_padre: product.id_woo,
             name: incoming.name,
             status: incoming.status,
             price: incoming.price,

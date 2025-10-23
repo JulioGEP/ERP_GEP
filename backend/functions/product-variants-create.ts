@@ -171,10 +171,7 @@ function buildCombos(sedes: string[], dates: ParsedDate[]): VariantCombo[] {
   return combos;
 }
 
-async function fetchWooProductAttributes(
-  productWooId: bigint | string,
-  token: string,
-): Promise<WooProductAttribute[]> {
+async function fetchWooProductAttributes(productWooId: bigint, token: string): Promise<WooProductAttribute[]> {
   const url = `${WOO_BASE}/wp-json/wc/v3/products/${productWooId.toString()}`;
 
   let response: Response;
@@ -225,7 +222,7 @@ function formatDateAttributeValue(date: Date | string | null): string {
 }
 
 async function createWooVariation(
-  productWooId: bigint | string,
+  productWooId: bigint,
   token: string,
   payload: Record<string, any>,
 ): Promise<WooVariationResponse> {
