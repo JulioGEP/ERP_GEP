@@ -2810,6 +2810,8 @@ function SessionEditor({
   const [unitListOpen, setUnitListOpen] = useState(false);
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
+  const trainerPointerInteractingRef = useRef(false);
+  const unitPointerInteractingRef = useRef(false);
   const isInCompany = dealSede === 'In Company';
   const handleManualSave = useCallback(() => {
     void onSave();
@@ -3099,8 +3101,21 @@ function SessionEditor({
                 aria-expanded={trainerListOpen}
                 aria-controls={`session-${form.id}-trainers-options`}
                 className="session-multiselect-summary"
-                onClick={() => setTrainerListOpen((open) => !open)}
-                onFocus={() => setTrainerListOpen(true)}
+                onMouseDown={() => {
+                  trainerPointerInteractingRef.current = true;
+                }}
+                onClick={() => {
+                  setTrainerListOpen((open) => !open);
+                  trainerPointerInteractingRef.current = false;
+                }}
+                onFocus={() => {
+                  if (!trainerPointerInteractingRef.current) {
+                    setTrainerListOpen(true);
+                  }
+                }}
+                onBlur={() => {
+                  trainerPointerInteractingRef.current = false;
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
@@ -3184,8 +3199,21 @@ function SessionEditor({
                 aria-expanded={unitListOpen}
                 aria-controls={`session-${form.id}-units-options`}
                 className="session-multiselect-summary"
-                onClick={() => setUnitListOpen((open) => !open)}
-                onFocus={() => setUnitListOpen(true)}
+                onMouseDown={() => {
+                  unitPointerInteractingRef.current = true;
+                }}
+                onClick={() => {
+                  setUnitListOpen((open) => !open);
+                  unitPointerInteractingRef.current = false;
+                }}
+                onFocus={() => {
+                  if (!unitPointerInteractingRef.current) {
+                    setUnitListOpen(true);
+                  }
+                }}
+                onBlur={() => {
+                  unitPointerInteractingRef.current = false;
+                }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
