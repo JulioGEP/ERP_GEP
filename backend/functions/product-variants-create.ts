@@ -42,6 +42,10 @@ type WooProductAttribute = {
   id?: number;
   name?: string;
   slug?: string;
+  position?: number;
+  visible?: boolean;
+  variation?: boolean;
+  options?: string[];
 };
 
 type WooVariationResponse = {
@@ -209,6 +213,186 @@ async function fetchWooProductAttributes(productWooId: bigint, token: string): P
   }
 
   return Array.isArray(data?.attributes) ? (data.attributes as WooProductAttribute[]) : [];
+}
+
+function collectUniqueSedes(combos: VariantCombo[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const combo of combos) {
+    const trimmed = combo.sede.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+
+  return result;
+}
+
+function collectUniqueDates(combos: VariantCombo[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const combo of combos) {
+    const display = combo.date.display.trim();
+    if (!display) continue;
+    if (seen.has(display)) continue;
+    seen.add(display);
+    result.push(display);
+  }
+
+  return result;
+}
+
+function ensureWooProductAttributesForCombos(
+  attributes: WooProductAttribute[],
+  combos: VariantCombo[],
+): { attributes: WooProductAttribute[]; changed: boolean } {
+  const next = attributes.map((attribute) => ({
+    ...attribute,
+    options: Array.isArray(attribute.options) ? [...attribute.options] : [],
+  }));
+
+  let changed = false;
+
+  const sedeOptions = collectUniqueSedes(combos);
+  const dateOptions = collectUniqueDates(combos);
+
+  const locationIndex = next.findIndex((attribute) => matchesAttributeKeywords(attribute, LOCATION_KEYWORDS));
+  if (locationIndex >= 0) {
+    const attribute = next[locationIndex];
+    const optionSet = new Set(
+      (attribute.options ?? [])
+        .map((option) => option.trim().toLowerCase())
+        .filter((option) => option.length > 0),
+    );
+    for (const option of sedeOptions) {
+      const key = option.trim().toLowerCase();
+      if (!optionSet.has(key)) {
+        attribute.options = [...(attribute.options ?? []), option];
+        optionSet.add(key);
+        changed = true;
+      }
+    }
+    if (attribute.variation !== true) {
+      attribute.variation = true;
+      changed = true;
+    }
+  } else if (sedeOptions.length) {
+    next.push({
+      name: 'Sede',
+      options: sedeOptions,
+      variation: true,
+      visible: true,
+      position: next.length + 1,
+    });
+    changed = true;
+  }
+
+  const dateIndex = next.findIndex((attribute) => matchesAttributeKeywords(attribute, DATE_KEYWORDS));
+  if (dateIndex >= 0) {
+    const attribute = next[dateIndex];
+    const optionSet = new Set(
+      (attribute.options ?? [])
+        .map((option) => option.trim())
+        .filter((option) => option.length > 0),
+    );
+    for (const option of dateOptions) {
+      if (!optionSet.has(option)) {
+        attribute.options = [...(attribute.options ?? []), option];
+        optionSet.add(option);
+        changed = true;
+      }
+    }
+    if (attribute.variation !== true) {
+      attribute.variation = true;
+      changed = true;
+    }
+  } else if (dateOptions.length) {
+    next.push({
+      name: 'Fecha',
+      options: dateOptions,
+      variation: true,
+      visible: true,
+      position: next.length + 1,
+    });
+    changed = true;
+  }
+
+  return { attributes: next, changed };
+}
+
+async function updateWooProductAttributes(
+  productWooId: bigint,
+  token: string,
+  attributes: WooProductAttribute[],
+): Promise<WooProductAttribute[]> {
+  const url = `${WOO_BASE}/wp-json/wc/v3/products/${productWooId.toString()}`;
+  const payloadAttributes = attributes.map((attribute, index) => {
+    const options = Array.isArray(attribute.options) ? attribute.options : [];
+    const payload: Record<string, any> = {
+      options,
+      visible: attribute.visible ?? false,
+      variation: attribute.variation ?? false,
+      position: attribute.position ?? index + 1,
+    };
+
+    if (attribute.id != null) {
+      payload.id = attribute.id;
+    }
+    if (attribute.name) {
+      payload.name = attribute.name;
+    }
+
+    return payload;
+  });
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Basic ${token}`,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ attributes: payloadAttributes }),
+    });
+  } catch (error) {
+    console.error('[product-variants-create] network error updating WooCommerce product attributes', {
+      productWooId,
+      error,
+    });
+    throw new Error('No se pudo conectar con WooCommerce');
+  }
+
+  const text = await response.text();
+  let data: any = {};
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (error) {
+      console.error('[product-variants-create] invalid JSON updating WooCommerce product attributes', {
+        productWooId,
+        error,
+        text,
+      });
+      throw new Error('Respuesta inválida de WooCommerce');
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      typeof data?.message === 'string'
+        ? data.message
+        : `Error al actualizar los atributos en WooCommerce (status ${response.status})`;
+    throw new Error(message);
+  }
+
+  return Array.isArray(data?.attributes) ? (data.attributes as WooProductAttribute[]) : attributes;
 }
 
 function formatDateAttributeValue(date: Date | string | null): string {
@@ -382,7 +566,12 @@ export const handler = async (event: any) => {
       return successResponse({ ok: true, created: [], skipped: combos.length, message: 'Todas las combinaciones ya existen.' });
     }
 
-    const attributes = await fetchWooProductAttributes(product.id_woo, token);
+    let attributes = await fetchWooProductAttributes(product.id_woo, token);
+    const ensuredAttributes = ensureWooProductAttributesForCombos(attributes, combosToCreate);
+    if (ensuredAttributes.changed) {
+      attributes = await updateWooProductAttributes(product.id_woo, token, ensuredAttributes.attributes);
+    }
+
     const locationAttribute = attributes.find((attribute) => matchesAttributeKeywords(attribute, LOCATION_KEYWORDS));
     const dateAttribute = attributes.find((attribute) => matchesAttributeKeywords(attribute, DATE_KEYWORDS));
 
