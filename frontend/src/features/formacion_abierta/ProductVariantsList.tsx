@@ -1746,11 +1746,13 @@ export function VariantModal({
           <div className="d-flex flex-column gap-3">
             <div>
               <p className="text-uppercase text-muted small fw-semibold mb-1">Producto</p>
-              <div className="fw-semibold">{product.name ?? 'Producto sin nombre'}</div>
-              <div className="text-muted small">ID Woo: {product.id_woo ?? '—'}</div>
-              <div className="text-muted small">
-                Alumnos en deals: {totalDealStudentsDisplay}
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div className="fw-semibold">{product.name ?? 'Producto sin nombre'}</div>
+                <div className="fw-semibold text-nowrap">
+                  Alumnos en deals: {totalDealStudentsDisplay}
+                </div>
               </div>
+              <div className="text-muted small">ID Woo: {product.id_woo ?? '—'}</div>
             </div>
 
             {saveError && <Alert variant="danger" className="mb-0">{saveError}</Alert>}
