@@ -354,6 +354,8 @@ type ProductRecord = {
   name: string | null;
   code: string | null;
   category: string | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
   default_variant_start: Date | string | null;
   default_variant_end: Date | string | null;
   default_variant_stock_status: string | null;
@@ -413,6 +415,8 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
     name: true,
     code: true,
     category: true,
+    hora_inicio: true,
+    hora_fin: true,
     default_variant_start: true,
     default_variant_end: true,
     default_variant_stock_status: true,
@@ -427,6 +431,8 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
     name: true,
     code: true,
     category: true,
+    hora_inicio: true,
+    hora_fin: true,
     variants: variantsSelection,
   };
 
@@ -514,6 +520,8 @@ function normalizeProduct(record: ProductRecord) {
     name: record.name ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
+    hora_inicio: record.hora_inicio ?? null,
+    hora_fin: record.hora_fin ?? null,
     default_variant_start: toMadridISOString(record.default_variant_start),
     default_variant_end: toMadridISOString(record.default_variant_end),
     default_variant_stock_status: mapDbStockStatusToApiValue(record.default_variant_stock_status),
