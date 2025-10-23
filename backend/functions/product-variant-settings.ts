@@ -12,6 +12,8 @@ type ProductDefaultsRecord = {
   default_variant_stock_status: string | null;
   default_variant_stock_quantity: number | null;
   default_variant_price: Prisma.Decimal | string | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
 };
 
 type ProductDefaultsPayload = {
@@ -21,6 +23,8 @@ type ProductDefaultsPayload = {
   stock_status?: string | null;
   stock_quantity?: number | null;
   price?: string | null;
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
 };
 
 function normalizeDefaults(record: ProductDefaultsRecord) {
@@ -36,6 +40,8 @@ function normalizeDefaults(record: ProductDefaultsRecord) {
         : typeof record.default_variant_price === 'string'
           ? record.default_variant_price
           : record.default_variant_price.toString(),
+    hora_inicio: record.hora_inicio ?? null,
+    hora_fin: record.hora_fin ?? null,
   } as const;
 }
 
@@ -101,6 +107,40 @@ function parseProductId(value: unknown): string {
   return value.trim();
 }
 
+function parseTimeInput(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw new Error('INVALID_TIME');
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const match = trimmed.match(/^(\d{2}):(\d{2})$/);
+  if (!match) {
+    throw new Error('INVALID_TIME');
+  }
+
+  const [, hoursText, minutesText] = match;
+  const hours = Number.parseInt(hoursText, 10);
+  const minutes = Number.parseInt(minutesText, 10);
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+    throw new Error('INVALID_TIME');
+  }
+
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    throw new Error('INVALID_TIME');
+  }
+
+  return `${hoursText.padStart(2, '0')}:${minutesText.padStart(2, '0')}`;
+}
+
 async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: string) {
   const product = await prisma.products.findUnique({
     where: { id: productId },
@@ -111,6 +151,8 @@ async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: strin
       default_variant_stock_status: true,
       default_variant_stock_quantity: true,
       default_variant_price: true,
+      hora_inicio: true,
+      hora_fin: true,
     },
   });
   return product;
@@ -169,6 +211,8 @@ export const handler = async (event: any) => {
     let stockStatus: string | null = null;
     let stockQuantity: number | null = null;
     let price: Prisma.Decimal | null = null;
+    let horaInicio: string | null = null;
+    let horaFin: string | null = null;
 
     try {
       if (Object.prototype.hasOwnProperty.call(payload, 'start_date')) {
@@ -186,6 +230,12 @@ export const handler = async (event: any) => {
       if (Object.prototype.hasOwnProperty.call(payload, 'price')) {
         price = parsePrice(payload.price ?? null);
       }
+      if (Object.prototype.hasOwnProperty.call(payload, 'hora_inicio')) {
+        horaInicio = parseTimeInput(payload.hora_inicio ?? null);
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, 'hora_fin')) {
+        horaFin = parseTimeInput(payload.hora_fin ?? null);
+      }
     } catch (error) {
       if (error instanceof Error) {
         switch (error.message) {
@@ -197,6 +247,8 @@ export const handler = async (event: any) => {
             return errorResponse('VALIDATION_ERROR', 'Cantidad de stock inválida', 400);
           case 'INVALID_PRICE':
             return errorResponse('VALIDATION_ERROR', 'Precio inválido', 400);
+          case 'INVALID_TIME':
+            return errorResponse('VALIDATION_ERROR', 'Hora inválida (usa el formato HH:MM)', 400);
           default:
             break;
         }
@@ -226,6 +278,12 @@ export const handler = async (event: any) => {
     if (Object.prototype.hasOwnProperty.call(payload, 'price')) {
       data.default_variant_price = price;
     }
+    if (Object.prototype.hasOwnProperty.call(payload, 'hora_inicio')) {
+      data.hora_inicio = horaInicio;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'hora_fin')) {
+      data.hora_fin = horaFin;
+    }
 
     const updated = await prisma.products.update({
       where: { id: productId },
@@ -237,6 +295,8 @@ export const handler = async (event: any) => {
         default_variant_stock_status: true,
         default_variant_stock_quantity: true,
         default_variant_price: true,
+        hora_inicio: true,
+        hora_fin: true,
       },
     });
 

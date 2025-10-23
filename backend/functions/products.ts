@@ -10,6 +10,8 @@ type ProductRecord = {
   name: string | null;
   code: string | null;
   category: string | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
   type: string | null;
   template: string | null;
   url_formacion: string | null;
@@ -38,6 +40,8 @@ function normalizeProduct(record: ProductRecord) {
     name: record.name ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
+    hora_inicio: record.hora_inicio ?? null,
+    hora_fin: record.hora_fin ?? null,
     type: record.type ?? null,
     template: record.template ?? null,
     url_formacion: record.url_formacion ?? null,
@@ -64,6 +68,18 @@ function buildUpdateData(body: any) {
   if (Object.prototype.hasOwnProperty.call(body, 'url_formacion')) {
     const value = toNullableTrimmedString(body.url_formacion);
     data.url_formacion = value;
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'hora_inicio')) {
+    const value = toNullableTrimmedString(body.hora_inicio);
+    data.hora_inicio = value;
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'hora_fin')) {
+    const value = toNullableTrimmedString(body.hora_fin);
+    data.hora_fin = value;
     hasChanges = true;
   }
 
