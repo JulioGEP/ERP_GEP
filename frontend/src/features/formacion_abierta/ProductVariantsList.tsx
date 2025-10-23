@@ -897,6 +897,18 @@ function ProductDefaultsModal({
     if (!product) return;
     if (isSaving) return;
 
+    const productId =
+      typeof product.id === 'string'
+        ? product.id.trim()
+        : product.id != null
+          ? String(product.id).trim()
+          : '';
+
+    if (!productId) {
+      setError('El producto no tiene un identificador válido.');
+      return;
+    }
+
     let stockQuantityValue: number | null = null;
     const stockQuantityText = formValues.stock_quantity.trim();
     if (stockQuantityText) {
@@ -920,8 +932,8 @@ function ProductDefaultsModal({
     setError(null);
 
     try {
-      const defaults = await updateProductVariantDefaults(product.id, payload);
-      onSaved(product.id, defaults);
+      const defaults = await updateProductVariantDefaults(productId, payload);
+      onSaved(productId, defaults);
       setFormValues({
         stock_status: defaults.default_variant_stock_status ?? '',
         stock_quantity:
@@ -1122,6 +1134,18 @@ function VariantCreationModal({
     if (!product) return;
     if (isSaving) return;
 
+    const productId =
+      typeof product.id === 'string'
+        ? product.id.trim()
+        : product.id != null
+          ? String(product.id).trim()
+          : '';
+
+    if (!productId) {
+      setError('El producto no tiene un identificador válido.');
+      return;
+    }
+
     const sedes = parseSedesInput(sedesInput);
     const { values: dates, invalid } = parseDatesInput(datesInput);
 
@@ -1144,8 +1168,8 @@ function VariantCreationModal({
     setError(null);
 
     try {
-      const result = await createProductVariantsForProduct(product.id, sedes, dates);
-      onVariantsCreated(product.id, result);
+      const result = await createProductVariantsForProduct(productId, sedes, dates);
+      onVariantsCreated(productId, result);
 
       const createdMessage = `Se crearon ${result.created.length} variantes.`;
       const skippedMessage = result.skipped

@@ -112,16 +112,42 @@ function parseProductId(value: unknown): string {
     throw new Error('INVALID_PRODUCT_ID');
   }
 
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) {
+      const [first] = value;
+      return parseProductId(first ?? null);
+    }
+
+    const possible =
+      (value as Record<string, unknown>).product_id ??
+      (value as Record<string, unknown>).productId ??
+      (value as Record<string, unknown>).id ??
+      null;
+
+    if (possible !== null) {
+      return parseProductId(possible);
+    }
+
+    throw new Error('INVALID_PRODUCT_ID');
+  }
+
   const normalized =
     typeof value === 'string'
       ? value
       : typeof value === 'number'
         ? value.toString()
-        : '';
+        : typeof value === 'bigint'
+          ? value.toString()
+          : '';
 
   const trimmed = normalized.trim();
 
   if (!trimmed) {
+    throw new Error('INVALID_PRODUCT_ID');
+  }
+
+  const invalidMarkers = new Set(['undefined', 'null', 'nan']);
+  if (invalidMarkers.has(trimmed.toLowerCase())) {
     throw new Error('INVALID_PRODUCT_ID');
   }
 
