@@ -1,6 +1,43 @@
 // frontend/src/features/calendar/api.ts
 import { API_BASE, ApiError, type SessionEstado } from '../presupuestos/api';
 
+export type CalendarVariantProduct = {
+  id: string;
+  id_woo: string | null;
+  name: string | null;
+  code: string | null;
+  category: string | null;
+  hora_inicio: string | null;
+  hora_fin: string | null;
+  default_variant_start: string | null;
+  default_variant_end: string | null;
+  default_variant_stock_status: string | null;
+  default_variant_stock_quantity: number | null;
+  default_variant_price: string | null;
+};
+
+export type CalendarVariantDetails = {
+  id: string;
+  id_woo: string | null;
+  name: string | null;
+  status: string | null;
+  price: string | null;
+  stock: number | null;
+  stock_status: string | null;
+  sede: string | null;
+  date: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type CalendarVariantEvent = {
+  id: string;
+  start: string;
+  end: string;
+  product: CalendarVariantProduct;
+  variant: CalendarVariantDetails;
+};
+
 export type CalendarResource = {
   id: string;
   name: string;
@@ -44,6 +81,16 @@ export type CalendarSessionsParams = {
 export type CalendarSessionsResponse = {
   range: { start: string; end: string };
   sessions: CalendarSession[];
+};
+
+export type CalendarVariantsParams = {
+  start: string;
+  end: string;
+};
+
+export type CalendarVariantsResponse = {
+  range: { start: string; end: string };
+  variants: CalendarVariantEvent[];
 };
 
 const SESSION_ESTADO_VALUES: SessionEstado[] = [
@@ -93,6 +140,77 @@ function ensureUniqueResources(resources: (CalendarResource | null)[]): Calendar
     output.push(resource);
   });
   return output;
+}
+
+function sanitizeVariantProduct(input: any): CalendarVariantProduct | null {
+  const id = toTrimmed(input?.id);
+  if (!id) return null;
+  return {
+    id,
+    id_woo: toOptionalString(input?.id_woo),
+    name: toOptionalString(input?.name),
+    code: toOptionalString(input?.code),
+    category: toOptionalString(input?.category),
+    hora_inicio: toOptionalString(input?.hora_inicio),
+    hora_fin: toOptionalString(input?.hora_fin),
+    default_variant_start: toOptionalString(input?.default_variant_start),
+    default_variant_end: toOptionalString(input?.default_variant_end),
+    default_variant_stock_status: toOptionalString(input?.default_variant_stock_status),
+    default_variant_stock_quantity:
+      typeof input?.default_variant_stock_quantity === 'number'
+        ? input.default_variant_stock_quantity
+        : input?.default_variant_stock_quantity != null && !Number.isNaN(Number(input.default_variant_stock_quantity))
+          ? Number(input.default_variant_stock_quantity)
+          : null,
+    default_variant_price: toOptionalString(input?.default_variant_price),
+  } satisfies CalendarVariantProduct;
+}
+
+function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
+  const id = toTrimmed(input?.id);
+  if (!id) return null;
+  return {
+    id,
+    id_woo: toOptionalString(input?.id_woo),
+    name: toOptionalString(input?.name),
+    status: toOptionalString(input?.status),
+    price: toOptionalString(input?.price),
+    stock:
+      typeof input?.stock === 'number'
+        ? input.stock
+        : input?.stock != null && !Number.isNaN(Number(input.stock))
+          ? Number(input.stock)
+          : null,
+    stock_status: toOptionalString(input?.stock_status),
+    sede: toOptionalString(input?.sede),
+    date: toOptionalString(input?.date),
+    created_at: toOptionalString(input?.created_at),
+    updated_at: toOptionalString(input?.updated_at),
+  } satisfies CalendarVariantDetails;
+}
+
+function sanitizeVariantsPayload(payload: any[]): CalendarVariantEvent[] {
+  const rows = Array.isArray(payload) ? payload : [];
+  return rows
+    .map((row) => {
+      const id = toTrimmed(row?.id);
+      const start = toTrimmed(row?.start);
+      const end = toTrimmed(row?.end);
+      if (!id || !start || !end) return null;
+
+      const product = sanitizeVariantProduct(row?.product);
+      const variant = sanitizeVariantDetails(row?.variant);
+      if (!product || !variant) return null;
+
+      return {
+        id,
+        start,
+        end,
+        product,
+        variant,
+      } satisfies CalendarVariantEvent;
+    })
+    .filter((variant): variant is CalendarVariantEvent => variant !== null);
 }
 
 function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
@@ -201,4 +319,44 @@ export async function fetchCalendarSessions(
     },
     sessions,
   };
+}
+
+export async function fetchCalendarVariants(
+  params: CalendarVariantsParams,
+): Promise<CalendarVariantsResponse> {
+  const search = new URLSearchParams();
+  search.set('start', params.start);
+  search.set('end', params.end);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/calendar-variants?${search.toString()}`);
+  } catch (error: any) {
+    throw new ApiError('NETWORK_ERROR', error?.message ?? 'Fallo de red');
+  }
+
+  let payload: any = {};
+  try {
+    payload = await response.json();
+  } catch {
+    /* cuerpo vacío */
+  }
+
+  if (!response.ok || payload?.ok === false) {
+    const code = payload?.error_code ?? payload?.code ?? `HTTP_${response.status}`;
+    const message = payload?.message ?? 'Error inesperado en la carga del calendario';
+    throw new ApiError(code, message, response.status);
+  }
+
+  const rangeStart = toTrimmed(payload?.range?.start);
+  const rangeEnd = toTrimmed(payload?.range?.end);
+  const variants = sanitizeVariantsPayload(payload?.variants);
+
+  return {
+    range: {
+      start: rangeStart ?? params.start,
+      end: rangeEnd ?? params.end,
+    },
+    variants,
+  } satisfies CalendarVariantsResponse;
 }

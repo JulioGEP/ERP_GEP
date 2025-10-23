@@ -570,6 +570,13 @@ option.session-option-unavailable {
   --erp-calendar-event-bg: #edf3ff;
 }
 
+.erp-calendar-event.erp-calendar-event-variant {
+  --erp-calendar-accent: #6f42c1;
+  --erp-calendar-status-bg: rgba(111, 66, 193, 0.16);
+  --erp-calendar-status-color: #4b2d8d;
+  --erp-calendar-event-bg: #f3edff;
+}
+
 .erp-calendar-event-content {
   display: grid;
   gap: 0.35rem;
