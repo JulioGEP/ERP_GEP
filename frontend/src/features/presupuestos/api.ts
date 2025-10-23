@@ -160,6 +160,17 @@ export type MobileUnitOption = {
   matricula: string | null;
 };
 
+export type ProductVariantOption = {
+  productId: string;
+  productName: string | null;
+  productCode: string | null;
+  variantId: string;
+  wooId: string | null;
+  name: string | null;
+  date: string | null;
+  status: string | null;
+};
+
 export type SessionAvailability = {
   trainers: string[];
   rooms: string[];
@@ -909,6 +920,8 @@ export type DealEditablePatch = {
   fundae_label?: string | null;
   hotel_label?: string | null;
   comercial?: string | null;
+  w_id_variation?: string | null;
+  a_fecha?: string | null;
 };
 
 export type DealProductEditablePatch = {
@@ -1357,6 +1370,56 @@ export async function fetchMobileUnitsCatalog(): Promise<MobileUnitOption[]> {
     .map((unit) => normalizeMobileUnitOption(unit))
     .filter((unit): unit is MobileUnitOption => !!unit)
     .sort((a: MobileUnitOption, b: MobileUnitOption) => a.name.localeCompare(b.name, 'es'));
+}
+
+export async function fetchProductVariants(options?: {
+  productIds?: string[];
+}): Promise<ProductVariantOption[]> {
+  const data = await request(`/products-variants`);
+  const products = Array.isArray(data?.products) ? (data.products as unknown[]) : [];
+
+  const allowedIds = new Set(
+    Array.isArray(options?.productIds)
+      ? options!.productIds.map((id) => String(id ?? '').trim()).filter((id) => id.length)
+      : [],
+  );
+
+  const variants: ProductVariantOption[] = [];
+
+  for (const product of products) {
+    const productId = toStringValue((product as any)?.id);
+    if (!productId) continue;
+    if (allowedIds.size > 0 && !allowedIds.has(productId)) continue;
+
+    const productName = toStringValue((product as any)?.name);
+    const productCode = toStringValue((product as any)?.code);
+    const productVariants = Array.isArray((product as any)?.variants)
+      ? ((product as any)?.variants as unknown[])
+      : [];
+
+    for (const rawVariant of productVariants) {
+      const variantId = toStringValue((rawVariant as any)?.id);
+      if (!variantId) continue;
+
+      const wooId = toStringValue((rawVariant as any)?.id_woo);
+      const name = toStringValue((rawVariant as any)?.name);
+      const date = toStringValue((rawVariant as any)?.date);
+      const status = toStringValue((rawVariant as any)?.status);
+
+      variants.push({
+        productId,
+        productName,
+        productCode,
+        variantId,
+        wooId,
+        name,
+        date,
+        status,
+      });
+    }
+  }
+
+  return variants;
 }
 
 export async function fetchSessionAvailability(params: {
