@@ -376,13 +376,28 @@ const PRODUCT_DEFAULT_COLUMN_PATTERNS = [
   /variant_(start|end|stock_status|stock_quantity|price)/i,
 ];
 
-function isMissingProductDefaultColumns(error: unknown): boolean {
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2021') {
-    return true;
+function isPrismaErrorInstance(
+  error: unknown,
+  ctor: unknown,
+): boolean {
+  if (!ctor || typeof ctor !== 'function') {
+    return false;
   }
 
-  if (error instanceof Prisma.PrismaClientUnknownRequestError) {
-    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test(error.message));
+  try {
+    return error instanceof (ctor as new (...args: any[]) => Error);
+  } catch (_err) {
+    return false;
+  }
+}
+
+function isMissingProductDefaultColumns(error: unknown): boolean {
+  if (isPrismaErrorInstance(error, Prisma.PrismaClientKnownRequestError)) {
+    return (error as Prisma.PrismaClientKnownRequestError).code === 'P2021';
+  }
+
+  if (isPrismaErrorInstance(error, Prisma.PrismaClientUnknownRequestError)) {
+    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test((error as Error).message));
   }
 
   if (error instanceof Error) {
