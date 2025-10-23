@@ -2114,9 +2114,9 @@ export default function ProductVariantsList() {
                                         bg="light"
                                         text="dark"
                                         className="d-inline-flex align-items-center gap-2"
-                                        title={`Leads asociados: ${isLeadCountLoading ? 'cargando…' : leadsCount}`}
+                                        title={`Presupuestos asociados: ${isLeadCountLoading ? 'cargando…' : leadsCount}`}
                                       >
-                                        <span className="text-uppercase small mb-0">Leads</span>
+                                        <span className="text-uppercase small mb-0">Presupuestos</span>
                                         {isLeadCountLoading ? (
                                           <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
                                         ) : (
