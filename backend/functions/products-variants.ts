@@ -7,6 +7,7 @@ import { errorResponse, preflightResponse, successResponse } from './_shared/res
 import { formatTimeFromDb } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
 import { mapDbStockStatusToApiValue } from './_shared/variant-defaults';
+import { computeVariantDateRange, ensureResourcesAvailable } from './_shared/resourceAvailability';
 
 const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
 const WOO_KEY = process.env.WOO_KEY || '';
@@ -74,6 +75,9 @@ type VariantUpdateInput = {
   status?: string | null;
   sede?: string | null;
   date?: Date | null;
+  trainer_id?: string | null;
+  unidad_movil_id?: string | null;
+  sala_id?: string | null;
 };
 
 async function fetchWooVariation(
@@ -345,8 +349,14 @@ type VariantRecord = {
   stock_status: string | null;
   sede: string | null;
   date: Date | string | null;
+  sala_id: string | null;
+  trainer_id: string | null;
+  unidad_movil_id: string | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
+  sala: { sala_id: string; name: string | null } | null;
+  trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  unidad: { unidad_id: string; name: string | null; matricula: string | null } | null;
 };
 
 type ProductRecord = {
@@ -429,8 +439,14 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       stock_status: true,
       sede: true,
       date: true,
+      sala_id: true,
+      trainer_id: true,
+      unidad_movil_id: true,
       created_at: true,
       updated_at: true,
+      sala: { select: { sala_id: true, name: true } },
+      trainer: { select: { trainer_id: true, name: true, apellido: true } },
+      unidad: { select: { unidad_id: true, name: true, matricula: true } },
     },
   };
 
@@ -515,6 +531,17 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
 
 function normalizeVariant(record: VariantRecord) {
   const price = record.price == null ? null : typeof record.price === 'string' ? record.price : record.price.toString();
+  const trainerFirst = record.trainer?.name?.trim() ?? '';
+  const trainerLast = record.trainer?.apellido?.trim() ?? '';
+  const trainerLabel = `${trainerFirst} ${trainerLast}`.trim();
+  const trainerName = trainerLabel || trainerFirst || null;
+  const unitName = record.unidad?.name?.trim() ?? '';
+  const unitMatricula = record.unidad?.matricula?.trim() ?? '';
+  const unitLabel = unitName
+    ? unitMatricula
+      ? `${unitName} (${unitMatricula})`
+      : unitName
+    : unitMatricula || null;
 
   return {
     id: record.id,
@@ -526,6 +553,12 @@ function normalizeVariant(record: VariantRecord) {
     stock_status: record.stock_status ?? null,
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
+    sala_id: record.sala_id ?? null,
+    sala_name: record.sala?.name ?? null,
+    trainer_id: record.trainer_id ?? null,
+    trainer_name: trainerName,
+    unidad_movil_id: record.unidad_movil_id ?? null,
+    unidad_movil_name: unitLabel,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
   } as const;
@@ -675,6 +708,30 @@ export const handler = async (event: any) => {
         }
       }
 
+      if (Object.prototype.hasOwnProperty.call(payload, 'trainer_id')) {
+        if (payload.trainer_id === null || payload.trainer_id === undefined || payload.trainer_id === '') {
+          updates.trainer_id = null;
+        } else {
+          updates.trainer_id = String(payload.trainer_id).trim();
+        }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(payload, 'unidad_movil_id')) {
+        if (payload.unidad_movil_id === null || payload.unidad_movil_id === undefined || payload.unidad_movil_id === '') {
+          updates.unidad_movil_id = null;
+        } else {
+          updates.unidad_movil_id = String(payload.unidad_movil_id).trim();
+        }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(payload, 'sala_id')) {
+        if (payload.sala_id === null || payload.sala_id === undefined || payload.sala_id === '') {
+          updates.sala_id = null;
+        } else {
+          updates.sala_id = String(payload.sala_id).trim();
+        }
+      }
+
       if (!Object.keys(updates).length) {
         return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
       }
@@ -692,11 +749,54 @@ export const handler = async (event: any) => {
           stock_status: true,
           sede: true,
           date: true,
+          sala_id: true,
+          trainer_id: true,
+          unidad_movil_id: true,
+          product: { select: { hora_inicio: true, hora_fin: true } },
         },
       });
 
       if (!existing) {
         return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
+      }
+
+      const finalTrainerId =
+        Object.prototype.hasOwnProperty.call(updates, 'trainer_id')
+          ? updates.trainer_id ?? null
+          : existing.trainer_id ?? null;
+      const finalUnidadId =
+        Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id')
+          ? updates.unidad_movil_id ?? null
+          : existing.unidad_movil_id ?? null;
+      const finalSalaId =
+        Object.prototype.hasOwnProperty.call(updates, 'sala_id')
+          ? updates.sala_id ?? null
+          : existing.sala_id ?? null;
+      const finalDate =
+        Object.prototype.hasOwnProperty.call(updates, 'date') ? updates.date ?? null : existing.date ?? null;
+
+      const trainerIds = finalTrainerId ? [finalTrainerId] : [];
+      const unidadIds = finalUnidadId ? [finalUnidadId] : [];
+      const hasResourceSelection = trainerIds.length > 0 || unidadIds.length > 0 || Boolean(finalSalaId);
+
+      if (hasResourceSelection) {
+        const range = computeVariantDateRange(finalDate, {
+          hora_inicio: existing.product?.hora_inicio ?? null,
+          hora_fin: existing.product?.hora_fin ?? null,
+        });
+
+        if (!range) {
+          return errorResponse('VALIDATION_ERROR', 'La variante necesita una fecha para asignar recursos.', 400);
+        }
+
+        await ensureResourcesAvailable(prisma, {
+          variantId,
+          trainerIds,
+          unidadIds,
+          salaId: finalSalaId ?? null,
+          start: range.start,
+          end: range.end,
+        });
       }
 
       try {
@@ -708,7 +808,7 @@ export const handler = async (event: any) => {
       }
 
       const timestamp = new Date();
-      const data: Prisma.variantsUpdateInput = { updated_at: timestamp };
+      const data: Prisma.variantsUncheckedUpdateInput = { updated_at: timestamp };
 
       if (Object.prototype.hasOwnProperty.call(updates, 'price')) {
         data.price = updates.price === null || updates.price === undefined ? null : new Prisma.Decimal(updates.price);
@@ -728,6 +828,15 @@ export const handler = async (event: any) => {
       if (Object.prototype.hasOwnProperty.call(updates, 'date')) {
         data.date = updates.date ?? null;
       }
+      if (Object.prototype.hasOwnProperty.call(updates, 'trainer_id')) {
+        data.trainer_id = updates.trainer_id ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id')) {
+        data.unidad_movil_id = updates.unidad_movil_id ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'sala_id')) {
+        data.sala_id = updates.sala_id ?? null;
+      }
 
       await prisma.variants.update({
         where: { id: variantId },
@@ -746,6 +855,12 @@ export const handler = async (event: any) => {
           stock_status: true,
           sede: true,
           date: true,
+          sala_id: true,
+          trainer_id: true,
+          unidad_movil_id: true,
+          sala: { select: { sala_id: true, name: true } },
+          trainer: { select: { trainer_id: true, name: true, apellido: true } },
+          unidad: { select: { unidad_id: true, name: true, matricula: true } },
           created_at: true,
           updated_at: true,
         },
