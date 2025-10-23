@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   type ChangeEvent,
   type DragEvent,
@@ -147,15 +146,6 @@ function formatErrorMessage(error: unknown, fallback: string): string {
     return baseMessage;
   }
   return fallback;
-}
-
-function DuplicateIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} {...props}>
-      <rect x={7} y={7} width={11} height={11} rx={2.2} ry={2.2} />
-      <path d="M5.5 15.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v.6" />
-    </svg>
-  );
 }
 
 function CopyIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -1518,40 +1508,6 @@ function DeleteIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-type SessionActionIconProps = {
-  label: string;
-  onActivate: () => void;
-  children: ReactNode;
-  variant?: 'default' | 'danger';
-};
-
-function SessionActionIcon({ label, onActivate, children, variant = 'default' }: SessionActionIconProps) {
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLSpanElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      event.stopPropagation();
-      onActivate();
-    }
-  };
-
-  return (
-    <span
-      role="button"
-      aria-label={label}
-      title={label}
-      tabIndex={0}
-      className={`session-action-icon${variant === 'danger' ? ' danger' : ''}`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onActivate();
-      }}
-      onKeyDown={handleKeyDown}
-    >
-      {children}
-    </span>
-  );
-}
-
 function SessionStateBadge({ estado }: { estado: SessionEstado }) {
   const label = SESSION_ESTADO_LABELS[estado] ?? estado;
   const variant = SESSION_ESTADO_VARIANTS[estado] ?? 'secondary';
@@ -2564,27 +2520,6 @@ export function SessionsAccordionAbierta({
                           <div className="fw-semibold text-truncate">{sessionName}</div>
                         </div>
                         <div className="d-flex align-items-center gap-3">
-                          <div className="session-item-actions d-inline-flex align-items-center gap-2">
-                            <SessionActionIcon
-                              label="Duplicar sesión"
-                              onActivate={() => handleDuplicate(session.id)}
-                            >
-                              <DuplicateIcon aria-hidden="true" />
-                            </SessionActionIcon>
-                            <SessionActionIcon
-                              label="Eliminar sesión"
-                              variant="danger"
-                              onActivate={() =>
-                                handleOpenDeleteDialog({
-                                  sessionId: session.id,
-                                  productId: product.id,
-                                  sessionName,
-                                })
-                              }
-                            >
-                              <DeleteIcon aria-hidden="true" />
-                            </SessionActionIcon>
-                          </div>
                           <div className="text-end text-nowrap">
                             {status.saving ? (
                               <span className="text-primary d-inline-flex align-items-center gap-1">
