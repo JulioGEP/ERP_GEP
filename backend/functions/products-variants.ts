@@ -76,7 +76,7 @@ type VariantUpdateInput = {
 };
 
 async function fetchWooVariation(
-  productWooId: bigint,
+  productWooId: bigint | string,
   variantWooId: bigint,
   authToken: string,
 ): Promise<{ attributes: WooVariationAttribute[] }> {
@@ -132,7 +132,7 @@ async function fetchWooVariation(
 }
 
 async function updateVariantInWooCommerce(
-  productWooId: bigint,
+  productWooId: bigint | string,
   variantWooId: bigint,
   updates: VariantUpdateInput,
 ): Promise<void> {
@@ -273,7 +273,7 @@ async function updateVariantInWooCommerce(
 }
 
 async function deleteVariantFromWooCommerce(
-  productWooId: bigint,
+  productWooId: bigint | string,
   variantWooId: bigint,
 ): Promise<VariantDeletionResult> {
   ensureWooConfigured();
@@ -350,7 +350,7 @@ type VariantRecord = {
 
 type ProductRecord = {
   id: string;
-  id_woo: bigint | null;
+  id_woo: bigint | string | null;
   name: string | null;
   code: string | null;
   category: string | null;

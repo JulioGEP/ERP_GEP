@@ -6,7 +6,7 @@ import { toMadridISOString } from './_shared/timezone';
 type ProductRecord = {
   id: string;
   id_pipe: string;
-  id_woo: bigint | number | null;
+  id_woo: bigint | number | string | null;
   name: string | null;
   code: string | null;
   category: string | null;
@@ -32,11 +32,36 @@ function toNullableTrimmedString(value: unknown): string | null {
   return text.length ? text : null;
 }
 
+function parseWooIdToNumber(value: bigint | number | string | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.trunc(value) : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (!/^[-+]?\d+$/.test(trimmed)) return null;
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
+  }
+
+  return null;
+}
+
 function normalizeProduct(record: ProductRecord) {
   return {
     id: record.id,
     id_pipe: record.id_pipe,
-    id_woo: record.id_woo == null ? null : Number(record.id_woo),
+    id_woo: parseWooIdToNumber(record.id_woo),
     name: record.name ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
@@ -94,8 +119,15 @@ function buildUpdateData(body: any) {
     if (rawValue === '' || rawValue === null || rawValue === undefined) {
       data.id_woo = null;
       hasChanges = true;
-    } else if (typeof rawValue === 'bigint') {
-      data.id_woo = rawValue;
+    } else if (typeof rawValue === 'bigint' || typeof rawValue === 'number') {
+      const numericValue = Number(rawValue);
+      if (!Number.isFinite(numericValue)) {
+        return {
+          error: errorResponse('VALIDATION_ERROR', 'El campo id_woo debe ser un número entero válido', 400),
+        } as const;
+      }
+
+      data.id_woo = Math.trunc(numericValue).toString();
       hasChanges = true;
     } else {
       const text = String(rawValue).trim();
@@ -105,15 +137,8 @@ function buildUpdateData(body: any) {
         } as const;
       }
 
-      try {
-        data.id_woo = BigInt(text);
-        hasChanges = true;
-      } catch (error) {
-        console.error('[products] invalid id_woo value', error);
-        return {
-          error: errorResponse('VALIDATION_ERROR', 'El campo id_woo debe ser un número entero válido', 400),
-        } as const;
-      }
+      data.id_woo = text;
+      hasChanges = true;
     }
   }
 
