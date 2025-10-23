@@ -1762,18 +1762,6 @@ export function SessionsAccordionAbierta({
     [variantProductIds],
   );
 
-  const variantDateFormatter = useMemo(() => new Intl.DateTimeFormat('es-ES'), []);
-  const variantDateKeyFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Europe/Madrid',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }),
-    [],
-  );
-
   const productVariantsQuery = useQuery({
     queryKey: ['deal', dealId, 'product-variants', variantProductKey],
     queryFn: () => fetchProductVariants({ productIds: variantProductIds }),
@@ -1818,29 +1806,17 @@ export function SessionsAccordionAbierta({
 
   const variantSelectOptions = useMemo(() => {
     if (!activeVariantProductId) return [] as DealVariantSelectOption[];
-    const todayKey = variantDateKeyFormatter.format(new Date());
-
-    const options: Array<{ option: DealVariantSelectOption; sortKey: number }> = [];
+    const options: DealVariantSelectOption[] = [];
 
     for (const variant of productVariants) {
       if (variant.productId !== activeVariantProductId) continue;
       if (!variant.wooId) continue;
 
-      const rawDate = typeof variant.date === 'string' ? variant.date.trim() : '';
-      if (!rawDate) continue;
+      const baseName = variant.name?.trim();
+      const labelParts: string[] = [];
 
-      const parsedDate = new Date(rawDate);
-      const timestamp = parsedDate.getTime();
-      if (!Number.isFinite(timestamp)) continue;
-      const variantKey = variantDateKeyFormatter.format(parsedDate);
-      if (variantKey < todayKey) continue;
-
-      const dateLabel = variantDateFormatter.format(parsedDate);
-      const baseName = variant.name?.trim() || `Variante ${variant.wooId}`;
-      const labelParts: string[] = [baseName];
-
-      if (!baseName.includes(dateLabel)) {
-        labelParts.push(dateLabel);
+      if (baseName?.length) {
+        labelParts.push(baseName);
       }
 
       if (includeProductInVariantLabel) {
@@ -1851,27 +1827,15 @@ export function SessionsAccordionAbierta({
         }
       }
 
-      options.push({
-        option: { value: variant.wooId, label: labelParts.join(' · '), date: variant.date ?? null },
-        sortKey: timestamp,
-      });
+      if (!labelParts.length) {
+        labelParts.push(`Variante ${variant.wooId}`);
+      }
+
+      options.push({ value: variant.wooId, label: labelParts.join(' · '), date: variant.date ?? null });
     }
 
-    return options
-      .sort((a, b) => {
-        if (a.sortKey !== b.sortKey) {
-          return a.sortKey - b.sortKey;
-        }
-        return a.option.label.localeCompare(b.option.label, 'es');
-      })
-      .map((entry) => entry.option);
-  }, [
-    activeVariantProductId,
-    includeProductInVariantLabel,
-    productVariants,
-    variantDateFormatter,
-    variantDateKeyFormatter,
-  ]);
+    return options.sort((a, b) => a.label.localeCompare(b.label, 'es'));
+  }, [activeVariantProductId, includeProductInVariantLabel, productVariants]);
 
   const variantOptionsLoading = productVariantsQuery.isLoading || productVariantsQuery.isFetching;
   const [variantSaving, setVariantSaving] = useState(false);
@@ -2971,8 +2935,8 @@ function SessionEditor({
 
   const variantSelectPlaceholder = useMemo(() => {
     if (variantOptionsLoading) return 'Cargando variantes…';
-    if (!variantOptions.length) return 'No hay variantes futuras disponibles';
-    return 'Selecciona una variante futura…';
+    if (!variantOptions.length) return 'No hay variantes disponibles';
+    return 'Selecciona una variante…';
   }, [variantOptionsLoading, variantOptions.length]);
 
   const handleVariantSelectChange = useCallback(
