@@ -5,15 +5,19 @@ import { errorResponse, preflightResponse, successResponse } from './_shared/res
 import { toMadridISOString } from './_shared/timezone';
 import { mapApiStockStatusToDbValue, mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
+let variantDateColumnsSupported: boolean | null = null;
+
+const VARIANT_DATE_COLUMN_PATTERNS = [/default_variant_(start|end)/i, /variant_(start|end)/i];
+
 type ProductDefaultsRecord = {
   id: string;
-  default_variant_start: Date | string | null;
-  default_variant_end: Date | string | null;
-  default_variant_stock_status: string | null;
-  default_variant_stock_quantity: number | null;
-  default_variant_price: Prisma.Decimal | string | null;
-  hora_inicio: string | null;
-  hora_fin: string | null;
+  default_variant_start?: Date | string | null;
+  default_variant_end?: Date | string | null;
+  default_variant_stock_status?: string | null;
+  default_variant_stock_quantity?: number | null;
+  default_variant_price?: Prisma.Decimal | string | null;
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
 };
 
 type ProductDefaultsPayload = {
@@ -30,10 +34,13 @@ type ProductDefaultsPayload = {
 function normalizeDefaults(record: ProductDefaultsRecord) {
   return {
     id: record.id,
-    default_variant_start: toMadridISOString(record.default_variant_start),
-    default_variant_end: toMadridISOString(record.default_variant_end),
+    default_variant_start: toMadridISOString(record.default_variant_start ?? null),
+    default_variant_end: toMadridISOString(record.default_variant_end ?? null),
     default_variant_stock_status: mapDbStockStatusToApiValue(record.default_variant_stock_status),
-    default_variant_stock_quantity: record.default_variant_stock_quantity ?? null,
+    default_variant_stock_quantity:
+      record.default_variant_stock_quantity === undefined
+        ? null
+        : record.default_variant_stock_quantity ?? null,
     default_variant_price:
       record.default_variant_price == null
         ? null
@@ -155,10 +162,33 @@ function parseTimeInput(value: unknown): string | null {
   return `${hoursText.padStart(2, '0')}:${minutesText.padStart(2, '0')}`;
 }
 
-async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: string) {
-  const product = await prisma.products.findUnique({
-    where: { id: productId },
-    select: {
+function isMissingVariantDateColumns(error: unknown): boolean {
+  const isKnownRequestError =
+    typeof Prisma.PrismaClientKnownRequestError === 'function' &&
+    error instanceof Prisma.PrismaClientKnownRequestError;
+
+  if (isKnownRequestError) {
+    return error.code === 'P2021';
+  }
+
+  const isUnknownRequestError =
+    typeof Prisma.PrismaClientUnknownRequestError === 'function' &&
+    error instanceof Prisma.PrismaClientUnknownRequestError;
+
+  if (isUnknownRequestError) {
+    return VARIANT_DATE_COLUMN_PATTERNS.some((pattern) => pattern.test((error as Error).message));
+  }
+
+  if (error instanceof Error) {
+    return VARIANT_DATE_COLUMN_PATTERNS.some((pattern) => pattern.test(error.message));
+  }
+
+  return false;
+}
+
+function buildProductSelect(includeVariantDates: boolean): Prisma.productsSelect {
+  if (includeVariantDates) {
+    return {
       id: true,
       default_variant_start: true,
       default_variant_end: true,
@@ -167,9 +197,113 @@ async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: strin
       default_variant_price: true,
       hora_inicio: true,
       hora_fin: true,
-    },
-  });
-  return product;
+    } satisfies Prisma.productsSelect;
+  }
+
+  return {
+    id: true,
+    default_variant_stock_status: true,
+    default_variant_stock_quantity: true,
+    default_variant_price: true,
+    hora_inicio: true,
+    hora_fin: true,
+  } satisfies Prisma.productsSelect;
+}
+
+async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: string) {
+  const includeVariantDates = variantDateColumnsSupported !== false;
+
+  try {
+    const product = await prisma.products.findUnique({
+      where: { id: productId },
+      select: buildProductSelect(includeVariantDates),
+    });
+
+    if (includeVariantDates && variantDateColumnsSupported !== false) {
+      variantDateColumnsSupported = true;
+    }
+
+    return product;
+  } catch (error) {
+    if (!includeVariantDates || !isMissingVariantDateColumns(error)) {
+      throw error;
+    }
+
+    variantDateColumnsSupported = false;
+    console.warn('[product-variant-settings] Variant date columns not available, falling back', { error });
+
+    return prisma.products.findUnique({
+      where: { id: productId },
+      select: buildProductSelect(false),
+    });
+  }
+}
+
+function buildUpdateData(params: {
+  timestamp: Date;
+  includeVariantDates: boolean;
+  hasStartDate: boolean;
+  hasEndDate: boolean;
+  hasStockStatus: boolean;
+  hasStockQuantity: boolean;
+  hasPrice: boolean;
+  hasHoraInicio: boolean;
+  hasHoraFin: boolean;
+  startDate: Date | null;
+  endDate: Date | null;
+  stockStatus: string | null;
+  stockQuantity: number | null;
+  price: Prisma.Decimal | null;
+  horaInicio: string | null;
+  horaFin: string | null;
+}): Prisma.productsUpdateInput {
+  const {
+    timestamp,
+    includeVariantDates,
+    hasStartDate,
+    hasEndDate,
+    hasStockStatus,
+    hasStockQuantity,
+    hasPrice,
+    hasHoraInicio,
+    hasHoraFin,
+    startDate,
+    endDate,
+    stockStatus,
+    stockQuantity,
+    price,
+    horaInicio,
+    horaFin,
+  } = params;
+
+  const data: Prisma.productsUpdateInput = { updated_at: timestamp };
+
+  if (includeVariantDates) {
+    if (hasStartDate) {
+      data.default_variant_start = startDate;
+    }
+    if (hasEndDate) {
+      data.default_variant_end = endDate;
+    }
+  }
+
+  if (hasStockStatus) {
+    data.default_variant_stock_status = stockStatus;
+  }
+  if (hasStockQuantity) {
+    data.default_variant_stock_quantity = stockQuantity;
+  }
+  if (hasPrice) {
+    data.default_variant_price = price;
+  }
+  if (hasHoraInicio) {
+    data.hora_inicio = horaInicio;
+  }
+  if (hasHoraFin) {
+    data.hora_fin = horaFin;
+  }
+
+  return data;
 }
 
 export const handler = async (event: any) => {
@@ -283,47 +417,73 @@ export const handler = async (event: any) => {
     }
 
     const timestamp = new Date();
-    const data: Prisma.productsUpdateInput = { updated_at: timestamp };
-
-    if (hasStartDate) {
-      data.default_variant_start = startDate;
-    }
-    if (hasEndDate) {
-      data.default_variant_end = endDate;
-    }
-    if (hasStockStatus) {
-      data.default_variant_stock_status = stockStatus;
-    }
-    if (hasStockQuantity) {
-      data.default_variant_stock_quantity = stockQuantity;
-    }
-    if (hasPrice) {
-      data.default_variant_price = price;
-    }
-    if (hasHoraInicio) {
-      data.hora_inicio = horaInicio;
-    }
-    if (hasHoraFin) {
-      data.hora_fin = horaFin;
-    }
-
-    const updated = await prisma.products.update({
-      where: { id: productId },
-      data,
-      select: {
-        id: true,
-        id_woo: true,
-        default_variant_start: true,
-        default_variant_end: true,
-        default_variant_stock_status: true,
-        default_variant_stock_quantity: true,
-        default_variant_price: true,
-        hora_inicio: true,
-        hora_fin: true,
-      },
+    const includeVariantDates = variantDateColumnsSupported !== false;
+    const data = buildUpdateData({
+      timestamp,
+      includeVariantDates,
+      hasStartDate,
+      hasEndDate,
+      hasStockStatus,
+      hasStockQuantity,
+      hasPrice,
+      hasHoraInicio,
+      hasHoraFin,
+      startDate,
+      endDate,
+      stockStatus,
+      stockQuantity,
+      price,
+      horaInicio,
+      horaFin,
     });
 
-    return successResponse({ ok: true, product: normalizeDefaults(updated) });
+    try {
+      const updated = await prisma.products.update({
+        where: { id: productId },
+        data,
+        select: buildProductSelect(includeVariantDates),
+      });
+
+      if (includeVariantDates && variantDateColumnsSupported !== false) {
+        variantDateColumnsSupported = true;
+      }
+
+      return successResponse({ ok: true, product: normalizeDefaults(updated) });
+    } catch (error) {
+      if (!includeVariantDates || !isMissingVariantDateColumns(error)) {
+        throw error;
+      }
+
+      variantDateColumnsSupported = false;
+      console.warn('[product-variant-settings] Update fallback without variant date columns', { error });
+
+      const fallbackData = buildUpdateData({
+        timestamp,
+        includeVariantDates: false,
+        hasStartDate,
+        hasEndDate,
+        hasStockStatus,
+        hasStockQuantity,
+        hasPrice,
+        hasHoraInicio,
+        hasHoraFin,
+        startDate,
+        endDate,
+        stockStatus,
+        stockQuantity,
+        price,
+        horaInicio,
+        horaFin,
+      });
+
+      const updated = await prisma.products.update({
+        where: { id: productId },
+        data: fallbackData,
+        select: buildProductSelect(false),
+      });
+
+      return successResponse({ ok: true, product: normalizeDefaults(updated) });
+    }
   } catch (error) {
     console.error('[product-variant-settings] handler error', error);
     return errorResponse('UNEXPECTED_ERROR', 'Se ha producido un error inesperado', 500);
