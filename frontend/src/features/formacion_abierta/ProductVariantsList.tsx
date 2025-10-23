@@ -191,6 +191,7 @@ async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
   const products = Array.isArray(json.products) ? json.products : [];
 
   return products.map((product) => {
+    const productId = product?.id != null ? String(product.id) : '';
     const defaultStockQuantity =
       typeof (product as any).default_variant_stock_quantity === 'number'
         ? (product as any).default_variant_stock_quantity
@@ -200,7 +201,7 @@ async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
           : null;
 
     return {
-      id: product.id,
+      id: productId,
       id_woo: product.id_woo != null ? String(product.id_woo) : null,
       name: product.name ?? null,
       code: product.code ?? null,
@@ -221,8 +222,10 @@ async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
                   ? Number(variant.stock)
                   : null;
 
+            const variantId = variant?.id != null ? String(variant.id) : '';
+
             return {
-              id: variant.id,
+              id: variantId,
               id_woo: String(variant.id_woo),
               name: variant.name ?? null,
               status: variant.status ?? null,
