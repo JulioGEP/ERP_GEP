@@ -3,6 +3,12 @@ import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import {
+  ALWAYS_AVAILABLE_UNIT_IDS,
+  ensureResourcesAvailable,
+  normalizeDateRange,
+  computeVariantDateRange,
+} from './_shared/resourceAvailability';
 
 const APPLICABLE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const DEFAULT_LIMIT = 10;
@@ -20,9 +26,6 @@ const MANUAL_SESSION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCELADA',
 const BORRADOR_TRANSITION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCELADA']);
 
 type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>;
-
-// Certain unidades móviles act as placeholders and should never block availability checks.
-const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 
 function toTrimmed(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -466,101 +469,6 @@ function ensureValidDateRange(start?: Date | null, end?: Date | null) {
   return null;
 }
 
-type DateRange = { start: Date; end: Date };
-
-function normalizeDateRange(
-  start: Date | null | undefined,
-  end: Date | null | undefined,
-): DateRange | null {
-  const effectiveStart = start ?? end ?? null;
-  const effectiveEnd = end ?? start ?? null;
-  if (!effectiveStart || !effectiveEnd) return null;
-
-  const startTime = effectiveStart.getTime();
-  const endTime = effectiveEnd.getTime();
-  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return null;
-  if (endTime < startTime) return null;
-
-  return {
-    start: new Date(startTime),
-    end: new Date(endTime),
-  };
-}
-
-async function ensureResourcesAvailable(
-  tx: Prisma.TransactionClient,
-  {
-    sessionId,
-    trainerIds,
-    unidadIds,
-    salaId,
-    start,
-    end,
-  }: {
-    sessionId?: string;
-    trainerIds?: string[];
-    unidadIds?: string[];
-    salaId?: string | null;
-    start?: Date | null;
-    end?: Date | null;
-  },
-) {
-  const range = normalizeDateRange(start ?? null, end ?? null);
-  if (!range) return;
-
-  const resourceConditions: Prisma.sessionsWhereInput[] = [];
-
-  if (trainerIds && trainerIds.length) {
-    resourceConditions.push({ trainers: { some: { trainer_id: { in: trainerIds } } } });
-  }
-
-  const filteredUnidadIds = (unidadIds ?? []).filter((unidadId) =>
-    unidadId ? !ALWAYS_AVAILABLE_UNIT_IDS.has(unidadId) : false,
-  );
-
-  if (filteredUnidadIds.length) {
-    resourceConditions.push({ unidades: { some: { unidad_id: { in: filteredUnidadIds } } } });
-  }
-
-  if (salaId) {
-    resourceConditions.push({ sala_id: salaId });
-  }
-
-  if (!resourceConditions.length) return;
-
-  const sessions = await tx.sessions.findMany({
-    where: {
-      ...(sessionId ? { id: { not: sessionId } } : {}),
-      OR: resourceConditions,
-    },
-    select: {
-      id: true,
-      fecha_inicio_utc: true,
-      fecha_fin_utc: true,
-      sala_id: true,
-      trainers: { select: { trainer_id: true } },
-      unidades: { select: { unidad_id: true } },
-    },
-  });
-
-  const conflicting = sessions.filter((session) => {
-    const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
-    if (!sessionRange) return false;
-    return (
-      sessionRange.start.getTime() <= range.end.getTime() &&
-      sessionRange.end.getTime() >= range.start.getTime()
-    );
-  });
-
-  if (!conflicting.length) return;
-
-  throw errorResponse(
-    'RESOURCE_UNAVAILABLE',
-    'Algunos recursos ya están asignados en las fechas seleccionadas.',
-    409,
-  );
-}
-
 function parseLimit(value: unknown): number {
   const parsed = toPositiveInt(value, DEFAULT_LIMIT);
   return Math.min(parsed || DEFAULT_LIMIT, MAX_LIMIT);
@@ -683,8 +591,52 @@ export const handler = async (event: any) => {
           sessionRange.end.getTime() >= range.start.getTime()
         ) {
           session.trainers.forEach((trainer) => trainerLocks.add(trainer.trainer_id));
-          session.unidades.forEach((unit) => unitLocks.add(unit.unidad_id));
+          session.unidades.forEach((unit) => {
+            if (!ALWAYS_AVAILABLE_UNIT_IDS.has(unit.unidad_id)) {
+              unitLocks.add(unit.unidad_id);
+            }
+          });
           if (session.sala_id) roomLocks.add(session.sala_id);
+        }
+      });
+
+      const variantsWithResources = await prisma.variants.findMany({
+        where: {
+          date: { not: null },
+          OR: [
+            { trainer_id: { not: null } },
+            { unidad_movil_id: { not: null } },
+            { sala_id: { not: null } },
+          ],
+        },
+        select: {
+          trainer_id: true,
+          unidad_movil_id: true,
+          sala_id: true,
+          date: true,
+          product: { select: { hora_inicio: true, hora_fin: true } },
+        },
+      });
+
+      variantsWithResources.forEach((variant) => {
+        const variantRange = computeVariantDateRange(variant.date, {
+          hora_inicio: variant.product?.hora_inicio ?? null,
+          hora_fin: variant.product?.hora_fin ?? null,
+        });
+        if (!variantRange) return;
+        if (
+          variantRange.start.getTime() <= range.end.getTime() &&
+          variantRange.end.getTime() >= range.start.getTime()
+        ) {
+          if (variant.trainer_id) {
+            trainerLocks.add(variant.trainer_id);
+          }
+          if (variant.unidad_movil_id && !ALWAYS_AVAILABLE_UNIT_IDS.has(variant.unidad_movil_id)) {
+            unitLocks.add(variant.unidad_movil_id);
+          }
+          if (variant.sala_id) {
+            roomLocks.add(variant.sala_id);
+          }
         }
       });
 

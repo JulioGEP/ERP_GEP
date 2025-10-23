@@ -765,6 +765,12 @@ export function CalendarView({
       stock_status: event.variant.stock_status ?? null,
       sede: event.variant.sede ?? null,
       date: event.variant.date ?? null,
+      sala_id: event.variant.sala_id ?? null,
+      sala_name: event.variant.sala_name ?? null,
+      trainer_id: event.variant.trainer_id ?? null,
+      trainer_name: event.variant.trainer_name ?? null,
+      unidad_movil_id: event.variant.unidad_movil_id ?? null,
+      unidad_movil_name: event.variant.unidad_movil_name ?? null,
       created_at: event.variant.created_at ?? null,
       updated_at: event.variant.updated_at ?? null,
     };

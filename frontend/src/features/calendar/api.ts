@@ -26,6 +26,12 @@ export type CalendarVariantDetails = {
   stock_status: string | null;
   sede: string | null;
   date: string | null;
+  sala_id: string | null;
+  sala_name: string | null;
+  trainer_id: string | null;
+  trainer_name: string | null;
+  unidad_movil_id: string | null;
+  unidad_movil_name: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -184,6 +190,12 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
     stock_status: toOptionalString(input?.stock_status),
     sede: toOptionalString(input?.sede),
     date: toOptionalString(input?.date),
+    sala_id: toOptionalString(input?.sala_id),
+    sala_name: toOptionalString(input?.sala_name),
+    trainer_id: toOptionalString(input?.trainer_id),
+    trainer_name: toOptionalString(input?.trainer_name),
+    unidad_movil_id: toOptionalString(input?.unidad_movil_id),
+    unidad_movil_name: toOptionalString(input?.unidad_movil_name),
     created_at: toOptionalString(input?.created_at),
     updated_at: toOptionalString(input?.updated_at),
   } satisfies CalendarVariantDetails;

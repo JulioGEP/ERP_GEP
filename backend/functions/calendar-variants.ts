@@ -33,6 +33,12 @@ type CalendarVariantEvent = {
     stock_status: string | null;
     sede: string | null;
     date: string | null;
+    sala_id: string | null;
+    sala_name: string | null;
+    trainer_id: string | null;
+    trainer_name: string | null;
+    unidad_movil_id: string | null;
+    unidad_movil_name: string | null;
     created_at: string | null;
     updated_at: string | null;
   };
@@ -102,7 +108,24 @@ function normalizeVariantRecord(record: {
   date: Date | null;
   created_at: Date | null;
   updated_at: Date | null;
+  sala_id: string | null;
+  trainer_id: string | null;
+  unidad_movil_id: string | null;
+  sala?: { sala_id: string; name: string | null } | null;
+  trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  unidad?: { unidad_id: string; name: string | null; matricula: string | null } | null;
 }) {
+  const trainerFirst = record.trainer?.name?.trim() ?? '';
+  const trainerLast = record.trainer?.apellido?.trim() ?? '';
+  const trainerLabel = `${trainerFirst} ${trainerLast}`.trim();
+  const unitName = record.unidad?.name?.trim() ?? '';
+  const unitMatricula = record.unidad?.matricula?.trim() ?? '';
+  const unitLabel = unitName
+    ? unitMatricula
+      ? `${unitName} (${unitMatricula})`
+      : unitName
+    : unitMatricula || null;
+
   return {
     id: record.id,
     id_woo: record.id_woo != null ? record.id_woo.toString() : null,
@@ -118,6 +141,12 @@ function normalizeVariantRecord(record: {
     stock_status: record.stock_status ?? null,
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
+    sala_id: record.sala_id ?? null,
+    sala_name: record.sala?.name ?? null,
+    trainer_id: record.trainer_id ?? null,
+    trainer_name: trainerLabel || trainerFirst || null,
+    unidad_movil_id: record.unidad_movil_id ?? null,
+    unidad_movil_name: unitLabel,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
   };
@@ -223,8 +252,14 @@ export const handler = async (event: any) => {
         stock_status: true,
         sede: true,
         date: true,
+        sala_id: true,
+        trainer_id: true,
+        unidad_movil_id: true,
         created_at: true,
         updated_at: true,
+        sala: { select: { sala_id: true, name: true } },
+        trainer: { select: { trainer_id: true, name: true, apellido: true } },
+        unidad: { select: { unidad_id: true, name: true, matricula: true } },
         product: {
           select: {
             id: true,
