@@ -19,7 +19,7 @@ import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailMo
 import type { DealSummary } from '../../types/deal';
 import { emitToast } from '../../utils/toast';
 
-type VariantInfo = {
+export type VariantInfo = {
   id: string;
   id_woo: string;
   name: string | null;
@@ -43,7 +43,7 @@ type ProductDefaults = {
   hora_fin: string | null;
 };
 
-type ProductInfo = ProductDefaults & {
+export type ProductInfo = ProductDefaults & {
   id: string;
   id_woo: string | null;
   name: string | null;
@@ -52,7 +52,7 @@ type ProductInfo = ProductDefaults & {
   variants: VariantInfo[];
 };
 
-type ActiveVariant = {
+export type ActiveVariant = {
   product: ProductInfo;
   variant: VariantInfo;
 };
@@ -1381,7 +1381,7 @@ function VariantCreationModal({
   );
 }
 
-function VariantModal({
+export function VariantModal({
   active,
   onHide,
   onVariantUpdated,

@@ -2,9 +2,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, ButtonGroup, Spinner } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
-import { fetchCalendarSessions, type CalendarResource, type CalendarSession } from './api';
+import {
+  fetchCalendarSessions,
+  fetchCalendarVariants,
+  type CalendarResource,
+  type CalendarSession,
+  type CalendarSessionsResponse,
+  type CalendarVariantEvent,
+  type CalendarVariantsResponse,
+} from './api';
 import type { SessionEstado } from '../presupuestos/api';
 import { ApiError } from '../presupuestos/api';
+import {
+  VariantModal,
+  type ActiveVariant,
+  type ProductInfo,
+  type VariantInfo,
+} from '../formacion_abierta/ProductVariantsList';
 
 const STORAGE_KEY_PREFIX = 'erp-calendar-preferences';
 const MADRID_TZ = 'Europe/Madrid';
@@ -66,17 +80,20 @@ type VisibleRange = {
   endDateUTC: Date;
 };
 
+type CalendarEventItem =
+  | { kind: 'session'; start: string; end: string; session: CalendarSession }
+  | { kind: 'variant'; start: string; end: string; variant: CalendarVariantEvent };
+
 type MonthDayCell = {
   julian: number;
   date: MadridDate;
   iso: string;
   isCurrentMonth: boolean;
   isToday: boolean;
-  sessions: CalendarSession[];
+  events: CalendarEventItem[];
 };
 
-type DayEvent = {
-  session: CalendarSession;
+type BaseDayEvent = {
   startMinutes: number;
   endMinutes: number;
   topPercent: number;
@@ -88,6 +105,10 @@ type DayEvent = {
   continuesFromPreviousDay: boolean;
   continuesIntoNextDay: boolean;
 };
+
+type DayEvent =
+  | (BaseDayEvent & { kind: 'session'; session: CalendarSession })
+  | (BaseDayEvent & { kind: 'variant'; variant: CalendarVariantEvent });
 
 type WeekColumn = {
   julian: number;
@@ -315,11 +336,11 @@ function formatResourceDetail(resources: CalendarResource[], emptyLabel: string)
   return resources.map((resource) => formatResourceName(resource)).join(', ');
 }
 
-function groupSessionsByJulian(sessions: CalendarSession[]): Map<number, CalendarSession[]> {
-  const map = new Map<number, CalendarSession[]>();
-  sessions.forEach((session) => {
-    const start = getMadridDateTime(new Date(session.start));
-    const end = getMadridDateTime(new Date(session.end));
+function groupEventsByJulian(events: CalendarEventItem[]): Map<number, CalendarEventItem[]> {
+  const map = new Map<number, CalendarEventItem[]>();
+  events.forEach((event) => {
+    const start = getMadridDateTime(new Date(event.start));
+    const end = getMadridDateTime(new Date(event.end));
     let startJulian = getJulianDay(start);
     let endJulian = getJulianDay(end);
     if (endJulian > startJulian && end.hour === 0 && end.minute === 0) {
@@ -327,7 +348,7 @@ function groupSessionsByJulian(sessions: CalendarSession[]): Map<number, Calenda
     }
     for (let jd = startJulian; jd <= endJulian; jd += 1) {
       const list = map.get(jd) ?? [];
-      list.push(session);
+      list.push(event);
       map.set(jd, list);
     }
   });
@@ -373,7 +394,7 @@ function arrangeDayEvents(events: DayEvent[]): DayEvent[] {
   return sorted;
 }
 
-function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): WeekColumn[] {
+function buildWeekColumns(range: VisibleRange, events: CalendarEventItem[]): WeekColumn[] {
   const columns: WeekColumn[] = [];
   const todayParts = getMadridDateTime(new Date());
   for (let jd = range.startJulian; jd < range.endJulian; jd += 1) {
@@ -396,9 +417,9 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
   const weekStartUTC = madridDateToUTC(julianToMadridDate(range.startJulian));
   const weekEndUTC = madridDateToUTC(julianToMadridDate(range.endJulian));
 
-  const filtered = sessions.filter((session) => {
-    const start = new Date(session.start);
-    const end = new Date(session.end);
+  const filtered = events.filter((event) => {
+    const start = new Date(event.start);
+    const end = new Date(event.end);
     return end > weekStartUTC && start < weekEndUTC;
   });
 
@@ -407,9 +428,9 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
     const dayEnd = madridDateToUTC(julianToMadridDate(column.julian + 1));
     const dayEvents: DayEvent[] = [];
 
-    filtered.forEach((session) => {
-      const start = new Date(session.start);
-      const end = new Date(session.end);
+    filtered.forEach((item) => {
+      const start = new Date(item.start);
+      const end = new Date(item.end);
       if (end <= dayStart || start >= dayEnd) return;
       const continuesFromPreviousDay = start < dayStart;
       const continuesIntoNextDay = end > dayEnd;
@@ -452,8 +473,7 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
         ? '00:00'
         : madridTimeFormatter.format(overlapStart);
       const displayEnd = continuesIntoNextDay ? '24:00' : madridTimeFormatter.format(overlapEnd);
-      dayEvents.push({
-        session,
+      const baseEvent: BaseDayEvent = {
         startMinutes,
         endMinutes,
         topPercent,
@@ -464,7 +484,12 @@ function buildWeekColumns(range: VisibleRange, sessions: CalendarSession[]): Wee
         displayEnd,
         continuesFromPreviousDay: continuesFromPreviousDay || clippedAtStart,
         continuesIntoNextDay: continuesIntoNextDay || clippedAtEnd,
-      });
+      };
+      if (item.kind === 'session') {
+        dayEvents.push({ ...baseEvent, kind: 'session', session: item.session });
+      } else {
+        dayEvents.push({ ...baseEvent, kind: 'variant', variant: item.variant });
+      }
     });
 
     column.events = arrangeDayEvents(dayEvents);
@@ -522,16 +547,46 @@ export function CalendarView({
     };
   }, [debouncedRange]);
 
-  const sessionsQuery = useQuery({
+  const includeVariants = mode === 'sessions';
+
+  const sessionsQuery = useQuery<CalendarSessionsResponse, ApiError>({
     queryKey: ['calendarSessions', fetchRange?.start ?? null, fetchRange?.end ?? null],
     queryFn: () => fetchCalendarSessions({ start: fetchRange!.start, end: fetchRange!.end }),
     enabled: !!fetchRange,
-    keepPreviousData: true,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const variantsQuery = useQuery<CalendarVariantsResponse, ApiError>({
+    queryKey: ['calendarVariants', fetchRange?.start ?? null, fetchRange?.end ?? null],
+    queryFn: () => fetchCalendarVariants({ start: fetchRange!.start, end: fetchRange!.end }),
+    enabled: includeVariants && !!fetchRange,
     staleTime: 5 * 60 * 1000,
   });
 
   const sessions = sessionsQuery.data?.sessions ?? [];
-  const sessionGroups = useMemo(() => groupSessionsByJulian(sessions), [sessions]);
+  const variants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
+
+  const events: CalendarEventItem[] = useMemo(() => {
+    const items: CalendarEventItem[] = sessions.map((session) => ({
+      kind: 'session',
+      start: session.start,
+      end: session.end,
+      session,
+    }));
+    if (includeVariants) {
+      variants.forEach((variant) => {
+        items.push({
+          kind: 'variant',
+          start: variant.start,
+          end: variant.end,
+          variant,
+        });
+      });
+    }
+    return items;
+  }, [sessions, variants, includeVariants]);
+
+  const eventGroups = useMemo(() => groupEventsByJulian(events), [events]);
 
   const monthDays: MonthDayCell[] | null = useMemo(() => {
     if (view !== 'month') return null;
@@ -549,20 +604,31 @@ export function CalendarView({
         iso,
         isCurrentMonth,
         isToday,
-        sessions: [...(sessionGroups.get(jd) ?? [])].sort((a, b) => a.start.localeCompare(b.start)),
+        events: [...(eventGroups.get(jd) ?? [])].sort((a, b) => a.start.localeCompare(b.start)),
       });
     }
     return days;
-  }, [view, visibleRange, currentDate, sessionGroups]);
+  }, [view, visibleRange, currentDate, eventGroups]);
 
   const weekColumns = useMemo(() => {
     if (view === 'month') return null;
-    return buildWeekColumns(visibleRange, sessions);
-  }, [view, visibleRange, sessions]);
+    return buildWeekColumns(visibleRange, events);
+  }, [view, visibleRange, events]);
 
-  const isInitialLoading = sessionsQuery.isLoading && !sessionsQuery.data;
-  const isFetching = sessionsQuery.isFetching;
-  const error = sessionsQuery.error as ApiError | null;
+  const isInitialLoading =
+    (sessionsQuery.isLoading && !sessionsQuery.data) ||
+    (includeVariants && variantsQuery.isLoading && !variantsQuery.data);
+  const isFetching = sessionsQuery.isFetching || (includeVariants && variantsQuery.isFetching);
+  const error =
+    (sessionsQuery.error as ApiError | null) ??
+    (includeVariants ? (variantsQuery.error as ApiError | null) : null);
+
+  const handleRefetch = useCallback(() => {
+    void sessionsQuery.refetch();
+    if (includeVariants) {
+      void variantsQuery.refetch();
+    }
+  }, [sessionsQuery, variantsQuery, includeVariants]);
 
   const handleViewChange = useCallback((nextView: CalendarViewType) => {
     setView(nextView);
@@ -597,40 +663,157 @@ export function CalendarView({
 
   const [tooltip, setTooltip] = useState<
     | {
+        kind: 'session';
         session: CalendarSession;
+        rect: DOMRect;
+        pointer?: { x: number; y: number };
+      }
+    | {
+        kind: 'variant';
+        variant: CalendarVariantEvent;
         rect: DOMRect;
         pointer?: { x: number; y: number };
       }
     | null
   >(null);
 
+  const [activeVariant, setActiveVariant] = useState<ActiveVariant | null>(null);
+
   const tooltipStartLabel = tooltip
-    ? `${madridDateFormatter.format(new Date(tooltip.session.start))} · ${madridTimeFormatter.format(
-        new Date(tooltip.session.start),
-      )}`
+    ? madridTimeFormatter.format(
+        new Date(tooltip.kind === 'session' ? tooltip.session.start : tooltip.variant.start),
+      )
     : '';
   const tooltipEndLabel = tooltip
-    ? `${madridDateFormatter.format(new Date(tooltip.session.end))} · ${madridTimeFormatter.format(
-        new Date(tooltip.session.end),
-      )}`
+    ? madridTimeFormatter.format(
+        new Date(tooltip.kind === 'session' ? tooltip.session.end : tooltip.variant.end),
+      )
     : '';
-  const tooltipCompanyLabel = tooltip?.session.dealTitle?.trim() || 'Sin empresa';
-  const tooltipAddressLabel =
-    tooltip?.session.dealAddress?.trim() || tooltip?.session.direccion?.trim() || 'Sin dirección';
-  const tooltipTrainersLabel =
-    tooltip && tooltip.session.trainers.length
-      ? tooltip.session.trainers
-          .map((trainer) =>
-            trainer.secondary ? `${trainer.name} ${trainer.secondary}`.trim() : trainer.name,
-          )
-          .join(', ')
-      : 'Sin formador';
-  const tooltipUnitsLabel =
-    tooltip && tooltip.session.units.length
-      ? tooltip.session.units
-          .map((unit) => (unit.secondary ? `${unit.name} ${unit.secondary}`.trim() : unit.name))
-          .join(', ')
-      : 'Sin unidad móvil';
+  const tooltipDateLabel = tooltip
+    ? madridDateFormatter.format(
+        new Date(tooltip.kind === 'session' ? tooltip.session.start : tooltip.variant.start),
+      )
+    : '';
+
+  const tooltipTitle = tooltip
+    ? tooltip.kind === 'session'
+      ? tooltip.session.title
+      : tooltip.variant.variant.name ?? tooltip.variant.product.name ?? 'Variante sin nombre'
+    : '';
+
+  const tooltipSecondaryLine = (() => {
+    if (!tooltip) {
+      return { left: '', right: '' };
+    }
+    if (tooltip.kind === 'session') {
+      return {
+        left: tooltip.session.dealTitle?.trim() || 'Sin empresa',
+        right: tooltip.session.dealAddress?.trim() || tooltip.session.direccion?.trim() || 'Sin dirección',
+      };
+    }
+    const productLabel = tooltip.variant.product.name?.trim().length
+      ? tooltip.variant.product.name
+      : tooltip.variant.product.code?.trim().length
+        ? tooltip.variant.product.code
+        : 'Producto sin nombre';
+    return {
+      left: productLabel ?? 'Producto sin nombre',
+      right: tooltip.variant.variant.sede ?? 'Sin sede',
+    };
+  })();
+
+  const tooltipTertiaryLine = (() => {
+    if (!tooltip) {
+      return { left: '', right: '' };
+    }
+    if (tooltip.kind === 'session') {
+      const trainersLabel =
+        tooltip.session.trainers.length
+          ? tooltip.session.trainers
+              .map((trainer) =>
+                trainer.secondary ? `${trainer.name} ${trainer.secondary}`.trim() : trainer.name,
+              )
+              .join(', ')
+          : 'Sin formador';
+      const unitsLabel =
+        tooltip.session.units.length
+          ? tooltip.session.units
+              .map((unit) => (unit.secondary ? `${unit.name} ${unit.secondary}`.trim() : unit.name))
+              .join(', ')
+          : 'Sin unidad móvil';
+      return { left: trainersLabel, right: unitsLabel };
+    }
+
+    const statusLabel = tooltip.variant.variant.status
+      ? `Estado: ${tooltip.variant.variant.status}`
+      : 'Estado: —';
+    const priceLabel = tooltip.variant.variant.price
+      ? `Precio: ${tooltip.variant.variant.price}`
+      : 'Precio: —';
+
+    return { left: statusLabel, right: priceLabel };
+  })();
+
+  const handleVariantOpen = useCallback((event: CalendarVariantEvent) => {
+    const variant: VariantInfo = {
+      id: event.variant.id,
+      id_woo: event.variant.id_woo ?? '',
+      name: event.variant.name ?? null,
+      status: event.variant.status ?? null,
+      price: event.variant.price ?? null,
+      stock: event.variant.stock ?? null,
+      stock_status: event.variant.stock_status ?? null,
+      sede: event.variant.sede ?? null,
+      date: event.variant.date ?? null,
+      created_at: event.variant.created_at ?? null,
+      updated_at: event.variant.updated_at ?? null,
+    };
+
+    const product: ProductInfo = {
+      id: event.product.id,
+      id_woo: event.product.id_woo ?? null,
+      name: event.product.name ?? null,
+      code: event.product.code ?? null,
+      category: event.product.category ?? null,
+      hora_inicio: event.product.hora_inicio ?? null,
+      hora_fin: event.product.hora_fin ?? null,
+      default_variant_start: event.product.default_variant_start ?? null,
+      default_variant_end: event.product.default_variant_end ?? null,
+      default_variant_stock_status: event.product.default_variant_stock_status ?? null,
+      default_variant_stock_quantity: event.product.default_variant_stock_quantity ?? null,
+      default_variant_price: event.product.default_variant_price ?? null,
+      variants: [variant],
+    };
+
+    setActiveVariant({ product, variant });
+  }, []);
+
+  const handleVariantClose = useCallback(() => {
+    setActiveVariant(null);
+  }, []);
+
+  const handleVariantUpdated = useCallback(
+    (updated: VariantInfo) => {
+      setActiveVariant((prev) => {
+        if (!prev || prev.variant.id !== updated.id) {
+          return prev;
+        }
+        return {
+          product: {
+            ...prev.product,
+            variants: prev.product.variants.map((item) =>
+              item.id === updated.id ? { ...item, ...updated } : item,
+            ),
+          },
+          variant: { ...prev.variant, ...updated },
+        };
+      });
+      if (includeVariants) {
+        void variantsQuery.refetch();
+      }
+    },
+    [includeVariants, variantsQuery],
+  );
 
   const wrapperRect = wrapperRef.current?.getBoundingClientRect() ?? null;
   const tooltipStyle = tooltip
@@ -662,40 +845,83 @@ export function CalendarView({
     });
   }, [onNotify]);
 
-  const renderSessionContent = (session: CalendarSession) => {
+  const renderEventContent = (item: CalendarEventItem | DayEvent) => {
+    if (item.kind === 'session') {
+      const session = item.session;
+      const chips: string[] = [];
+      if (mode === 'sessions') {
+        if (session.room) {
+          chips.push(buildChipLabel('room', session.room.name));
+        }
+        if (session.trainers.length) {
+          const [first, ...rest] = session.trainers;
+          chips.push(buildChipLabel('trainer', formatResourceName(first), rest.length));
+        }
+        if (session.units.length) {
+          const [first, ...rest] = session.units;
+          chips.push(buildChipLabel('unit', formatResourceName(first), rest.length));
+        }
+      } else if (mode === 'trainers') {
+        if (session.trainers.length > 1) {
+          session.trainers.slice(1).forEach((trainer) => {
+            chips.push(buildChipLabel('trainer', formatResourceName(trainer)));
+          });
+        }
+      } else if (mode === 'units') {
+        if (session.units.length > 1) {
+          session.units.slice(1).forEach((unit) => {
+            chips.push(buildChipLabel('unit', formatResourceName(unit)));
+          });
+        }
+      }
+
+      const eventTitle =
+        mode === 'sessions'
+          ? session.dealPipelineId ?? session.title
+          : mode === 'trainers'
+          ? formatResourceSummary(session.trainers, 'Sin formador')
+          : formatResourceSummary(session.units, 'Sin unidad móvil');
+
+      return (
+        <div className="erp-calendar-event-content">
+          <div className="erp-calendar-event-title">{eventTitle}</div>
+          {chips.length ? (
+            <div className="erp-calendar-event-meta">
+              {chips.map((chip, index) => (
+                <span key={`${chip}-${index}`} className="erp-calendar-chip">
+                  {chip}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <span className="erp-calendar-event-status">
+            {SESSION_ESTADO_LABELS[session.estado] ?? session.estado}
+          </span>
+        </div>
+      );
+    }
+
+    const variantEvent = item.variant;
     const chips: string[] = [];
-    if (mode === 'sessions') {
-      if (session.room) {
-        chips.push(buildChipLabel('room', session.room.name));
-      }
-      if (session.trainers.length) {
-        const [first, ...rest] = session.trainers;
-        chips.push(buildChipLabel('trainer', formatResourceName(first), rest.length));
-      }
-      if (session.units.length) {
-        const [first, ...rest] = session.units;
-        chips.push(buildChipLabel('unit', formatResourceName(first), rest.length));
-      }
-    } else if (mode === 'trainers') {
-      if (session.trainers.length > 1) {
-        session.trainers.slice(1).forEach((trainer) => {
-          chips.push(buildChipLabel('trainer', formatResourceName(trainer)));
-        });
-      }
-    } else if (mode === 'units') {
-      if (session.units.length > 1) {
-        session.units.slice(1).forEach((unit) => {
-          chips.push(buildChipLabel('unit', formatResourceName(unit)));
-        });
-      }
+    if (variantEvent.product.name) {
+      chips.push(`Producto: ${variantEvent.product.name}`);
+    } else if (variantEvent.product.code) {
+      chips.push(`Producto: ${variantEvent.product.code}`);
+    }
+    if (variantEvent.variant.sede) {
+      chips.push(`Sede: ${variantEvent.variant.sede}`);
+    }
+    if (variantEvent.variant.price) {
+      chips.push(`Precio: ${variantEvent.variant.price}`);
+    }
+    if (variantEvent.variant.stock != null) {
+      chips.push(`Stock: ${variantEvent.variant.stock}`);
     }
 
     const eventTitle =
-      mode === 'sessions'
-        ? session.dealPipelineId ?? session.title
-        : mode === 'trainers'
-        ? formatResourceSummary(session.trainers, 'Sin formador')
-        : formatResourceSummary(session.units, 'Sin unidad móvil');
+      variantEvent.variant.name?.trim().length
+        ? variantEvent.variant.name
+        : variantEvent.product.name ?? 'Variante sin nombre';
 
     return (
       <div className="erp-calendar-event-content">
@@ -710,7 +936,7 @@ export function CalendarView({
           </div>
         ) : null}
         <span className="erp-calendar-event-status">
-          {SESSION_ESTADO_LABELS[session.estado] ?? session.estado}
+          {variantEvent.variant.status ?? 'Variante'}
         </span>
       </div>
     );
@@ -766,7 +992,7 @@ export function CalendarView({
               <strong className="d-block mb-1">No se pudo cargar el calendario</strong>
               <span className="small">{error.message}</span>
             </div>
-            <Button size="sm" variant="outline-danger" onClick={() => sessionsQuery.refetch()}>
+            <Button size="sm" variant="outline-danger" onClick={handleRefetch}>
               Reintentar
             </Button>
           </div>
@@ -802,50 +1028,106 @@ export function CalendarView({
                   >
                     <div className="erp-calendar-day-label">{day.date.day}</div>
                     <div className="erp-calendar-day-events">
-                      {day.sessions.map((session) => {
-                        const monthEventLabel =
-                          mode === 'sessions'
-                            ? session.dealPipelineId ?? session.title
-                            : mode === 'trainers'
-                            ? formatResourceSummary(session.trainers, 'Sin formador')
-                            : formatResourceSummary(session.units, 'Sin unidad móvil');
-                        const monthEventTitle =
-                          mode === 'sessions'
-                            ? session.dealPipelineId ?? session.title
-                            : mode === 'trainers'
-                            ? formatResourceDetail(session.trainers, 'Sin formador')
-                            : formatResourceDetail(session.units, 'Sin unidad móvil');
+                      {day.events.map((eventItem) => {
+                        if (eventItem.kind === 'session') {
+                          const session = eventItem.session;
+                          const monthEventLabel =
+                            mode === 'sessions'
+                              ? session.dealPipelineId ?? session.title
+                              : mode === 'trainers'
+                              ? formatResourceSummary(session.trainers, 'Sin formador')
+                              : formatResourceSummary(session.units, 'Sin unidad móvil');
+                          const monthEventTitle =
+                            mode === 'sessions'
+                              ? session.dealPipelineId ?? session.title
+                              : mode === 'trainers'
+                              ? formatResourceDetail(session.trainers, 'Sin formador')
+                              : formatResourceDetail(session.units, 'Sin unidad móvil');
+                          return (
+                            <div
+                              key={`session-${session.id}`}
+                              className={`erp-calendar-event erp-calendar-month-event ${SESSION_CLASSNAMES[session.estado]}`}
+                              role="button"
+                              tabIndex={0}
+                              draggable
+                              title={monthEventTitle}
+                              onClick={() => onSessionOpen?.(session)}
+                              onKeyDown={(keyboardEvent) => {
+                                if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                                  keyboardEvent.preventDefault();
+                                  onSessionOpen?.(session);
+                                }
+                              }}
+                              onDragEnd={handleEventDragEnd}
+                              onMouseEnter={(mouseEvent) => {
+                                const target = mouseEvent.currentTarget;
+                                if (!target) return;
+                                setTooltip({ kind: 'session', session, rect: target.getBoundingClientRect() });
+                              }}
+                              onMouseLeave={() => setTooltip(null)}
+                              onFocus={(focusEvent) => {
+                                const target = focusEvent.currentTarget;
+                                if (!target) return;
+                                setTooltip({ kind: 'session', session, rect: target.getBoundingClientRect() });
+                              }}
+                              onBlur={() => setTooltip(null)}
+                            >
+                              <span className="erp-calendar-month-event-dot" aria-hidden="true" />
+                              <span className="erp-calendar-month-event-text">{monthEventLabel}</span>
+                            </div>
+                          );
+                        }
+
+                        const variant = eventItem.variant;
+                        const variantLabel = variant.variant.name?.trim().length
+                          ? variant.variant.name
+                          : variant.product.name ?? 'Variante sin nombre';
+                        const variantTitleParts: string[] = [];
+                        if (variant.product.name) {
+                          variantTitleParts.push(variant.product.name);
+                        } else if (variant.product.code) {
+                          variantTitleParts.push(variant.product.code);
+                        }
+                        if (variant.variant.sede) {
+                          variantTitleParts.push(variant.variant.sede);
+                        }
+                        const variantTitle = variantTitleParts.length
+                          ? variantTitleParts.join(' · ')
+                          : variantLabel ?? 'Variante sin nombre';
+
                         return (
                           <div
-                            key={session.id}
-                            className={`erp-calendar-event erp-calendar-month-event ${SESSION_CLASSNAMES[session.estado]}`}
+                            key={`variant-${variant.id}`}
+                            className="erp-calendar-event erp-calendar-month-event erp-calendar-event-variant"
                             role="button"
                             tabIndex={0}
-                            draggable
-                            title={monthEventTitle}
-                            onClick={() => onSessionOpen?.(session)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault();
-                                onSessionOpen?.(session);
+                            title={variantTitle}
+                            onClick={() => handleVariantOpen(variant)}
+                            onKeyDown={(keyboardEvent) => {
+                              if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                                keyboardEvent.preventDefault();
+                                handleVariantOpen(variant);
                               }
                             }}
-                            onDragEnd={handleEventDragEnd}
-                            onMouseEnter={(event) => {
-                              const target = event.currentTarget;
+                            onMouseEnter={(mouseEvent) => {
+                              const target = mouseEvent.currentTarget;
                               if (!target) return;
-                              setTooltip({ session, rect: target.getBoundingClientRect() });
+                              setTooltip({
+                                kind: 'variant',
+                                variant,
+                                rect: target.getBoundingClientRect(),
+                              });
                             }}
                             onMouseLeave={() => setTooltip(null)}
-                            onFocus={(event) => {
-                              const target = event.currentTarget;
+                            onFocus={(focusEvent) => {
+                              const target = focusEvent.currentTarget;
                               if (!target) return;
-                              setTooltip({ session, rect: target.getBoundingClientRect() });
+                              setTooltip({ kind: 'variant', variant, rect: target.getBoundingClientRect() });
                             }}
                             onBlur={() => setTooltip(null)}
                           >
                             <span className="erp-calendar-month-event-dot" aria-hidden="true" />
-                            <span className="erp-calendar-month-event-text">{monthEventLabel}</span>
+                            <span className="erp-calendar-month-event-text">{variantLabel}</span>
                           </div>
                         );
                       })}
@@ -876,63 +1158,138 @@ export function CalendarView({
                       <span className="erp-calendar-weekdate">{column.label}</span>
                     </div>
                     <div className="erp-calendar-week-column-body">
-                      {column.events.map((event) => (
-                        <div
-                          key={`${event.session.id}-${event.startMinutes}`}
-                          className={`erp-calendar-event erp-calendar-week-event ${SESSION_CLASSNAMES[event.session.estado]} ${
-                            event.continuesFromPreviousDay ? 'is-continued-from-previous-day' : ''
-                          } ${event.continuesIntoNextDay ? 'is-continued-into-next-day' : ''}`}
-                          role="button"
-                          tabIndex={0}
-                          style={{
-                            top: `${event.topPercent}%`,
-                            height: `${event.heightPercent}%`,
-                            left: `${(event.column / event.columns) * 100}%`,
-                            width: `${100 / event.columns}%`,
-                          }}
-                          draggable
-                          onClick={() => onSessionOpen?.(event.session)}
-                          onKeyDown={(keyboardEvent) => {
-                            if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
-                              keyboardEvent.preventDefault();
-                              onSessionOpen?.(event.session);
-                            }
-                          }}
-                          onDragEnd={handleEventDragEnd}
-                          onMouseEnter={(evt) => {
-                            const target = evt.currentTarget;
-                            if (!target) return;
-                            setTooltip({
-                              session: event.session,
-                              rect: target.getBoundingClientRect(),
-                              pointer: { x: evt.clientX, y: evt.clientY },
-                            });
-                          }}
-                          onMouseMove={(evt) => {
-                            const target = evt.currentTarget;
-                            if (!target) return;
-                            setTooltip((current) =>
-                              current && current.session.id === event.session.id
-                                ? {
-                                    session: event.session,
-                                    rect: target.getBoundingClientRect(),
-                                    pointer: { x: evt.clientX, y: evt.clientY },
-                                  }
-                                : current,
-                            );
-                          }}
-                          onMouseLeave={() => setTooltip(null)}
-                          onFocus={(evt) => {
-                            const target = evt.currentTarget;
-                            if (!target) return;
-                            setTooltip({ session: event.session, rect: target.getBoundingClientRect() });
-                          }}
-                          onBlur={() => setTooltip(null)}
-                        >
-                          <div className="erp-calendar-event-time">{event.displayStart} - {event.displayEnd}</div>
-                          {renderSessionContent(event.session)}
-                        </div>
-                      ))}
+                      {column.events.map((event) => {
+                        const baseClass = 'erp-calendar-event erp-calendar-week-event';
+                        const continuesClasses = `${
+                          event.continuesFromPreviousDay ? 'is-continued-from-previous-day' : ''
+                        } ${event.continuesIntoNextDay ? 'is-continued-into-next-day' : ''}`.trim();
+
+                        if (event.kind === 'session') {
+                          const className = `${baseClass} ${SESSION_CLASSNAMES[event.session.estado]} ${continuesClasses}`.trim();
+                          return (
+                            <div
+                              key={`session-${event.session.id}-${event.startMinutes}`}
+                              className={className}
+                              role="button"
+                              tabIndex={0}
+                              style={{
+                                top: `${event.topPercent}%`,
+                                height: `${event.heightPercent}%`,
+                                left: `${(event.column / event.columns) * 100}%`,
+                                width: `${100 / event.columns}%`,
+                              }}
+                              draggable
+                              onClick={() => onSessionOpen?.(event.session)}
+                              onKeyDown={(keyboardEvent) => {
+                                if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                                  keyboardEvent.preventDefault();
+                                  onSessionOpen?.(event.session);
+                                }
+                              }}
+                              onDragEnd={handleEventDragEnd}
+                              onMouseEnter={(evt) => {
+                                const target = evt.currentTarget;
+                                if (!target) return;
+                                setTooltip({
+                                  kind: 'session',
+                                  session: event.session,
+                                  rect: target.getBoundingClientRect(),
+                                  pointer: { x: evt.clientX, y: evt.clientY },
+                                });
+                              }}
+                              onMouseMove={(evt) => {
+                                const target = evt.currentTarget;
+                                if (!target) return;
+                                setTooltip((current) =>
+                                  current && current.kind === 'session' && current.session.id === event.session.id
+                                    ? {
+                                        kind: 'session',
+                                        session: event.session,
+                                        rect: target.getBoundingClientRect(),
+                                        pointer: { x: evt.clientX, y: evt.clientY },
+                                      }
+                                    : current,
+                                );
+                              }}
+                              onMouseLeave={() => setTooltip(null)}
+                              onFocus={(evt) => {
+                                const target = evt.currentTarget;
+                                if (!target) return;
+                                setTooltip({
+                                  kind: 'session',
+                                  session: event.session,
+                                  rect: target.getBoundingClientRect(),
+                                });
+                              }}
+                              onBlur={() => setTooltip(null)}
+                            >
+                              <div className="erp-calendar-event-time">{event.displayStart} - {event.displayEnd}</div>
+                              {renderEventContent(event)}
+                            </div>
+                          );
+                        }
+
+                        const className = `${baseClass} erp-calendar-event-variant ${continuesClasses}`.trim();
+                        return (
+                          <div
+                            key={`variant-${event.variant.id}-${event.startMinutes}`}
+                            className={className}
+                            role="button"
+                            tabIndex={0}
+                            style={{
+                              top: `${event.topPercent}%`,
+                              height: `${event.heightPercent}%`,
+                              left: `${(event.column / event.columns) * 100}%`,
+                              width: `${100 / event.columns}%`,
+                            }}
+                            onClick={() => handleVariantOpen(event.variant)}
+                            onKeyDown={(keyboardEvent) => {
+                              if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                                keyboardEvent.preventDefault();
+                                handleVariantOpen(event.variant);
+                              }
+                            }}
+                            onMouseEnter={(evt) => {
+                              const target = evt.currentTarget;
+                              if (!target) return;
+                              setTooltip({
+                                kind: 'variant',
+                                variant: event.variant,
+                                rect: target.getBoundingClientRect(),
+                                pointer: { x: evt.clientX, y: evt.clientY },
+                              });
+                            }}
+                            onMouseMove={(evt) => {
+                              const target = evt.currentTarget;
+                              if (!target) return;
+                              setTooltip((current) =>
+                                current && current.kind === 'variant' && current.variant.id === event.variant.id
+                                  ? {
+                                      kind: 'variant',
+                                      variant: event.variant,
+                                      rect: target.getBoundingClientRect(),
+                                      pointer: { x: evt.clientX, y: evt.clientY },
+                                    }
+                                  : current,
+                              );
+                            }}
+                            onMouseLeave={() => setTooltip(null)}
+                            onFocus={(evt) => {
+                              const target = evt.currentTarget;
+                              if (!target) return;
+                              setTooltip({
+                                kind: 'variant',
+                                variant: event.variant,
+                                rect: target.getBoundingClientRect(),
+                              });
+                            }}
+                            onBlur={() => setTooltip(null)}
+                          >
+                            <div className="erp-calendar-event-time">{event.displayStart} - {event.displayEnd}</div>
+                            {renderEventContent(event)}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -943,21 +1300,26 @@ export function CalendarView({
           {tooltip ? (
             <div className="erp-calendar-tooltip-overlay" style={tooltipStyle}>
               <div className="erp-calendar-tooltip-content">
-                <div className="erp-calendar-tooltip-title">{tooltip.session.title}</div>
+                <div className="erp-calendar-tooltip-title">{tooltipTitle}</div>
                 <div className="erp-calendar-tooltip-line">
-                  {tooltipStartLabel} - {tooltipEndLabel}
+                  {tooltipDateLabel} · {tooltipStartLabel} - {tooltipEndLabel}
                 </div>
                 <div className="erp-calendar-tooltip-line">
-                  {tooltipCompanyLabel} - {tooltipAddressLabel}
+                  {tooltipSecondaryLine.left} - {tooltipSecondaryLine.right}
                 </div>
                 <div className="erp-calendar-tooltip-line">
-                  {tooltipTrainersLabel} - {tooltipUnitsLabel}
+                  {tooltipTertiaryLine.left} - {tooltipTertiaryLine.right}
                 </div>
               </div>
             </div>
           ) : null}
         </div>
       </div>
+      <VariantModal
+        active={activeVariant}
+        onHide={handleVariantClose}
+        onVariantUpdated={handleVariantUpdated}
+      />
     </section>
   );
 }
