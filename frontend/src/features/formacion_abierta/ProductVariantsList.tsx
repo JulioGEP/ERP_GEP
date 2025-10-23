@@ -126,6 +126,8 @@ type DealTag = {
   deal_id: string;
   title: string;
   products: DealProductInfo[];
+  w_id_variation: string | null;
+  a_fecha: string | null;
 };
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', {
@@ -587,11 +589,35 @@ async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]>
   const deals = Array.isArray(json.deals) ? json.deals : [];
 
   return deals
-    .map((deal) => ({
-      deal_id: deal?.deal_id != null ? String(deal.deal_id) : '',
-      title: deal?.title ?? '',
-      products: normalizeDealProducts((deal as any)?.products ?? (deal as any)?.deal_products ?? []),
-    }))
+    .map((deal) => {
+      const rawDealId = deal?.deal_id != null ? String(deal.deal_id) : '';
+      const rawVariation = (deal as any)?.w_id_variation;
+      const rawDate = (deal as any)?.a_fecha;
+
+      const wIdVariation =
+        typeof rawVariation === 'string'
+          ? rawVariation
+          : rawVariation != null
+          ? String(rawVariation)
+          : null;
+
+      const trainingDate =
+        typeof rawDate === 'string'
+          ? rawDate
+          : rawDate != null
+          ? String(rawDate)
+          : null;
+
+      return {
+        deal_id: rawDealId,
+        title: deal?.title ?? '',
+        products: normalizeDealProducts(
+          (deal as any)?.products ?? (deal as any)?.deal_products ?? [],
+        ),
+        w_id_variation: wIdVariation,
+        a_fecha: trainingDate,
+      };
+    })
     .filter((deal): deal is DealTag => Boolean(deal.deal_id) && Boolean(deal.title));
 }
 
@@ -1453,6 +1479,11 @@ function VariantModal({
       })
       .filter((value): value is string => value.length > 0);
 
+    const variantWooId = variant?.id_woo != null ? String(variant.id_woo).trim() : '';
+    const variantDate = typeof variant?.date === 'string' ? variant.date.trim() : '';
+    const dealVariation = typeof deal.w_id_variation === 'string' ? deal.w_id_variation.trim() : '';
+    const dealTrainingDate = typeof deal.a_fecha === 'string' ? deal.a_fecha.trim() : '';
+
     setSelectedDealSummary({
       deal_id: rawId,
       dealId: rawId,
@@ -1464,6 +1495,8 @@ function VariantModal({
       person: null,
       products,
       productNames: productNames.length ? productNames : undefined,
+      w_id_variation: dealVariation.length ? dealVariation : variantWooId || null,
+      a_fecha: dealTrainingDate.length ? dealTrainingDate : variantDate || null,
     });
     setSelectedDealId(rawId);
   };
