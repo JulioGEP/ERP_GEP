@@ -135,6 +135,21 @@ const dateFormatter = new Intl.DateTimeFormat('es-ES', {
   timeStyle: 'short',
 });
 
+const MONTH_NAMES = [
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
+];
+
 const STOCK_STATUS_SUMMARY_LABELS: Record<string, string> = {
   instock: 'En stock',
   outofstock: 'Sin stock',
@@ -710,6 +725,113 @@ function compareVariants(a: VariantInfo, b: VariantInfo): number {
   if (dayCompare !== 0) return dayCompare;
 
   return (a.name ?? '').localeCompare(b.name ?? '', 'es', { sensitivity: 'base' });
+}
+
+type VariantMonthGroup = {
+  key: string;
+  label: string;
+  sortYear: number | null;
+  sortMonth: number | null;
+  variants: VariantInfo[];
+};
+
+type VariantLocationGroup = {
+  key: string;
+  label: string;
+  variantsByMonth: VariantMonthGroup[];
+  totalVariants: number;
+};
+
+function getVariantLocationLabel(variant: VariantInfo): string {
+  const location = extractVariantSortKey(variant).location ?? variant.sede?.trim() ?? '';
+  return location || 'Sin sede';
+}
+
+function getVariantMonthSortKey(variant: VariantInfo): { year: number | null; month: number | null } {
+  const key = extractVariantSortKey(variant);
+  let { year, month } = key;
+
+  if ((year == null || month == null) && variant.date) {
+    const parsed = new Date(variant.date);
+    if (!Number.isNaN(parsed.getTime())) {
+      if (year == null) {
+        year = parsed.getFullYear();
+      }
+      if (month == null) {
+        month = parsed.getMonth() + 1;
+      }
+    }
+  }
+
+  return { year: year ?? null, month: month ?? null };
+}
+
+function buildMonthLabel(sortKey: { year: number | null; month: number | null }): string {
+  if (sortKey.month != null) {
+    const monthIndex = Math.max(Math.min(sortKey.month - 1, 11), 0);
+    const monthName = MONTH_NAMES[monthIndex] ?? `Mes ${sortKey.month}`;
+    return sortKey.year != null ? `${monthName} ${sortKey.year}` : monthName;
+  }
+
+  if (sortKey.year != null) {
+    return `${sortKey.year}`;
+  }
+
+  return 'Sin mes';
+}
+
+function buildVariantGroups(variants: VariantInfo[]): VariantLocationGroup[] {
+  const sortedVariants = [...variants].sort(compareVariants);
+  const locationMap = new Map<string, VariantLocationGroup>();
+
+  sortedVariants.forEach((variant) => {
+    const locationLabel = getVariantLocationLabel(variant);
+    const locationKey = locationLabel.trim().toLocaleLowerCase('es') || 'default';
+    const locationGroup = locationMap.get(locationKey) ?? {
+      key: locationKey,
+      label: locationLabel,
+      variantsByMonth: [],
+      totalVariants: 0,
+    };
+
+    const monthSortKey = getVariantMonthSortKey(variant);
+    const monthKey = `${monthSortKey.year ?? 'none'}-${monthSortKey.month ?? 'none'}`;
+    let monthGroup = locationGroup.variantsByMonth.find((group) => group.key === monthKey);
+
+    if (!monthGroup) {
+      monthGroup = {
+        key: monthKey,
+        label: buildMonthLabel(monthSortKey),
+        sortYear: monthSortKey.year,
+        sortMonth: monthSortKey.month,
+        variants: [],
+      };
+      locationGroup.variantsByMonth.push(monthGroup);
+    }
+
+    monthGroup.variants.push(variant);
+    locationGroup.totalVariants += 1;
+
+    locationMap.set(locationKey, locationGroup);
+  });
+
+  const locationGroups = Array.from(locationMap.values());
+
+  locationGroups.forEach((group) => {
+    group.variantsByMonth.forEach((monthGroup) => {
+      monthGroup.variants.sort(compareVariants);
+    });
+
+    group.variantsByMonth.sort((a, b) => {
+      const yearCompare = compareNullableNumbers(a.sortYear, b.sortYear);
+      if (yearCompare !== 0) return yearCompare;
+      const monthCompare = compareNullableNumbers(a.sortMonth, b.sortMonth);
+      if (monthCompare !== 0) return monthCompare;
+      return a.label.localeCompare(b.label, 'es', { sensitivity: 'base' });
+    });
+  });
+
+  return locationGroups;
 }
 
 type VariantFormValues = {
@@ -2053,6 +2175,7 @@ export default function ProductVariantsList() {
               <Accordion alwaysOpen>
                 {products.map((product) => {
                   const defaultsSummary = buildProductDefaultsSummary(product);
+                  const variantGroups = buildVariantGroups(product.variants);
 
                   return (
                     <Accordion.Item eventKey={product.id} key={product.id}>
@@ -2094,87 +2217,159 @@ export default function ProductVariantsList() {
                         ) : null}
 
                         {product.variants.length > 0 ? (
-                          <ListGroup>
-                          {[...product.variants].sort(compareVariants).map((variant) => {
-                            const isDeleting = !!pendingDeletes[variant.id];
-                            const wooId = typeof variant.id_woo === 'string' ? variant.id_woo.trim() : '';
-                            const leadsCount = wooId ? variantLeadCounts[wooId] ?? 0 : null;
-                            const isLeadCountLoading = wooId ? !!variantLeadCountsLoading[wooId] : false;
-                            const budgetsBadgeBg =
-                              !isLeadCountLoading && typeof leadsCount === 'number' && leadsCount > 0
-                                ? 'primary'
-                                : 'light';
+                          variantGroups.length > 0 ? (
+                            <Accordion alwaysOpen className="mb-3">
+                              {variantGroups.map((locationGroup, locationIndex) => {
+                                const locationEventKey = `${product.id}-location-${locationIndex}`;
 
-                            return (
-                              <ListGroup.Item
-                                action
-                                key={variant.id}
-                                onClick={() => handleSelectVariant(product, variant)}
-                                className="d-flex flex-column gap-1"
-                              >
-                                <div className="d-flex justify-content-between align-items-start gap-3">
-                                  <div>
-                                    <div className="fw-semibold">{variant.name ?? 'Variante sin nombre'}</div>
-                                    <div className="text-muted small">ID Woo: {variant.id_woo}</div>
-                                  </div>
-                                  <Stack direction="horizontal" gap={2} className="flex-wrap">
-                                    {wooId ? (
-                                      <Badge
-                                        bg={budgetsBadgeBg}
-                                        text={budgetsBadgeBg === 'light' ? 'dark' : undefined}
-                                        className="d-inline-flex align-items-center gap-2"
-                                        title={`Presupuestos asociados: ${isLeadCountLoading ? 'cargando…' : leadsCount}`}
+                                return (
+                                  <Accordion.Item
+                                    eventKey={locationEventKey}
+                                    key={`${locationGroup.key}-${locationEventKey}`}
+                                  >
+                                    <Accordion.Header>
+                                      <Stack
+                                        direction="horizontal"
+                                        className="w-100 justify-content-between align-items-center"
                                       >
-                                        <span className="text-uppercase small mb-0">Presupuestos</span>
-                                        {isLeadCountLoading ? (
-                                          <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
-                                        ) : (
-                                          <span className="fw-semibold">{leadsCount}</span>
-                                        )}
-                                      </Badge>
-                                    ) : null}
-                                    {variant.status && (
-                                      <Badge bg={getStatusBadgeVariant(variant.status)}>
-                                        {variant.status}
-                                      </Badge>
-                                    )}
-                                    {variant.date && (
-                                      <span className="text-muted small">{formatDate(variant.date)}</span>
-                                    )}
-                                    <Button
-                                      size="sm"
-                                      variant="outline-danger"
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        event.stopPropagation();
-                                        handleDeleteVariant(product, variant);
-                                      }}
-                                      disabled={isDeleting}
-                                    >
-                                      {isDeleting ? (
-                                        <>
-                                          <Spinner
-                                            as="span"
-                                            animation="border"
-                                            size="sm"
-                                            role="status"
-                                            aria-hidden="true"
-                                            className="me-2"
-                                          />
-                                          Eliminando…
-                                        </>
+                                        <span>{locationGroup.label}</span>
+                                        <Badge bg="secondary">{locationGroup.totalVariants}</Badge>
+                                      </Stack>
+                                    </Accordion.Header>
+                                    <Accordion.Body>
+                                      {locationGroup.variantsByMonth.length > 0 ? (
+                                        <Accordion alwaysOpen flush>
+                                          {locationGroup.variantsByMonth.map((monthGroup, monthIndex) => {
+                                            const monthEventKey = `${locationEventKey}-month-${monthIndex}`;
+
+                                            return (
+                                              <Accordion.Item
+                                                eventKey={monthEventKey}
+                                                key={`${locationGroup.key}-${monthGroup.key}-${monthIndex}`}
+                                              >
+                                                <Accordion.Header>
+                                                  <Stack
+                                                    direction="horizontal"
+                                                    className="w-100 justify-content-between align-items-center"
+                                                  >
+                                                    <span>{monthGroup.label}</span>
+                                                    <Badge bg="secondary">{monthGroup.variants.length}</Badge>
+                                                  </Stack>
+                                                </Accordion.Header>
+                                                <Accordion.Body>
+                                                  <ListGroup>
+                                                    {monthGroup.variants.map((variant) => {
+                                                      const isDeleting = !!pendingDeletes[variant.id];
+                                                      const wooId =
+                                                        typeof variant.id_woo === 'string'
+                                                          ? variant.id_woo.trim()
+                                                          : '';
+                                                      const leadsCount = wooId ? variantLeadCounts[wooId] ?? 0 : null;
+                                                      const isLeadCountLoading = wooId
+                                                        ? !!variantLeadCountsLoading[wooId]
+                                                        : false;
+                                                      const budgetsBadgeBg =
+                                                        !isLeadCountLoading && typeof leadsCount === 'number' && leadsCount > 0
+                                                          ? 'primary'
+                                                          : 'light';
+
+                                                      return (
+                                                        <ListGroup.Item
+                                                          action
+                                                          key={variant.id}
+                                                          onClick={() => handleSelectVariant(product, variant)}
+                                                          className="d-flex flex-column gap-1"
+                                                        >
+                                                          <div className="d-flex justify-content-between align-items-start gap-3">
+                                                            <div>
+                                                              <div className="fw-semibold">
+                                                                {variant.name ?? 'Variante sin nombre'}
+                                                              </div>
+                                                              <div className="text-muted small">ID Woo: {variant.id_woo}</div>
+                                                            </div>
+                                                            <Stack direction="horizontal" gap={2} className="flex-wrap">
+                                                              {wooId ? (
+                                                                <Badge
+                                                                  bg={budgetsBadgeBg}
+                                                                  text={budgetsBadgeBg === 'light' ? 'dark' : undefined}
+                                                                  className="d-inline-flex align-items-center gap-2"
+                                                                  title={`Presupuestos asociados: ${
+                                                                    isLeadCountLoading ? 'cargando…' : leadsCount
+                                                                  }`}
+                                                                >
+                                                                  <span className="text-uppercase small mb-0">Presupuestos</span>
+                                                                  {isLeadCountLoading ? (
+                                                                    <Spinner
+                                                                      animation="border"
+                                                                      size="sm"
+                                                                      role="status"
+                                                                      aria-hidden="true"
+                                                                    />
+                                                                  ) : (
+                                                                    <span className="fw-semibold">{leadsCount}</span>
+                                                                  )}
+                                                                </Badge>
+                                                              ) : null}
+                                                              {variant.status && (
+                                                                <Badge bg={getStatusBadgeVariant(variant.status)}>
+                                                                  {variant.status}
+                                                                </Badge>
+                                                              )}
+                                                              {variant.date && (
+                                                                <span className="text-muted small">{formatDate(variant.date)}</span>
+                                                              )}
+                                                              <Button
+                                                                size="sm"
+                                                                variant="outline-danger"
+                                                                onClick={(event) => {
+                                                                  event.preventDefault();
+                                                                  event.stopPropagation();
+                                                                  handleDeleteVariant(product, variant);
+                                                                }}
+                                                                disabled={isDeleting}
+                                                              >
+                                                                {isDeleting ? (
+                                                                  <>
+                                                                    <Spinner
+                                                                      as="span"
+                                                                      animation="border"
+                                                                      size="sm"
+                                                                      role="status"
+                                                                      aria-hidden="true"
+                                                                      className="me-2"
+                                                                    />
+                                                                    Eliminando…
+                                                                  </>
+                                                                ) : (
+                                                                  'Eliminar'
+                                                                )}
+                                                              </Button>
+                                                            </Stack>
+                                                          </div>
+                                                          {variant.sede && (
+                                                            <div className="text-muted small">Sede: {variant.sede}</div>
+                                                          )}
+                                                        </ListGroup.Item>
+                                                      );
+                                                    })}
+                                                  </ListGroup>
+                                                </Accordion.Body>
+                                              </Accordion.Item>
+                                            );
+                                          })}
+                                        </Accordion>
                                       ) : (
-                                        'Eliminar'
+                                        <p className="text-muted small mb-0">No hay variantes agrupadas por mes.</p>
                                       )}
-                                    </Button>
-                                  </Stack>
-                                </div>
-                                {variant.sede && <div className="text-muted small">Sede: {variant.sede}</div>}
-                              </ListGroup.Item>
-                            );
-                          })}
-                        </ListGroup>
-                      ) : (
+                                    </Accordion.Body>
+                                  </Accordion.Item>
+                                );
+                              })}
+                            </Accordion>
+                          ) : (
+                            <p className="text-muted small mb-0">No hay variantes agrupadas para mostrar.</p>
+                          )
+                        ) : (
                         <p className="text-muted small mb-0">No hay variantes registradas para este producto.</p>
                       )}
                     </Accordion.Body>
