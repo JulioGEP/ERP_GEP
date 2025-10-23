@@ -106,10 +106,24 @@ function parsePrice(value: unknown): Prisma.Decimal | null {
 }
 
 function parseProductId(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) {
+  if (value === null || value === undefined) {
     throw new Error('INVALID_PRODUCT_ID');
   }
-  return value.trim();
+
+  const normalized =
+    typeof value === 'string'
+      ? value
+      : typeof value === 'number'
+        ? value.toString()
+        : '';
+
+  const trimmed = normalized.trim();
+
+  if (!trimmed) {
+    throw new Error('INVALID_PRODUCT_ID');
+  }
+
+  return trimmed;
 }
 
 function parseTimeInput(value: unknown): string | null {
