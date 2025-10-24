@@ -2209,34 +2209,6 @@ export function VariantModal({
               </Row>
             </Form>
 
-            <div className="d-flex flex-column gap-1">
-              <p className="text-uppercase text-muted small fw-semibold mb-1">Variante</p>
-              <Stack direction="horizontal" gap={2} className="flex-wrap align-items-center">
-                <span className="fw-semibold h5 mb-0">{variant.name ?? 'Variante sin nombre'}</span>
-                {variant.status && (
-                  <Badge bg={getStatusBadgeVariant(variant.status)}>{variant.status}</Badge>
-                )}
-              </Stack>
-              {variantSummary ? <div className="text-muted small">{variantSummary}</div> : null}
-              {variantIdWoo ? <div className="text-muted small">ID Woo: {variantIdWoo}</div> : null}
-            </div>
-
-            <dl className="row mb-0">
-              <dt className="col-sm-4 text-muted">Formador</dt>
-              <dd className="col-sm-8">{trainerDisplay}</dd>
-
-              <dt className="col-sm-4 text-muted">Sala</dt>
-              <dd className="col-sm-8">{roomDisplay}</dd>
-
-              <dt className="col-sm-4 text-muted">Unidad móvil</dt>
-              <dd className="col-sm-8">{unitDisplay}</dd>
-
-              <dt className="col-sm-4 text-muted">Creada</dt>
-              <dd className="col-sm-8">{formatDate(variant.created_at) ?? '—'}</dd>
-
-              <dt className="col-sm-4 text-muted">Actualizada</dt>
-              <dd className="col-sm-8">{formatDate(variant.updated_at) ?? '—'}</dd>
-            </dl>
           </div>
         ) : null}
       </Modal.Body>
