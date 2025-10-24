@@ -22,7 +22,7 @@ import { BudgetTable } from '../presupuestos/BudgetTable';
 import { useCertificateData } from './hooks/useCertificateData';
 import { CertificateTable } from './CertificateTable';
 import { CertificateToolbar, type CertificateToolbarProgressStatus } from './CertificateToolbar';
-import type { CertificateRow, CertificateSession } from './lib/mappers';
+import { isOpenTrainingDeal, type CertificateRow, type CertificateSession } from './lib/mappers';
 import type { DealDetail, DealSummary } from '../../types/deal';
 import {
   generateCertificatePDF,
@@ -255,7 +255,10 @@ function mapRowToCertificateGenerationData(
   const nombre = toTrimmedString(row.nombre);
   const apellido = toTrimmedString(row.apellidos);
   const dni = toTrimmedString(row.dni);
-  const sessionDate = normaliseSessionDate(context.session?.fecha_inicio_utc ?? row.fecha);
+  const sessionDateSource = isOpenTrainingDeal(context.deal)
+    ? context.deal?.a_fecha ?? row.fecha
+    : context.session?.fecha_inicio_utc ?? row.fecha;
+  const sessionDate = normaliseSessionDate(sessionDateSource);
   const sede = resolveCertificateLocation(toTrimmedString(context.deal?.sede_label ?? row.lugar));
   const productName = toTrimmedString(context.session?.productName ?? row.formacion);
   const hours =
