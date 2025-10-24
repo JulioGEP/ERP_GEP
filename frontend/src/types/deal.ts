@@ -34,6 +34,7 @@ export interface DealProduct {
 
   name?: string | null;
   code?: string | null;
+  wooId?: string | null;
 
   quantity?: number | null; // decimal en DB, se normaliza a number en API
   price?: number | null;    // decimal en DB, se normaliza a number en API

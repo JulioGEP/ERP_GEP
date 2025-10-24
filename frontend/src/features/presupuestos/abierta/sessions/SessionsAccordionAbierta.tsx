@@ -1550,6 +1550,7 @@ type ApplicableProductInfo = {
   id: string;
   name: string | null;
   code: string | null;
+  wooId: string | null;
   quantity: number;
   hours: number | null;
   matchIds: string[];
@@ -1693,12 +1694,19 @@ export function SessionsAccordionAbierta({
       const normalizedId = typeof product.id === 'string' ? product.id.trim() : String(product.id ?? '').trim();
       const normalizedCode = typeof product.code === 'string' ? product.code.trim() : '';
       const normalizedName = typeof product.name === 'string' ? product.name.trim() : '';
+      const normalizedWooId =
+        typeof product.wooId === 'string'
+          ? product.wooId.trim()
+          : product.wooId != null
+          ? String(product.wooId).trim()
+          : '';
 
       const matchIds = new Set<string>();
       const matchTexts = new Set<string>();
 
       if (normalizedId) matchIds.add(normalizedId);
       if (normalizedCode) matchIds.add(normalizedCode);
+      if (normalizedWooId) matchIds.add(normalizedWooId);
 
       if (normalizedCode) matchTexts.add(normalizedCode.toLocaleLowerCase('es'));
       if (normalizedName) matchTexts.add(normalizedName.toLocaleLowerCase('es'));
@@ -1707,6 +1715,7 @@ export function SessionsAccordionAbierta({
         id,
         name: normalizedName || null,
         code: normalizedCode || null,
+        wooId: normalizedWooId || null,
         quantity:
           typeof product.quantity === 'number'
             ? product.quantity
@@ -1828,6 +1837,18 @@ export function SessionsAccordionAbierta({
 
   const matchesProduct = useCallback(
     (variant: ProductVariantOption, product: ApplicableProductInfo) => {
+      const productWooId = normalizeExact(product.wooId);
+      if (productWooId) {
+        const variantProductWooId = normalizeExact(variant.productWooId);
+        const variantParentWooId = normalizeExact(variant.parentWooId);
+        if (
+          (variantProductWooId && variantProductWooId === productWooId) ||
+          (variantParentWooId && variantParentWooId === productWooId)
+        ) {
+          return true;
+        }
+      }
+
       const variantIds = new Set<string>();
       [
         variant.productId,
