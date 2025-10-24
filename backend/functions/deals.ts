@@ -1,6 +1,7 @@
 // backend/functions/deals.ts
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { getPrisma } from "./_shared/prisma";
+import type { Prisma } from "@prisma/client";
 import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import {
   getDeal,
@@ -818,8 +819,43 @@ export const handler = async (event: any) => {
     if (method === "GET" && event.queryStringParameters?.pendingCertificates === "true") {
       const now = nowInMadridDate();
 
-      const rowsRaw = await prisma.deals.findMany({
-        where: {
+      let variantIdsForPendingCertificates: string[] = [];
+
+      try {
+        const variantRows = await prisma.variants.findMany({
+          where: {
+            date: { lt: now },
+          },
+          select: { id_woo: true },
+        });
+
+        const seenVariantIds = new Set<string>();
+        variantRows.forEach((variant) => {
+          const rawId = variant?.id_woo;
+          if (rawId === null || rawId === undefined) return;
+
+          let normalized: string | null = null;
+          if (typeof rawId === "bigint") {
+            normalized = rawId.toString();
+          } else if (typeof rawId === "number") {
+            normalized = Number.isFinite(rawId) ? String(rawId) : null;
+          } else if (typeof rawId === "string") {
+            const trimmed = rawId.trim();
+            normalized = trimmed.length ? trimmed : null;
+          }
+
+          if (normalized && !seenVariantIds.has(normalized)) {
+            seenVariantIds.add(normalized);
+          }
+        });
+
+        variantIdsForPendingCertificates = Array.from(seenVariantIds);
+      } catch (error) {
+        console.warn("[deals] pendingCertificates fallback without variant data", { error });
+      }
+
+      const conditions: Prisma.dealsWhereInput[] = [
+        {
           sessions: {
             some: {
               AND: [
@@ -839,6 +875,23 @@ export const handler = async (event: any) => {
               ],
             },
           },
+        },
+      ];
+
+      if (variantIdsForPendingCertificates.length > 0) {
+        conditions.push({
+          w_id_variation: { in: variantIdsForPendingCertificates },
+          alumnos: {
+            some: {
+              certificado: false,
+            },
+          },
+        });
+      }
+
+      const rowsRaw = await prisma.deals.findMany({
+        where: {
+          OR: conditions,
         },
         select: {
           deal_id: true,
