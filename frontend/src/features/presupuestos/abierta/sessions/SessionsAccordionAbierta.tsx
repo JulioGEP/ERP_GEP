@@ -1714,13 +1714,6 @@ export function SessionsAccordionAbierta({
   const enablePublicLink = allowPublicLinkGeneration;
 
   const applicableProducts = useMemo<ApplicableProductInfo[]>(() => {
-    const normalizeStableId = (value: unknown): string => {
-      if (value === null || value === undefined) return '';
-      if (typeof value === 'string') return value.trim();
-      if (typeof value === 'number') return String(value).trim();
-      return '';
-    };
-
     return products.filter(isApplicableProduct).map((product) => {
       const id = String(product.id);
       const normalizedId = typeof product.id === 'string' ? product.id.trim() : String(product.id ?? '').trim();
@@ -1731,14 +1724,7 @@ export function SessionsAccordionAbierta({
       const matchTexts = new Set<string>();
 
       if (normalizedId) matchIds.add(normalizedId);
-
-      const rawPipeId = (product as { id_pipe?: unknown } | null | undefined)?.id_pipe;
-      const normalizedPipeId = normalizeStableId(rawPipeId);
-      if (normalizedPipeId) matchIds.add(normalizedPipeId);
-
-      const rawWooId = (product as { id_woo?: unknown } | null | undefined)?.id_woo;
-      const normalizedWooId = normalizeStableId(rawWooId);
-      if (normalizedWooId) matchIds.add(normalizedWooId);
+      if (normalizedCode) matchIds.add(normalizedCode);
 
       if (normalizedCode) matchTexts.add(normalizedCode.toLocaleLowerCase('es'));
       if (normalizedName) matchTexts.add(normalizedName.toLocaleLowerCase('es'));
@@ -1784,25 +1770,14 @@ export function SessionsAccordionAbierta({
 
   const variantProductFilters = useMemo(() => {
     const filters = new Set<string>();
-    let hasStableId = false;
-
     for (const product of applicableProducts) {
       product.matchIds.forEach((value) => {
-        if (value) {
-          hasStableId = true;
-          filters.add(value);
-        }
+        if (value) filters.add(value);
+      });
+      product.matchTexts.forEach((value) => {
+        if (value) filters.add(value);
       });
     }
-
-    if (!hasStableId) {
-      for (const product of applicableProducts) {
-        product.matchTexts.forEach((value) => {
-          if (value) filters.add(value);
-        });
-      }
-    }
-
     return Array.from(filters);
   }, [applicableProducts]);
 
@@ -1882,7 +1857,13 @@ export function SessionsAccordionAbierta({
   const matchesProductById = useCallback(
     (variant: ProductVariantOption, product: ApplicableProductInfo) => {
       const variantIds = new Set<string>();
-      [variant.productId, variant.productPipeId, variant.productWooId, variant.parentWooId].forEach((value) => {
+      [
+        variant.productId,
+        variant.productPipeId,
+        variant.productCode,
+        variant.productWooId,
+        variant.parentWooId,
+      ].forEach((value) => {
         const normalized = normalizeExact(value);
         if (normalized) variantIds.add(normalized);
       });
@@ -3055,6 +3036,7 @@ function SessionEditor({
   const [unitFilter, setUnitFilter] = useState('');
   const [trainerListOpen, setTrainerListOpen] = useState(false);
   const [unitListOpen, setUnitListOpen] = useState(false);
+  const [variantSelection, setVariantSelection] = useState('');
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const trainerPointerInteractingRef = useRef(false);
@@ -3158,48 +3140,32 @@ function SessionEditor({
     return dealTrainingDate.trim();
   }, [dealTrainingDate]);
 
-  const variantListDisabled = variantSaving || variantOptionsLoading || variantOptions.length === 0;
+  const variantSelectDisabled = variantSaving || variantOptionsLoading || variantOptions.length === 0;
 
-  const normalizeVariantValue = useCallback((value: string | null | undefined) => {
-    if (typeof value === 'string') return value.trim();
-    if (typeof value === 'number') return String(value).trim();
-    return '';
-  }, []);
-
-  const variantListHelperText = useMemo(() => {
-    if (variantOptionsLoading) return null;
-    if (!variantOptions.length) return null;
-    return 'Selecciona una variante relacionada con el producto y la sede.';
+  const variantSelectPlaceholder = useMemo(() => {
+    if (variantOptionsLoading) return 'Cargando variantes…';
+    if (!variantOptions.length) return 'No hay variantes disponibles';
+    return 'Selecciona una variante…';
   }, [variantOptionsLoading, variantOptions.length]);
 
-  const normalizedCurrentVariantValue = useMemo(
-    () => normalizeVariantValue(dealVariation),
-    [dealVariation, normalizeVariantValue],
-  );
-
-  const formatVariantDate = useCallback((value: string | null) => {
-    if (!value) return null;
-    const parsed = new Date(value);
-    if (!Number.isFinite(parsed.getTime())) {
-      return value;
-    }
-    try {
-      return new Intl.DateTimeFormat('es-ES').format(parsed);
-    } catch (error) {
-      return value;
-    }
-  }, []);
-
-  const handleVariantOptionClick = useCallback(
-    async (value: string) => {
-      if (!value || variantListDisabled) {
+  const handleVariantSelectChange = useCallback(
+    async (event: ChangeEvent<HTMLSelectElement>) => {
+      const value = event.target.value;
+      if (!value || variantSelectDisabled) {
+        setVariantSelection('');
         return;
       }
-      if (onVariantSelect) {
-        await onVariantSelect(value);
+
+      setVariantSelection(value);
+      try {
+        if (onVariantSelect) {
+          await onVariantSelect(value);
+        }
+      } finally {
+        setVariantSelection('');
       }
     },
-    [onVariantSelect, variantListDisabled],
+    [onVariantSelect, variantSelectDisabled],
   );
 
   useEffect(() => {
@@ -3244,7 +3210,12 @@ function SessionEditor({
   useEffect(() => {
     setTrainerListOpen(false);
     setUnitListOpen(false);
+    setVariantSelection('');
   }, [form.id]);
+
+  useEffect(() => {
+    setVariantSelection('');
+  }, [dealVariation]);
 
   return (
     <div className="session-editor bg-white rounded-3 p-3">
@@ -3258,39 +3229,20 @@ function SessionEditor({
               value={variationDisplay}
               title={buildFieldTooltip(variationTooltip || variationDisplay)}
             />
-            <div className="mt-2">
-              {variantListHelperText ? (
-                <p className="text-muted small mb-2">{variantListHelperText}</p>
-              ) : null}
-              {variantOptions.length ? (
-                <ListGroup className="session-variant-list border rounded" style={{ maxHeight: 220, overflowY: 'auto' }}>
-                  {variantOptions.map((option) => {
-                    const normalizedValue = normalizeVariantValue(option.value);
-                    const isActive =
-                      Boolean(normalizedCurrentVariantValue) && normalizedValue === normalizedCurrentVariantValue;
-                    const formattedDate = formatVariantDate(option.date ?? null);
-                    return (
-                      <ListGroup.Item
-                        key={option.value}
-                        action
-                        onClick={() => handleVariantOptionClick(option.value)}
-                        disabled={variantListDisabled && !isActive}
-                        active={isActive}
-                        aria-current={isActive}
-                        className="d-flex flex-column align-items-start gap-1"
-                      >
-                        <span>{option.label}</span>
-                        {formattedDate ? (
-                          <small className="text-muted">Fecha: {formattedDate}</small>
-                        ) : null}
-                      </ListGroup.Item>
-                    );
-                  })}
-                </ListGroup>
-              ) : !variantOptionsLoading ? (
-                <p className="text-muted small mb-0">No hay variantes disponibles</p>
-              ) : null}
-            </div>
+            <Form.Select
+              className="mt-2"
+              value={variantSelection}
+              onChange={handleVariantSelectChange}
+              disabled={variantSelectDisabled}
+              aria-label="Seleccionar variante para el presupuesto"
+            >
+              <option value="">{variantSelectPlaceholder}</option>
+              {variantOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Form.Select>
             {variantOptionsLoading ? (
               <div className="d-flex align-items-center gap-2 text-muted mt-1 small">
                 <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
