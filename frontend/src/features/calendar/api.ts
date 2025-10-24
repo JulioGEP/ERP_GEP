@@ -26,6 +26,12 @@ export type CalendarVariantDetails = {
   stock_status: string | null;
   sede: string | null;
   date: string | null;
+  trainer_id: string | null;
+  trainer: { trainer_id: string | null; name: string | null; apellido: string | null } | null;
+  sala_id: string | null;
+  sala: { sala_id: string | null; name: string | null; sede: string | null } | null;
+  unidad_movil_id: string | null;
+  unidad: { unidad_id: string | null; name: string | null; matricula: string | null } | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -169,6 +175,9 @@ function sanitizeVariantProduct(input: any): CalendarVariantProduct | null {
 function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
   const id = toTrimmed(input?.id);
   if (!id) return null;
+  const trainerId = toOptionalString(input?.trainer_id);
+  const salaId = toOptionalString(input?.sala_id);
+  const unidadId = toOptionalString(input?.unidad_movil_id);
   return {
     id,
     id_woo: toOptionalString(input?.id_woo),
@@ -184,6 +193,33 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
     stock_status: toOptionalString(input?.stock_status),
     sede: toOptionalString(input?.sede),
     date: toOptionalString(input?.date),
+    trainer_id: trainerId,
+    trainer:
+      input?.trainer && typeof input.trainer === 'object'
+        ? {
+            trainer_id: toOptionalString(input.trainer?.trainer_id) ?? trainerId,
+            name: toOptionalString(input.trainer?.name),
+            apellido: toOptionalString(input.trainer?.apellido),
+          }
+        : null,
+    sala_id: salaId,
+    sala:
+      input?.sala && typeof input.sala === 'object'
+        ? {
+            sala_id: toOptionalString(input.sala?.sala_id) ?? salaId,
+            name: toOptionalString(input.sala?.name),
+            sede: toOptionalString(input.sala?.sede),
+          }
+        : null,
+    unidad_movil_id: unidadId,
+    unidad:
+      input?.unidad && typeof input.unidad === 'object'
+        ? {
+            unidad_id: toOptionalString(input.unidad?.unidad_id) ?? unidadId,
+            name: toOptionalString(input.unidad?.name),
+            matricula: toOptionalString(input.unidad?.matricula),
+          }
+        : null,
     created_at: toOptionalString(input?.created_at),
     updated_at: toOptionalString(input?.updated_at),
   } satisfies CalendarVariantDetails;

@@ -765,6 +765,30 @@ export function CalendarView({
       stock_status: event.variant.stock_status ?? null,
       sede: event.variant.sede ?? null,
       date: event.variant.date ?? null,
+      trainer_id: event.variant.trainer_id ?? null,
+      trainer: event.variant.trainer
+        ? {
+            trainer_id: event.variant.trainer.trainer_id ?? null,
+            name: event.variant.trainer.name ?? null,
+            apellido: event.variant.trainer.apellido ?? null,
+          }
+        : null,
+      sala_id: event.variant.sala_id ?? null,
+      sala: event.variant.sala
+        ? {
+            sala_id: event.variant.sala.sala_id ?? null,
+            name: event.variant.sala.name ?? null,
+            sede: event.variant.sala.sede ?? null,
+          }
+        : null,
+      unidad_movil_id: event.variant.unidad_movil_id ?? null,
+      unidad: event.variant.unidad
+        ? {
+            unidad_id: event.variant.unidad.unidad_id ?? null,
+            name: event.variant.unidad.name ?? null,
+            matricula: event.variant.unidad.matricula ?? null,
+          }
+        : null,
       created_at: event.variant.created_at ?? null,
       updated_at: event.variant.updated_at ?? null,
     };

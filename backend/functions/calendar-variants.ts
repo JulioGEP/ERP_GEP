@@ -100,6 +100,12 @@ function normalizeVariantRecord(record: {
   stock_status: string | null;
   sede: string | null;
   date: Date | null;
+  trainer_id?: string | null;
+  sala_id?: string | null;
+  unidad_movil_id?: string | null;
+  trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  sala?: { sala_id: string; name: string; sede: string | null } | null;
+  unidad?: { unidad_id: string; name: string; matricula: string | null } | null;
   created_at: Date | null;
   updated_at: Date | null;
 }) {
@@ -118,6 +124,26 @@ function normalizeVariantRecord(record: {
     stock_status: record.stock_status ?? null,
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
+    trainer_id: record.trainer_id ?? null,
+    trainer: record.trainer
+      ? {
+          trainer_id: record.trainer.trainer_id,
+          name: record.trainer.name ?? null,
+          apellido: record.trainer.apellido ?? null,
+        }
+      : null,
+    sala_id: record.sala_id ?? null,
+    sala: record.sala
+      ? { sala_id: record.sala.sala_id, name: record.sala.name, sede: record.sala.sede ?? null }
+      : null,
+    unidad_movil_id: record.unidad_movil_id ?? null,
+    unidad: record.unidad
+      ? {
+          unidad_id: record.unidad.unidad_id,
+          name: record.unidad.name,
+          matricula: record.unidad.matricula ?? null,
+        }
+      : null,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
   };
@@ -223,6 +249,12 @@ export const handler = async (event: any) => {
         stock_status: true,
         sede: true,
         date: true,
+        trainer_id: true,
+        sala_id: true,
+        unidad_movil_id: true,
+        trainer: { select: { trainer_id: true, name: true, apellido: true } },
+        sala: { select: { sala_id: true, name: true, sede: true } },
+        unidad: { select: { unidad_id: true, name: true, matricula: true } },
         created_at: true,
         updated_at: true,
         product: {
