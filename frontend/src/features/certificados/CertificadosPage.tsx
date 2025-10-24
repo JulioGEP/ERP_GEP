@@ -259,8 +259,6 @@ function mapRowToCertificateGenerationData(
     ? context.deal?.a_fecha ?? row.fecha
     : context.session?.fecha_inicio_utc ?? row.fecha;
   const sessionDate = normaliseSessionDate(sessionDateSource);
-  const sessionEndDateSource = row.fecha2;
-  const sessionEndDate = normaliseSessionDate(sessionEndDateSource);
   const sede = resolveCertificateLocation(toTrimmedString(context.deal?.sede_label ?? row.lugar));
   const productName = toTrimmedString(context.session?.productName ?? row.formacion);
   const hours =
@@ -290,7 +288,6 @@ function mapRowToCertificateGenerationData(
     },
     sesion: {
       fecha_inicio_utc: sessionDate,
-      ...(sessionEndDate ? { fecha_fin_utc: sessionEndDate } : {}),
     },
     deal: {
       sede_labels: sede,
@@ -1127,12 +1124,6 @@ export function CertificadosPage() {
               session: selectedSession,
             });
             if (selectedTrainingTemplate) {
-              const templateLabels = [selectedTrainingTemplate.name, selectedTrainingTemplate.title]
-                .map((label) => toTrimmedString(label))
-                .filter((label) => label.length > 0);
-              if (templateLabels.length) {
-                certificateData.templateLabels = templateLabels;
-              }
               const templateTitle =
                 selectedTrainingTemplate.title || selectedTrainingTemplate.name;
               if (templateTitle) {
