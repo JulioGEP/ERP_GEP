@@ -1714,6 +1714,13 @@ export function SessionsAccordionAbierta({
   const enablePublicLink = allowPublicLinkGeneration;
 
   const applicableProducts = useMemo<ApplicableProductInfo[]>(() => {
+    const normalizeStableId = (value: unknown): string => {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value.trim();
+      if (typeof value === 'number') return String(value).trim();
+      return '';
+    };
+
     return products.filter(isApplicableProduct).map((product) => {
       const id = String(product.id);
       const normalizedId = typeof product.id === 'string' ? product.id.trim() : String(product.id ?? '').trim();
@@ -1724,7 +1731,14 @@ export function SessionsAccordionAbierta({
       const matchTexts = new Set<string>();
 
       if (normalizedId) matchIds.add(normalizedId);
-      if (normalizedCode) matchIds.add(normalizedCode);
+
+      const rawPipeId = (product as { id_pipe?: unknown } | null | undefined)?.id_pipe;
+      const normalizedPipeId = normalizeStableId(rawPipeId);
+      if (normalizedPipeId) matchIds.add(normalizedPipeId);
+
+      const rawWooId = (product as { id_woo?: unknown } | null | undefined)?.id_woo;
+      const normalizedWooId = normalizeStableId(rawWooId);
+      if (normalizedWooId) matchIds.add(normalizedWooId);
 
       if (normalizedCode) matchTexts.add(normalizedCode.toLocaleLowerCase('es'));
       if (normalizedName) matchTexts.add(normalizedName.toLocaleLowerCase('es'));
@@ -1770,14 +1784,25 @@ export function SessionsAccordionAbierta({
 
   const variantProductFilters = useMemo(() => {
     const filters = new Set<string>();
+    let hasStableId = false;
+
     for (const product of applicableProducts) {
       product.matchIds.forEach((value) => {
-        if (value) filters.add(value);
-      });
-      product.matchTexts.forEach((value) => {
-        if (value) filters.add(value);
+        if (value) {
+          hasStableId = true;
+          filters.add(value);
+        }
       });
     }
+
+    if (!hasStableId) {
+      for (const product of applicableProducts) {
+        product.matchTexts.forEach((value) => {
+          if (value) filters.add(value);
+        });
+      }
+    }
+
     return Array.from(filters);
   }, [applicableProducts]);
 
@@ -1857,13 +1882,7 @@ export function SessionsAccordionAbierta({
   const matchesProductById = useCallback(
     (variant: ProductVariantOption, product: ApplicableProductInfo) => {
       const variantIds = new Set<string>();
-      [
-        variant.productId,
-        variant.productPipeId,
-        variant.productCode,
-        variant.productWooId,
-        variant.parentWooId,
-      ].forEach((value) => {
+      [variant.productId, variant.productPipeId, variant.productWooId, variant.parentWooId].forEach((value) => {
         const normalized = normalizeExact(value);
         if (normalized) variantIds.add(normalized);
       });
