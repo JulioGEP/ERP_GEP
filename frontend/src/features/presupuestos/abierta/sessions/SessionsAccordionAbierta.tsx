@@ -88,6 +88,21 @@ const ENABLE_MOBILE_UNITS = false;
 const ENABLE_ROOMS = false;
 const ENABLE_ADDRESS = false;
 
+const VARIANT_SEDE_ALIASES: Record<string, string> = {
+  sabadell: 'gep sabadell',
+  'gep sabadell': 'gep sabadell',
+  madrid: 'gep arganda',
+  'gep arganda': 'gep arganda',
+};
+
+function normalizeVariantSedeKey(value: string | null | undefined): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const lower = trimmed.toLocaleLowerCase('es');
+  return VARIANT_SEDE_ALIASES[lower] ?? lower;
+}
+
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
   message: string;
@@ -1738,6 +1753,8 @@ export function SessionsAccordionAbierta({
 
   const shouldShow = applicableProducts.length > 0;
 
+  const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
+
   const [currentDealVariation, setCurrentDealVariation] = useState<string | null>(dealVariation ?? null);
   const [currentDealTrainingDate, setCurrentDealTrainingDate] = useState<string | null>(
     dealTrainingDate ?? null,
@@ -1833,8 +1850,8 @@ export function SessionsAccordionAbierta({
   );
 
   const normalizedCurrentVariantSede = useMemo(
-    () => normalizeText(currentVariantInfo?.sede),
-    [currentVariantInfo, normalizeText],
+    () => normalizeVariantSedeKey(currentVariantInfo?.sede),
+    [currentVariantInfo],
   );
 
   const matchesProduct = useCallback(
@@ -1868,6 +1885,11 @@ export function SessionsAccordionAbierta({
       return product.matchTexts.some((text) => variantTexts.has(text));
     },
     [normalizeExact, normalizeText],
+  );
+
+  const normalizedDealSedeKey = useMemo(
+    () => normalizeVariantSedeKey(normalizedDealSede),
+    [normalizedDealSede],
   );
 
   const allowedVariantParentIds = useMemo(() => {
@@ -1929,7 +1951,7 @@ export function SessionsAccordionAbierta({
       const matchedProduct = relevantProducts.find((product) => matchesProduct(variant, product));
       if (!matchedProduct) continue;
 
-      const normalizedVariantSede = normalizeText(variant.sede);
+      const normalizedVariantSede = normalizeVariantSedeKey(variant.sede);
       const isCurrentVariant =
         (normalizedCurrentVariantWooId && normalizeExact(variant.wooId) === normalizedCurrentVariantWooId) ||
         (normalizedCurrentVariantId && normalizeExact(variant.variantId) === normalizedCurrentVariantId);
@@ -1944,22 +1966,27 @@ export function SessionsAccordionAbierta({
         }
       }
 
-      if (normalizedCurrentVariantSede && normalizedVariantSede !== normalizedCurrentVariantSede) {
+      if (normalizedDealSedeKey) {
+        if (normalizedVariantSede !== normalizedDealSedeKey && !isCurrentVariant) {
+          continue;
+        }
+      } else if (normalizedCurrentVariantSede && normalizedVariantSede !== normalizedCurrentVariantSede) {
         if (!isCurrentVariant) {
           continue;
         }
       }
 
       let sortKey = Number.POSITIVE_INFINITY;
-      let label: string | null = null;
+      let label: string | null = (variant.name ?? '').trim() || null;
       let variantDateKey: string | null = null;
+      let formattedDate: string | null = null;
 
       if (variant.date) {
         const parsed = new Date(variant.date);
         if (!Number.isNaN(parsed.getTime())) {
           sortKey = parsed.getTime();
           variantDateKey = comparisonFormatter.format(parsed);
-          label = dateFormatter.format(parsed);
+          formattedDate = dateFormatter.format(parsed);
         }
       }
 
@@ -1967,15 +1994,12 @@ export function SessionsAccordionAbierta({
         if (!isCurrentVariant) {
           continue;
         }
-        if (!label) {
-          const baseName = variant.name?.trim();
-          label = baseName && baseName.length ? baseName : `Variante ${value}`;
-        }
       } else if (!isCurrentVariant && variantDateKey < todayKey) {
         continue;
-      } else if (!label) {
-        const baseName = variant.name?.trim();
-        label = baseName && baseName.length ? baseName : `Variante ${value}`;
+      }
+
+      if (!label) {
+        label = formattedDate ?? `Variante ${value}`;
       }
 
       options.push({ option: { value, label, date: variant.date ?? null }, sortKey });
@@ -2001,6 +2025,7 @@ export function SessionsAccordionAbierta({
     normalizedCurrentVariantId,
     normalizedCurrentVariantSede,
     normalizedCurrentVariantWooId,
+    normalizedDealSedeKey,
   ]);
 
   const variantOptionsLoading = productVariantsQuery.isLoading || productVariantsQuery.isFetching;
@@ -2602,8 +2627,6 @@ export function SessionsAccordionAbierta({
   }, [activeSession, forms]);
 
   if (!shouldShow) return null;
-
-  const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
 
   const trainers = ENABLE_TRAINERS && trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
   const allRooms = ENABLE_ROOMS && roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
