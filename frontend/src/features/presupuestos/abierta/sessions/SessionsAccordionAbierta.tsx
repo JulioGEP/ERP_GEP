@@ -1929,6 +1929,11 @@ export function SessionsAccordionAbierta({
       const matchedProduct = relevantProducts.find((product) => matchesProduct(variant, product));
       if (!matchedProduct) continue;
 
+      const normalizedVariantSede = normalizeText(variant.sede);
+      const isCurrentVariant =
+        (normalizedCurrentVariantWooId && normalizeExact(variant.wooId) === normalizedCurrentVariantWooId) ||
+        (normalizedCurrentVariantId && normalizeExact(variant.variantId) === normalizedCurrentVariantId);
+
       const normalizedParentWooId = normalizeExact(variant.parentWooId ?? variant.productWooId);
       if (
         allowedVariantParentIds.size > 0 &&
@@ -1938,11 +1943,6 @@ export function SessionsAccordionAbierta({
           continue;
         }
       }
-
-      const normalizedVariantSede = normalizeText(variant.sede);
-      const isCurrentVariant =
-        (normalizedCurrentVariantWooId && normalizeExact(variant.wooId) === normalizedCurrentVariantWooId) ||
-        (normalizedCurrentVariantId && normalizeExact(variant.variantId) === normalizedCurrentVariantId);
 
       if (normalizedCurrentVariantSede && normalizedVariantSede !== normalizedCurrentVariantSede) {
         if (!isCurrentVariant) {
