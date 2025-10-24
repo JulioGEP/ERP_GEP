@@ -11,6 +11,7 @@ export interface CertificateStudentData {
 
 export interface CertificateSessionData {
   fecha_inicio_utc: string;
+  fecha_fin_utc?: string | null;
 }
 
 export interface CertificateDealData {
@@ -29,6 +30,7 @@ export interface CertificateGenerationData {
   producto: CertificateProductData;
   theoreticalItems?: string[];
   practicalItems?: string[];
+  templateLabels?: string[];
 }
 
 export type CertificateTextLayoutAdjustments = {
@@ -101,6 +103,7 @@ const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
   },
   sesion: {
     fecha_inicio_utc: '2025-10-16',
+    fecha_fin_utc: '2025-10-17',
   },
   deal: {
     sede_labels: 'Valencia',
@@ -582,6 +585,15 @@ function buildCertificateDocDefinition(
   const courseName = normaliseText(data.producto.name);
   const theoreticalItems = ensureList(data.theoreticalItems);
   const practicalItems = ensureList(data.practicalItems);
+  const templateLabels = Array.isArray(data.templateLabels)
+    ? data.templateLabels.map((label) => normaliseText(label)).filter(Boolean)
+    : [];
+  const formattedEndDate = formatDate(normaliseText(data.sesion.fecha_fin_utc ?? ''));
+  const trabajosVerticalesKey = normaliseForComparison('Trabajos Verticales');
+  const isTrabajosVerticalesTemplate = templateLabels
+    .map((label) => normaliseForComparison(label))
+    .some((label) => label.includes(trabajosVerticalesKey));
+  const shouldUseDateRange = isTrabajosVerticalesTemplate && Boolean(formattedEndDate);
 
   const styles: StyleDictionary = {
     bodyText: { fontSize: 8.5, lineHeight: 1.3 },
@@ -652,7 +664,11 @@ function buildCertificateDocDefinition(
       'con DNI/NIE ',
       { text: dni, bold: true },
       ', quien en fecha ',
+      ...(shouldUseDateRange ? ['de '] : []),
       { text: formattedDate, bold: true },
+      ...(shouldUseDateRange
+        ? [' a ', { text: formattedEndDate, bold: true }]
+        : []),
       ' y en ',
       { text: location, bold: true },
     ],
