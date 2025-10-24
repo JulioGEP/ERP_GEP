@@ -300,6 +300,12 @@ body > .modal-backdrop.show:nth-of-type(n + 3) {
   opacity: 1;
 }
 
+.variant-deals-summary-table thead th {
+  background-color: var(--color-red);
+  color: #ffffff;
+  border-color: var(--color-red);
+}
+
 .session-editor {
   background-color: #ffffff;
   border-radius: 14px;
