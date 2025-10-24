@@ -1827,14 +1827,6 @@ export function SessionsAccordionAbierta({
     return '';
   }, []);
 
-  const normalizeText = useCallback(
-    (value: string | null | undefined) => {
-      const text = normalizeExact(value);
-      return text ? text.toLocaleLowerCase('es') : '';
-    },
-    [normalizeExact],
-  );
-
   const currentVariantName = useMemo(() => {
     const label = currentVariantInfo?.name?.trim() ?? '';
     return label.length ? label : null;
@@ -1874,27 +1866,6 @@ export function SessionsAccordionAbierta({
     [normalizeExact],
   );
 
-  const matchesProduct = useCallback(
-    (variant: ProductVariantOption, product: ApplicableProductInfo) => {
-      if (matchesProductById(variant, product)) {
-        return true;
-      }
-
-      const variantTexts = new Set<string>();
-      [variant.productName, variant.name].forEach((value) => {
-        const normalized = normalizeText(value);
-        if (normalized) variantTexts.add(normalized);
-      });
-
-      if (!variantTexts.size) {
-        return false;
-      }
-
-      return product.matchTexts.some((text) => variantTexts.has(text));
-    },
-    [matchesProductById, normalizeText],
-  );
-
   const normalizedDealSedeKey = useMemo(
     () => normalizeVariantSedeKey(normalizedDealSede),
     [normalizedDealSede],
@@ -1928,9 +1899,9 @@ export function SessionsAccordionAbierta({
     if (currentVariantInfo) {
       const parentId = currentVariantInfo.parentWooId ?? currentVariantInfo.productWooId;
       if (parentId) {
-        const matchedProduct =
-          applicableProducts.find((product) => matchesProductById(currentVariantInfo, product)) ??
-          applicableProducts.find((product) => matchesProduct(currentVariantInfo, product));
+        const matchedProduct = applicableProducts.find((product) =>
+          matchesProductById(currentVariantInfo, product),
+        );
         if (matchedProduct) {
           add(matchedProduct.id, parentId);
         }
@@ -1938,25 +1909,17 @@ export function SessionsAccordionAbierta({
     }
 
     return map;
-  }, [
-    applicableProducts,
-    currentVariantInfo,
-    matchesProduct,
-    matchesProductById,
-    normalizeExact,
-    productVariants,
-  ]);
+  }, [applicableProducts, currentVariantInfo, matchesProductById, normalizeExact, productVariants]);
 
   const activeVariantProduct = useMemo(() => {
     if (currentVariantInfo) {
       return (
         applicableProducts.find((product) => matchesProductById(currentVariantInfo, product)) ??
-        applicableProducts.find((product) => matchesProduct(currentVariantInfo, product)) ??
         null
       );
     }
     return applicableProducts.length === 1 ? applicableProducts[0] : null;
-  }, [applicableProducts, currentVariantInfo, matchesProduct, matchesProductById]);
+  }, [applicableProducts, currentVariantInfo, matchesProductById]);
 
   const variantSelectOptions = useMemo(() => {
     if (!applicableProducts.length) return [] as DealVariantSelectOption[];
@@ -1983,7 +1946,9 @@ export function SessionsAccordionAbierta({
       if (!value) continue;
       if (seenValues.has(value)) continue;
 
-      const matchedProduct = relevantProducts.find((product) => matchesProduct(variant, product));
+      const matchedProduct = relevantProducts.find((product) =>
+        matchesProductById(variant, product),
+      );
       if (!matchedProduct) continue;
 
       const normalizedVariantSede = normalizeVariantSedeKey(variant.sede);
@@ -2058,10 +2023,8 @@ export function SessionsAccordionAbierta({
     activeVariantProduct,
     allowedVariantParentsByProduct,
     applicableProducts,
-    matchesProduct,
     matchesProductById,
     normalizeExact,
-    normalizeText,
     productVariants,
     normalizedCurrentVariantId,
     normalizedCurrentVariantSede,
