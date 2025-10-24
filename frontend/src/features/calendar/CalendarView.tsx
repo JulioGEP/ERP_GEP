@@ -80,6 +80,8 @@ type VisibleRange = {
   endDateUTC: Date;
 };
 
+type TooltipLine = { left: string | null; right: string | null; separator?: string };
+
 type CalendarEventItem =
   | { kind: 'session'; start: string; end: string; session: CalendarSession }
   | { kind: 'variant'; start: string; end: string; variant: CalendarVariantEvent };
@@ -698,33 +700,45 @@ export function CalendarView({
   const tooltipTitle = tooltip
     ? tooltip.kind === 'session'
       ? tooltip.session.title
-      : tooltip.variant.variant.name ?? tooltip.variant.product.name ?? 'Variante sin nombre'
+      : (() => {
+          const productName = (tooltip.variant.product.name ?? '').trim();
+          if (productName.length) {
+            return productName;
+          }
+          const productCode = (tooltip.variant.product.code ?? '').trim();
+          if (productCode.length) {
+            return productCode;
+          }
+          return 'Producto sin nombre';
+        })()
     : '';
 
   const tooltipSecondaryLine = (() => {
     if (!tooltip) {
-      return { left: '', right: '' };
+      return { left: null, right: null } satisfies TooltipLine;
     }
     if (tooltip.kind === 'session') {
       return {
         left: tooltip.session.dealTitle?.trim() || 'Sin empresa',
         right: tooltip.session.dealAddress?.trim() || tooltip.session.direccion?.trim() || 'Sin dirección',
-      };
+        separator: ' - ',
+      } satisfies TooltipLine;
     }
-    const productLabel = tooltip.variant.product.name?.trim().length
-      ? tooltip.variant.product.name
-      : tooltip.variant.product.code?.trim().length
-        ? tooltip.variant.product.code
-        : 'Producto sin nombre';
+    const studentsRaw = tooltip.variant.variant.students_total;
+    const studentsLabel =
+      typeof studentsRaw === 'number' && Number.isFinite(studentsRaw)
+        ? String(studentsRaw)
+        : 'No disponible';
     return {
-      left: productLabel ?? 'Producto sin nombre',
-      right: tooltip.variant.variant.sede ?? 'Sin sede',
-    };
+      left: 'Alumnos totales',
+      right: studentsLabel,
+      separator: ': ',
+    } satisfies TooltipLine;
   })();
 
   const tooltipTertiaryLine = (() => {
     if (!tooltip) {
-      return { left: '', right: '' };
+      return { left: null, right: null } satisfies TooltipLine;
     }
     if (tooltip.kind === 'session') {
       const trainersLabel =
@@ -741,20 +755,92 @@ export function CalendarView({
               .map((unit) => (unit.secondary ? `${unit.name} ${unit.secondary}`.trim() : unit.name))
               .join(', ')
           : 'Sin unidad móvil';
-      return { left: trainersLabel, right: unitsLabel };
+      return { left: trainersLabel, right: unitsLabel, separator: ' - ' } satisfies TooltipLine;
     }
 
-    const statusLabel = tooltip.variant.variant.status
-      ? `Estado: ${tooltip.variant.variant.status}`
-      : 'Estado: —';
-    const priceLabel = tooltip.variant.variant.price
-      ? `Precio: ${tooltip.variant.variant.price}`
-      : 'Precio: —';
+    const trainer = tooltip.variant.variant.trainer;
+    const trainerNameParts: string[] = [];
+    if (trainer?.name?.trim()) {
+      trainerNameParts.push(trainer.name.trim());
+    }
+    if (trainer?.apellido?.trim()) {
+      trainerNameParts.push(trainer.apellido.trim());
+    }
+    const trainerLabel = trainerNameParts.length
+      ? `Formador: ${trainerNameParts.join(' ')}`
+      : 'Formador: Sin asignar';
 
-    return { left: statusLabel, right: priceLabel };
+    const unit = tooltip.variant.variant.unidad;
+    const unitName = unit?.name?.trim() ?? '';
+    const unitPlate = unit?.matricula?.trim() ?? '';
+    let unitDisplay = '';
+    if (unitName && unitPlate) {
+      unitDisplay = `${unitName} (${unitPlate})`;
+    } else if (unitName) {
+      unitDisplay = unitName;
+    } else if (unitPlate) {
+      unitDisplay = unitPlate;
+    }
+    const unitLabel = unitDisplay.length ? `Unidad móvil: ${unitDisplay}` : 'Unidad móvil: Sin asignar';
+
+    return { left: trainerLabel, right: unitLabel, separator: ' - ' } satisfies TooltipLine;
   })();
 
+  const renderTooltipLine = (line: TooltipLine): string => {
+    const left = line.left?.toString().trim();
+    const right = line.right?.toString().trim();
+    const separator = line.separator ?? ' - ';
+
+    if (left && right) {
+      return `${left}${separator}${right}`;
+    }
+    if (left) {
+      return left;
+    }
+    if (right) {
+      return right;
+    }
+    return '';
+  };
+
+  const tooltipSecondaryText = renderTooltipLine(tooltipSecondaryLine);
+  const tooltipTertiaryText = renderTooltipLine(tooltipTertiaryLine);
+
   const handleVariantOpen = useCallback((event: CalendarVariantEvent) => {
+    const trainerResource = event.variant.trainer;
+    const trainer =
+      trainerResource && typeof trainerResource.trainer_id === 'string' && trainerResource.trainer_id.trim().length
+        ? {
+            trainer_id: trainerResource.trainer_id.trim(),
+            name: trainerResource.name ?? null,
+            apellido: trainerResource.apellido ?? null,
+          }
+        : null;
+
+    const salaResource = event.variant.sala;
+    const sala =
+      salaResource && typeof salaResource.sala_id === 'string' && salaResource.sala_id.trim().length
+        ? salaResource.name
+          ? {
+              sala_id: salaResource.sala_id.trim(),
+              name: salaResource.name,
+              sede: salaResource.sede ?? null,
+            }
+          : null
+        : null;
+
+    const unitResource = event.variant.unidad;
+    const unidad =
+      unitResource && typeof unitResource.unidad_id === 'string' && unitResource.unidad_id.trim().length
+        ? unitResource.name
+          ? {
+              unidad_id: unitResource.unidad_id.trim(),
+              name: unitResource.name,
+              matricula: unitResource.matricula ?? null,
+            }
+          : null
+        : null;
+
     const variant: VariantInfo = {
       id: event.variant.id,
       id_woo: event.variant.id_woo ?? '',
@@ -765,30 +851,12 @@ export function CalendarView({
       stock_status: event.variant.stock_status ?? null,
       sede: event.variant.sede ?? null,
       date: event.variant.date ?? null,
-      trainer_id: event.variant.trainer_id ?? null,
-      trainer: event.variant.trainer
-        ? {
-            trainer_id: event.variant.trainer.trainer_id ?? null,
-            name: event.variant.trainer.name ?? null,
-            apellido: event.variant.trainer.apellido ?? null,
-          }
-        : null,
-      sala_id: event.variant.sala_id ?? null,
-      sala: event.variant.sala
-        ? {
-            sala_id: event.variant.sala.sala_id ?? null,
-            name: event.variant.sala.name ?? null,
-            sede: event.variant.sala.sede ?? null,
-          }
-        : null,
-      unidad_movil_id: event.variant.unidad_movil_id ?? null,
-      unidad: event.variant.unidad
-        ? {
-            unidad_id: event.variant.unidad.unidad_id ?? null,
-            name: event.variant.unidad.name ?? null,
-            matricula: event.variant.unidad.matricula ?? null,
-          }
-        : null,
+      trainer_id: trainer?.trainer_id ?? null,
+      trainer,
+      sala_id: sala?.sala_id ?? null,
+      sala,
+      unidad_movil_id: unidad?.unidad_id ?? null,
+      unidad,
       created_at: event.variant.created_at ?? null,
       updated_at: event.variant.updated_at ?? null,
     };
@@ -1328,12 +1396,16 @@ export function CalendarView({
                 <div className="erp-calendar-tooltip-line">
                   {tooltipDateLabel} · {tooltipStartLabel} - {tooltipEndLabel}
                 </div>
-                <div className="erp-calendar-tooltip-line">
-                  {tooltipSecondaryLine.left} - {tooltipSecondaryLine.right}
-                </div>
-                <div className="erp-calendar-tooltip-line">
-                  {tooltipTertiaryLine.left} - {tooltipTertiaryLine.right}
-                </div>
+                {tooltipSecondaryText.length ? (
+                  <div className="erp-calendar-tooltip-line">
+                    {tooltipSecondaryText}
+                  </div>
+                ) : null}
+                {tooltipTertiaryText.length ? (
+                  <div className="erp-calendar-tooltip-line">
+                    {tooltipTertiaryText}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}

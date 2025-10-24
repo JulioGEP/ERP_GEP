@@ -32,6 +32,7 @@ export type CalendarVariantDetails = {
   sala: { sala_id: string | null; name: string | null; sede: string | null } | null;
   unidad_movil_id: string | null;
   unidad: { unidad_id: string | null; name: string | null; matricula: string | null } | null;
+  students_total: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -220,6 +221,12 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
             matricula: toOptionalString(input.unidad?.matricula),
           }
         : null,
+    students_total:
+      typeof input?.students_total === 'number'
+        ? input.students_total
+        : input?.students_total != null && !Number.isNaN(Number(input.students_total))
+          ? Number(input.students_total)
+          : null,
     created_at: toOptionalString(input?.created_at),
     updated_at: toOptionalString(input?.updated_at),
   } satisfies CalendarVariantDetails;
