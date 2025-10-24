@@ -3036,12 +3036,17 @@ function SessionEditor({
   const [unitFilter, setUnitFilter] = useState('');
   const [trainerListOpen, setTrainerListOpen] = useState(false);
   const [unitListOpen, setUnitListOpen] = useState(false);
-  const [variantSelection, setVariantSelection] = useState('');
+  const [pendingVariantSelection, setPendingVariantSelection] = useState<string | null>(null);
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const trainerPointerInteractingRef = useRef(false);
   const unitPointerInteractingRef = useRef(false);
   const isInCompany = dealSede === 'In Company';
+  const normalizedCurrentVariation = useMemo(
+    () => (typeof dealVariation === 'string' ? dealVariation.trim() : ''),
+    [dealVariation],
+  );
+  const normalizeVariantValue = useCallback((value: string) => value.trim(), []);
   const effectiveTrainers = ENABLE_TRAINERS ? trainers : [];
   const effectiveUnits = ENABLE_MOBILE_UNITS ? units : [];
   const effectiveRooms = ENABLE_ROOMS ? rooms : [];
@@ -3148,24 +3153,21 @@ function SessionEditor({
     return 'Selecciona una variante…';
   }, [variantOptionsLoading, variantOptions.length]);
 
-  const handleVariantSelectChange = useCallback(
-    async (event: ChangeEvent<HTMLSelectElement>) => {
-      const value = event.target.value;
-      if (!value || variantSelectDisabled) {
-        setVariantSelection('');
-        return;
-      }
+  const handleVariantOptionClick = useCallback(
+    async (value: string) => {
+      if (variantSelectDisabled) return;
 
-      setVariantSelection(value);
+      const normalized = normalizeVariantValue(value);
+      setPendingVariantSelection(normalized);
       try {
         if (onVariantSelect) {
           await onVariantSelect(value);
         }
       } finally {
-        setVariantSelection('');
+        setPendingVariantSelection(null);
       }
     },
-    [onVariantSelect, variantSelectDisabled],
+    [normalizeVariantValue, onVariantSelect, variantSelectDisabled],
   );
 
   useEffect(() => {
@@ -3210,11 +3212,11 @@ function SessionEditor({
   useEffect(() => {
     setTrainerListOpen(false);
     setUnitListOpen(false);
-    setVariantSelection('');
+    setPendingVariantSelection(null);
   }, [form.id]);
 
   useEffect(() => {
-    setVariantSelection('');
+    setPendingVariantSelection(null);
   }, [dealVariation]);
 
   return (
@@ -3229,32 +3231,76 @@ function SessionEditor({
               value={variationDisplay}
               title={buildFieldTooltip(variationTooltip || variationDisplay)}
             />
-            <Form.Select
-              className="mt-2"
-              value={variantSelection}
-              onChange={handleVariantSelectChange}
-              disabled={variantSelectDisabled}
-              aria-label="Seleccionar variante para el presupuesto"
-            >
-              <option value="">{variantSelectPlaceholder}</option>
-              {variantOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Form.Select>
-            {variantOptionsLoading ? (
-              <div className="d-flex align-items-center gap-2 text-muted mt-1 small">
-                <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
-                Cargando variantes…
-              </div>
-            ) : null}
-            {variantSaving ? (
-              <div className="d-flex align-items-center gap-2 text-muted mt-1 small">
-                <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
-                Actualizando variante…
-              </div>
-            ) : null}
+            <div className="mt-2">
+              {variantOptionsLoading ? (
+                <div className="d-flex align-items-center gap-2 text-muted small">
+                  <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                  Cargando variantes…
+                </div>
+              ) : null}
+
+              {!variantOptionsLoading && variantOptions.length ? (
+                <ListGroup
+                  as="div"
+                  role="listbox"
+                  aria-label="Variantes compatibles con el presupuesto"
+                  className="variant-selection-list"
+                >
+                  {variantOptions.map((option) => {
+                    const normalizedValue = normalizeVariantValue(option.value);
+                    const isActive = normalizedValue === normalizedCurrentVariation;
+                    const isPending =
+                      pendingVariantSelection !== null &&
+                      pendingVariantSelection === normalizedValue &&
+                      variantSaving;
+                    return (
+                      <ListGroup.Item
+                        key={option.value}
+                        as="button"
+                        type="button"
+                        role="option"
+                        action
+                        active={isActive}
+                        aria-selected={isActive}
+                        disabled={variantSelectDisabled}
+                        onClick={() => {
+                          void handleVariantOptionClick(option.value);
+                        }}
+                        className="d-flex justify-content-between align-items-center gap-3 text-start"
+                      >
+                        <span>{option.label}</span>
+                        <span className="d-flex align-items-center gap-2">
+                          {isPending ? (
+                            <Spinner
+                              animation="border"
+                              size="sm"
+                              role="status"
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          {isActive ? (
+                            <Badge bg="light" text="dark">
+                              Asignada
+                            </Badge>
+                          ) : null}
+                        </span>
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              ) : null}
+
+              {!variantOptionsLoading && !variantOptions.length ? (
+                <div className="text-muted small">{variantSelectPlaceholder}</div>
+              ) : null}
+
+              {variantSaving ? (
+                <div className="d-flex align-items-center gap-2 text-muted mt-2 small">
+                  <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                  Actualizando variante…
+                </div>
+              ) : null}
+            </div>
           </Form.Group>
         </Col>
         <Col md={6} lg={4}>
