@@ -3055,7 +3055,6 @@ function SessionEditor({
   const [unitFilter, setUnitFilter] = useState('');
   const [trainerListOpen, setTrainerListOpen] = useState(false);
   const [unitListOpen, setUnitListOpen] = useState(false);
-  const [variantSelection, setVariantSelection] = useState('');
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const trainerPointerInteractingRef = useRef(false);
@@ -3159,32 +3158,48 @@ function SessionEditor({
     return dealTrainingDate.trim();
   }, [dealTrainingDate]);
 
-  const variantSelectDisabled = variantSaving || variantOptionsLoading || variantOptions.length === 0;
+  const variantListDisabled = variantSaving || variantOptionsLoading || variantOptions.length === 0;
 
-  const variantSelectPlaceholder = useMemo(() => {
-    if (variantOptionsLoading) return 'Cargando variantes…';
-    if (!variantOptions.length) return 'No hay variantes disponibles';
-    return 'Selecciona una variante…';
+  const normalizeVariantValue = useCallback((value: string | null | undefined) => {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number') return String(value).trim();
+    return '';
+  }, []);
+
+  const variantListHelperText = useMemo(() => {
+    if (variantOptionsLoading) return null;
+    if (!variantOptions.length) return null;
+    return 'Selecciona una variante relacionada con el producto y la sede.';
   }, [variantOptionsLoading, variantOptions.length]);
 
-  const handleVariantSelectChange = useCallback(
-    async (event: ChangeEvent<HTMLSelectElement>) => {
-      const value = event.target.value;
-      if (!value || variantSelectDisabled) {
-        setVariantSelection('');
+  const normalizedCurrentVariantValue = useMemo(
+    () => normalizeVariantValue(dealVariation),
+    [dealVariation, normalizeVariantValue],
+  );
+
+  const formatVariantDate = useCallback((value: string | null) => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (!Number.isFinite(parsed.getTime())) {
+      return value;
+    }
+    try {
+      return new Intl.DateTimeFormat('es-ES').format(parsed);
+    } catch (error) {
+      return value;
+    }
+  }, []);
+
+  const handleVariantOptionClick = useCallback(
+    async (value: string) => {
+      if (!value || variantListDisabled) {
         return;
       }
-
-      setVariantSelection(value);
-      try {
-        if (onVariantSelect) {
-          await onVariantSelect(value);
-        }
-      } finally {
-        setVariantSelection('');
+      if (onVariantSelect) {
+        await onVariantSelect(value);
       }
     },
-    [onVariantSelect, variantSelectDisabled],
+    [onVariantSelect, variantListDisabled],
   );
 
   useEffect(() => {
@@ -3229,12 +3244,7 @@ function SessionEditor({
   useEffect(() => {
     setTrainerListOpen(false);
     setUnitListOpen(false);
-    setVariantSelection('');
   }, [form.id]);
-
-  useEffect(() => {
-    setVariantSelection('');
-  }, [dealVariation]);
 
   return (
     <div className="session-editor bg-white rounded-3 p-3">
@@ -3248,20 +3258,39 @@ function SessionEditor({
               value={variationDisplay}
               title={buildFieldTooltip(variationTooltip || variationDisplay)}
             />
-            <Form.Select
-              className="mt-2"
-              value={variantSelection}
-              onChange={handleVariantSelectChange}
-              disabled={variantSelectDisabled}
-              aria-label="Seleccionar variante para el presupuesto"
-            >
-              <option value="">{variantSelectPlaceholder}</option>
-              {variantOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Form.Select>
+            <div className="mt-2">
+              {variantListHelperText ? (
+                <p className="text-muted small mb-2">{variantListHelperText}</p>
+              ) : null}
+              {variantOptions.length ? (
+                <ListGroup className="session-variant-list border rounded" style={{ maxHeight: 220, overflowY: 'auto' }}>
+                  {variantOptions.map((option) => {
+                    const normalizedValue = normalizeVariantValue(option.value);
+                    const isActive =
+                      Boolean(normalizedCurrentVariantValue) && normalizedValue === normalizedCurrentVariantValue;
+                    const formattedDate = formatVariantDate(option.date ?? null);
+                    return (
+                      <ListGroup.Item
+                        key={option.value}
+                        action
+                        onClick={() => handleVariantOptionClick(option.value)}
+                        disabled={variantListDisabled && !isActive}
+                        active={isActive}
+                        aria-current={isActive}
+                        className="d-flex flex-column align-items-start gap-1"
+                      >
+                        <span>{option.label}</span>
+                        {formattedDate ? (
+                          <small className="text-muted">Fecha: {formattedDate}</small>
+                        ) : null}
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              ) : !variantOptionsLoading ? (
+                <p className="text-muted small mb-0">No hay variantes disponibles</p>
+              ) : null}
+            </div>
             {variantOptionsLoading ? (
               <div className="d-flex align-items-center gap-2 text-muted mt-1 small">
                 <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
