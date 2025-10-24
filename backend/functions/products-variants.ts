@@ -4,7 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
-import { formatTimeFromDb } from './_shared/time';
+import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
 import {
   getVariantResourceColumnsSupport,
@@ -37,10 +37,10 @@ function extractTimeParts(value: Date | string | null | undefined): TimeParts | 
 
 function buildDateTime(date: Date, time: TimeParts | null, fallback: TimeParts): Date {
   const parts = time ?? fallback;
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const day = date.getDate();
-  return new Date(Date.UTC(year, month, day, parts.hour, parts.minute, 0, 0));
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  return buildMadridDateTime({ year, month, day, hour: parts.hour, minute: parts.minute });
 }
 
 type DateRange = { start: Date; end: Date };
