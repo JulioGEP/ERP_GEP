@@ -752,6 +752,7 @@ export const handler = async (event: any) => {
           training_address: true,
           caes_label: true,
           fundae_label: true,
+          po: true,
           hotel_label: true,
           comercial: true,
           a_fecha: true,

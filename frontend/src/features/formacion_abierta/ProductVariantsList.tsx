@@ -13,6 +13,7 @@ import {
   Row,
   Spinner,
   Stack,
+  Table,
 } from 'react-bootstrap';
 
 import {
@@ -137,6 +138,10 @@ type DealsByVariationResponse = {
     products?: unknown;
     students_count?: unknown;
     _count?: { alumnos?: unknown };
+    organization?: { name?: unknown } | null;
+    person?: { first_name?: unknown; last_name?: unknown } | null;
+    fundae_label?: unknown;
+    po?: unknown;
   }>;
   message?: string;
 };
@@ -148,6 +153,10 @@ type DealTag = {
   w_id_variation: string | null;
   a_fecha: string | null;
   students_count: number;
+  organization: { name: string | null } | null;
+  person: { first_name: string | null; last_name: string | null } | null;
+  fundae_label: string | null;
+  po: string | null;
 };
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', {
@@ -519,6 +528,20 @@ async function updateProductVariant(
   return normalizeVariantFromResponse(json.variant, variantId);
 }
 
+function normalizeOptionalText(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
 function normalizeDealProductPrice(value: unknown): string | null {
   if (value === null || value === undefined) {
     return null;
@@ -710,6 +733,19 @@ async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]>
 
       const studentsCount = normalizeDealStudentsCount(rawStudentsCount);
 
+      const organizationName = normalizeOptionalText((deal as any)?.organization?.name);
+      const organization = organizationName !== null ? { name: organizationName } : null;
+
+      const personFirstName = normalizeOptionalText((deal as any)?.person?.first_name);
+      const personLastName = normalizeOptionalText((deal as any)?.person?.last_name);
+      const person =
+        personFirstName !== null || personLastName !== null
+          ? { first_name: personFirstName, last_name: personLastName }
+          : null;
+
+      const fundaeLabel = normalizeOptionalText((deal as any)?.fundae_label);
+      const poValue = normalizeOptionalText((deal as any)?.po);
+
       return {
         deal_id: rawDealId,
         title: deal?.title ?? '',
@@ -719,6 +755,10 @@ async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]>
         w_id_variation: wIdVariation,
         a_fecha: trainingDate,
         students_count: studentsCount,
+        organization,
+        person,
+        fundae_label: fundaeLabel,
+        po: poValue,
       };
     })
     .filter((deal): deal is DealTag => Boolean(deal.deal_id) && Boolean(deal.title));
@@ -1983,7 +2023,6 @@ export function VariantModal({
                   Alumnos en deals: {totalDealStudentsDisplay}
                 </div>
               </div>
-              <div className="text-muted small">ID Woo: {product.id_woo ?? '—'}</div>
             </div>
 
             {saveError && <Alert variant="danger" className="mb-0">{saveError}</Alert>}
@@ -2097,52 +2136,6 @@ export function VariantModal({
                 </Col>
               </Row>
 
-              <Accordion className="variant-deals-accordion">
-                <Accordion.Item eventKey="variant-deals">
-                  <Accordion.Header>
-                    <span className="text-uppercase small fw-semibold">Presupuestos asociados</span>
-                    {deals.length ? (
-                      <Badge bg="light" text="dark" className="ms-2">
-                        {deals.length}
-                      </Badge>
-                    ) : null}
-                  </Accordion.Header>
-                  <Accordion.Body>
-                    {dealsError ? (
-                      <Alert variant="danger" className="mb-0">
-                        {dealsError}
-                      </Alert>
-                    ) : isDealsLoading ? (
-                      <div className="d-flex align-items-center gap-2 text-muted">
-                        <Spinner animation="border" size="sm" />
-                        <span>Cargando deals…</span>
-                      </div>
-                    ) : deals.length ? (
-                      <ListGroup variant="flush" className="mb-0">
-                        {deals.map((deal) => {
-                          const dealTitle = deal.title?.trim().length
-                            ? deal.title
-                            : `Presupuesto ${deal.deal_id}`;
-                          return (
-                            <ListGroup.Item
-                              action
-                              key={deal.deal_id}
-                              onClick={handleDealClick(deal)}
-                              className="d-flex justify-content-between align-items-center"
-                            >
-                              <span className="fw-semibold">{dealTitle}</span>
-                              <span className="text-muted small">{deal.deal_id}</span>
-                            </ListGroup.Item>
-                          );
-                        })}
-                      </ListGroup>
-                    ) : (
-                      <div className="text-muted small mb-0">No hay deals asociados a esta variación.</div>
-                    )}
-                  </Accordion.Body>
-                </Accordion.Item>
-              </Accordion>
-
               <Row className="g-3">
                 <Col md={3}>
                   <Form.Group controlId="variantStatus" className="mb-0">
@@ -2207,6 +2200,99 @@ export function VariantModal({
                   </Form.Group>
                 </Col>
               </Row>
+
+              <Accordion className="variant-deals-accordion">
+                <Accordion.Item eventKey="variant-deals">
+                  <Accordion.Header>
+                    <span className="text-uppercase small fw-semibold">Presupuestos asociados</span>
+                    {deals.length ? (
+                      <Badge bg="light" text="dark" className="ms-2">
+                        {deals.length}
+                      </Badge>
+                    ) : null}
+                  </Accordion.Header>
+                  <Accordion.Body>
+                    {dealsError ? (
+                      <Alert variant="danger" className="mb-0">
+                        {dealsError}
+                      </Alert>
+                    ) : isDealsLoading ? (
+                      <div className="d-flex align-items-center gap-2 text-muted">
+                        <Spinner animation="border" size="sm" />
+                        <span>Cargando deals…</span>
+                      </div>
+                    ) : deals.length ? (
+                      <ListGroup variant="flush" className="mb-0">
+                        {deals.map((deal) => {
+                          const dealTitle = deal.title?.trim().length
+                            ? deal.title
+                            : `Presupuesto ${deal.deal_id}`;
+                          return (
+                            <ListGroup.Item
+                              action
+                              key={deal.deal_id}
+                              onClick={handleDealClick(deal)}
+                              className="d-flex justify-content-between align-items-center"
+                            >
+                              <span className="fw-semibold">{dealTitle}</span>
+                              <span className="text-muted small">{deal.deal_id}</span>
+                            </ListGroup.Item>
+                          );
+                        })}
+                      </ListGroup>
+                    ) : (
+                      <div className="text-muted small mb-0">No hay deals asociados a esta variación.</div>
+                    )}
+                  </Accordion.Body>
+                </Accordion.Item>
+              </Accordion>
+
+              <div>
+                <p className="text-uppercase text-muted small fw-semibold mb-2">
+                  Resumen de presupuestos
+                </p>
+                {dealsError ? (
+                  <Alert variant="danger" className="mb-0">
+                    {dealsError}
+                  </Alert>
+                ) : isDealsLoading ? (
+                  <div className="d-flex align-items-center gap-2 text-muted">
+                    <Spinner animation="border" size="sm" />
+                    <span>Cargando resumen…</span>
+                  </div>
+                ) : deals.length ? (
+                  <div className="table-responsive">
+                    <Table bordered hover size="sm" className="mb-0 align-middle">
+                      <thead>
+                        <tr>
+                          <th>Presupuesto</th>
+                          <th>Nombre Empresa</th>
+                          <th>Nombre Alumno</th>
+                          <th>Apellido Alumno</th>
+                          <th>Valor de Fundae</th>
+                          <th>Valor de PO</th>
+                          <th className="text-end">Alumnos</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {deals.map((deal) => (
+                          <tr key={`summary-${deal.deal_id}`}>
+                            <td>{deal.deal_id}</td>
+                            <td>{deal.organization?.name ?? '—'}</td>
+                            <td>{deal.person?.first_name ?? '—'}</td>
+                            <td>{deal.person?.last_name ?? '—'}</td>
+                            <td>{deal.fundae_label ?? '—'}</td>
+                            <td>{deal.po ?? '—'}</td>
+                            <td className="text-end">{deal.students_count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-muted small">No hay deals asociados a esta variación.</div>
+                )}
+              </div>
             </Form>
 
           </div>
