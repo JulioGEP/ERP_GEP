@@ -5,6 +5,7 @@ import type {
   DealDetailViewModel,
   DealProduct,
   DealSummary,
+  DealSummarySession,
   DealDocument,
   DealNote,
 } from "../../types/deal";
@@ -340,6 +341,35 @@ function normalizeProducts(
   return result;
 }
 
+function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
+  if (!raw || typeof raw !== "object") {
+    const date = toStringValue(raw);
+    if (!date) {
+      return null;
+    }
+    return {
+      id: null,
+      fecha_inicio_utc: date,
+      fecha: date,
+    };
+  }
+
+  const session = raw as Record<string, unknown>;
+  const id = toStringValue(session.id);
+  const startDate = toStringValue(session.fecha_inicio_utc);
+  const fallbackDate = toStringValue((session as any).fecha);
+
+  if (!id && !startDate && !fallbackDate) {
+    return null;
+  }
+
+  return {
+    id: id ?? null,
+    fecha_inicio_utc: startDate ?? fallbackDate ?? null,
+    fecha: fallbackDate ?? (startDate ?? null),
+  };
+}
+
 function normalizeDealSummary(row: Json): DealSummary {
   const rawDealId = row?.deal_id ?? row?.dealId ?? row?.id;
   const resolvedDealId =
@@ -375,6 +405,15 @@ function normalizeDealSummary(row: Json): DealSummary {
 
   const productsInfo = normalizeProducts(row?.products ?? row?.deal_products);
 
+  const rawSessions = Array.isArray(row?.sesiones)
+    ? row?.sesiones
+    : Array.isArray(row?.sessions)
+    ? row?.sessions
+    : [];
+  const sessions = rawSessions
+    .map((session: Json) => normalizeDealSummarySession(session))
+    .filter((session): session is DealSummarySession => session !== null);
+
   const summary: DealSummary = {
     deal_id: resolvedDealId,
     dealId: resolvedDealId, // compat
@@ -408,6 +447,7 @@ function normalizeDealSummary(row: Json): DealSummary {
   if (productsInfo.products) summary.products = productsInfo.products;
   if (productsInfo.productNames)
     summary.productNames = productsInfo.productNames;
+  if (sessions.length) summary.sessions = sessions;
 
   return summary;
 }

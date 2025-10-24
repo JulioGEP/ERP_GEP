@@ -115,6 +115,94 @@ function getBudgetId(budget: DealSummary): string | null {
   return null;
 }
 
+function normalisePipelineKey(value: string | null | undefined): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function parseDateValue(value: string | null | undefined): number | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.length) {
+    return null;
+  }
+
+  const directDate = new Date(trimmed);
+  if (!Number.isNaN(directDate.getTime())) {
+    return directDate.getTime();
+  }
+
+  const fallbackMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (fallbackMatch) {
+    const [, day, month, year] = fallbackMatch;
+    const isoCandidate = `${year.padStart(4, '0')}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00Z`;
+    const fallbackDate = new Date(isoCandidate);
+    if (!Number.isNaN(fallbackDate.getTime())) {
+      return fallbackDate.getTime();
+    }
+  }
+
+  return null;
+}
+
+function formatDateLabel(timestamp: number | null): string {
+  if (timestamp === null) {
+    return '—';
+  }
+
+  try {
+    return new Intl.DateTimeFormat('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(new Date(timestamp));
+  } catch {
+    return '—';
+  }
+}
+
+function getTrainingDateTimestamp(budget: DealSummary): number | null {
+  const pipelineKey = normalisePipelineKey(budget.pipeline_label ?? budget.pipeline_id ?? '');
+
+  if (pipelineKey.includes('formacion empresa')) {
+    const sessions = Array.isArray(budget.sessions) ? budget.sessions : [];
+    let earliest: number | null = null;
+    for (const session of sessions) {
+      const timestamp = parseDateValue(session?.fecha_inicio_utc ?? session?.fecha ?? null);
+      if (timestamp === null) {
+        continue;
+      }
+      if (earliest === null || timestamp < earliest) {
+        earliest = timestamp;
+      }
+    }
+    return earliest;
+  }
+
+  if (pipelineKey.includes('formacion abierta')) {
+    return parseDateValue(budget.a_fecha ?? null);
+  }
+
+  return null;
+}
+
+function getTrainingDateInfo(budget: DealSummary): { label: string; sortValue: number | null } {
+  const timestamp = getTrainingDateTimestamp(budget);
+  return {
+    label: formatDateLabel(timestamp),
+    sortValue: timestamp,
+  };
+}
+
 /** Normaliza mínimamente un item del backend a DealSummary (lo justo para la tabla) */
 function normalizeRowMinimal(row: any) {
   const dealId =
@@ -190,6 +278,8 @@ export function BudgetTable({
         return getTitleLabel(budget);
       case 'formacion':
         return getProductNames(budget).join(', ');
+      case 'fecha_formacion':
+        return getTrainingDateInfo(budget).sortValue;
       case 'negocio':
         return getNegocioLabel(budget);
       default:
@@ -382,6 +472,13 @@ export function BudgetTable({
               onSort={requestSort}
             />
             <SortableHeader
+              columnKey="fecha_formacion"
+              label="Fecha formación"
+              sortState={sortState}
+              onSort={requestSort}
+              style={{ width: 160 }}
+            />
+            <SortableHeader
               columnKey="negocio"
               label="Negocio"
               sortState={sortState}
@@ -406,6 +503,7 @@ export function BudgetTable({
             const organizationLabel = getOrganizationLabel(budget);
             const titleLabel = getTitleLabel(budget);
             const negocioLabel = getNegocioLabel(budget);
+            const trainingDateInfo = getTrainingDateInfo(budget);
 
             const rowKey = id ?? `${organizationLabel}-${titleLabel}-${index}`;
 
@@ -417,6 +515,7 @@ export function BudgetTable({
                 <td>{organizationLabel}</td>
                 <td title={budget.title ?? ''}>{titleLabel}</td>
                 <td title={names.join(', ')}>{productLabel}</td>
+                <td>{trainingDateInfo.label}</td>
                 <td>{negocioLabel}</td>
                 {showDeleteAction && (
                   <td className="text-end">
