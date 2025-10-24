@@ -38,6 +38,13 @@ type CalendarVariantEvent = {
     stock_status: string | null;
     sede: string | null;
     date: string | null;
+    trainer_id: string | null;
+    trainer: { trainer_id: string | null; name: string | null; apellido: string | null } | null;
+    sala_id: string | null;
+    sala: { sala_id: string | null; name: string | null; sede: string | null } | null;
+    unidad_movil_id: string | null;
+    unidad: { unidad_id: string | null; name: string | null; matricula: string | null } | null;
+    students_total: number | null;
     created_at: string | null;
     updated_at: string | null;
   };
@@ -95,25 +102,31 @@ function buildDateTime(
   return new Date(Date.UTC(year, month, day, parts.hour, parts.minute, 0, 0));
 }
 
-function normalizeVariantRecord(record: {
-  id: string;
-  id_woo: Prisma.Decimal | bigint | number;
-  name: string | null;
-  status: string | null;
-  price: Prisma.Decimal | string | number | null;
-  stock: number | null;
-  stock_status: string | null;
-  sede: string | null;
-  date: Date | null;
-  trainer_id?: string | null;
-  sala_id?: string | null;
-  unidad_movil_id?: string | null;
-  trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
-  sala?: { sala_id: string; name: string; sede: string | null } | null;
-  unidad?: { unidad_id: string; name: string; matricula: string | null } | null;
-  created_at: Date | null;
-  updated_at: Date | null;
-}) {
+function normalizeVariantRecord(
+  record: {
+    id: string;
+    id_woo: Prisma.Decimal | bigint | number;
+    name: string | null;
+    status: string | null;
+    price: Prisma.Decimal | string | number | null;
+    stock: number | null;
+    stock_status: string | null;
+    sede: string | null;
+    date: Date | null;
+    trainer_id?: string | null;
+    sala_id?: string | null;
+    unidad_movil_id?: string | null;
+    trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
+    sala?: { sala_id: string; name: string; sede: string | null } | null;
+    unidad?: { unidad_id: string; name: string; matricula: string | null } | null;
+    created_at: Date | null;
+    updated_at: Date | null;
+  },
+  studentsTotal?: number | null,
+) {
+  const normalizedStudentsTotal =
+    typeof studentsTotal === 'number' && Number.isFinite(studentsTotal) ? studentsTotal : null;
+
   return {
     id: record.id,
     id_woo: record.id_woo != null ? record.id_woo.toString() : null,
@@ -149,6 +162,7 @@ function normalizeVariantRecord(record: {
           matricula: record.unidad.matricula ?? null,
         }
       : null,
+    students_total: normalizedStudentsTotal,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
   };
@@ -311,6 +325,70 @@ export const handler = async (event: any) => {
 
     const events: CalendarVariantEvent[] = [];
 
+    const variantWooIds = Array.isArray(variants)
+      ? Array.from(
+          new Set(
+            variants
+              .map((variant: any) => {
+                if (variant?.id_woo === null || variant?.id_woo === undefined) {
+                  return null;
+                }
+                const rawId = variant.id_woo;
+                if (typeof rawId === 'bigint') {
+                  return rawId.toString();
+                }
+                if (typeof rawId === 'number') {
+                  return Number.isFinite(rawId) ? String(rawId) : null;
+                }
+                if (typeof rawId === 'object' && rawId !== null && 'toString' in rawId) {
+                  try {
+                    return (rawId as Prisma.Decimal).toString();
+                  } catch {
+                    return null;
+                  }
+                }
+                if (typeof rawId === 'string') {
+                  const trimmed = rawId.trim();
+                  return trimmed.length ? trimmed : null;
+                }
+                return null;
+              })
+              .filter((id): id is string => Boolean(id)),
+          ),
+        )
+      : [];
+
+    const studentsCountByVariant = new Map<string, number>();
+
+    if (variantWooIds.length) {
+      const dealsWithCounts = await prisma.deals.findMany({
+        where: { w_id_variation: { in: variantWooIds } },
+        select: {
+          w_id_variation: true,
+          _count: {
+            select: { alumnos: true },
+          },
+        },
+      });
+
+      dealsWithCounts.forEach((deal) => {
+        let keyRaw: string | null = null;
+        if (typeof deal.w_id_variation === 'string') {
+          const trimmed = deal.w_id_variation.trim();
+          keyRaw = trimmed.length ? trimmed : null;
+        } else if (typeof deal.w_id_variation === 'number') {
+          keyRaw = Number.isFinite(deal.w_id_variation) ? String(deal.w_id_variation) : null;
+        }
+
+        if (!keyRaw) {
+          return;
+        }
+        const rawCount = deal?._count?.alumnos;
+        const count = typeof rawCount === 'number' && Number.isFinite(rawCount) ? rawCount : 0;
+        studentsCountByVariant.set(keyRaw, (studentsCountByVariant.get(keyRaw) ?? 0) + count);
+      });
+    }
+
     variants.forEach((variant) => {
       if (!variant.product) {
         return;
@@ -322,7 +400,27 @@ export const handler = async (event: any) => {
         return;
       }
 
-      const normalizedVariant = normalizeVariantRecord(variant);
+      let wooIdKey: string | null = null;
+      if (variant?.id_woo !== null && variant?.id_woo !== undefined) {
+        const rawId = variant.id_woo;
+        if (typeof rawId === 'bigint') {
+          wooIdKey = rawId.toString();
+        } else if (typeof rawId === 'number') {
+          wooIdKey = Number.isFinite(rawId) ? String(rawId) : null;
+        } else if (typeof rawId === 'string') {
+          wooIdKey = rawId.trim().length ? rawId.trim() : null;
+        } else if (rawId && typeof rawId === 'object' && 'toString' in rawId) {
+          try {
+            wooIdKey = (rawId as Prisma.Decimal).toString();
+          } catch {
+            wooIdKey = null;
+          }
+        }
+      }
+
+      const studentsTotal = wooIdKey ? studentsCountByVariant.get(wooIdKey) ?? 0 : null;
+
+      const normalizedVariant = normalizeVariantRecord(variant, studentsTotal);
 
       events.push({
         id: variant.id,
