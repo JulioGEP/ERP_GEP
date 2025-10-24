@@ -159,42 +159,45 @@ export function ProductCommentWindow({ show, productName, comment, onClose }: Pr
   const normalizedComment = (comment ?? '').trim();
 
   return createPortal(
-    <div
-      ref={containerRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      tabIndex={-1}
-      className="bg-white rounded-4 shadow-lg border position-fixed"
-      style={{
-        left: position.left,
-        top: position.top,
-        zIndex: 1080,
-        width: 'min(420px, calc(100vw - 32px))',
-        maxHeight: 'min(70vh, calc(100vh - 32px))',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <>
+      <div className="modal-backdrop fade show" style={{ zIndex: 1079 }} />
       <div
-        className="px-4 py-3 border-bottom d-flex align-items-center justify-content-between gap-3"
-        style={{ cursor: 'move', userSelect: 'none', touchAction: 'none' }}
-        onPointerDown={handlePointerDown}
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-white rounded-4 shadow-lg border position-fixed"
+        style={{
+          left: position.left,
+          top: position.top,
+          zIndex: 1080,
+          width: 'min(420px, calc(100vw - 32px))',
+          maxHeight: 'min(70vh, calc(100vh - 32px))',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
       >
-        <h2 id={titleId} className="h6 mb-0">
-          Comentario de la formación
-        </h2>
-        <CloseButton onClick={onClose} aria-label="Cerrar comentario de la formación" />
+        <div
+          className="px-4 py-3 border-bottom d-flex align-items-center justify-content-between gap-3"
+          style={{ cursor: 'move', userSelect: 'none', touchAction: 'none' }}
+          onPointerDown={handlePointerDown}
+        >
+          <h2 id={titleId} className="h6 mb-0">
+            Comentario de la formación
+          </h2>
+          <CloseButton onClick={onClose} aria-label="Cerrar comentario de la formación" />
+        </div>
+        <div className="px-4 py-3 overflow-auto" style={{ whiteSpace: 'pre-wrap' }}>
+          {normalizedProduct.length ? (
+            <div className="mb-3">
+              <strong>Formación:</strong> {normalizedProduct}
+            </div>
+          ) : null}
+          {normalizedComment.length ? normalizedComment : 'Sin comentarios para este producto.'}
+        </div>
       </div>
-      <div className="px-4 py-3 overflow-auto" style={{ whiteSpace: 'pre-wrap' }}>
-        {normalizedProduct.length ? (
-          <div className="mb-3">
-            <strong>Formación:</strong> {normalizedProduct}
-          </div>
-        ) : null}
-        {normalizedComment.length ? normalizedComment : 'Sin comentarios para este producto.'}
-      </div>
-    </div>,
+    </>,
     document.body
   );
 }
