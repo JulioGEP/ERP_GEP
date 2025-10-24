@@ -4,6 +4,11 @@ import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { formatTimeFromDb } from './_shared/time';
+import {
+  getVariantResourceColumnsSupport,
+  isVariantResourceColumnError,
+  setVariantResourceColumnsSupport,
+} from './_shared/variant-resources';
 
 const APPLICABLE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const DEFAULT_LIMIT = 10;
@@ -744,40 +749,58 @@ export const handler = async (event: any) => {
         }
       });
 
-      const variants = await prisma.variants.findMany({
-        where: {
-          ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
-          date: { not: null },
-          OR: [
-            { trainer_id: { not: null } },
-            { sala_id: { not: null } },
-            { unidad_movil_id: { not: null } },
-          ],
-        },
-        select: {
-          id: true,
-          date: true,
-          trainer_id: true,
-          sala_id: true,
-          unidad_movil_id: true,
-          product: { select: { hora_inicio: true, hora_fin: true } },
-        },
-      });
+      if (getVariantResourceColumnsSupport() !== false) {
+        try {
+          const variantQueryArgs = {
+            where: {
+              ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
+              date: { not: null },
+              OR: [
+                { trainer_id: { not: null } },
+                { sala_id: { not: null } },
+                { unidad_movil_id: { not: null } },
+              ],
+            },
+            select: {
+              id: true,
+              date: true,
+              trainer_id: true,
+              sala_id: true,
+              unidad_movil_id: true,
+              product: { select: { hora_inicio: true, hora_fin: true } },
+            },
+          } as const;
 
-      variants.forEach((variant) => {
-        const variantRange = computeVariantRange(variant.date, variant.product ?? { hora_inicio: null, hora_fin: null });
-        if (!variantRange) return;
-        if (
-          variantRange.start.getTime() <= range.end.getTime() &&
-          variantRange.end.getTime() >= range.start.getTime()
-        ) {
-          if (variant.trainer_id) trainerLocks.add(variant.trainer_id);
-          if (variant.sala_id) roomLocks.add(variant.sala_id);
-          if (variant.unidad_movil_id && !ALWAYS_AVAILABLE_UNIT_IDS.has(variant.unidad_movil_id)) {
-            unitLocks.add(variant.unidad_movil_id);
+          const variants = await prisma.variants.findMany(variantQueryArgs as any);
+
+          setVariantResourceColumnsSupport(true);
+
+          variants.forEach((variant) => {
+            const variantRange = computeVariantRange(variant.date, variant.product ?? { hora_inicio: null, hora_fin: null });
+            if (!variantRange) return;
+            if (
+              variantRange.start.getTime() <= range.end.getTime() &&
+              variantRange.end.getTime() >= range.start.getTime()
+            ) {
+              if (variant.trainer_id) trainerLocks.add(variant.trainer_id);
+              if (variant.sala_id) roomLocks.add(variant.sala_id);
+              if (variant.unidad_movil_id && !ALWAYS_AVAILABLE_UNIT_IDS.has(variant.unidad_movil_id)) {
+                unitLocks.add(variant.unidad_movil_id);
+              }
+            }
+          });
+        } catch (error) {
+          if (isVariantResourceColumnError(error)) {
+            setVariantResourceColumnsSupport(false);
+            console.warn(
+              '[sessions] skipping variant resource availability check (missing resource columns)',
+              { error },
+            );
+          } else {
+            throw error;
           }
         }
-      });
+      }
 
       return successResponse({
         availability: {

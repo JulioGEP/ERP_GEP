@@ -1,9 +1,14 @@
 // backend/functions/calendar-variants.ts
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { ensureMadridTimezone, toMadridISOString } from './_shared/timezone';
 import { formatTimeFromDb } from './_shared/time';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import {
+  getVariantResourceColumnsSupport,
+  isVariantResourceColumnError,
+  setVariantResourceColumnsSupport,
+} from './_shared/variant-resources';
 
 type CalendarVariantEvent = {
   id: string;
@@ -209,6 +214,46 @@ function computeEventTimes(variantDate: Date | null, product: { hora_inicio: str
   return { start, end };
 }
 
+const variantSelectionBase = {
+  id: true,
+  id_woo: true,
+  name: true,
+  status: true,
+  price: true,
+  stock: true,
+  stock_status: true,
+  sede: true,
+  date: true,
+  created_at: true,
+  updated_at: true,
+  product: {
+    select: {
+      id: true,
+      id_woo: true,
+      name: true,
+      code: true,
+      category: true,
+      hora_inicio: true,
+      hora_fin: true,
+      default_variant_start: true,
+      default_variant_end: true,
+      default_variant_stock_status: true,
+      default_variant_stock_quantity: true,
+      default_variant_price: true,
+    },
+  },
+};
+
+const variantSelectionWithResources = {
+  ...variantSelectionBase,
+  trainer_id: true,
+  sala_id: true,
+  unidad_movil_id: true,
+  trainer: { select: { trainer_id: true, name: true, apellido: true } },
+  sala: { select: { sala_id: true, name: true, sede: true } },
+  unidad: { select: { unidad_id: true, name: true, matricula: true } },
+};
+
 export const handler = async (event: any) => {
   try {
     if (event.httpMethod === 'OPTIONS') {
@@ -230,51 +275,39 @@ export const handler = async (event: any) => {
 
     const prisma = getPrisma();
 
-    const variants = await prisma.variants.findMany({
-      where: {
-        date: {
-          not: null,
-          gte: range.start,
-          lte: range.end,
-        },
-      },
-      orderBy: [{ date: 'asc' as Prisma.SortOrder }, { name: 'asc' as Prisma.SortOrder }],
-      select: {
-        id: true,
-        id_woo: true,
-        name: true,
-        status: true,
-        price: true,
-        stock: true,
-        stock_status: true,
-        sede: true,
-        date: true,
-        trainer_id: true,
-        sala_id: true,
-        unidad_movil_id: true,
-        trainer: { select: { trainer_id: true, name: true, apellido: true } },
-        sala: { select: { sala_id: true, name: true, sede: true } },
-        unidad: { select: { unidad_id: true, name: true, matricula: true } },
-        created_at: true,
-        updated_at: true,
-        product: {
-          select: {
-            id: true,
-            id_woo: true,
-            name: true,
-            code: true,
-            category: true,
-            hora_inicio: true,
-            hora_fin: true,
-            default_variant_start: true,
-            default_variant_end: true,
-            default_variant_stock_status: true,
-            default_variant_stock_quantity: true,
-            default_variant_price: true,
+    const shouldIncludeResources = getVariantResourceColumnsSupport() !== false;
+
+    const buildQuery = (includeResources: boolean) =>
+      prisma.variants.findMany({
+        where: {
+          date: {
+            not: null,
+            gte: range.start,
+            lte: range.end,
           },
         },
-      },
-    });
+        orderBy: [{ date: 'asc' as Prisma.SortOrder }, { name: 'asc' as Prisma.SortOrder }],
+        select: (includeResources ? variantSelectionWithResources : variantSelectionBase) as any,
+      });
+
+    let variants;
+    try {
+      variants = await buildQuery(shouldIncludeResources);
+      if (shouldIncludeResources) {
+        setVariantResourceColumnsSupport(true);
+      }
+    } catch (error) {
+      if (shouldIncludeResources && isVariantResourceColumnError(error)) {
+        setVariantResourceColumnsSupport(false);
+        console.warn(
+          '[calendar-variants] falling back to legacy variant query (missing resource columns)',
+          { error },
+        );
+        variants = await buildQuery(false);
+      } else {
+        throw error;
+      }
+    }
 
     const events: CalendarVariantEvent[] = [];
 
