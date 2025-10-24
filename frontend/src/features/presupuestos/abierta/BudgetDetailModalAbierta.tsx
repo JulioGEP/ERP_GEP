@@ -402,6 +402,17 @@ export function BudgetDetailModalAbierta({
           );
         },
       });
+      qc.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key.length > 1 &&
+            key[0] === 'dealSessionsForStudents' &&
+            key[1] === normalizedDealId
+          );
+        },
+      });
 
       if (warnings.length) {
         alert(`Presupuesto actualizado con avisos:\n\n${warnings.join('\n')}`);
