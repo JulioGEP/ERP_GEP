@@ -1,6 +1,6 @@
 // backend/functions/sessions.ts
 import { randomUUID } from 'crypto';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
@@ -29,6 +29,140 @@ type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>
 
 // Certain unidades móviles act as placeholders and should never block availability checks.
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const VERTICAL_PRODUCT_PIPE_ID = '212';
+const VERTICAL_PRODUCT_WOO_ID = '503';
+const VERTICAL_PRODUCT_KNOWN_NAMES = ['A-Trabajos Verticales', 'Trabajos Verticales'];
+
+type PrismaClientOrTx = Prisma.TransactionClient | PrismaClient;
+
+type VerticalProductInfo = {
+  normalizedNames: Set<string>;
+  normalizedCodes: Set<string>;
+  rawCodes: Set<string>;
+};
+
+let cachedVerticalProductInfo: VerticalProductInfo | null = null;
+let verticalBackfillPromise: Promise<void> | null = null;
+let verticalBackfillCompleted = false;
+
+function normalizeProductMatch(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed.length) return null;
+  return trimmed
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toNumericText(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = String(value).replace(/[^0-9]/g, '').trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function shiftDateByDays(value: Date, days: number): Date {
+  return new Date(value.getTime() + days * ONE_DAY_MS);
+}
+
+function buildSessionDuplicateKey(productId: string, date: Date | null): string | null {
+  if (!productId || !date) return null;
+  const time = date.getTime();
+  if (!Number.isFinite(time)) return null;
+  return `${productId}|${time}`;
+}
+
+async function getVerticalProductInfo(prisma: PrismaClientOrTx): Promise<VerticalProductInfo> {
+  if (cachedVerticalProductInfo) {
+    return cachedVerticalProductInfo;
+  }
+
+  const normalizedNames = new Set<string>();
+  const normalizedCodes = new Set<string>();
+  const rawCodes = new Set<string>([VERTICAL_PRODUCT_PIPE_ID, VERTICAL_PRODUCT_WOO_ID]);
+
+  VERTICAL_PRODUCT_KNOWN_NAMES.forEach((value) => {
+    const normalized = normalizeProductMatch(value);
+    if (normalized) normalizedNames.add(normalized);
+  });
+
+  let verticalProductRecord: { name: string | null; code: string | null; id_pipe: string | null; id_woo: bigint | null } | null = null;
+
+  try {
+    const wooId = (() => {
+      try {
+        return BigInt(VERTICAL_PRODUCT_WOO_ID);
+      } catch {
+        return null;
+      }
+    })();
+
+    verticalProductRecord = await prisma.products.findFirst({
+      where: {
+        OR: [
+          { id_pipe: VERTICAL_PRODUCT_PIPE_ID },
+          ...(wooId != null ? [{ id_woo: wooId }] : []),
+        ],
+      },
+      select: { name: true, code: true, id_pipe: true, id_woo: true },
+    });
+  } catch (error) {
+    console.warn('[sessions] Unable to load vertical product info', { error });
+  }
+
+  if (verticalProductRecord) {
+    const normalizedName = normalizeProductMatch(verticalProductRecord.name);
+    if (normalizedName) normalizedNames.add(normalizedName);
+
+    const normalizedCode = normalizeProductMatch(verticalProductRecord.code);
+    if (normalizedCode) normalizedCodes.add(normalizedCode);
+
+    const rawPipe = toTrimmed(verticalProductRecord.id_pipe);
+    if (rawPipe) rawCodes.add(rawPipe);
+
+    const rawWoo = verticalProductRecord.id_woo != null ? verticalProductRecord.id_woo.toString() : null;
+    if (rawWoo) rawCodes.add(rawWoo);
+  }
+
+  cachedVerticalProductInfo = { normalizedNames, normalizedCodes, rawCodes };
+  return cachedVerticalProductInfo;
+}
+
+async function isVerticalCourseProduct(
+  prisma: PrismaClientOrTx,
+  product: { name: string | null; code: string | null },
+): Promise<boolean> {
+  const info = await getVerticalProductInfo(prisma);
+  const normalizedName = normalizeProductMatch(product.name);
+  const normalizedCode = normalizeProductMatch(product.code);
+  const rawCode = toTrimmed(product.code);
+  const numericCode = toNumericText(product.code);
+  const numericName = toNumericText(product.name);
+
+  if (normalizedName && info.normalizedNames.has(normalizedName)) return true;
+  if (normalizedCode && (info.normalizedCodes.has(normalizedCode) || info.normalizedNames.has(normalizedCode))) return true;
+  if (rawCode && info.rawCodes.has(rawCode)) return true;
+  if (numericCode && info.rawCodes.has(numericCode)) return true;
+  if (numericName && info.rawCodes.has(numericName)) return true;
+
+  if (normalizedName) {
+    for (const candidate of info.normalizedNames) {
+      if (normalizedName.includes(candidate)) return true;
+    }
+  }
+
+  if (normalizedCode) {
+    for (const candidate of info.normalizedNames) {
+      if (normalizedCode.includes(candidate)) return true;
+    }
+  }
+
+  return false;
+}
 
 function toTrimmed(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -247,7 +381,7 @@ function buildNombreBase(name?: string | null, code?: string | null): string {
 }
 
 async function reindexSessionNames(
-  tx: Prisma.TransactionClient,
+  tx: PrismaClientOrTx,
   dealProductId: string,
   baseName: string,
 ) {
@@ -270,6 +404,104 @@ async function reindexSessionNames(
   );
 
   return sessions.length;
+}
+
+async function duplicateVerticalCourseSessionIfNeeded(
+  tx: Prisma.TransactionClient,
+  {
+    deal,
+    product,
+    baseName,
+    createdSession,
+    fechaInicio,
+    fechaFin,
+    trainerIds,
+    unidadIds,
+  }: {
+    deal: { deal_id: string; sede_label: string | null };
+    product: { id: string; name: string | null; code: string | null };
+    baseName: string;
+    createdSession: { id: string; direccion: string; sala_id: string | null; estado: SessionEstado; drive_url: string | null };
+    fechaInicio: Date | null;
+    fechaFin: Date | null;
+    trainerIds: string[];
+    unidadIds: string[];
+  },
+): Promise<{ id: string } | null> {
+  if (!(await isVerticalCourseProduct(tx, product))) {
+    return null;
+  }
+
+  if (!fechaInicio) {
+    return null;
+  }
+
+  const nextStart = shiftDateByDays(fechaInicio, 1);
+  const nextEnd = fechaFin ? shiftDateByDays(fechaFin, 1) : null;
+
+  const existing = await tx.sessions.findFirst({
+    where: {
+      deal_product_id: product.id,
+      fecha_inicio_utc: nextStart,
+    },
+    select: { id: true },
+  });
+
+  if (existing) {
+    return null;
+  }
+
+  await ensureResourcesAvailable(tx, {
+    trainerIds: trainerIds.length ? trainerIds : undefined,
+    unidadIds: unidadIds.length ? unidadIds : undefined,
+    salaId: createdSession.sala_id ?? null,
+    start: nextStart,
+    end: nextEnd,
+  });
+
+  const duplicateEstado = computeAutomaticSessionEstadoFromValues({
+    fechaInicio: nextStart,
+    fechaFin: nextEnd,
+    salaId: createdSession.sala_id ?? null,
+    trainerIds,
+    unidadIds,
+    dealSede: deal.sede_label ?? null,
+  });
+
+  const duplicated = await tx.sessions.create({
+    data: {
+      id: randomUUID(),
+      deal_id: deal.deal_id,
+      deal_product_id: product.id,
+      nombre_cache: baseName,
+      direccion: createdSession.direccion,
+      sala_id: createdSession.sala_id ?? null,
+      fecha_inicio_utc: nextStart,
+      fecha_fin_utc: nextEnd,
+      estado: duplicateEstado,
+      drive_url: createdSession.drive_url ?? null,
+    } as any,
+  });
+
+  if (trainerIds.length) {
+    await tx.session_trainers.createMany({
+      data: trainerIds.map((trainerId) => ({
+        session_id: duplicated.id,
+        trainer_id: trainerId,
+      })),
+    });
+  }
+
+  if (unidadIds.length) {
+    await tx.session_unidades.createMany({
+      data: unidadIds.map((unidadId) => ({
+        session_id: duplicated.id,
+        unidad_id: unidadId,
+      })),
+    });
+  }
+
+  return { id: duplicated.id };
 }
 
 async function syncSessionsForProduct(
@@ -357,6 +589,197 @@ async function generateSessionsForDeal(tx: Prisma.TransactionClient, dealId: str
 
   const count = await tx.sessions.count({ where: { deal_id: deal.deal_id } });
   return { count };
+}
+
+async function backfillMissingVerticalSessions(prisma: PrismaClient) {
+  const productConditions: Prisma.deal_productsWhereInput[] = [
+    { name: { contains: 'trabajos verticales', mode: 'insensitive' } },
+    { code: { contains: 'trabajos verticales', mode: 'insensitive' } },
+  ];
+
+  const verticalInfo = await getVerticalProductInfo(prisma);
+  verticalInfo.rawCodes.forEach((raw) => {
+    const trimmed = raw.trim();
+    if (trimmed.length) {
+      productConditions.push({ code: { equals: trimmed } });
+    }
+  });
+
+  const where: Prisma.sessionsWhereInput = {};
+  if (productConditions.length) {
+    where.deal_product = { OR: productConditions };
+  }
+
+  const sessions = await prisma.sessions.findMany({
+    where,
+    include: {
+      deal: { select: { sede_label: true } },
+      deal_product: { select: { id: true, name: true, code: true } },
+      trainers: { select: { trainer_id: true } },
+      unidades: { select: { unidad_id: true } },
+    },
+  });
+
+  if (!sessions.length) {
+    return;
+  }
+
+  const baseNames = new Map<string, string>();
+  const existingKeys = new Set<string>();
+  const processedSessions: typeof sessions = [];
+  const productMatchCache = new Map<string, boolean>();
+
+  for (const session of sessions) {
+    const product = session.deal_product;
+    if (!product || !product.id) continue;
+
+    let isVertical = productMatchCache.get(product.id);
+    if (isVertical === undefined) {
+      isVertical = await isVerticalCourseProduct(prisma, product);
+      productMatchCache.set(product.id, isVertical);
+    }
+
+    if (!isVertical) continue;
+
+    processedSessions.push(session);
+    const baseName = buildNombreBase(product.name, product.code);
+    if (!baseNames.has(product.id)) {
+      baseNames.set(product.id, baseName);
+    }
+
+    const key = buildSessionDuplicateKey(product.id, session.fecha_inicio_utc);
+    if (key) {
+      existingKeys.add(key);
+    }
+  }
+
+  if (!processedSessions.length) {
+    return;
+  }
+
+  const createdProducts = new Set<string>();
+
+  for (const session of processedSessions) {
+    if (!session.fecha_inicio_utc) continue;
+    const product = session.deal_product;
+    if (!product || !product.id) continue;
+
+    const productId = product.id;
+    const start = session.fecha_inicio_utc;
+    const prevKey = buildSessionDuplicateKey(productId, shiftDateByDays(start, -1));
+    if (prevKey && existingKeys.has(prevKey)) {
+      continue;
+    }
+
+    const nextStart = shiftDateByDays(start, 1);
+    const nextKey = buildSessionDuplicateKey(productId, nextStart);
+    if (nextKey && existingKeys.has(nextKey)) {
+      continue;
+    }
+
+    const trainerIds = session.trainers
+      .map((link) => link.trainer_id)
+      .filter((value): value is string => Boolean(value));
+    const unidadIds = session.unidades
+      .map((link) => link.unidad_id)
+      .filter((value): value is string => Boolean(value));
+    const nextEnd = session.fecha_fin_utc ? shiftDateByDays(session.fecha_fin_utc, 1) : null;
+
+    try {
+      await ensureResourcesAvailable(prisma, {
+        trainerIds: trainerIds.length ? trainerIds : undefined,
+        unidadIds: unidadIds.length ? unidadIds : undefined,
+        salaId: session.sala_id ?? null,
+        start: nextStart,
+        end: nextEnd,
+      });
+    } catch (error) {
+      console.warn('[sessions] Unable to create vertical duplicate due to resource conflict', {
+        sessionId: session.id,
+        error,
+      });
+      continue;
+    }
+
+    const duplicateEstado = computeAutomaticSessionEstadoFromValues({
+      fechaInicio: nextStart,
+      fechaFin: nextEnd,
+      salaId: session.sala_id ?? null,
+      trainerIds,
+      unidadIds,
+      dealSede: session.deal?.sede_label ?? null,
+    });
+
+    try {
+      const duplicate = await prisma.sessions.create({
+        data: {
+          id: randomUUID(),
+          deal_id: session.deal_id,
+          deal_product_id: productId,
+          nombre_cache: baseNames.get(productId) ?? buildNombreBase(product.name, product.code),
+          direccion: session.direccion,
+          sala_id: session.sala_id ?? null,
+          fecha_inicio_utc: nextStart,
+          fecha_fin_utc: nextEnd,
+          estado: duplicateEstado,
+          drive_url: session.drive_url ?? null,
+        } as any,
+      });
+
+      if (trainerIds.length) {
+        await prisma.session_trainers.createMany({
+          data: trainerIds.map((trainerId) => ({ session_id: duplicate.id, trainer_id: trainerId })),
+        });
+      }
+
+      if (unidadIds.length) {
+        await prisma.session_unidades.createMany({
+          data: unidadIds.map((unidadId) => ({ session_id: duplicate.id, unidad_id: unidadId })),
+        });
+      }
+
+      if (nextKey) {
+        existingKeys.add(nextKey);
+      }
+      createdProducts.add(productId);
+    } catch (error) {
+      console.error('[sessions] Failed to duplicate vertical session', {
+        sessionId: session.id,
+        error,
+      });
+    }
+  }
+
+  for (const productId of createdProducts) {
+    const baseName = baseNames.get(productId) ?? 'Sesión';
+    await reindexSessionNames(prisma, productId, baseName);
+  }
+}
+
+async function ensureVerticalBackfill(prisma: PrismaClient) {
+  if (verticalBackfillCompleted) {
+    return;
+  }
+
+  if (!verticalBackfillPromise) {
+    const runPromise = backfillMissingVerticalSessions(prisma)
+      .then(() => {
+        verticalBackfillCompleted = true;
+      })
+      .catch((error) => {
+        console.error('[sessions] Vertical course backfill failed', error);
+      })
+      .finally(() => {
+        verticalBackfillPromise = null;
+      });
+
+    verticalBackfillPromise = runPromise;
+  }
+
+  const pending = verticalBackfillPromise;
+  if (pending) {
+    await pending;
+  }
 }
 
 function parseDateInput(value: unknown) {
@@ -548,7 +971,7 @@ function computeVariantRange(
 }
 
 async function ensureResourcesAvailable(
-  tx: Prisma.TransactionClient,
+  tx: PrismaClientOrTx,
   {
     sessionId,
     trainerIds,
@@ -660,6 +1083,7 @@ export const handler = async (event: any) => {
     }
 
     const prisma = getPrisma();
+    await ensureVerticalBackfill(prisma);
     const method = event.httpMethod;
     const path = event.path || '';
     const isAvailabilityRequest =
@@ -1208,6 +1632,23 @@ export const handler = async (event: any) => {
             })),
           });
         }
+
+        await duplicateVerticalCourseSessionIfNeeded(tx, {
+          deal: { deal_id: deal.deal_id, sede_label: deal.sede_label ?? null },
+          product: { id: product.id, name: product.name ?? null, code: product.code ?? null },
+          baseName,
+          createdSession: {
+            id: created.id,
+            direccion: created.direccion,
+            sala_id: created.sala_id ?? null,
+            estado: created.estado as SessionEstado,
+            drive_url: (created as any).drive_url ?? null,
+          },
+          fechaInicio: fechaInicioDate,
+          fechaFin: fechaFinDate,
+          trainerIds: trainerIdsResult,
+          unidadIds: unidadIdsResult,
+        });
 
         await reindexSessionNames(tx, product.id, baseName);
 
