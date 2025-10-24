@@ -23,7 +23,9 @@ import {
   fetchRoomsCatalog,
   fetchMobileUnitsCatalog,
   fetchSessionAvailability,
+  fetchDealStudents,
 } from '../presupuestos/api';
+import type { SessionStudent } from '../presupuestos/api';
 import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailModalAbierta';
 import type { DealSummary } from '../../types/deal';
 import { emitToast } from '../../utils/toast';
@@ -1557,15 +1559,37 @@ export function VariantModal({
   const [deals, setDeals] = useState<DealTag[]>([]);
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [isDealsLoading, setIsDealsLoading] = useState(false);
+  const [dealStudents, setDealStudents] = useState<Record<string, SessionStudent[]>>({});
+  const [dealStudentsError, setDealStudentsError] = useState<string | null>(null);
+  const [isDealStudentsLoading, setIsDealStudentsLoading] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDealSummary, setSelectedDealSummary] = useState<DealSummary | null>(null);
   const totalDealStudents = useMemo(
-    () => deals.reduce((sum, deal) => sum + deal.students_count, 0),
-    [deals],
+    () => {
+      if (!deals.length) {
+        return 0;
+      }
+
+      const hasStudentsData = Object.keys(dealStudents).length > 0;
+
+      return deals.reduce((sum, deal) => {
+        const dealId = typeof deal.deal_id === 'string' ? deal.deal_id.trim() : '';
+        if (hasStudentsData && dealId) {
+          const students = dealStudents[dealId];
+          if (Array.isArray(students)) {
+            return sum + students.length;
+          }
+        }
+        return sum + deal.students_count;
+      }, 0);
+    },
+    [deals, dealStudents],
   );
-  const totalDealStudentsDisplay = isDealsLoading
+  const isSummaryLoading = isDealsLoading || isDealStudentsLoading;
+  const summaryError = dealsError ?? dealStudentsError;
+  const totalDealStudentsDisplay = isSummaryLoading
     ? 'Cargando…'
-    : dealsError
+    : summaryError
     ? 'No disponible'
     : String(totalDealStudents);
 
@@ -1764,6 +1788,9 @@ export function VariantModal({
       setDeals([]);
       setDealsError(null);
       setIsDealsLoading(false);
+      setDealStudents({});
+      setDealStudentsError(null);
+      setIsDealStudentsLoading(false);
       setSelectedDealId(null);
       setSelectedDealSummary(null);
       return;
@@ -1785,6 +1812,9 @@ export function VariantModal({
       setDeals([]);
       setDealsError(null);
       setIsDealsLoading(false);
+      setDealStudents({});
+      setDealStudentsError(null);
+      setIsDealStudentsLoading(false);
       setSelectedDealId(null);
       setSelectedDealSummary(null);
       return () => {
@@ -1818,6 +1848,97 @@ export function VariantModal({
       ignore = true;
     };
   }, [variant?.id_woo]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    if (!deals.length) {
+      setDealStudents({});
+      setDealStudentsError(null);
+      setIsDealStudentsLoading(false);
+      return () => {
+        ignore = true;
+      };
+    }
+
+    const validDeals = deals.filter((deal) => Boolean(deal.deal_id?.trim()));
+
+    if (!validDeals.length) {
+      setDealStudents({});
+      setDealStudentsError(null);
+      setIsDealStudentsLoading(false);
+      return () => {
+        ignore = true;
+      };
+    }
+
+    setIsDealStudentsLoading(true);
+    setDealStudentsError(null);
+
+    (async () => {
+      const results = await Promise.allSettled(
+        validDeals.map(async (deal) => {
+          const dealId = typeof deal.deal_id === 'string' ? deal.deal_id.trim() : '';
+          const students = await fetchDealStudents(dealId);
+          return { dealId, students };
+        }),
+      );
+
+      if (ignore) {
+        return;
+      }
+
+      const nextStudents: Record<string, SessionStudent[]> = {};
+      let hadError = false;
+
+      results.forEach((result, index) => {
+        const fallbackDealId =
+          typeof validDeals[index]?.deal_id === 'string' ? validDeals[index].deal_id.trim() : '';
+
+        if (result.status === 'fulfilled') {
+          const key = result.value.dealId || fallbackDealId;
+          if (key) {
+            nextStudents[key] = result.value.students;
+          }
+        } else if (fallbackDealId) {
+          nextStudents[fallbackDealId] = [];
+          hadError = true;
+        } else {
+          hadError = true;
+        }
+      });
+
+      setDealStudents(nextStudents);
+      setDealStudentsError(
+        hadError ? 'No se pudieron cargar todos los alumnos de los presupuestos.' : null,
+      );
+      setIsDealStudentsLoading(false);
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [deals]);
+
+  const dealSummaryRows = useMemo(() => {
+    if (!deals.length) {
+      return [] as Array<{ deal: DealTag; student: SessionStudent; key: string }>;
+    }
+
+    const rows: Array<{ deal: DealTag; student: SessionStudent; key: string }> = [];
+
+    deals.forEach((deal) => {
+      const dealId = typeof deal.deal_id === 'string' ? deal.deal_id.trim() : '';
+      const students = (dealId && dealStudents[dealId]) || [];
+
+      students.forEach((student, index) => {
+        const keyBase = student.id.trim().length ? student.id : `${dealId}-student-${index}`;
+        rows.push({ deal, student, key: `summary-${keyBase}` });
+      });
+    });
+
+    return rows;
+  }, [deals, dealStudents]);
 
   const handleChange = (field: keyof VariantFormValues) =>
     (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -2251,57 +2372,63 @@ export function VariantModal({
                 <p className="text-uppercase text-muted small fw-semibold mb-2">
                   Resumen de presupuestos
                 </p>
-                {dealsError ? (
+                {summaryError ? (
                   <Alert variant="danger" className="mb-0">
-                    {dealsError}
+                    {summaryError}
                   </Alert>
-                ) : isDealsLoading ? (
+                ) : isSummaryLoading ? (
                   <div className="d-flex align-items-center gap-2 text-muted">
                     <Spinner animation="border" size="sm" />
                     <span>Cargando resumen…</span>
                   </div>
                 ) : deals.length ? (
-                  <div className="table-responsive">
-                    <Table
-                      bordered
-                      hover
-                      size="sm"
-                      className="mb-0 align-middle variant-deals-summary-table"
-                    >
-                      <thead>
-                        <tr>
-                          <th>Presupuesto</th>
-                          <th>Nombre Empresa</th>
-                          <th>Nombre Alumno</th>
-                          <th>Apellido Alumno</th>
-                          <th>Valor de Fundae</th>
-                          <th>Valor de PO</th>
-                          <th className="text-end">Alumnos</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {deals.map((deal) => (
-                          <tr key={`summary-${deal.deal_id}`}>
-                            <td>{deal.deal_id}</td>
-                            <td>{deal.organization?.name ?? '—'}</td>
-                            <td>{deal.person?.first_name ?? '—'}</td>
-                            <td>{deal.person?.last_name ?? '—'}</td>
-                            <td>{deal.fundae_label ?? '—'}</td>
-                            <td>{deal.po ?? '—'}</td>
-                            <td className="text-end">{deal.students_count}</td>
+                  dealSummaryRows.length ? (
+                    <div className="table-responsive">
+                      <Table
+                        bordered
+                        hover
+                        size="sm"
+                        className="mb-0 align-middle variant-deals-summary-table"
+                      >
+                        <thead>
+                          <tr>
+                            <th>Presupuesto</th>
+                            <th>Nombre Empresa</th>
+                            <th>Nombre Alumno</th>
+                            <th>Apellido Alumno</th>
+                            <th>Valor de Fundae</th>
+                            <th>Valor de PO</th>
+                            <th className="text-end">Alumnos</th>
                           </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr>
-                          <td colSpan={6} className="fw-semibold text-end">
-                            Total alumnos
-                          </td>
-                          <td className="text-end fw-semibold">{totalDealStudents}</td>
-                        </tr>
-                      </tfoot>
-                    </Table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {dealSummaryRows.map(({ deal, student, key }) => (
+                            <tr key={key}>
+                              <td>{deal.deal_id}</td>
+                              <td>{deal.organization?.name ?? '—'}</td>
+                              <td>{student.nombre.trim().length ? student.nombre : '—'}</td>
+                              <td>{student.apellido.trim().length ? student.apellido : '—'}</td>
+                              <td>{deal.fundae_label ?? '—'}</td>
+                              <td>{deal.po ?? '—'}</td>
+                              <td className="text-end">1</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colSpan={6} className="fw-semibold text-end">
+                              Total alumnos
+                            </td>
+                            <td className="text-end fw-semibold">{totalDealStudents}</td>
+                          </tr>
+                        </tfoot>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="text-muted small">
+                      Los deals asociados no tienen alumnos registrados.
+                    </div>
+                  )
                 ) : (
                   <div className="text-muted small">No hay deals asociados a esta variación.</div>
                 )}
