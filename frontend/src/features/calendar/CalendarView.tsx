@@ -1003,9 +1003,19 @@ export function CalendarView({
     if (variantEvent.variant.sede) {
       chips.push(`Sede: ${variantEvent.variant.sede}`);
     }
-    if (variantEvent.variant.price) {
-      chips.push(`Precio: ${variantEvent.variant.price}`);
+    const trainerResource = variantEvent.variant.trainer;
+    const trainerNameParts: string[] = [];
+    if (trainerResource?.name?.trim()) {
+      trainerNameParts.push(trainerResource.name.trim());
     }
+    if (trainerResource?.apellido?.trim()) {
+      trainerNameParts.push(trainerResource.apellido.trim());
+    }
+    chips.push(
+      trainerNameParts.length
+        ? `Formador: ${trainerNameParts.join(' ')}`
+        : 'Formador: Sin asignar',
+    );
     if (variantEvent.variant.stock != null) {
       chips.push(`Stock: ${variantEvent.variant.stock}`);
     }
@@ -1027,8 +1037,23 @@ export function CalendarView({
             ))}
           </div>
         ) : null}
-        <span className="erp-calendar-event-status">
-          {variantEvent.variant.status ?? 'Variante'}
+        <span
+          className={`erp-calendar-event-status ${
+            variantEvent.variant.status
+              ? `erp-calendar-event-status--${variantEvent.variant.status.toLowerCase()}`
+              : ''
+          }`.trim()}
+        >
+          {(() => {
+            const status = variantEvent.variant.status?.toLowerCase();
+            if (status === 'publish') {
+              return 'Publicado';
+            }
+            if (status === 'private') {
+              return 'Cancelada';
+            }
+            return variantEvent.variant.status ?? 'Variante';
+          })()}
         </span>
       </div>
     );
