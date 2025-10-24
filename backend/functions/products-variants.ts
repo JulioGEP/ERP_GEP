@@ -5,6 +5,201 @@ import type { PrismaClient } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { formatTimeFromDb } from './_shared/time';
+
+const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
+
+type TimeParts = { hour: number; minute: number };
+
+function toTrimmed(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
+function extractTimeParts(value: Date | string | null | undefined): TimeParts | null {
+  const formatted = formatTimeFromDb(value);
+  if (!formatted) return null;
+  const match = formatted.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number.parseInt(match[1], 10);
+  const minute = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function buildDateTime(date: Date, time: TimeParts | null, fallback: TimeParts): Date {
+  const parts = time ?? fallback;
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+  return new Date(Date.UTC(year, month, day, parts.hour, parts.minute, 0, 0));
+}
+
+type DateRange = { start: Date; end: Date };
+
+function normalizeDateRange(start: Date | null | undefined, end: Date | null | undefined): DateRange | null {
+  const effectiveStart = start ?? end ?? null;
+  const effectiveEnd = end ?? start ?? null;
+  if (!effectiveStart || !effectiveEnd) return null;
+
+  const startTime = effectiveStart.getTime();
+  const endTime = effectiveEnd.getTime();
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return null;
+  if (endTime < startTime) return null;
+
+  return {
+    start: new Date(startTime),
+    end: new Date(endTime),
+  };
+}
+
+function computeVariantRange(
+  variantDate: Date | string | null | undefined,
+  productTimes: { hora_inicio: Date | string | null; hora_fin: Date | string | null },
+): DateRange | null {
+  if (!variantDate) return null;
+
+  const parsedDate = new Date(variantDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  const startTime = extractTimeParts(productTimes.hora_inicio);
+  const endTime = extractTimeParts(productTimes.hora_fin);
+  const fallbackStart: TimeParts = startTime ?? { hour: 9, minute: 0 };
+  const fallbackEnd: TimeParts = endTime ?? (startTime ? { ...startTime } : { hour: 11, minute: 0 });
+
+  const start = buildDateTime(parsedDate, startTime, fallbackStart);
+  let end = buildDateTime(parsedDate, endTime, fallbackEnd);
+
+  if (end.getTime() <= start.getTime()) {
+    end = new Date(start.getTime() + 60 * 60 * 1000);
+  }
+
+  return { start, end };
+}
+
+async function ensureVariantResourcesAvailable(
+  prisma: PrismaClient,
+  {
+    excludeVariantId,
+    trainerId,
+    salaId,
+    unidadId,
+    range,
+  }: {
+    excludeVariantId?: string;
+    trainerId: string | null;
+    salaId: string | null;
+    unidadId: string | null;
+    range: DateRange | null;
+  },
+): Promise<ReturnType<typeof errorResponse> | null> {
+  if (!range) {
+    return null;
+  }
+
+  const normalizedTrainerId = trainerId ?? null;
+  const normalizedSalaId = salaId ?? null;
+  const normalizedUnidadId =
+    unidadId && !ALWAYS_AVAILABLE_UNIT_IDS.has(unidadId) ? unidadId : null;
+
+  if (!normalizedTrainerId && !normalizedSalaId && !normalizedUnidadId) {
+    return null;
+  }
+
+  const sessionConditions: Prisma.sessionsWhereInput[] = [];
+  if (normalizedTrainerId) {
+    sessionConditions.push({ trainers: { some: { trainer_id: normalizedTrainerId } } });
+  }
+  if (normalizedSalaId) {
+    sessionConditions.push({ sala_id: normalizedSalaId });
+  }
+  if (normalizedUnidadId) {
+    sessionConditions.push({ unidades: { some: { unidad_id: normalizedUnidadId } } });
+  }
+
+  if (sessionConditions.length) {
+    const sessions = await prisma.sessions.findMany({
+      where: { OR: sessionConditions },
+      select: { fecha_inicio_utc: true, fecha_fin_utc: true },
+    });
+
+    const hasSessionConflict = sessions.some((session) => {
+      const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
+      if (!sessionRange) return false;
+      return (
+        sessionRange.start.getTime() <= range.end.getTime() &&
+        sessionRange.end.getTime() >= range.start.getTime()
+      );
+    });
+
+    if (hasSessionConflict) {
+      return errorResponse(
+        'RESOURCE_UNAVAILABLE',
+        'Algunos recursos ya están asignados en las fechas seleccionadas.',
+        409,
+      );
+    }
+  }
+
+  const variantConditions: Prisma.variantsWhereInput[] = [];
+  if (normalizedTrainerId) {
+    variantConditions.push({ trainer_id: normalizedTrainerId });
+  }
+  if (normalizedSalaId) {
+    variantConditions.push({ sala_id: normalizedSalaId });
+  }
+  if (normalizedUnidadId) {
+    variantConditions.push({ unidad_movil_id: normalizedUnidadId });
+  }
+
+  if (!variantConditions.length) {
+    return null;
+  }
+
+  const variants = await prisma.variants.findMany({
+    where: {
+      ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
+      date: { not: null },
+      OR: variantConditions,
+    },
+    select: {
+      id: true,
+      date: true,
+      trainer_id: true,
+      sala_id: true,
+      unidad_movil_id: true,
+      product: { select: { hora_inicio: true, hora_fin: true } },
+    },
+  });
+
+  const hasVariantConflict = variants.some((variant) => {
+    const otherRange = computeVariantRange(variant.date, variant.product ?? { hora_inicio: null, hora_fin: null });
+    if (!otherRange) return false;
+    const overlaps =
+      otherRange.start.getTime() <= range.end.getTime() &&
+      otherRange.end.getTime() >= range.start.getTime();
+    if (!overlaps) return false;
+
+    const trainerConflict = normalizedTrainerId && variant.trainer_id === normalizedTrainerId;
+    const salaConflict = normalizedSalaId && variant.sala_id === normalizedSalaId;
+    const unidadConflict = normalizedUnidadId && variant.unidad_movil_id === normalizedUnidadId;
+
+    return Boolean(trainerConflict || salaConflict || unidadConflict);
+  });
+
+  if (hasVariantConflict) {
+    return errorResponse(
+      'RESOURCE_UNAVAILABLE',
+      'Algunos recursos ya están asignados en las fechas seleccionadas.',
+      409,
+    );
+  }
+
+  return null;
+}
 import { toMadridISOString } from './_shared/timezone';
 import { mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
@@ -74,7 +269,15 @@ type VariantUpdateInput = {
   status?: string | null;
   sede?: string | null;
   date?: Date | null;
+  trainer_id?: string | null;
+  sala_id?: string | null;
+  unidad_movil_id?: string | null;
 };
+
+type VariantWooUpdateInput = Pick<
+  VariantUpdateInput,
+  'price' | 'stock' | 'stock_status' | 'status' | 'sede' | 'date'
+>;
 
 async function fetchWooVariation(
   productWooId: bigint,
@@ -135,7 +338,7 @@ async function fetchWooVariation(
 async function updateVariantInWooCommerce(
   productWooId: bigint,
   variantWooId: bigint,
-  updates: VariantUpdateInput,
+  updates: VariantWooUpdateInput,
 ): Promise<void> {
   ensureWooConfigured();
 
@@ -346,6 +549,12 @@ type VariantRecord = {
   stock_status: string | null;
   sede: string | null;
   date: Date | string | null;
+  trainer_id: string | null;
+  sala_id: string | null;
+  unidad_movil_id: string | null;
+  trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  sala?: { sala_id: string; name: string; sede: string | null } | null;
+  unidad?: { unidad_id: string; name: string; matricula: string | null } | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
 };
@@ -432,6 +641,12 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       stock_status: true,
       sede: true,
       date: true,
+      trainer_id: true,
+      sala_id: true,
+      unidad_movil_id: true,
+      trainer: { select: { trainer_id: true, name: true, apellido: true } },
+      sala: { select: { sala_id: true, name: true, sede: true } },
+      unidad: { select: { unidad_id: true, name: true, matricula: true } },
       created_at: true,
       updated_at: true,
     },
@@ -532,6 +747,26 @@ function normalizeVariant(record: VariantRecord) {
     stock_status: record.stock_status ?? null,
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
+    trainer_id: record.trainer_id ?? null,
+    trainer: record.trainer
+      ? {
+          trainer_id: record.trainer.trainer_id,
+          name: record.trainer.name ?? null,
+          apellido: record.trainer.apellido ?? null,
+        }
+      : null,
+    sala_id: record.sala_id ?? null,
+    sala: record.sala
+      ? { sala_id: record.sala.sala_id, name: record.sala.name, sede: record.sala.sede ?? null }
+      : null,
+    unidad_movil_id: record.unidad_movil_id ?? null,
+    unidad: record.unidad
+      ? {
+          unidad_id: record.unidad.unidad_id,
+          name: record.unidad.name,
+          matricula: record.unidad.matricula ?? null,
+        }
+      : null,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
   } as const;
@@ -682,6 +917,18 @@ export const handler = async (event: any) => {
         }
       }
 
+      if (Object.prototype.hasOwnProperty.call(payload, 'trainer_id')) {
+        updates.trainer_id = toTrimmed(payload.trainer_id);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(payload, 'sala_id')) {
+        updates.sala_id = toTrimmed(payload.sala_id);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(payload, 'unidad_movil_id')) {
+        updates.unidad_movil_id = toTrimmed(payload.unidad_movil_id);
+      }
+
       if (!Object.keys(updates).length) {
         return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
       }
@@ -699,6 +946,10 @@ export const handler = async (event: any) => {
           stock_status: true,
           sede: true,
           date: true,
+          trainer_id: true,
+          sala_id: true,
+          unidad_movil_id: true,
+          product: { select: { hora_inicio: true, hora_fin: true } },
         },
       });
 
@@ -706,16 +957,86 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
       }
 
-      try {
-        await updateVariantInWooCommerce(existing.id_padre, existing.id_woo, updates);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'No se pudo actualizar la variante en WooCommerce';
-        return errorResponse('WOO_UPDATE_ERROR', message, 502);
+      const nextTrainerId = Object.prototype.hasOwnProperty.call(updates, 'trainer_id')
+        ? updates.trainer_id ?? null
+        : existing.trainer_id ?? null;
+      const nextSalaId = Object.prototype.hasOwnProperty.call(updates, 'sala_id')
+        ? updates.sala_id ?? null
+        : existing.sala_id ?? null;
+      const nextUnidadId = Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id')
+        ? updates.unidad_movil_id ?? null
+        : existing.unidad_movil_id ?? null;
+      const nextSede = Object.prototype.hasOwnProperty.call(updates, 'sede')
+        ? updates.sede ?? null
+        : existing.sede ?? null;
+      const nextDate = Object.prototype.hasOwnProperty.call(updates, 'date')
+        ? updates.date ?? null
+        : existing.date ?? null;
+
+      if (nextSede && nextSalaId && nextSede.trim().toLowerCase() === 'sabadell') {
+        const room = await prisma.salas.findUnique({
+          where: { sala_id: nextSalaId },
+          select: { sala_id: true, sede: true },
+        });
+        if (!room) {
+          return errorResponse('VALIDATION_ERROR', 'La sala seleccionada no existe', 400);
+        }
+        if ((room.sede ?? '').trim().toLowerCase() !== 'gep sabadell') {
+          return errorResponse(
+            'VALIDATION_ERROR',
+            'La sala seleccionada no pertenece a GEP Sabadell.',
+            400,
+          );
+        }
+      }
+
+      const productTimes = existing.product ?? { hora_inicio: null, hora_fin: null };
+      const variantRange = computeVariantRange(nextDate, productTimes);
+
+      const availabilityError = await ensureVariantResourcesAvailable(prisma, {
+        excludeVariantId: existing.id,
+        trainerId: nextTrainerId,
+        salaId: nextSalaId,
+        unidadId: nextUnidadId,
+        range: variantRange,
+      });
+      if (availabilityError) {
+        return availabilityError;
+      }
+
+      const wooUpdates: VariantWooUpdateInput = {};
+
+      if (Object.prototype.hasOwnProperty.call(updates, 'price')) {
+        wooUpdates.price = updates.price ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'stock')) {
+        wooUpdates.stock = updates.stock ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'stock_status')) {
+        wooUpdates.stock_status = updates.stock_status ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
+        wooUpdates.status = updates.status ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'sede')) {
+        wooUpdates.sede = updates.sede ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'date')) {
+        wooUpdates.date = updates.date ?? null;
+      }
+
+      if (Object.keys(wooUpdates).length) {
+        try {
+          await updateVariantInWooCommerce(existing.id_padre, existing.id_woo, wooUpdates);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'No se pudo actualizar la variante en WooCommerce';
+          return errorResponse('WOO_UPDATE_ERROR', message, 502);
+        }
       }
 
       const timestamp = new Date();
-      const data: Prisma.variantsUpdateInput = { updated_at: timestamp };
+      const data: Prisma.variantsUncheckedUpdateInput = { updated_at: timestamp };
 
       if (Object.prototype.hasOwnProperty.call(updates, 'price')) {
         data.price = updates.price === null || updates.price === undefined ? null : new Prisma.Decimal(updates.price);
@@ -734,6 +1055,15 @@ export const handler = async (event: any) => {
       }
       if (Object.prototype.hasOwnProperty.call(updates, 'date')) {
         data.date = updates.date ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'trainer_id')) {
+        data.trainer_id = updates.trainer_id ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'sala_id')) {
+        data.sala_id = updates.sala_id ?? null;
+      }
+      if (Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id')) {
+        data.unidad_movil_id = updates.unidad_movil_id ?? null;
       }
 
       await prisma.variants.update({
@@ -754,6 +1084,12 @@ export const handler = async (event: any) => {
           stock_status: true,
           sede: true,
           date: true,
+          trainer_id: true,
+          sala_id: true,
+          unidad_movil_id: true,
+          trainer: { select: { trainer_id: true, name: true, apellido: true } },
+          sala: { select: { sala_id: true, name: true, sede: true } },
+          unidad: { select: { unidad_id: true, name: true, matricula: true } },
           created_at: true,
           updated_at: true,
         },

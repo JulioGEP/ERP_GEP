@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { formatTimeFromDb } from './_shared/time';
 
 const APPLICABLE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const DEFAULT_LIMIT = 10;
@@ -487,6 +488,60 @@ function normalizeDateRange(
   };
 }
 
+type VariantTimeParts = { hour: number; minute: number };
+
+function extractVariantTimeParts(value: Date | string | null | undefined): VariantTimeParts | null {
+  const formatted = formatTimeFromDb(value);
+  if (!formatted) return null;
+  const match = formatted.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number.parseInt(match[1], 10);
+  const minute = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function buildVariantDateTime(
+  date: Date,
+  time: VariantTimeParts | null,
+  fallback: VariantTimeParts,
+): Date {
+  const parts = time ?? fallback;
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+  return new Date(Date.UTC(year, month, day, parts.hour, parts.minute, 0, 0));
+}
+
+function computeVariantRange(
+  variantDate: Date | string | null | undefined,
+  productTimes: { hora_inicio: Date | string | null; hora_fin: Date | string | null },
+): DateRange | null {
+  if (!variantDate) {
+    return null;
+  }
+
+  const parsedDate = new Date(variantDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  const startTime = extractVariantTimeParts(productTimes.hora_inicio);
+  const endTime = extractVariantTimeParts(productTimes.hora_fin);
+  const fallbackStart: VariantTimeParts = startTime ?? { hour: 9, minute: 0 };
+  const fallbackEnd: VariantTimeParts = endTime ?? (startTime ? { ...startTime } : { hour: 11, minute: 0 });
+
+  const start = buildVariantDateTime(parsedDate, startTime, fallbackStart);
+  let end = buildVariantDateTime(parsedDate, endTime, fallbackEnd);
+
+  if (end.getTime() <= start.getTime()) {
+    end = new Date(start.getTime() + 60 * 60 * 1000);
+  }
+
+  return { start, end };
+}
+
 async function ensureResourcesAvailable(
   tx: Prisma.TransactionClient,
   {
@@ -651,6 +706,7 @@ export const handler = async (event: any) => {
       }
 
       const excludeSessionId = toTrimmed(event.queryStringParameters?.excludeSessionId);
+      const excludeVariantId = toTrimmed(event.queryStringParameters?.excludeVariantId);
 
       const sessions = await prisma.sessions.findMany({
         where: {
@@ -685,6 +741,41 @@ export const handler = async (event: any) => {
           session.trainers.forEach((trainer) => trainerLocks.add(trainer.trainer_id));
           session.unidades.forEach((unit) => unitLocks.add(unit.unidad_id));
           if (session.sala_id) roomLocks.add(session.sala_id);
+        }
+      });
+
+      const variants = await prisma.variants.findMany({
+        where: {
+          ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
+          date: { not: null },
+          OR: [
+            { trainer_id: { not: null } },
+            { sala_id: { not: null } },
+            { unidad_movil_id: { not: null } },
+          ],
+        },
+        select: {
+          id: true,
+          date: true,
+          trainer_id: true,
+          sala_id: true,
+          unidad_movil_id: true,
+          product: { select: { hora_inicio: true, hora_fin: true } },
+        },
+      });
+
+      variants.forEach((variant) => {
+        const variantRange = computeVariantRange(variant.date, variant.product ?? { hora_inicio: null, hora_fin: null });
+        if (!variantRange) return;
+        if (
+          variantRange.start.getTime() <= range.end.getTime() &&
+          variantRange.end.getTime() >= range.start.getTime()
+        ) {
+          if (variant.trainer_id) trainerLocks.add(variant.trainer_id);
+          if (variant.sala_id) roomLocks.add(variant.sala_id);
+          if (variant.unidad_movil_id && !ALWAYS_AVAILABLE_UNIT_IDS.has(variant.unidad_movil_id)) {
+            unitLocks.add(variant.unidad_movil_id);
+          }
         }
       });
 

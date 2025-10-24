@@ -1457,11 +1457,13 @@ export async function fetchSessionAvailability(params: {
   start: string;
   end?: string;
   excludeSessionId?: string;
+  excludeVariantId?: string;
 }): Promise<SessionAvailability> {
   const searchParams = new URLSearchParams();
   searchParams.set('start', params.start);
   if (params.end) searchParams.set('end', params.end);
   if (params.excludeSessionId) searchParams.set('excludeSessionId', params.excludeSessionId);
+  if (params.excludeVariantId) searchParams.set('excludeVariantId', params.excludeVariantId);
 
   const data = await request(`/sessions/availability?${searchParams.toString()}`);
   const availability = data?.availability ?? {};

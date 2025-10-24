@@ -1,4 +1,5 @@
 import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Accordion,
   Alert,
@@ -14,7 +15,14 @@ import {
   Stack,
 } from 'react-bootstrap';
 
-import { API_BASE, ApiError } from '../presupuestos/api';
+import {
+  API_BASE,
+  ApiError,
+  fetchActiveTrainers,
+  fetchRoomsCatalog,
+  fetchMobileUnitsCatalog,
+  fetchSessionAvailability,
+} from '../presupuestos/api';
 import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailModalAbierta';
 import type { DealSummary } from '../../types/deal';
 import { emitToast } from '../../utils/toast';
@@ -29,6 +37,12 @@ export type VariantInfo = {
   stock_status: string | null;
   sede: string | null;
   date: string | null;
+  trainer_id: string | null;
+  trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  sala_id: string | null;
+  sala: { sala_id: string; name: string; sede: string | null } | null;
+  unidad_movil_id: string | null;
+  unidad: { unidad_id: string; name: string; matricula: string | null } | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -103,6 +117,9 @@ type VariantUpdatePayload = {
   status?: string | null;
   sede?: string | null;
   date?: string | null;
+  trainer_id?: string | null;
+  sala_id?: string | null;
+  unidad_movil_id?: string | null;
 };
 
 type DealProductInfo = {
@@ -403,6 +420,15 @@ function normalizeVariantFromResponse(input: any, fallbackId: string): VariantIn
         ? Number(input.stock)
         : null;
 
+  const trainerIdRaw = input?.trainer_id;
+  const trainerId =
+    trainerIdRaw != null && String(trainerIdRaw).trim().length ? String(trainerIdRaw).trim() : null;
+  const salaIdRaw = input?.sala_id;
+  const salaId = salaIdRaw != null && String(salaIdRaw).trim().length ? String(salaIdRaw).trim() : null;
+  const unidadIdRaw = input?.unidad_movil_id;
+  const unidadId =
+    unidadIdRaw != null && String(unidadIdRaw).trim().length ? String(unidadIdRaw).trim() : null;
+
   return {
     id: String(input?.id ?? fallbackId),
     id_woo: input?.id_woo != null ? String(input.id_woo) : '',
@@ -413,6 +439,42 @@ function normalizeVariantFromResponse(input: any, fallbackId: string): VariantIn
     stock_status: input?.stock_status ?? null,
     sede: input?.sede ?? null,
     date: input?.date ?? null,
+    trainer_id: trainerId,
+    trainer:
+      input?.trainer && typeof input.trainer === 'object'
+        ? {
+            trainer_id:
+              input.trainer.trainer_id != null && String(input.trainer.trainer_id).trim().length
+                ? String(input.trainer.trainer_id).trim()
+                : trainerId,
+            name: input.trainer.name ?? null,
+            apellido: input.trainer.apellido ?? null,
+          }
+        : null,
+    sala_id: salaId,
+    sala:
+      input?.sala && typeof input.sala === 'object'
+        ? {
+            sala_id:
+              input.sala.sala_id != null && String(input.sala.sala_id).trim().length
+                ? String(input.sala.sala_id).trim()
+                : salaId,
+            name: input.sala.name ?? '',
+            sede: input.sala.sede ?? null,
+          }
+        : null,
+    unidad_movil_id: unidadId,
+    unidad:
+      input?.unidad && typeof input.unidad === 'object'
+        ? {
+            unidad_id:
+              input.unidad.unidad_id != null && String(input.unidad.unidad_id).trim().length
+                ? String(input.unidad.unidad_id).trim()
+                : unidadId,
+            name: input.unidad.name ?? '',
+            matricula: input.unidad.matricula ?? null,
+          }
+        : null,
     created_at: input?.created_at ?? null,
     updated_at: input?.updated_at ?? null,
   };
@@ -869,6 +931,9 @@ type VariantFormValues = {
   status: string;
   sede: string;
   date: string;
+  trainer_id: string;
+  sala_id: string;
+  unidad_movil_id: string;
 };
 
 const STOCK_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
@@ -913,6 +978,9 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
     status: variant.status ?? 'publish',
     sede: variant.sede ?? '',
     date: formatDateForInputValue(variant.date),
+    trainer_id: variant.trainer_id ?? '',
+    sala_id: variant.sala_id ?? '',
+    unidad_movil_id: variant.unidad_movil_id ?? '',
   };
 }
 
@@ -1428,6 +1496,9 @@ export function VariantModal({
     status: 'publish',
     sede: '',
     date: '',
+    trainer_id: '',
+    sala_id: '',
+    unidad_movil_id: '',
   });
   const [initialValues, setInitialValues] = useState<VariantFormValues>({
     price: '',
@@ -1436,6 +1507,9 @@ export function VariantModal({
     status: 'publish',
     sede: '',
     date: '',
+    trainer_id: '',
+    sala_id: '',
+    unidad_movil_id: '',
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1484,6 +1558,142 @@ export function VariantModal({
 
   const variantSummary = variantSummaryParts.join(' · ');
   const variantIdWoo = variant?.id_woo ? String(variant.id_woo).trim() : '';
+  const variantSedeNormalized = (variant?.sede ?? '').trim().toLowerCase();
+
+  const trainerDisplay = useMemo(() => {
+    if (!variant) return '—';
+    if (variant.trainer) {
+      const parts = [variant.trainer.name ?? '', variant.trainer.apellido ?? '']
+        .map((part) => part.trim())
+        .filter((part) => part.length);
+      if (parts.length) {
+        return parts.join(' ');
+      }
+    }
+    return variant.trainer_id ?? '—';
+  }, [variant]);
+
+  const roomDisplay = useMemo(() => {
+    if (!variant) return '—';
+    if (variant.sala) {
+      const base = (variant.sala.name ?? '').trim();
+      const sede = variant.sala.sede ? ` (${variant.sala.sede})` : '';
+      const label = `${base}${sede}`.trim();
+      if (label.length) return label;
+    }
+    return variant.sala_id ?? '—';
+  }, [variant]);
+
+  const unitDisplay = useMemo(() => {
+    if (!variant) return '—';
+    if (variant.unidad) {
+      const base = (variant.unidad.name ?? '').trim();
+      const matricula = variant.unidad.matricula ? ` (${variant.unidad.matricula})` : '';
+      const label = `${base}${matricula}`.trim();
+      if (label.length) return label;
+    }
+    return variant.unidad_movil_id ?? '—';
+  }, [variant]);
+
+  const trainersQuery = useQuery({
+    queryKey: ['trainers', 'active'],
+    queryFn: fetchActiveTrainers,
+    enabled: !!variant,
+    staleTime: 5 * 60 * 1000,
+  });
+  const roomsQuery = useQuery({
+    queryKey: ['rooms', 'catalog'],
+    queryFn: fetchRoomsCatalog,
+    enabled: !!variant,
+    staleTime: 5 * 60 * 1000,
+  });
+  const unitsQuery = useQuery({
+    queryKey: ['mobile-units', 'catalog'],
+    queryFn: fetchMobileUnitsCatalog,
+    enabled: !!variant,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const trainers = trainersQuery.data ?? [];
+  const allRooms = roomsQuery.data ?? [];
+  const units = unitsQuery.data ?? [];
+
+  const rooms = useMemo(() => {
+    const base =
+      variantSedeNormalized === 'sabadell'
+        ? allRooms.filter((room) => (room.sede ?? '').trim().toLowerCase() === 'gep sabadell')
+        : allRooms;
+
+    if (formValues.sala_id && !base.some((room) => room.sala_id === formValues.sala_id)) {
+      const selectedRoom = allRooms.find((room) => room.sala_id === formValues.sala_id);
+      return selectedRoom ? [...base, selectedRoom] : base;
+    }
+
+    return base;
+  }, [allRooms, formValues.sala_id, variantSedeNormalized]);
+
+  const variantRange = useMemo(() => {
+    if (!variant?.date) return null;
+    const parsedDate = new Date(variant.date);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return null;
+    }
+
+    const parseTime = (value: string | null | undefined) => {
+      if (!value) return null;
+      const match = String(value).trim().match(/^(\d{1,2}):(\d{2})$/);
+      if (!match) return null;
+      const hour = Number.parseInt(match[1], 10);
+      const minute = Number.parseInt(match[2], 10);
+      if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+      return { hour, minute };
+    };
+
+    const startParts = parseTime(product?.hora_inicio ?? null);
+    const endParts = parseTime(product?.hora_fin ?? null);
+    const effectiveStart = startParts ?? { hour: 9, minute: 0 };
+    const effectiveEnd = endParts ?? (startParts ?? { hour: 11, minute: 0 });
+
+    const year = parsedDate.getFullYear();
+    const month = parsedDate.getMonth();
+    const day = parsedDate.getDate();
+    const build = (parts: { hour: number; minute: number }) =>
+      new Date(Date.UTC(year, month, day, parts.hour, parts.minute, 0, 0));
+
+    const start = build(effectiveStart);
+    let end = build(effectiveEnd);
+    if (end.getTime() <= start.getTime()) {
+      end = new Date(start.getTime() + 60 * 60 * 1000);
+    }
+
+    return { start: start.toISOString(), end: end.toISOString() };
+  }, [product?.hora_fin, product?.hora_inicio, variant?.date]);
+
+  const availabilityQuery = useQuery({
+    queryKey: ['variantAvailability', variant?.id ?? null, variantRange?.start ?? null, variantRange?.end ?? null],
+    queryFn: () =>
+      fetchSessionAvailability({
+        start: variantRange!.start,
+        end: variantRange!.end,
+        excludeVariantId: variant?.id,
+      }),
+    enabled: !!variant && !!variantRange,
+    staleTime: 60 * 1000,
+  });
+
+  const availability = availabilityQuery.data;
+  const blockedTrainerIds = useMemo(
+    () => new Set(availability?.trainers ?? []),
+    [availability?.trainers],
+  );
+  const blockedRoomIds = useMemo(() => new Set(availability?.rooms ?? []), [availability?.rooms]);
+  const blockedUnitIds = useMemo(() => new Set(availability?.units ?? []), [availability?.units]);
+
+  const trainersLoading = trainersQuery.isLoading;
+  const roomsLoading = roomsQuery.isLoading;
+  const unitsLoading = unitsQuery.isLoading;
+  const availabilityLoading = availabilityQuery.isLoading;
 
   useEffect(() => {
     if (!variant) {
@@ -1494,6 +1704,9 @@ export function VariantModal({
         status: 'publish',
         sede: '',
         date: '',
+        trainer_id: '',
+        sala_id: '',
+        unidad_movil_id: '',
       });
       setInitialValues({
         price: '',
@@ -1502,6 +1715,9 @@ export function VariantModal({
         status: 'publish',
         sede: '',
         date: '',
+        trainer_id: '',
+        sala_id: '',
+        unidad_movil_id: '',
       });
       setSaveError(null);
       setSaveSuccess(null);
@@ -1651,7 +1867,10 @@ export function VariantModal({
     formValues.stock_status !== initialValues.stock_status ||
     formValues.status !== initialValues.status ||
     formValues.sede !== initialValues.sede ||
-    formValues.date !== initialValues.date;
+    formValues.date !== initialValues.date ||
+    formValues.trainer_id !== initialValues.trainer_id ||
+    formValues.sala_id !== initialValues.sala_id ||
+    formValues.unidad_movil_id !== initialValues.unidad_movil_id;
 
   const handleSave = async (closeAfter: boolean) => {
     if (!variant) return;
@@ -1683,6 +1902,18 @@ export function VariantModal({
     }
     if (formValues.date !== initialValues.date) {
       payload.date = formValues.date || null;
+    }
+    if (formValues.trainer_id !== initialValues.trainer_id) {
+      const trimmed = formValues.trainer_id.trim();
+      payload.trainer_id = trimmed.length ? trimmed : null;
+    }
+    if (formValues.sala_id !== initialValues.sala_id) {
+      const trimmed = formValues.sala_id.trim();
+      payload.sala_id = trimmed.length ? trimmed : null;
+    }
+    if (formValues.unidad_movil_id !== initialValues.unidad_movil_id) {
+      const trimmed = formValues.unidad_movil_id.trim();
+      payload.unidad_movil_id = trimmed.length ? trimmed : null;
     }
 
     if (!Object.keys(payload).length) {
@@ -1781,6 +2012,87 @@ export function VariantModal({
                       disabled
                       readOnly
                     />
+                  </Form.Group>
+                </Col>
+              </Row>
+
+              <Row className="g-3">
+                <Col md={4}>
+                  <Form.Group controlId="variantTrainer" className="mb-0">
+                    <Form.Label>Formador</Form.Label>
+                    <Form.Select
+                      value={formValues.trainer_id}
+                      onChange={handleChange('trainer_id')}
+                      disabled={isSaving || trainersLoading || availabilityLoading}
+                    >
+                      <option value="">Sin formador</option>
+                      {trainers.map((trainer) => {
+                        const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
+                        const blocked =
+                          blockedTrainerIds.has(trainer.trainer_id) && trainer.trainer_id !== formValues.trainer_id;
+                        return (
+                          <option
+                            key={trainer.trainer_id}
+                            value={trainer.trainer_id}
+                            disabled={blocked}
+                          >
+                            {blocked ? `${label} · No disponible` : label}
+                          </option>
+                        );
+                      })}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group controlId="variantRoom" className="mb-0">
+                    <Form.Label>Sala</Form.Label>
+                    <Form.Select
+                      value={formValues.sala_id}
+                      onChange={handleChange('sala_id')}
+                      disabled={isSaving || roomsLoading || availabilityLoading}
+                    >
+                      <option value="">Sin sala</option>
+                      {rooms.map((room) => {
+                        const label = room.sede ? `${room.name} (${room.sede})` : room.name;
+                        const sedeMatches = (room.sede ?? '').trim().toLowerCase() === 'gep sabadell';
+                        const disallowedBySede = variantSedeNormalized === 'sabadell' && !sedeMatches;
+                        const blocked =
+                          (blockedRoomIds.has(room.sala_id) && room.sala_id !== formValues.sala_id) ||
+                          disallowedBySede;
+                        return (
+                          <option key={room.sala_id} value={room.sala_id} disabled={blocked}>
+                            {blocked ? `${label} · No disponible` : label}
+                          </option>
+                        );
+                      })}
+                      {!rooms.length && !roomsLoading ? (
+                        <option value="" disabled>
+                          No hay salas disponibles
+                        </option>
+                      ) : null}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group controlId="variantUnit" className="mb-0">
+                    <Form.Label>Unidad móvil</Form.Label>
+                    <Form.Select
+                      value={formValues.unidad_movil_id}
+                      onChange={handleChange('unidad_movil_id')}
+                      disabled={isSaving || unitsLoading || availabilityLoading}
+                    >
+                      <option value="">Sin unidad móvil</option>
+                      {units.map((unit) => {
+                        const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
+                        const blocked =
+                          blockedUnitIds.has(unit.unidad_id) && unit.unidad_id !== formValues.unidad_movil_id;
+                        return (
+                          <option key={unit.unidad_id} value={unit.unidad_id} disabled={blocked}>
+                            {blocked ? `${label} · No disponible` : label}
+                          </option>
+                        );
+                      })}
+                    </Form.Select>
                   </Form.Group>
                 </Col>
               </Row>
@@ -1910,6 +2222,15 @@ export function VariantModal({
             </div>
 
             <dl className="row mb-0">
+              <dt className="col-sm-4 text-muted">Formador</dt>
+              <dd className="col-sm-8">{trainerDisplay}</dd>
+
+              <dt className="col-sm-4 text-muted">Sala</dt>
+              <dd className="col-sm-8">{roomDisplay}</dd>
+
+              <dt className="col-sm-4 text-muted">Unidad móvil</dt>
+              <dd className="col-sm-8">{unitDisplay}</dd>
+
               <dt className="col-sm-4 text-muted">Creada</dt>
               <dd className="col-sm-8">{formatDate(variant.created_at) ?? '—'}</dd>
 
