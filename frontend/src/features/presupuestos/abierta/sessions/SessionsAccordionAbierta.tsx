@@ -1570,6 +1570,17 @@ type DealVariantSelectOption = {
   value: string;
   label: string;
   date: string | null;
+  sede: string | null;
+  isCurrent: boolean;
+};
+
+type DealVariantOptionGroup = {
+  productId: string;
+  productName: string | null;
+  productCode: string | null;
+  options: DealVariantSelectOption[];
+  hasCurrentVariant: boolean;
+  isActiveProduct: boolean;
 };
 
 type ApplicableProductInfo = {
@@ -1854,13 +1865,13 @@ export function SessionsAccordionAbierta({
     [currentVariantInfo],
   );
 
-  const matchesProduct = useCallback(
+  const matchesProductById = useCallback(
     (variant: ProductVariantOption, product: ApplicableProductInfo) => {
       const variantIds = new Set<string>();
+      // Only rely on stable identifiers; product codes can be reused across deals.
       [
         variant.productId,
         variant.productPipeId,
-        variant.productCode,
         variant.productWooId,
         variant.parentWooId,
       ].forEach((value) => {
@@ -1868,7 +1879,14 @@ export function SessionsAccordionAbierta({
         if (normalized) variantIds.add(normalized);
       });
 
-      if (product.matchIds.some((id) => variantIds.has(id))) {
+      return product.matchIds.some((id) => variantIds.has(id));
+    },
+    [normalizeExact],
+  );
+
+  const matchesProduct = useCallback(
+    (variant: ProductVariantOption, product: ApplicableProductInfo) => {
+      if (matchesProductById(variant, product)) {
         return true;
       }
 
@@ -1884,7 +1902,7 @@ export function SessionsAccordionAbierta({
 
       return product.matchTexts.some((text) => variantTexts.has(text));
     },
-    [normalizeExact, normalizeText],
+    [matchesProductById, normalizeText],
   );
 
   const normalizedDealSedeKey = useMemo(
@@ -1892,43 +1910,68 @@ export function SessionsAccordionAbierta({
     [normalizedDealSede],
   );
 
-  const allowedVariantParentIds = useMemo(() => {
-    const ids = new Set<string>();
+  const allowedVariantParentsByProduct = useMemo(() => {
+    const map = new Map<string, Set<string>>();
 
-    const add = (value: string | null | undefined) => {
+    const add = (productId: string, value: string | null | undefined) => {
       const normalized = normalizeExact(value);
-      if (normalized) {
-        ids.add(normalized);
+      if (!normalized) {
+        return;
+      }
+      const existing = map.get(productId);
+      if (existing) {
+        existing.add(normalized);
+      } else {
+        map.set(productId, new Set([normalized]));
       }
     };
 
-    add(currentVariantInfo?.parentWooId ?? currentVariantInfo?.productWooId);
-
     applicableProducts.forEach((product) => {
-      const matchingVariant = productVariants.find((variant) => matchesProduct(variant, product));
-      if (matchingVariant) {
-        add(matchingVariant.parentWooId ?? matchingVariant.productWooId);
-      }
+      productVariants.forEach((variant) => {
+        if (!matchesProductById(variant, product)) {
+          return;
+        }
+        add(product.id, variant.parentWooId ?? variant.productWooId);
+      });
     });
 
-    return ids;
-  }, [applicableProducts, currentVariantInfo, matchesProduct, normalizeExact, productVariants]);
+    if (currentVariantInfo) {
+      const parentId = currentVariantInfo.parentWooId ?? currentVariantInfo.productWooId;
+      if (parentId) {
+        const matchedProduct =
+          applicableProducts.find((product) => matchesProductById(currentVariantInfo, product)) ??
+          applicableProducts.find((product) => matchesProduct(currentVariantInfo, product));
+        if (matchedProduct) {
+          add(matchedProduct.id, parentId);
+        }
+      }
+    }
+
+    return map;
+  }, [
+    applicableProducts,
+    currentVariantInfo,
+    matchesProduct,
+    matchesProductById,
+    normalizeExact,
+    productVariants,
+  ]);
 
   const activeVariantProduct = useMemo(() => {
     if (currentVariantInfo) {
       return (
-        applicableProducts.find((product) => matchesProduct(currentVariantInfo, product)) ?? null
+        applicableProducts.find((product) => matchesProductById(currentVariantInfo, product)) ??
+        applicableProducts.find((product) => matchesProduct(currentVariantInfo, product)) ??
+        null
       );
     }
     return applicableProducts.length === 1 ? applicableProducts[0] : null;
-  }, [applicableProducts, currentVariantInfo, matchesProduct]);
+  }, [applicableProducts, currentVariantInfo, matchesProduct, matchesProductById]);
 
-  const variantSelectOptions = useMemo(() => {
-    if (!applicableProducts.length) return [] as DealVariantSelectOption[];
+  const variantOptionGroups = useMemo(() => {
+    if (!applicableProducts.length) return [] as DealVariantOptionGroup[];
 
     const relevantProducts = activeVariantProduct ? [activeVariantProduct] : applicableProducts;
-    const options: Array<{ option: DealVariantSelectOption; sortKey: number }> = [];
-    const seenValues = new Set<string>();
     const dateFormatter = new Intl.DateTimeFormat('es-ES', {
       timeZone: MADRID_TIMEZONE,
       year: 'numeric',
@@ -1943,90 +1986,128 @@ export function SessionsAccordionAbierta({
     });
     const todayKey = comparisonFormatter.format(new Date());
 
-    for (const variant of productVariants) {
-      const value = variant.wooId;
-      if (!value) continue;
-      if (seenValues.has(value)) continue;
+    const groups: DealVariantOptionGroup[] = [];
 
-      const matchedProduct = relevantProducts.find((product) => matchesProduct(variant, product));
-      if (!matchedProduct) continue;
+    relevantProducts.forEach((product) => {
+      const allowedParents = allowedVariantParentsByProduct.get(product.id);
+      const entries: Array<{ option: DealVariantSelectOption; sortKey: number }> = [];
+      const seenValues = new Set<string>();
+      const isActiveProduct = activeVariantProduct?.id === product.id;
 
-      const normalizedVariantSede = normalizeVariantSedeKey(variant.sede);
-      const isCurrentVariant =
-        (normalizedCurrentVariantWooId && normalizeExact(variant.wooId) === normalizedCurrentVariantWooId) ||
-        (normalizedCurrentVariantId && normalizeExact(variant.variantId) === normalizedCurrentVariantId);
+      for (const variant of productVariants) {
+        const value = typeof variant.wooId === 'string' ? variant.wooId.trim() : '';
+        if (!value || seenValues.has(value)) continue;
 
-      const normalizedParentWooId = normalizeExact(variant.parentWooId ?? variant.productWooId);
-      if (
-        allowedVariantParentIds.size > 0 &&
-        (!normalizedParentWooId || !allowedVariantParentIds.has(normalizedParentWooId))
-      ) {
-        if (!isCurrentVariant) {
+        const normalizedVariantSede = normalizeVariantSedeKey(variant.sede);
+        const normalizedParentWooId = normalizeExact(variant.parentWooId ?? variant.productWooId);
+        const isCurrentVariant =
+          (normalizedCurrentVariantWooId != null &&
+            normalizeExact(variant.wooId) === normalizedCurrentVariantWooId) ||
+          (normalizedCurrentVariantId != null &&
+            normalizeExact(variant.variantId) === normalizedCurrentVariantId);
+
+        if (allowedParents && allowedParents.size > 0) {
+          if (!normalizedParentWooId || !allowedParents.has(normalizedParentWooId)) {
+            if (!isCurrentVariant) {
+              continue;
+            }
+          }
+        } else if (!matchesProductById(variant, product)) {
+          if (!isCurrentVariant) {
+            continue;
+          }
+        }
+
+        if (normalizedDealSedeKey) {
+          if (normalizedVariantSede !== normalizedDealSedeKey && !isCurrentVariant) {
+            continue;
+          }
+        } else if (normalizedCurrentVariantSede && normalizedVariantSede !== normalizedCurrentVariantSede) {
+          if (!isCurrentVariant) {
+            continue;
+          }
+        }
+
+        let sortKey = Number.POSITIVE_INFINITY;
+        let label: string | null = (variant.name ?? '').trim() || null;
+        let variantDateKey: string | null = null;
+        let formattedDate: string | null = null;
+
+        if (variant.date) {
+          const parsed = new Date(variant.date);
+          if (!Number.isNaN(parsed.getTime())) {
+            sortKey = parsed.getTime();
+            variantDateKey = comparisonFormatter.format(parsed);
+            formattedDate = dateFormatter.format(parsed);
+          }
+        }
+
+        if (!variantDateKey) {
+          if (!isCurrentVariant) {
+            continue;
+          }
+        } else if (!isCurrentVariant && variantDateKey < todayKey) {
           continue;
         }
-      }
 
-      if (normalizedDealSedeKey) {
-        if (normalizedVariantSede !== normalizedDealSedeKey && !isCurrentVariant) {
-          continue;
+        if (!label) {
+          label = formattedDate ?? `Variante ${value}`;
         }
-      } else if (normalizedCurrentVariantSede && normalizedVariantSede !== normalizedCurrentVariantSede) {
-        if (!isCurrentVariant) {
-          continue;
-        }
+
+        entries.push({
+          option: {
+            value,
+            label,
+            date: variant.date ?? null,
+            sede: variant.sede ?? null,
+            isCurrent: isCurrentVariant,
+          },
+          sortKey,
+        });
+        seenValues.add(value);
       }
 
-      let sortKey = Number.POSITIVE_INFINITY;
-      let label: string | null = (variant.name ?? '').trim() || null;
-      let variantDateKey: string | null = null;
-      let formattedDate: string | null = null;
-
-      if (variant.date) {
-        const parsed = new Date(variant.date);
-        if (!Number.isNaN(parsed.getTime())) {
-          sortKey = parsed.getTime();
-          variantDateKey = comparisonFormatter.format(parsed);
-          formattedDate = dateFormatter.format(parsed);
-        }
+      if (!entries.length) {
+        return;
       }
 
-      if (!variantDateKey) {
-        if (!isCurrentVariant) {
-          continue;
-        }
-      } else if (!isCurrentVariant && variantDateKey < todayKey) {
-        continue;
-      }
-
-      if (!label) {
-        label = formattedDate ?? `Variante ${value}`;
-      }
-
-      options.push({ option: { value, label, date: variant.date ?? null }, sortKey });
-      seenValues.add(value);
-    }
-
-    return options
-      .sort((a, b) => {
+      entries.sort((a, b) => {
         if (a.sortKey !== b.sortKey) {
           return a.sortKey - b.sortKey;
         }
         return a.option.label.localeCompare(b.option.label, 'es');
-      })
-      .map((item) => item.option);
+      });
+
+      const hasCurrentVariant = entries.some((entry) => entry.option.isCurrent);
+
+      groups.push({
+        productId: product.id,
+        productName: product.name ?? null,
+        productCode: product.code ?? null,
+        options: entries.map((entry) => entry.option),
+        hasCurrentVariant,
+        isActiveProduct,
+      });
+    });
+
+    return groups;
   }, [
     activeVariantProduct,
-    allowedVariantParentIds,
+    allowedVariantParentsByProduct,
     applicableProducts,
-    matchesProduct,
+    matchesProductById,
     normalizeExact,
-    normalizeText,
     productVariants,
     normalizedCurrentVariantId,
     normalizedCurrentVariantSede,
     normalizedCurrentVariantWooId,
     normalizedDealSedeKey,
   ]);
+
+  const variantSelectOptions = useMemo(
+    () => variantOptionGroups.flatMap((group) => group.options),
+    [variantOptionGroups],
+  );
 
   const variantOptionsLoading = productVariantsQuery.isLoading || productVariantsQuery.isFetching;
   const [variantSaving, setVariantSaving] = useState(false);
@@ -2903,11 +2984,11 @@ export function SessionsAccordionAbierta({
                 ) : null}
               </Modal.Title>
             </Modal.Header>
-            <Modal.Body>
-              {activeForm ? (
-                <SessionEditor
-                  form={activeForm}
-                  status={activeStatus}
+          <Modal.Body>
+            {activeForm ? (
+              <SessionEditor
+                form={activeForm}
+                status={activeStatus}
                   trainers={trainers}
                   rooms={rooms}
                   units={units}
@@ -2919,12 +3000,13 @@ export function SessionsAccordionAbierta({
                   dealTrainingDate={currentDealTrainingDate}
                   dealVariation={currentDealVariation}
                   dealVariationName={currentVariantName}
-                  variantOptions={variantSelectOptions}
-                  variantOptionsLoading={variantOptionsLoading}
-                  variantSaving={variantSaving}
-                  onVariantSelect={handleVariantSelect}
-                  onNotify={onNotify}
-                />
+                variantOptionGroups={variantOptionGroups}
+                variantOptions={variantSelectOptions}
+                variantOptionsLoading={variantOptionsLoading}
+                variantSaving={variantSaving}
+                onVariantSelect={handleVariantSelect}
+                onNotify={onNotify}
+              />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
               )}
@@ -2970,6 +3052,7 @@ interface SessionEditorProps {
   dealTrainingDate: string | null;
   dealVariation: string | null;
   dealVariationName: string | null;
+  variantOptionGroups: DealVariantOptionGroup[];
   variantOptions: DealVariantSelectOption[];
   variantOptionsLoading?: boolean;
   variantSaving?: boolean;
@@ -2991,6 +3074,7 @@ function SessionEditor({
   dealTrainingDate,
   dealVariation,
   dealVariationName,
+  variantOptionGroups,
   variantOptions,
   variantOptionsLoading,
   variantSaving,
@@ -3001,7 +3085,7 @@ function SessionEditor({
   const [unitFilter, setUnitFilter] = useState('');
   const [trainerListOpen, setTrainerListOpen] = useState(false);
   const [unitListOpen, setUnitListOpen] = useState(false);
-  const [variantSelection, setVariantSelection] = useState('');
+  const [variantSelection, setVariantSelection] = useState<string | null>(null);
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const trainerPointerInteractingRef = useRef(false);
@@ -3010,6 +3094,17 @@ function SessionEditor({
   const effectiveTrainers = ENABLE_TRAINERS ? trainers : [];
   const effectiveUnits = ENABLE_MOBILE_UNITS ? units : [];
   const effectiveRooms = ENABLE_ROOMS ? rooms : [];
+  const variantGroupDefaultKeys = useMemo(() => {
+    if (!variantOptionGroups.length) return [] as string[];
+    const preferred = variantOptionGroups
+      .filter((group) => group.hasCurrentVariant || group.isActiveProduct)
+      .map((group) => group.productId);
+    if (preferred.length) {
+      return preferred;
+    }
+    return [variantOptionGroups[0].productId];
+  }, [variantOptionGroups]);
+  const variantDateFormatter = useMemo(() => new Intl.DateTimeFormat('es-ES'), []);
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
@@ -3105,29 +3200,18 @@ function SessionEditor({
     return dealTrainingDate.trim();
   }, [dealTrainingDate]);
 
-  const variantSelectDisabled = variantSaving || variantOptionsLoading || variantOptions.length === 0;
+  const variantSelectDisabled =
+    variantSaving || variantOptionsLoading || variantOptions.length === 0;
 
-  const variantSelectPlaceholder = useMemo(() => {
-    if (variantOptionsLoading) return 'Cargando variantes…';
-    if (!variantOptions.length) return 'No hay variantes disponibles';
-    return 'Selecciona una variante…';
-  }, [variantOptionsLoading, variantOptions.length]);
-
-  const handleVariantSelectChange = useCallback(
-    async (event: ChangeEvent<HTMLSelectElement>) => {
-      const value = event.target.value;
-      if (!value || variantSelectDisabled) {
-        setVariantSelection('');
+  const handleVariantOptionPick = useCallback(
+    async (nextWooId: string) => {
+      if (!nextWooId || variantSelectDisabled) {
         return;
       }
 
-      setVariantSelection(value);
-      try {
-        if (onVariantSelect) {
-          await onVariantSelect(value);
-        }
-      } finally {
-        setVariantSelection('');
+      setVariantSelection(nextWooId);
+      if (onVariantSelect) {
+        await onVariantSelect(nextWooId);
       }
     },
     [onVariantSelect, variantSelectDisabled],
@@ -3175,12 +3259,18 @@ function SessionEditor({
   useEffect(() => {
     setTrainerListOpen(false);
     setUnitListOpen(false);
-    setVariantSelection('');
+    setVariantSelection(null);
   }, [form.id]);
 
   useEffect(() => {
-    setVariantSelection('');
+    setVariantSelection(null);
   }, [dealVariation]);
+
+  useEffect(() => {
+    if (!variantSaving) {
+      setVariantSelection(null);
+    }
+  }, [variantSaving]);
 
   return (
     <div className="session-editor bg-white rounded-3 p-3">
@@ -3194,32 +3284,108 @@ function SessionEditor({
               value={variationDisplay}
               title={buildFieldTooltip(variationTooltip || variationDisplay)}
             />
-            <Form.Select
-              className="mt-2"
-              value={variantSelection}
-              onChange={handleVariantSelectChange}
-              disabled={variantSelectDisabled}
-              aria-label="Seleccionar variante para el presupuesto"
-            >
-              <option value="">{variantSelectPlaceholder}</option>
-              {variantOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Form.Select>
-            {variantOptionsLoading ? (
-              <div className="d-flex align-items-center gap-2 text-muted mt-1 small">
-                <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
-                Cargando variantes…
-              </div>
-            ) : null}
-            {variantSaving ? (
-              <div className="d-flex align-items-center gap-2 text-muted mt-1 small">
-                <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
-                Actualizando variante…
-              </div>
-            ) : null}
+            <div className="mt-2">
+              {variantOptionsLoading ? (
+                <div className="d-flex align-items-center gap-2 text-muted small">
+                  <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                  Cargando variantes…
+                </div>
+              ) : variantOptionGroups.length ? (
+                <Accordion
+                  alwaysOpen
+                  className="variant-selector-accordion"
+                  defaultActiveKey={variantGroupDefaultKeys}
+                >
+                  {variantOptionGroups.map((group) => {
+                    const eventKey = group.productId;
+                    const productLabelParts: string[] = [];
+                    if (group.productName) {
+                      productLabelParts.push(group.productName);
+                    }
+                    if (group.productCode) {
+                      productLabelParts.push(`Código ${group.productCode}`);
+                    }
+                    const headerLabel = productLabelParts.join(' · ') || 'Producto';
+
+                    return (
+                      <Accordion.Item eventKey={eventKey} key={eventKey} className="variant-selector-item">
+                        <Accordion.Header>
+                          <div className="d-flex align-items-center gap-2">
+                            <span>{headerLabel}</span>
+                            {group.isActiveProduct ? (
+                              <Badge bg="secondary" className="text-uppercase">
+                                Sesión
+                              </Badge>
+                            ) : null}
+                            {group.hasCurrentVariant ? (
+                              <Badge bg="primary" className="text-uppercase">Asignada</Badge>
+                            ) : null}
+                          </div>
+                        </Accordion.Header>
+                        <Accordion.Body className="pt-0">
+                          <ListGroup variant="flush" className="border rounded-3 overflow-hidden">
+                            {group.options.map((option) => {
+                              const isProcessing = variantSelection === option.value;
+                              const disabled = variantSelectDisabled;
+                              const sedeLabel = option.sede ? formatSedeLabel(option.sede) : null;
+
+                              return (
+                                <ListGroup.Item
+                                  action
+                                  as="button"
+                                  key={option.value}
+                                  onClick={() => {
+                                    void handleVariantOptionPick(option.value);
+                                  }}
+                                  disabled={disabled}
+                                  active={option.isCurrent}
+                                  className="text-start"
+                                >
+                                  <div className="d-flex justify-content-between align-items-start gap-3">
+                                    <div>
+                                      <div className="fw-semibold">{option.label}</div>
+                                      {option.date ? (
+                                        <div className="text-muted small">
+                                          {(() => {
+                                            const parsed = new Date(option.date!);
+                                            return Number.isNaN(parsed.getTime())
+                                              ? option.date
+                                              : variantDateFormatter.format(parsed);
+                                          })()}
+                                        </div>
+                                      ) : null}
+                                      {sedeLabel ? (
+                                        <div className="text-muted small text-uppercase mt-1">{sedeLabel}</div>
+                                      ) : null}
+                                    </div>
+                                    <div className="d-flex align-items-center gap-2">
+                                      {option.isCurrent ? (
+                                        <Badge bg="info" className="text-uppercase">Actual</Badge>
+                                      ) : null}
+                                      {variantSaving && isProcessing ? (
+                                        <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </ListGroup.Item>
+                              );
+                            })}
+                          </ListGroup>
+                        </Accordion.Body>
+                      </Accordion.Item>
+                    );
+                  })}
+                </Accordion>
+              ) : (
+                <div className="text-muted small">No hay variantes disponibles.</div>
+              )}
+              {variantSaving ? (
+                <div className="d-flex align-items-center gap-2 text-muted small mt-2">
+                  <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                  Actualizando variante…
+                </div>
+              ) : null}
+            </div>
           </Form.Group>
         </Col>
         <Col md={6} lg={4}>
