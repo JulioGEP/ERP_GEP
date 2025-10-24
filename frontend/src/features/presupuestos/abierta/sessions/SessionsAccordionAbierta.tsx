@@ -126,6 +126,17 @@ const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
 const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['BORRADOR', 'SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
 const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
 
+function buildSessionDisplayName(rawName: string | null | undefined, displayIndex: number): string {
+  if (typeof rawName === 'string') {
+    const trimmed = rawName.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+
+  return `Sesión ${displayIndex}`;
+}
+
 function formatErrorMessage(error: unknown, fallback: string): string {
   if (isApiError(error)) {
     if (error.code === 'PAYLOAD_TOO_LARGE' || error.status === 413) {
@@ -2683,9 +2694,10 @@ export function SessionsAccordionAbierta({
                     const status =
                       saveStatus[session.id] ?? { saving: false, error: null, dirty: false };
                     if (!form) return null;
-                    const displayIndex = ((pagination.page ?? currentPage) - 1) * SESSION_LIMIT + sessionIndex + 1;
+                    const displayIndex =
+                      ((pagination.page ?? currentPage) - 1) * SESSION_LIMIT + sessionIndex + 1;
                     const productName = product.name ?? product.code ?? 'Producto';
-                    const sessionName = form.nombre_cache?.trim() || `Sesión ${displayIndex}`;
+                    const sessionName = buildSessionDisplayName(form.nombre_cache, displayIndex);
                     return (
                       <ListGroup.Item
                         key={session.id}
@@ -2857,7 +2869,12 @@ export function SessionsAccordionAbierta({
           >
             <Modal.Header closeButton closeVariant="white" className="border-0">
               <Modal.Title className="session-modal-title d-flex align-items-center justify-content-between gap-3">
-                <span>{activeForm?.nombre_cache?.trim() || `Sesión ${activeSession.displayIndex}`}</span>
+                <span>
+                  {buildSessionDisplayName(
+                    activeForm?.nombre_cache,
+                    activeSession.displayIndex,
+                  )}
+                </span>
                 {ENABLE_SESSION_STATE && activeForm ? (
                   <SessionStateBadge estado={activeForm.estado} />
                 ) : null}

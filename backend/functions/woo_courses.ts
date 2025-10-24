@@ -67,6 +67,8 @@ const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
 const WOO_KEY = process.env.WOO_KEY || '';
 const WOO_SECRET = process.env.WOO_SECRET || '';
 
+const DEFAULT_SYNC_CONCURRENCY = 3;
+
 const ESSENTIAL_VARIATION_FIELDS = new Set([
   'id',
   'name',
@@ -136,6 +138,20 @@ function ensureConfigured() {
   if (!WOO_BASE || !WOO_KEY || !WOO_SECRET) {
     throw new Error('WooCommerce env vars missing');
   }
+}
+
+function resolveSyncConcurrency(): number {
+  const raw = process.env.WOO_SYNC_CONCURRENCY;
+  if (!raw) {
+    return DEFAULT_SYNC_CONCURRENCY;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_SYNC_CONCURRENCY;
+  }
+
+  return Math.min(parsed, 6);
 }
 
 function removeImageFields(input: any): any {
@@ -771,29 +787,43 @@ async function syncAllProducts(): Promise<SyncResult> {
     return { ok: true, logs, summary };
   }
 
-  for (const product of productsRaw) {
+  const concurrency = resolveSyncConcurrency();
+
+  const processProduct = async (
+    product: (typeof productsRaw)[number],
+  ): Promise<{
+    logs: SyncLogEntry[];
+    summary: ProductSyncReport;
+    totals: SyncTotals;
+    failed: boolean;
+  }> => {
+    const productLogs: SyncLogEntry[] = [];
     const productWooId = product.id_woo;
 
     if (productWooId === null) {
-      logs.push({
+      productLogs.push({
         type: 'warning',
         message: 'Producto sin ID de WooCommerce; se omite la sincronización.',
         productName: product.name ?? null,
       });
-      summary.products.push({
-        productId: product.id,
-        productWooId: '—',
-        productName: product.name ?? null,
-        fetchedVariations: 0,
-        validVariations: 0,
-        skippedVariations: 0,
-        added: [],
-        updated: [],
-        removed: [],
-        error: 'Producto sin ID de WooCommerce en la base de datos.',
-      });
-      summary.failedProducts += 1;
-      continue;
+
+      return {
+        logs: productLogs,
+        summary: {
+          productId: product.id,
+          productWooId: '—',
+          productName: product.name ?? null,
+          fetchedVariations: 0,
+          validVariations: 0,
+          skippedVariations: 0,
+          added: [],
+          updated: [],
+          removed: [],
+          error: 'Producto sin ID de WooCommerce en la base de datos.',
+        },
+        totals: { added: 0, updated: 0, removed: 0 },
+        failed: true,
+      };
     }
 
     const normalizedProduct: ProductWithWooId = {
@@ -802,10 +832,11 @@ async function syncAllProducts(): Promise<SyncResult> {
       name: product.name ?? null,
     };
 
-    logs.push({
+    const productWooIdString = productWooId.toString();
+    productLogs.push({
       type: 'info',
-      message: `Analizando producto ${productWooId.toString()}.`,
-      productWooId: productWooId.toString(),
+      message: `Analizando producto ${productWooIdString}.`,
+      productWooId: productWooIdString,
       productName: product.name ?? null,
     });
 
@@ -813,35 +844,61 @@ async function syncAllProducts(): Promise<SyncResult> {
       const variations = await fetchWooVariations(productWooId);
       const result = await syncProductVariations(prisma, normalizedProduct, variations);
 
+      productLogs.push(...result.logs);
+
+      return {
+        logs: productLogs,
+        summary: result.summary,
+        totals: result.totals,
+        failed: false,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error inesperado';
+
+      productLogs.push({
+        type: 'error',
+        message: `Error al sincronizar el producto ${productWooIdString}: ${message}`,
+        productWooId: productWooIdString,
+        productName: product.name ?? null,
+      });
+
+      return {
+        logs: productLogs,
+        summary: {
+          productId: product.id,
+          productWooId: productWooIdString,
+          productName: product.name ?? null,
+          fetchedVariations: 0,
+          validVariations: 0,
+          skippedVariations: 0,
+          added: [],
+          updated: [],
+          removed: [],
+          error: message,
+        },
+        totals: { added: 0, updated: 0, removed: 0 },
+        failed: true,
+      };
+    }
+  };
+
+  for (let index = 0; index < productsRaw.length; index += concurrency) {
+    const batch = productsRaw.slice(index, index + concurrency);
+    const results = await Promise.all(batch.map((product) => processProduct(product)));
+
+    for (const result of results) {
       logs.push(...result.logs);
       summary.products.push(result.summary);
+
+      if (result.failed) {
+        summary.failedProducts += 1;
+        continue;
+      }
+
       summary.processedProducts += 1;
       summary.totals.added += result.totals.added;
       summary.totals.updated += result.totals.updated;
       summary.totals.removed += result.totals.removed;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error inesperado';
-      logs.push({
-        type: 'error',
-        message: `Error al sincronizar el producto ${productWooId.toString()}: ${message}`,
-        productWooId: productWooId.toString(),
-        productName: product.name ?? null,
-      });
-
-      summary.products.push({
-        productId: product.id,
-        productWooId: productWooId.toString(),
-        productName: product.name ?? null,
-        fetchedVariations: 0,
-        validVariations: 0,
-        skippedVariations: 0,
-        added: [],
-        updated: [],
-        removed: [],
-        error: message,
-      });
-
-      summary.failedProducts += 1;
     }
   }
 
