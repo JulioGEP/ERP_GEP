@@ -5,6 +5,13 @@ import type { PrismaClient } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { formatTimeFromDb } from './_shared/time';
+import { toMadridISOString } from './_shared/timezone';
+import {
+  getVariantResourceColumnsSupport,
+  isVariantResourceColumnError,
+  setVariantResourceColumnsSupport,
+} from './_shared/variant-resources';
+import { mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 
@@ -109,6 +116,10 @@ async function ensureVariantResourcesAvailable(
     return null;
   }
 
+  if (getVariantResourceColumnsSupport() === false) {
+    return null;
+  }
+
   const sessionConditions: Prisma.sessionsWhereInput[] = [];
   if (normalizedTrainerId) {
     sessionConditions.push({ trainers: { some: { trainer_id: normalizedTrainerId } } });
@@ -159,21 +170,35 @@ async function ensureVariantResourcesAvailable(
     return null;
   }
 
-  const variants = await prisma.variants.findMany({
-    where: {
-      ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
-      date: { not: null },
-      OR: variantConditions,
-    },
-    select: {
-      id: true,
-      date: true,
-      trainer_id: true,
-      sala_id: true,
-      unidad_movil_id: true,
-      product: { select: { hora_inicio: true, hora_fin: true } },
-    },
-  });
+  let variants;
+  try {
+    variants = await prisma.variants.findMany({
+      where: {
+        ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
+        date: { not: null },
+        OR: variantConditions,
+      },
+      select: {
+        id: true,
+        date: true,
+        trainer_id: true,
+        sala_id: true,
+        unidad_movil_id: true,
+        product: { select: { hora_inicio: true, hora_fin: true } },
+      },
+    });
+    setVariantResourceColumnsSupport(true);
+  } catch (error) {
+    if (isVariantResourceColumnError(error)) {
+      setVariantResourceColumnsSupport(false);
+      console.warn(
+        '[products-variants] skipping variant resource availability check (missing resource columns)',
+        { error },
+      );
+      return null;
+    }
+    throw error;
+  }
 
   const hasVariantConflict = variants.some((variant) => {
     const otherRange = computeVariantRange(variant.date, variant.product ?? { hora_inicio: null, hora_fin: null });
@@ -200,8 +225,6 @@ async function ensureVariantResourcesAvailable(
 
   return null;
 }
-import { toMadridISOString } from './_shared/timezone';
-import { mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
 const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
 const WOO_KEY = process.env.WOO_KEY || '';
@@ -549,9 +572,9 @@ type VariantRecord = {
   stock_status: string | null;
   sede: string | null;
   date: Date | string | null;
-  trainer_id: string | null;
-  sala_id: string | null;
-  unidad_movil_id: string | null;
+  trainer_id?: string | null;
+  sala_id?: string | null;
+  unidad_movil_id?: string | null;
   trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
   sala?: { sala_id: string; name: string; sede: string | null } | null;
   unidad?: { unidad_id: string; name: string; matricula: string | null } | null;
@@ -625,12 +648,8 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
     variants: { some: {} },
   };
 
-  const variantsSelection = {
-    orderBy: [
-      { date: 'asc' as Prisma.SortOrder },
-      { name: 'asc' as Prisma.SortOrder },
-    ],
-    select: {
+  const buildVariantSelect = (includeResources: boolean): Prisma.variantsSelect => {
+    const base = {
       id: true,
       id_woo: true,
       id_padre: true,
@@ -641,45 +660,32 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       stock_status: true,
       sede: true,
       date: true,
+      created_at: true,
+      updated_at: true,
+    };
+
+    if (!includeResources) {
+      return base as Prisma.variantsSelect;
+    }
+
+    return {
+      ...base,
       trainer_id: true,
       sala_id: true,
       unidad_movil_id: true,
       trainer: { select: { trainer_id: true, name: true, apellido: true } },
       sala: { select: { sala_id: true, name: true, sede: true } },
       unidad: { select: { unidad_id: true, name: true, matricula: true } },
-      created_at: true,
-      updated_at: true,
-    },
+    } as Prisma.variantsSelect;
   };
 
-  const selectWithDefaults: Record<string, any> = {
-    id: true,
-    id_pipe: true,
-    id_woo: true,
-    name: true,
-    code: true,
-    category: true,
-    hora_inicio: true,
-    hora_fin: true,
-    default_variant_start: true,
-    default_variant_end: true,
-    default_variant_stock_status: true,
-    default_variant_stock_quantity: true,
-    default_variant_price: true,
-    variants: variantsSelection,
-  };
-
-  const selectLegacy: Record<string, any> = {
-    id: true,
-    id_pipe: true,
-    id_woo: true,
-    name: true,
-    code: true,
-    category: true,
-    hora_inicio: true,
-    hora_fin: true,
-    variants: variantsSelection,
-  };
+  const buildVariantsSelection = (includeResources: boolean) => ({
+    orderBy: [
+      { date: 'asc' as Prisma.SortOrder },
+      { name: 'asc' as Prisma.SortOrder },
+    ],
+    select: buildVariantSelect(includeResources),
+  });
 
   const orderByName: Array<Record<string, Prisma.SortOrder>> = [{ name: 'asc' as Prisma.SortOrder }];
 
@@ -693,43 +699,85 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       default_variant_price: null,
     }));
 
-  if (productsDefaultFieldsSupported === false) {
-    const legacyProducts = (await prisma.products.findMany({
-      where: baseWhere,
-      select: selectLegacy,
-      orderBy: orderByName,
-    })) as unknown as LegacyProductRecord[];
+  let includeDefaults = productsDefaultFieldsSupported !== false;
+  let includeVariantResources = getVariantResourceColumnsSupport() !== false;
 
-    return mapLegacyProducts(legacyProducts);
-  }
+  while (true) {
+    const variantSelectionArgs = buildVariantsSelection(includeVariantResources);
 
-  try {
-    const products = (await prisma.products.findMany({
-      where: baseWhere,
-      select: selectWithDefaults,
-      orderBy: orderByName,
-    })) as unknown as ProductRecord[];
+    const select: Record<string, any> = includeDefaults
+      ? {
+          id: true,
+          id_pipe: true,
+          id_woo: true,
+          name: true,
+          code: true,
+          category: true,
+          hora_inicio: true,
+          hora_fin: true,
+          default_variant_start: true,
+          default_variant_end: true,
+          default_variant_stock_status: true,
+          default_variant_stock_quantity: true,
+          default_variant_price: true,
+          variants: variantSelectionArgs,
+        }
+      : {
+          id: true,
+          id_pipe: true,
+          id_woo: true,
+          name: true,
+          code: true,
+          category: true,
+          hora_inicio: true,
+          hora_fin: true,
+          variants: variantSelectionArgs,
+        };
 
-    productsDefaultFieldsSupported = true;
-    return products;
-  } catch (error) {
-    if (!isMissingProductDefaultColumns(error)) {
+    try {
+      const products = await prisma.products.findMany({
+        where: baseWhere,
+        select,
+        orderBy: orderByName,
+      });
+
+      if (!includeDefaults) {
+        if (includeVariantResources) {
+          setVariantResourceColumnsSupport(true);
+        }
+        const legacyProducts = products as unknown as LegacyProductRecord[];
+        return mapLegacyProducts(legacyProducts);
+      }
+
+      productsDefaultFieldsSupported = true;
+      if (includeVariantResources) {
+        setVariantResourceColumnsSupport(true);
+      }
+
+      return products as unknown as ProductRecord[];
+    } catch (error) {
+      if (includeDefaults && isMissingProductDefaultColumns(error)) {
+        productsDefaultFieldsSupported = false;
+        includeDefaults = false;
+        console.warn(
+          '[products-variants] falling back to legacy product query (missing default variant columns)',
+          { error },
+        );
+        continue;
+      }
+
+      if (includeVariantResources && isVariantResourceColumnError(error)) {
+        setVariantResourceColumnsSupport(false);
+        includeVariantResources = false;
+        console.warn(
+          '[products-variants] falling back to variant query without resource columns',
+          { error },
+        );
+        continue;
+      }
+
       throw error;
     }
-
-    productsDefaultFieldsSupported = false;
-    console.warn(
-      '[products-variants] falling back to legacy product query (missing default variant columns)',
-      { error },
-    );
-
-    const legacyProducts = (await prisma.products.findMany({
-      where: baseWhere,
-      select: selectLegacy,
-      orderBy: orderByName,
-    })) as unknown as LegacyProductRecord[];
-
-    return mapLegacyProducts(legacyProducts);
   }
 }
 
