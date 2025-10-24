@@ -2262,7 +2262,12 @@ export function VariantModal({
                   </div>
                 ) : deals.length ? (
                   <div className="table-responsive">
-                    <Table bordered hover size="sm" className="mb-0 align-middle">
+                    <Table
+                      bordered
+                      hover
+                      size="sm"
+                      className="mb-0 align-middle variant-deals-summary-table"
+                    >
                       <thead>
                         <tr>
                           <th>Presupuesto</th>
@@ -2287,6 +2292,14 @@ export function VariantModal({
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan={6} className="fw-semibold text-end">
+                            Total alumnos
+                          </td>
+                          <td className="text-end fw-semibold">{totalDealStudents}</td>
+                        </tr>
+                      </tfoot>
                     </Table>
                   </div>
                 ) : (
