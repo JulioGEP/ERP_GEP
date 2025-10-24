@@ -1428,6 +1428,7 @@ export async function fetchMobileUnitsCatalog(): Promise<MobileUnitOption[]> {
 
 export async function fetchProductVariants(options?: {
   productIds?: string[];
+  variantWooIds?: string[];
 }): Promise<ProductVariantOption[]> {
   const data = await request(`/products-variants`);
   const products = Array.isArray(data?.products) ? (data.products as unknown[]) : [];
@@ -1436,11 +1437,20 @@ export async function fetchProductVariants(options?: {
   const allowedExact = new Set<string>();
   const allowedLower = new Set<string>();
 
+  const allowedVariantValues = Array.isArray(options?.variantWooIds) ? options!.variantWooIds : [];
+  const allowedVariantExact = new Set<string>();
+
   for (const value of allowedValues) {
     const text = toStringValue(value);
     if (!text) continue;
     allowedExact.add(text);
     allowedLower.add(text.toLocaleLowerCase('es'));
+  }
+
+  for (const value of allowedVariantValues) {
+    const text = toStringValue(value);
+    if (!text) continue;
+    allowedVariantExact.add(text);
   }
 
   const variants: ProductVariantOption[] = [];
@@ -1454,36 +1464,29 @@ export async function fetchProductVariants(options?: {
     const productWooId = toStringValue((product as any)?.id_woo);
     const productCode = toStringValue((product as any)?.code);
 
-    if (allowedExact.size > 0) {
-      const matchesExact =
-        (productId && allowedExact.has(productId)) ||
-        (productPipeId && allowedExact.has(productPipeId)) ||
-        (productCode && allowedExact.has(productCode));
-      const matchesText =
-        (productName && allowedLower.has(productName.toLocaleLowerCase('es'))) ||
-        (productCode && allowedLower.has(productCode.toLocaleLowerCase('es')));
-
-      if (!matchesExact && !matchesText) {
-        continue;
-      }
-    }
-
     const productVariants = Array.isArray((product as any)?.variants)
       ? ((product as any)?.variants as unknown[])
       : [];
+
+    let matchesVariantFilter = false;
+    const normalizedVariants: ProductVariantOption[] = [];
 
     for (const rawVariant of productVariants) {
       const variantId = toStringValue((rawVariant as any)?.id);
       if (!variantId) continue;
 
       const wooId = toStringValue((rawVariant as any)?.id_woo);
+      if (wooId && allowedVariantExact.has(wooId)) {
+        matchesVariantFilter = true;
+      }
+
       const parentWooId = toStringValue((rawVariant as any)?.id_padre);
       const name = toStringValue((rawVariant as any)?.name);
       const date = toStringValue((rawVariant as any)?.date);
       const status = toStringValue((rawVariant as any)?.status);
       const sede = toStringValue((rawVariant as any)?.sede);
 
-      variants.push({
+      normalizedVariants.push({
         productId,
         productPipeId,
         productWooId,
@@ -1498,6 +1501,23 @@ export async function fetchProductVariants(options?: {
         sede,
       });
     }
+
+    const matchesExact =
+      (productId && allowedExact.has(productId)) ||
+      (productPipeId && allowedExact.has(productPipeId)) ||
+      (productCode && allowedExact.has(productCode));
+    const matchesText =
+      (productName && allowedLower.has(productName.toLocaleLowerCase('es'))) ||
+      (productCode && allowedLower.has(productCode.toLocaleLowerCase('es')));
+
+    const shouldFilter =
+      allowedExact.size > 0 || allowedLower.size > 0 || allowedVariantExact.size > 0;
+
+    if (shouldFilter && !matchesExact && !matchesText && !matchesVariantFilter) {
+      continue;
+    }
+
+    variants.push(...normalizedVariants);
   }
 
   return variants;

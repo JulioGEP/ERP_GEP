@@ -1761,6 +1761,11 @@ export function SessionsAccordionAbierta({
     dealTrainingDate ?? null,
   );
 
+  const normalizedCurrentVariation = useMemo(
+    () => (typeof currentDealVariation === 'string' ? currentDealVariation.trim() : ''),
+    [currentDealVariation],
+  );
+
   useEffect(() => {
     setCurrentDealVariation(dealVariation ?? null);
   }, [dealVariation]);
@@ -1791,10 +1796,16 @@ export function SessionsAccordionAbierta({
     [variantProductFilters],
   );
 
+  const variantWooFilterKey = normalizedCurrentVariation ? `woo:${normalizedCurrentVariation}` : 'woo:';
+
   const productVariantsQuery = useQuery({
-    queryKey: ['deal', dealId, 'product-variants', variantProductKey],
-    queryFn: () => fetchProductVariants({ productIds: variantProductFilters }),
-    enabled: variantProductFilters.length > 0,
+    queryKey: ['deal', dealId, 'product-variants', variantProductKey, variantWooFilterKey],
+    queryFn: () =>
+      fetchProductVariants({
+        productIds: variantProductFilters,
+        variantWooIds: normalizedCurrentVariation ? [normalizedCurrentVariation] : undefined,
+      }),
+    enabled: variantProductFilters.length > 0 || Boolean(normalizedCurrentVariation),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -1810,11 +1821,6 @@ export function SessionsAccordionAbierta({
     }
     return map;
   }, [productVariants]);
-
-  const normalizedCurrentVariation = useMemo(
-    () => (typeof currentDealVariation === 'string' ? currentDealVariation.trim() : ''),
-    [currentDealVariation],
-  );
 
   const currentVariantInfo = useMemo(() => {
     if (!normalizedCurrentVariation) return null;
@@ -1922,9 +1928,66 @@ export function SessionsAccordionAbierta({
   }, [applicableProducts, currentVariantInfo, matchesProductById]);
 
   const variantSelectOptions = useMemo(() => {
-    if (!applicableProducts.length) return [] as DealVariantSelectOption[];
+    if (!applicableProducts.length && !currentVariantInfo) {
+      return [] as DealVariantSelectOption[];
+    }
 
-    const relevantProducts = activeVariantProduct ? [activeVariantProduct] : applicableProducts;
+    const relevantProducts = activeVariantProduct
+      ? [activeVariantProduct]
+      : (() => {
+          if (currentVariantInfo) {
+            const matchIds = new Set<string>();
+            const matchTexts = new Set<string>();
+
+            const addMatchId = (value: string | null | undefined) => {
+              const normalized = normalizeExact(value);
+              if (normalized) {
+                matchIds.add(normalized);
+              }
+            };
+
+            const addMatchText = (value: string | null | undefined) => {
+              if (typeof value === 'string') {
+                const trimmed = value.trim();
+                if (trimmed.length) {
+                  matchTexts.add(trimmed.toLocaleLowerCase('es'));
+                }
+              }
+            };
+
+            addMatchId(currentVariantInfo.productId);
+            addMatchId(currentVariantInfo.productPipeId);
+            addMatchId(currentVariantInfo.productCode);
+            addMatchId(currentVariantInfo.productWooId);
+            addMatchId(currentVariantInfo.parentWooId);
+            addMatchId(currentVariantInfo.wooId);
+            addMatchId(normalizedCurrentVariation);
+
+            addMatchText(currentVariantInfo.productCode);
+            addMatchText(currentVariantInfo.productName);
+
+            const syntheticId =
+              Array.from(matchIds)[0] ||
+              normalizedCurrentVariation ||
+              currentVariantInfo.variantId ||
+              `variant-${currentVariantInfo.wooId ?? 'unknown'}`;
+
+            return [
+              {
+                id: syntheticId,
+                name: (currentVariantInfo.productName ?? '').trim() || null,
+                code: (currentVariantInfo.productCode ?? '').trim() || null,
+                quantity: 0,
+                hours: null,
+                matchIds: Array.from(matchIds),
+                matchTexts: Array.from(matchTexts),
+              },
+            ];
+          }
+
+          return applicableProducts;
+        })();
+
     const options: Array<{ option: DealVariantSelectOption; sortKey: number }> = [];
     const seenValues = new Set<string>();
     const dateFormatter = new Intl.DateTimeFormat('es-ES', {
@@ -2023,9 +2086,11 @@ export function SessionsAccordionAbierta({
     activeVariantProduct,
     allowedVariantParentsByProduct,
     applicableProducts,
+    currentVariantInfo,
     matchesProductById,
     normalizeExact,
     productVariants,
+    normalizedCurrentVariation,
     normalizedCurrentVariantId,
     normalizedCurrentVariantSede,
     normalizedCurrentVariantWooId,
