@@ -68,6 +68,12 @@ export interface DealDocument {
  * ====================== */
 
 /** Fila para listados (tabla de presupuestos) */
+export interface DealSummarySession {
+  id: string | null;
+  fecha_inicio_utc: string | null;
+  fecha?: string | null;
+}
+
 export interface DealSummary {
   // La API devuelve deal_id; dejamos dealId opcional para compatibilidad de vistas antiguas
   deal_id: string;
@@ -100,6 +106,7 @@ export interface DealSummary {
   // Para pintar chips o resúmenes
   products?: DealProduct[];
   productNames?: string[];
+  sessions?: DealSummarySession[];
 }
 
 /** Detalle completo (para el modal) */
