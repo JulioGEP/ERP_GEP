@@ -8,19 +8,22 @@ import {
   useState,
 } from 'react';
 import { Alert, Button, Card, Form, Modal, Spinner } from 'react-bootstrap';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   ApiError,
   createSessionPublicLink,
   fetchSessionPublicLink,
+  fetchDealsWithPendingCertificates,
   uploadSessionCertificate,
   type SessionPublicLink,
 } from '../presupuestos/api';
+import { BudgetTable } from '../presupuestos/BudgetTable';
 import { useCertificateData } from './hooks/useCertificateData';
 import { CertificateTable } from './CertificateTable';
 import { CertificateToolbar, type CertificateToolbarProgressStatus } from './CertificateToolbar';
 import type { CertificateRow, CertificateSession } from './lib/mappers';
-import type { DealDetail } from '../../types/deal';
+import type { DealDetail, DealSummary } from '../../types/deal';
 import {
   generateCertificatePDF,
   generateCertificateTemplatePreviewDataUrl,
@@ -532,6 +535,40 @@ export function CertificadosPage() {
   const pendingPersistedExcludedIdsRef = useRef<string[] | null>(null);
   const pendingTemplateManualRef = useRef<boolean | null>(null);
   const pendingPersistedTemplateKeyRef = useRef<string | null>(null);
+
+  const queryClient = useQueryClient();
+  const pendingBudgetsQuery = useQuery({
+    queryKey: ['deals', 'pendingCertificates'],
+    queryFn: fetchDealsWithPendingCertificates,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const pendingBudgets = pendingBudgetsQuery.data ?? [];
+  const isPendingBudgetsRefreshing =
+    pendingBudgetsQuery.isFetching && !pendingBudgetsQuery.isLoading;
+
+  const handleSelectPendingBudget = useCallback(
+    (budget: DealSummary) => {
+      const normalizedId = String(budget.deal_id ?? budget.dealId ?? '').trim();
+      if (!normalizedId) {
+        return;
+      }
+      setDealIdInput(normalizedId);
+      void loadDealAndSessions(normalizedId);
+    },
+    [loadDealAndSessions, setDealIdInput],
+  );
+
+  const pendingBudgetsTableLabels = useMemo(
+    () => ({
+      loading: 'Cargando presupuestos con certificados pendientes…',
+      emptyTitle: 'No hay certificados pendientes.',
+      emptyDescription:
+        'Todos los presupuestos con sesiones finalizadas tienen los certificados gestionados.',
+    }),
+    [],
+  );
 
   const templateSelectionManuallyChangedRef = useRef(false);
   const [templateSelectionManuallyChangedState, setTemplateSelectionManuallyChangedState] =
@@ -1243,6 +1280,7 @@ export function CertificadosPage() {
         setGenerating(false);
         setIsCancellingGeneration(false);
         generationAbortRef.current = null;
+        void queryClient.invalidateQueries({ queryKey: ['deals', 'pendingCertificates'] });
       }
     },
     [
@@ -1256,6 +1294,7 @@ export function CertificadosPage() {
       ensureSessionPublicLink,
       selectedTemplateKey,
       templateOptions,
+      queryClient,
     ],
   );
 
@@ -1552,6 +1591,45 @@ export function CertificadosPage() {
           <Card.Title as="h1" className="h4 fw-bold mb-4 text-uppercase text-center">
             Certificados
           </Card.Title>
+
+          <section className="mb-5">
+            <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-3 text-start">
+              <div>
+                <h2 className="h5 fw-bold mb-1">Certificados pendientes</h2>
+                <p className="text-muted mb-0">
+                  Presupuestos con alumnos sin certificado y sesiones ya impartidas
+                </p>
+              </div>
+              <div className="d-flex align-items-center gap-3">
+                {isPendingBudgetsRefreshing && (
+                  <Spinner animation="border" role="status" size="sm" />
+                )}
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => {
+                    void pendingBudgetsQuery.refetch();
+                  }}
+                  disabled={pendingBudgetsQuery.isFetching}
+                >
+                  Actualizar
+                </Button>
+              </div>
+            </div>
+
+            <BudgetTable
+              budgets={pendingBudgets}
+              isLoading={pendingBudgetsQuery.isLoading}
+              isFetching={pendingBudgetsQuery.isFetching}
+              error={pendingBudgetsQuery.error ?? null}
+              onRetry={() => {
+                void pendingBudgetsQuery.refetch();
+              }}
+              onSelect={handleSelectPendingBudget}
+              labels={pendingBudgetsTableLabels}
+              enableFallback={false}
+            />
+          </section>
 
           <Form onSubmit={handleSubmit} className="mb-4">
             <Form.Group controlId="certificate-deal" className="text-start">

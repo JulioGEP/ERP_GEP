@@ -23,6 +23,32 @@ function TrashIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+type BudgetTableLabels = {
+  loading: string;
+  updating: string;
+  errorTitle: string;
+  errorRetry: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  emptyRetry: string;
+  fallbackLoading: string;
+  fallbackErrorTitle: string;
+  fallbackErrorRetry: string;
+};
+
+const DEFAULT_LABELS: BudgetTableLabels = {
+  loading: 'Cargando presupuestos desde la base de datos…',
+  updating: 'Actualizando listado…',
+  errorTitle: 'Error al cargar presupuestos',
+  errorRetry: 'Reintentar',
+  emptyTitle: 'No hay presupuestos sin sesiones pendientes.',
+  emptyDescription: 'Importa un presupuesto para comenzar a planificar la formación.',
+  emptyRetry: 'Reintentar',
+  fallbackLoading: 'Cargando datos de respaldo…',
+  fallbackErrorTitle: 'No se pudieron recuperar datos de respaldo',
+  fallbackErrorRetry: 'Reintentar',
+};
+
 interface BudgetTableProps {
   budgets: DealSummary[];
   isLoading: boolean;
@@ -31,6 +57,8 @@ interface BudgetTableProps {
   onRetry: () => void;
   onSelect: (budget: DealSummary) => void;
   onDelete?: (budget: DealSummary) => Promise<void>;
+  labels?: Partial<BudgetTableLabels>;
+  enableFallback?: boolean;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -132,17 +160,22 @@ export function BudgetTable({
   error,
   onRetry,
   onSelect,
-  onDelete
+  onDelete,
+  labels: labelsProp,
+  enableFallback = true,
 }: BudgetTableProps) {
+  const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const [fallbackLoading, setFallbackLoading] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   const [fallbackBudgets, setFallbackBudgets] = useState<DealSummary[] | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const effectiveBudgets: DealSummary[] = useMemo(() => {
-    if (fallbackBudgets && fallbackBudgets.length) return fallbackBudgets;
+    if (enableFallback && fallbackBudgets && fallbackBudgets.length) {
+      return fallbackBudgets;
+    }
     return budgets;
-  }, [budgets, fallbackBudgets]);
+  }, [budgets, enableFallback, fallbackBudgets]);
 
   const getSortValue = useCallback((budget: DealSummary, column: string) => {
     switch (column) {
@@ -213,6 +246,9 @@ export function BudgetTable({
   );
 
   useEffect(() => {
+    if (!enableFallback) {
+      return;
+    }
     if (!isLoading && !error && budgets.length === 0 && !fallbackBudgets && !fallbackLoading) {
       (async () => {
         try {
@@ -230,13 +266,20 @@ export function BudgetTable({
       })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, error, budgets.length]);
+  }, [
+    enableFallback,
+    isLoading,
+    error,
+    budgets.length,
+    fallbackBudgets,
+    fallbackLoading,
+  ]);
 
   if (isLoading) {
     return (
       <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm">
         <Spinner animation="border" role="status" className="mb-3" />
-        <p className="mb-0">Cargando presupuestos desde la base de datos…</p>
+        <p className="mb-0">{labels.loading}</p>
       </div>
     );
   }
@@ -249,37 +292,37 @@ export function BudgetTable({
     return (
       <Alert variant="danger" className="rounded-4 shadow-sm d-flex flex-column flex-md-row align-items-md-center gap-3">
         <div className="flex-grow-1">
-          <p className="fw-semibold mb-1">Error al cargar presupuestos</p>
+          <p className="fw-semibold mb-1">{labels.errorTitle}</p>
           <p className="mb-0 small">{message}</p>
         </div>
         <div>
           <Button variant="outline-danger" onClick={onRetry}>
-            Reintentar
+            {labels.errorRetry}
           </Button>
         </div>
       </Alert>
     );
   }
 
-  if (fallbackLoading) {
+  if (enableFallback && fallbackLoading) {
     return (
       <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm">
         <Spinner animation="border" role="status" className="mb-3" />
-        <p className="mb-0">Cargando datos de respaldo…</p>
+        <p className="mb-0">{labels.fallbackLoading}</p>
       </div>
     );
   }
 
-  if (fallbackError) {
+  if (enableFallback && fallbackError) {
     return (
       <Alert variant="warning" className="rounded-4 shadow-sm">
         <div className="d-flex justify-content-between align-items-center">
           <div>
-            <div className="fw-semibold">No se pudieron recuperar datos de respaldo</div>
+            <div className="fw-semibold">{labels.fallbackErrorTitle}</div>
             <div className="small mb-0">{fallbackError}</div>
           </div>
           <Button size="sm" variant="outline-secondary" onClick={onRetry}>
-            Reintentar
+            {labels.fallbackErrorRetry}
           </Button>
         </div>
       </Alert>
@@ -289,11 +332,13 @@ export function BudgetTable({
   if (!effectiveBudgets.length) {
     return (
       <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm">
-        <p className="mb-1 fw-semibold">No hay presupuestos sin sesiones pendientes.</p>
-        <p className="mb-0 small">Importa un presupuesto para comenzar a planificar la formación.</p>
+        <p className="mb-1 fw-semibold">{labels.emptyTitle}</p>
+        {labels.emptyDescription && (
+          <p className="mb-0 small">{labels.emptyDescription}</p>
+        )}
         <div className="mt-3">
           <Button size="sm" variant="outline-secondary" onClick={onRetry}>
-            Reintentar
+            {labels.emptyRetry}
           </Button>
         </div>
       </div>
@@ -305,7 +350,7 @@ export function BudgetTable({
       {isFetching && (
         <div className="d-flex align-items-center gap-2 px-3 py-2 border-bottom text-muted small">
           <Spinner animation="border" size="sm" />
-          <span>Actualizando listado…</span>
+          <span>{labels.updating}</span>
         </div>
       )}
       <Table hover className="mb-0 align-middle">
