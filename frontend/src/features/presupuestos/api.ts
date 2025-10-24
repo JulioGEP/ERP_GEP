@@ -314,7 +314,6 @@ function normalizeProducts(
         deal_id: item.deal_id ?? null,
         name: toStringValue(item.name) ?? null,
         code: toStringValue(item.code) ?? null,
-        wooId: toStringValue(item.id_woo) ?? null,
         quantity: toNumber(item.quantity),
         price: toNumber(item.price),
         type: item.type ?? null,
@@ -1409,12 +1408,10 @@ export async function fetchProductVariants(options?: {
       const matchesExact =
         (productId && allowedExact.has(productId)) ||
         (productPipeId && allowedExact.has(productPipeId)) ||
-        (productCode && allowedExact.has(productCode)) ||
-        (productWooId && allowedExact.has(productWooId));
+        (productCode && allowedExact.has(productCode));
       const matchesText =
         (productName && allowedLower.has(productName.toLocaleLowerCase('es'))) ||
-        (productCode && allowedLower.has(productCode.toLocaleLowerCase('es'))) ||
-        (productWooId && allowedLower.has(productWooId.toLocaleLowerCase('es')));
+        (productCode && allowedLower.has(productCode.toLocaleLowerCase('es')));
 
       if (!matchesExact && !matchesText) {
         continue;
