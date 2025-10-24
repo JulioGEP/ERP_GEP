@@ -30,10 +30,40 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('es-ES', {
   year: 'numeric',
 });
 
-function formatDate(value?: string | null): string {
+function parseDate(value?: string | null): Date | null {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+
+  const match = /^([0-9]{2})\/([0-9]{2})\/([0-9]{4})$/.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+
+  const [, dayStr, monthStr, yearStr] = match;
+  const day = Number.parseInt(dayStr, 10);
+  const month = Number.parseInt(monthStr, 10) - 1;
+  const year = Number.parseInt(yearStr, 10);
+
+  const normalized = new Date(year, month, day);
+  if (
+    normalized.getFullYear() !== year ||
+    normalized.getMonth() !== month ||
+    normalized.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function formatDate(value?: string | Date | null): string {
   if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  const date = value instanceof Date ? value : parseDate(value);
+  if (!date || Number.isNaN(date.getTime())) return '';
   return DATE_FORMATTER.format(date);
 }
 
@@ -89,9 +119,16 @@ export function mapStudentsToCertificateRows(params: {
   const fechaSource = isOpenTrainingDeal(deal)
     ? deal?.a_fecha ?? session?.fecha_inicio_utc
     : session?.fecha_inicio_utc;
-  const fecha = formatDate(fechaSource);
+  const fechaDate = fechaSource ? parseDate(fechaSource) : null;
+  const fecha = formatDate(fechaDate ?? fechaSource);
+  let fecha2 = '';
+  if (fechaDate && !Number.isNaN(fechaDate.getTime())) {
+    const nextDay = new Date(fechaDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    fecha2 = formatDate(nextDay);
+  }
   const horas = formatNumber(session?.productHours ?? null);
-  const formacion = session?.productName ?? '';
+  const formacion = isOpenTrainingDeal(deal) ? 'A- Trabajos verticales' : session?.productName ?? '';
 
   return students.map((student) => ({
     id: student.id,
@@ -100,7 +137,7 @@ export function mapStudentsToCertificateRows(params: {
     apellidos: student.apellido,
     dni: student.dni,
     fecha,
-    fecha2: '',
+    fecha2,
     lugar,
     horas,
     cliente,
