@@ -84,9 +84,11 @@ const ESSENTIAL_VARIATION_FIELDS = new Set([
   'date_created_gmt',
   'date_modified',
   'date_modified_gmt',
+  'meta_data',
 ]);
 
 const ESSENTIAL_VARIATION_ATTRIBUTE_FIELDS = new Set(['id', 'name', 'option', 'slug']);
+const ESSENTIAL_VARIATION_META_FIELDS = new Set(['key', 'value']);
 
 const LOCATION_KEYWORDS = ['localizacion', 'ubicacion', 'sede'];
 const DATE_KEYWORDS = ['fecha'];
@@ -111,6 +113,7 @@ type SanitizedVariation = {
   date_created_gmt?: string | null;
   date_modified?: string | null;
   date_modified_gmt?: string | null;
+  meta_data?: VariationMetaData[];
 };
 
 type VariationPersistence = {
@@ -122,6 +125,11 @@ type VariationPersistence = {
   stock_status: string | null;
   sede: string | null;
   date: Date | null;
+};
+
+type VariationMetaData = {
+  key?: string | null;
+  value?: unknown;
 };
 
 function ensureConfigured() {
@@ -170,6 +178,15 @@ function sanitizeVariationAttributes(attributes: unknown): VariationAttribute[] 
     .map((attribute) => attribute as VariationAttribute);
 }
 
+function sanitizeVariationMetaData(meta: unknown): VariationMetaData[] {
+  if (!Array.isArray(meta)) return [];
+
+  return meta
+    .filter((entry) => entry && typeof entry === 'object')
+    .map((entry) => pickFields(entry as Record<string, any>, ESSENTIAL_VARIATION_META_FIELDS))
+    .map((entry) => entry as VariationMetaData);
+}
+
 function sanitizeVariation(input: unknown): SanitizedVariation {
   if (!input || typeof input !== 'object') return {};
 
@@ -177,6 +194,7 @@ function sanitizeVariation(input: unknown): SanitizedVariation {
   const sanitized = pickFields(variation, ESSENTIAL_VARIATION_FIELDS) as SanitizedVariation;
 
   sanitized.attributes = sanitizeVariationAttributes(variation.attributes);
+  sanitized.meta_data = sanitizeVariationMetaData(variation.meta_data);
 
   return sanitized;
 }
@@ -271,28 +289,57 @@ function findAttributeOptionByKeywords(
   return null;
 }
 
+function parseDateFromParts(year: number, month: number, day: number): Date | null {
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() + 1 !== month ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
 function parseDateFromText(value: string | null): Date | null {
   if (!value) return null;
   const text = value.trim();
   if (!text) return null;
 
-  const direct = new Date(text);
-  if (!Number.isNaN(direct.getTime())) return direct;
+  const isoMatch = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, yearText, monthText, dayText] = isoMatch;
+    const year = Number.parseInt(yearText, 10);
+    const month = Number.parseInt(monthText, 10);
+    const day = Number.parseInt(dayText, 10);
+    const parsed = parseDateFromParts(year, month, day);
+    if (parsed) return parsed;
+  }
 
-  const match = text.match(/^([0-3]?\d)[\/-]([0-3]?\d)[\/-](\d{2,4})$/);
+  const match = text.match(/([0-3]?\d)[\/-]([0-3]?\d)[\/-](\d{2,4})/);
   if (match) {
-    const day = Number(match[1]);
-    const month = Number(match[2]);
-    let year = Number(match[3]);
+    const day = Number.parseInt(match[1], 10);
+    const month = Number.parseInt(match[2], 10);
+    let year = Number.parseInt(match[3], 10);
     if (year < 100) {
       year += year < 50 ? 2000 : 1900;
     }
 
-    if (Number.isFinite(day) && Number.isFinite(month) && Number.isFinite(year)) {
-      const result = new Date(Date.UTC(year, month - 1, day));
-      if (!Number.isNaN(result.getTime())) return result;
-    }
+    const parsed = parseDateFromParts(year, month, day);
+    if (parsed) return parsed;
   }
+
+  const direct = new Date(text);
+  if (!Number.isNaN(direct.getTime())) return direct;
 
   return null;
 }
@@ -302,6 +349,12 @@ function resolveVariationDate(variation: SanitizedVariation): Date | null {
     findAttributeOptionByKeywords(variation.attributes, DATE_KEYWORDS),
   );
   if (attributeDate) return attributeDate;
+
+  const metaDate = extractDateFromMetaData(variation.meta_data);
+  if (metaDate) return metaDate;
+
+  const nameDate = parseDateFromText(toNullableString(variation.name));
+  if (nameDate) return nameDate;
 
   const fallbackDates = [
     variation.date_modified_gmt,
@@ -337,6 +390,23 @@ function mapVariationToPersistence(variation: SanitizedVariation): VariationPers
     sede,
     date,
   };
+}
+
+function extractDateFromMetaData(meta: VariationMetaData[] | undefined): Date | null {
+  if (!meta?.length) return null;
+
+  for (const entry of meta) {
+    const key = typeof entry?.key === 'string' ? entry.key.trim().toLowerCase() : '';
+    if (!key) continue;
+
+    if (key === 'start_date' || key === 'fecha' || key === '_event_date') {
+      const value = toNullableString(entry?.value);
+      const parsed = parseDateFromText(value);
+      if (parsed) return parsed;
+    }
+  }
+
+  return null;
 }
 
 function decimalToNumber(value: Prisma.Decimal | number | null | undefined): number | null {
