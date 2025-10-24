@@ -1398,6 +1398,7 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
   mimeType?: string | null;
   data: Buffer;
   targetSubfolderName?: string | null;
+  placeInDealCertificatesFolder?: boolean;
 }): Promise<{
   driveFileId: string;
   driveFileName: string;
@@ -1429,49 +1430,91 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
     throw new Error("No se pudo preparar la carpeta de la organización en Drive");
   }
 
-  const sessionFolderInfo = await ensureSessionFolderUnderOrganization({
-    driveId,
-    organizationFolderId: organizationFolder.folderId,
-    deal: params.deal,
-    session: params.session,
-    sessionNumber: params.sessionNumber,
-    sessionName: params.sessionName,
-  });
-
-  if (!sessionFolderInfo) {
-    throw new Error("No se pudo preparar la carpeta de la sesión en Drive");
-  }
-
-  const sessionFolderId = sessionFolderInfo.folderId;
-
-  let sessionFolderLink: string | null = null;
-  try {
-    sessionFolderLink = await ensureFilePublicWebViewLink(sessionFolderId);
-  } catch (permissionError) {
-    console.warn("[google-drive-sync] No se pudo generar enlace público de carpeta de sesión", {
-      dealId: params.deal?.deal_id ?? params.deal?.id,
-      sessionId: params.session?.id,
-      sessionFolderId,
-      error: permissionError instanceof Error ? permissionError.message : String(permissionError),
-    });
-  }
-
-  if (!sessionFolderLink) {
-    sessionFolderLink = `https://drive.google.com/drive/folders/${sessionFolderId}`;
-  }
-
   const safeName = sanitizeName(params.fileName || "documento") || "documento";
   const mimeType = params.mimeType?.trim() || "application/octet-stream";
 
-  let parentFolderId = sessionFolderId;
-  if (params.targetSubfolderName) {
-    const requestedName = sanitizeName(params.targetSubfolderName) || params.targetSubfolderName;
-    const effectiveName = sanitizeName(requestedName || "Certificados") || "Certificados";
+  const dealFolder = await ensureDealFolder({
+    driveId,
+    organizationFolderId: organizationFolder.folderId,
+    deal: params.deal,
+  });
+  if (!dealFolder) {
+    throw new Error("No se pudo preparar la carpeta del deal en Drive");
+  }
+
+  await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolder.folderId });
+
+  let parentFolderId = dealFolder.folderId;
+  let sessionFolderLink: string | null = null;
+  let shouldCreateSubfolder = true;
+
+  if (params.placeInDealCertificatesFolder) {
+    const certificatesFolderName =
+      sanitizeName(params.targetSubfolderName || "Certificados") || "Certificados";
     parentFolderId = await ensureFolder({
-      name: effectiveName,
-      parentId: sessionFolderId,
+      name: certificatesFolderName,
+      parentId: dealFolder.folderId,
       driveId,
     });
+    shouldCreateSubfolder = false;
+    try {
+      sessionFolderLink = await ensureFilePublicWebViewLink(parentFolderId);
+    } catch (permissionError) {
+      console.warn(
+        "[google-drive-sync] No se pudo generar enlace público de carpeta de certificados del deal",
+        {
+          dealId: params.deal?.deal_id ?? params.deal?.id,
+          sessionId: params.session?.id,
+          folderId: parentFolderId,
+          error: permissionError instanceof Error ? permissionError.message : String(permissionError),
+        },
+      );
+    }
+    if (!sessionFolderLink) {
+      sessionFolderLink = `https://drive.google.com/drive/folders/${parentFolderId}`;
+    }
+  } else {
+    const sessionFolderInfo = await ensureSessionFolderUnderOrganization({
+      driveId,
+      organizationFolderId: organizationFolder.folderId,
+      deal: params.deal,
+      session: params.session,
+      sessionNumber: params.sessionNumber,
+      sessionName: params.sessionName,
+    });
+
+    if (!sessionFolderInfo) {
+      throw new Error("No se pudo preparar la carpeta de la sesión en Drive");
+    }
+
+    const sessionFolderId = sessionFolderInfo.folderId;
+    parentFolderId = sessionFolderId;
+
+    try {
+      sessionFolderLink = await ensureFilePublicWebViewLink(sessionFolderId);
+    } catch (permissionError) {
+      console.warn("[google-drive-sync] No se pudo generar enlace público de carpeta de sesión", {
+        dealId: params.deal?.deal_id ?? params.deal?.id,
+        sessionId: params.session?.id,
+        sessionFolderId,
+        error: permissionError instanceof Error ? permissionError.message : String(permissionError),
+      });
+    }
+
+    if (!sessionFolderLink) {
+      sessionFolderLink = `https://drive.google.com/drive/folders/${sessionFolderId}`;
+    }
+  }
+
+  if (params.targetSubfolderName && shouldCreateSubfolder) {
+    const requestedName = sanitizeName(params.targetSubfolderName) || params.targetSubfolderName;
+    const effectiveName = sanitizeName(requestedName || "Certificados") || "Certificados";
+    const subfolderId = await ensureFolder({
+      name: effectiveName,
+      parentId: parentFolderId,
+      driveId,
+    });
+    parentFolderId = subfolderId;
   }
 
   const uploadResult = await uploadBufferToDrive({
@@ -1501,7 +1544,7 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
   };
 }
 
-export async function uploadSessionCertificateToGoogleDrive(params: {
+type UploadSessionCertificateParams = {
   deal: any;
   session: any;
   organizationName?: string | null;
@@ -1510,7 +1553,13 @@ export async function uploadSessionCertificateToGoogleDrive(params: {
   fileName: string;
   mimeType?: string | null;
   data: Buffer;
-}): Promise<{
+  placeInDealCertificatesFolder?: boolean;
+};
+
+export async function uploadSessionCertificateToGoogleDrive({
+  placeInDealCertificatesFolder,
+  ...params
+}: UploadSessionCertificateParams): Promise<{
   driveFileId: string;
   driveFileName: string;
   driveWebViewLink: string | null;
@@ -1519,6 +1568,7 @@ export async function uploadSessionCertificateToGoogleDrive(params: {
   return uploadSessionDocumentToGoogleDrive({
     ...params,
     targetSubfolderName: "Certificados",
+    placeInDealCertificatesFolder,
   });
 }
 

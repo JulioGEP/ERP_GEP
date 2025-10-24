@@ -18,6 +18,32 @@ import { nowInMadridDate } from './_shared/timezone';
 
 const MAX_CERTIFICATE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
+function normalizeProductLabel(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const raw = typeof value === 'string' ? value : String(value);
+  return raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]+/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isVerticalCourseProduct(product: { name?: unknown; code?: unknown } | null): boolean {
+  if (!product) return false;
+  const candidates = [product.name, product.code];
+  return candidates.some((value) => {
+    const normalized = normalizeProductLabel(value);
+    if (!normalized) return false;
+    return (
+      normalized.includes('trabajos verticales') ||
+      normalized.includes('trabajo vertical') ||
+      normalized.includes('verticales trabajo')
+    );
+  });
+}
+
 function parsePath(path: string | undefined | null): { isUpload: boolean } {
   const normalized = String(path || '');
   const trimmed = normalized.replace(/^\/?\.netlify\/functions\//, '/');
@@ -171,6 +197,16 @@ export const handler = async (event: any) => {
     const sessionName =
       toStringOrNull(resolvedSession?.nombre_cache) ?? `Sesión ${sessionNumber}`;
 
+    let isVerticalCourse = false;
+    const dealProductId = toStringOrNull(resolvedSession?.deal_product_id);
+    if (dealProductId) {
+      const dealProduct = await prisma.deal_products.findUnique({
+        where: { id: dealProductId },
+        select: { name: true, code: true },
+      });
+      isVerticalCourse = isVerticalCourseProduct(dealProduct);
+    }
+
     let normalizedFileName = fileNameRaw
       ? normalizeIncomingFileName(fileNameRaw)
       : '';
@@ -197,6 +233,7 @@ export const handler = async (event: any) => {
         fileName: normalizedFileName,
         mimeType,
         data: buffer,
+        placeInDealCertificatesFolder: isVerticalCourse,
       });
     } catch (err: any) {
       const message = err?.message || 'No se pudo subir el certificado a Drive';
