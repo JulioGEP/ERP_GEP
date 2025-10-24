@@ -1854,7 +1854,7 @@ export function SessionsAccordionAbierta({
     [currentVariantInfo],
   );
 
-  const matchesProduct = useCallback(
+  const matchesProductById = useCallback(
     (variant: ProductVariantOption, product: ApplicableProductInfo) => {
       const variantIds = new Set<string>();
       [
@@ -1868,7 +1868,14 @@ export function SessionsAccordionAbierta({
         if (normalized) variantIds.add(normalized);
       });
 
-      if (product.matchIds.some((id) => variantIds.has(id))) {
+      return product.matchIds.some((id) => variantIds.has(id));
+    },
+    [normalizeExact],
+  );
+
+  const matchesProduct = useCallback(
+    (variant: ProductVariantOption, product: ApplicableProductInfo) => {
+      if (matchesProductById(variant, product)) {
         return true;
       }
 
@@ -1884,7 +1891,7 @@ export function SessionsAccordionAbierta({
 
       return product.matchTexts.some((text) => variantTexts.has(text));
     },
-    [normalizeExact, normalizeText],
+    [matchesProductById, normalizeText],
   );
 
   const normalizedDealSedeKey = useMemo(
@@ -1892,36 +1899,63 @@ export function SessionsAccordionAbierta({
     [normalizedDealSede],
   );
 
-  const allowedVariantParentIds = useMemo(() => {
-    const ids = new Set<string>();
+  const allowedVariantParentsByProduct = useMemo(() => {
+    const map = new Map<string, Set<string>>();
 
-    const add = (value: string | null | undefined) => {
+    const add = (productId: string, value: string | null | undefined) => {
       const normalized = normalizeExact(value);
-      if (normalized) {
-        ids.add(normalized);
+      if (!normalized) {
+        return;
+      }
+      const existing = map.get(productId);
+      if (existing) {
+        existing.add(normalized);
+      } else {
+        map.set(productId, new Set([normalized]));
       }
     };
 
-    add(currentVariantInfo?.parentWooId ?? currentVariantInfo?.productWooId);
-
     applicableProducts.forEach((product) => {
-      const matchingVariant = productVariants.find((variant) => matchesProduct(variant, product));
-      if (matchingVariant) {
-        add(matchingVariant.parentWooId ?? matchingVariant.productWooId);
-      }
+      productVariants.forEach((variant) => {
+        if (!matchesProductById(variant, product)) {
+          return;
+        }
+        add(product.id, variant.parentWooId ?? variant.productWooId);
+      });
     });
 
-    return ids;
-  }, [applicableProducts, currentVariantInfo, matchesProduct, normalizeExact, productVariants]);
+    if (currentVariantInfo) {
+      const parentId = currentVariantInfo.parentWooId ?? currentVariantInfo.productWooId;
+      if (parentId) {
+        const matchedProduct =
+          applicableProducts.find((product) => matchesProductById(currentVariantInfo, product)) ??
+          applicableProducts.find((product) => matchesProduct(currentVariantInfo, product));
+        if (matchedProduct) {
+          add(matchedProduct.id, parentId);
+        }
+      }
+    }
+
+    return map;
+  }, [
+    applicableProducts,
+    currentVariantInfo,
+    matchesProduct,
+    matchesProductById,
+    normalizeExact,
+    productVariants,
+  ]);
 
   const activeVariantProduct = useMemo(() => {
     if (currentVariantInfo) {
       return (
-        applicableProducts.find((product) => matchesProduct(currentVariantInfo, product)) ?? null
+        applicableProducts.find((product) => matchesProductById(currentVariantInfo, product)) ??
+        applicableProducts.find((product) => matchesProduct(currentVariantInfo, product)) ??
+        null
       );
     }
     return applicableProducts.length === 1 ? applicableProducts[0] : null;
-  }, [applicableProducts, currentVariantInfo, matchesProduct]);
+  }, [applicableProducts, currentVariantInfo, matchesProduct, matchesProductById]);
 
   const variantSelectOptions = useMemo(() => {
     if (!applicableProducts.length) return [] as DealVariantSelectOption[];
@@ -1957,12 +1991,12 @@ export function SessionsAccordionAbierta({
         (normalizedCurrentVariantId && normalizeExact(variant.variantId) === normalizedCurrentVariantId);
 
       const normalizedParentWooId = normalizeExact(variant.parentWooId ?? variant.productWooId);
-      if (
-        allowedVariantParentIds.size > 0 &&
-        (!normalizedParentWooId || !allowedVariantParentIds.has(normalizedParentWooId))
-      ) {
-        if (!isCurrentVariant) {
-          continue;
+      const allowedParents = allowedVariantParentsByProduct.get(matchedProduct.id);
+      if (allowedParents && allowedParents.size > 0) {
+        if (!normalizedParentWooId || !allowedParents.has(normalizedParentWooId)) {
+          if (!isCurrentVariant) {
+            continue;
+          }
         }
       }
 
@@ -2016,9 +2050,10 @@ export function SessionsAccordionAbierta({
       .map((item) => item.option);
   }, [
     activeVariantProduct,
-    allowedVariantParentIds,
+    allowedVariantParentsByProduct,
     applicableProducts,
     matchesProduct,
+    matchesProductById,
     normalizeExact,
     normalizeText,
     productVariants,
