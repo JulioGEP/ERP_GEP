@@ -43,6 +43,24 @@ function formatNumber(value?: number | null): string {
   return String(value);
 }
 
+function normalizePipelineValue(value?: string | null): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+export function isOpenTrainingDeal(deal: DealDetail | null): boolean {
+  if (!deal) return false;
+  const pipelineValues: Array<string | null | undefined> = [
+    deal.pipeline_label,
+    deal.pipeline_id ? String(deal.pipeline_id) : null,
+  ];
+  return pipelineValues.some((value) => normalizePipelineValue(value) === 'formacion abierta');
+}
+
 export function mapSessionToCertificateSession(
   session: SessionDTO,
   options: { product?: DealProduct | null; fallbackProductName?: string | null } = {},
@@ -68,7 +86,10 @@ export function mapStudentsToCertificateRows(params: {
   const dealId = deal?.deal_id ? String(deal.deal_id) : '';
   const lugar = deal?.sede_label ? String(deal.sede_label) : '';
   const cliente = deal?.organization?.name ? String(deal.organization.name) : '';
-  const fecha = formatDate(session?.fecha_inicio_utc);
+  const fechaSource = isOpenTrainingDeal(deal)
+    ? deal?.a_fecha ?? session?.fecha_inicio_utc
+    : session?.fecha_inicio_utc;
+  const fecha = formatDate(fechaSource);
   const horas = formatNumber(session?.productHours ?? null);
   const formacion = session?.productName ?? '';
 

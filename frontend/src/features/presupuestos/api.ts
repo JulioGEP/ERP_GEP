@@ -439,6 +439,10 @@ function normalizeDealDetail(raw: Json): DealDetail {
     fundae_label: toStringValue(raw.fundae_label) ?? null,
     hotel_label: toStringValue(raw.hotel_label) ?? null,
     comercial: toStringValue(raw.comercial) ?? null,
+    a_fecha: toStringValue(raw.a_fecha) ?? null,
+    w_id_variation: toStringValue(raw.w_id_variation) ?? null,
+    presu_holded: toStringValue(raw.presu_holded) ?? null,
+    modo_reserva: toStringValue(raw.modo_reserva) ?? null,
     transporte:
       toStringValue(raw.transporte) === null
         ? null
