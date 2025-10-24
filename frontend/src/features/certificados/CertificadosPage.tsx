@@ -1597,7 +1597,7 @@ export function CertificadosPage() {
               <div>
                 <h2 className="h5 fw-bold mb-1">Certificados pendientes</h2>
                 <p className="text-muted mb-0">
-                  Presupuestos con alumnos sin certificado y sesiones ya impartidas
+                  Presupuestos con alumnos sin certificado y sesiones o variantes ya impartidas
                 </p>
               </div>
               <div className="d-flex align-items-center gap-3">
