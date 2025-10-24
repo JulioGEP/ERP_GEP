@@ -2,6 +2,7 @@ import type { DealDetail, DealProduct } from '../../../types/deal';
 import type { SessionDTO, SessionStudent } from '../../presupuestos/api';
 
 export type CertificateSession = SessionDTO & {
+  productId: string | null;
   productName: string | null;
   productHours: number | null;
   productTemplate: string | null;
@@ -100,6 +101,7 @@ export function mapSessionToCertificateSession(
 
   return {
     ...session,
+    productId: product?.id ?? session.deal_product_id ?? null,
     productName: product?.name ?? fallbackName ?? null,
     productHours: product?.hours ?? null,
     productTemplate: product?.template ?? null,
@@ -122,7 +124,14 @@ export function mapStudentsToCertificateRows(params: {
   const fechaDate = fechaSource ? parseDate(fechaSource) : null;
   const fecha = formatDate(fechaDate ?? fechaSource);
   let fecha2 = '';
-  if (fechaDate && !Number.isNaN(fechaDate.getTime())) {
+  const productId = session?.productId ?? null;
+  const productName = session?.productName ?? '';
+  const normalizedProductName = normalizePipelineValue(productName);
+  const normalizedProductId = productId != null ? String(productId).trim() : '';
+  const shouldIncludeSecondDate =
+    normalizedProductId === '212' ||
+    normalizedProductName === normalizePipelineValue('A- Trabajos Verticales');
+  if (shouldIncludeSecondDate && fechaDate && !Number.isNaN(fechaDate.getTime())) {
     const nextDay = new Date(fechaDate);
     nextDay.setDate(nextDay.getDate() + 1);
     fecha2 = formatDate(nextDay);
