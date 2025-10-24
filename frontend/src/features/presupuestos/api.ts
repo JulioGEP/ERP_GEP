@@ -881,6 +881,12 @@ export async function fetchDealsWithoutSessions(): Promise<DealSummary[]> {
   return rows.map((row) => normalizeDealSummary(row));
 }
 
+export async function fetchDealsWithPendingCertificates(): Promise<DealSummary[]> {
+  const data = await request("/deals?pendingCertificates=true");
+  const rows: Json[] = Array.isArray(data?.deals) ? data.deals : [];
+  return rows.map((row) => normalizeDealSummary(row));
+}
+
 export async function fetchDealDetail(dealId: number | string): Promise<DealDetail> {
   const data = await request(`/deals?dealId=${encodeURIComponent(String(dealId))}`);
   return normalizeDealDetail(data?.deal);
