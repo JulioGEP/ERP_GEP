@@ -1570,6 +1570,7 @@ type DealVariantSelectOption = {
   value: string;
   label: string;
   date: string | null;
+  productName: string | null;
 };
 
 type ApplicableProductInfo = {
@@ -2036,7 +2037,12 @@ export function SessionsAccordionAbierta({
         label = formattedDate ?? `Variante ${value}`;
       }
 
-      options.push({ option: { value, label, date: variant.date ?? null }, sortKey });
+      const productName = (matchedProduct?.name ?? '').trim() || null;
+
+      options.push({
+        option: { value, label, date: variant.date ?? null, productName },
+        sortKey,
+      });
       seenValues.add(value);
     }
 
@@ -3253,6 +3259,9 @@ function SessionEditor({
                       pendingVariantSelection !== null &&
                       pendingVariantSelection === normalizedValue &&
                       variantSaving;
+                    const labelWithProduct = option.productName
+                      ? `${option.label} · ${option.productName}`
+                      : option.label;
                     return (
                       <ListGroup.Item
                         key={option.value}
@@ -3268,7 +3277,7 @@ function SessionEditor({
                         }}
                         className="d-flex justify-content-between align-items-center gap-3 text-start"
                       >
-                        <span>{option.label}</span>
+                        <span>{labelWithProduct}</span>
                         <span className="d-flex align-items-center gap-2">
                           {isPending ? (
                             <Spinner
