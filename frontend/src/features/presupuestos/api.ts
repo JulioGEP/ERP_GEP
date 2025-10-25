@@ -1,5 +1,4 @@
 // frontend/src/features/presupuestos/api.ts
-import { Buffer } from "buffer";
 import type {
   DealDetail,
   DealDetailViewModel,
@@ -9,6 +8,7 @@ import type {
   DealDocument,
   DealNote,
 } from "../../types/deal";
+import { blobOrFileToBase64 } from "../../utils/base64";
 
 export type SessionEstado =
   | 'BORRADOR'
@@ -893,28 +893,6 @@ async function request(path: string, init?: RequestInit) {
   return data;
 }
 
-async function blobToBase64(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-  let binary = "";
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const chunk = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  if (typeof btoa === "function") {
-    return btoa(binary);
-  }
-
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(binary, "binary").toString("base64");
-  }
-
-  throw new Error("No se puede convertir el archivo a base64 en este entorno.");
-}
-
 /* ===============================
  * Listado / Detalle / Import deal
  * =============================== */
@@ -1120,18 +1098,6 @@ export async function getDocPreviewUrl(
   };
 }
 
-async function fileToBase64(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  let binary = "";
-  const bytes = new Uint8Array(arrayBuffer);
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return typeof window !== "undefined" ? window.btoa(binary) : Buffer.from(binary, "binary").toString("base64");
-}
-
 const MANUAL_INLINE_UPLOAD_MAX_BYTES = Math.floor(4.5 * 1024 * 1024); // ~4.5 MB → < 6 MB cuando es base64
 const MANUAL_INLINE_UPLOAD_MAX_LABEL = '4.5 MB';
 export const MANUAL_DOCUMENT_SIZE_LIMIT_BYTES = MANUAL_INLINE_UPLOAD_MAX_BYTES;
@@ -1221,7 +1187,7 @@ export async function uploadManualDocument(
     }
   }
 
-  const base64 = await fileToBase64(file);
+  const base64 = await blobOrFileToBase64(file);
   await request(`/deal_documents/${encodeURIComponent(normalizedId)}/manual`, {
     method: "POST",
     headers,
@@ -1800,7 +1766,7 @@ export async function uploadSessionDocuments(params: {
       fileName: file.name,
       mimeType: file.type,
       fileSize: file.size,
-      contentBase64: await fileToBase64(file),
+      contentBase64: await blobOrFileToBase64(file),
     })),
   );
 
@@ -1907,7 +1873,7 @@ export async function uploadSessionCertificate(params: {
     throw new ApiError('VALIDATION_ERROR', 'El certificado generado está vacío');
   }
 
-  const contentBase64 = await blobToBase64(file);
+  const contentBase64 = await blobOrFileToBase64(file);
   const payload = {
     dealId: normalizedDealId,
     sessionId: normalizedSessionId,
