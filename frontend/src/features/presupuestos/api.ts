@@ -1529,7 +1529,6 @@ export type VariantSiblingOption = {
   parentWooId: string | null;
   name: string | null;
   date: string | null;
-  sede: string | null;
 };
 
 export type VariantSiblingsResponse = {
@@ -1571,7 +1570,6 @@ export async function fetchVariantSiblings(params: {
       const parentWooIdValue = toStringValue(variant?.parentWooId ?? variant?.parent_woo_id);
       const name = toStringValue(variant?.name);
       const date = toStringValue(variant?.date);
-      const sede = toStringValue(variant?.sede);
 
       if (!id) {
         return null;
@@ -1583,7 +1581,6 @@ export async function fetchVariantSiblings(params: {
         parentWooId: parentWooIdValue,
         name,
         date,
-        sede,
       } satisfies VariantSiblingOption;
     })
     .filter((variant): variant is VariantSiblingOption => variant !== null);

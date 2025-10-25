@@ -1798,58 +1798,9 @@ export function SessionsAccordionAbierta({
   const variantSiblings = variantSiblingsData?.variants ?? [];
   const variantParentName = variantSiblingsData?.parent?.name ?? null;
 
-  const extendedVariantSiblings = useMemo(() => {
-    if (!normalizedCurrentVariation) {
-      return variantSiblings;
-    }
-
-    const hasCurrentVariant = variantSiblings.some((variant) => {
-      const wooId = typeof variant.wooId === 'string' ? variant.wooId.trim() : '';
-      if (wooId && wooId === normalizedCurrentVariation) {
-        return true;
-      }
-      const id = typeof variant.id === 'string' ? variant.id.trim() : '';
-      return id && id === normalizedCurrentVariation;
-    });
-
-    if (hasCurrentVariant) {
-      return variantSiblings;
-    }
-
-    const rawDate = typeof currentDealTrainingDate === 'string' ? currentDealTrainingDate.trim() : '';
-    const formattedDate = formatVariantDate(rawDate || null);
-    const sedeLabel = typeof dealSedeLabel === 'string' ? dealSedeLabel.trim() : '';
-
-    const fallbackNameParts: string[] = [];
-    if (sedeLabel.length) {
-      fallbackNameParts.push(sedeLabel);
-    }
-    if (formattedDate) {
-      fallbackNameParts.push(formattedDate);
-    }
-
-    const fallbackVariant: VariantSiblingOption = {
-      id: normalizedCurrentVariation,
-      wooId: normalizedCurrentVariation,
-      parentWooId: variantSiblingsData?.parent?.wooId ?? null,
-      name: fallbackNameParts.length ? fallbackNameParts.join(', ') : null,
-      date: rawDate.length ? rawDate : null,
-      sede: sedeLabel.length ? sedeLabel : null,
-    };
-
-    return [fallbackVariant, ...variantSiblings];
-  }, [
-    currentDealTrainingDate,
-    dealSedeLabel,
-    formatVariantDate,
-    normalizedCurrentVariation,
-    variantSiblings,
-    variantSiblingsData?.parent?.wooId,
-  ]);
-
   const variantLookup = useMemo(() => {
     const map = new Map<string, VariantSiblingOption>();
-    for (const variant of extendedVariantSiblings) {
+    for (const variant of variantSiblings) {
       const wooId = typeof variant.wooId === 'string' ? variant.wooId.trim() : '';
       if (wooId.length) {
         map.set(wooId, variant);
@@ -1859,7 +1810,7 @@ export function SessionsAccordionAbierta({
       }
     }
     return map;
-  }, [extendedVariantSiblings]);
+  }, [variantSiblings]);
 
   const currentVariantInfo = useMemo(() => {
     if (!normalizedCurrentVariation) return null;
@@ -1872,40 +1823,12 @@ export function SessionsAccordionAbierta({
     return formatVariantDate(currentVariantInfo?.date ?? null) ?? null;
   }, [currentVariantInfo, formatVariantDate]);
 
-  const getNormalizedVariantSede = useCallback((variant: VariantSiblingOption | null | undefined) => {
-    if (!variant) return null;
-
-    const rawSede = typeof variant.sede === 'string' ? variant.sede.trim() : '';
-    if (rawSede.length) {
-      return rawSede.toLocaleLowerCase('es');
-    }
-
-    const label = typeof variant.name === 'string' ? variant.name : '';
-    if (!label.length) return null;
-
-    const [firstPart] = label.split(',');
-    const normalized = typeof firstPart === 'string' ? firstPart.trim() : '';
-    return normalized.length ? normalized.toLocaleLowerCase('es') : null;
-  }, []);
-
-  const currentVariantSede = useMemo(
-    () => getNormalizedVariantSede(currentVariantInfo),
-    [currentVariantInfo, getNormalizedVariantSede],
-  );
-
   const variantSelectOptions = useMemo(() => {
-    if (!extendedVariantSiblings.length) return [] as DealVariantSelectOption[];
-    return extendedVariantSiblings
+    if (!variantSiblings.length) return [] as DealVariantSelectOption[];
+    return variantSiblings
       .map((variant) => {
         const wooId = typeof variant.wooId === 'string' ? variant.wooId.trim() : '';
         if (!wooId.length) return null;
-
-        if (currentVariantSede) {
-          const optionSede = getNormalizedVariantSede(variant);
-          if (!optionSede || optionSede !== currentVariantSede) {
-            return null;
-          }
-        }
         const formattedDate = formatVariantDate(variant.date ?? null);
         let label = (variant.name ?? '').trim();
         if (!label.length) {
@@ -1919,12 +1842,7 @@ export function SessionsAccordionAbierta({
         } satisfies DealVariantSelectOption;
       })
       .filter((option): option is DealVariantSelectOption => option !== null);
-  }, [
-    currentVariantSede,
-    extendedVariantSiblings,
-    formatVariantDate,
-    getNormalizedVariantSede,
-  ]);
+  }, [formatVariantDate, variantSiblings]);
 
   const variantOptionsLoading = variantSiblingsQuery.isLoading || variantSiblingsQuery.isFetching;
   const [variantSaving, setVariantSaving] = useState(false);
