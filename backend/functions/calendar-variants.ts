@@ -52,6 +52,15 @@ type CalendarVariantEvent = {
 
 type DateRange = { start: Date; end: Date };
 
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function toTrimmed(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
@@ -224,6 +233,26 @@ function computeEventTimes(variantDate: Date | null, product: { hora_inicio: str
   return { start, end };
 }
 
+function normalizeProductIdentifier(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toLowerCase();
+  return normalized.length ? normalized : null;
+}
+
+const TWO_DAY_VERTICAL_PRODUCT_KEYS = new Set(['atrabajosverticales', 'trabajosverticales']);
+
+function isTwoDayVerticalProduct(product: { name: string | null; code: string | null; category: string | null }): boolean {
+  const identifiers = [product.name, product.code, product.category]
+    .map((value) => normalizeProductIdentifier(value))
+    .filter((value): value is string => Boolean(value));
+
+  return identifiers.some((identifier) => TWO_DAY_VERTICAL_PRODUCT_KEYS.has(identifier));
+}
+
 const variantSelectionBase = {
   id: true,
   id_woo: true,
@@ -391,7 +420,8 @@ export const handler = async (event: any) => {
       }
 
       const product = normalizeProductRecord(variant.product);
-      const times = computeEventTimes(variant.date, product);
+      const variantDate = toDate(variant.date);
+      const times = computeEventTimes(variantDate, product);
       if (!times) {
         return;
       }
@@ -418,13 +448,26 @@ export const handler = async (event: any) => {
 
       const normalizedVariant = normalizeVariantRecord(variant, studentsTotal);
 
-      events.push({
-        id: variant.id,
-        start: times.start.toISOString(),
-        end: times.end.toISOString(),
-        product,
-        variant: normalizedVariant,
-      });
+      const pushEvent = (id: string, start: Date, end: Date) => {
+        events.push({
+          id,
+          start: start.toISOString(),
+          end: end.toISOString(),
+          product,
+          variant: normalizedVariant,
+        });
+      };
+
+      pushEvent(variant.id, times.start, times.end);
+
+      if (variantDate && isTwoDayVerticalProduct(product)) {
+        const nextDayDate = new Date(variantDate.getTime());
+        nextDayDate.setUTCDate(nextDayDate.getUTCDate() + 1);
+        const nextTimes = computeEventTimes(nextDayDate, product);
+        if (nextTimes) {
+          pushEvent(`${variant.id}:day2`, nextTimes.start, nextTimes.end);
+        }
+      }
     });
 
     return successResponse({
