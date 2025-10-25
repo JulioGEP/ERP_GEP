@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/products.api.ts
-import { API_BASE, ApiError } from '../presupuestos/api';
+import { API_BASE, ApiError } from '../../api/client';
 import type { Product } from '../../types/product';
 
 export type ProductUpdatePayload = {

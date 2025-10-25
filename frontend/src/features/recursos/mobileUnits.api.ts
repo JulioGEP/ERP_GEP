@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/mobileUnits.api.ts
-import { API_BASE, ApiError } from "../presupuestos/api";
+import { API_BASE, ApiError } from "../../api/client";
 import type { MobileUnit } from "../../types/mobile-unit";
 import {
   MOBILE_UNIT_SEDE_OPTIONS,

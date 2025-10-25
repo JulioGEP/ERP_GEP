@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/api.ts
-import { API_BASE, ApiError } from "../presupuestos/api";
+import { API_BASE, ApiError } from "../../api/client";
 import type { Trainer } from "../../types/trainer";
 import { SEDE_OPTIONS } from "./trainers.constants";
 

@@ -10,15 +10,14 @@ import {
   ToastContainer,
 } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ApiError } from "../api/client";
+import type { PublicSessionInfo, SessionStudent } from "../api/sessions.types";
 import {
-  ApiError,
-  fetchPublicSessionStudents,
   createPublicSessionStudent,
-  updatePublicSessionStudent,
   deletePublicSessionStudent,
-  type SessionStudent,
-  type PublicSessionInfo,
-} from '../features/presupuestos/api';
+  fetchPublicSessionStudents,
+  updatePublicSessionStudent,
+} from "../features/presupuestos/api/students.api";
 
 const EMPTY_DRAFT = { nombre: '', apellido: '', dni: '' };
 

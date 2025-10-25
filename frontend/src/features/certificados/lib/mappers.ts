@@ -1,5 +1,5 @@
 import type { DealDetail, DealProduct } from '../../../types/deal';
-import type { SessionDTO, SessionStudent } from '../../presupuestos/api';
+import type { SessionDTO, SessionStudent } from "../../../api/sessions.types";
 
 export type CertificateSession = SessionDTO & {
   productId: string | null;
