@@ -278,7 +278,7 @@ export async function mapAndUpsertDealTree({
   products: any[];
   notes: any[];
   files: any[];
-}): Promise<{ dealId: string; pipelineLabel: string | null }> {
+}) {
   const prisma = getPrisma();
 
   // 1) Labels
@@ -662,5 +662,5 @@ export async function mapAndUpsertDealTree({
     });
   }
 
-  return { dealId, pipelineLabel: pipelineLabel ?? null };
+  return dealId;
 }

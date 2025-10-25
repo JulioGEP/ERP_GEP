@@ -12,7 +12,6 @@ import {
   getDealFiles,
 } from "./_shared/pipedrive";
 import { mapAndUpsertDealTree } from "./_shared/mappers";
-import { syncStudentsFromDealNotes } from "./_shared/noteStudents";
 import {
   syncDealDocumentsToGoogleDrive,
   deleteDealFolderFromGoogleDrive,
@@ -239,8 +238,6 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     productsCount: 0,
     notesCount: 0,
     filesCount: 0,
-    studentsCreated: 0,
-    studentsUpdated: 0,
   };
   let errorMessage: string | undefined;
 
@@ -256,11 +253,6 @@ async function importDealFromPipedrive(dealIdRaw: any) {
       timings.getDealMs = Date.now() - getDealStart;
     }
     if (!d) throw new Error("Deal no encontrado en Pipedrive");
-
-    const dealStatus = typeof d.status === "string" ? d.status.trim().toLowerCase() : "";
-    if (dealStatus !== "won") {
-      throw new Error("No se puede importar el presupuesto porque no está ganado.");
-    }
 
     const orgId = resolvePipedriveId(d.org_id);
     const personId = resolvePipedriveId(d.person_id);
@@ -371,7 +363,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     // 2) Mapear + upsert relacional en Neon
     const persistStart = Date.now();
     try {
-      const { dealId: importedDealId, pipelineLabel } = await mapAndUpsertDealTree({
+      savedDealId = await mapAndUpsertDealTree({
         deal: d,
         org: org || (orgId ? { id: orgId, name: resolvePipedriveName(d) ?? "—" } : undefined),
         person: person || (personId ? { id: personId } : undefined),
@@ -379,34 +371,6 @@ async function importDealFromPipedrive(dealIdRaw: any) {
         notes,
         files,
       });
-      savedDealId = importedDealId;
-
-      try {
-        const syncResult = await syncStudentsFromDealNotes({
-          dealId: importedDealId,
-          pipelineLabel,
-          notes,
-        });
-
-        if (syncResult.processed) {
-          counters.studentsCreated = syncResult.created;
-          counters.studentsUpdated = syncResult.updated;
-        }
-
-        if (syncResult.warning) {
-          warnings.push(syncResult.warning);
-        }
-      } catch (studentSyncError) {
-        const errorMessage =
-          studentSyncError instanceof Error ? studentSyncError.message : String(studentSyncError);
-        warnings.push(
-          `No se pudieron sincronizar los alumnos desde las notas del deal (${errorMessage}).`,
-        );
-        console.warn("[deal-import] note students sync failed", {
-          dealId: importedDealId,
-          error: errorMessage,
-        });
-      }
     } finally {
       timings.persistMs = Date.now() - persistStart;
     }
