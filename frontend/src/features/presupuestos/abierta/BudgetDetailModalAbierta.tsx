@@ -90,6 +90,8 @@ function mergeDealDetailData(current: DealDetail | undefined, next: DealDetail):
 const EMPTY_DOCUMENTS: DealDocument[] = [];
 const PIPELINE_LABEL = 'Formación Abierta';
 
+const processedNoteSignatureCache = new Map<string, string | null>();
+
 interface Props {
   dealId: string | null;
   summary?: DealSummary | null;
@@ -540,6 +542,7 @@ export function BudgetDetailModalAbierta({
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const processedNoteSignatureRef = useRef<string | null>(null);
+  const lastProcessedDealIdRef = useRef<string | null>(null);
   const noteWarningSignatureRef = useRef<string | null>(null);
 
   const getDocumentDisplayName = (doc: DealDocument | null | undefined): string => {
@@ -981,6 +984,11 @@ export function BudgetDetailModalAbierta({
     },
     onSuccess: (result, variables) => {
       processedNoteSignatureRef.current = variables.noteSignature;
+      const trimmedDealId = (normalizedDealId ?? '').trim();
+      if (trimmedDealId.length) {
+        processedNoteSignatureCache.set(trimmedDealId, variables.noteSignature);
+        lastProcessedDealIdRef.current = trimmedDealId;
+      }
       if (normalizedDealId) {
         qc.setQueryData<SessionStudent[] | undefined>(
           ['dealStudents', normalizedDealId],
@@ -1025,6 +1033,11 @@ export function BudgetDetailModalAbierta({
     },
     onError: (error) => {
       processedNoteSignatureRef.current = null;
+      const lastProcessedDealId = lastProcessedDealIdRef.current;
+      if (lastProcessedDealId) {
+        processedNoteSignatureCache.delete(lastProcessedDealId);
+      }
+      lastProcessedDealIdRef.current = null;
       if (onNotify) {
         const baseMessage = isApiError(error)
           ? `No se pudieron sincronizar los alumnos de la nota. [${error.code}] ${error.message}`
@@ -1044,6 +1057,8 @@ export function BudgetDetailModalAbierta({
       options?: { notifyOnNoChanges?: boolean; notifyOnMissingNote?: boolean },
     ): boolean => {
       if (!normalizedDealId) return false;
+      const trimmedDealId = normalizedDealId.trim();
+      if (!trimmedDealId.length) return false;
       const trimmedSessionId = sessionId.trim();
       if (!trimmedSessionId.length) return false;
       if (!noteSignature || !noteStudents.length) {
@@ -1092,6 +1107,8 @@ export function BudgetDetailModalAbierta({
 
       if (!toCreate.length && !toUpdate.length) {
         processedNoteSignatureRef.current = noteSignature;
+        processedNoteSignatureCache.set(trimmedDealId, noteSignature);
+        lastProcessedDealIdRef.current = trimmedDealId;
         if (options?.notifyOnNoChanges && onNotify) {
           onNotify({
             variant: 'info',
@@ -1102,6 +1119,8 @@ export function BudgetDetailModalAbierta({
       }
 
       processedNoteSignatureRef.current = noteSignature;
+      processedNoteSignatureCache.set(trimmedDealId, noteSignature);
+      lastProcessedDealIdRef.current = trimmedDealId;
 
       importStudentsFromNoteMutation.mutate({
         dealId: normalizedDealId,
@@ -1124,7 +1143,15 @@ export function BudgetDetailModalAbierta({
   );
 
   useEffect(() => {
-    processedNoteSignatureRef.current = null;
+    const trimmedDealId = (normalizedDealId ?? '').trim();
+    if (!trimmedDealId.length) {
+      processedNoteSignatureRef.current = null;
+      lastProcessedDealIdRef.current = null;
+      noteWarningSignatureRef.current = null;
+      return;
+    }
+    lastProcessedDealIdRef.current = trimmedDealId;
+    processedNoteSignatureRef.current = processedNoteSignatureCache.get(trimmedDealId) ?? null;
     noteWarningSignatureRef.current = null;
   }, [normalizedDealId]);
 
@@ -1133,7 +1160,13 @@ export function BudgetDetailModalAbierta({
     if (!noteSignature || !noteStudents.length) return;
     if (!defaultSessionId) return;
     if (studentsLoading || sessionsLoading) return;
-    if (processedNoteSignatureRef.current === noteSignature) return;
+    const trimmedDealId = normalizedDealId.trim();
+    if (!trimmedDealId.length) return;
+    const cachedSignature = processedNoteSignatureCache.get(trimmedDealId) ?? null;
+    if (cachedSignature === noteSignature) {
+      processedNoteSignatureRef.current = cachedSignature;
+      return;
+    }
 
     performNoteStudentsSync(defaultSessionId);
   }, [
