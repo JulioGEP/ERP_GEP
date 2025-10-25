@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, ListGroup, Spinner, Stack } from 'react-bootstrap';
 
-import { API_BASE, ApiError } from '../presupuestos/api';
+import { ApiError, requestJson } from '../../api/client';
 
 export type VariationsSyncLogEntry = {
   type: 'info' | 'success' | 'warning' | 'error';
@@ -47,25 +47,6 @@ export type VariationsSyncResponse = {
   summary?: VariationsSyncSummary;
 };
 
-async function requestJson(input: RequestInfo, init?: RequestInit) {
-  const response = await fetch(input, init);
-  const text = await response.text();
-  const json = text ? JSON.parse(text) : null;
-
-  if (!response.ok || (json && typeof json === 'object' && (json as any).ok === false)) {
-    const message =
-      json && typeof json === 'object' && typeof (json as any).message === 'string'
-        ? (json as any).message
-        : 'Error al sincronizar las variantes';
-    const status = response.status || (json && typeof (json as any).status === 'number'
-      ? (json as any).status
-      : undefined);
-    throw new ApiError('SYNC_ERROR', message, status);
-  }
-
-  return (json || {}) as VariationsSyncResponse;
-}
-
 function formatChangeSummary(changes: VariationsSyncChange[]): string {
   return changes
     .map((change) => {
@@ -105,15 +86,15 @@ export default function VariationsSync() {
     setSummary(null);
 
     try {
-      const json = await requestJson(`${API_BASE}/woo_courses`, {
+      const json = (await requestJson<VariationsSyncResponse>(`/woo_courses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-      });
+      })) ?? {};
 
-      setLogs(json.logs ?? []);
-      setSummary(json.summary ?? null);
+      setLogs(json?.logs ?? []);
+      setSummary(json?.summary ?? null);
     } catch (err) {
       if (err instanceof SyntaxError) {
         setError('Respuesta inválida del servidor.');

@@ -11,8 +11,8 @@ import {
   type CalendarVariantEvent,
   type CalendarVariantsResponse,
 } from './api';
+import { ApiError } from '../../api/client';
 import type { SessionEstado } from '../presupuestos/api';
-import { ApiError } from '../presupuestos/api';
 import {
   VariantModal,
   type ActiveVariant,

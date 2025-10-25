@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RoomModal, type RoomFormValues } from './RoomModal';
 import { createRoom, fetchRooms, updateRoom, type RoomPayload } from './rooms.api';
 import type { Room } from '../../types/room';
-import { ApiError } from '../presupuestos/api';
+import { ApiError } from '../../api/client';
 import { useDataTable } from '../../hooks/useDataTable';
 import { SortableHeader } from '../../components/table/SortableHeader';
 import { DataTablePagination } from '../../components/table/DataTablePagination';

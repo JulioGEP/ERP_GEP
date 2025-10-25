@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/api.ts
-import { API_BASE, ApiError } from "../presupuestos/api";
+import { ApiError, requestJson } from '../../api/client';
 import type { Trainer } from "../../types/trainer";
 import { SEDE_OPTIONS } from "./trainers.constants";
 
@@ -30,15 +30,6 @@ type TrainerMutationResponse = {
   message?: string;
   error_code?: string;
 };
-
-function parseJson(text: string): any {
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    throw new ApiError("INVALID_RESPONSE", "Respuesta JSON inválida del servidor");
-  }
-}
 
 function normalizeTrainer(row: any): Trainer {
   if (!row || typeof row !== "object") {
@@ -123,33 +114,20 @@ function buildRequestBody(payload: TrainerPayload): Record<string, any> {
   return body;
 }
 
-async function requestJson(input: RequestInfo, init?: RequestInit) {
-  const response = await fetch(input, init);
-  const text = await response.text();
-  const json = parseJson(text);
-
-  if (!response.ok || json?.ok === false) {
-    const code = json?.error_code ?? `HTTP_${response.status}`;
-    const message = json?.message ?? "Error inesperado en la solicitud";
-    throw new ApiError(code, message, response.status);
-  }
-
-  return json;
-}
-
 export async function fetchTrainers(): Promise<Trainer[]> {
-  const json = (await requestJson(`${API_BASE}/trainers`)) as TrainerListResponse;
+  const json = (await requestJson<TrainerListResponse>(`/trainers`)) ?? {};
   const rows = Array.isArray(json.trainers) ? json.trainers : [];
   return rows.map((row) => normalizeTrainer(row));
 }
 
 export async function createTrainer(payload: TrainerPayload): Promise<Trainer> {
   const body = buildRequestBody(payload);
-  const json = (await requestJson(`${API_BASE}/trainers`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })) as TrainerMutationResponse;
+  const json =
+    (await requestJson<TrainerMutationResponse>(`/trainers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })) ?? {};
 
   return normalizeTrainer(json.trainer);
 }
@@ -160,11 +138,12 @@ export async function updateTrainer(trainerId: string, payload: TrainerPayload):
   }
 
   const body = buildRequestBody(payload);
-  const json = (await requestJson(`${API_BASE}/trainers/${encodeURIComponent(trainerId)}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })) as TrainerMutationResponse;
+  const json =
+    (await requestJson<TrainerMutationResponse>(`/trainers/${encodeURIComponent(trainerId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })) ?? {};
 
   return normalizeTrainer(json.trainer);
 }

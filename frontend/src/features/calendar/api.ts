@@ -1,5 +1,6 @@
 // frontend/src/features/calendar/api.ts
-import { API_BASE, ApiError, type SessionEstado } from '../presupuestos/api';
+import { ApiError, requestJson } from '../../api/client';
+import type { SessionEstado } from '../presupuestos/api';
 
 export type CalendarVariantProduct = {
   id: string;
@@ -331,37 +332,31 @@ export async function fetchCalendarSessions(
   params: CalendarSessionsParams,
 ): Promise<CalendarSessionsResponse> {
   const query = buildQuery(params);
-  let response: Response;
   try {
-    response = await fetch(`${API_BASE}/sessions/range?${query}`);
-  } catch (error: any) {
-    throw new ApiError('NETWORK_ERROR', error?.message ?? 'Fallo de red');
+    const payload =
+      (await requestJson<{
+        range?: { start?: string | null; end?: string | null };
+        sessions?: unknown;
+      }>(`/sessions/range?${query}`)) ?? {};
+
+    const rangeStart = toTrimmed(payload?.range?.start);
+    const rangeEnd = toTrimmed(payload?.range?.end);
+    const sessions = sanitizeSessionsPayload(payload?.sessions);
+
+    return {
+      range: {
+        start: rangeStart ?? params.start,
+        end: rangeEnd ?? params.end,
+      },
+      sessions,
+    };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const message = error.message || 'Error inesperado en la carga del calendario';
+      throw new ApiError(error.code, message, error.status);
+    }
+    throw error;
   }
-
-  let payload: any = {};
-  try {
-    payload = await response.json();
-  } catch {
-    /* cuerpo vacío */
-  }
-
-  if (!response.ok || payload?.ok === false) {
-    const code = payload?.error_code ?? payload?.code ?? `HTTP_${response.status}`;
-    const message = payload?.message ?? 'Error inesperado en la carga del calendario';
-    throw new ApiError(code, message, response.status);
-  }
-
-  const rangeStart = toTrimmed(payload?.range?.start);
-  const rangeEnd = toTrimmed(payload?.range?.end);
-  const sessions = sanitizeSessionsPayload(payload?.sessions);
-
-  return {
-    range: {
-      start: rangeStart ?? params.start,
-      end: rangeEnd ?? params.end,
-    },
-    sessions,
-  };
 }
 
 export async function fetchCalendarVariants(
@@ -371,35 +366,29 @@ export async function fetchCalendarVariants(
   search.set('start', params.start);
   search.set('end', params.end);
 
-  let response: Response;
   try {
-    response = await fetch(`${API_BASE}/calendar-variants?${search.toString()}`);
-  } catch (error: any) {
-    throw new ApiError('NETWORK_ERROR', error?.message ?? 'Fallo de red');
+    const payload =
+      (await requestJson<{
+        range?: { start?: string | null; end?: string | null };
+        variants?: unknown;
+      }>(`/calendar-variants?${search.toString()}`)) ?? {};
+
+    const rangeStart = toTrimmed(payload?.range?.start);
+    const rangeEnd = toTrimmed(payload?.range?.end);
+    const variants = sanitizeVariantsPayload(payload?.variants);
+
+    return {
+      range: {
+        start: rangeStart ?? params.start,
+        end: rangeEnd ?? params.end,
+      },
+      variants,
+    };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const message = error.message || 'Error inesperado en la carga del calendario';
+      throw new ApiError(error.code, message, error.status);
+    }
+    throw error;
   }
-
-  let payload: any = {};
-  try {
-    payload = await response.json();
-  } catch {
-    /* cuerpo vacío */
-  }
-
-  if (!response.ok || payload?.ok === false) {
-    const code = payload?.error_code ?? payload?.code ?? `HTTP_${response.status}`;
-    const message = payload?.message ?? 'Error inesperado en la carga del calendario';
-    throw new ApiError(code, message, response.status);
-  }
-
-  const rangeStart = toTrimmed(payload?.range?.start);
-  const rangeEnd = toTrimmed(payload?.range?.end);
-  const variants = sanitizeVariantsPayload(payload?.variants);
-
-  return {
-    range: {
-      start: rangeStart ?? params.start,
-      end: rangeEnd ?? params.end,
-    },
-    variants,
-  } satisfies CalendarVariantsResponse;
 }

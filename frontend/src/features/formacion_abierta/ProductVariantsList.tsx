@@ -16,16 +16,15 @@ import {
   Table,
 } from 'react-bootstrap';
 
+import { ApiError, requestJson } from '../../api/client';
 import {
-  API_BASE,
-  ApiError,
   fetchActiveTrainers,
   fetchRoomsCatalog,
   fetchMobileUnitsCatalog,
   fetchSessionAvailability,
   fetchDealStudents,
+  type SessionStudent,
 } from '../presupuestos/api';
-import type { SessionStudent } from '../presupuestos/api';
 import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailModalAbierta';
 import type { DealSummary } from '../../types/deal';
 import { emitToast } from '../../utils/toast';
@@ -226,15 +225,19 @@ function buildProductDefaultsSummary(product: ProductInfo): string | null {
 }
 
 async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
-  const response = await fetch(`${API_BASE}/products-variants`, {
-    headers: { Accept: 'application/json' },
-  });
-  const text = await response.text();
-  const json: ProductsVariantsResponse = text ? JSON.parse(text) : {};
+  let json: ProductsVariantsResponse = {};
 
-  if (!response.ok || json.ok === false) {
-    const message = json.message || 'No se pudieron obtener las variantes.';
-    throw new ApiError('FETCH_ERROR', message, response.status || undefined);
+  try {
+    json =
+      (await requestJson<ProductsVariantsResponse>(`/products-variants`, {
+        headers: { Accept: 'application/json' },
+      })) ?? {};
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const message = error.message || 'No se pudieron obtener las variantes.';
+      throw new ApiError(error.code || 'FETCH_ERROR', message, error.status);
+    }
+    throw error;
   }
 
   const products = Array.isArray(json.products) ? json.products : [];
@@ -290,69 +293,55 @@ async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
 }
 
 async function deleteProductVariant(variantId: string): Promise<string | null> {
-  let response: Response;
   try {
-    response = await fetch(`${API_BASE}/products-variants/${encodeURIComponent(variantId)}`, {
-      method: 'DELETE',
-      headers: { Accept: 'application/json' },
-    });
+    const json = await requestJson<DeleteVariantResponse>(
+      `/products-variants/${encodeURIComponent(variantId)}`,
+      {
+        method: 'DELETE',
+        headers: { Accept: 'application/json' },
+      },
+    );
+
+    return json?.message ?? null;
   } catch (error) {
-    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
-  }
-
-  const text = await response.text();
-  let json: DeleteVariantResponse = {};
-
-  if (text) {
-    try {
-      json = JSON.parse(text);
-    } catch (error) {
-      console.error('[deleteProductVariant] invalid JSON response', error);
-      json = {};
+    if (error instanceof ApiError) {
+      const message = error.message || 'No se pudo eliminar la variante.';
+      const code = error.code || 'DELETE_ERROR';
+      throw new ApiError(code, message, error.status);
     }
+    throw error;
   }
-
-  if (!response.ok || json.ok === false) {
-    const message = json.message || 'No se pudo eliminar la variante.';
-    throw new ApiError(json.error_code ?? 'DELETE_ERROR', message, response.status || undefined);
-  }
-
-  return json.message ?? null;
 }
 
 async function updateProductVariantDefaults(
   productId: string,
   updates: ProductDefaultsUpdatePayload,
 ): Promise<ProductDefaults> {
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE}/product-variant-settings`, {
-      method: 'PATCH',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ product_id: productId, ...updates }),
-    });
-  } catch (error) {
-    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
-  }
-
-  const text = await response.text();
   let json: ProductDefaultsUpdateResponse = {};
 
-  if (text) {
-    try {
-      json = JSON.parse(text) as ProductDefaultsUpdateResponse;
-    } catch (error) {
-      console.error('[updateProductVariantDefaults] invalid JSON response', error);
-      json = {};
+  try {
+    json =
+      (await requestJson<ProductDefaultsUpdateResponse>(`/product-variant-settings`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ product_id: productId, ...updates }),
+      })) ?? {};
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const message = error.message || 'No se pudo actualizar la configuración del producto.';
+      throw new ApiError(error.code || 'UPDATE_DEFAULTS_ERROR', message, error.status);
     }
+    throw error;
   }
 
-  if (!response.ok || json.ok === false || !json.product) {
-    const message = json.message || 'No se pudo actualizar la configuración del producto.';
-    throw new ApiError('UPDATE_DEFAULTS_ERROR', message, response.status || undefined);
+  if (!json.product) {
+    throw new ApiError(
+      'UPDATE_DEFAULTS_ERROR',
+      json.message || 'No se pudo actualizar la configuración del producto.',
+    );
   }
 
   const stockQuantity =
@@ -380,35 +369,24 @@ async function createProductVariantsForProduct(
   sedes: string[],
   dates: string[],
 ): Promise<{ created: VariantInfo[]; skipped: number; message: string | null }> {
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE}/product-variants-create`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ product_id: productId, sedes, dates }),
-    });
-  } catch (error) {
-    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
-  }
-
-  const text = await response.text();
   let json: VariantBulkCreateResponse = {};
 
-  if (text) {
-    try {
-      json = JSON.parse(text) as VariantBulkCreateResponse;
-    } catch (error) {
-      console.error('[createProductVariantsForProduct] invalid JSON response', error);
-      json = {};
+  try {
+    json =
+      (await requestJson<VariantBulkCreateResponse>(`/product-variants-create`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ product_id: productId, sedes, dates }),
+      })) ?? {};
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const message = error.message || 'No se pudieron crear las variantes.';
+      throw new ApiError(error.code || 'CREATE_VARIANTS_ERROR', message, error.status);
     }
-  }
-
-  if (!response.ok || json.ok === false) {
-    const message = json.message || 'No se pudieron crear las variantes.';
-    throw new ApiError('CREATE_VARIANTS_ERROR', message, response.status || undefined);
+    throw error;
   }
 
   const createdRaw = Array.isArray(json.created) ? json.created : [];
@@ -495,36 +473,28 @@ async function updateProductVariant(
   variantId: string,
   updates: VariantUpdatePayload,
 ): Promise<VariantInfo> {
-  let response: Response;
-
-  try {
-    response = await fetch(`${API_BASE}/products-variants/${encodeURIComponent(variantId)}`, {
-      method: 'PATCH',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updates),
-    });
-  } catch (error) {
-    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
-  }
-
-  const text = await response.text();
   let json: VariantUpdateResponse = {};
 
-  if (text) {
-    try {
-      json = JSON.parse(text) as VariantUpdateResponse;
-    } catch (error) {
-      console.error('[updateProductVariant] invalid JSON response', error);
-      json = {};
+  try {
+    json =
+      (await requestJson<VariantUpdateResponse>(`/products-variants/${encodeURIComponent(variantId)}`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      })) ?? {};
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const message = error.message || 'No se pudo actualizar la variante.';
+      throw new ApiError(error.code || 'UPDATE_ERROR', message, error.status);
     }
+    throw error;
   }
 
-  if (!response.ok || json.ok === false || !json.variant) {
-    const message = json.message || 'No se pudo actualizar la variante.';
-    throw new ApiError('UPDATE_ERROR', message, response.status || undefined);
+  if (!json.variant) {
+    throw new ApiError('UPDATE_ERROR', json.message || 'No se pudo actualizar la variante.');
   }
 
   return normalizeVariantFromResponse(json.variant, variantId);
@@ -683,30 +653,20 @@ function findDealProductPriceForProduct(deals: DealTag[], product: ProductInfo):
 }
 
 async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]> {
-  let response: Response;
-  const url = `${API_BASE}/deals?w_id_variation=${encodeURIComponent(variationWooId)}`;
-
-  try {
-    response = await fetch(url, { headers: { Accept: 'application/json' } });
-  } catch (error) {
-    throw new ApiError('NETWORK_ERROR', 'No se pudo conectar con el servidor.', undefined);
-  }
-
-  const text = await response.text();
   let json: DealsByVariationResponse = {};
 
-  if (text) {
-    try {
-      json = JSON.parse(text) as DealsByVariationResponse;
-    } catch (error) {
-      console.error('[fetchDealsByVariation] invalid JSON response', error);
-      json = {};
+  try {
+    json =
+      (await requestJson<DealsByVariationResponse>(
+        `/deals?w_id_variation=${encodeURIComponent(variationWooId)}`,
+        { headers: { Accept: 'application/json' } },
+      )) ?? {};
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const message = error.message || 'No se pudieron obtener los deals.';
+      throw new ApiError(error.code || 'FETCH_ERROR', message, error.status);
     }
-  }
-
-  if (!response.ok || json.ok === false) {
-    const message = json.message || 'No se pudieron obtener los deals.';
-    throw new ApiError('FETCH_ERROR', message, response.status || undefined);
+    throw error;
   }
 
   const deals = Array.isArray(json.deals) ? json.deals : [];

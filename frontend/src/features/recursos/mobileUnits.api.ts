@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/mobileUnits.api.ts
-import { API_BASE, ApiError } from "../presupuestos/api";
+import { ApiError, requestJson } from '../../api/client';
 import type { MobileUnit } from "../../types/mobile-unit";
 import {
   MOBILE_UNIT_SEDE_OPTIONS,
@@ -27,15 +27,6 @@ type MobileUnitMutationResponse = {
   message?: string;
   error_code?: string;
 };
-
-function parseJson(text: string): any {
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    throw new ApiError("INVALID_RESPONSE", "Respuesta JSON inválida del servidor");
-  }
-}
 
 function sanitizeSelection(value: unknown, allowedValues: readonly string[]): string[] {
   const items = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
@@ -111,33 +102,21 @@ function buildRequestBody(payload: MobileUnitPayload): Record<string, any> {
   return body;
 }
 
-async function requestJson(input: RequestInfo, init?: RequestInit) {
-  const response = await fetch(input, init);
-  const text = await response.text();
-  const json = parseJson(text);
-
-  if (!response.ok || json?.ok === false) {
-    const code = json?.error_code ?? `HTTP_${response.status}`;
-    const message = json?.message ?? "Error inesperado en la solicitud";
-    throw new ApiError(code, message, response.status);
-  }
-
-  return json;
-}
 
 export async function fetchMobileUnits(): Promise<MobileUnit[]> {
-  const json = (await requestJson(`${API_BASE}/mobile-units`)) as MobileUnitListResponse;
+  const json = (await requestJson<MobileUnitListResponse>(`/mobile-units`)) ?? {};
   const rows = Array.isArray(json.mobileUnits) ? json.mobileUnits : [];
   return rows.map((row) => normalizeMobileUnit(row));
 }
 
 export async function createMobileUnit(payload: MobileUnitPayload): Promise<MobileUnit> {
   const body = buildRequestBody(payload);
-  const json = (await requestJson(`${API_BASE}/mobile-units`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })) as MobileUnitMutationResponse;
+  const json =
+    (await requestJson<MobileUnitMutationResponse>(`/mobile-units`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })) ?? {};
 
   return normalizeMobileUnit(json.mobileUnit);
 }
@@ -148,11 +127,12 @@ export async function updateMobileUnit(unidadId: string, payload: MobileUnitPayl
   }
 
   const body = buildRequestBody(payload);
-  const json = (await requestJson(`${API_BASE}/mobile-units/${encodeURIComponent(unidadId)}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  })) as MobileUnitMutationResponse;
+  const json =
+    (await requestJson<MobileUnitMutationResponse>(`/mobile-units/${encodeURIComponent(unidadId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })) ?? {};
 
   return normalizeMobileUnit(json.mobileUnit);
 }
