@@ -58,7 +58,7 @@ import {
   SESSION_DOCUMENT_SIZE_LIMIT_LABEL,
   SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE,
   patchDealEditable,
-  fetchProductVariants,
+  fetchVariantSiblings,
   type TrainerOption,
   type RoomOption,
   type MobileUnitOption,
@@ -67,7 +67,8 @@ import {
   type SessionDocument,
   type SessionStudent,
   type SessionCounts,
-  type ProductVariantOption,
+  type VariantSiblingOption,
+  type VariantSiblingsResponse,
 } from '../../api';
 import { isApiError } from '../../api';
 import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
@@ -87,21 +88,6 @@ const ENABLE_TRAINERS = false;
 const ENABLE_MOBILE_UNITS = false;
 const ENABLE_ROOMS = false;
 const ENABLE_ADDRESS = false;
-
-const VARIANT_SEDE_ALIASES: Record<string, string> = {
-  sabadell: 'gep sabadell',
-  'gep sabadell': 'gep sabadell',
-  madrid: 'gep arganda',
-  'gep arganda': 'gep arganda',
-};
-
-function normalizeVariantSedeKey(value: string | null | undefined): string {
-  if (typeof value !== 'string') return '';
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  const lower = trimmed.toLocaleLowerCase('es');
-  return VARIANT_SEDE_ALIASES[lower] ?? lower;
-}
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -1570,7 +1556,7 @@ type DealVariantSelectOption = {
   value: string;
   label: string;
   date: string | null;
-  productName: string | null;
+  description: string | null;
 };
 
 type ApplicableProductInfo = {
@@ -1774,330 +1760,91 @@ export function SessionsAccordionAbierta({
     setCurrentDealTrainingDate(dealTrainingDate ?? null);
   }, [dealTrainingDate]);
 
-  const variantProductFilters = useMemo(() => {
-    const filters = new Set<string>();
-    for (const product of applicableProducts) {
-      product.matchIds.forEach((value) => {
-        if (value) filters.add(value);
-      });
-      product.matchTexts.forEach((value) => {
-        if (value) filters.add(value);
-      });
-    }
-    return Array.from(filters);
-  }, [applicableProducts]);
 
-  const variantProductKey = useMemo(
+  const variantDateFormatter = useMemo(
     () =>
-      variantProductFilters
-        .slice()
-        .sort((a, b) => a.localeCompare(b, 'es'))
-        .join('|'),
-    [variantProductFilters],
+      new Intl.DateTimeFormat('es-ES', {
+        dateStyle: 'long',
+      }),
+    [],
   );
 
-  const variantWooFilterKey = normalizedCurrentVariation ? `woo:${normalizedCurrentVariation}` : 'woo:';
+  const formatVariantDate = useCallback(
+    (value: string | null | undefined) => {
+      if (typeof value !== 'string') return null;
+      const trimmed = value.trim();
+      if (!trimmed.length) return null;
+      const parsed = new Date(trimmed);
+      if (Number.isNaN(parsed.getTime())) {
+        return trimmed;
+      }
+      try {
+        return variantDateFormatter.format(parsed);
+      } catch (error) {
+        return trimmed;
+      }
+    },
+    [variantDateFormatter],
+  );
 
-  const productVariantsQuery = useQuery({
-    queryKey: ['deal', dealId, 'product-variants', variantProductKey, variantWooFilterKey],
-    queryFn: () =>
-      fetchProductVariants({
-        productIds: variantProductFilters,
-        variantWooIds: normalizedCurrentVariation ? [normalizedCurrentVariation] : undefined,
-      }),
-    enabled: variantProductFilters.length > 0 || Boolean(normalizedCurrentVariation),
+  const variantSiblingsQuery = useQuery<VariantSiblingsResponse>({
+    queryKey: ['deal', dealId, 'variant-siblings', normalizedCurrentVariation],
+    queryFn: () => fetchVariantSiblings({ variantWooId: normalizedCurrentVariation }),
+    enabled: Boolean(normalizedCurrentVariation),
     staleTime: 5 * 60 * 1000,
   });
 
-  const productVariants = productVariantsQuery.data ?? [];
+  const variantSiblingsData = variantSiblingsQuery.data ?? null;
+  const variantSiblings = variantSiblingsData?.variants ?? [];
+  const variantParentName = variantSiblingsData?.parent?.name ?? null;
 
   const variantLookup = useMemo(() => {
-    const map = new Map<string, ProductVariantOption>();
-    for (const variant of productVariants) {
-      map.set(variant.variantId, variant);
-      if (variant.wooId) {
-        map.set(variant.wooId, variant);
+    const map = new Map<string, VariantSiblingOption>();
+    for (const variant of variantSiblings) {
+      const wooId = typeof variant.wooId === 'string' ? variant.wooId.trim() : '';
+      if (wooId.length) {
+        map.set(wooId, variant);
+      }
+      if (variant.id && !map.has(variant.id)) {
+        map.set(variant.id, variant);
       }
     }
     return map;
-  }, [productVariants]);
+  }, [variantSiblings]);
 
   const currentVariantInfo = useMemo(() => {
     if (!normalizedCurrentVariation) return null;
     return variantLookup.get(normalizedCurrentVariation) ?? null;
   }, [normalizedCurrentVariation, variantLookup]);
 
-  const normalizeExact = useCallback((value: string | null | undefined) => {
-    if (typeof value === 'string') return value.trim();
-    if (typeof value === 'number') return String(value).trim();
-    return '';
-  }, []);
-
   const currentVariantName = useMemo(() => {
     const label = currentVariantInfo?.name?.trim() ?? '';
-    return label.length ? label : null;
-  }, [currentVariantInfo]);
-
-  const normalizedCurrentVariantWooId = useMemo(
-    () => normalizeExact(currentVariantInfo?.wooId),
-    [currentVariantInfo, normalizeExact],
-  );
-
-  const normalizedCurrentVariantId = useMemo(
-    () => normalizeExact(currentVariantInfo?.variantId),
-    [currentVariantInfo, normalizeExact],
-  );
-
-  const normalizedCurrentVariantSede = useMemo(
-    () => normalizeVariantSedeKey(currentVariantInfo?.sede),
-    [currentVariantInfo],
-  );
-
-  const matchesProductById = useCallback(
-    (variant: ProductVariantOption, product: ApplicableProductInfo) => {
-      const variantIds = new Set<string>();
-      [
-        variant.productId,
-        variant.productPipeId,
-        variant.productCode,
-        variant.productWooId,
-        variant.parentWooId,
-      ].forEach((value) => {
-        const normalized = normalizeExact(value);
-        if (normalized) variantIds.add(normalized);
-      });
-
-      return product.matchIds.some((id) => variantIds.has(id));
-    },
-    [normalizeExact],
-  );
-
-  const normalizedDealSedeKey = useMemo(
-    () => normalizeVariantSedeKey(normalizedDealSede),
-    [normalizedDealSede],
-  );
-
-  const allowedVariantParentsByProduct = useMemo(() => {
-    const map = new Map<string, Set<string>>();
-
-    const add = (productId: string, value: string | null | undefined) => {
-      const normalized = normalizeExact(value);
-      if (!normalized) {
-        return;
-      }
-      const existing = map.get(productId);
-      if (existing) {
-        existing.add(normalized);
-      } else {
-        map.set(productId, new Set([normalized]));
-      }
-    };
-
-    applicableProducts.forEach((product) => {
-      productVariants.forEach((variant) => {
-        if (!matchesProductById(variant, product)) {
-          return;
-        }
-        add(product.id, variant.parentWooId ?? variant.productWooId);
-      });
-    });
-
-    if (currentVariantInfo) {
-      const parentId = currentVariantInfo.parentWooId ?? currentVariantInfo.productWooId;
-      if (parentId) {
-        const matchedProduct = applicableProducts.find((product) =>
-          matchesProductById(currentVariantInfo, product),
-        );
-        if (matchedProduct) {
-          add(matchedProduct.id, parentId);
-        }
-      }
-    }
-
-    return map;
-  }, [applicableProducts, currentVariantInfo, matchesProductById, normalizeExact, productVariants]);
-
-  const activeVariantProduct = useMemo(() => {
-    if (currentVariantInfo) {
-      return (
-        applicableProducts.find((product) => matchesProductById(currentVariantInfo, product)) ??
-        null
-      );
-    }
-    return applicableProducts.length === 1 ? applicableProducts[0] : null;
-  }, [applicableProducts, currentVariantInfo, matchesProductById]);
+    if (label.length) return label;
+    return formatVariantDate(currentVariantInfo?.date ?? null) ?? null;
+  }, [currentVariantInfo, formatVariantDate]);
 
   const variantSelectOptions = useMemo(() => {
-    if (!applicableProducts.length && !currentVariantInfo) {
-      return [] as DealVariantSelectOption[];
-    }
-
-    const relevantProducts = activeVariantProduct
-      ? [activeVariantProduct]
-      : (() => {
-          if (currentVariantInfo) {
-            const matchIds = new Set<string>();
-            const matchTexts = new Set<string>();
-
-            const addMatchId = (value: string | null | undefined) => {
-              const normalized = normalizeExact(value);
-              if (normalized) {
-                matchIds.add(normalized);
-              }
-            };
-
-            const addMatchText = (value: string | null | undefined) => {
-              if (typeof value === 'string') {
-                const trimmed = value.trim();
-                if (trimmed.length) {
-                  matchTexts.add(trimmed.toLocaleLowerCase('es'));
-                }
-              }
-            };
-
-            addMatchId(currentVariantInfo.productId);
-            addMatchId(currentVariantInfo.productPipeId);
-            addMatchId(currentVariantInfo.productCode);
-            addMatchId(currentVariantInfo.productWooId);
-            addMatchId(currentVariantInfo.parentWooId);
-            addMatchId(currentVariantInfo.wooId);
-            addMatchId(normalizedCurrentVariation);
-
-            addMatchText(currentVariantInfo.productCode);
-            addMatchText(currentVariantInfo.productName);
-
-            const syntheticId =
-              Array.from(matchIds)[0] ||
-              normalizedCurrentVariation ||
-              currentVariantInfo.variantId ||
-              `variant-${currentVariantInfo.wooId ?? 'unknown'}`;
-
-            return [
-              {
-                id: syntheticId,
-                name: (currentVariantInfo.productName ?? '').trim() || null,
-                code: (currentVariantInfo.productCode ?? '').trim() || null,
-                quantity: 0,
-                hours: null,
-                matchIds: Array.from(matchIds),
-                matchTexts: Array.from(matchTexts),
-              },
-            ];
-          }
-
-          return applicableProducts;
-        })();
-
-    const options: Array<{ option: DealVariantSelectOption; sortKey: number }> = [];
-    const seenValues = new Set<string>();
-    const dateFormatter = new Intl.DateTimeFormat('es-ES', {
-      timeZone: MADRID_TIMEZONE,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-    const comparisonFormatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: MADRID_TIMEZONE,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-    const todayKey = comparisonFormatter.format(new Date());
-
-    for (const variant of productVariants) {
-      const value = variant.wooId;
-      if (!value) continue;
-      if (seenValues.has(value)) continue;
-
-      const matchedProduct = relevantProducts.find((product) =>
-        matchesProductById(variant, product),
-      );
-      if (!matchedProduct) continue;
-
-      const normalizedVariantSede = normalizeVariantSedeKey(variant.sede);
-      const isCurrentVariant =
-        (normalizedCurrentVariantWooId && normalizeExact(variant.wooId) === normalizedCurrentVariantWooId) ||
-        (normalizedCurrentVariantId && normalizeExact(variant.variantId) === normalizedCurrentVariantId);
-
-      const normalizedParentWooId = normalizeExact(variant.parentWooId ?? variant.productWooId);
-      const allowedParents = allowedVariantParentsByProduct.get(matchedProduct.id);
-      if (allowedParents && allowedParents.size > 0) {
-        if (!normalizedParentWooId || !allowedParents.has(normalizedParentWooId)) {
-          if (!isCurrentVariant) {
-            continue;
-          }
+    if (!variantSiblings.length) return [] as DealVariantSelectOption[];
+    return variantSiblings
+      .map((variant) => {
+        const wooId = typeof variant.wooId === 'string' ? variant.wooId.trim() : '';
+        if (!wooId.length) return null;
+        const formattedDate = formatVariantDate(variant.date ?? null);
+        let label = (variant.name ?? '').trim();
+        if (!label.length) {
+          label = formattedDate ?? `Variante ${wooId}`;
         }
-      }
-
-      if (normalizedDealSedeKey) {
-        if (normalizedVariantSede !== normalizedDealSedeKey && !isCurrentVariant) {
-          continue;
-        }
-      } else if (normalizedCurrentVariantSede && normalizedVariantSede !== normalizedCurrentVariantSede) {
-        if (!isCurrentVariant) {
-          continue;
-        }
-      }
-
-      let sortKey = Number.POSITIVE_INFINITY;
-      let label: string | null = (variant.name ?? '').trim() || null;
-      let variantDateKey: string | null = null;
-      let formattedDate: string | null = null;
-
-      if (variant.date) {
-        const parsed = new Date(variant.date);
-        if (!Number.isNaN(parsed.getTime())) {
-          sortKey = parsed.getTime();
-          variantDateKey = comparisonFormatter.format(parsed);
-          formattedDate = dateFormatter.format(parsed);
-        }
-      }
-
-      if (!variantDateKey) {
-        if (!isCurrentVariant) {
-          continue;
-        }
-      } else if (!isCurrentVariant && variantDateKey < todayKey) {
-        continue;
-      }
-
-      if (!label) {
-        label = formattedDate ?? `Variante ${value}`;
-      }
-
-      const productName = (matchedProduct?.name ?? '').trim() || null;
-
-      options.push({
-        option: { value, label, date: variant.date ?? null, productName },
-        sortKey,
-      });
-      seenValues.add(value);
-    }
-
-    return options
-      .sort((a, b) => {
-        if (a.sortKey !== b.sortKey) {
-          return a.sortKey - b.sortKey;
-        }
-        return a.option.label.localeCompare(b.option.label, 'es');
+        return {
+          value: wooId,
+          label,
+          date: variant.date ?? null,
+          description: formattedDate,
+        } satisfies DealVariantSelectOption;
       })
-      .map((item) => item.option);
-  }, [
-    activeVariantProduct,
-    allowedVariantParentsByProduct,
-    applicableProducts,
-    currentVariantInfo,
-    matchesProductById,
-    normalizeExact,
-    productVariants,
-    normalizedCurrentVariation,
-    normalizedCurrentVariantId,
-    normalizedCurrentVariantSede,
-    normalizedCurrentVariantWooId,
-    normalizedDealSedeKey,
-  ]);
+      .filter((option): option is DealVariantSelectOption => option !== null);
+  }, [formatVariantDate, variantSiblings]);
 
-  const variantOptionsLoading = productVariantsQuery.isLoading || productVariantsQuery.isFetching;
+  const variantOptionsLoading = variantSiblingsQuery.isLoading || variantSiblingsQuery.isFetching;
   const [variantSaving, setVariantSaving] = useState(false);
 
   const handleVariantSelect = useCallback(
@@ -2117,7 +1864,7 @@ export function SessionsAccordionAbierta({
       }
 
       const variantInfo = variantLookup.get(normalizedNext);
-      if (!variantInfo) {
+      if (!variantInfo || !variantInfo.wooId) {
         onNotify?.({ variant: 'danger', message: 'No se encontró la variante seleccionada.' });
         return false;
       }
@@ -2125,17 +1872,22 @@ export function SessionsAccordionAbierta({
       setVariantSaving(true);
       try {
         await patchDealEditable(dealId, {
-          w_id_variation: normalizedNext,
+          w_id_variation: variantInfo.wooId,
           a_fecha: variantInfo.date ?? null,
         });
 
-        setCurrentDealVariation(normalizedNext);
+        setCurrentDealVariation(variantInfo.wooId);
         setCurrentDealTrainingDate(variantInfo.date ?? null);
 
         qc.setQueryData<DealDetail | undefined>(['deal', dealId], (current) => {
           if (!current) return current;
-          return { ...current, w_id_variation: normalizedNext, a_fecha: variantInfo.date ?? null };
+          return { ...current, w_id_variation: variantInfo.wooId, a_fecha: variantInfo.date ?? null };
         });
+
+        qc.setQueryData<VariantSiblingsResponse | undefined>(
+          ['deal', dealId, 'variant-siblings', variantInfo.wooId],
+          (current) => current ?? variantSiblingsData ?? { parent: null, variants: [] },
+        );
 
         void qc.invalidateQueries({ queryKey: ['deal', dealId] });
 
@@ -2143,9 +1895,7 @@ export function SessionsAccordionAbierta({
         return true;
       } catch (error) {
         const message = isApiError(error)
-          ? error.message
-          : error instanceof Error
-          ? error.message
+          ? error.message || 'No se pudo actualizar la variante'
           : 'No se pudo actualizar la variante';
         onNotify?.({ variant: 'danger', message });
         return false;
@@ -2154,14 +1904,14 @@ export function SessionsAccordionAbierta({
       }
     },
     [
+      dealId,
       normalizedCurrentVariation,
       onNotify,
-      dealId,
-      variantLookup,
       qc,
+      variantLookup,
+      variantSiblingsData,
     ],
   );
-
   const generationKey = useMemo(
     () =>
       applicableProducts
@@ -2993,6 +2743,7 @@ export function SessionsAccordionAbierta({
                   variantSaving={variantSaving}
                   onVariantSelect={handleVariantSelect}
                   onNotify={onNotify}
+                  variantParentName={variantParentName}
                 />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
@@ -3044,6 +2795,7 @@ interface SessionEditorProps {
   variantSaving?: boolean;
   onVariantSelect?: (variantWooId: string) => Promise<boolean>;
   onNotify?: (toast: ToastParams) => void;
+  variantParentName: string | null;
 }
 
 function SessionEditor({
@@ -3065,6 +2817,7 @@ function SessionEditor({
   variantSaving,
   onVariantSelect,
   onNotify,
+  variantParentName,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
@@ -3274,57 +3027,70 @@ function SessionEditor({
               ) : null}
 
               {!variantOptionsLoading && variantOptions.length ? (
-                <ListGroup
-                  as="div"
-                  role="listbox"
-                  aria-label="Variantes compatibles con el presupuesto"
-                  className="variant-selection-list"
-                >
-                  {variantOptions.map((option) => {
-                    const normalizedValue = normalizeVariantValue(option.value);
-                    const isActive = normalizedValue === normalizedCurrentVariation;
-                    const isPending =
-                      pendingVariantSelection !== null &&
-                      pendingVariantSelection === normalizedValue &&
-                      variantSaving;
-                    const labelWithProduct = option.productName
-                      ? `${option.label} · ${option.productName}`
-                      : option.label;
-                    return (
-                      <ListGroup.Item
-                        key={option.value}
-                        as="button"
-                        type="button"
-                        role="option"
-                        action
-                        active={isActive}
-                        aria-selected={isActive}
-                        disabled={variantSelectDisabled}
-                        onClick={() => {
-                          void handleVariantOptionClick(option.value);
-                        }}
-                        className="d-flex justify-content-between align-items-center gap-3 text-start"
-                      >
-                        <span>{labelWithProduct}</span>
-                        <span className="d-flex align-items-center gap-2">
-                          {isPending ? (
-                            <Spinner
-                              animation="border"
-                              size="sm"
-                              role="status"
-                              aria-hidden="true"
-                            />
-                          ) : null}
-                          {isActive ? (
-                            <Badge bg="light" text="dark">
-                              Asignada
-                            </Badge>
-                          ) : null}
-                        </span>
-                      </ListGroup.Item>
-                    );
-                  })}
-                </ListGroup>
+                <>
+                  <div className="text-muted small mb-2">
+                    {variantParentName ? (
+                      <>
+                        Variantes disponibles para <strong>{variantParentName}</strong>
+                      </>
+                    ) : (
+                      'Selecciona la fecha disponible que deseas asignar.'
+                    )}
+                  </div>
+                  <ListGroup
+                    as="div"
+                    role="listbox"
+                    aria-label="Variantes compatibles con el presupuesto"
+                    className="variant-selection-list"
+                  >
+                    {variantOptions.map((option) => {
+                      const normalizedValue = normalizeVariantValue(option.value);
+                      const isActive = normalizedValue === normalizedCurrentVariation;
+                      const isPending =
+                        pendingVariantSelection !== null &&
+                        pendingVariantSelection === normalizedValue &&
+                        variantSaving;
+                      return (
+                        <ListGroup.Item
+                          key={option.value}
+                          as="button"
+                          type="button"
+                          role="option"
+                          action
+                          active={isActive}
+                          aria-selected={isActive}
+                          disabled={variantSelectDisabled}
+                          onClick={() => {
+                            void handleVariantOptionClick(option.value);
+                          }}
+                          className="d-flex justify-content-between align-items-center gap-3 text-start"
+                        >
+                          <div className="flex-grow-1">
+                            <div className="fw-semibold">{option.label}</div>
+                            {option.description ? (
+                              <div className="text-muted small">{option.description}</div>
+                            ) : null}
+                          </div>
+                          <span className="d-flex align-items-center gap-2">
+                            {isPending ? (
+                              <Spinner
+                                animation="border"
+                                size="sm"
+                                role="status"
+                                aria-hidden="true"
+                              />
+                            ) : null}
+                            {isActive ? (
+                              <Badge bg="light" text="dark">
+                                Asignada
+                              </Badge>
+                            ) : null}
+                          </span>
+                        </ListGroup.Item>
+                      );
+                    })}
+                  </ListGroup>
+                </>
               ) : null}
 
               {!variantOptionsLoading && !variantOptions.length ? (
