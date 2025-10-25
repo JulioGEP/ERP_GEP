@@ -1523,6 +1523,82 @@ export async function fetchProductVariants(options?: {
   return variants;
 }
 
+export type VariantSiblingOption = {
+  id: string;
+  wooId: string | null;
+  parentWooId: string | null;
+  name: string | null;
+  date: string | null;
+};
+
+export type VariantSiblingsResponse = {
+  parent: { id: string | null; wooId: string | null; name: string | null } | null;
+  variants: VariantSiblingOption[];
+};
+
+export async function fetchVariantSiblings(params: {
+  variantWooId?: string | null;
+  parentWooId?: string | null;
+}): Promise<VariantSiblingsResponse> {
+  const searchParams = new URLSearchParams();
+  const variantId = toStringValue(params.variantWooId);
+  const parentId = toStringValue(params.parentWooId);
+
+  if (variantId) {
+    searchParams.set('variantWooId', variantId);
+  }
+
+  if (parentId) {
+    searchParams.set('parentWooId', parentId);
+  }
+
+  if (!variantId && !parentId) {
+    throw new Error('variantWooId o parentWooId requerido');
+  }
+
+  const url = searchParams.toString().length
+    ? `/variant-siblings?${searchParams.toString()}`
+    : `/variant-siblings`;
+
+  const data = await request(url);
+
+  const rawVariants = Array.isArray(data?.variants) ? data.variants : [];
+  const normalizedVariants = rawVariants
+    .map<VariantSiblingOption | null>((variant: any) => {
+      const id = toStringValue(variant?.id);
+      const wooId = toStringValue(variant?.wooId ?? variant?.id_woo);
+      const parentWooIdValue = toStringValue(variant?.parentWooId ?? variant?.parent_woo_id);
+      const name = toStringValue(variant?.name);
+      const date = toStringValue(variant?.date);
+
+      if (!id) {
+        return null;
+      }
+
+      return {
+        id,
+        wooId,
+        parentWooId: parentWooIdValue,
+        name,
+        date,
+      } satisfies VariantSiblingOption;
+    })
+    .filter((variant): variant is VariantSiblingOption => variant !== null);
+
+  const variants: VariantSiblingOption[] = normalizedVariants;
+
+  const parentRaw = data?.parent;
+  const parent = parentRaw
+    ? {
+        id: toStringValue(parentRaw?.id),
+        wooId: toStringValue(parentRaw?.wooId ?? parentRaw?.id_woo),
+        name: toStringValue(parentRaw?.name),
+      }
+    : null;
+
+  return { parent, variants };
+}
+
 export async function fetchSessionAvailability(params: {
   start: string;
   end?: string;
