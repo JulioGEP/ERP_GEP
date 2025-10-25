@@ -1,10 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
+import { useQueryClient } from '@tanstack/react-query';
 import type { DealSummary } from '../../types/deal';
-import { fetchDealsWithoutSessions } from './api'; // ← usar API común
 import { useDataTable } from '../../hooks/useDataTable';
 import { SortableHeader } from '../../components/table/SortableHeader';
 import { DataTablePagination } from '../../components/table/DataTablePagination';
+import {
+  DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
+} from './queryKeys';
 
 function TrashIcon({ size = 16 }: { size?: number }) {
   return (
@@ -31,8 +34,8 @@ type BudgetTableLabels = {
   emptyTitle: string;
   emptyDescription: string;
   emptyRetry: string;
-  fallbackLoading: string;
-  fallbackErrorTitle: string;
+  fallbackNotice: string;
+  fallbackNoticeError: string;
   fallbackErrorRetry: string;
 };
 
@@ -44,8 +47,8 @@ const DEFAULT_LABELS: BudgetTableLabels = {
   emptyTitle: 'No hay presupuestos sin sesiones pendientes.',
   emptyDescription: 'Importa un presupuesto para comenzar a planificar la formación.',
   emptyRetry: 'Reintentar',
-  fallbackLoading: 'Cargando datos de respaldo…',
-  fallbackErrorTitle: 'No se pudieron recuperar datos de respaldo',
+  fallbackNotice: 'Mostrando los últimos datos disponibles.',
+  fallbackNoticeError: 'Mostrando datos guardados porque no se pudo actualizar la lista.',
   fallbackErrorRetry: 'Reintentar',
 };
 
@@ -67,12 +70,6 @@ function safeTrim(v: unknown): string | null {
   if (typeof v !== 'string') return null;
   const t = v.trim();
   return t.length ? t : null;
-}
-
-function toStringValue(v: unknown): string | null {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  return s.length ? s : null;
 }
 
 function getProductNames(budget: DealSummary): string[] {
@@ -112,6 +109,24 @@ function getBudgetId(budget: DealSummary): string | null {
     .filter((value) => value.length);
 
   if (idCandidates.length) return idCandidates[0];
+  return null;
+}
+
+function getErrorMessage(error: unknown): string | null {
+  if (!error) return null;
+  if (error instanceof Error) {
+    const trimmed = error.message?.trim();
+    return trimmed?.length ? trimmed : null;
+  }
+
+  if (typeof error === 'object' && error && 'message' in error) {
+    const message = (error as any).message;
+    if (typeof message === 'string') {
+      const trimmed = message.trim();
+      return trimmed.length ? trimmed : null;
+    }
+  }
+
   return null;
 }
 
@@ -203,42 +218,6 @@ function getTrainingDateInfo(budget: DealSummary): { label: string; sortValue: n
   };
 }
 
-/** Normaliza mínimamente un item del backend a DealSummary (lo justo para la tabla) */
-function normalizeRowMinimal(row: any) {
-  const dealId =
-    toStringValue(row?.deal_id) ??
-    toStringValue(row?.dealId) ??
-    (row?.id != null ? String(row.id) : '');
-
-  return {
-    // IDs en ambos formatos
-    dealId: dealId || '',
-    deal_id: dealId || '',
-
-    dealNumericId: Number.isFinite(Number(dealId)) ? Number(dealId) : null,
-    title: toStringValue(row?.title ?? row?.deal_title) ?? '—',
-    sede_label: toStringValue(row?.sede_label) ?? null,
-    pipeline_label:
-      toStringValue(row?.pipeline_label) ?? toStringValue(row?.deal_pipeline_label) ?? null,
-    pipeline_id:
-      toStringValue(row?.pipeline_id) ?? toStringValue(row?.deal_pipeline_id) ?? null,
-    training_address: toStringValue(row?.training_address) ?? null, // schema vigente
-    hours: typeof row?.hours === 'number' ? row.hours : Number(row?.hours) || null,
-    caes_label: toStringValue(row?.caes_label) ?? null,
-    fundae_label: toStringValue(row?.fundae_label) ?? null,
-    hotel_label: toStringValue(row?.hotel_label) ?? null,
-    organization: row?.organization ?? null,
-    person: row?.person ?? null,
-    // productos si vinieran
-    products: Array.isArray(row?.deal_products)
-      ? row.deal_products
-      : Array.isArray(row?.products)
-      ? row.products
-      : undefined,
-    productNames: Array.isArray(row?.productNames) ? row.productNames : undefined,
-  } as DealSummary;
-}
-
 /** ============ Componente ============ */
 
 export function BudgetTable({
@@ -253,17 +232,26 @@ export function BudgetTable({
   enableFallback = true,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
-  const [fallbackLoading, setFallbackLoading] = useState(false);
-  const [fallbackError, setFallbackError] = useState<string | null>(null);
-  const [fallbackBudgets, setFallbackBudgets] = useState<DealSummary[] | null>(null);
+  const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const cachedFallbackBudgets = enableFallback
+    ? queryClient.getQueryData<DealSummary[]>(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY) ?? null
+    : null;
+
+  const hasFallbackBudgets = Boolean(cachedFallbackBudgets && cachedFallbackBudgets.length);
+  const shouldUseFallbackForError = Boolean(error) && hasFallbackBudgets;
+  const shouldUseFallbackForEmpty =
+    !error && !isLoading && budgets.length === 0 && hasFallbackBudgets;
+  const isShowingFallback = enableFallback && (shouldUseFallbackForError || shouldUseFallbackForEmpty);
+  const fallbackErrorMessage = error ? getErrorMessage(error) : null;
+
   const effectiveBudgets: DealSummary[] = useMemo(() => {
-    if (enableFallback && fallbackBudgets && fallbackBudgets.length) {
-      return fallbackBudgets;
+    if (isShowingFallback && cachedFallbackBudgets && cachedFallbackBudgets.length) {
+      return cachedFallbackBudgets;
     }
     return budgets;
-  }, [budgets, enableFallback, fallbackBudgets]);
+  }, [budgets, cachedFallbackBudgets, isShowingFallback]);
 
   const getSortValue = useCallback((budget: DealSummary, column: string) => {
     switch (column) {
@@ -335,36 +323,6 @@ export function BudgetTable({
     [onDelete, showDeleteAction]
   );
 
-  useEffect(() => {
-    if (!enableFallback) {
-      return;
-    }
-    if (!isLoading && !error && budgets.length === 0 && !fallbackBudgets && !fallbackLoading) {
-      (async () => {
-        try {
-          setFallbackLoading(true);
-          setFallbackError(null);
-
-          // ← usar la API común para respetar API_BASE y shape
-          const rows = await fetchDealsWithoutSessions();
-          setFallbackBudgets(rows.map(normalizeRowMinimal));
-        } catch (e: any) {
-          setFallbackError(e?.message || 'Fallo al cargar datos de respaldo');
-        } finally {
-          setFallbackLoading(false);
-        }
-      })();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    enableFallback,
-    isLoading,
-    error,
-    budgets.length,
-    fallbackBudgets,
-    fallbackLoading,
-  ]);
-
   if (isLoading) {
     return (
       <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm">
@@ -374,7 +332,7 @@ export function BudgetTable({
     );
   }
 
-  if (error) {
+  if (error && !isShowingFallback) {
     const message =
       error instanceof Error
         ? error.message
@@ -388,31 +346,6 @@ export function BudgetTable({
         <div>
           <Button variant="outline-danger" onClick={onRetry}>
             {labels.errorRetry}
-          </Button>
-        </div>
-      </Alert>
-    );
-  }
-
-  if (enableFallback && fallbackLoading) {
-    return (
-      <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm">
-        <Spinner animation="border" role="status" className="mb-3" />
-        <p className="mb-0">{labels.fallbackLoading}</p>
-      </div>
-    );
-  }
-
-  if (enableFallback && fallbackError) {
-    return (
-      <Alert variant="warning" className="rounded-4 shadow-sm">
-        <div className="d-flex justify-content-between align-items-center">
-          <div>
-            <div className="fw-semibold">{labels.fallbackErrorTitle}</div>
-            <div className="small mb-0">{fallbackError}</div>
-          </div>
-          <Button size="sm" variant="outline-secondary" onClick={onRetry}>
-            {labels.fallbackErrorRetry}
           </Button>
         </div>
       </Alert>
@@ -435,20 +368,36 @@ export function BudgetTable({
     );
   }
 
+  const fallbackNoticeMessage = error ? labels.fallbackNoticeError : labels.fallbackNotice;
+
   return (
-    <div className="table-responsive rounded-4 shadow-sm bg-white">
+    <div className="rounded-4 shadow-sm bg-white overflow-hidden">
       {isFetching && (
         <div className="d-flex align-items-center gap-2 px-3 py-2 border-bottom text-muted small">
           <Spinner animation="border" size="sm" />
           <span>{labels.updating}</span>
         </div>
       )}
-      <Table hover className="mb-0 align-middle">
-        <thead>
-          <tr>
-            <SortableHeader
-              columnKey="presupuesto"
-              label="Presupuesto"
+      {isShowingFallback && (
+        <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 px-3 py-2 border-bottom bg-warning-subtle">
+          <div className="text-warning small">
+            <div className="fw-semibold">{fallbackNoticeMessage}</div>
+            {fallbackErrorMessage && (
+              <div className="text-muted">{fallbackErrorMessage}</div>
+            )}
+          </div>
+          <Button size="sm" variant="outline-warning" onClick={onRetry}>
+            {labels.fallbackErrorRetry}
+          </Button>
+        </div>
+      )}
+      <div className="table-responsive">
+        <Table hover className="mb-0 align-middle">
+          <thead>
+            <tr>
+              <SortableHeader
+                columnKey="presupuesto"
+                label="Presupuesto"
               sortState={sortState}
               onSort={requestSort}
               style={{ width: 160 }}
@@ -533,8 +482,9 @@ export function BudgetTable({
               </tr>
             );
           })}
-        </tbody>
-      </Table>
+          </tbody>
+        </Table>
+      </div>
       <DataTablePagination
         page={currentPage}
         totalPages={totalPages}
