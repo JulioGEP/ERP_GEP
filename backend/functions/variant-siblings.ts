@@ -140,8 +140,14 @@ export const handler: Handler = async (event) => {
       date: Date | string | null;
     };
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const variants = (await prisma.variants.findMany({
-      where: { id_padre: parentWooIdBigInt },
+      where: {
+        id_padre: parentWooIdBigInt,
+        date: { gt: today },
+      },
       select: {
         id: true,
         id_woo: true,
