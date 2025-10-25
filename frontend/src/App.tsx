@@ -251,6 +251,9 @@ export default function App() {
   const [selectedBudgetSummary, setSelectedBudgetSummary] = useState<DealSummary | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [productComment, setProductComment] = useState<ProductCommentPayload | null>(null);
+  const [importResultWarnings, setImportResultWarnings] = useState<string[] | null>(null);
+  const [importResultDealId, setImportResultDealId] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -283,6 +286,20 @@ export default function App() {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
+  const handleOpenImportModal = useCallback(() => {
+    setImportResultWarnings(null);
+    setImportResultDealId(null);
+    setImportError(null);
+    setShowImportModal(true);
+  }, []);
+
+  const handleCloseImportModal = useCallback(() => {
+    setShowImportModal(false);
+    setImportResultWarnings(null);
+    setImportResultDealId(null);
+    setImportError(null);
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -303,8 +320,13 @@ export default function App() {
 
   const importMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
+    onMutate: () => {
+      setImportError(null);
+      setImportResultDealId(null);
+      setImportResultWarnings(null);
+    },
     onSuccess: async (payload) => {
-      const { deal } = normalizeImportDealResult(payload);
+      const { deal, warnings } = normalizeImportDealResult(payload);
 
       let summary: DealSummary | null = null;
       let normalizedDealId: string | null = null;
@@ -313,45 +335,107 @@ export default function App() {
         summary = buildSummaryFromDeal(deal as DealDetail | DealSummary);
         normalizedDealId = summary.dealId ?? summary.deal_id ?? null;
 
-        const hasPipelineInfo =
+        if (normalizedDealId) {
+          const detailForCache: DealDetail = {
+            ...(deal as DealDetail),
+            deal_id: normalizedDealId,
+          };
+          queryClient.setQueryData<DealDetail | undefined>(
+            ['deal', normalizedDealId],
+            (current) => {
+              const mergedDetail: DealDetail = {
+                ...(current ?? {}),
+                ...detailForCache,
+                deal_id: normalizedDealId,
+              };
+              return mergedDetail;
+            },
+          );
+        }
+
+        let pipelineInfo =
           normalizeOptionalString(summary.pipeline_label) ??
           normalizeOptionalString(summary.pipeline_id);
 
-        if (normalizedDealId && !hasPipelineInfo) {
-          try {
-            const refreshedDetail = await queryClient.fetchQuery({
-              queryKey: ['deal', normalizedDealId],
-              queryFn: () => fetchDealDetail(normalizedDealId!),
-            });
-            summary = buildSummaryFromDeal(refreshedDetail);
-            normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
-          } catch (error) {
-            console.error(
-              '[App] No se pudo obtener el pipeline del presupuesto importado',
-              error,
-            );
+        if (normalizedDealId && !pipelineInfo) {
+          const cachedDetail = queryClient.getQueryData<DealDetail>(['deal', normalizedDealId]);
+          if (cachedDetail) {
+            const summaryFromCache = buildSummaryFromDeal(cachedDetail);
+            const cachedPipeline =
+              normalizeOptionalString(summaryFromCache.pipeline_label) ??
+              normalizeOptionalString(summaryFromCache.pipeline_id);
+            if (cachedPipeline) {
+              summary = summaryFromCache;
+              normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
+              pipelineInfo = cachedPipeline;
+            }
+          }
+
+          if (!pipelineInfo) {
+            try {
+              const refreshedDetail = await fetchDealDetail(normalizedDealId);
+              queryClient.setQueryData(['deal', normalizedDealId], refreshedDetail);
+              summary = buildSummaryFromDeal(refreshedDetail);
+              normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
+            } catch (error) {
+              console.error(
+                '[App] No se pudo obtener el pipeline del presupuesto importado',
+                error,
+              );
+            }
           }
         }
       }
 
-      if (summary) {
-        setSelectedBudgetSummary(summary);
-        setSelectedBudgetId(summary.dealId ?? summary.deal_id ?? null);
+      const normalizedId = normalizeDealId(normalizedDealId);
+      setImportResultWarnings(warnings);
+      setImportResultDealId(normalizedId);
+      setImportError(null);
+
+      if (summary && normalizedId) {
+        const summaryWithNormalizedId: DealSummary = {
+          ...summary,
+          deal_id: normalizedId,
+          dealId: normalizedId,
+        };
+
+        queryClient.setQueryData<DealSummary[]>(
+          ['deals', 'noSessions'],
+          (current = []) => {
+            const existingIndex = current.findIndex((item) => {
+              const currentId = normalizeDealId(item.dealId ?? item.deal_id);
+              return currentId === normalizedId;
+            });
+
+            if (existingIndex >= 0) {
+              const next = current.slice();
+              next[existingIndex] = { ...next[existingIndex], ...summaryWithNormalizedId };
+              return next;
+            }
+
+            return [summaryWithNormalizedId, ...current];
+          },
+        );
+
+        setSelectedBudgetSummary(summaryWithNormalizedId);
+        setSelectedBudgetId(summaryWithNormalizedId.dealId ?? summaryWithNormalizedId.deal_id ?? null);
       } else {
         setSelectedBudgetSummary(null);
         setSelectedBudgetId(null);
       }
 
       pushToast({ variant: 'success', message: 'Presupuesto importado' });
-      setShowImportModal(false);
-      await queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
       const code = apiError?.code ?? 'UNKNOWN_ERROR';
       const message =
         apiError?.message ?? 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
-      pushToast({ variant: 'danger', message: `No se pudo importar. [${code}] ${message}` });
+      const detailedMessage = `No se pudo importar. [${code}] ${message}`;
+      setImportError(detailedMessage);
+      setImportResultDealId(null);
+      setImportResultWarnings(null);
+      pushToast({ variant: 'danger', message: detailedMessage });
     }
   });
 
@@ -541,7 +625,7 @@ export default function App() {
     onRetry: () => budgetsQuery.refetch(),
     onSelect: handleSelectBudget,
     onDelete: handleDeleteBudget,
-    onOpenImportModal: () => setShowImportModal(true),
+    onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
   };
 
@@ -686,7 +770,10 @@ export default function App() {
       <BudgetImportModal
         show={showImportModal}
         isLoading={importMutation.isPending}
-        onClose={() => setShowImportModal(false)}
+        resultWarnings={importResultWarnings ?? undefined}
+        resultDealId={importResultDealId ?? undefined}
+        error={importError}
+        onClose={handleCloseImportModal}
         onSubmit={(dealId) => importMutation.mutate(dealId)}
       />
 
