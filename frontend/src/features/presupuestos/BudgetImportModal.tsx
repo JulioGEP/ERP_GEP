@@ -42,12 +42,21 @@ export function BudgetImportModal({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (isLoading) return;
+
+    if (resultDealId && !error) {
+      onClose();
+      return;
+    }
+
     const value = dealId.trim();
-    if (!value || isLoading) return;
+    if (!value) return;
     onSubmit(value);
   }
 
   const hasWarnings = Array.isArray(resultWarnings) && resultWarnings.length > 0;
+  const hasResult = Boolean(resultDealId && !error);
+  const submitDisabled = isLoading || (!hasResult && !dealId.trim());
 
   return (
     <Modal show={show} onHide={handleHide} centered>
@@ -87,7 +96,7 @@ export function BudgetImportModal({
             placeholder="Añade el número de presupuesto sin puntos ni comas"
             value={dealId}
             onChange={(e) => setDealId(e.target.value)}
-            disabled={isLoading}
+            disabled={isLoading || hasResult}
             autoComplete="off"
           />
         </Modal.Body>
@@ -96,8 +105,8 @@ export function BudgetImportModal({
           <Button variant="outline-secondary" onClick={handleHide} disabled={isLoading}>
             Cancelar
           </Button>
-          <Button type="submit" variant="primary" disabled={isLoading || !dealId.trim()}>
-            {isLoading ? 'Importando…' : 'Importar'}
+          <Button type="submit" variant="primary" disabled={submitDisabled}>
+            {isLoading ? 'Importando…' : hasResult ? 'Cerrar' : 'Importar'}
           </Button>
         </Modal.Footer>
       </Form>
