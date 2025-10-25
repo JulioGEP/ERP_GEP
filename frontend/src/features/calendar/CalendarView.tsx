@@ -729,10 +729,13 @@ export function CalendarView({
       typeof studentsRaw === 'number' && Number.isFinite(studentsRaw)
         ? String(studentsRaw)
         : 'No disponible';
+
+    const sedeRaw = tooltip.variant.variant.sede;
+    const sedeLabel = typeof sedeRaw === 'string' && sedeRaw.trim().length ? sedeRaw.trim() : 'Sin asignar';
     return {
-      left: 'Alumnos totales',
-      right: studentsLabel,
-      separator: ': ',
+      left: `Sede: ${sedeLabel}`,
+      right: `Alumnos totales: ${studentsLabel}`,
+      separator: ' - ',
     } satisfies TooltipLine;
   })();
 
