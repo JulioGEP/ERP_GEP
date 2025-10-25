@@ -1823,12 +1823,40 @@ export function SessionsAccordionAbierta({
     return formatVariantDate(currentVariantInfo?.date ?? null) ?? null;
   }, [currentVariantInfo, formatVariantDate]);
 
+  const getNormalizedVariantSede = useCallback((variant: VariantSiblingOption | null | undefined) => {
+    if (!variant) return null;
+
+    const rawSede = typeof variant.sede === 'string' ? variant.sede.trim() : '';
+    if (rawSede.length) {
+      return rawSede.toLocaleLowerCase('es');
+    }
+
+    const label = typeof variant.name === 'string' ? variant.name : '';
+    if (!label.length) return null;
+
+    const [firstPart] = label.split(',');
+    const normalized = typeof firstPart === 'string' ? firstPart.trim() : '';
+    return normalized.length ? normalized.toLocaleLowerCase('es') : null;
+  }, []);
+
+  const currentVariantSede = useMemo(
+    () => getNormalizedVariantSede(currentVariantInfo),
+    [currentVariantInfo, getNormalizedVariantSede],
+  );
+
   const variantSelectOptions = useMemo(() => {
     if (!variantSiblings.length) return [] as DealVariantSelectOption[];
     return variantSiblings
       .map((variant) => {
         const wooId = typeof variant.wooId === 'string' ? variant.wooId.trim() : '';
         if (!wooId.length) return null;
+
+        if (currentVariantSede) {
+          const optionSede = getNormalizedVariantSede(variant);
+          if (!optionSede || optionSede !== currentVariantSede) {
+            return null;
+          }
+        }
         const formattedDate = formatVariantDate(variant.date ?? null);
         let label = (variant.name ?? '').trim();
         if (!label.length) {
@@ -1842,7 +1870,7 @@ export function SessionsAccordionAbierta({
         } satisfies DealVariantSelectOption;
       })
       .filter((option): option is DealVariantSelectOption => option !== null);
-  }, [formatVariantDate, variantSiblings]);
+  }, [currentVariantSede, formatVariantDate, getNormalizedVariantSede, variantSiblings]);
 
   const variantOptionsLoading = variantSiblingsQuery.isLoading || variantSiblingsQuery.isFetching;
   const [variantSaving, setVariantSaving] = useState(false);
