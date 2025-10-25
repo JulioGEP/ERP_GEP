@@ -391,6 +391,18 @@ export function BudgetDetailModalAbierta({
       qc.invalidateQueries({ queryKey: detailQueryKey });
       qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
       qc.invalidateQueries({ queryKey: ['calendarSessions'] });
+      qc.invalidateQueries({ queryKey: ['dealStudents', normalizedDealId] });
+      qc.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key.length > 2 &&
+            key[0] === 'session-students' &&
+            key[1] === normalizedDealId
+          );
+        },
+      });
       qc.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;
@@ -855,6 +867,7 @@ export function BudgetDetailModalAbierta({
 
   const students = dealStudentsQuery.data ?? [];
   const studentsLoading = dealStudentsQuery.isLoading;
+  const studentsFetching = dealStudentsQuery.isFetching;
 
   const noteStudentsInfo = useMemo(
     () => extractNoteStudents(deal?.notes ?? []),
@@ -1108,6 +1121,12 @@ export function BudgetDetailModalAbierta({
     if (defaultSessionId) {
       return;
     }
+    if (studentsFetching) {
+      return;
+    }
+    if (students.length > 0) {
+      return;
+    }
     if (noteWarningSignatureRef.current === noteSignature) {
       return;
     }
@@ -1121,7 +1140,15 @@ export function BudgetDetailModalAbierta({
     } else {
       console.info('[BudgetDetailModalAbierta] ' + message);
     }
-  }, [noteSignature, noteStudents, sessionsLoading, defaultSessionId, onNotify]);
+  }, [
+    noteSignature,
+    noteStudents,
+    sessionsLoading,
+    defaultSessionId,
+    onNotify,
+    studentsFetching,
+    students,
+  ]);
 
   const dirtyProducts = useMemo(
     () => !areHourMapsEqual(productHours, initialProductHours),
