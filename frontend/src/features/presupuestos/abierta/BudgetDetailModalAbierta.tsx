@@ -839,6 +839,21 @@ export function BudgetDetailModalAbierta({
         .filter((option): option is { id: string; label: string } => Boolean(option)),
     [dealSessions],
   );
+  const automaticStudentsSessionId = useMemo(() => {
+    const normalizedDefault = (defaultSessionId ?? '').trim();
+    if (normalizedDefault.length) {
+      return normalizedDefault;
+    }
+
+    for (const option of studentsSessionOptions) {
+      const trimmedId = option.id.trim();
+      if (trimmedId.length) {
+        return trimmedId;
+      }
+    }
+
+    return null;
+  }, [defaultSessionId, studentsSessionOptions]);
   const effectiveStudentsSessionId = useMemo(() => {
     const trimmed = (selectedStudentsSessionId ?? '').trim();
     if (trimmed.length) {
@@ -1062,7 +1077,7 @@ export function BudgetDetailModalAbierta({
   useEffect(() => {
     if (!normalizedDealId) return;
     if (!noteSignature || !noteStudents.length) return;
-    if (!defaultSessionId) return;
+    if (!automaticStudentsSessionId) return;
     if (studentsLoading || sessionsLoading) return;
     const trimmedDealId = normalizedDealId.trim();
     if (
@@ -1072,12 +1087,12 @@ export function BudgetDetailModalAbierta({
       return;
     }
 
-    performNoteStudentsSync(defaultSessionId);
+    performNoteStudentsSync(automaticStudentsSessionId);
   }, [
     normalizedDealId,
     noteSignature,
     noteStudents,
-    defaultSessionId,
+    automaticStudentsSessionId,
     studentsLoading,
     sessionsLoading,
     performNoteStudentsSync,
@@ -1122,7 +1137,7 @@ export function BudgetDetailModalAbierta({
     if (sessionsLoading) {
       return;
     }
-    if (defaultSessionId) {
+    if (automaticStudentsSessionId) {
       return;
     }
     if (noteWarningSignatureRef.current === noteSignature) {
@@ -1138,7 +1153,7 @@ export function BudgetDetailModalAbierta({
     } else {
       console.info('[BudgetDetailModalAbierta] ' + message);
     }
-  }, [noteSignature, noteStudents, sessionsLoading, defaultSessionId, onNotify]);
+  }, [noteSignature, noteStudents, sessionsLoading, automaticStudentsSessionId, onNotify]);
 
   const dirtyProducts = useMemo(
     () => !areHourMapsEqual(productHours, initialProductHours),
