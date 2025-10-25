@@ -42,10 +42,6 @@ import type { DealEditablePatch, DealProductEditablePatch } from '../api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../../types/deal';
 import { buildFieldTooltip } from '../../../utils/fieldTooltip';
 
-const NOTE_STUDENTS_POLL_INITIAL_DELAY_MS = 1000;
-const NOTE_STUDENTS_POLL_INTERVAL_MS = 2000;
-const NOTE_STUDENTS_POLL_MAX_ATTEMPTS = 6;
-
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
     return value.trim();
@@ -380,78 +376,8 @@ export function BudgetDetailModalAbierta({
     staleTime: Infinity
   });
 
-  const notePollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const notePollingAttemptsRef = useRef(0);
-  const notePollingStatusRef = useRef<'idle' | 'active' | 'cooldown'>('idle');
-
-  const stopNotePolling = useCallback(() => {
-    if (notePollingTimeoutRef.current) {
-      clearTimeout(notePollingTimeoutRef.current);
-      notePollingTimeoutRef.current = null;
-    }
-    notePollingAttemptsRef.current = 0;
-  }, []);
-
   const deal = detailQuery.data ?? null;
   const isLoading = detailQuery.isLoading;
-  const detailQueryRefetch = detailQuery.refetch;
-
-  const startNotePolling = useCallback(
-    (options?: { initialDelay?: number }) => {
-      if (!normalizedDealId) {
-        return;
-      }
-
-      stopNotePolling();
-      notePollingStatusRef.current = 'active';
-
-      const initialDelay = options?.initialDelay ?? NOTE_STUDENTS_POLL_INITIAL_DELAY_MS;
-
-      const runAttempt = async () => {
-        notePollingTimeoutRef.current = null;
-
-        try {
-          const result = await detailQueryRefetch();
-          const polledDeal = result.data ?? null;
-          const noteInfo = extractNoteStudents(polledDeal?.notes ?? []);
-
-          if (noteInfo.students.length > 0) {
-            stopNotePolling();
-            notePollingStatusRef.current = 'idle';
-            return;
-          }
-        } catch (error) {
-          console.error(
-            '[BudgetDetailModalAbierta] Error al refrescar notas tras importar presupuesto',
-            error,
-          );
-          stopNotePolling();
-          notePollingStatusRef.current = 'cooldown';
-          return;
-        }
-
-        notePollingAttemptsRef.current += 1;
-        if (notePollingAttemptsRef.current >= NOTE_STUDENTS_POLL_MAX_ATTEMPTS) {
-          stopNotePolling();
-          notePollingStatusRef.current = 'cooldown';
-          return;
-        }
-
-        notePollingTimeoutRef.current = setTimeout(() => {
-          void runAttempt();
-        }, NOTE_STUDENTS_POLL_INTERVAL_MS);
-      };
-
-      if (initialDelay <= 0) {
-        void runAttempt();
-      } else {
-        notePollingTimeoutRef.current = setTimeout(() => {
-          void runAttempt();
-        }, initialDelay);
-      }
-    },
-    [normalizedDealId, detailQueryRefetch, stopNotePolling],
-  );
 
   const refreshMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
@@ -461,20 +387,6 @@ export function BudgetDetailModalAbierta({
         qc.setQueryData(detailQueryKey, (current: DealDetail | undefined) =>
           mergeDealDetailData(current, nextDeal as DealDetail),
         );
-      }
-
-      const shouldStartNotePolling =
-        Boolean(normalizedDealId) &&
-        (!nextDeal ||
-          !('notes' in nextDeal) ||
-          extractNoteStudents((nextDeal as DealDetail).notes ?? []).students.length === 0);
-
-      if (shouldStartNotePolling) {
-        notePollingStatusRef.current = 'idle';
-        startNotePolling();
-      } else {
-        stopNotePolling();
-        notePollingStatusRef.current = 'idle';
       }
       qc.invalidateQueries({ queryKey: detailQueryKey });
       qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
@@ -523,8 +435,6 @@ export function BudgetDetailModalAbierta({
       } else {
         alert(notifyMessage);
       }
-      stopNotePolling();
-      notePollingStatusRef.current = 'cooldown';
     }
   });
 
@@ -565,18 +475,6 @@ export function BudgetDetailModalAbierta({
   const processedNoteSignatureRef = useRef<string | null>(null);
   const processedNoteDealIdRef = useRef<string | null>(null);
   const noteWarningSignatureRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    notePollingStatusRef.current = 'idle';
-    stopNotePolling();
-  }, [normalizedDealId, stopNotePolling]);
-
-  useEffect(() => {
-    return () => {
-      stopNotePolling();
-      notePollingStatusRef.current = 'idle';
-    };
-  }, [stopNotePolling]);
 
   const getDocumentDisplayName = (doc: DealDocument | null | undefined): string => {
     if (!doc) return 'Documento';
@@ -965,30 +863,6 @@ export function BudgetDetailModalAbierta({
   );
   const noteStudents = noteStudentsInfo.students;
   const noteSignature = noteStudentsInfo.signature;
-
-  useEffect(() => {
-    if (!normalizedDealId) {
-      return;
-    }
-    if (!detailQuery.isSuccess) {
-      return;
-    }
-    if (noteStudents.length > 0) {
-      stopNotePolling();
-      notePollingStatusRef.current = 'idle';
-      return;
-    }
-    if (notePollingStatusRef.current !== 'idle') {
-      return;
-    }
-    startNotePolling();
-  }, [
-    normalizedDealId,
-    detailQuery.isSuccess,
-    noteStudents.length,
-    startNotePolling,
-    stopNotePolling,
-  ]);
 
   const importStudentsFromNoteMutation = useMutation({
     mutationFn: async (payload: {
