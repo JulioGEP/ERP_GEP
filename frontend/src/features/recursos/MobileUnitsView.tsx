@@ -14,7 +14,7 @@ import {
   MOBILE_UNIT_TIPO_OPTIONS,
 } from "./mobileUnits.constants";
 import type { MobileUnit } from "../../types/mobile-unit";
-import { ApiError } from "../presupuestos/api";
+import { ApiError } from "../../api/client";
 import { useDataTable } from "../../hooks/useDataTable";
 import { SortableHeader } from "../../components/table/SortableHeader";
 import { DataTablePagination } from "../../components/table/DataTablePagination";

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, ListGroup, Spinner, Stack } from 'react-bootstrap';
 
-import { API_BASE, ApiError } from '../presupuestos/api';
+import { API_BASE, ApiError } from "../../api/client";
 
 export type VariationsSyncLogEntry = {
   type: 'info' | 'success' | 'warning' | 'error';

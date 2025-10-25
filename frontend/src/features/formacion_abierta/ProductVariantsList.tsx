@@ -16,15 +16,15 @@ import {
   Table,
 } from 'react-bootstrap';
 
+import { ApiError } from "../../api/client";
+import type { SessionStudent } from "../../api/sessions.types";
 import {
-  ApiError,
   fetchActiveTrainers,
-  fetchRoomsCatalog,
   fetchMobileUnitsCatalog,
-  fetchSessionAvailability,
-  fetchDealStudents,
-} from '../presupuestos/api';
-import type { SessionStudent } from '../presupuestos/api';
+  fetchRoomsCatalog,
+} from "../presupuestos/api/catalogs.api";
+import { fetchSessionAvailability } from "../presupuestos/api/sessions.api";
+import { fetchDealStudents } from "../presupuestos/api/students.api";
 import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailModalAbierta';
 import type { DealSummary } from '../../types/deal';
 import { emitToast } from '../../utils/toast';

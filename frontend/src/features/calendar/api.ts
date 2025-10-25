@@ -1,5 +1,6 @@
 // frontend/src/features/calendar/api.ts
-import { API_BASE, ApiError, type SessionEstado } from '../presupuestos/api';
+import { API_BASE, ApiError } from "../../api/client";
+import type { SessionEstado } from "../../api/sessions.types";
 
 export type CalendarVariantProduct = {
   id: string;

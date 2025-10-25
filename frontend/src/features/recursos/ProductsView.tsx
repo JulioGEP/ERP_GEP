@@ -11,7 +11,7 @@ import {
   type ProductSyncSummary,
   type ProductUpdatePayload,
 } from './products.api';
-import { ApiError } from '../presupuestos/api';
+import { ApiError } from "../../api/client";
 import {
   getTrainingTemplatesManager,
   type TrainingTemplate,

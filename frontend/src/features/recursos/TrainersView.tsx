@@ -6,7 +6,7 @@ import { TrainerModal, type TrainerFormValues } from "./TrainerModal";
 import { createTrainer, fetchTrainers, updateTrainer, type TrainerPayload } from "./api";
 import { SEDE_OPTIONS } from "./trainers.constants";
 import type { Trainer } from "../../types/trainer";
-import { ApiError } from "../presupuestos/api";
+import { ApiError } from "../../api/client";
 import { useDataTable } from "../../hooks/useDataTable";
 import { SortableHeader } from "../../components/table/SortableHeader";
 import { DataTablePagination } from "../../components/table/DataTablePagination";

@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/rooms.api.ts
-import { API_BASE, ApiError } from '../presupuestos/api';
+import { API_BASE, ApiError } from '../../api/client';
 import type { Room } from '../../types/room';
 import { SEDE_OPTIONS } from './trainers.constants';
 

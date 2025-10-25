@@ -1,13 +1,10 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import type { DealDetail, DealProduct } from '../../../types/deal';
-import {
-  fetchDealDetail,
-  fetchDealSessions,
-  fetchSessionStudents,
-  type SessionGroupDTO,
-  type SessionStudent,
-} from '../../presupuestos/api';
+import type { SessionGroupDTO, SessionStudent } from "../../../api/sessions.types";
+import { fetchDealDetail } from "../../presupuestos/api/deals.api";
+import { fetchDealSessions } from "../../presupuestos/api/sessions.api";
+import { fetchSessionStudents } from "../../presupuestos/api/students.api";
 import {
   mapSessionToCertificateSession,
   mapStudentsToCertificateRows,

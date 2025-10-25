@@ -9,13 +9,13 @@ import { BudgetDetailModalServices } from './features/presupuestos/services/Budg
 import { BudgetDetailModalMaterial } from './features/presupuestos/material/BudgetDetailModalMaterial';
 import { ProductCommentWindow } from './features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from './features/presupuestos/ProductCommentWindow';
+import { ApiError } from "./api/client";
 import {
-  ApiError,
-  fetchDealsWithoutSessions,
-  importDeal,
   deleteDeal,
   fetchDealDetail,
-} from './features/presupuestos/api';
+  fetchDealsWithoutSessions,
+  importDeal,
+} from "./features/presupuestos/api/deals.api";
 import {
   DEALS_WITHOUT_SESSIONS_QUERY_KEY,
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,

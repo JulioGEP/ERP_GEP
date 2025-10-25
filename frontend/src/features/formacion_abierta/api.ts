@@ -1,5 +1,4 @@
-import { API_BASE, ApiError } from '../presupuestos/api';
-import { requestJson } from '../../shared/api/client';
+import { ApiError, requestJson } from '../../api/client';
 import type {
   DealTag,
   ProductDefaults,
@@ -52,9 +51,13 @@ export type DealsByVariationResponse = {
   message?: string;
 };
 
+function apiPath(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
 export async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
   const json = await requestJson<ProductsVariantsResponse>(
-    `${API_BASE}/products-variants`,
+    apiPath('products-variants'),
     { headers: { Accept: 'application/json' } },
     { defaultErrorMessage: 'No se pudieron obtener las variantes.' },
   );
@@ -65,7 +68,7 @@ export async function fetchProductsWithVariants(): Promise<ProductInfo[]> {
 
 export async function deleteProductVariant(variantId: string): Promise<string | null> {
   const json = await requestJson<DeleteVariantResponse>(
-    `${API_BASE}/products-variants/${encodeURIComponent(variantId)}`,
+    apiPath(`products-variants/${encodeURIComponent(variantId)}`),
     { method: 'DELETE', headers: { Accept: 'application/json' } },
     { defaultErrorMessage: 'No se pudo eliminar la variante.' },
   );
@@ -78,7 +81,7 @@ export async function updateProductVariantDefaults(
   updates: ProductDefaultsUpdatePayload,
 ): Promise<ProductDefaults> {
   const json = await requestJson<ProductDefaultsUpdateResponse>(
-    `${API_BASE}/product-variant-settings`,
+    apiPath('product-variant-settings'),
     {
       method: 'PATCH',
       headers: {
@@ -103,7 +106,7 @@ export async function createProductVariantsForProduct(
   dates: string[],
 ): Promise<{ created: VariantInfo[]; skipped: number; message: string | null }> {
   const json = await requestJson<VariantBulkCreateResponse>(
-    `${API_BASE}/product-variants-create`,
+    apiPath('product-variants-create'),
     {
       method: 'POST',
       headers: {
@@ -132,7 +135,7 @@ export async function updateProductVariant(
   updates: VariantUpdatePayload,
 ): Promise<VariantInfo> {
   const json = await requestJson<VariantUpdateResponse>(
-    `${API_BASE}/products-variants/${encodeURIComponent(variantId)}`,
+    apiPath(`products-variants/${encodeURIComponent(variantId)}`),
     {
       method: 'PATCH',
       headers: {
@@ -153,7 +156,7 @@ export async function updateProductVariant(
 
 export async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]> {
   const json = await requestJson<DealsByVariationResponse>(
-    `${API_BASE}/deals?w_id_variation=${encodeURIComponent(variationWooId)}`,
+    apiPath(`deals?w_id_variation=${encodeURIComponent(variationWooId)}`),
     { headers: { Accept: 'application/json' } },
     { defaultErrorMessage: 'No se pudieron obtener los deals.' },
   );

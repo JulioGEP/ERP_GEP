@@ -10,14 +10,14 @@ import {
 import { Alert, Button, Card, Form, Modal, Spinner } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { ApiError } from "../../api/client";
+import type { SessionPublicLink } from "../../api/sessions.types";
+import { fetchDealsWithPendingCertificates } from "../presupuestos/api/deals.api";
+import { uploadSessionCertificate } from "../presupuestos/api/documents.api";
 import {
-  ApiError,
   createSessionPublicLink,
   fetchSessionPublicLink,
-  fetchDealsWithPendingCertificates,
-  uploadSessionCertificate,
-  type SessionPublicLink,
-} from '../presupuestos/api';
+} from "../presupuestos/api/sessions.api";
 import { BudgetTable } from '../presupuestos/BudgetTable';
 import { useCertificateData } from './hooks/useCertificateData';
 import { CertificateTable } from './CertificateTable';
