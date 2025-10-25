@@ -281,61 +281,6 @@ function buildNoteStudentsSignature(noteId: string | null, students: readonly No
   return `${noteId ?? 'unknown'}|${serialized}`;
 }
 
-function compareSessionStudents(a: SessionStudent, b: SessionStudent): number {
-  const nameA = `${(a.apellido ?? '').trim()} ${(a.nombre ?? '').trim()}`.trim().toLowerCase();
-  const nameB = `${(b.apellido ?? '').trim()} ${(b.nombre ?? '').trim()}`.trim().toLowerCase();
-  if (nameA && nameB) {
-    const compare = nameA.localeCompare(nameB, 'es');
-    if (compare !== 0) {
-      return compare;
-    }
-  }
-  if (nameA) return -1;
-  if (nameB) return 1;
-  const dniA = (a.dni ?? '').trim().toUpperCase();
-  const dniB = (b.dni ?? '').trim().toUpperCase();
-  if (dniA && dniB) {
-    const compare = dniA.localeCompare(dniB, 'es');
-    if (compare !== 0) {
-      return compare;
-    }
-  }
-  if (dniA) return -1;
-  if (dniB) return 1;
-  return (a.id ?? '').localeCompare(b.id ?? '', 'es');
-}
-
-function mergeSessionStudentLists(
-  current: readonly SessionStudent[] | undefined,
-  created: readonly SessionStudent[],
-  updated: readonly SessionStudent[],
-  options?: { sortByName?: boolean },
-): SessionStudent[] {
-  const map = new Map<string, SessionStudent>();
-
-  if (Array.isArray(current)) {
-    current.forEach((student) => {
-      const id = (student?.id ?? '').trim();
-      if (!id.length) return;
-      map.set(id, student);
-    });
-  }
-
-  [...updated, ...created].forEach((student) => {
-    const id = (student?.id ?? '').trim();
-    if (!id.length) return;
-    map.set(id, student);
-  });
-
-  const merged = Array.from(map.values());
-
-  if (options?.sortByName) {
-    merged.sort(compareSessionStudents);
-  }
-
-  return merged;
-}
-
 function extractNoteStudents(
   notes: DealDetail['notes'] | undefined | null,
 ): { noteId: string | null; signature: string | null; students: NoteStudentEntry[] } {
@@ -446,18 +391,6 @@ export function BudgetDetailModalAbierta({
       qc.invalidateQueries({ queryKey: detailQueryKey });
       qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
       qc.invalidateQueries({ queryKey: ['calendarSessions'] });
-      qc.invalidateQueries({ queryKey: ['dealStudents', normalizedDealId] });
-      qc.invalidateQueries({
-        predicate: (query) => {
-          const key = query.queryKey;
-          return (
-            Array.isArray(key) &&
-            key.length > 2 &&
-            key[0] === 'session-students' &&
-            key[1] === normalizedDealId
-          );
-        },
-      });
       qc.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;
@@ -923,7 +856,6 @@ export function BudgetDetailModalAbierta({
 
   const students = dealStudentsQuery.data ?? [];
   const studentsLoading = dealStudentsQuery.isLoading;
-  const studentsFetching = dealStudentsQuery.isFetching;
 
   const noteStudentsInfo = useMemo(
     () => extractNoteStudents(deal?.notes ?? []),
@@ -982,18 +914,6 @@ export function BudgetDetailModalAbierta({
     },
     onSuccess: (result, variables) => {
       processedNoteSignatureRef.current = variables.noteSignature;
-      if (normalizedDealId) {
-        qc.setQueryData<SessionStudent[] | undefined>(
-          ['dealStudents', normalizedDealId],
-          (current) => mergeSessionStudentLists(current, result.created, result.updated, { sortByName: true }),
-        );
-      }
-      if (normalizedDealId && variables.sessionId) {
-        qc.setQueryData<SessionStudent[] | undefined>(
-          ['session-students', normalizedDealId, variables.sessionId],
-          (current) => mergeSessionStudentLists(current, result.created, result.updated),
-        );
-      }
       if (normalizedDealId) {
         void qc.invalidateQueries({ queryKey: ['dealStudents', normalizedDealId] });
       }
@@ -1205,15 +1125,6 @@ export function BudgetDetailModalAbierta({
     if (defaultSessionId) {
       return;
     }
-    if (dealSessions.length > 0) {
-      return;
-    }
-    if (studentsFetching) {
-      return;
-    }
-    if (students.length > 0) {
-      return;
-    }
     if (noteWarningSignatureRef.current === noteSignature) {
       return;
     }
@@ -1227,16 +1138,7 @@ export function BudgetDetailModalAbierta({
     } else {
       console.info('[BudgetDetailModalAbierta] ' + message);
     }
-  }, [
-    noteSignature,
-    noteStudents,
-    sessionsLoading,
-    defaultSessionId,
-    dealSessions,
-    onNotify,
-    studentsFetching,
-    students,
-  ]);
+  }, [noteSignature, noteStudents, sessionsLoading, defaultSessionId, onNotify]);
 
   const dirtyProducts = useMemo(
     () => !areHourMapsEqual(productHours, initialProductHours),
