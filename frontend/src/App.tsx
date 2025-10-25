@@ -16,6 +16,10 @@ import {
   deleteDeal,
   fetchDealDetail,
 } from './features/presupuestos/api';
+import {
+  DEALS_WITHOUT_SESSIONS_QUERY_KEY,
+  DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
+} from './features/presupuestos/queryKeys';
 import { normalizeImportDealResult } from './features/presupuestos/importDealUtils';
 import type { CalendarSession } from './features/calendar/api';
 import type { DealDetail, DealSummary } from './types/deal';
@@ -264,7 +268,7 @@ export default function App() {
   }, [selectedBudgetId]);
 
   const budgetsQuery = useQuery({
-    queryKey: ['deals', 'noSessions'],
+    queryKey: DEALS_WITHOUT_SESSIONS_QUERY_KEY,
     queryFn: fetchDealsWithoutSessions,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -273,6 +277,17 @@ export default function App() {
     staleTime: Infinity,
     enabled: isBudgetsRoute,
   });
+
+  useEffect(() => {
+    if (!budgetsQuery.isSuccess) {
+      return;
+    }
+    const data = budgetsQuery.data;
+    if (!Array.isArray(data) || data.length === 0) {
+      return;
+    }
+    queryClient.setQueryData(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY, data);
+  }, [budgetsQuery.data, budgetsQuery.isSuccess, queryClient]);
 
   const pushToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
     const id =
@@ -400,7 +415,7 @@ export default function App() {
         };
 
         queryClient.setQueryData<DealSummary[]>(
-          ['deals', 'noSessions'],
+          DEALS_WITHOUT_SESSIONS_QUERY_KEY,
           (current = []) => {
             const existingIndex = current.findIndex((item) => {
               const currentId = normalizeDealId(item.dealId ?? item.deal_id);
@@ -469,7 +484,7 @@ export default function App() {
         return currentId === dealId ? null : current;
       });
       pushToast({ variant: 'success', message: 'Presupuesto eliminado' });
-      queryClient.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+      queryClient.invalidateQueries({ queryKey: DEALS_WITHOUT_SESSIONS_QUERY_KEY });
     },
     onError: (error: unknown) => {
       const message =
