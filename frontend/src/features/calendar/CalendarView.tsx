@@ -93,6 +93,7 @@ type MonthDayCell = {
   isCurrentMonth: boolean;
   isToday: boolean;
   events: CalendarEventItem[];
+  availability: ResourceAvailability | null;
 };
 
 type BaseDayEvent = {
@@ -120,7 +121,30 @@ type WeekColumn = {
   weekdayLabel: string;
   isToday: boolean;
   events: DayEvent[];
+  availability: ResourceAvailability | null;
 };
+
+type ResourceAvailability = {
+  roomsUnavailable: boolean;
+  trainersUnavailable: boolean;
+  unitsUnavailable: boolean;
+};
+
+const EMPTY_AVAILABILITY: ResourceAvailability = {
+  roomsUnavailable: false,
+  trainersUnavailable: false,
+  unitsUnavailable: false,
+};
+
+const AVAILABILITY_CONFIG = [
+  { key: 'roomsUnavailable', icon: '🏢', label: 'Salas no disponibles' },
+  { key: 'trainersUnavailable', icon: '⛑️', label: 'Bomberos no disponibles' },
+  { key: 'unitsUnavailable', icon: '🚒', label: 'Unidades móviles no disponibles' },
+] as const satisfies ReadonlyArray<{
+  key: keyof ResourceAvailability;
+  icon: string;
+  label: string;
+}>;
 
 const madridDateTimeFormatter = new Intl.DateTimeFormat('en-GB', {
   timeZone: MADRID_TZ,
@@ -338,6 +362,10 @@ function formatResourceDetail(resources: CalendarResource[], emptyLabel: string)
   return resources.map((resource) => formatResourceName(resource)).join(', ');
 }
 
+function hasText(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 function groupEventsByJulian(events: CalendarEventItem[]): Map<number, CalendarEventItem[]> {
   const map = new Map<number, CalendarEventItem[]>();
   events.forEach((event) => {
@@ -355,6 +383,62 @@ function groupEventsByJulian(events: CalendarEventItem[]): Map<number, CalendarE
     }
   });
   return map;
+}
+
+function computeDayAvailability(events: CalendarEventItem[]): ResourceAvailability {
+  const availability: ResourceAvailability = { ...EMPTY_AVAILABILITY };
+
+  events.forEach((event) => {
+    if (availability.roomsUnavailable && availability.trainersUnavailable && availability.unitsUnavailable) {
+      return;
+    }
+
+    if (event.kind === 'session') {
+      if (!availability.roomsUnavailable && !event.session.room) {
+        availability.roomsUnavailable = true;
+      }
+      if (!availability.trainersUnavailable && event.session.trainers.length === 0) {
+        availability.trainersUnavailable = true;
+      }
+      if (!availability.unitsUnavailable && event.session.units.length === 0) {
+        availability.unitsUnavailable = true;
+      }
+      return;
+    }
+
+    const variant = event.variant.variant;
+    if (!availability.roomsUnavailable) {
+      const hasRoom = hasText(variant.sala_id) || hasText(variant.sala?.name);
+      if (!hasRoom) {
+        availability.roomsUnavailable = true;
+      }
+    }
+    if (!availability.trainersUnavailable) {
+      const hasTrainer = hasText(variant.trainer_id) || hasText(variant.trainer?.name);
+      if (!hasTrainer) {
+        availability.trainersUnavailable = true;
+      }
+    }
+    if (!availability.unitsUnavailable) {
+      const hasUnit =
+        hasText(variant.unidad_movil_id) || hasText(variant.unidad?.name) || hasText(variant.unidad?.matricula);
+      if (!hasUnit) {
+        availability.unitsUnavailable = true;
+      }
+    }
+  });
+
+  return availability;
+}
+
+function computeAvailabilityMap(
+  groups: Map<number, CalendarEventItem[]>,
+): Map<number, ResourceAvailability> {
+  const availability = new Map<number, ResourceAvailability>();
+  groups.forEach((events, julian) => {
+    availability.set(julian, computeDayAvailability(events));
+  });
+  return availability;
 }
 
 function arrangeDayEvents(events: DayEvent[]): DayEvent[] {
@@ -396,7 +480,11 @@ function arrangeDayEvents(events: DayEvent[]): DayEvent[] {
   return sorted;
 }
 
-function buildWeekColumns(range: VisibleRange, events: CalendarEventItem[]): WeekColumn[] {
+function buildWeekColumns(
+  range: VisibleRange,
+  events: CalendarEventItem[],
+  availabilityMap: Map<number, ResourceAvailability>,
+): WeekColumn[] {
   const columns: WeekColumn[] = [];
   const todayParts = getMadridDateTime(new Date());
   for (let jd = range.startJulian; jd < range.endJulian; jd += 1) {
@@ -413,6 +501,7 @@ function buildWeekColumns(range: VisibleRange, events: CalendarEventItem[]): Wee
       weekdayLabel,
       isToday,
       events: [],
+      availability: availabilityMap.get(jd) ?? null,
     });
   }
 
@@ -589,6 +678,10 @@ export function CalendarView({
   }, [sessions, variants, includeVariants]);
 
   const eventGroups = useMemo(() => groupEventsByJulian(events), [events]);
+  const availabilityByJulian = useMemo(
+    () => computeAvailabilityMap(eventGroups),
+    [eventGroups],
+  );
 
   const monthDays: MonthDayCell[] | null = useMemo(() => {
     if (view !== 'month') return null;
@@ -607,15 +700,16 @@ export function CalendarView({
         isCurrentMonth,
         isToday,
         events: [...(eventGroups.get(jd) ?? [])].sort((a, b) => a.start.localeCompare(b.start)),
+        availability: availabilityByJulian.get(jd) ?? null,
       });
     }
     return days;
-  }, [view, visibleRange, currentDate, eventGroups]);
+  }, [view, visibleRange, currentDate, eventGroups, availabilityByJulian]);
 
   const weekColumns = useMemo(() => {
     if (view === 'month') return null;
-    return buildWeekColumns(visibleRange, events);
-  }, [view, visibleRange, events]);
+    return buildWeekColumns(visibleRange, events, availabilityByJulian);
+  }, [view, visibleRange, events, availabilityByJulian]);
 
   const isInitialLoading =
     (sessionsQuery.isLoading && !sessionsQuery.data) ||
@@ -804,6 +898,27 @@ export function CalendarView({
       return right;
     }
     return '';
+  };
+
+  const renderAvailabilityIcons = (availability: ResourceAvailability | null | undefined) => {
+    if (!availability) return null;
+    const unavailable = AVAILABILITY_CONFIG.filter(({ key }) => availability[key]);
+    if (!unavailable.length) return null;
+    return (
+      <span className="erp-calendar-availability-icons">
+        {unavailable.map(({ key, icon, label }) => (
+          <span
+            key={key}
+            className="erp-calendar-availability-icon"
+            role="img"
+            aria-label={label}
+            title={label}
+          >
+            {icon}
+          </span>
+        ))}
+      </span>
+    );
   };
 
   const tooltipSecondaryText = renderTooltipLine(tooltipSecondaryLine);
@@ -1146,7 +1261,10 @@ export function CalendarView({
                       day.isCurrentMonth ? '' : 'is-muted'
                     } ${day.isToday ? 'is-today' : ''}`}
                   >
-                    <div className="erp-calendar-day-label">{day.date.day}</div>
+                    <div className="erp-calendar-day-label">
+                      <span>{day.date.day}</span>
+                      {renderAvailabilityIcons(day.availability)}
+                    </div>
                     <div className="erp-calendar-day-events">
                       {day.events.map((eventItem) => {
                         if (eventItem.kind === 'session') {
@@ -1274,8 +1392,13 @@ export function CalendarView({
                     }`}
                   >
                     <div className="erp-calendar-week-column-header">
-                      <span className="erp-calendar-weekday">{column.weekdayLabel}</span>
-                      <span className="erp-calendar-weekdate">{column.label}</span>
+                      <div className="erp-calendar-week-column-header-row">
+                        <span className="erp-calendar-weekday">{column.weekdayLabel}</span>
+                        {renderAvailabilityIcons(column.availability)}
+                      </div>
+                      <div className="erp-calendar-week-column-header-row">
+                        <span className="erp-calendar-weekdate">{column.label}</span>
+                      </div>
                     </div>
                     <div className="erp-calendar-week-column-body">
                       {column.events.map((event) => {

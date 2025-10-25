@@ -788,6 +788,10 @@ option.session-option-unavailable {
 .erp-calendar-day-label {
   font-weight: 700;
   font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
 }
 
 .erp-calendar-day-events {
@@ -858,7 +862,14 @@ option.session-option-unavailable {
   border-bottom: 1px solid rgba(232, 71, 77, 0.12);
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.35rem;
+}
+
+.erp-calendar-week-column-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
 }
 
 .erp-calendar-weekday {
@@ -871,6 +882,21 @@ option.session-option-unavailable {
 .erp-calendar-weekdate {
   font-size: 0.95rem;
   font-weight: 700;
+}
+
+.erp-calendar-availability-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  color: var(--color-gray-dark);
+}
+
+.erp-calendar-availability-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+  text-decoration-line: line-through;
+  text-decoration-thickness: 0.12em;
+  text-decoration-color: currentColor;
 }
 
 .erp-calendar-week-column-body {
