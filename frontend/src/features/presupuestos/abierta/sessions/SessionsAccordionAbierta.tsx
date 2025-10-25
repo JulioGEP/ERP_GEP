@@ -1824,8 +1824,7 @@ export function SessionsAccordionAbierta({
   }, [currentVariantInfo, formatVariantDate]);
 
   const variantSelectOptions = useMemo(() => {
-    if (!variantSiblings.length) return [] as DealVariantSelectOption[];
-    return variantSiblings
+    const options = variantSiblings
       .map((variant) => {
         const wooId = typeof variant.wooId === 'string' ? variant.wooId.trim() : '';
         if (!wooId.length) return null;
@@ -1842,7 +1841,47 @@ export function SessionsAccordionAbierta({
         } satisfies DealVariantSelectOption;
       })
       .filter((option): option is DealVariantSelectOption => option !== null);
-  }, [formatVariantDate, variantSiblings]);
+
+    const normalizedCurrent = normalizedCurrentVariation;
+    if (normalizedCurrent) {
+      const hasCurrentAssigned = options.some(
+        (option) => option.value.trim() === normalizedCurrent,
+      );
+
+      if (!hasCurrentAssigned) {
+        const fallbackDate = currentVariantInfo?.date ?? currentDealTrainingDate ?? null;
+        const formattedFallbackDate = formatVariantDate(fallbackDate);
+        const fallbackLabelSources = [
+          currentVariantInfo?.name ?? null,
+          currentVariantName ?? null,
+          formattedFallbackDate,
+        ];
+        let fallbackLabel = fallbackLabelSources
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .find((value) => value.length > 0);
+
+        if (!fallbackLabel) {
+          fallbackLabel = `Variante ${normalizedCurrent}`;
+        }
+
+        options.unshift({
+          value: normalizedCurrent,
+          label: fallbackLabel,
+          date: fallbackDate,
+          description: formattedFallbackDate,
+        });
+      }
+    }
+
+    return options;
+  }, [
+    currentDealTrainingDate,
+    currentVariantInfo,
+    currentVariantName,
+    formatVariantDate,
+    normalizedCurrentVariation,
+    variantSiblings,
+  ]);
 
   const variantOptionsLoading = variantSiblingsQuery.isLoading || variantSiblingsQuery.isFetching;
   const [variantSaving, setVariantSaving] = useState(false);
