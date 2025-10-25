@@ -257,6 +257,11 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     }
     if (!d) throw new Error("Deal no encontrado en Pipedrive");
 
+    const dealStatus = typeof d.status === "string" ? d.status.trim().toLowerCase() : "";
+    if (dealStatus !== "won") {
+      throw new Error("No se puede importar el presupuesto porque no está ganado.");
+    }
+
     const orgId = resolvePipedriveId(d.org_id);
     const personId = resolvePipedriveId(d.person_id);
 
