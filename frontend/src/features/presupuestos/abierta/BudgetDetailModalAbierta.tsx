@@ -540,6 +540,7 @@ export function BudgetDetailModalAbierta({
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const processedNoteSignatureRef = useRef<string | null>(null);
+  const processedNoteDealIdRef = useRef<string | null>(null);
   const noteWarningSignatureRef = useRef<string | null>(null);
 
   const getDocumentDisplayName = (doc: DealDocument | null | undefined): string => {
@@ -1091,6 +1092,7 @@ export function BudgetDetailModalAbierta({
       });
 
       if (!toCreate.length && !toUpdate.length) {
+        processedNoteDealIdRef.current = normalizedDealId;
         processedNoteSignatureRef.current = noteSignature;
         if (options?.notifyOnNoChanges && onNotify) {
           onNotify({
@@ -1101,6 +1103,7 @@ export function BudgetDetailModalAbierta({
         return false;
       }
 
+      processedNoteDealIdRef.current = normalizedDealId;
       processedNoteSignatureRef.current = noteSignature;
 
       importStudentsFromNoteMutation.mutate({
@@ -1124,6 +1127,14 @@ export function BudgetDetailModalAbierta({
   );
 
   useEffect(() => {
+    const trimmedDealId = normalizedDealId.trim();
+    if (!trimmedDealId.length) {
+      return;
+    }
+    if (processedNoteDealIdRef.current === trimmedDealId) {
+      return;
+    }
+    processedNoteDealIdRef.current = trimmedDealId;
     processedNoteSignatureRef.current = null;
     noteWarningSignatureRef.current = null;
   }, [normalizedDealId]);
@@ -1133,7 +1144,13 @@ export function BudgetDetailModalAbierta({
     if (!noteSignature || !noteStudents.length) return;
     if (!defaultSessionId) return;
     if (studentsLoading || sessionsLoading) return;
-    if (processedNoteSignatureRef.current === noteSignature) return;
+    const trimmedDealId = normalizedDealId.trim();
+    if (
+      processedNoteDealIdRef.current === trimmedDealId &&
+      processedNoteSignatureRef.current === noteSignature
+    ) {
+      return;
+    }
 
     performNoteStudentsSync(defaultSessionId);
   }, [
