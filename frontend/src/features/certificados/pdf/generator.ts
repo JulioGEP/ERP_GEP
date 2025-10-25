@@ -11,6 +11,7 @@ export interface CertificateStudentData {
 
 export interface CertificateSessionData {
   fecha_inicio_utc: string;
+  fecha_fin_utc?: string;
 }
 
 export interface CertificateDealData {
@@ -27,6 +28,7 @@ export interface CertificateGenerationData {
   sesion: CertificateSessionData;
   deal: CertificateDealData;
   producto: CertificateProductData;
+  templateName?: string;
   theoreticalItems?: string[];
   practicalItems?: string[];
 }
@@ -101,6 +103,7 @@ const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
   },
   sesion: {
     fecha_inicio_utc: '2025-10-16',
+    fecha_fin_utc: '2025-10-17',
   },
   deal: {
     sede_labels: 'Valencia',
@@ -109,6 +112,7 @@ const PREVIEW_SAMPLE_DATA: CertificateGenerationData = {
     name: 'Formación genérica de ejemplo',
     hours: 8,
   },
+  templateName: 'Formación genérica de ejemplo',
   theoreticalItems: [
     'Teoría del fuego.',
     'Clases de fuego y agentes extintores.',
@@ -484,6 +488,11 @@ function normaliseForComparison(value: string): string {
     .trim();
 }
 
+function isTrabajosVerticalesTemplate(templateName?: string | null): boolean {
+  const comparable = normaliseForComparison(normaliseText(templateName));
+  return comparable.includes('trabajos verticales');
+}
+
 function formatLocation(value: string | string[]): string {
   const items = Array.isArray(value) ? value : [value];
   const combined = items.map((item) => normaliseText(item)).filter(Boolean).join(', ');
@@ -546,8 +555,10 @@ function assertCertificateData(data: CertificateGenerationData): void {
   const surname = normaliseText(data.alumno?.apellido);
   const dni = normaliseText(data.alumno?.dni);
   const sessionDate = normaliseText(data.sesion?.fecha_inicio_utc);
+  const sessionEndDate = normaliseText(data.sesion?.fecha_fin_utc);
   const courseName = normaliseText(data.producto?.name);
   const hours = data.producto?.hours;
+  const templateName = normaliseText(data.templateName);
 
   if (!name || !surname || !dni) {
     throw new Error('Faltan datos del alumno para generar el certificado.');
@@ -555,6 +566,10 @@ function assertCertificateData(data: CertificateGenerationData): void {
 
   if (!sessionDate) {
     throw new Error('Falta la fecha de la sesión para generar el certificado.');
+  }
+
+  if (isTrabajosVerticalesTemplate(templateName) && !sessionEndDate) {
+    throw new Error('Falta la segunda fecha de la sesión para generar el certificado.');
   }
 
   if (!courseName || !Number.isFinite(hours) || (typeof hours === 'number' && hours <= 0)) {
@@ -577,11 +592,16 @@ function buildCertificateDocDefinition(
   const studentName = `${normaliseText(data.alumno.nombre)} ${normaliseText(data.alumno.apellido)}`.trim();
   const dni = normaliseText(data.alumno.dni);
   const formattedDate = formatDate(data.sesion.fecha_inicio_utc);
+  const formattedSecondDate = data.sesion.fecha_fin_utc
+    ? formatDate(data.sesion.fecha_fin_utc)
+    : '';
   const location = formatLocation(data.deal.sede_labels);
   const courseHours = formatHours(data.producto.hours);
   const courseName = normaliseText(data.producto.name);
+  const templateName = normaliseText(data.templateName);
   const theoreticalItems = ensureList(data.theoreticalItems);
   const practicalItems = ensureList(data.practicalItems);
+  const usesDualDate = isTrabajosVerticalesTemplate(templateName) && formattedSecondDate.length > 0;
 
   const styles: StyleDictionary = {
     bodyText: { fontSize: 8.5, lineHeight: 1.3 },
@@ -647,18 +667,31 @@ function buildCertificateDocDefinition(
     margin: [0, -5, 0, 6],
   });
 
-  stack.push({
-    text: [
-      'con DNI/NIE ',
-      { text: dni, bold: true },
-      ', quien en fecha ',
-      { text: formattedDate, bold: true },
-      ' y en ',
-      { text: location, bold: true },
-    ],
+  const dateTextSegments: Content = {
+    text: usesDualDate
+      ? [
+          'con DNI/NIE ',
+          { text: dni, bold: true },
+          ', quien en las fechas ',
+          { text: formattedDate, bold: true },
+          ' / ',
+          { text: formattedSecondDate, bold: true },
+          ' y en ',
+          { text: location, bold: true },
+        ]
+      : [
+          'con DNI/NIE ',
+          { text: dni, bold: true },
+          ', quien en fecha ',
+          { text: formattedDate, bold: true },
+          ' y en ',
+          { text: location, bold: true },
+        ],
     style: 'studentInfoText',
     margin: [0, -5, 0, 6],
-  });
+  };
+
+  stack.push(dateTextSegments);
 
   stack.push({
     text: [
@@ -864,6 +897,11 @@ export async function generateCertificateTemplatePreviewDataUrl(
     theoreticalItems: previewTheory.length ? previewTheory : PREVIEW_SAMPLE_DATA.theoreticalItems,
     practicalItems: previewPractice.length ? previewPractice : PREVIEW_SAMPLE_DATA.practicalItems,
   };
+
+  const previewTemplateName = normaliseText(options?.courseName) || PREVIEW_SAMPLE_DATA.templateName;
+  if (previewTemplateName) {
+    previewData.templateName = previewTemplateName;
+  }
 
   assertCertificateData(previewData);
 
