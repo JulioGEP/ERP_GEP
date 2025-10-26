@@ -89,7 +89,9 @@ export function isOpenTrainingDeal(deal: DealDetail | null): boolean {
     deal.pipeline_label,
     deal.pipeline_id ? String(deal.pipeline_id) : null,
   ];
-  return pipelineValues.some((value) => normalizePipelineValue(value) === 'formacion abierta');
+  return pipelineValues.some((value) =>
+    normalizePipelineValue(value).includes('formacion abierta'),
+  );
 }
 
 export function mapSessionToCertificateSession(
@@ -119,8 +121,8 @@ export function mapStudentsToCertificateRows(params: {
   const lugar = deal?.sede_label ? String(deal.sede_label) : '';
   const cliente = deal?.organization?.name ? String(deal.organization.name) : '';
   const fechaSource = isOpenTrainingDeal(deal)
-    ? deal?.a_fecha ?? session?.fecha_inicio_utc
-    : session?.fecha_inicio_utc;
+    ? deal?.a_fecha ?? session?.fecha_inicio_utc ?? ''
+    : session?.fecha_inicio_utc ?? '';
   const fechaDate = fechaSource ? parseDate(fechaSource) : null;
   const fecha = formatDate(fechaDate ?? fechaSource);
   let fecha2 = '';
