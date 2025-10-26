@@ -107,7 +107,7 @@ type SessionRecord = {
   drive_url: string | null;
   trainers: Array<{ trainer_id: string }>;
   unidades: Array<{ unidad_id: string }>;
-  deal?: { sede_label: string | null } | null;
+  deal?: { sede_label: string | null; pipeline_id: string | null } | null;
 };
 
 const SEDE_ALIASES: Record<string, string> = {
@@ -122,6 +122,30 @@ function normalizeSedeLabel(value: string | null | undefined): string | null {
   if (!trimmed.length) return null;
   const alias = SEDE_ALIASES[trimmed.toLowerCase()];
   return alias ?? trimmed;
+}
+
+const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_DATES = new Set([
+  'gep services',
+  'formacion empresas',
+  'formacion empresa',
+]);
+
+function normalizePipelineLabel(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed.length) return null;
+  return trimmed
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function allowsAutomaticPlanificadaWithoutDates(
+  pipelineLabel: string | null | undefined,
+): boolean {
+  const normalized = normalizePipelineLabel(pipelineLabel);
+  if (!normalized) return false;
+  return PIPELINES_ALLOW_PLANIFICADA_WITHOUT_DATES.has(normalized);
 }
 
 function toSessionEstado(value: unknown): SessionEstado | null {
@@ -148,6 +172,7 @@ function computeAutomaticSessionEstadoFromValues({
   trainerIds,
   unidadIds,
   dealSede,
+  dealPipeline,
 }: {
   fechaInicio: Date | null | undefined;
   fechaFin: Date | null | undefined;
@@ -155,8 +180,10 @@ function computeAutomaticSessionEstadoFromValues({
   trainerIds: string[];
   unidadIds: string[];
   dealSede?: string | null;
+  dealPipeline?: string | null;
 }): AutomaticSessionEstado {
-  if (!fechaInicio || !fechaFin) return 'BORRADOR';
+  const allowWithoutDates = allowsAutomaticPlanificadaWithoutDates(dealPipeline);
+  const hasValidDates = Boolean(fechaInicio && fechaFin);
   const normalizedSede = normalizeSedeLabel(dealSede);
   const requiresRoom = normalizedSede !== 'In Company';
   if (
@@ -167,7 +194,10 @@ function computeAutomaticSessionEstadoFromValues({
   }
   if (!trainerIds || !trainerIds.length) return 'BORRADOR';
   if (!unidadIds || !unidadIds.length) return 'BORRADOR';
-  return 'PLANIFICADA';
+  if (hasValidDates || allowWithoutDates) {
+    return 'PLANIFICADA';
+  }
+  return 'BORRADOR';
 }
 
 function resolveAutomaticSessionEstado(row: SessionRecord): AutomaticSessionEstado {
@@ -180,6 +210,7 @@ function resolveAutomaticSessionEstado(row: SessionRecord): AutomaticSessionEsta
     trainerIds,
     unidadIds,
     dealSede: row.deal?.sede_label ?? null,
+    dealPipeline: row.deal?.pipeline_id ?? null,
   });
 }
 
@@ -643,7 +674,7 @@ async function fetchSessionsByProduct(
       include: {
         trainers: { select: { trainer_id: true } },
         unidades: { select: { unidad_id: true } },
-        deal: { select: { sede_label: true } },
+        deal: { select: { sede_label: true, pipeline_id: true } },
       },
     }),
   ]);
@@ -1138,7 +1169,7 @@ export const handler = async (event: any) => {
       const result = await prisma.$transaction(async (tx) => {
         const deal = await tx.deals.findUnique({
           where: { deal_id: dealId },
-          select: { deal_id: true, training_address: true, sede_label: true },
+          select: { deal_id: true, training_address: true, sede_label: true, pipeline_id: true },
         });
         if (!deal) {
           throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
@@ -1169,6 +1200,7 @@ export const handler = async (event: any) => {
           trainerIds: trainerIdsResult,
           unidadIds: unidadIdsResult,
           dealSede: deal.sede_label ?? null,
+          dealPipeline: deal.pipeline_id ?? null,
         });
 
         const created = await tx.sessions.create({
@@ -1214,7 +1246,7 @@ export const handler = async (event: any) => {
         const stored = await tx.sessions.findUnique({
           where: { id: created.id },
           include: {
-            deal: { select: { sede_label: true } },
+            deal: { select: { sede_label: true, pipeline_id: true } },
             trainers: { select: { trainer_id: true } },
             unidades: { select: { unidad_id: true } },
           },
@@ -1239,7 +1271,7 @@ export const handler = async (event: any) => {
       const stored = await prisma.sessions.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deal: { select: { sede_label: true } },
+          deal: { select: { sede_label: true, pipeline_id: true } },
           trainers: { select: { trainer_id: true } },
           unidades: { select: { unidad_id: true } },
         },
@@ -1286,6 +1318,7 @@ export const handler = async (event: any) => {
         trainerIds: nextTrainerIds,
         unidadIds: nextUnidadIds,
         dealSede: storedRecord.deal?.sede_label ?? null,
+        dealPipeline: storedRecord.deal?.pipeline_id ?? null,
       });
 
       if (requestedEstado !== undefined) {
@@ -1357,7 +1390,7 @@ export const handler = async (event: any) => {
       const refreshed = await prisma.sessions.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deal: { select: { sede_label: true } },
+          deal: { select: { sede_label: true, pipeline_id: true } },
           trainers: { select: { trainer_id: true } },
           unidades: { select: { unidad_id: true } },
         },
