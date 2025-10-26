@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ComponentProps, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType } from 'react';
 import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -261,6 +261,23 @@ export default function App() {
 
   const queryClient = useQueryClient();
 
+  const normalizedSelectedBudgetId = useMemo(
+    () => normalizeDealId(selectedBudgetId)?.trim() ?? '',
+    [selectedBudgetId],
+  );
+
+  const selectedBudgetDetailQuery = useQuery({
+    queryKey: ['deal', normalizedSelectedBudgetId],
+    queryFn: () => fetchDealDetail(normalizedSelectedBudgetId),
+    enabled: normalizedSelectedBudgetId.length > 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 0,
+    staleTime: Infinity,
+  });
+
+  const selectedBudgetDetail = selectedBudgetDetailQuery.data ?? null;
+
   useEffect(() => {
     if (!selectedBudgetId) {
       setProductComment(null);
@@ -452,7 +469,7 @@ export default function App() {
         );
 
         setSelectedBudgetSummary(summaryWithNormalizedId);
-        setSelectedBudgetId(summaryWithNormalizedId.dealId ?? summaryWithNormalizedId.deal_id ?? null);
+        setSelectedBudgetId(normalizeDealId(summaryWithNormalizedId.dealId ?? summaryWithNormalizedId.deal_id));
       } else {
         setSelectedBudgetSummary(null);
         setSelectedBudgetId(null);
@@ -519,7 +536,7 @@ export default function App() {
   const handleSelectBudget = useCallback((budget: DealSummary) => {
     setSelectedBudgetSummary(budget);
     // 👇 asegura string | null
-    setSelectedBudgetId(budget.dealId ?? null);
+    setSelectedBudgetId(normalizeDealId(budget.dealId ?? budget.deal_id));
   }, []);
 
   const handleDeleteBudget = useCallback(
@@ -645,7 +662,7 @@ export default function App() {
         };
 
         setSelectedBudgetSummary(summaryWithPipeline);
-        setSelectedBudgetId(id);
+        setSelectedBudgetId(normalizeDealId(id));
       })();
     },
     [pushToast, queryClient],
@@ -707,7 +724,52 @@ export default function App() {
       ? String(selectedBudgetSummary.pipeline_id).trim()
       : '';
 
-  const BudgetModalComponent = resolveBudgetModalComponent([pipelineLabelKey, pipelineIdKey]);
+  const detailPipelineLabelKey = (selectedBudgetDetail?.pipeline_label ?? '').trim();
+  const detailPipelineIdKey =
+    selectedBudgetDetail?.pipeline_id != null
+      ? String(selectedBudgetDetail.pipeline_id).trim()
+      : '';
+
+  const BudgetModalComponent = resolveBudgetModalComponent([
+    pipelineLabelKey,
+    pipelineIdKey,
+    detailPipelineLabelKey,
+    detailPipelineIdKey,
+  ]);
+
+  useEffect(() => {
+    if (!selectedBudgetDetail || !normalizedSelectedBudgetId.length) {
+      return;
+    }
+
+    setSelectedBudgetSummary((current) => {
+      if (!current) return current;
+
+      const currentId = normalizeDealId(current.dealId ?? current.deal_id);
+      if (currentId !== normalizedSelectedBudgetId) {
+        return current;
+      }
+
+      const detailSummary = buildSummaryFromDeal(selectedBudgetDetail);
+      const mergedSummary: DealSummary = {
+        ...current,
+        ...detailSummary,
+        deal_id: normalizedSelectedBudgetId,
+        dealId: normalizedSelectedBudgetId,
+      };
+
+      const currentLabelKey = normalizePipelineKey(current.pipeline_label);
+      const currentIdKey = normalizePipelineKey(current.pipeline_id);
+      const nextLabelKey = normalizePipelineKey(mergedSummary.pipeline_label);
+      const nextIdKey = normalizePipelineKey(mergedSummary.pipeline_id);
+
+      if (currentLabelKey === nextLabelKey && currentIdKey === nextIdKey) {
+        return current;
+      }
+
+      return mergedSummary;
+    });
+  }, [selectedBudgetDetail, normalizedSelectedBudgetId]);
 
   const budgetModalProps: BudgetModalProps = {
     dealId: selectedBudgetId,
