@@ -368,30 +368,45 @@ export default function App() {
           );
         }
 
-        let pipelineInfo =
-          normalizeOptionalString(summary.pipeline_label) ??
-          normalizeOptionalString(summary.pipeline_id);
+      }
 
-        if (normalizedDealId && !pipelineInfo) {
-          const cachedDetail = queryClient.getQueryData<DealDetail>(['deal', normalizedDealId]);
+      const extractPipelineInfo = (
+        source: DealSummary | null | undefined,
+      ): { info: string | null; key: string } => {
+        const info =
+          normalizeOptionalString(source?.pipeline_label) ??
+          normalizeOptionalString(source?.pipeline_id);
+        const key = info ? normalizePipelineKey(info) : '';
+        return { info, key };
+      };
+
+      if (summary && normalizedDealId) {
+        let { info: pipelineInfo, key: pipelineKey } = extractPipelineInfo(summary);
+
+        const ensurePipelineFromDetail = async () => {
+          if (!normalizedDealId) return;
+
+          const cachedDetail = queryClient.getQueryData<DealDetail>([
+            'deal',
+            normalizedDealId,
+          ]);
           if (cachedDetail) {
-            const summaryFromCache = buildSummaryFromDeal(cachedDetail);
-            const cachedPipeline =
-              normalizeOptionalString(summaryFromCache.pipeline_label) ??
-              normalizeOptionalString(summaryFromCache.pipeline_id);
-            if (cachedPipeline) {
-              summary = summaryFromCache;
-              normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
-              pipelineInfo = cachedPipeline;
-            }
+            summary = buildSummaryFromDeal(cachedDetail);
+            normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
+            const extracted = extractPipelineInfo(summary);
+            pipelineInfo = extracted.info;
+            pipelineKey = extracted.key;
           }
 
-          if (!pipelineInfo) {
+          if (!pipelineInfo || !pipelineKey || !KNOWN_PIPELINE_KEYS.has(pipelineKey)) {
             try {
               const refreshedDetail = await fetchDealDetail(normalizedDealId);
               queryClient.setQueryData(['deal', normalizedDealId], refreshedDetail);
               summary = buildSummaryFromDeal(refreshedDetail);
               normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
+              const extracted = extractPipelineInfo(summary);
+              pipelineInfo = extracted.info;
+              pipelineKey = extracted.key;
             } catch (error) {
               console.error(
                 '[App] No se pudo obtener el pipeline del presupuesto importado',
@@ -399,6 +414,10 @@ export default function App() {
               );
             }
           }
+        };
+
+        if (!pipelineInfo || !pipelineKey || !KNOWN_PIPELINE_KEYS.has(pipelineKey)) {
+          await ensurePipelineFromDetail();
         }
       }
 
