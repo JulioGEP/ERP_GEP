@@ -12,6 +12,7 @@ type BudgetsPageProps = {
   onDelete?: (budget: DealSummary) => Promise<void>;
   onOpenImportModal: () => void;
   isImporting: boolean;
+  highlightBudgetId?: string | null;
 };
 
 export function BudgetsPage({
@@ -24,6 +25,7 @@ export function BudgetsPage({
   onDelete,
   onOpenImportModal,
   isImporting,
+  highlightBudgetId,
 }: BudgetsPageProps) {
   return (
     <div className="d-grid gap-4">
@@ -48,6 +50,7 @@ export function BudgetsPage({
         onRetry={onRetry}
         onSelect={onSelect}
         onDelete={onDelete}
+        highlightedBudgetId={highlightBudgetId}
       />
     </div>
   );
