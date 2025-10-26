@@ -1,6 +1,7 @@
 // backend/functions/products.ts
+import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
-import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { errorResponse, successResponse } from './_shared/response';
 import { formatTimeFromDb, parseHHMMToDate } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
 
@@ -147,59 +148,50 @@ function buildUpdateData(body: any) {
   return { data } as const;
 }
 
-export const handler = async (event: any) => {
-  try {
-    if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse();
-    }
+export const handler = createHttpHandler<any>(async (request) => {
+  const prisma = getPrisma();
+  const method = request.method;
+  const path = request.path;
+  const productId = parseProductIdFromPath(path);
 
-    const prisma = getPrisma();
-    const method = event.httpMethod;
-    const path = event.path || '';
-    const productId = parseProductIdFromPath(path);
-
-    if (method === 'GET' && !productId) {
+  if (method === 'GET' && !productId) {
       const products = await prisma.products.findMany({
         orderBy: [{ name: 'asc' }],
       });
 
-      return successResponse({
-        products: products.map((product: ProductRecord) => normalizeProduct(product)),
-      });
-    }
-
-    if (method === 'GET' && productId) {
-      const product = await prisma.products.findUnique({
-        where: { id: productId },
-      });
-
-      if (!product) {
-        return errorResponse('NOT_FOUND', 'Producto no encontrado', 404);
-      }
-
-      return successResponse({ product: normalizeProduct(product as ProductRecord) });
-    }
-
-    if (method === 'PATCH' && productId) {
-      if (!event.body) {
-        return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
-      }
-
-      const body = JSON.parse(event.body || '{}');
-      const result = buildUpdateData(body);
-      if ('error' in result) return result.error;
-
-      const updated = await prisma.products.update({
-        where: { id: productId },
-        data: result.data,
-      });
-
-      return successResponse({ product: normalizeProduct(updated as ProductRecord) });
-    }
-
-    return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
-  } catch (error) {
-    console.error('[products] handler error', error);
-    return errorResponse('UNEXPECTED_ERROR', 'Se ha producido un error inesperado', 500);
+    return successResponse({
+      products: products.map((product: ProductRecord) => normalizeProduct(product)),
+    });
   }
-};
+
+  if (method === 'GET' && productId) {
+    const product = await prisma.products.findUnique({
+      where: { id: productId },
+    });
+
+    if (!product) {
+      return errorResponse('NOT_FOUND', 'Producto no encontrado', 404);
+    }
+
+    return successResponse({ product: normalizeProduct(product as ProductRecord) });
+  }
+
+  if (method === 'PATCH' && productId) {
+    if (!request.rawBody) {
+      return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
+    }
+
+    const body = request.body ?? {};
+    const result = buildUpdateData(body);
+    if ('error' in result) return result.error;
+
+    const updated = await prisma.products.update({
+      where: { id: productId },
+      data: result.data,
+    });
+
+    return successResponse({ product: normalizeProduct(updated as ProductRecord) });
+  }
+
+  return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
+});
