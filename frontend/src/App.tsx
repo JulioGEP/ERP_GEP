@@ -192,39 +192,6 @@ function buildSummaryFromDeal(deal: DealDetail | DealSummary): DealSummary {
     normalizeOptionalString(base?.title) ??
     resolvedDealId;
 
-  const pickString = (...values: unknown[]): string | null => {
-    for (const value of values) {
-      const normalized = normalizeOptionalString(value);
-      if (normalized !== null) {
-        return normalized;
-      }
-    }
-    return null;
-  };
-
-  const resolveHours = (): number | null => {
-    const candidate = (deal as any)?.hours ?? base?.hours ?? null;
-    if (candidate === null || candidate === undefined) {
-      return null;
-    }
-    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
-      return candidate;
-    }
-    const parsed = Number(candidate);
-    return Number.isFinite(parsed) ? parsed : base?.hours ?? null;
-  };
-
-  const studentsCountValue = (() => {
-    const fromDeal = (deal as any)?.students_count;
-    if (typeof fromDeal === 'number' && Number.isFinite(fromDeal)) {
-      return fromDeal;
-    }
-    if (typeof base?.students_count === 'number' && Number.isFinite(base.students_count)) {
-      return base.students_count;
-    }
-    return null;
-  })();
-
   const summary: DealSummary = {
     ...base,
     deal_id: resolvedDealId,
@@ -233,34 +200,9 @@ function buildSummaryFromDeal(deal: DealDetail | DealSummary): DealSummary {
     pipeline_label: pipelineLabel,
     pipeline_id: pipelineId,
     training_address: trainingAddress,
-    sede_label: pickString((deal as any)?.sede_label, base?.sede_label),
-    caes_label: pickString((deal as any)?.caes_label, base?.caes_label),
-    fundae_label: pickString((deal as any)?.fundae_label, base?.fundae_label),
-    hotel_label: pickString((deal as any)?.hotel_label, base?.hotel_label),
-    transporte: pickString((deal as any)?.transporte, base?.transporte),
-    po: pickString((deal as any)?.po, base?.po),
-    tipo_servicio: pickString((deal as any)?.tipo_servicio, base?.tipo_servicio),
-    mail_invoice: pickString((deal as any)?.mail_invoice, base?.mail_invoice),
-    comercial: pickString((deal as any)?.comercial, base?.comercial),
-    a_fecha: pickString((deal as any)?.a_fecha, base?.a_fecha),
-    w_id_variation: pickString((deal as any)?.w_id_variation, base?.w_id_variation),
-    presu_holded: pickString((deal as any)?.presu_holded, base?.presu_holded),
-    modo_reserva: pickString((deal as any)?.modo_reserva, base?.modo_reserva),
-    hours: resolveHours(),
-    students_count: studentsCountValue,
     organization: (deal as any)?.organization ?? base.organization ?? null,
     person: (deal as any)?.person ?? base.person ?? null,
   };
-
-  if (Array.isArray((deal as any)?.products)) {
-    summary.products = (deal as any).products;
-  }
-  if (Array.isArray((deal as any)?.productNames)) {
-    summary.productNames = (deal as any).productNames;
-  }
-  if (Array.isArray((deal as any)?.sessions)) {
-    summary.sessions = (deal as any).sessions;
-  }
 
   return summary;
 }

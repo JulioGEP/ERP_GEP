@@ -430,8 +430,6 @@ function normalizeDealSummary(row: Json): DealSummary {
     caes_label: toStringValue(row?.caes_label) ?? null,
     fundae_label: toStringValue(row?.fundae_label) ?? null,
     hotel_label: toStringValue(row?.hotel_label) ?? null,
-    transporte: toStringValue(row?.transporte) ?? null,
-    po: toStringValue(row?.po) ?? null,
     tipo_servicio: toStringValue(row?.tipo_servicio) ?? null,
     mail_invoice: toStringValue(row?.mail_invoice) ?? null,
     comercial: toStringValue(row?.comercial) ?? null,
@@ -441,8 +439,6 @@ function normalizeDealSummary(row: Json): DealSummary {
     modo_reserva: toStringValue(row?.modo_reserva) ?? null,
 
     hours: toNumber(row?.hours) ?? null,
-
-    students_count: toNumber(row?.students_count) ?? null,
 
     organization: organization ?? null,
     person: person ?? null,
@@ -496,8 +492,6 @@ function normalizeDealDetail(raw: Json): DealDetail {
     mail_invoice: toStringValue(raw.mail_invoice) ?? null,
 
     hours: toNumber(raw.hours) ?? null,
-
-    students_count: toNumber(raw.students_count) ?? null,
 
     organization: null,
     person: null,
