@@ -156,6 +156,21 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
     out.a_fecha = toMadridISOString(out.a_fecha);
   }
 
+  if ("sessions" in out) {
+    out.sessions = Array.isArray(out.sessions)
+      ? out.sessions.map((session: any) => {
+          if (!session || typeof session !== "object") {
+            return session;
+          }
+          return {
+            ...session,
+            fecha_inicio_utc: toMadridISOString((session as any)?.fecha_inicio_utc ?? null),
+            fecha_fin_utc: toMadridISOString((session as any)?.fecha_fin_utc ?? null),
+          };
+        })
+      : out.sessions;
+  }
+
   return out as T;
 }
 
@@ -912,6 +927,14 @@ export const handler = async (event: any) => {
           org_id: true,
           person_id: true,
           created_at: true,
+          sessions: {
+            select: {
+              id: true,
+              fecha_inicio_utc: true,
+              fecha_fin_utc: true,
+            },
+            orderBy: { fecha_inicio_utc: "asc" },
+          },
           organization: { select: { org_id: true, name: true } },
           person: {
             select: {
