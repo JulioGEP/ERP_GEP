@@ -1,7 +1,7 @@
 // backend/functions/_shared/mappers.ts
 // Mapeos y upserts a BD desde objetos de Pipedrive (deal + org + person + productos + notas + ficheros)
 
-import { getPrisma } from "./prisma";
+import type { PrismaClient } from "@prisma/client";
 import {
   getDealFields,
   optionLabelOf,
@@ -264,22 +264,24 @@ export async function resolveDealCustomLabels(deal: any) {
  * ===============  MAP & UPSERT DEAL COMPLETO  ===============
  * ============================================================ */
 
-export async function mapAndUpsertDealTree({
-  deal,
-  org,
-  person,
-  products,
-  notes,
-  files,
-}: {
-  deal: any;
-  org: any;
-  person?: any;
-  products: any[];
-  notes: any[];
-  files: any[];
-}) {
-  const prisma = getPrisma();
+export async function mapAndUpsertDealTree(
+  prisma: PrismaClient,
+  {
+    deal,
+    org,
+    person,
+    products,
+    notes,
+    files,
+  }: {
+    deal: any;
+    org: any;
+    person?: any;
+    products: any[];
+    notes: any[];
+    files: any[];
+  },
+) {
 
   // 1) Labels
   const pipelineLabel = await resolvePipelineLabel(deal?.pipeline_id);
@@ -662,5 +664,5 @@ export async function mapAndUpsertDealTree({
     });
   }
 
-  return dealId;
+  return { dealId, pipelineLabel: pipelineLabel ?? null };
 }
