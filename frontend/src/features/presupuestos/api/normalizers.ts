@@ -197,11 +197,16 @@ export function normalizeDealSummary(row: Json): DealSummary {
     caes_label: toStringValue(row?.caes_label) ?? null,
     fundae_label: toStringValue(row?.fundae_label) ?? null,
     hotel_label: toStringValue(row?.hotel_label) ?? null,
+    transporte: toStringValue(row?.transporte) ?? null,
+    po: toStringValue(row?.po) ?? null,
     comercial: toStringValue(row?.comercial) ?? null,
+    tipo_servicio: toStringValue(row?.tipo_servicio) ?? null,
+    mail_invoice: toStringValue(row?.mail_invoice) ?? null,
     presu_holded: toStringValue(row?.presu_holded) ?? null,
     modo_reserva: toStringValue(row?.modo_reserva) ?? null,
     hours: toNumber(row?.hours),
     a_fecha: toStringValue(row?.a_fecha) ?? null,
+    students_count: toNumber(row?.students_count),
   } satisfies DealSummary;
 }
 
@@ -246,6 +251,10 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     caes_label: toStringValue(raw?.caes_label) ?? null,
     fundae_label: toStringValue(raw?.fundae_label) ?? null,
     hotel_label: toStringValue(raw?.hotel_label) ?? null,
+    transporte: toStringValue(raw?.transporte) ?? null,
+    po: toStringValue(raw?.po) ?? null,
+    tipo_servicio: toStringValue(raw?.tipo_servicio) ?? null,
+    mail_invoice: toStringValue(raw?.mail_invoice) ?? null,
     comercial: toStringValue(raw?.comercial) ?? null,
     w_id_variation: toStringValue(raw?.w_id_variation) ?? null,
     a_fecha: toStringValue(raw?.a_fecha) ?? null,
@@ -255,6 +264,7 @@ export function normalizeDealDetail(raw: Json): DealDetail {
       : [],
     extras: raw?.extras ?? undefined,
     presu_holded: toStringValue(raw?.presu_holded) ?? null,
+    students_count: toNumber(raw?.students_count),
   };
 
   return normalized;

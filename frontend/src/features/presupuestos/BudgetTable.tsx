@@ -104,6 +104,33 @@ function getNegocioLabel(budget: DealSummary): string {
   return safeTrim(budget.pipeline_id ?? budget.pipeline_label ?? '') ?? '—';
 }
 
+function formatNullableLabel(value: string | null | undefined): string {
+  return safeTrim(value ?? '') ?? '—';
+}
+
+function formatHoursValue(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(Math.round(value));
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) return '—';
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? String(Math.round(parsed)) : trimmed;
+  }
+  return '—';
+}
+
+function formatStudentsCount(value: number | null | undefined): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return '—';
+}
+
 function getBudgetId(budget: DealSummary): string | null {
   const idCandidates = [budget.dealId, budget.deal_id]
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
@@ -435,8 +462,23 @@ export function BudgetTable({
               label="Negocio"
               sortState={sortState}
               onSort={requestSort}
-              style={{ width: showDeleteAction ? 120 : 140 }}
             />
+            <th className="d-none d-xl-table-cell">Dirección formación</th>
+            <th className="d-none d-lg-table-cell">Sede</th>
+            <th className="d-none d-xxl-table-cell">CAES</th>
+            <th className="d-none d-xxl-table-cell">FUNDAE</th>
+            <th className="d-none d-xxl-table-cell">Hotel</th>
+            <th className="d-none d-xxl-table-cell">Transporte</th>
+            <th className="d-none d-xl-table-cell">PO</th>
+            <th className="d-none d-xl-table-cell">Tipo servicio</th>
+            <th className="d-none d-xxl-table-cell">Mail facturación</th>
+            <th className="d-none d-lg-table-cell">Comercial</th>
+            <th className="d-none d-xxl-table-cell">Fecha A</th>
+            <th className="d-none d-xxl-table-cell">W ID</th>
+            <th className="d-none d-xxl-table-cell">Presu holded</th>
+            <th className="d-none d-xl-table-cell">Modo reserva</th>
+            <th className="d-none d-xl-table-cell text-end">Horas</th>
+            <th className="d-none d-lg-table-cell text-end">Alumnos</th>
             {showDeleteAction && (
               <th className="text-end" style={{ width: 56 }}>
                 <span className="visually-hidden">Acciones</span>
@@ -456,6 +498,22 @@ export function BudgetTable({
             const titleLabel = getTitleLabel(budget);
             const negocioLabel = getNegocioLabel(budget);
             const trainingDateInfo = getTrainingDateInfo(budget);
+            const trainingAddress = formatNullableLabel(budget.training_address);
+            const sedeLabel = formatNullableLabel(budget.sede_label);
+            const caesLabel = formatNullableLabel(budget.caes_label);
+            const fundaeLabel = formatNullableLabel(budget.fundae_label);
+            const hotelLabel = formatNullableLabel(budget.hotel_label);
+            const transporteLabel = formatNullableLabel(budget.transporte);
+            const poLabel = formatNullableLabel(budget.po);
+            const tipoServicioLabel = formatNullableLabel(budget.tipo_servicio);
+            const mailInvoiceLabel = formatNullableLabel(budget.mail_invoice);
+            const comercialLabel = formatNullableLabel(budget.comercial);
+            const aFechaLabel = formatDateLabel(parseDateValue(budget.a_fecha ?? null));
+            const wIdLabel = formatNullableLabel(budget.w_id_variation);
+            const presuHoldedLabel = formatNullableLabel(budget.presu_holded);
+            const modoReservaLabel = formatNullableLabel(budget.modo_reserva);
+            const hoursLabel = formatHoursValue(budget.hours ?? null);
+            const studentsCountLabel = formatStudentsCount(budget.students_count ?? null);
 
             const rowKey = id ?? `${organizationLabel}-${titleLabel}-${index}`;
 
@@ -476,6 +534,24 @@ export function BudgetTable({
                 <td title={names.join(', ')}>{productLabel}</td>
                 <td>{trainingDateInfo.label}</td>
                 <td>{negocioLabel}</td>
+                <td className="d-none d-xl-table-cell" title={budget.training_address ?? ''}>
+                  {trainingAddress}
+                </td>
+                <td className="d-none d-lg-table-cell" title={budget.sede_label ?? ''}>{sedeLabel}</td>
+                <td className="d-none d-xxl-table-cell" title={budget.caes_label ?? ''}>{caesLabel}</td>
+                <td className="d-none d-xxl-table-cell" title={budget.fundae_label ?? ''}>{fundaeLabel}</td>
+                <td className="d-none d-xxl-table-cell" title={budget.hotel_label ?? ''}>{hotelLabel}</td>
+                <td className="d-none d-xxl-table-cell" title={budget.transporte ?? ''}>{transporteLabel}</td>
+                <td className="d-none d-xl-table-cell" title={budget.po ?? ''}>{poLabel}</td>
+                <td className="d-none d-xl-table-cell" title={budget.tipo_servicio ?? ''}>{tipoServicioLabel}</td>
+                <td className="d-none d-xxl-table-cell" title={budget.mail_invoice ?? ''}>{mailInvoiceLabel}</td>
+                <td className="d-none d-lg-table-cell" title={budget.comercial ?? ''}>{comercialLabel}</td>
+                <td className="d-none d-xxl-table-cell" title={budget.a_fecha ?? ''}>{aFechaLabel}</td>
+                <td className="d-none d-xxl-table-cell" title={budget.w_id_variation ?? ''}>{wIdLabel}</td>
+                <td className="d-none d-xxl-table-cell" title={budget.presu_holded ?? ''}>{presuHoldedLabel}</td>
+                <td className="d-none d-xl-table-cell" title={budget.modo_reserva ?? ''}>{modoReservaLabel}</td>
+                <td className="d-none d-xl-table-cell text-end">{hoursLabel}</td>
+                <td className="d-none d-lg-table-cell text-end">{studentsCountLabel}</td>
                 {showDeleteAction && (
                   <td className="text-end">
                     <button

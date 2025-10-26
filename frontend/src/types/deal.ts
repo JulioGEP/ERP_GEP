@@ -89,6 +89,8 @@ export interface DealSummary {
   caes_label?: string | null;
   fundae_label?: string | null;
   hotel_label?: string | null;
+  transporte?: string | null;
+  po?: string | null;
   tipo_servicio?: string | null;
   mail_invoice?: string | null;
 
@@ -99,6 +101,8 @@ export interface DealSummary {
   modo_reserva?: string | null;
 
   hours?: number | null;    // editable en ERP (no autocalculado)
+
+  students_count?: number | null;
 
   organization?: DealOrganization | null;
   person?: DealPerson | null;
@@ -142,6 +146,8 @@ export interface DealDetail {
   products?: DealProduct[]; // antes: deal_products
   notes?: DealNote[];       // antes: deal_notes
   documents?: DealDocument[];
+
+  students_count?: number | null;
 }
 
 /* ======================
