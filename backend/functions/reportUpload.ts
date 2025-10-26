@@ -1,7 +1,8 @@
 // backend/functions/reportUpload.ts
 import { randomUUID } from 'crypto'
+import { createHttpHandler } from './_shared/http'
 import { getPrisma } from './_shared/prisma'
-import { successResponse, errorResponse, preflightResponse } from './_shared/response'
+import { successResponse, errorResponse } from './_shared/response'
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone'
 import { ensureSessionContext, resolveSessionNumber, toStringOrNull } from './_shared/sessions'
 import { normalizeDriveUrl } from './_shared/drive'
@@ -48,22 +49,14 @@ const mapSessionFile = (row: any) => ({
   drive_web_view_link: row?.drive_web_view_link ?? null,
 })
 
-export const handler = async (event: any) => {
+export const handler = createHttpHandler<any>(async (request) => {
   try {
-    if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse()
-    }
-
-    if (event.httpMethod !== 'POST') {
+    if (request.method !== 'POST') {
       return METHOD_NOT_ALLOWED
     }
 
-    let payload: any = null
-    try {
-      payload = event.body ? JSON.parse(event.body) : {}
-    } catch {
-      return errorResponse('VALIDATION_ERROR', 'JSON inválido', 400)
-    }
+    const payload =
+      request.body && typeof request.body === 'object' ? (request.body as any) : {}
 
     const dealId = toStringOrNull(payload?.dealId ?? payload?.deal_id ?? payload?.id)
     const sessionId = toStringOrNull(payload?.sessionId ?? payload?.sesion_id ?? payload?.session_id)
@@ -200,6 +193,6 @@ export const handler = async (event: any) => {
     console.error('[reportUpload] handler error', error)
     return errorResponse('INTERNAL_ERROR', 'Error guardando el informe', 500)
   }
-}
+})
 
 export default handler

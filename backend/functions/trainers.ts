@@ -1,7 +1,8 @@
 // backend/functions/trainers.ts
 import { randomUUID } from 'crypto';
+import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
-import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { errorResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
 
 const OPTIONAL_STRING_FIELDS = [
@@ -211,17 +212,13 @@ function handleKnownPrismaError(error: unknown) {
   return null;
 }
 
-export const handler = async (event: any) => {
+export const handler = createHttpHandler<any>(async (request) => {
+  const prisma = getPrisma();
+  const method = request.method;
+  const path = request.path || '';
+  const trainerIdFromPath = parseTrainerIdFromPath(path);
+
   try {
-    if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse();
-    }
-
-    const prisma = getPrisma();
-    const method = event.httpMethod;
-    const path = event.path || '';
-    const trainerIdFromPath = parseTrainerIdFromPath(path);
-
     if (method === 'GET' && !trainerIdFromPath) {
       const trainers = await prisma.trainers.findMany({
         orderBy: [{ name: 'asc' }, { apellido: 'asc' }],
@@ -242,10 +239,11 @@ export const handler = async (event: any) => {
     }
 
     if (method === 'POST') {
-      if (!event.body) {
+      if (!request.rawBody) {
         return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
       }
-      const body = JSON.parse(event.body || '{}');
+      const body =
+        request.body && typeof request.body === 'object' ? (request.body as any) : {};
       const result = buildCreateData(body);
       if ('error' in result) return result.error;
 
@@ -254,7 +252,7 @@ export const handler = async (event: any) => {
     }
 
     if (method === 'PATCH' && trainerIdFromPath) {
-      if (!event.body) {
+      if (!request.rawBody) {
         return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
       }
 
@@ -263,7 +261,8 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Formador/Bombero no encontrado', 404);
       }
 
-      const body = JSON.parse(event.body || '{}');
+      const body =
+        request.body && typeof request.body === 'object' ? (request.body as any) : {};
       const result = buildUpdateData(body);
       if ('error' in result) return result.error;
 
@@ -283,4 +282,4 @@ export const handler = async (event: any) => {
     const message = error instanceof Error ? error.message : 'Error inesperado';
     return errorResponse('UNEXPECTED_ERROR', message, 500);
   }
-};
+});
