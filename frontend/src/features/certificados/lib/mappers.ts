@@ -83,13 +83,42 @@ function normalizePipelineValue(value?: string | null): string {
     .toLowerCase();
 }
 
+function pipelineMatches(value: string | null | undefined, target: string): boolean {
+  const normalizedTarget = normalizePipelineValue(target);
+  if (!normalizedTarget) {
+    return false;
+  }
+
+  const normalizedValue = normalizePipelineValue(value);
+  if (!normalizedValue) {
+    return false;
+  }
+
+  return normalizedValue === normalizedTarget || normalizedValue.includes(normalizedTarget);
+}
+
+export function pickNonEmptyString(
+  ...values: Array<string | null | undefined>
+): string | null {
+  for (const value of values) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
 export function isOpenTrainingDeal(deal: DealDetail | null): boolean {
   if (!deal) return false;
   const pipelineValues: Array<string | null | undefined> = [
     deal.pipeline_label,
     deal.pipeline_id ? String(deal.pipeline_id) : null,
   ];
-  return pipelineValues.some((value) => normalizePipelineValue(value) === 'formacion abierta');
+  return pipelineValues.some((value) => pipelineMatches(value, 'formacion abierta'));
 }
 
 export function mapSessionToCertificateSession(
@@ -119,8 +148,8 @@ export function mapStudentsToCertificateRows(params: {
   const lugar = deal?.sede_label ? String(deal.sede_label) : '';
   const cliente = deal?.organization?.name ? String(deal.organization.name) : '';
   const fechaSource = isOpenTrainingDeal(deal)
-    ? deal?.a_fecha ?? session?.fecha_inicio_utc
-    : session?.fecha_inicio_utc;
+    ? pickNonEmptyString(deal?.a_fecha, session?.fecha_inicio_utc)
+    : pickNonEmptyString(session?.fecha_inicio_utc);
   const fechaDate = fechaSource ? parseDate(fechaSource) : null;
   const fecha = formatDate(fechaDate ?? fechaSource);
   let fecha2 = '';
