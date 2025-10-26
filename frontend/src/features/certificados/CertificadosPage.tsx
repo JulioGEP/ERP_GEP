@@ -301,31 +301,6 @@ function mapRowToCertificateGenerationData(
   };
 }
 
-function mergeRowWithPersistedData(
-  baseRow: CertificateRow,
-  persistedRow: CertificateRow | undefined,
-): CertificateRow {
-  if (!persistedRow) {
-    return { ...baseRow };
-  }
-
-  const mergedRow: CertificateRow = {
-    ...baseRow,
-    ...persistedRow,
-  };
-
-  const fieldsToPreserve: Array<keyof CertificateRow> = ['fecha', 'fecha2'];
-
-  for (const field of fieldsToPreserve) {
-    const persistedValue = persistedRow[field];
-    if (typeof persistedValue !== 'string' || !persistedValue.trim().length) {
-      mergedRow[field] = baseRow[field];
-    }
-  }
-
-  return mergedRow;
-}
-
 function slugifyForFileName(value: string): string {
   return value
     .normalize('NFD')
@@ -841,7 +816,7 @@ export function CertificadosPage() {
         const persistedMap = new Map(persistedRows.map((row) => [row.id, row]));
         nextEditableRows = rows.map((row) => {
           const persisted = persistedMap.get(row.id);
-          return mergeRowWithPersistedData(row, persisted);
+          return persisted ? { ...row, ...persisted } : { ...row };
         });
       } else {
         nextEditableRows = rows.map((row) => ({ ...row }));
