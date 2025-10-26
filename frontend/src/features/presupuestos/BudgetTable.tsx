@@ -62,7 +62,6 @@ interface BudgetTableProps {
   onDelete?: (budget: DealSummary) => Promise<void>;
   labels?: Partial<BudgetTableLabels>;
   enableFallback?: boolean;
-  highlightedBudgetId?: string | null;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -258,7 +257,6 @@ export function BudgetTable({
   onDelete,
   labels: labelsProp,
   enableFallback = true,
-  highlightedBudgetId = null,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -318,7 +316,6 @@ export function BudgetTable({
   });
 
   const showDeleteAction = typeof onDelete === 'function';
-  const highlightedId = (highlightedBudgetId ?? '').trim();
 
   const handleDelete = useCallback(
     async (event: React.MouseEvent, budget: DealSummary) => {
@@ -517,15 +514,8 @@ export function BudgetTable({
 
             const rowKey = id ?? `${organizationLabel}-${titleLabel}-${index}`;
 
-            const isHighlighted = highlightedId.length > 0 && id === highlightedId;
-
             return (
-              <tr
-                key={rowKey}
-                role="button"
-                onClick={() => onSelect(budget)}
-                className={isHighlighted ? 'recently-imported-budget-row' : undefined}
-              >
+              <tr key={rowKey} role="button" onClick={() => onSelect(budget)}>
                 <td className="fw-semibold" title={presupuestoTitle}>
                   {presupuestoLabel}
                 </td>

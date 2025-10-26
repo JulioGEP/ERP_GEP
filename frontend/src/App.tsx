@@ -9,32 +9,18 @@ import { BudgetDetailModalServices } from './features/presupuestos/services/Budg
 import { BudgetDetailModalMaterial } from './features/presupuestos/material/BudgetDetailModalMaterial';
 import { ProductCommentWindow } from './features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from './features/presupuestos/ProductCommentWindow';
-import { ApiError } from './api/client';
+import { ApiError } from "./api/client";
 import {
   deleteDeal,
   fetchDealDetail,
   fetchDealsWithoutSessions,
   importDeal,
-} from './features/presupuestos/api/deals.api';
-import {
-  fetchDealSessions,
-  fetchDealStudents,
-  createSessionStudent,
-  updateSessionStudent,
-  type SessionDTO,
-  type SessionGroupDTO,
-  type SessionStudent,
-} from './features/presupuestos/api';
+} from "./features/presupuestos/api/deals.api";
 import {
   DEALS_WITHOUT_SESSIONS_QUERY_KEY,
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
 } from './features/presupuestos/queryKeys';
 import { normalizeImportDealResult } from './features/presupuestos/importDealUtils';
-import {
-  diffNoteStudents,
-  extractNoteStudents,
-  pickDefaultSessionId,
-} from './features/presupuestos/abierta/noteStudents';
 import type { CalendarSession } from './features/calendar/api';
 import type { DealDetail, DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
@@ -330,7 +316,6 @@ export default function App() {
   const [importResultWarnings, setImportResultWarnings] = useState<string[] | null>(null);
   const [importResultDealId, setImportResultDealId] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
-  const [recentlyImportedBudgetId, setRecentlyImportedBudgetId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -416,189 +401,6 @@ export default function App() {
     onSuccess: async (payload) => {
       const { deal, warnings } = normalizeImportDealResult(payload);
 
-      let dealDetail: DealDetail | null = deal ? (deal as DealDetail) : null;
-
-      const syncNoteStudentsFromNotes = async (dealId: string, detail: DealDetail | null) => {
-        const normalizedDealIdValue = normalizeOptionalString(dealId);
-        if (!normalizedDealIdValue) {
-          return;
-        }
-
-        let detailWithNotes = detail;
-        if (!detailWithNotes || !Array.isArray(detailWithNotes.notes) || detailWithNotes.notes.length === 0) {
-          try {
-            detailWithNotes = await fetchDealDetail(normalizedDealIdValue);
-            queryClient.setQueryData(['deal', normalizedDealIdValue], detailWithNotes);
-            dealDetail = detailWithNotes;
-          } catch (error) {
-            console.error(
-              '[App] No se pudo obtener el detalle del presupuesto para sincronizar alumnos',
-              error,
-            );
-            return;
-          }
-        }
-        if (!detailWithNotes) {
-          return;
-        }
-
-        const noteInfo = extractNoteStudents(detailWithNotes.notes);
-        if (!noteInfo.students.length) {
-          return;
-        }
-
-        const productIds = Array.isArray(detailWithNotes.products)
-          ? detailWithNotes.products
-              .map((product) => {
-                if (!product) return null;
-                const code = typeof product.code === 'string' ? product.code.trim().toLowerCase() : '';
-                if (code.startsWith('ext-')) {
-                  return null;
-                }
-                if (product.id === null || product.id === undefined) {
-                  return null;
-                }
-                const normalized = String(product.id).trim();
-                return normalized.length ? normalized : null;
-              })
-              .filter((id): id is string => Boolean(id))
-          : [];
-
-        const fetchSessionsForProducts = async (): Promise<SessionDTO[]> => {
-          const pageSize = 200;
-          const sessionsMap = new Map<string, SessionDTO>();
-          const productsToFetch = productIds.length ? productIds : [null];
-
-          for (const productId of productsToFetch) {
-            let page = 1;
-            let hasMore = true;
-            while (hasMore) {
-              const options: { productId?: string; page: number; limit: number } = {
-                page,
-                limit: pageSize,
-              };
-              if (productId) {
-                options.productId = productId;
-              }
-              const groups: SessionGroupDTO[] = await fetchDealSessions(normalizedDealIdValue, options);
-              if (!Array.isArray(groups) || !groups.length) {
-                break;
-              }
-
-              for (const group of groups) {
-                if (!group || !Array.isArray(group.sessions)) {
-                  continue;
-                }
-                for (const session of group.sessions) {
-                  if (!session || typeof session.id !== 'string') {
-                    continue;
-                  }
-                  const trimmedId = session.id.trim();
-                  if (!trimmedId.length) {
-                    continue;
-                  }
-                  sessionsMap.set(trimmedId, session);
-                }
-              }
-
-              const pagination = groups[0]?.pagination ?? null;
-              if (!pagination) {
-                break;
-              }
-              const totalPages = Number(pagination.totalPages ?? 1);
-              if (!Number.isFinite(totalPages) || totalPages <= page) {
-                hasMore = false;
-              } else {
-                page += 1;
-              }
-            }
-          }
-
-          return Array.from(sessionsMap.values());
-        };
-
-        try {
-          const sessions = await fetchSessionsForProducts();
-          if (!sessions.length) {
-            return;
-          }
-          const defaultSessionId = pickDefaultSessionId(sessions);
-          if (!defaultSessionId) {
-            return;
-          }
-
-          const existingStudents = await fetchDealStudents(normalizedDealIdValue);
-          const diff = diffNoteStudents(noteInfo.students, existingStudents);
-          if (!diff.toCreate.length && !diff.toUpdate.length) {
-            return;
-          }
-
-          let createdCount = 0;
-          let updatedCount = 0;
-
-          for (const update of diff.toUpdate) {
-            try {
-              await updateSessionStudent(update.id, {
-                nombre: update.nombre,
-                apellido: update.apellido,
-              });
-              updatedCount += 1;
-            } catch (error) {
-              if (error instanceof ApiError && error.code === 'NOT_FOUND') {
-                continue;
-              }
-              throw error;
-            }
-          }
-
-          for (const student of diff.toCreate) {
-            try {
-              await createSessionStudent({
-                dealId: normalizedDealIdValue,
-                sessionId: defaultSessionId,
-                nombre: student.nombre,
-                apellido: student.apellido,
-                dni: student.dni,
-              });
-              createdCount += 1;
-            } catch (error) {
-              if (error instanceof ApiError && error.code === 'DUPLICATE_DNI') {
-                continue;
-              }
-              throw error;
-            }
-          }
-
-          if (createdCount > 0 || updatedCount > 0) {
-            const parts: string[] = [];
-            if (createdCount > 0) {
-              parts.push(`${createdCount} ${createdCount === 1 ? 'alumno creado' : 'alumnos creados'}`);
-            }
-            if (updatedCount > 0) {
-              parts.push(`${updatedCount} ${updatedCount === 1 ? 'alumno actualizado' : 'alumnos actualizados'}`);
-            }
-            pushToast({
-              variant: 'success',
-              message: `Alumnos sincronizados desde la nota (${parts.join(' y ')})`,
-            });
-          }
-
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['dealStudents', normalizedDealIdValue] }),
-            queryClient.invalidateQueries({ queryKey: ['session-students', normalizedDealIdValue, defaultSessionId] }),
-          ]);
-        } catch (error) {
-          const baseMessage =
-            error instanceof ApiError
-              ? `No se pudieron sincronizar los alumnos de la nota. [${error.code}] ${error.message}`
-              : error instanceof Error
-              ? `No se pudieron sincronizar los alumnos de la nota. ${error.message}`
-              : 'No se pudieron sincronizar los alumnos de la nota.';
-          console.error('[App] Error al sincronizar alumnos de nota tras importar', error);
-          pushToast({ variant: 'danger', message: baseMessage });
-        }
-      };
-
       let summary: DealSummary | null = null;
       let normalizedDealId: string | null = null;
 
@@ -611,7 +413,6 @@ export default function App() {
             ...(deal as DealDetail),
             deal_id: normalizedDealId,
           };
-          dealDetail = detailForCache;
           queryClient.setQueryData<DealDetail | undefined>(
             ['deal', normalizedDealId],
             (current) => {
@@ -648,7 +449,6 @@ export default function App() {
             normalizedDealId,
           ]);
           if (cachedDetail) {
-            dealDetail = cachedDetail;
             summary = buildSummaryFromDeal(cachedDetail);
             normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
             const extracted = extractPipelineInfo(summary);
@@ -660,7 +460,6 @@ export default function App() {
             try {
               const refreshedDetail = await fetchDealDetail(normalizedDealId);
               queryClient.setQueryData(['deal', normalizedDealId], refreshedDetail);
-              dealDetail = refreshedDetail;
               summary = buildSummaryFromDeal(refreshedDetail);
               normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
               const extracted = extractPipelineInfo(summary);
@@ -709,13 +508,12 @@ export default function App() {
             return [summaryWithNormalizedId, ...current];
           },
         );
-        setRecentlyImportedBudgetId(normalizedId);
 
-        if (pipelineKey === 'formacion abierta') {
-          await syncNoteStudentsFromNotes(normalizedId, dealDetail);
-        }
+        setSelectedBudgetSummary(summaryWithNormalizedId);
+        setSelectedBudgetId(summaryWithNormalizedId.dealId ?? summaryWithNormalizedId.deal_id ?? null);
       } else {
-        setRecentlyImportedBudgetId(null);
+        setSelectedBudgetSummary(null);
+        setSelectedBudgetId(null);
       }
 
       pushToast({ variant: 'success', message: 'Presupuesto importado' });
@@ -753,19 +551,6 @@ export default function App() {
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
 
-  useEffect(() => {
-    if (!recentlyImportedBudgetId) {
-      return;
-    }
-    const exists = budgets.some((item) => {
-      const currentId = normalizeDealId(item.dealId ?? item.deal_id);
-      return currentId === recentlyImportedBudgetId;
-    });
-    if (!exists) {
-      setRecentlyImportedBudgetId(null);
-    }
-  }, [budgets, recentlyImportedBudgetId]);
-
   const deleteDealMutation = useMutation({
     mutationFn: (dealId: string) => deleteDeal(dealId),
     onSuccess: (_, dealId) => {
@@ -793,11 +578,6 @@ export default function App() {
     setSelectedBudgetSummary(budget);
     // 👇 asegura string | null
     setSelectedBudgetId(budget.dealId ?? null);
-    setRecentlyImportedBudgetId((current) => {
-      if (!current) return current;
-      const normalizedSelectedId = normalizeDealId(budget.dealId ?? budget.deal_id);
-      return normalizedSelectedId === current ? null : current;
-    });
   }, []);
 
   const handleDeleteBudget = useCallback(
@@ -939,7 +719,6 @@ export default function App() {
     onDelete: handleDeleteBudget,
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
-    highlightBudgetId: recentlyImportedBudgetId,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {
