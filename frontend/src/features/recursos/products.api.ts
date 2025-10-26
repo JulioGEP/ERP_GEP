@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/products.api.ts
-import { API_BASE, ApiError } from '../../api/client';
+import { ApiError, requestJson } from '../../api/client';
 import type { Product } from '../../types/product';
 
 export type ProductUpdatePayload = {
@@ -37,15 +37,6 @@ type ProductSyncResponse = {
   message?: string;
   error_code?: string;
 };
-
-function parseJson(text: string): any {
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    throw new ApiError('INVALID_RESPONSE', 'Respuesta JSON inválida del servidor');
-  }
-}
 
 function toNullableString(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -109,22 +100,13 @@ function buildUpdateBody(payload: ProductUpdatePayload): Record<string, any> {
   return body;
 }
 
-async function requestJson(input: RequestInfo, init?: RequestInit) {
-  const response = await fetch(input, init);
-  const text = await response.text();
-  const json = parseJson(text);
-
-  if (!response.ok || json?.ok === false) {
-    const code = json?.error_code ?? `HTTP_${response.status}`;
-    const message = json?.message ?? 'Error inesperado en la solicitud';
-    throw new ApiError(code, message, response.status);
-  }
-
-  return json;
-}
+const requestOptions = {
+  defaultErrorMessage: 'Error inesperado en la solicitud',
+  invalidResponseMessage: 'Respuesta JSON inválida del servidor',
+};
 
 export async function fetchProducts(): Promise<Product[]> {
-  const json = (await requestJson(`${API_BASE}/products`)) as ProductListResponse;
+  const json = await requestJson<ProductListResponse>('/products', undefined, requestOptions);
   const rows = Array.isArray(json.products) ? json.products : [];
   return rows.map((row) => normalizeProduct(row));
 }
@@ -135,19 +117,26 @@ export async function updateProduct(productId: string, payload: ProductUpdatePay
   }
 
   const body = buildUpdateBody(payload);
-  const json = (await requestJson(`${API_BASE}/products/${encodeURIComponent(productId)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })) as ProductMutationResponse;
+  const json = await requestJson<ProductMutationResponse>(
+    `/products/${encodeURIComponent(productId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    },
+    requestOptions,
+  );
 
   return normalizeProduct(json.product);
 }
 
 export async function syncProducts(): Promise<ProductSyncSummary | null> {
-  const json = (await requestJson(`${API_BASE}/products-sync`, {
-    method: 'POST',
-  })) as ProductSyncResponse;
+  const json = await requestJson<ProductSyncResponse>(
+    '/products-sync',
+    {
+      method: 'POST',
+    },
+    requestOptions,
+  );
 
   return json.summary ?? null;
 }
