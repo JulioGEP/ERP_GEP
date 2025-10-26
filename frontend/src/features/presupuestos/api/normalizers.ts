@@ -207,6 +207,17 @@ export function normalizeDealSummary(row: Json): DealSummary {
 
 export function normalizeDealDetail(raw: Json): DealDetail {
   const products = normalizeProducts(raw?.products ?? raw?.line_items ?? []);
+  const pipelineId =
+    toStringValue(
+      raw?.pipeline_id ?? raw?.pipelineId ?? raw?.deal_pipeline_id ?? raw?.pipeline?.id,
+    ) ?? null;
+  const pipelineLabel =
+    toStringValue(
+      raw?.pipeline_label ?? raw?.pipelineLabel ?? raw?.pipeline?.label ?? raw?.pipeline?.name,
+    ) ?? null;
+  const trainingAddress =
+    toStringValue(raw?.training_address ?? raw?.trainingAddress ?? raw?.training?.address) ?? null;
+
   const normalized: DealDetail = {
     deal_id: toStringValue(raw?.deal_id ?? raw?.dealId ?? raw?.id) ?? '',
     title: toStringValue(raw?.title) ?? null,
@@ -228,8 +239,9 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     products: products.products ?? [],
     productNames: products.productNames ?? [],
     hours: toNumber(raw?.hours),
-    pipeline_label: toStringValue(raw?.pipeline_label) ?? null,
-    training_address: toStringValue(raw?.training_address) ?? null,
+    pipeline_label: pipelineLabel,
+    pipeline_id: pipelineId,
+    training_address: trainingAddress,
     sede_label: toStringValue(raw?.sede_label) ?? null,
     caes_label: toStringValue(raw?.caes_label) ?? null,
     fundae_label: toStringValue(raw?.fundae_label) ?? null,
