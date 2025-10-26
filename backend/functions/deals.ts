@@ -12,7 +12,6 @@ import {
   getDealFiles,
 } from "./_shared/pipedrive";
 import { mapAndUpsertDealTree } from "./_shared/mappers";
-import { syncNoteStudentsFromNotes } from "./_shared/noteStudents";
 import {
   syncDealDocumentsToGoogleDrive,
   deleteDealFolderFromGoogleDrive,
@@ -237,7 +236,7 @@ async function withTimeout<T>(
 }
 
 /* ======================= IMPORT DESDE PIPEDRIVE ======================= */
-async function importDealFromPipedrive(dealIdRaw: any, prisma: ReturnType<typeof getPrisma>) {
+async function importDealFromPipedrive(dealIdRaw: any) {
   const dealIdStr = String(dealIdRaw ?? "").trim();
   if (!dealIdStr) throw new Error("Falta dealId");
   const dealIdNum = Number(dealIdStr);
@@ -379,7 +378,7 @@ async function importDealFromPipedrive(dealIdRaw: any, prisma: ReturnType<typeof
     // 2) Mapear + upsert relacional en Neon
     const persistStart = Date.now();
     try {
-      const { dealId: persistedDealId, pipelineLabel } = await mapAndUpsertDealTree(prisma, {
+      savedDealId = await mapAndUpsertDealTree({
         deal: d,
         org: org || (orgId ? { id: orgId, name: resolvePipedriveName(d) ?? "—" } : undefined),
         person: person || (personId ? { id: personId } : undefined),
@@ -387,25 +386,6 @@ async function importDealFromPipedrive(dealIdRaw: any, prisma: ReturnType<typeof
         notes,
         files,
       });
-      savedDealId = persistedDealId;
-
-      try {
-        const studentWarnings = await syncNoteStudentsFromNotes({
-          prisma,
-          dealId: String(persistedDealId),
-          pipelineLabel,
-          notes,
-        });
-        if (studentWarnings.length) {
-          warnings.push(...studentWarnings);
-        }
-      } catch (studentSyncError) {
-        warnings.push(
-          studentSyncError instanceof Error
-            ? `No se pudieron sincronizar los alumnos de la nota: ${studentSyncError.message}`
-            : "No se pudieron sincronizar los alumnos de la nota.",
-        );
-      }
     } finally {
       timings.persistMs = Date.now() - persistStart;
     }
@@ -465,7 +445,7 @@ export const handler = async (event: any) => {
       if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
 
       try {
-        const { deal_id, warnings } = await importDealFromPipedrive(incomingId, prisma);
+        const { deal_id, warnings } = await importDealFromPipedrive(incomingId);
         const dealInclude = {
           organization: { select: { org_id: true, name: true } },
           person: {
