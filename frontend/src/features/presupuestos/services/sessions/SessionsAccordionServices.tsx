@@ -62,6 +62,7 @@ import {
 import { isApiError } from '../../api';
 import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
 import { formatSedeLabel } from '../../formatSedeLabel';
+import { useApplicableDealProducts } from '../../shared/useApplicableDealProducts';
 import {
   SESSION_DOCUMENTS_EVENT,
   type SessionDocumentsEventDetail,
@@ -799,6 +800,13 @@ function matchesSessionPrefix(value: unknown): boolean {
   return value.trim().toLowerCase().startsWith(SESSION_PRODUCT_PREFIX);
 }
 
+type ApplicableProductInfo = {
+  id: string;
+  name: string | null;
+  code: string | null;
+  hours: number | null;
+};
+
 function isApplicableProduct(product: DealProduct): product is DealProduct & { id: string } {
   const id = product?.id;
   if (!id) return false;
@@ -1068,32 +1076,29 @@ export function SessionsAccordionServices({
 }: SessionsAccordionServicesProps) {
   const qc = useQueryClient();
 
-  const applicableProducts = useMemo(
-    () =>
-      products.filter(isApplicableProduct).map((product) => ({
-        id: String(product.id),
-        name: product.name ?? null,
-        code: product.code ?? null,
-        hours:
-          typeof product.quantity === 'number'
-            ? product.quantity
-            : product.quantity != null
-            ? Number(product.quantity)
-            : null,
-      })),
-    [products],
+  const mapApplicableProduct = useCallback(
+    (product: DealProduct & { id: string | number }): ApplicableProductInfo => ({
+      id: String(product.id),
+      name: product.name ?? null,
+      code: product.code ?? null,
+      hours:
+        typeof product.quantity === 'number'
+          ? product.quantity
+          : product.quantity != null
+          ? Number(product.quantity)
+          : null,
+    }),
+    [],
   );
 
-  const shouldShow = applicableProducts.length > 0;
+  const generationKeySelector = useCallback((product: ApplicableProductInfo) => product.id, []);
 
-  const generationKey = useMemo(
-    () =>
-      applicableProducts
-        .map((product) => product.id)
-        .sort()
-        .join('|'),
-    [applicableProducts],
-  );
+  const { applicableProducts, shouldShow, generationKey } = useApplicableDealProducts(products, {
+    filter: isApplicableProduct,
+    mapProduct: mapApplicableProduct,
+    generationKeySelector,
+    sortGenerationKey: true,
+  });
 
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationDone, setGenerationDone] = useState(false);

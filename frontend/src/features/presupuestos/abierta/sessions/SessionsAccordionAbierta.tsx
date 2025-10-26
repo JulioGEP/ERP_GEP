@@ -73,6 +73,7 @@ import {
 import { isApiError } from '../../api';
 import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
 import { formatSedeLabel } from '../../formatSedeLabel';
+import { SESSION_CODE_PREFIXES, useApplicableDealProducts } from '../../shared/useApplicableDealProducts';
 import {
   SESSION_DOCUMENTS_EVENT,
   type SessionDocumentsEventDetail,
@@ -109,7 +110,6 @@ type DeleteDialogState = {
   error: string | null;
 };
 
-const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
   PLANIFICADA: 'Planificada',
@@ -1700,8 +1700,8 @@ export function SessionsAccordionAbierta({
   const qc = useQueryClient();
   const enablePublicLink = allowPublicLinkGeneration;
 
-  const applicableProducts = useMemo<ApplicableProductInfo[]>(() => {
-    return products.filter(isApplicableProduct).map((product) => {
+  const mapApplicableProduct = useCallback(
+    (product: DealProduct & { id: string | number }): ApplicableProductInfo => {
       const id = String(product.id);
       const normalizedId = typeof product.id === 'string' ? product.id.trim() : String(product.id ?? '').trim();
       const normalizedCode = typeof product.code === 'string' ? product.code.trim() : '';
@@ -1735,10 +1735,17 @@ export function SessionsAccordionAbierta({
         matchIds: Array.from(matchIds),
         matchTexts: Array.from(matchTexts),
       };
-    });
-  }, [products]);
+    },
+    [],
+  );
 
-  const shouldShow = applicableProducts.length > 0;
+  const { applicableProducts, shouldShow, generationKey } = useApplicableDealProducts<ApplicableProductInfo>(
+    products,
+    {
+      filter: isApplicableProduct,
+      mapProduct: mapApplicableProduct,
+    },
+  );
 
   const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
 
@@ -1951,14 +1958,6 @@ export function SessionsAccordionAbierta({
       variantSiblingsData,
     ],
   );
-  const generationKey = useMemo(
-    () =>
-      applicableProducts
-        .map((product) => `${product.id}|${Number.isFinite(product.quantity) ? product.quantity : 0}`)
-        .join('|'),
-    [applicableProducts],
-  );
-
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationDone, setGenerationDone] = useState(false);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
