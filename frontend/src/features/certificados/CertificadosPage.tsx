@@ -22,7 +22,12 @@ import { BudgetTable } from '../presupuestos/BudgetTable';
 import { useCertificateData } from './hooks/useCertificateData';
 import { CertificateTable } from './CertificateTable';
 import { CertificateToolbar, type CertificateToolbarProgressStatus } from './CertificateToolbar';
-import { isOpenTrainingDeal, type CertificateRow, type CertificateSession } from './lib/mappers';
+import {
+  isOpenTrainingDeal,
+  pickNonEmptyString,
+  type CertificateRow,
+  type CertificateSession,
+} from './lib/mappers';
 import type { DealDetail, DealSummary } from '../../types/deal';
 import {
   generateCertificatePDF,
@@ -256,8 +261,8 @@ function mapRowToCertificateGenerationData(
   const apellido = toTrimmedString(row.apellidos);
   const dni = toTrimmedString(row.dni);
   const sessionDateSource = isOpenTrainingDeal(context.deal)
-    ? context.deal?.a_fecha ?? row.fecha
-    : context.session?.fecha_inicio_utc ?? row.fecha;
+    ? pickNonEmptyString(context.deal?.a_fecha, row.fecha)
+    : pickNonEmptyString(context.session?.fecha_inicio_utc, row.fecha);
   const sessionDate = normaliseSessionDate(sessionDateSource);
   const sessionSecondDate = normaliseSessionDate(row.fecha2);
   const sede = resolveCertificateLocation(toTrimmedString(context.deal?.sede_label ?? row.lugar));
