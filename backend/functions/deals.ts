@@ -28,6 +28,316 @@ const EDITABLE_FIELDS = new Set([
   "a_fecha",
 ]);
 
+const OPEN_TRAINING_PIPELINE_LABEL = "Formación Abierta";
+
+type NoteStudentEntry = { nombre: string; apellido: string; dni: string };
+
+type SessionForSync = {
+  id: string;
+  estado: string | null;
+  fecha_inicio_utc: Date | string | null;
+  created_at: Date | string | null;
+};
+
+function normalizeNoteWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function sanitizeNoteContent(content: string): string {
+  return content
+    .replace(/&nbsp;/gi, " ")
+    .replace(/<br\s*\/?>(?=\s|$)/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[“”]/g, '"')
+    .replace(/^["']+/, "")
+    .replace(/["']+$/, "")
+    .trim();
+}
+
+function parseNoteStudents(content: unknown): NoteStudentEntry[] {
+  if (typeof content !== "string") return [];
+  if (!content.trim().length) return [];
+
+  const cleaned = sanitizeNoteContent(content);
+  const headerIndex = cleaned.toLowerCase().indexOf("alumnos del deal");
+  if (headerIndex === -1) {
+    return [];
+  }
+
+  const afterHeader = cleaned
+    .slice(headerIndex + "alumnos del deal".length)
+    .replace(/^[:\-\s"']+/, "");
+  if (!afterHeader.trim().length) {
+    return [];
+  }
+
+  const normalizedBody = afterHeader
+    .replace(/\n+/g, " ")
+    .replace(/\s*;\s*/g, ";")
+    .replace(/\s*\|\s*/g, "|")
+    .trim();
+  if (!normalizedBody.length) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const result: NoteStudentEntry[] = [];
+
+  normalizedBody
+    .split(";")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .forEach((entry) => {
+      const rawParts = entry
+        .split("|")
+        .map((part) =>
+          normalizeNoteWhitespace(part.replace(/^["']+/, "").replace(/["']+$/, ""))
+        );
+
+      const parts = rawParts.filter((part) => part.length > 0);
+      if (parts.length < 3) {
+        return;
+      }
+
+      const nombre = parts[0];
+      const apellido = parts.slice(1, -1).join(" ").trim();
+      const dni = parts[parts.length - 1].toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+      if (!nombre.length || !apellido.length || !dni.length) {
+        return;
+      }
+
+      if (seen.has(dni)) {
+        return;
+      }
+      seen.add(dni);
+      result.push({ nombre, apellido, dni });
+    });
+
+  return result;
+}
+
+function extractNoteStudents(
+  notes: readonly { id?: string | null; content?: string | null }[] | null | undefined,
+): { noteId: string | null; students: NoteStudentEntry[] } {
+  if (!Array.isArray(notes)) {
+    return { noteId: null, students: [] };
+  }
+
+  for (const note of notes) {
+    if (!note) continue;
+    const content = typeof note.content === "string" ? note.content : null;
+    if (!content || !content.trim().length) {
+      continue;
+    }
+
+    const students = parseNoteStudents(content);
+    if (!students.length) {
+      continue;
+    }
+
+    const rawId = typeof note.id === "string" ? note.id : null;
+    const trimmedId = rawId ? rawId.trim() : "";
+
+    return { noteId: trimmedId.length ? trimmedId : null, students };
+  }
+
+  return { noteId: null, students: [] };
+}
+
+function pickAutomaticSessionId(sessions: readonly SessionForSync[] | null | undefined): string | null {
+  if (!sessions || !sessions.length) {
+    return null;
+  }
+
+  const normalized = sessions
+    .map((session) => {
+      if (!session || typeof session.id !== "string") {
+        return null;
+      }
+      const id = session.id.trim();
+      if (!id.length) {
+        return null;
+      }
+
+      const estado =
+        typeof session.estado === "string" && session.estado.trim().length
+          ? session.estado.trim().toUpperCase()
+          : null;
+
+      const fechaInicio = session.fecha_inicio_utc
+        ? new Date(session.fecha_inicio_utc)
+        : null;
+      const createdAt = session.created_at ? new Date(session.created_at) : null;
+
+      return { id, estado, fechaInicio, createdAt };
+    })
+    .filter((entry): entry is {
+      id: string;
+      estado: string | null;
+      fechaInicio: Date | null;
+      createdAt: Date | null;
+    } => Boolean(entry));
+
+  if (!normalized.length) {
+    return null;
+  }
+
+  const preferred = normalized.filter((session) => session.estado !== "CANCELADA");
+  const candidates = preferred.length ? preferred : normalized;
+
+  candidates.sort((a, b) => {
+    const aTime = a.fechaInicio?.getTime();
+    const bTime = b.fechaInicio?.getTime();
+    if (aTime != null && bTime != null && aTime !== bTime) {
+      return aTime - bTime;
+    }
+    if (aTime != null && bTime == null) {
+      return -1;
+    }
+    if (aTime == null && bTime != null) {
+      return 1;
+    }
+
+    const aCreated = a.createdAt?.getTime();
+    const bCreated = b.createdAt?.getTime();
+    if (aCreated != null && bCreated != null && aCreated !== bCreated) {
+      return aCreated - bCreated;
+    }
+    if (aCreated != null && bCreated == null) {
+      return -1;
+    }
+    if (aCreated == null && bCreated != null) {
+      return 1;
+    }
+
+    return a.id.localeCompare(b.id, "es");
+  });
+
+  return candidates[0]?.id ?? null;
+}
+
+function normalizeNameForComparison(value: string | null | undefined): string {
+  if (!value) return "";
+  return normalizeNoteWhitespace(String(value)).toUpperCase();
+}
+
+async function syncStudentsFromDealNoteIfApplicable(
+  dealId: string,
+): Promise<{ created: number; updated: number } | null> {
+  const prisma = getPrisma();
+
+  const deal = await prisma.deals.findUnique({
+    where: { deal_id: String(dealId) },
+    select: {
+      deal_id: true,
+      pipeline_id: true,
+      deal_notes: {
+        select: { id: true, content: true },
+        orderBy: { created_at: "desc" },
+      },
+      sessions: {
+        select: {
+          id: true,
+          estado: true,
+          fecha_inicio_utc: true,
+          created_at: true,
+        },
+      },
+    },
+  });
+
+  if (!deal) {
+    return null;
+  }
+
+  const pipelineLabel = typeof deal.pipeline_id === "string" ? deal.pipeline_id.trim() : "";
+  if (pipelineLabel.toLowerCase() !== OPEN_TRAINING_PIPELINE_LABEL.toLowerCase()) {
+    return null;
+  }
+
+  const { students } = extractNoteStudents(deal.deal_notes);
+  if (!students.length) {
+    return null;
+  }
+
+  const sessionId = pickAutomaticSessionId(deal.sessions);
+  if (!sessionId) {
+    return null;
+  }
+
+  const existingStudents = await prisma.alumnos.findMany({
+    where: { sesion_id: sessionId },
+    select: { id: true, nombre: true, apellido: true, dni: true },
+  });
+
+  const existingByDni = new Map<string, { id: string; nombre: string; apellido: string }>();
+  for (const student of existingStudents) {
+    const dni = typeof student.dni === "string" ? student.dni.trim().toUpperCase() : "";
+    if (!dni.length) continue;
+    if (existingByDni.has(dni)) continue;
+    existingByDni.set(dni, {
+      id: String(student.id),
+      nombre: student.nombre,
+      apellido: student.apellido,
+    });
+  }
+
+  const operations: Prisma.PrismaPromise<any>[] = [];
+  let created = 0;
+  let updated = 0;
+
+  for (const student of students) {
+    const dni = student.dni.trim().toUpperCase();
+    if (!dni.length) continue;
+
+    const existing = existingByDni.get(dni);
+    if (!existing) {
+      operations.push(
+        prisma.alumnos.create({
+          data: {
+            deal_id: String(dealId),
+            sesion_id: sessionId,
+            nombre: student.nombre,
+            apellido: student.apellido,
+            dni,
+          },
+        }),
+      );
+      created += 1;
+      continue;
+    }
+
+    const existingNombre = normalizeNameForComparison(existing.nombre);
+    const existingApellido = normalizeNameForComparison(existing.apellido);
+    const incomingNombre = normalizeNameForComparison(student.nombre);
+    const incomingApellido = normalizeNameForComparison(student.apellido);
+
+    if (existingNombre === incomingNombre && existingApellido === incomingApellido) {
+      continue;
+    }
+
+    operations.push(
+      prisma.alumnos.update({
+        where: { id: existing.id },
+        data: { nombre: student.nombre, apellido: student.apellido },
+      }),
+    );
+    updated += 1;
+  }
+
+  if (!operations.length) {
+    return { created: 0, updated: 0 };
+  }
+
+  await prisma.$transaction(operations);
+
+  return { created, updated };
+}
+
 /* -------------------- Helpers -------------------- */
 function parsePathId(path: any): string | null {
   if (!path) return null;
@@ -386,6 +696,30 @@ async function importDealFromPipedrive(dealIdRaw: any) {
         notes,
         files,
       });
+
+      if (savedDealId) {
+        try {
+          const syncResult = await syncStudentsFromDealNoteIfApplicable(savedDealId);
+          if (syncResult && (syncResult.created > 0 || syncResult.updated > 0)) {
+            console.log(
+              JSON.stringify({
+                event: "note-students-sync",
+                dealId: savedDealId,
+                created: syncResult.created,
+                updated: syncResult.updated,
+              }),
+            );
+          }
+        } catch (syncError) {
+          warnings.push(
+            "No se pudieron sincronizar los alumnos desde la nota automáticamente. Revisa la nota y sincroniza manualmente si es necesario.",
+          );
+          console.warn("[note-students-sync] Error", {
+            dealId: savedDealId,
+            error: syncError instanceof Error ? syncError.message : String(syncError),
+          });
+        }
+      }
     } finally {
       timings.persistMs = Date.now() - persistStart;
     }
