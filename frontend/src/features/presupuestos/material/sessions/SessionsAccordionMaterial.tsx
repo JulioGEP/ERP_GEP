@@ -71,6 +71,7 @@ import {
 import { isApiError } from '../../api';
 import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
 import { formatSedeLabel } from '../../formatSedeLabel';
+import { useApplicableDealProducts } from '../../shared/useApplicableDealProducts';
 import {
   SESSION_DOCUMENTS_EVENT,
   type SessionDocumentsEventDetail,
@@ -99,7 +100,6 @@ type DeleteDialogState = {
   error: string | null;
 };
 
-const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'];
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
   PLANIFICADA: 'Planificada',
@@ -1559,12 +1559,6 @@ type SaveStatus = {
   savedAt?: number;
 };
 
-function isApplicableProduct(product: DealProduct): product is DealProduct & { id: string } {
-  const code = typeof product?.code === 'string' ? product.code.toLowerCase() : '';
-  const id = product?.id;
-  return Boolean(id) && SESSION_CODE_PREFIXES.some((prefix) => code.startsWith(prefix));
-}
-
 function formatDateForInput(iso: string | null): string | null {
   if (!iso) return null;
   const date = new Date(iso);
@@ -1827,38 +1821,7 @@ export function SessionsAccordionMaterial({
   onNotify,
 }: SessionsAccordionMaterialProps) {
   const qc = useQueryClient();
-
-  const applicableProducts = useMemo(
-    () =>
-      products.filter(isApplicableProduct).map((product) => ({
-        id: String(product.id),
-        name: product.name ?? null,
-        code: product.code ?? null,
-        quantity:
-          typeof product.quantity === 'number'
-            ? product.quantity
-            : product.quantity != null
-            ? Number(product.quantity)
-            : 0,
-        hours:
-          typeof product.hours === 'number'
-            ? product.hours
-            : product.hours != null
-            ? Number(product.hours)
-            : null,
-      })),
-    [products],
-  );
-
-  const shouldShow = applicableProducts.length > 0;
-
-  const generationKey = useMemo(
-    () =>
-      applicableProducts
-        .map((product) => `${product.id}|${Number.isFinite(product.quantity) ? product.quantity : 0}`)
-        .join('|'),
-    [applicableProducts],
-  );
+  const { applicableProducts, shouldShow, generationKey } = useApplicableDealProducts(products);
 
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationDone, setGenerationDone] = useState(false);
