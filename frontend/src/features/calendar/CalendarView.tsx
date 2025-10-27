@@ -1,10 +1,15 @@
 // frontend/src/features/calendar/CalendarView.tsx
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, ButtonGroup, Spinner } from 'react-bootstrap';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Button, ButtonGroup, OverlayTrigger, Spinner, Tooltip } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import {
+  fetchCalendarAvailability,
   fetchCalendarSessions,
   fetchCalendarVariants,
+  type CalendarAvailabilityDay,
+  type CalendarAvailabilityResourceKey,
+  type CalendarAvailabilityResponse,
+  type CalendarAvailabilitySedeKey,
   type CalendarResource,
   type CalendarSession,
   type CalendarSessionsResponse,
@@ -13,12 +18,12 @@ import {
 } from './api';
 import type { SessionEstado } from "../../api/sessions.types";
 import { ApiError } from "../../api/client";
-import {
-  VariantModal,
-  type ActiveVariant,
-  type ProductInfo,
-  type VariantInfo,
-} from '../formacion_abierta/ProductVariantsList';
+import { VariantModal } from '../formacion_abierta/ProductVariantsList';
+import type {
+  ActiveVariant,
+  ProductInfo,
+  VariantInfo,
+} from '../formacion_abierta/types';
 import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
 import { useTableFilterState } from '../../hooks/useTableFilterState';
 
@@ -96,6 +101,20 @@ type CalendarViewProps = {
 type MadridDate = { year: number; month: number; day: number };
 type MadridDateTime = MadridDate & { hour: number; minute: number; offsetMinutes: number };
 
+const AVAILABILITY_SEDE_ORDER: { code: CalendarAvailabilitySedeKey; label: string }[] = [
+  { code: 'ARG', label: 'ARG' },
+  { code: 'SAB', label: 'SAB' },
+];
+
+const AVAILABILITY_RESOURCE_CONFIG: Record<
+  CalendarAvailabilityResourceKey,
+  { tooltip: string }
+> = {
+  rooms: { tooltip: 'Sin salas' },
+  units: { tooltip: 'Sin unidades móviles' },
+  trainers: { tooltip: 'Sin bomberos' },
+};
+
 type VisibleRange = {
   startJulian: number;
   endJulian: number; // exclusive
@@ -118,6 +137,12 @@ type MonthDayCell = {
   isCurrentMonth: boolean;
   isToday: boolean;
   events: CalendarEventItem[];
+};
+
+type AvailabilityEntry = {
+  sedeCode: CalendarAvailabilitySedeKey;
+  label: string;
+  resources: { type: CalendarAvailabilityResourceKey; tooltip: string }[];
 };
 
 type BaseDayEvent = {
@@ -146,6 +171,109 @@ type WeekColumn = {
   isToday: boolean;
   events: DayEvent[];
 };
+
+function CalendarAvailabilityIcon({ type }: { type: CalendarAvailabilityResourceKey }) {
+  if (type === 'rooms') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M5 19V9l7-4 7 4v10" />
+        <path d="M9 19v-5h6v5" />
+        <line x1="4" y1="4" x2="20" y2="20" />
+      </svg>
+    );
+  }
+  if (type === 'units') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M3 13V8h11v5" />
+        <path d="M14 13h4l3 3v4h-2" />
+        <circle cx="7.5" cy="18.5" r="1.8" />
+        <circle cx="17.5" cy="18.5" r="1.8" />
+        <line x1="4" y1="4" x2="20" y2="20" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 4l5 2v3a5 5 0 0 1-10 0V6z" />
+      <path d="M7 19c0-2.2 2.2-4 5-4s5 1.8 5 4" />
+      <line x1="4" y1="4" x2="20" y2="20" />
+    </svg>
+  );
+}
+
+type DayAvailabilityIndicatorsProps = {
+  dayKey: string;
+  availabilityDays: Record<string, CalendarAvailabilityDay>;
+  className?: string;
+};
+
+function DayAvailabilityIndicators({
+  dayKey,
+  availabilityDays,
+  className,
+}: DayAvailabilityIndicatorsProps) {
+  const dayData = availabilityDays[dayKey];
+  if (!dayData) {
+    return null;
+  }
+
+  const entries = AVAILABILITY_SEDE_ORDER.map<AvailabilityEntry | null>(({ code, label }) => {
+    const sedeData = dayData[code];
+    if (!sedeData) return null;
+    const resources: AvailabilityEntry['resources'] = [];
+    (['rooms', 'units', 'trainers'] as CalendarAvailabilityResourceKey[]).forEach((resourceKey) => {
+      const counts = sedeData[resourceKey];
+      if (!counts) return;
+      if (counts.total <= 0) return;
+      if (counts.available <= 0) {
+        resources.push({ type: resourceKey, tooltip: AVAILABILITY_RESOURCE_CONFIG[resourceKey].tooltip });
+      }
+    });
+    if (!resources.length) {
+      return null;
+    }
+    return { sedeCode: code, label, resources } satisfies AvailabilityEntry;
+  }).filter((entry): entry is AvailabilityEntry => entry !== null);
+
+  if (!entries.length) {
+    return null;
+  }
+
+  return (
+    <div className={`erp-calendar-availability ${className ?? ''}`}>
+      {entries.map((entry, index) => (
+        <Fragment key={`${dayKey}-${entry.sedeCode}`}>
+          {index > 0 ? (
+            <span className="erp-calendar-availability-separator" aria-hidden="true">
+              ·
+            </span>
+          ) : null}
+          <span className="erp-calendar-availability-entry">
+            <span>{entry.label}</span>
+            <span className="erp-calendar-availability-icons">
+              {entry.resources.map((resource) => {
+                const tooltipId = `calendar-availability-${dayKey}-${entry.sedeCode}-${resource.type}`;
+                return (
+                  <OverlayTrigger
+                    key={`${entry.sedeCode}-${resource.type}`}
+                    placement="top"
+                    delay={{ show: 150, hide: 0 }}
+                    overlay={<Tooltip id={tooltipId}>{resource.tooltip}</Tooltip>}
+                  >
+                    <span className="erp-calendar-availability-icon" aria-label={resource.tooltip}>
+                      <CalendarAvailabilityIcon type={resource.type} />
+                    </span>
+                  </OverlayTrigger>
+                );
+              })}
+            </span>
+          </span>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
 
 const madridDateTimeFormatter = new Intl.DateTimeFormat('en-GB', {
   timeZone: MADRID_TZ,
@@ -178,6 +306,10 @@ const madridTimeFormatter = new Intl.DateTimeFormat('es-ES', {
 
 function pad(value: number): string {
   return String(value).padStart(2, '0');
+}
+
+function formatMadridDayKey(date: MadridDate): string {
+  return `${date.year}-${pad(date.month)}-${pad(date.day)}`;
 }
 
 function parseOffset(value: string): number {
@@ -767,8 +899,16 @@ export function CalendarView({
     staleTime: 5 * 60 * 1000,
   });
 
+  const availabilityQuery = useQuery<CalendarAvailabilityResponse, ApiError>({
+    queryKey: ['calendarAvailability', fetchRange?.start ?? null, fetchRange?.end ?? null],
+    queryFn: () => fetchCalendarAvailability({ start: fetchRange!.start, end: fetchRange!.end }),
+    enabled: !!fetchRange,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const sessions = sessionsQuery.data?.sessions ?? [];
   const variants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
+  const availabilityDays = availabilityQuery.data?.days ?? {};
 
   const {
     filters: activeFilters,
@@ -887,18 +1027,24 @@ export function CalendarView({
 
   const isInitialLoading =
     (sessionsQuery.isLoading && !sessionsQuery.data) ||
-    (includeVariants && variantsQuery.isLoading && !variantsQuery.data);
-  const isFetching = sessionsQuery.isFetching || (includeVariants && variantsQuery.isFetching);
+    (includeVariants && variantsQuery.isLoading && !variantsQuery.data) ||
+    (availabilityQuery.isLoading && !availabilityQuery.data);
+  const isFetching =
+    sessionsQuery.isFetching ||
+    (includeVariants && variantsQuery.isFetching) ||
+    availabilityQuery.isFetching;
   const error =
     (sessionsQuery.error as ApiError | null) ??
-    (includeVariants ? (variantsQuery.error as ApiError | null) : null);
+    (includeVariants ? (variantsQuery.error as ApiError | null) : null) ??
+    (!availabilityQuery.data ? (availabilityQuery.error as ApiError | null) : null);
 
   const handleRefetch = useCallback(() => {
     void sessionsQuery.refetch();
     if (includeVariants) {
       void variantsQuery.refetch();
     }
-  }, [sessionsQuery, variantsQuery, includeVariants]);
+    void availabilityQuery.refetch();
+  }, [sessionsQuery, variantsQuery, availabilityQuery, includeVariants]);
 
   const handleViewChange = useCallback((nextView: CalendarViewType) => {
     setView(nextView);
@@ -1429,7 +1575,14 @@ export function CalendarView({
                       day.isCurrentMonth ? '' : 'is-muted'
                     } ${day.isToday ? 'is-today' : ''}`}
                   >
-                    <div className="erp-calendar-day-label">{day.date.day}</div>
+                    <div className="erp-calendar-day-label">
+                      <span className="erp-calendar-day-number">{day.date.day}</span>
+                      <DayAvailabilityIndicators
+                        dayKey={formatMadridDayKey(day.date)}
+                        availabilityDays={availabilityDays}
+                        className="erp-calendar-availability--month"
+                      />
+                    </div>
                     <div className="erp-calendar-day-events">
                       {day.events.map((eventItem) => {
                         if (eventItem.kind === 'session') {
@@ -1559,6 +1712,11 @@ export function CalendarView({
                     <div className="erp-calendar-week-column-header">
                       <span className="erp-calendar-weekday">{column.weekdayLabel}</span>
                       <span className="erp-calendar-weekdate">{column.label}</span>
+                      <DayAvailabilityIndicators
+                        dayKey={formatMadridDayKey(column.date)}
+                        availabilityDays={availabilityDays}
+                        className="erp-calendar-availability--compact"
+                      />
                     </div>
                     <div className="erp-calendar-week-column-body">
                       {column.events.map((event) => {

@@ -102,6 +102,29 @@ export type CalendarVariantsResponse = {
   variants: CalendarVariantEvent[];
 };
 
+export type CalendarAvailabilityResourceKey = 'rooms' | 'units' | 'trainers';
+export type CalendarAvailabilitySedeKey = 'ARG' | 'SAB';
+
+export type CalendarAvailabilityCounts = {
+  total: number;
+  booked: number;
+  available: number;
+};
+
+export type CalendarAvailabilityDay = Partial<
+  Record<CalendarAvailabilitySedeKey, Partial<Record<CalendarAvailabilityResourceKey, CalendarAvailabilityCounts>>>
+>;
+
+export type CalendarAvailabilityResponse = {
+  range: { start: string; end: string };
+  days: Record<string, CalendarAvailabilityDay>;
+};
+
+export type CalendarAvailabilityParams = {
+  start: string;
+  end: string;
+};
+
 const SESSION_ESTADO_VALUES: SessionEstado[] = [
   'BORRADOR',
   'PLANIFICADA',
@@ -120,6 +143,55 @@ function toOptionalString(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value);
   return text.trim().length ? text : null;
+}
+
+function toNonNegativeInt(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) {
+    return 0;
+  }
+  return Math.floor(num);
+}
+
+function sanitizeAvailabilityCounts(value: any): CalendarAvailabilityCounts | null {
+  if (!value || typeof value !== 'object') return null;
+  const total = toNonNegativeInt(value.total);
+  const booked = toNonNegativeInt(value.booked);
+  const availableRaw = Number(value.available);
+  const available = Number.isFinite(availableRaw) ? Math.max(Math.floor(availableRaw), 0) : Math.max(total - booked, 0);
+  return { total, booked, available } satisfies CalendarAvailabilityCounts;
+}
+
+function sanitizeAvailabilityDay(value: any): CalendarAvailabilityDay {
+  const day: CalendarAvailabilityDay = {};
+  if (!value || typeof value !== 'object') return day;
+  (['ARG', 'SAB'] as CalendarAvailabilitySedeKey[]).forEach((sede) => {
+    const sedeValue = (value as Record<string, unknown>)[sede];
+    if (!sedeValue || typeof sedeValue !== 'object') return;
+    const resources: Partial<Record<CalendarAvailabilityResourceKey, CalendarAvailabilityCounts>> = {};
+    (['rooms', 'units', 'trainers'] as CalendarAvailabilityResourceKey[]).forEach((resource) => {
+      const counts = sanitizeAvailabilityCounts((sedeValue as Record<string, unknown>)[resource]);
+      if (counts) {
+        resources[resource] = counts;
+      }
+    });
+    if (Object.keys(resources).length) {
+      day[sede] = resources;
+    }
+  });
+  return day;
+}
+
+function sanitizeAvailabilityDays(value: any): Record<string, CalendarAvailabilityDay> {
+  if (!value || typeof value !== 'object') return {};
+  const output: Record<string, CalendarAvailabilityDay> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([dayKey, dayValue]) => {
+    const sanitized = sanitizeAvailabilityDay(dayValue);
+    if (Object.keys(sanitized).length) {
+      output[dayKey] = sanitized;
+    }
+  });
+  return output;
 }
 
 function toSessionEstado(value: unknown): SessionEstado {
@@ -405,4 +477,44 @@ export async function fetchCalendarVariants(
     },
     variants,
   } satisfies CalendarVariantsResponse;
+}
+
+export async function fetchCalendarAvailability(
+  params: CalendarAvailabilityParams,
+): Promise<CalendarAvailabilityResponse> {
+  const search = new URLSearchParams();
+  search.set('start', params.start);
+  search.set('end', params.end);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/calendar-availability?${search.toString()}`);
+  } catch (error: any) {
+    throw new ApiError('NETWORK_ERROR', error?.message ?? 'Fallo de red');
+  }
+
+  let payload: any = {};
+  try {
+    payload = await response.json();
+  } catch {
+    /* cuerpo vacío */
+  }
+
+  if (!response.ok || payload?.ok === false) {
+    const code = payload?.error_code ?? payload?.code ?? `HTTP_${response.status}`;
+    const message = payload?.message ?? 'Error inesperado en la carga del calendario';
+    throw new ApiError(code, message, response.status);
+  }
+
+  const rangeStart = toTrimmed(payload?.range?.start);
+  const rangeEnd = toTrimmed(payload?.range?.end);
+  const days = sanitizeAvailabilityDays(payload?.days);
+
+  return {
+    range: {
+      start: rangeStart ?? params.start,
+      end: rangeEnd ?? params.end,
+    },
+    days,
+  } satisfies CalendarAvailabilityResponse;
 }

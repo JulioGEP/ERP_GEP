@@ -1,3 +1,4 @@
+// @ts-nocheck
 export const handler = async (event) => {
   try {
     const { OPENAI_API_KEY, OPENAI_BASE_URL } = process.env

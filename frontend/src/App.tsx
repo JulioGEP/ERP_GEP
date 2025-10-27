@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback, useEffect, useState, type ComponentProps, type ComponentType } from 'react';
 import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';

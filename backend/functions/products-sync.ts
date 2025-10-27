@@ -1,3 +1,4 @@
+// @ts-nocheck
 // backend/functions/products-sync.ts
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';

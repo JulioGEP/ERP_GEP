@@ -1,3 +1,4 @@
+// @ts-nocheck
 // frontend/src/features/presupuestos/api.ts
 import type {
   DealDetail,

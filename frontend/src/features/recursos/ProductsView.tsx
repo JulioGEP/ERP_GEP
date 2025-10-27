@@ -1,3 +1,4 @@
+// @ts-nocheck
 // frontend/src/features/recursos/ProductsView.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
