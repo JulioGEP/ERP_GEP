@@ -332,7 +332,9 @@ model alumnos {
   sesion_id   String   @db.Uuid
   nombre      String
   apellido    String
-  dni         String
+  dni         String?
+  email       String?
+  telefono    String?
   apto        Boolean  @default(false)
   certificado Boolean  @default(false)
   drive_url   String?
@@ -343,6 +345,8 @@ model alumnos {
   session sessions? @relation(fields: [sesion_id], references: [id], onDelete: Cascade, map: "alumnos_session_fk")
 
   @@unique([sesion_id, dni], map: "ux_alumnos_sesion_dni")
+  @@unique([sesion_id, email], map: "ux_alumnos_sesion_email")
+  @@unique([sesion_id, telefono], map: "ux_alumnos_sesion_telefono")
   @@index([deal_id], map: "idx_alumnos_deal_id")
   @@index([apellido], map: "idx_alumnos_apellido")
   @@index([dni], map: "idx_alumnos_dni")
