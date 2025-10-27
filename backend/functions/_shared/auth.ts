@@ -14,6 +14,24 @@ export type AuthedHttpRequest<TBody = unknown> = HttpRequest<TBody> & {
 
 const DEFAULT_CURRENT_USER_EMAIL = 'julio@gepgroup.es';
 
+async function findFallbackActiveUser() {
+  const prisma = getPrisma();
+
+  const adminUser = await prisma.users.findFirst({
+    where: { active: true, role: 'admin' },
+    orderBy: { created_at: 'asc' },
+  });
+
+  if (adminUser) {
+    return adminUser;
+  }
+
+  return prisma.users.findFirst({
+    where: { active: true },
+    orderBy: { created_at: 'asc' },
+  });
+}
+
 function normalizeEmail(value: string | null | undefined): string | null {
   if (!value) return null;
   const email = value.trim().toLowerCase();
@@ -33,26 +51,22 @@ export async function attachCurrentUser<TBody>(
   request: HttpRequest<TBody>,
 ): Promise<{ request: AuthedHttpRequest<TBody> } | { error: ReturnType<typeof errorResponse> }> {
   const resolvedEmail =
-    normalizeEmail(process.env.CURRENT_USER_EMAIL) ?? normalizeEmail(DEFAULT_CURRENT_USER_EMAIL);
+    normalizeEmail(request.headers['x-current-user-email']) ??
+    normalizeEmail(process.env.CURRENT_USER_EMAIL) ??
+    normalizeEmail(DEFAULT_CURRENT_USER_EMAIL);
 
-  if (!resolvedEmail) {
-    return {
-      error: errorResponse(
-        'CURRENT_USER_MISSING',
-        'No se pudo determinar el usuario actual (CURRENT_USER_EMAIL no configurado).',
-        401,
-      ),
-    };
+  let user = resolvedEmail ? await findCurrentUserByEmail(resolvedEmail) : null;
+
+  if ((!user || !user.active) && !process.env.CURRENT_USER_EMAIL) {
+    user = await findFallbackActiveUser();
   }
 
-  const user = await findCurrentUserByEmail(resolvedEmail);
   if (!user || !user.active) {
+    const message = resolvedEmail
+      ? `No existe un usuario activo con email ${resolvedEmail}.`
+      : 'No se encontró un usuario activo disponible.';
     return {
-      error: errorResponse(
-        'CURRENT_USER_NOT_FOUND',
-        `No existe un usuario activo con email ${resolvedEmail}.`,
-        401,
-      ),
+      error: errorResponse('CURRENT_USER_NOT_FOUND', message, 401),
     };
   }
 
