@@ -40,6 +40,28 @@ body {
   border-color: #d93b41;
 }
 
+.btn-outline-primary {
+  color: var(--color-red);
+  border-color: var(--color-red);
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus,
+.btn-outline-primary:active,
+.btn-outline-primary.active,
+.btn-outline-primary.dropdown-toggle.show {
+  color: #ffffff;
+  background-color: var(--color-red);
+  border-color: var(--color-red);
+}
+
+.btn-outline-primary:disabled,
+.btn-outline-primary.disabled {
+  color: var(--color-red);
+  background-color: transparent;
+  border-color: var(--color-red);
+}
+
 .navbar .nav-link {
   font-weight: 500;
   color: var(--color-gray-medium);
