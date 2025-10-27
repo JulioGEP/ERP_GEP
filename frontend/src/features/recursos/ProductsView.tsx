@@ -23,7 +23,13 @@ import {
   type TrainingTemplate,
   type TrainingTemplatesManager,
 } from '../certificados/lib/templates/training-templates';
-import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import {
+  FilterToolbar,
+  getAppliedFiltersCount,
+  type FilterDefinition,
+  type FilterOption,
+  type FilterToolbarHandle,
+} from '../../components/table/FilterToolbar';
 import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
 
 type ToastParams = {
@@ -118,11 +124,11 @@ const PRODUCT_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'id_woo', label: 'Id Producto WC', type: 'number' },
   { key: 'name', label: 'Nombre' },
   { key: 'code', label: 'Código' },
-  { key: 'category', label: 'Categoría' },
-  { key: 'type', label: 'Tipo' },
-  { key: 'template', label: 'Template' },
+  { key: 'category', label: 'Categoría', type: 'select' },
+  { key: 'type', label: 'Tipo', type: 'select' },
+  { key: 'template', label: 'Template', type: 'select' },
   { key: 'url_formacion', label: 'URL formación' },
-  { key: 'estado', label: 'Estado' },
+  { key: 'estado', label: 'Estado', type: 'select' },
 ];
 
 const PRODUCT_FILTER_ACCESSORS: Record<string, (product: Product) => string> = {
@@ -138,6 +144,12 @@ const PRODUCT_FILTER_ACCESSORS: Record<string, (product: Product) => string> = {
 };
 
 const PRODUCT_FILTER_KEYS = Object.keys(PRODUCT_FILTER_ACCESSORS);
+
+const PRODUCT_SELECT_KEYS = new Set(
+  PRODUCT_FILTER_DEFINITIONS.filter((definition) => definition.type === 'select').map((definition) => definition.key),
+);
+
+const MAX_PRODUCT_OPTIONS = 120;
 
 function createProductFilterRow(product: Product): ProductFilterRow {
   const values: Record<string, string> = {};
@@ -185,18 +197,22 @@ function computeFuzzyScore(text: string, query: string): number {
 
 function applyProductFilters(
   rows: ProductFilterRow[],
-  filters: Record<string, string>,
+  filters: Record<string, string[]>,
   search: string,
 ): ProductFilterRow[] {
-  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+  const filterEntries = Object.entries(filters)
+    .map(([key, values]) => [key, values.map((value) => value.trim()).filter((value) => value.length > 0)] as const)
+    .filter(([, values]) => values.length > 0);
   let filtered = rows;
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
-      filterEntries.every(([key, value]) => {
-        const normalizedValue = normalizeText(value);
-        if (!normalizedValue.length) return true;
+      filterEntries.every(([key, values]) => {
         const target = row.normalized[key] ?? '';
-        return target.includes(normalizedValue);
+        return values.some((value) => {
+          const normalizedValue = normalizeText(value);
+          if (!normalizedValue.length) return true;
+          return target.includes(normalizedValue);
+        });
       }),
     );
   }
@@ -216,6 +232,7 @@ function applyProductFilters(
 
 export function ProductsView({ onNotify }: ProductsViewProps) {
   const queryClient = useQueryClient();
+  const filterToolbarRef = useRef<FilterToolbarHandle | null>(null);
   const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>([]);
   const [urlDrafts, setUrlDrafts] = useState<Record<string, string>>({});
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, string>>({});
@@ -485,10 +502,15 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     sorting: sortingFromUrl,
     setSearchValue,
     setFilterValue,
-    clearFilter,
     clearAllFilters,
     setSorting: setSortingInUrl,
   } = useTableFilterState({ tableKey: 'products-table' });
+
+  const openFilters = useCallback(() => {
+    filterToolbarRef.current?.open();
+  }, []);
+
+  const appliedFiltersCount = useMemo(() => getAppliedFiltersCount(activeFilters), [activeFilters]);
 
   const [sortingState, setSortingState] = useState<TableSortingState>(sortingFromUrl);
 
@@ -510,6 +532,52 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     [products],
   );
 
+  const dynamicFilterOptions = useMemo(() => {
+    const result: Record<string, FilterOption[]> = {};
+    const optionMaps = new Map<string, Map<string, string>>();
+
+    preparedRows.forEach((row) => {
+      PRODUCT_SELECT_KEYS.forEach((key) => {
+        const rawValue = row.values[key] ?? '';
+        const trimmed = rawValue.trim();
+        if (!trimmed.length) return;
+        const normalized = normalizeText(trimmed);
+        if (!normalized.length) return;
+
+        let mapForKey = optionMaps.get(key);
+        if (!mapForKey) {
+          mapForKey = new Map();
+          optionMaps.set(key, mapForKey);
+        }
+
+        if (!mapForKey.has(normalized)) {
+          mapForKey.set(normalized, trimmed);
+        }
+      });
+    });
+
+    optionMaps.forEach((valueMap, key) => {
+      const options = Array.from(valueMap.values())
+        .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+        .slice(0, MAX_PRODUCT_OPTIONS)
+        .map((label) => ({ value: label, label }));
+      if (options.length) {
+        result[key] = options;
+      }
+    });
+
+    return result;
+  }, [preparedRows]);
+
+  const productFilterDefinitions = useMemo(
+    () =>
+      PRODUCT_FILTER_DEFINITIONS.map((definition) => ({
+        ...definition,
+        options: dynamicFilterOptions[definition.key] ?? definition.options,
+      })),
+    [dynamicFilterOptions],
+  );
+
   const filteredRows = useMemo(
     () => applyProductFilters(preparedRows, activeFilters, searchValue),
     [preparedRows, activeFilters, searchValue],
@@ -526,9 +594,8 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   );
 
   const handleFilterChange = useCallback(
-    (key: string, value: string) => {
-      const trimmed = value.trim();
-      setFilterValue(key, trimmed.length ? trimmed : null);
+    (key: string, values: string[]) => {
+      setFilterValue(key, values.length ? values : null);
     },
     [setFilterValue],
   );
@@ -835,11 +902,27 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     []
   );
 
+  const filtersBadge = appliedFiltersCount ? (
+    <Badge bg="primary" pill>
+      {appliedFiltersCount}
+    </Badge>
+  ) : null;
+
   return (
     <div className="d-grid gap-4">
       <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-        <div>
-          <h1 className="h3 fw-bold mb-1">Productos</h1>
+        <div className="d-grid gap-2">
+          <div className="d-flex align-items-center gap-3 flex-wrap">
+            <h1 className="h3 fw-bold mb-0">Productos</h1>
+            <Button
+              variant="outline-primary"
+              onClick={openFilters}
+              className="d-flex align-items-center gap-2"
+            >
+              <span>Filtros</span>
+              {filtersBadge}
+            </Button>
+          </div>
           <p className="text-muted mb-0">{subtitle}</p>
         </div>
         <div className="d-flex align-items-center gap-3">
@@ -861,16 +944,17 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
       <div className="bg-white rounded-4 shadow-sm">
         <div className="px-3 py-3 border-bottom">
           <FilterToolbar
-            filters={PRODUCT_FILTER_DEFINITIONS}
+            ref={filterToolbarRef}
+            filters={productFilterDefinitions}
             activeFilters={activeFilters}
             searchValue={searchValue}
             onSearchChange={handleSearchChange}
             onFilterChange={handleFilterChange}
-            onRemoveFilter={clearFilter}
             onClearAll={clearAllFilters}
             resultCount={resultCount}
             isServerBusy={false}
             onSaveView={() => console.info('Guardar vista de productos')}
+            showTriggerButton={false}
           />
         </div>
         <div

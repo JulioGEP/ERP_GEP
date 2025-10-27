@@ -1,6 +1,6 @@
 // frontend/src/features/calendar/CalendarView.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, ButtonGroup, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Button, ButtonGroup, Spinner } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import {
   fetchCalendarSessions,
@@ -19,7 +19,13 @@ import {
   type ProductInfo,
   type VariantInfo,
 } from '../formacion_abierta/ProductVariantsList';
-import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import {
+  FilterToolbar,
+  getAppliedFiltersCount,
+  type FilterDefinition,
+  type FilterOption,
+  type FilterToolbarHandle,
+} from '../../components/table/FilterToolbar';
 import { useTableFilterState } from '../../hooks/useTableFilterState';
 
 const STORAGE_KEY_PREFIX = 'erp-calendar-preferences';
@@ -62,20 +68,28 @@ const SESSION_ESTADO_OPTIONS = Object.entries(SESSION_ESTADO_LABELS).map(([value
 const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_id', label: 'Presupuesto' },
   { key: 'deal_title', label: 'Título del deal' },
-  { key: 'deal_pipeline_id', label: 'Pipeline' },
+  { key: 'deal_pipeline_id', label: 'Pipeline', type: 'select' },
   { key: 'deal_training_address', label: 'Dirección de formación' },
-  { key: 'deal_sede_label', label: 'Sede' },
-  { key: 'product_name', label: 'Producto' },
-  { key: 'product_code', label: 'Código de producto' },
+  { key: 'deal_sede_label', label: 'Sede', type: 'select' },
+  { key: 'product_name', label: 'Producto', type: 'select' },
+  { key: 'product_code', label: 'Código de producto', type: 'select' },
   { key: 'estado', label: 'Estado', type: 'select', options: SESSION_ESTADO_OPTIONS },
-  { key: 'trainer', label: 'Formador' },
-  { key: 'unit', label: 'Unidad móvil' },
-  { key: 'room', label: 'Sala' },
+  { key: 'trainer', label: 'Formador', type: 'select' },
+  { key: 'unit', label: 'Unidad móvil', type: 'select' },
+  { key: 'room', label: 'Sala', type: 'select' },
   { key: 'direccion', label: 'Dirección' },
   { key: 'comentarios', label: 'Comentarios' },
 ];
 
 const CALENDAR_FILTER_KEYS = CALENDAR_FILTER_DEFINITIONS.map((definition) => definition.key);
+
+const CALENDAR_SELECT_KEYS = new Set(
+  CALENDAR_FILTER_DEFINITIONS.filter((definition) => definition.type === 'select').map(
+    (definition) => definition.key,
+  ),
+);
+
+const MAX_CALENDAR_OPTIONS = 150;
 
 type CalendarViewType = 'month' | 'week' | 'day';
 type CalendarMode = 'sessions' | 'trainers' | 'units';
@@ -511,18 +525,22 @@ function createVariantFilterRow(variant: CalendarVariantEvent): CalendarFilterRo
 
 function applyCalendarFilters(
   rows: CalendarFilterRow[],
-  filters: Record<string, string>,
+  filters: Record<string, string[]>,
   search: string,
 ): CalendarFilterRow[] {
-  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+  const filterEntries = Object.entries(filters)
+    .map(([key, values]) => [key, values.map((value) => safeString(value)).filter((value) => value.length > 0)] as const)
+    .filter(([, values]) => values.length > 0);
   let filtered = rows;
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
-      filterEntries.every(([key, value]) => {
-        const normalizedValue = normalizeText(safeString(value));
-        if (!normalizedValue.length) return true;
+      filterEntries.every(([key, values]) => {
         const target = row.normalized[key] ?? '';
-        return target.includes(normalizedValue);
+        return values.some((value) => {
+          const normalizedValue = normalizeText(value);
+          if (!normalizedValue.length) return true;
+          return target.includes(normalizedValue);
+        });
       }),
     );
   }
@@ -725,6 +743,7 @@ export function CalendarView({
   const [visibleRange, setVisibleRange] = useState<VisibleRange>(() => computeVisibleRange(stored.view, stored.date));
   const debouncedRange = useDebouncedValue(visibleRange, DEBOUNCE_MS);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const filterToolbarRef = useRef<FilterToolbarHandle | null>(null);
 
   useEffect(() => {
     const nextRange = computeVisibleRange(view, currentDate);
@@ -775,14 +794,85 @@ export function CalendarView({
     searchValue,
     setSearchValue,
     setFilterValue,
-    clearFilter,
     clearAllFilters,
   } = useTableFilterState({ tableKey: `calendar-${mode}` });
 
+  const openFilters = useCallback(() => {
+    filterToolbarRef.current?.open();
+  }, []);
+
+  const appliedFiltersCount = useMemo(() => getAppliedFiltersCount(activeFilters), [activeFilters]);
+
+  const dynamicFilterOptions = useMemo(() => {
+    const result: Record<string, FilterOption[]> = {};
+    const optionMaps = new Map<string, Map<string, string>>();
+
+    const registerValue = (key: string, rawValue: string) => {
+      if (!CALENDAR_SELECT_KEYS.has(key)) return;
+      const trimmed = safeString(rawValue);
+      if (!trimmed.length) return;
+      const normalized = normalizeText(trimmed);
+      if (!normalized.length) return;
+
+      let mapForKey = optionMaps.get(key);
+      if (!mapForKey) {
+        mapForKey = new Map();
+        optionMaps.set(key, mapForKey);
+      }
+
+      if (!mapForKey.has(normalized)) {
+        mapForKey.set(normalized, trimmed);
+      }
+    };
+
+    sessions.forEach((session) => {
+      CALENDAR_SELECT_KEYS.forEach((key) => {
+        const accessor = CALENDAR_SESSION_FILTER_ACCESSORS[key];
+        if (!accessor) return;
+        registerValue(key, accessor(session));
+      });
+    });
+
+    if (includeVariants) {
+      variants.forEach((variant) => {
+        CALENDAR_SELECT_KEYS.forEach((key) => {
+          const accessor = CALENDAR_VARIANT_FILTER_ACCESSORS[key];
+          if (!accessor) return;
+          registerValue(key, accessor(variant));
+        });
+      });
+    }
+
+    optionMaps.forEach((valueMap, key) => {
+      const options = Array.from(valueMap.values())
+        .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+        .slice(0, MAX_CALENDAR_OPTIONS)
+        .map((label) => ({ value: label, label }));
+      if (options.length) {
+        result[key] = options;
+      }
+    });
+
+    return result;
+  }, [sessions, variants, includeVariants]);
+
+  const calendarFilterDefinitions = useMemo(
+    () =>
+      CALENDAR_FILTER_DEFINITIONS.map((definition) => {
+        const dynamicOptions = dynamicFilterOptions[definition.key];
+        const baseOptions = definition.options ?? [];
+        const options = baseOptions.length ? baseOptions : dynamicOptions;
+        return {
+          ...definition,
+          options,
+        };
+      }),
+    [dynamicFilterOptions],
+  );
+
   const handleFilterChange = useCallback(
-    (key: string, value: string) => {
-      const trimmed = value.trim();
-      setFilterValue(key, trimmed.length ? trimmed : null);
+    (key: string, values: string[]) => {
+      setFilterValue(key, values.length ? values : null);
     },
     [setFilterValue],
   );
@@ -857,6 +947,23 @@ export function CalendarView({
   }, [filteredSessions, filteredVariants, includeVariants]);
 
   const eventGroups = useMemo(() => groupEventsByJulian(events), [events]);
+
+  useEffect(() => {
+    if (filteredSessions.length !== 1) return;
+    const session = filteredSessions[0];
+    const start = new Date(session.start);
+    if (Number.isNaN(start.getTime())) return;
+    const sameDay =
+      currentDate.getFullYear() === start.getFullYear() &&
+      currentDate.getMonth() === start.getMonth() &&
+      currentDate.getDate() === start.getDate();
+    if (!sameDay) {
+      setCurrentDate(start);
+    }
+    if (view !== 'day') {
+      setView('day');
+    }
+  }, [filteredSessions, currentDate, view]);
 
   const monthDays: MonthDayCell[] | null = useMemo(() => {
     if (view !== 'month') return null;
@@ -1332,13 +1439,28 @@ export function CalendarView({
 
   const isDayView = view === 'day';
 
+  const filtersBadge = appliedFiltersCount ? (
+    <Badge bg="primary" pill>
+      {appliedFiltersCount}
+    </Badge>
+  ) : null;
+
   return (
     <section className="d-grid gap-4">
-      <header className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-        <div>
-          <h1 className="h3 fw-bold mb-1">{title}</h1>
-        </div>
-        <div className="d-flex flex-wrap align-items-center gap-2">
+      <header className="d-grid gap-3">
+        <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+          <div className="d-flex align-items-center gap-3 flex-wrap">
+            <h1 className="h3 fw-bold mb-0">{title}</h1>
+            <Button
+              variant="outline-primary"
+              onClick={openFilters}
+              className="d-flex align-items-center gap-2"
+            >
+              <span>Filtros</span>
+              {filtersBadge}
+            </Button>
+          </div>
+          <div className="d-flex flex-wrap align-items-center gap-2">
           <Button variant="outline-secondary" className="fw-semibold" onClick={handleToday}>
             Hoy
           </Button>
@@ -1371,20 +1493,22 @@ export function CalendarView({
             </Button>
           </ButtonGroup>
         </div>
+        </div>
       </header>
 
       <div className="rounded-4 shadow-sm bg-white p-3">
         <FilterToolbar
-          filters={CALENDAR_FILTER_DEFINITIONS}
+          ref={filterToolbarRef}
+          filters={calendarFilterDefinitions}
           activeFilters={activeFilters}
           searchValue={searchValue}
           onSearchChange={handleSearchChange}
           onFilterChange={handleFilterChange}
-          onRemoveFilter={clearFilter}
           onClearAll={clearAllFilters}
           resultCount={resultCount}
           isServerBusy={isFetching}
           onSaveView={() => console.info('Guardar vista del calendario')}
+          showTriggerButton={false}
         />
       </div>
 

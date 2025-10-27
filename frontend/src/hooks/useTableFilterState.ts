@@ -5,7 +5,7 @@ type SortingItem = { id: string; desc: boolean };
 
 export type TableSortingState = SortingItem[];
 
-export type TableFiltersState = Record<string, string>;
+export type TableFiltersState = Record<string, string[]>;
 
 export interface UseTableFilterStateOptions {
   tableKey: string;
@@ -50,7 +50,28 @@ export function useTableFilterState({ tableKey }: UseTableFilterStateOptions) {
       if (key.startsWith(filterPrefix)) {
         const filterKey = decodeURIComponent(key.slice(filterPrefix.length));
         if (filterKey.length) {
-          active[filterKey] = value;
+          try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) {
+              const normalized = parsed
+                .map((item) => String(item).trim())
+                .filter((item) => item.length > 0);
+              if (normalized.length) {
+                active[filterKey] = normalized;
+                continue;
+              }
+            } else if (typeof parsed === 'string' && parsed.trim().length) {
+              active[filterKey] = [parsed.trim()];
+              continue;
+            }
+          } catch {
+            /* ignore malformed JSON */
+          }
+
+          const trimmed = value.trim();
+          if (trimmed.length) {
+            active[filterKey] = [trimmed];
+          }
         }
       }
     }
@@ -70,16 +91,20 @@ export function useTableFilterState({ tableKey }: UseTableFilterStateOptions) {
   );
 
   const setFilterValue = useCallback(
-    (key: string, value: string | null) => {
+    (key: string, value: string | string[] | null) => {
       const normalizedKey = key.trim();
       if (!normalizedKey.length) return;
       updateSearchParams((draft) => {
         const paramKey = `${filterPrefix}${encodeURIComponent(normalizedKey)}`;
-        if (value && value.trim().length) {
-          draft.set(paramKey, value);
-        } else {
+        const valuesArray = Array.isArray(value) ? value : value ? [value] : [];
+        const sanitized = valuesArray.map((item) => item.trim()).filter((item) => item.length > 0);
+        if (!sanitized.length) {
           draft.delete(paramKey);
+          return;
         }
+
+        const payload = JSON.stringify(Array.from(new Set(sanitized)));
+        draft.set(paramKey, payload);
       });
     },
     [filterPrefix, updateSearchParams],

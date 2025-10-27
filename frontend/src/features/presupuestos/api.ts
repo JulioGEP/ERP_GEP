@@ -899,7 +899,7 @@ async function request(path: string, init?: RequestInit) {
 
 export type DealsWithoutSessionsSort = { id: string; desc?: boolean };
 export type DealsWithoutSessionsOptions = {
-  filters?: Record<string, string>;
+  filters?: Record<string, string[]>;
   search?: string;
   sorting?: DealsWithoutSessionsSort[];
 };
@@ -915,10 +915,13 @@ export async function fetchDealsWithoutSessions(
   }
 
   if (options?.filters) {
-    Object.entries(options.filters).forEach(([key, value]) => {
-      const normalizedValue = value?.trim();
-      if (!normalizedValue) return;
-      searchParams.append(`filter[${key}]`, normalizedValue);
+    Object.entries(options.filters).forEach(([key, values]) => {
+      values
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+        .forEach((value) => {
+          searchParams.append(`filter[${key}]`, value);
+        });
     });
   }
 

@@ -8,7 +8,13 @@ import {
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DealSummary } from '../../types/deal';
-import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import {
+  FilterToolbar,
+  getAppliedFiltersCount,
+  type FilterDefinition,
+  type FilterOption,
+  type FilterToolbarHandle,
+} from '../../components/table/FilterToolbar';
 import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
 import {
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
@@ -68,6 +74,7 @@ interface BudgetTableProps {
   onDelete?: (budget: DealSummary) => Promise<void>;
   labels?: Partial<BudgetTableLabels>;
   enableFallback?: boolean;
+  onFiltersReady?: (controls: { open: () => void; appliedCount: number } | null) => void;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -279,31 +286,37 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_id', label: 'Presupuesto' },
   { key: 'title', label: 'Título' },
   { key: 'organization', label: 'Empresa' },
-  { key: 'pipeline', label: 'Pipeline' },
+  { key: 'pipeline', label: 'Pipeline', type: 'select' },
   { key: 'pipeline_id', label: 'Pipeline (ID)' },
   { key: 'training_address', label: 'Dirección de formación' },
-  { key: 'sede_label', label: 'Sede' },
-  { key: 'caes_label', label: 'CAES' },
-  { key: 'fundae_label', label: 'FUNDAE' },
-  { key: 'hotel_label', label: 'Hotel' },
-  { key: 'tipo_servicio', label: 'Tipo de servicio' },
+  { key: 'sede_label', label: 'Sede', type: 'select' },
+  { key: 'caes_label', label: 'CAES', type: 'select' },
+  { key: 'fundae_label', label: 'FUNDAE', type: 'select' },
+  { key: 'hotel_label', label: 'Hotel', type: 'select' },
+  { key: 'tipo_servicio', label: 'Tipo de servicio', type: 'select' },
   { key: 'mail_invoice', label: 'Email de facturación' },
-  { key: 'comercial', label: 'Comercial' },
+  { key: 'comercial', label: 'Comercial', type: 'select' },
   { key: 'a_fecha', label: 'A fecha' },
   { key: 'w_id_variation', label: 'ID variación' },
-  { key: 'presu_holded', label: 'Presupuesto retenido' },
-  { key: 'modo_reserva', label: 'Modo reserva' },
+  { key: 'presu_holded', label: 'Presupuesto retenido', type: 'select' },
+  { key: 'modo_reserva', label: 'Modo reserva', type: 'select' },
   { key: 'hours', label: 'Horas', type: 'number' },
   { key: 'product_names', label: 'Productos' },
   { key: 'sessions', label: 'Sesiones' },
   { key: 'person_name', label: 'Persona de contacto' },
   { key: 'person_email', label: 'Email de contacto' },
   { key: 'person_phone', label: 'Teléfono de contacto' },
-  { key: 'training_date', label: 'Fecha de formación' },
-  { key: 'negocio', label: 'Negocio' },
+  { key: 'training_date', label: 'Fecha de formación', type: 'date' },
+  { key: 'negocio', label: 'Negocio', type: 'select' },
 ];
 
 const BUDGET_FILTER_KEYS = Object.keys(BUDGET_FILTER_ACCESSORS);
+
+const BUDGET_SELECT_KEYS = new Set(
+  BUDGET_FILTER_DEFINITIONS.filter((definition) => definition.type === 'select').map((definition) => definition.key),
+);
+
+const MAX_DYNAMIC_OPTIONS = 120;
 
 function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
   const values: Record<string, string> = {};
@@ -351,18 +364,22 @@ function computeFuzzyScore(text: string, query: string): number {
 
 function applyBudgetFilters(
   rows: BudgetFilterRow[],
-  filters: Record<string, string>,
+  filters: Record<string, string[]>,
   search: string,
 ): BudgetFilterRow[] {
-  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+  const filterEntries = Object.entries(filters)
+    .map(([key, values]) => [key, values.map((value) => value.trim()).filter((value) => value.length > 0)] as const)
+    .filter(([, values]) => values.length > 0);
   let filtered = rows;
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
-      filterEntries.every(([key, value]) => {
-        const normalizedValue = normalizeText(value);
-        if (!normalizedValue.length) return true;
+      filterEntries.every(([key, values]) => {
         const target = row.normalized[key] ?? '';
-        return target.includes(normalizedValue);
+        return values.some((value) => {
+          const normalizedValue = normalizeText(value);
+          if (!normalizedValue.length) return true;
+          return target.includes(normalizedValue);
+        });
       }),
     );
   }
@@ -392,9 +409,11 @@ export function BudgetTable({
   onDelete,
   labels: labelsProp,
   enableFallback = true,
+  onFiltersReady,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
+  const filterToolbarRef = useRef<FilterToolbarHandle | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const cachedFallbackBudgets = enableFallback
@@ -421,10 +440,23 @@ export function BudgetTable({
     sorting: sortingFromUrl,
     setSearchValue,
     setFilterValue,
-    clearFilter,
     clearAllFilters,
     setSorting: setSortingInUrl,
   } = useTableFilterState({ tableKey: 'budgets-table' });
+
+  const openFilters = useCallback(() => {
+    filterToolbarRef.current?.open();
+  }, []);
+
+  const appliedFiltersCount = useMemo(() => getAppliedFiltersCount(activeFilters), [activeFilters]);
+
+  useEffect(() => {
+    if (!onFiltersReady) return;
+    onFiltersReady({ open: openFilters, appliedCount: appliedFiltersCount });
+    return () => {
+      onFiltersReady(null);
+    };
+  }, [onFiltersReady, openFilters, appliedFiltersCount]);
 
   const [sortingState, setSortingState] = useState<TableSortingState>(sortingFromUrl);
 
@@ -444,6 +476,52 @@ export function BudgetTable({
   const preparedRows = useMemo(
     () => effectiveBudgets.map((budget) => createBudgetFilterRow(budget)),
     [effectiveBudgets],
+  );
+
+  const dynamicFilterOptions = useMemo(() => {
+    const result: Record<string, FilterOption[]> = {};
+    const optionMaps = new Map<string, Map<string, string>>();
+
+    preparedRows.forEach((row) => {
+      BUDGET_SELECT_KEYS.forEach((key) => {
+        const rawValue = row.values[key] ?? '';
+        const trimmed = rawValue.trim();
+        if (!trimmed.length) return;
+        const normalized = normalizeText(trimmed);
+        if (!normalized.length) return;
+
+        let mapForKey = optionMaps.get(key);
+        if (!mapForKey) {
+          mapForKey = new Map();
+          optionMaps.set(key, mapForKey);
+        }
+
+        if (!mapForKey.has(normalized)) {
+          mapForKey.set(normalized, trimmed);
+        }
+      });
+    });
+
+    optionMaps.forEach((valueMap, key) => {
+      const options = Array.from(valueMap.values())
+        .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+        .slice(0, MAX_DYNAMIC_OPTIONS)
+        .map((label) => ({ value: label, label }));
+      if (options.length) {
+        result[key] = options;
+      }
+    });
+
+    return result;
+  }, [preparedRows]);
+
+  const budgetFilterDefinitions = useMemo(
+    () =>
+      BUDGET_FILTER_DEFINITIONS.map((definition) => ({
+        ...definition,
+        options: dynamicFilterOptions[definition.key] ?? definition.options,
+      })),
+    [dynamicFilterOptions],
   );
 
   const filteredRows = useMemo(
@@ -491,9 +569,8 @@ export function BudgetTable({
   const showDeleteAction = typeof onDelete === 'function';
 
   const handleFilterChange = useCallback(
-    (key: string, value: string) => {
-      const trimmed = value.trim();
-      setFilterValue(key, trimmed.length ? trimmed : null);
+    (key: string, values: string[]) => {
+      setFilterValue(key, values.length ? values : null);
     },
     [setFilterValue],
   );
@@ -830,16 +907,17 @@ export function BudgetTable({
       )}
       <div className="px-3 py-3 border-bottom">
         <FilterToolbar
-          filters={BUDGET_FILTER_DEFINITIONS}
+          ref={filterToolbarRef}
+          filters={budgetFilterDefinitions}
           activeFilters={activeFilters}
           searchValue={searchValue}
           onSearchChange={handleSearchChange}
           onFilterChange={handleFilterChange}
-          onRemoveFilter={clearFilter}
           onClearAll={clearAllFilters}
           resultCount={resultCount}
           isServerBusy={isServerBusy}
           onSaveView={() => console.info('Guardar vista de presupuestos')}
+          showTriggerButton={!onFiltersReady}
         />
       </div>
       <div className="table-responsive" style={{ maxHeight: '70vh' }} ref={tableContainerRef}>
