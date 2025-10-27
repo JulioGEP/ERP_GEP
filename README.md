@@ -169,6 +169,8 @@ Prisma genera automáticamente el cliente tipado en `node_modules/.prisma/client
    ```
    - El frontend queda accesible en `http://localhost:8888` y proxea las funciones en `/.netlify/functions/*`.
    - Para trabajar solo con el frontend: `npm run dev --workspace frontend` (Vite en `http://localhost:5173`).
+5. **Primer acceso**: si la tabla `users` está vacía, el primer inicio de sesión válido creará automáticamente un usuario admin
+   con las credenciales utilizadas para arrancar el entorno.
 
 ## Scripts útiles
 | Comando | Descripción |

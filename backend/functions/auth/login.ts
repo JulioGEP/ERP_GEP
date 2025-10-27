@@ -1,10 +1,16 @@
 // backend/functions/auth/login.ts
+import { randomUUID } from 'crypto';
 import type { PrismaClient } from '@prisma/client';
 
 import { createHttpHandler } from '../_shared/http';
 import { errorResponse, successResponse } from '../_shared/response';
 import { getPrisma } from '../_shared/prisma';
-import { buildSessionCookie, createSession, hashPassword } from '../_lib/auth';
+import {
+  buildSessionCookie,
+  createSession,
+  hashPassword,
+  validatePassword,
+} from '../_lib/auth';
 
 interface LoginBody {
   email?: unknown;
@@ -81,6 +87,80 @@ async function upgradePasswordHashIfNeeded(
   }
 }
 
+function buildBootstrapDisplayName(email: string): string | null {
+  const localPart = email.split('@')[0]?.trim() ?? '';
+  if (!localPart) {
+    return null;
+  }
+
+  const words = localPart
+    .split(/[._-]+/)
+    .map((part) => part.trim())
+    .filter((part): part is string => Boolean(part && part.length))
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+
+  if (!words.length) {
+    return null;
+  }
+
+  return words.join(' ');
+}
+
+async function bootstrapFirstUserIfEmpty(
+  prisma: PrismaClient,
+  email: string,
+  password: string,
+): Promise<UserRecord | null> {
+  const existingUsers = await prisma.$queryRaw<{ has_users: boolean }[]>`
+    SELECT EXISTS(SELECT 1 FROM users) AS has_users
+  `;
+
+  const hasUsersRaw = existingUsers[0]?.has_users;
+  const hasUsers = typeof hasUsersRaw === 'boolean' ? hasUsersRaw : Boolean(hasUsersRaw);
+  if (hasUsers) {
+    return null;
+  }
+
+  const allowedDomain = process.env.ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase() ?? null;
+  if (allowedDomain && !email.toLowerCase().endsWith(`@${allowedDomain}`)) {
+    console.warn(
+      `[auth] Ignorando arranque automático para ${email}: dominio no permitido (${allowedDomain})`,
+    );
+    return null;
+  }
+
+  const passwordValidation = validatePassword(password);
+  if (!passwordValidation.ok) {
+    console.warn(
+      `[auth] Ignorando arranque automático para ${email}: contraseña no cumple requisitos (${passwordValidation.message})`,
+    );
+    return null;
+  }
+
+  try {
+    const passwordHash = await hashPassword(password, prisma);
+    const userId = randomUUID();
+    const displayName = buildBootstrapDisplayName(email);
+
+    const createdUsers = await prisma.$queryRaw<UserRecord[]>`
+      INSERT INTO users (id, email, name, role, active, password_hash, password_algo, password_updated_at, created_at, updated_at)
+      VALUES (${userId}::uuid, ${email}, ${displayName}, 'admin', true, ${passwordHash}, 'bcrypt', now(), now(), now())
+      RETURNING id, name, email, role, active, password_hash, password_algo
+    `;
+
+    if (!createdUsers.length) {
+      console.error('[auth] No se pudo crear el usuario administrador inicial');
+      return null;
+    }
+
+    console.info(`[auth] Usuario administrador inicial creado para ${email}`);
+    return createdUsers[0];
+  } catch (error) {
+    console.error('[auth] Error creando usuario administrador inicial', error);
+    return null;
+  }
+}
+
 export const handler = createHttpHandler<LoginBody>(async (request) => {
   if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -105,11 +185,16 @@ export const handler = createHttpHandler<LoginBody>(async (request) => {
     LIMIT 1
   `;
 
-  if (!users.length) {
+  let user = users[0];
+
+  if (!user) {
+    user = await bootstrapFirstUserIfEmpty(prisma, email, password);
+  }
+
+  if (!user) {
     return errorResponse('INVALID_CREDENTIALS', 'Credenciales inválidas', 401);
   }
 
-  const user = users[0];
   await upgradePasswordHashIfNeeded(prisma, user, password);
   const { password_hash: _passwordHash, password_algo: _passwordAlgo, ...publicUser } = user;
 
