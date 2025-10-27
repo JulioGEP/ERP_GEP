@@ -374,6 +374,38 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
   };
 }
 
+function normalizeDealStudentNames(raw: Json): string[] {
+  if (!raw) return [];
+  const entries = Array.isArray(raw) ? raw : [];
+  if (!entries.length) return [];
+
+  const names: string[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") {
+      const label = toStringValue(entry);
+      if (label) names.push(label);
+      continue;
+    }
+
+    const record = entry as Record<string, unknown>;
+    const nombre = toStringValue(record["nombre"]) ?? "";
+    const apellido = toStringValue(record["apellido"]) ?? "";
+    const dni = toStringValue(record["dni"]) ?? "";
+
+    const combined = `${nombre} ${apellido}`.trim();
+    if (combined.length) {
+      names.push(combined);
+      continue;
+    }
+
+    if (dni.length) {
+      names.push(dni);
+    }
+  }
+
+  return names;
+}
+
 function normalizeDealSummary(row: Json): DealSummary {
   const rawDealId = row?.deal_id ?? row?.dealId ?? row?.id;
   const resolvedDealId =
@@ -418,6 +450,8 @@ function normalizeDealSummary(row: Json): DealSummary {
     .map((session: Json) => normalizeDealSummarySession(session))
     .filter((session): session is DealSummarySession => session !== null);
 
+  const studentNames = normalizeDealStudentNames(row?.students ?? null);
+
   const summary: DealSummary = {
     deal_id: resolvedDealId,
     dealId: resolvedDealId, // compat
@@ -458,6 +492,7 @@ function normalizeDealSummary(row: Json): DealSummary {
   if (productsInfo.products) summary.products = productsInfo.products;
   if (productsInfo.productNames)
     summary.productNames = productsInfo.productNames;
+  if (studentNames.length) summary.studentNames = studentNames;
   if (sessions.length) summary.sessions = sessions;
 
   return summary;

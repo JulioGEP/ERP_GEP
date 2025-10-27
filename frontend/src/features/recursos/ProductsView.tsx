@@ -23,7 +23,7 @@ import {
   type TrainingTemplate,
   type TrainingTemplatesManager,
 } from '../certificados/lib/templates/training-templates';
-import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import { FilterToolbar, type FilterDefinition, type FilterOption } from '../../components/table/FilterToolbar';
 import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
 
@@ -116,7 +116,7 @@ type ProductFilterRow = {
 
 const PRODUCT_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'id_pipe', label: 'ID de Pipedrive' },
-  { key: 'id_woo', label: 'Id Producto WC', type: 'number' },
+  { key: 'id_woo', label: 'Id Producto WC' },
   { key: 'name', label: 'Nombre' },
   { key: 'code', label: 'Código' },
   { key: 'category', label: 'Categoría' },
@@ -139,6 +139,17 @@ const PRODUCT_FILTER_ACCESSORS: Record<string, (product: Product) => string> = {
 };
 
 const PRODUCT_FILTER_KEYS = Object.keys(PRODUCT_FILTER_ACCESSORS);
+
+const PRODUCT_SELECT_FILTER_KEYS = new Set<string>([
+  'id_pipe',
+  'id_woo',
+  'name',
+  'code',
+  'category',
+  'type',
+  'template',
+  'estado',
+]);
 
 function createProductFilterRow(product: Product): ProductFilterRow {
   const values: Record<string, string> = {};
@@ -520,6 +531,56 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     [products],
   );
 
+  const selectOptionsByKey = useMemo(() => {
+    const accumulator = new Map<string, Set<string>>();
+    PRODUCT_SELECT_FILTER_KEYS.forEach((key) => {
+      accumulator.set(key, new Set<string>());
+    });
+
+    preparedRows.forEach((row) => {
+      PRODUCT_SELECT_FILTER_KEYS.forEach((key) => {
+        const raw = row.values[key] ?? '';
+        const trimmed = raw.trim();
+        if (!trimmed.length) return;
+        const set = accumulator.get(key);
+        set?.add(trimmed);
+      });
+    });
+
+    const result: Record<string, FilterOption[]> = {};
+    PRODUCT_SELECT_FILTER_KEYS.forEach((key) => {
+      const values = accumulator.get(key);
+      if (!values || !values.size) {
+        result[key] = [];
+        return;
+      }
+      const sorted = Array.from(values).sort((a, b) =>
+        a.localeCompare(b, 'es', { sensitivity: 'base' }),
+      );
+      result[key] = sorted.map((value) => ({ value, label: value }));
+    });
+
+    return result;
+  }, [preparedRows]);
+
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () =>
+      PRODUCT_FILTER_DEFINITIONS.map((definition) => {
+        if (!PRODUCT_SELECT_FILTER_KEYS.has(definition.key)) {
+          return definition;
+        }
+
+        const options = selectOptionsByKey[definition.key] ?? [];
+        return {
+          ...definition,
+          type: 'select',
+          options,
+          placeholder: definition.placeholder ?? 'Selecciona una opción',
+        } satisfies FilterDefinition;
+      }),
+    [selectOptionsByKey],
+  );
+
   const filteredRows = useMemo(
     () => applyProductFilters(preparedRows, activeFilters, searchValue),
     [preparedRows, activeFilters, searchValue],
@@ -854,7 +915,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
               <h1 className="h3 fw-bold mb-0">Productos</h1>
               <div className="flex-grow-1" style={{ minWidth: '240px' }}>
                 <FilterToolbar
-                  filters={PRODUCT_FILTER_DEFINITIONS}
+                  filters={filterDefinitions}
                   activeFilters={activeFilters}
                   searchValue={searchValue}
                   onSearchChange={handleSearchChange}

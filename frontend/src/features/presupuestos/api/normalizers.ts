@@ -141,6 +141,38 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
   };
 }
 
+function normalizeDealStudentNames(raw: Json): string[] {
+  if (!raw) return [];
+  const entries = Array.isArray(raw) ? raw : [];
+  if (!entries.length) return [];
+
+  const names: string[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') {
+      const label = toStringValue(entry);
+      if (label) names.push(label);
+      continue;
+    }
+
+    const record = entry as Record<string, unknown>;
+    const nombre = toStringValue(record['nombre']) ?? '';
+    const apellido = toStringValue(record['apellido']) ?? '';
+    const dni = toStringValue(record['dni']) ?? '';
+
+    const combined = `${nombre} ${apellido}`.trim();
+    if (combined.length) {
+      names.push(combined);
+      continue;
+    }
+
+    if (dni.length) {
+      names.push(dni);
+    }
+  }
+
+  return names;
+}
+
 export function normalizeDealSummary(row: Json): DealSummary {
   const rawDealId = row?.deal_id ?? row?.dealId ?? row?.id;
   const resolvedDealId =
@@ -183,6 +215,8 @@ export function normalizeDealSummary(row: Json): DealSummary {
         .filter((session): session is DealSummarySession => session !== null)
     : [];
 
+  const studentNames = normalizeDealStudentNames(row?.students ?? null);
+
   return {
     deal_id: resolvedDealId,
     dealId: resolvedDealId,
@@ -213,6 +247,7 @@ export function normalizeDealSummary(row: Json): DealSummary {
     modo_reserva: toStringValue(row?.modo_reserva) ?? null,
     hours: toNumber(row?.hours),
     a_fecha: toStringValue(row?.a_fecha) ?? null,
+    studentNames,
   } satisfies DealSummary;
 }
 

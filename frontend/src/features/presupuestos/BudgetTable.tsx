@@ -20,6 +20,7 @@ import {
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
 } from './queryKeys';
 import { fetchDealsWithoutSessions as fetchDealsWithoutSessionsApi } from './api';
+import { fetchProducts } from '../recursos/products.api';
 
 function TrashIcon({ size = 16 }: { size?: number }) {
   return (
@@ -75,6 +76,7 @@ interface BudgetTableProps {
   labels?: Partial<BudgetTableLabels>;
   enableFallback?: boolean;
   filtersContainer?: HTMLElement | null;
+  showFilters?: boolean;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -113,7 +115,7 @@ function getTitleLabel(budget: DealSummary): string {
 }
 
 function getNegocioLabel(budget: DealSummary): string {
-  return safeTrim(budget.pipeline_id ?? budget.pipeline_label ?? '') ?? '—';
+  return safeTrim(budget.pipeline_label ?? budget.pipeline_id ?? '') ?? '—';
 }
 
 function getBudgetId(budget: DealSummary): string | null {
@@ -198,6 +200,25 @@ function formatDateLabel(timestamp: number | null): string {
   }
 }
 
+function formatDateIso(timestamp: number | null): string {
+  if (timestamp === null) {
+    return '';
+  }
+
+  try {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    return '';
+  }
+}
+
 function getTrainingDateTimestamp(budget: DealSummary): number | null {
   const pipelineKey = normalisePipelineKey(budget.pipeline_label ?? budget.pipeline_id ?? '');
 
@@ -258,24 +279,22 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   hotel_label: (budget) => safeTrim(budget.hotel_label ?? '') ?? '',
   transporte: (budget) => safeTrim(budget.transporte ?? '') ?? '',
   tipo_servicio: (budget) => safeTrim(budget.tipo_servicio ?? '') ?? '',
-  mail_invoice: (budget) => safeTrim(budget.mail_invoice ?? '') ?? '',
   comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
   product_names: (budget) => getProductNames(budget).join(' '),
-  person_name: (budget) => {
-    const first = safeTrim(budget.person?.first_name ?? '') ?? '';
-    const last = safeTrim(budget.person?.last_name ?? '') ?? '';
-    return [first, last].filter(Boolean).join(' ');
+  student_names: (budget) => (budget.studentNames ?? []).join(' '),
+  training_date: (budget) => {
+    const timestamp = getTrainingDateTimestamp(budget);
+    const iso = formatDateIso(timestamp);
+    const label = formatDateLabel(timestamp);
+    return [iso, label].filter(Boolean).join(' ');
   },
-  person_email: (budget) => safeTrim(budget.person?.email ?? '') ?? '',
-  person_phone: (budget) => safeTrim(budget.person?.phone ?? '') ?? '',
-  training_date: (budget) => getTrainingDateInfo(budget).label,
 };
 
 const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_id', label: 'Presupuesto' },
   { key: 'title', label: 'Título' },
   { key: 'organization', label: 'Empresa' },
-  { key: 'pipeline', label: 'Pipeline' },
+  { key: 'pipeline', label: 'Negocio' },
   { key: 'training_address', label: 'Dirección de formación' },
   { key: 'sede_label', label: 'Sede' },
   { key: 'caes_label', label: 'CAES' },
@@ -283,13 +302,10 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'hotel_label', label: 'Hotel' },
   { key: 'transporte', label: 'Transporte' },
   { key: 'tipo_servicio', label: 'Tipo de servicio' },
-  { key: 'mail_invoice', label: 'Email de facturación' },
   { key: 'comercial', label: 'Comercial' },
   { key: 'product_names', label: 'Productos' },
-  { key: 'person_name', label: 'Persona de contacto' },
-  { key: 'person_email', label: 'Email de contacto' },
-  { key: 'person_phone', label: 'Teléfono de contacto' },
-  { key: 'training_date', label: 'Fecha de formación' },
+  { key: 'student_names', label: 'Alumnos' },
+  { key: 'training_date', label: 'Fecha de formación', type: 'date' },
 ];
 
 const BUDGET_FILTER_DEFINITION_KEYS = new Set(
@@ -408,6 +424,7 @@ export function BudgetTable({
   labels: labelsProp,
   enableFallback = true,
   filtersContainer,
+  showFilters = true,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -494,9 +511,54 @@ export function BudgetTable({
     return result;
   }, [preparedRows]);
 
+  const productOptionsQuery = useQuery({
+    queryKey: ['budget-filter-products'],
+    queryFn: fetchProducts,
+    enabled: showFilters,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const productFilterOptions = useMemo<FilterOption[]>(() => {
+    const products = productOptionsQuery.data ?? [];
+    if (!products.length) {
+      return [];
+    }
+
+    const seen = new Set<string>();
+    const options: FilterOption[] = [];
+
+    products.forEach((product) => {
+      const name = typeof product?.name === 'string' ? product.name.trim() : '';
+      const code = typeof product?.code === 'string' ? product.code.trim() : '';
+      const value = name.length ? name : code;
+      if (!value.length) {
+        return;
+      }
+      const normalized = value.toLocaleLowerCase('es-ES');
+      if (seen.has(normalized)) {
+        return;
+      }
+      seen.add(normalized);
+      const label = name.length && code.length && code !== name ? `${name} (${code})` : value;
+      options.push({ value, label });
+    });
+
+    options.sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+    return options;
+  }, [productOptionsQuery.data]);
+
   const filterDefinitions = useMemo<FilterDefinition[]>(
     () =>
       BUDGET_FILTER_DEFINITIONS.map((definition) => {
+        if (definition.key === 'product_names') {
+          return {
+            ...definition,
+            type: 'select',
+            options: productFilterOptions,
+            placeholder: definition.placeholder ?? 'Selecciona productos',
+          } satisfies FilterDefinition;
+        }
+
         if (!BUDGET_SELECT_FILTER_KEYS.has(definition.key)) {
           return definition;
         }
@@ -508,7 +570,7 @@ export function BudgetTable({
           placeholder: definition.placeholder ?? 'Selecciona o escribe valores',
         } satisfies FilterDefinition;
       }),
-    [selectOptionsByKey],
+    [productFilterOptions, selectOptionsByKey],
   );
 
   const filteredRows = useMemo(
@@ -901,26 +963,28 @@ export function BudgetTable({
           </Button>
         </div>
       )}
-          {(() => {
+      {showFilters
+        ? (() => {
             const toolbar = (
               <FilterToolbar
-            filters={filterDefinitions}
-            activeFilters={activeFilters}
-            searchValue={searchValue}
-            onSearchChange={handleSearchChange}
-            onFilterChange={handleFilterChange}
-            onRemoveFilter={clearFilter}
-            onClearAll={clearAllFilters}
-            resultCount={resultCount}
-            isServerBusy={isServerBusy}
-            viewStorageKey="budgets-table"
-          />
-        );
-        if (filtersContainer) {
-          return createPortal(toolbar, filtersContainer);
-        }
-        return <div className="px-3 py-3 border-bottom">{toolbar}</div>;
-      })()}
+                filters={filterDefinitions}
+                activeFilters={activeFilters}
+                searchValue={searchValue}
+                onSearchChange={handleSearchChange}
+                onFilterChange={handleFilterChange}
+                onRemoveFilter={clearFilter}
+                onClearAll={clearAllFilters}
+                resultCount={resultCount}
+                isServerBusy={isServerBusy}
+                viewStorageKey="budgets-table"
+              />
+            );
+            if (filtersContainer) {
+              return createPortal(toolbar, filtersContainer);
+            }
+            return <div className="px-3 py-3 border-bottom">{toolbar}</div>;
+          })()
+        : null}
       <div className="table-responsive" style={{ maxHeight: '70vh' }} ref={tableContainerRef}>
         <Table hover className="mb-0 align-middle">
           <thead>
