@@ -863,7 +863,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
                   onClearAll={clearAllFilters}
                   resultCount={resultCount}
                   isServerBusy={isFetching}
-                  onSaveView={() => console.info('Guardar vista de productos')}
+                  viewStorageKey="products-table"
                 />
               </div>
             </div>

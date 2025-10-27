@@ -25,6 +25,14 @@ type BadgeDescriptor = {
   onRemove: () => void;
 };
 
+type SavedFilterView = {
+  id: string;
+  name: string;
+  filters: Record<string, string>;
+  searchValue: string;
+  createdAt: number;
+};
+
 interface FilterToolbarProps {
   filters: FilterDefinition[];
   activeFilters: Record<string, string>;
@@ -36,7 +44,7 @@ interface FilterToolbarProps {
   resultCount: number;
   isServerBusy?: boolean;
   debounceMs?: number; // mantenido por compatibilidad, no se usa directamente
-  onSaveView?: () => void;
+  viewStorageKey?: string;
 }
 
 function formatFilterValue(
@@ -75,16 +83,85 @@ export function FilterToolbar({
   onClearAll,
   resultCount,
   isServerBusy = false,
-  onSaveView,
+  viewStorageKey,
 }: FilterToolbarProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [draftFilters, setDraftFilters] = useState<Record<string, string>>({});
   const [searchDraft, setSearchDraft] = useState(searchValue);
+  const [savedViews, setSavedViews] = useState<SavedFilterView[]>([]);
+  const [optionSearchTerms, setOptionSearchTerms] = useState<Record<string, string>>({});
   const idPrefix = useId();
+  const storageKey = viewStorageKey ? `filter-toolbar:${viewStorageKey}` : null;
 
   useEffect(() => {
     setSearchDraft(searchValue);
   }, [searchValue]);
+
+  useEffect(() => {
+    if (!storageKey) {
+      setSavedViews([]);
+      return;
+    }
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) {
+        setSavedViews([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        setSavedViews([]);
+        return;
+      }
+      const normalized = parsed
+        .map((item: unknown) => {
+          if (!item || typeof item !== 'object') return null;
+          const candidate = item as Partial<SavedFilterView> & {
+            filters?: Record<string, unknown>;
+          };
+          const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
+          const name = typeof candidate.name === 'string' ? candidate.name.trim() : '';
+          if (!id.length || !name.length) return null;
+          const rawFilters = candidate.filters ?? {};
+          const filters: Record<string, string> = {};
+          Object.entries(rawFilters).forEach(([key, value]) => {
+            if (typeof value === 'string' && value.trim().length) {
+              filters[key] = value;
+            }
+          });
+          const search = typeof candidate.searchValue === 'string' ? candidate.searchValue : '';
+          const createdAt =
+            typeof candidate.createdAt === 'number' && Number.isFinite(candidate.createdAt)
+              ? candidate.createdAt
+              : Date.now();
+          return { id, name, filters, searchValue: search, createdAt } satisfies SavedFilterView;
+        })
+        .filter((item): item is SavedFilterView => Boolean(item));
+      normalized.sort((a, b) => {
+        const byName = a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+        if (byName !== 0) return byName;
+        return a.createdAt - b.createdAt;
+      });
+      setSavedViews(normalized);
+    } catch {
+      setSavedViews([]);
+    }
+  }, [storageKey]);
+
+  const persistSavedViews = useCallback(
+    (views: SavedFilterView[]) => {
+      if (!storageKey || typeof window === 'undefined') return;
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(views));
+      } catch {
+        // ignorar errores de almacenamiento (p. ej. cuota superada)
+      }
+    },
+    [storageKey],
+  );
 
   const filterMap = useMemo(() => {
     const map = new Map<string, FilterDefinition>();
@@ -150,6 +227,7 @@ export function FilterToolbar({
   const handleModalOpen = useCallback(() => {
     setDraftFilters({ ...activeFilters });
     setSearchDraft(searchValue);
+    setOptionSearchTerms({});
     setIsModalOpen(true);
   }, [activeFilters, searchValue]);
 
@@ -172,6 +250,34 @@ export function FilterToolbar({
         return next;
       }
       return { ...current, [key]: nextValue };
+    });
+  }, []);
+
+  const handleSelectInputChange = useCallback((key: string, displayValue: string) => {
+    const parts = displayValue
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+    setDraftFilters((current) => {
+      if (!parts.length) {
+        if (!(key in current)) return current;
+        const next = { ...current };
+        delete next[key];
+        return next;
+      }
+      return { ...current, [key]: joinFilterValues(parts) };
+    });
+  }, []);
+
+  const handleOptionSearchChange = useCallback((key: string, query: string) => {
+    setOptionSearchTerms((current) => {
+      if (!query.length) {
+        if (!(key in current)) return current;
+        const next = { ...current };
+        delete next[key];
+        return next;
+      }
+      return { ...current, [key]: query };
     });
   }, []);
 
@@ -216,12 +322,138 @@ export function FilterToolbar({
     setIsModalOpen(false);
   }, [onClearAll]);
 
+  const handleSaveCurrentView = useCallback(() => {
+    if (!storageKey || typeof window === 'undefined') {
+      return;
+    }
+
+    const proposedName = window.prompt('Introduce el nombre de la vista guardada');
+    if (proposedName === null) {
+      return;
+    }
+    const trimmedName = proposedName.trim();
+    if (!trimmedName.length) {
+      return;
+    }
+
+    const normalizedFilters = filters.reduce<Record<string, string>>((acc, definition) => {
+      const rawValue = draftFilters[definition.key] ?? '';
+      const normalized = definition.type === 'select' ? rawValue : rawValue.trim();
+      if (normalized.length) {
+        acc[definition.key] = normalized;
+      }
+      return acc;
+    }, {});
+    const normalizedSearch = searchDraft.trim();
+
+    const existing = savedViews.find(
+      (view) => view.name.localeCompare(trimmedName, 'es', { sensitivity: 'base' }) === 0,
+    );
+    if (existing) {
+      const shouldReplace = window.confirm(
+        `Ya existe una vista llamada "${existing.name}". ¿Quieres reemplazarla?`,
+      );
+      if (!shouldReplace) {
+        return;
+      }
+    }
+
+    const viewId =
+      existing?.id ??
+      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}`);
+    const createdAt = existing?.createdAt ?? Date.now();
+
+    const nextView: SavedFilterView = {
+      id: viewId,
+      name: trimmedName,
+      filters: normalizedFilters,
+      searchValue: normalizedSearch,
+      createdAt,
+    };
+
+    setSavedViews((current) => {
+      const updated = existing
+        ? current.map((view) => (view.id === existing.id ? nextView : view))
+        : [...current, nextView];
+      updated.sort((a, b) => {
+        const byName = a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+        if (byName !== 0) return byName;
+        return a.createdAt - b.createdAt;
+      });
+      persistSavedViews(updated);
+      return updated;
+    });
+
+    setIsModalOpen(false);
+  }, [
+    draftFilters,
+    filters,
+    persistSavedViews,
+    savedViews,
+    searchDraft,
+    storageKey,
+  ]);
+
+  const handleApplySavedView = useCallback(
+    (view: SavedFilterView) => {
+      const normalizedFilters = view.filters ?? {};
+      const normalizedSearch = view.searchValue ?? '';
+      const allowedKeys = new Set(filters.map((definition) => definition.key));
+
+      Object.keys(activeFilters).forEach((key) => {
+        if (!allowedKeys.has(key)) return;
+        if (!(key in normalizedFilters)) {
+          onRemoveFilter(key);
+        }
+      });
+
+      Object.entries(normalizedFilters).forEach(([key, value]) => {
+        if (!allowedKeys.has(key)) return;
+        onFilterChange(key, value);
+      });
+
+      onSearchChange(normalizedSearch);
+      setDraftFilters({ ...normalizedFilters });
+      setSearchDraft(normalizedSearch);
+      setIsModalOpen(false);
+    },
+    [activeFilters, filters, onFilterChange, onRemoveFilter, onSearchChange],
+  );
+
+  const handleDeleteSavedView = useCallback(
+    (id: string) => {
+      if (!storageKey || typeof window === 'undefined') {
+        return;
+      }
+
+      const target = savedViews.find((view) => view.id === id);
+      const confirmationMessage = target
+        ? `¿Eliminar la vista "${target.name}"?`
+        : '¿Eliminar la vista guardada?';
+      const confirmed = window.confirm(confirmationMessage);
+      if (!confirmed) {
+        return;
+      }
+
+      setSavedViews((current) => {
+        const updated = current.filter((view) => view.id !== id);
+        persistSavedViews(updated);
+        return updated;
+      });
+    },
+    [persistSavedViews, savedViews, storageKey],
+  );
+
   const resultLabel = useMemo(() => {
     const count = Number.isFinite(resultCount) ? resultCount : 0;
     return `${count.toLocaleString('es-ES')} resultado${count === 1 ? '' : 's'}`;
   }, [resultCount]);
 
   const hasAppliedFilters = appliedBadges.length > 0;
+  const canSaveViews = Boolean(storageKey);
+  const hasSavedViews = savedViews.length > 0;
 
   return (
     <>
@@ -260,6 +492,40 @@ export function FilterToolbar({
             <span className="text-muted small">Sin filtros aplicados</span>
           )}
         </div>
+        {hasSavedViews && (
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <span className="text-muted small">Vistas guardadas:</span>
+            {savedViews.map((view) => (
+              <div
+                key={view.id}
+                className="d-inline-flex align-items-center gap-2 bg-light border border-secondary rounded-pill px-2 py-1"
+              >
+                <button
+                  type="button"
+                  className="btn btn-link p-0 text-decoration-none text-secondary fw-semibold"
+                  onClick={() => handleApplySavedView(view)}
+                >
+                  {view.name}
+                </button>
+                {canSaveViews && (
+                  <button
+                    type="button"
+                    className="btn btn-link p-0 text-danger"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      handleDeleteSavedView(view.id);
+                    }}
+                    aria-label={`Eliminar vista ${view.name}`}
+                    style={{ textDecoration: 'none' }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <Modal show={isModalOpen} onHide={handleModalClose} size="lg" centered>
@@ -284,8 +550,17 @@ export function FilterToolbar({
               {filters.map((definition) => {
                 const controlId = `${idPrefix}-${definition.key}`;
                 if (definition.type === 'select') {
-                  const selected = new Set(splitFilterValue(draftFilters[definition.key]));
                   const options = definition.options ?? [];
+                  const selected = new Set(splitFilterValue(draftFilters[definition.key]));
+                  const displayValue = Array.from(selected).join(', ');
+                  const query = optionSearchTerms[definition.key] ?? '';
+                  const normalizedQuery = query.trim().toLocaleLowerCase('es-ES');
+                  const filteredOptions = normalizedQuery.length
+                    ? options.filter((option) =>
+                        option.label.toLocaleLowerCase('es-ES').includes(normalizedQuery),
+                      )
+                    : options;
+
                   return (
                     <Col xs={12} lg={4} key={definition.key}>
                       <Form.Group controlId={controlId}>
@@ -295,22 +570,57 @@ export function FilterToolbar({
                             <span className="d-block text-muted small">{definition.description}</span>
                           )}
                         </Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={displayValue}
+                          onChange={(event) =>
+                            handleSelectInputChange(definition.key, event.target.value)
+                          }
+                          placeholder={
+                            definition.placeholder ??
+                            'Escribe valores separados por comas para filtrar'
+                          }
+                          className="mb-2"
+                        />
+                        <Form.Text className="text-muted">
+                          Selecciona de la lista o añade valores manualmente separados por comas.
+                        </Form.Text>
+                        <Form.Control
+                          type="search"
+                          value={query}
+                          onChange={(event) =>
+                            handleOptionSearchChange(definition.key, event.target.value)
+                          }
+                          placeholder="Filtrar opciones"
+                          className="mt-2 mb-2"
+                        />
                         {options.length ? (
-                          <div className="d-grid gap-2">
-                            {options.map((option) => {
-                              const optionId = `${controlId}-${option.value}`;
-                              return (
-                                <Form.Check
-                                  type="checkbox"
-                                  id={optionId}
-                                  key={option.value}
-                                  label={option.label}
-                                  checked={selected.has(option.value)}
-                                  onChange={() => handleToggleOption(definition.key, option.value)}
-                                />
-                              );
-                            })}
-                          </div>
+                          filteredOptions.length ? (
+                            <div
+                              className="d-grid gap-2"
+                              style={{ maxHeight: '200px', overflowY: 'auto' }}
+                            >
+                              {filteredOptions.map((option) => {
+                                const optionId = `${controlId}-${option.value}`;
+                                return (
+                                  <Form.Check
+                                    type="checkbox"
+                                    id={optionId}
+                                    key={option.value}
+                                    label={option.label}
+                                    checked={selected.has(option.value)}
+                                    onChange={() =>
+                                      handleToggleOption(definition.key, option.value)
+                                    }
+                                  />
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-muted small mb-0">
+                              No hay coincidencias para ese término.
+                            </p>
+                          )
                         ) : (
                           <p className="text-muted small mb-0">No hay opciones disponibles.</p>
                         )}
@@ -352,8 +662,8 @@ export function FilterToolbar({
             <Button variant="outline-secondary" onClick={handleClearAll}>
               Limpiar todo
             </Button>
-            {onSaveView && (
-              <Button variant="outline-primary" onClick={onSaveView}>
+            {canSaveViews && (
+              <Button variant="outline-primary" onClick={handleSaveCurrentView}>
                 Guardar vista
               </Button>
             )}

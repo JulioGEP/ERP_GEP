@@ -1393,7 +1393,7 @@ export function CalendarView({
                   onClearAll={clearAllFilters}
                   resultCount={resultCount}
                   isServerBusy={isFetching}
-                  onSaveView={() => console.info('Guardar vista del calendario')}
+                  viewStorageKey={`calendar-${mode}`}
                 />
               </div>
             </div>

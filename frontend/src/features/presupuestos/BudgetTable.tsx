@@ -9,7 +9,11 @@ import {
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DealSummary } from '../../types/deal';
-import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import {
+  FilterToolbar,
+  type FilterDefinition,
+  type FilterOption,
+} from '../../components/table/FilterToolbar';
 import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
 import {
@@ -252,6 +256,7 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   caes_label: (budget) => safeTrim(budget.caes_label ?? '') ?? '',
   fundae_label: (budget) => safeTrim(budget.fundae_label ?? '') ?? '',
   hotel_label: (budget) => safeTrim(budget.hotel_label ?? '') ?? '',
+  transporte: (budget) => safeTrim(budget.transporte ?? '') ?? '',
   tipo_servicio: (budget) => safeTrim(budget.tipo_servicio ?? '') ?? '',
   mail_invoice: (budget) => safeTrim(budget.mail_invoice ?? '') ?? '',
   comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
@@ -276,6 +281,7 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'caes_label', label: 'CAES' },
   { key: 'fundae_label', label: 'FUNDAE' },
   { key: 'hotel_label', label: 'Hotel' },
+  { key: 'transporte', label: 'Transporte' },
   { key: 'tipo_servicio', label: 'Tipo de servicio' },
   { key: 'mail_invoice', label: 'Email de facturación' },
   { key: 'comercial', label: 'Comercial' },
@@ -291,6 +297,17 @@ const BUDGET_FILTER_DEFINITION_KEYS = new Set(
 );
 
 const BUDGET_FILTER_KEYS = Object.keys(BUDGET_FILTER_ACCESSORS);
+
+const BUDGET_SELECT_FILTER_KEYS = new Set<string>([
+  'pipeline',
+  'sede_label',
+  'caes_label',
+  'fundae_label',
+  'hotel_label',
+  'transporte',
+  'tipo_servicio',
+  'comercial',
+]);
 
 function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
   const values: Record<string, string> = {};
@@ -443,6 +460,55 @@ export function BudgetTable({
   const preparedRows = useMemo(
     () => effectiveBudgets.map((budget) => createBudgetFilterRow(budget)),
     [effectiveBudgets],
+  );
+
+  const selectOptionsByKey = useMemo(() => {
+    const accumulator = new Map<string, Set<string>>();
+    BUDGET_SELECT_FILTER_KEYS.forEach((key) => {
+      accumulator.set(key, new Set<string>());
+    });
+
+    preparedRows.forEach((row) => {
+      BUDGET_SELECT_FILTER_KEYS.forEach((key) => {
+        const raw = row.values[key] ?? '';
+        const trimmed = raw.trim();
+        if (!trimmed.length) return;
+        const set = accumulator.get(key);
+        set?.add(trimmed);
+      });
+    });
+
+    const result: Record<string, FilterOption[]> = {};
+    BUDGET_SELECT_FILTER_KEYS.forEach((key) => {
+      const values = accumulator.get(key);
+      if (!values || values.size === 0) {
+        result[key] = [];
+        return;
+      }
+      const sorted = Array.from(values).sort((a, b) =>
+        a.localeCompare(b, 'es', { sensitivity: 'base' }),
+      );
+      result[key] = sorted.map((value) => ({ value, label: value }));
+    });
+
+    return result;
+  }, [preparedRows]);
+
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () =>
+      BUDGET_FILTER_DEFINITIONS.map((definition) => {
+        if (!BUDGET_SELECT_FILTER_KEYS.has(definition.key)) {
+          return definition;
+        }
+        const options = selectOptionsByKey[definition.key] ?? [];
+        return {
+          ...definition,
+          type: 'select',
+          options,
+          placeholder: definition.placeholder ?? 'Selecciona o escribe valores',
+        } satisfies FilterDefinition;
+      }),
+    [selectOptionsByKey],
   );
 
   const filteredRows = useMemo(
@@ -835,10 +901,10 @@ export function BudgetTable({
           </Button>
         </div>
       )}
-      {(() => {
-        const toolbar = (
-          <FilterToolbar
-            filters={BUDGET_FILTER_DEFINITIONS}
+          {(() => {
+            const toolbar = (
+              <FilterToolbar
+            filters={filterDefinitions}
             activeFilters={activeFilters}
             searchValue={searchValue}
             onSearchChange={handleSearchChange}
@@ -847,7 +913,7 @@ export function BudgetTable({
             onClearAll={clearAllFilters}
             resultCount={resultCount}
             isServerBusy={isServerBusy}
-            onSaveView={() => console.info('Guardar vista de presupuestos')}
+            viewStorageKey="budgets-table"
           />
         );
         if (filtersContainer) {
