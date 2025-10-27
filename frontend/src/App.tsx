@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType } from 'react';
-import { Alert, Container, Nav, Navbar, NavDropdown, Spinner, Toast, ToastContainer } from 'react-bootstrap';
+import { useCallback, useEffect, useState, type ComponentProps, type ComponentType } from 'react';
+import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
@@ -9,8 +9,7 @@ import { BudgetDetailModalServices } from './features/presupuestos/services/Budg
 import { BudgetDetailModalMaterial } from './features/presupuestos/material/BudgetDetailModalMaterial';
 import { ProductCommentWindow } from './features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from './features/presupuestos/ProductCommentWindow';
-import { ApiError } from './api/client';
-import { logout as logoutRequest } from './api/auth';
+import { ApiError } from "./api/client";
 import {
   deleteDeal,
   fetchDealDetail,
@@ -31,10 +30,6 @@ import type { DealDetail, DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { AppRouter } from './app/router';
-import { useCurrentUser } from './app/CurrentUserContext';
-import LoginPage from './pages/LoginPage';
-import PasswordResetRequestPage from './pages/PasswordResetRequestPage';
-import PasswordResetPage from './pages/PasswordResetPage';
 import type { BudgetsPageProps } from './pages/presupuestos/BudgetsPage';
 import type { PorSesionesPageProps } from './pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from './pages/calendario/PorUnidadMovilPage';
@@ -63,7 +58,7 @@ type NavItem = {
   children?: NavChild[];
 };
 
-const BASE_NAVIGATION_ITEMS: NavItem[] = [
+const NAVIGATION_ITEMS: NavItem[] = [
   {
     key: 'Presupuestos',
     label: 'Presupuestos',
@@ -122,16 +117,10 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
 
 const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
 
-const ADDITIONAL_KNOWN_PATHS = ['/usuarios', '/no-autorizado'] as const;
-
 const KNOWN_APP_PATHS = new Set(
   [
-    ...BASE_NAVIGATION_ITEMS.flatMap((item) => [
-      item.path,
-      ...(item.children?.map((child) => child.path) ?? []),
-    ]),
+    ...NAVIGATION_ITEMS.flatMap((item) => [item.path, ...(item.children?.map((child) => child.path) ?? [])]),
     ...LEGACY_APP_PATHS,
-    ...ADDITIONAL_KNOWN_PATHS,
   ].filter((path): path is string => Boolean(path))
 );
 
@@ -264,51 +253,6 @@ export default function App() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const {
-    currentUser,
-    authorization,
-    status: userStatus,
-    isError: isUserError,
-    error: currentUserError,
-    setAuthToken,
-  } = useCurrentUser();
-
-  const defaultRedirectPath = authorization.defaultRoute;
-  const homePath = defaultRedirectPath || DEFAULT_REDIRECT_PATH;
-  const isAuthLoading = userStatus === 'loading';
-
-  const navigationItems = useMemo(() => {
-    const items: NavItem[] = [];
-
-    for (const item of BASE_NAVIGATION_ITEMS) {
-      if (item.children && item.children.length > 0) {
-        const visibleChildren = item.children.filter((child) =>
-          authorization.canAccessRoute(child.path),
-        );
-        if (visibleChildren.length > 0) {
-          items.push({ ...item, children: visibleChildren });
-          continue;
-        }
-        if (item.path && authorization.canAccessRoute(item.path)) {
-          items.push({ ...item, children: undefined });
-        }
-        continue;
-      }
-
-      if (item.path && authorization.canAccessRoute(item.path)) {
-        items.push(item);
-      }
-    }
-
-    if (authorization.canAccessRoute('/usuarios')) {
-      items.push({ key: 'Usuarios', label: 'Usuarios', path: '/usuarios' });
-    }
-
-    return items;
-  }, [authorization]);
-
-  const canImportBudgets = authorization.canPerformAction('budgets:import');
-  const canAccessBudgetsRoute = authorization.canAccessRoute('/presupuestos/sinplanificar');
   const isBudgetsRoute = location.pathname.startsWith('/presupuestos');
 
   const [showImportModal, setShowImportModal] = useState(false);
@@ -337,7 +281,7 @@ export default function App() {
     refetchInterval: false,
     retry: 0,
     staleTime: Infinity,
-    enabled: isBudgetsRoute && canAccessBudgetsRoute,
+    enabled: isBudgetsRoute,
   });
 
   useEffect(() => {
@@ -363,37 +307,12 @@ export default function App() {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const logoutMutation = useMutation({
-    mutationFn: logoutRequest,
-    onError: (error: unknown) => {
-      const message =
-        error instanceof ApiError
-          ? error.message || 'No se pudo cerrar sesión.'
-          : 'No se pudo cerrar sesión.';
-      pushToast({ variant: 'danger', message });
-    },
-    onSettled: () => {
-      setAuthToken(null);
-      queryClient.removeQueries({ queryKey: ['current-user'], exact: false });
-    },
-  });
-
-  const handleLogout = useCallback(() => {
-    if (logoutMutation.isPending) {
-      return;
-    }
-    logoutMutation.mutate();
-  }, [logoutMutation]);
-
   const handleOpenImportModal = useCallback(() => {
-    if (!canImportBudgets) {
-      return;
-    }
     setImportResultWarnings(null);
     setImportResultDealId(null);
     setImportError(null);
     setShowImportModal(true);
-  }, [canImportBudgets]);
+  }, []);
 
   const handleCloseImportModal = useCallback(() => {
     setShowImportModal(false);
@@ -602,17 +521,14 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (
-      KNOWN_APP_PATHS.has(location.pathname) &&
-      authorization.canAccessRoute(location.pathname)
-    ) {
+    if (KNOWN_APP_PATHS.has(location.pathname)) {
       try {
         window.localStorage.setItem(ACTIVE_PATH_STORAGE_KEY, location.pathname);
       } catch (error) {
         console.warn('No se pudo guardar la ruta activa', error);
       }
     }
-  }, [authorization, location.pathname]);
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!location.pathname.startsWith('/presupuestos')) {
@@ -793,7 +709,6 @@ export default function App() {
     onDelete: handleDeleteBudget,
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
-    canImportBudgets,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {
@@ -858,58 +773,6 @@ export default function App() {
     autoRefreshOnOpen: !!selectedBudgetId && selectedBudgetId === autoRefreshBudgetId,
   };
 
-  if (isAuthLoading) {
-    return (
-      <div className="min-vh-100 d-flex align-items-center justify-content-center">
-        <Spinner animation="border" role="status" />
-        <span className="ms-2 fw-semibold">Cargando usuario…</span>
-      </div>
-    );
-  }
-
-  if (userStatus === 'unauthenticated') {
-    if (location.pathname === '/recuperar-contraseña') {
-      return <PasswordResetRequestPage />;
-    }
-    if (location.pathname === '/restablecer-contraseña') {
-      return <PasswordResetPage />;
-    }
-    return <LoginPage />;
-  }
-
-  if (userStatus === 'error') {
-    const errorMessage =
-      isUserError && currentUserError instanceof Error
-        ? currentUserError.message
-        : null;
-
-    return (
-      <div className="min-vh-100 d-flex align-items-center justify-content-center">
-        <Container style={{ maxWidth: '480px' }}>
-          <Alert variant="danger" className="shadow-sm">
-            <Alert.Heading className="h5">Acceso no disponible</Alert.Heading>
-            <p className="mb-1">No se pudo cargar la información del usuario actual.</p>
-            <p className="mb-0">Revisa la configuración e inténtalo de nuevo.</p>
-            {errorMessage ? (
-              <p className="mb-0 mt-3 small text-break text-muted">{errorMessage}</p>
-            ) : null}
-          </Alert>
-        </Container>
-      </div>
-    );
-  }
-
-  if (!currentUser) {
-    return null;
-  }
-
-  const userFullName = useMemo(() => {
-    const parts = [currentUser.first_name, currentUser.last_name]
-      .map((value) => (value ?? '').trim())
-      .filter((value) => value.length);
-    return parts.length ? parts.join(' ') : currentUser.email;
-  }, [currentUser]);
-
   return (
     <div className="min-vh-100 d-flex flex-column">
       <Navbar bg="white" expand="lg" className="shadow-sm py-3">
@@ -919,7 +782,7 @@ export default function App() {
             className="d-flex align-items-center gap-3"
             onClick={(event) => {
               event.preventDefault();
-              navigate(homePath);
+              navigate(DEFAULT_REDIRECT_PATH);
             }}
           >
             <img src={logo} height={64} alt="GEP Group" />
@@ -930,8 +793,8 @@ export default function App() {
               </span>
             </div>
           </Navbar.Brand>
-          <Nav className="ms-auto gap-3 align-items-center">
-            {navigationItems.map((item) =>
+          <Nav className="ms-auto gap-3">
+            {NAVIGATION_ITEMS.map((item) =>
               item.children ? (
                 <NavDropdown
                   key={item.key}
@@ -962,27 +825,6 @@ export default function App() {
                 </Nav.Item>
               )
             )}
-            <NavDropdown
-              align="end"
-              title={<span className="text-uppercase">{userFullName}</span>}
-              id="nav-user-menu"
-            >
-              <NavDropdown.ItemText>
-                <div className="fw-semibold">{userFullName}</div>
-                <div className="text-muted small">{currentUser.email}</div>
-              </NavDropdown.ItemText>
-              <NavDropdown.Divider />
-              <NavDropdown.Item onClick={handleLogout} disabled={logoutMutation.isPending}>
-                {logoutMutation.isPending ? (
-                  <>
-                    <Spinner animation="border" size="sm" role="status" className="me-2" />
-                    Cerrando sesión…
-                  </>
-                ) : (
-                  'Cerrar sesión'
-                )}
-              </NavDropdown.Item>
-            </NavDropdown>
           </Nav>
         </Container>
       </Navbar>
@@ -1001,7 +843,7 @@ export default function App() {
             productosPageProps={productosPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
-            defaultRedirectPath={defaultRedirectPath}
+            defaultRedirectPath={DEFAULT_REDIRECT_PATH}
             knownPaths={KNOWN_APP_PATHS}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}
           />
