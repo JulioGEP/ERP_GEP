@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -9,6 +10,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DealSummary } from '../../types/deal';
 import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
 import {
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
@@ -68,6 +70,7 @@ interface BudgetTableProps {
   onDelete?: (budget: DealSummary) => Promise<void>;
   labels?: Partial<BudgetTableLabels>;
   enableFallback?: boolean;
+  filtersContainer?: HTMLElement | null;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -359,6 +362,15 @@ function applyBudgetFilters(
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
       filterEntries.every(([key, value]) => {
+        const parts = splitFilterValue(value);
+        if (parts.length > 1) {
+          return parts.some((part) => {
+            const normalizedPart = normalizeText(part);
+            if (!normalizedPart.length) return false;
+            const targetValue = row.normalized[key] ?? '';
+            return targetValue.includes(normalizedPart);
+          });
+        }
         const normalizedValue = normalizeText(value);
         if (!normalizedValue.length) return true;
         const target = row.normalized[key] ?? '';
@@ -392,6 +404,7 @@ export function BudgetTable({
   onDelete,
   labels: labelsProp,
   enableFallback = true,
+  filtersContainer,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -828,20 +841,26 @@ export function BudgetTable({
           </Button>
         </div>
       )}
-      <div className="px-3 py-3 border-bottom">
-        <FilterToolbar
-          filters={BUDGET_FILTER_DEFINITIONS}
-          activeFilters={activeFilters}
-          searchValue={searchValue}
-          onSearchChange={handleSearchChange}
-          onFilterChange={handleFilterChange}
-          onRemoveFilter={clearFilter}
-          onClearAll={clearAllFilters}
-          resultCount={resultCount}
-          isServerBusy={isServerBusy}
-          onSaveView={() => console.info('Guardar vista de presupuestos')}
-        />
-      </div>
+      {(() => {
+        const toolbar = (
+          <FilterToolbar
+            filters={BUDGET_FILTER_DEFINITIONS}
+            activeFilters={activeFilters}
+            searchValue={searchValue}
+            onSearchChange={handleSearchChange}
+            onFilterChange={handleFilterChange}
+            onRemoveFilter={clearFilter}
+            onClearAll={clearAllFilters}
+            resultCount={resultCount}
+            isServerBusy={isServerBusy}
+            onSaveView={() => console.info('Guardar vista de presupuestos')}
+          />
+        );
+        if (filtersContainer) {
+          return createPortal(toolbar, filtersContainer);
+        }
+        return <div className="px-3 py-3 border-bottom">{toolbar}</div>;
+      })()}
       <div className="table-responsive" style={{ maxHeight: '70vh' }} ref={tableContainerRef}>
         <Table hover className="mb-0 align-middle">
           <thead>
