@@ -65,6 +65,8 @@ const DEFAULT_LABELS: BudgetTableLabels = {
   fallbackErrorRetry: 'Reintentar',
 };
 
+const EMPTY_EXTRA_COLUMNS: ColumnDef<DealSummary>[] = [];
+
 interface BudgetTableProps {
   budgets: DealSummary[];
   isLoading: boolean;
@@ -77,6 +79,7 @@ interface BudgetTableProps {
   enableFallback?: boolean;
   filtersContainer?: HTMLElement | null;
   showFilters?: boolean;
+  extraColumns?: ColumnDef<DealSummary>[];
 }
 
 /** ============ Helpers de presentación ============ */
@@ -425,6 +428,7 @@ export function BudgetTable({
   enableFallback = true,
   filtersContainer,
   showFilters = true,
+  extraColumns,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -673,6 +677,8 @@ export function BudgetTable({
     [onDelete, showDeleteAction]
   );
 
+  const resolvedExtraColumns = extraColumns ?? EMPTY_EXTRA_COLUMNS;
+
   const columns = useMemo<ColumnDef<DealSummary>[]>(() => {
     const baseColumns: ColumnDef<DealSummary>[] = [
       {
@@ -836,6 +842,10 @@ export function BudgetTable({
       },
     ];
 
+    if (resolvedExtraColumns.length) {
+      baseColumns.push(...resolvedExtraColumns);
+    }
+
     if (showDeleteAction) {
       baseColumns.push({
         id: 'acciones',
@@ -864,7 +874,7 @@ export function BudgetTable({
     }
 
     return baseColumns;
-  }, [deletingId, handleDelete, showDeleteAction]);
+  }, [deletingId, handleDelete, resolvedExtraColumns, showDeleteAction]);
 
   const table = useReactTable({
     data: tableBudgets,

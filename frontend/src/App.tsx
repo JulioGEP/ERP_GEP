@@ -36,6 +36,7 @@ import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import { useCurrentUser } from './app/auth/UserContext';
 import { logout as requestLogout } from './api/auth';
 import type { BudgetsPageProps } from './pages/presupuestos/BudgetsPage';
+import type { BudgetsUnworkedPageProps } from './pages/presupuestos/UnworkedBudgetsPage';
 import type { PorSesionesPageProps } from './pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from './pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from './pages/calendario/PorFormadorPage';
@@ -69,6 +70,7 @@ const NAVIGATION_ITEMS: NavItem[] = [
     label: 'Presupuestos',
     children: [
       { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
+      { key: 'Presupuestos/SinTrabajar', label: 'Sin trabajar', path: '/presupuestos/sintrabajar' },
     ],
   },
   {
@@ -731,6 +733,10 @@ function AuthenticatedApp() {
     isImporting: importMutation.isPending,
   };
 
+  const budgetsUnworkedPageProps: BudgetsUnworkedPageProps = {
+    ...budgetsPageProps,
+  };
+
   const calendarSessionsPageProps: PorSesionesPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
@@ -871,6 +877,7 @@ function AuthenticatedApp() {
         <Container fluid="xl">
           <AppRouter
             budgetsPageProps={budgetsPageProps}
+            budgetsUnworkedPageProps={budgetsUnworkedPageProps}
             porSesionesPageProps={calendarSessionsPageProps}
             porUnidadMovilPageProps={calendarUnitsPageProps}
             porFormadorPageProps={calendarTrainersPageProps}

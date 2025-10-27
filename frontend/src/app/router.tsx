@@ -1,6 +1,7 @@
 import { createElement, lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
+import type { BudgetsUnworkedPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
@@ -13,6 +14,7 @@ import type { CertificadosPageProps } from '../pages/certificados/CertificadosPa
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
+const BudgetsUnworkedPage = lazy(() => import('../pages/presupuestos/UnworkedBudgetsPage'));
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
 const PorUnidadMovilPage = lazy(() => import('../pages/calendario/PorUnidadMovilPage'));
 const PorFormadorPage = lazy(() => import('../pages/calendario/PorFormadorPage'));
@@ -34,6 +36,7 @@ const InformesRecursoPreventivoEbroPage = lazy(
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
+  budgetsUnworkedPageProps: BudgetsUnworkedPageProps;
   porSesionesPageProps: PorSesionesPageProps;
   porUnidadMovilPageProps: PorUnidadMovilPageProps;
   porFormadorPageProps: PorFormadorPageProps;
@@ -51,6 +54,7 @@ type AppRouterProps = {
 
 export function AppRouter({
   budgetsPageProps,
+  budgetsUnworkedPageProps,
   porSesionesPageProps,
   porUnidadMovilPageProps,
   porFormadorPageProps,
@@ -80,6 +84,10 @@ export function AppRouter({
         />
         <Route path="/presupuestos" element={<Navigate to="/presupuestos/sinplanificar" replace />} />
         <Route path="/presupuestos/sinplanificar" element={<BudgetsPage {...budgetsPageProps} />} />
+        <Route
+          path="/presupuestos/sintrabajar"
+          element={<BudgetsUnworkedPage {...budgetsUnworkedPageProps} />}
+        />
         <Route
           path="/calendario/por_sesiones"
           element={createElement(PorSesionesPage, { ...porSesionesPageProps, key: 'calendar-sesiones' })}

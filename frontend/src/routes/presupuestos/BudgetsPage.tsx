@@ -3,7 +3,7 @@ import { Button, Spinner } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
 import { BudgetTable } from '../../features/presupuestos/BudgetTable';
 
-type BudgetsPageProps = {
+export type BudgetsPageProps = {
   budgets: DealSummary[];
   isLoading: boolean;
   isFetching: boolean;
