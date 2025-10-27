@@ -13,7 +13,6 @@ type BudgetsPageProps = {
   onDelete?: (budget: DealSummary) => Promise<void>;
   onOpenImportModal: () => void;
   isImporting: boolean;
-  canImportBudgets?: boolean;
 };
 
 export function BudgetsPage({
@@ -26,7 +25,6 @@ export function BudgetsPage({
   onDelete,
   onOpenImportModal,
   isImporting,
-  canImportBudgets = true,
 }: BudgetsPageProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
 
@@ -42,11 +40,9 @@ export function BudgetsPage({
         </div>
         <div className="d-flex align-items-center gap-3">
           {(isImporting || isFetching) && <Spinner animation="border" role="status" size="sm" />}
-          {canImportBudgets && (
-            <Button size="lg" onClick={onOpenImportModal}>
-              Importar presupuesto
-            </Button>
-          )}
+          <Button size="lg" onClick={onOpenImportModal}>
+            Importar presupuesto
+          </Button>
         </div>
       </section>
 
