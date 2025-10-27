@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type ComponentProps, type ComponentType } from 'react';
-import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType } from 'react';
+import { Alert, Container, Nav, Navbar, NavDropdown, Spinner, Toast, ToastContainer } from 'react-bootstrap';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
@@ -30,6 +30,7 @@ import type { DealDetail, DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { AppRouter } from './app/router';
+import { useCurrentUser } from './app/CurrentUserContext';
 import type { BudgetsPageProps } from './pages/presupuestos/BudgetsPage';
 import type { PorSesionesPageProps } from './pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from './pages/calendario/PorUnidadMovilPage';
@@ -58,7 +59,7 @@ type NavItem = {
   children?: NavChild[];
 };
 
-const NAVIGATION_ITEMS: NavItem[] = [
+const BASE_NAVIGATION_ITEMS: NavItem[] = [
   {
     key: 'Presupuestos',
     label: 'Presupuestos',
@@ -117,10 +118,16 @@ const NAVIGATION_ITEMS: NavItem[] = [
 
 const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
 
+const ADDITIONAL_KNOWN_PATHS = ['/usuarios', '/no-autorizado'] as const;
+
 const KNOWN_APP_PATHS = new Set(
   [
-    ...NAVIGATION_ITEMS.flatMap((item) => [item.path, ...(item.children?.map((child) => child.path) ?? [])]),
+    ...BASE_NAVIGATION_ITEMS.flatMap((item) => [
+      item.path,
+      ...(item.children?.map((child) => child.path) ?? []),
+    ]),
     ...LEGACY_APP_PATHS,
+    ...ADDITIONAL_KNOWN_PATHS,
   ].filter((path): path is string => Boolean(path))
 );
 
@@ -253,6 +260,49 @@ export default function App() {
 
   const location = useLocation();
   const navigate = useNavigate();
+  const {
+    currentUser,
+    authorization,
+    isLoading: isUserLoading,
+    isError: isUserError,
+    error: currentUserError,
+  } = useCurrentUser();
+
+  const defaultRedirectPath = authorization.defaultRoute;
+  const homePath = defaultRedirectPath || DEFAULT_REDIRECT_PATH;
+
+  const navigationItems = useMemo(() => {
+    const items: NavItem[] = [];
+
+    for (const item of BASE_NAVIGATION_ITEMS) {
+      if (item.children && item.children.length > 0) {
+        const visibleChildren = item.children.filter((child) =>
+          authorization.canAccessRoute(child.path),
+        );
+        if (visibleChildren.length > 0) {
+          items.push({ ...item, children: visibleChildren });
+          continue;
+        }
+        if (item.path && authorization.canAccessRoute(item.path)) {
+          items.push({ ...item, children: undefined });
+        }
+        continue;
+      }
+
+      if (item.path && authorization.canAccessRoute(item.path)) {
+        items.push(item);
+      }
+    }
+
+    if (authorization.canAccessRoute('/usuarios')) {
+      items.push({ key: 'Usuarios', label: 'Usuarios', path: '/usuarios' });
+    }
+
+    return items;
+  }, [authorization]);
+
+  const canImportBudgets = authorization.canPerformAction('budgets:import');
+  const canAccessBudgetsRoute = authorization.canAccessRoute('/presupuestos/sinplanificar');
   const isBudgetsRoute = location.pathname.startsWith('/presupuestos');
 
   const [showImportModal, setShowImportModal] = useState(false);
@@ -281,7 +331,7 @@ export default function App() {
     refetchInterval: false,
     retry: 0,
     staleTime: Infinity,
-    enabled: isBudgetsRoute,
+    enabled: isBudgetsRoute && canAccessBudgetsRoute,
   });
 
   useEffect(() => {
@@ -308,11 +358,14 @@ export default function App() {
   }, []);
 
   const handleOpenImportModal = useCallback(() => {
+    if (!canImportBudgets) {
+      return;
+    }
     setImportResultWarnings(null);
     setImportResultDealId(null);
     setImportError(null);
     setShowImportModal(true);
-  }, []);
+  }, [canImportBudgets]);
 
   const handleCloseImportModal = useCallback(() => {
     setShowImportModal(false);
@@ -521,14 +574,17 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (KNOWN_APP_PATHS.has(location.pathname)) {
+    if (
+      KNOWN_APP_PATHS.has(location.pathname) &&
+      authorization.canAccessRoute(location.pathname)
+    ) {
       try {
         window.localStorage.setItem(ACTIVE_PATH_STORAGE_KEY, location.pathname);
       } catch (error) {
         console.warn('No se pudo guardar la ruta activa', error);
       }
     }
-  }, [location.pathname]);
+  }, [authorization, location.pathname]);
 
   useEffect(() => {
     if (!location.pathname.startsWith('/presupuestos')) {
@@ -709,6 +765,7 @@ export default function App() {
     onDelete: handleDeleteBudget,
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
+    canImportBudgets,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {
@@ -773,6 +830,37 @@ export default function App() {
     autoRefreshOnOpen: !!selectedBudgetId && selectedBudgetId === autoRefreshBudgetId,
   };
 
+  if (isUserLoading) {
+    return (
+      <div className="min-vh-100 d-flex align-items-center justify-content-center">
+        <Spinner animation="border" role="status" />
+        <span className="ms-2 fw-semibold">Cargando usuario…</span>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    const errorMessage =
+      isUserError && currentUserError instanceof Error
+        ? currentUserError.message
+        : null;
+
+    return (
+      <div className="min-vh-100 d-flex align-items-center justify-content-center">
+        <Container style={{ maxWidth: '480px' }}>
+          <Alert variant="danger" className="shadow-sm">
+            <Alert.Heading className="h5">Acceso no disponible</Alert.Heading>
+            <p className="mb-1">No se pudo cargar la información del usuario actual.</p>
+            <p className="mb-0">Revisa la configuración e inténtalo de nuevo.</p>
+            {errorMessage ? (
+              <p className="mb-0 mt-3 small text-break text-muted">{errorMessage}</p>
+            ) : null}
+          </Alert>
+        </Container>
+      </div>
+    );
+  }
+
   return (
     <div className="min-vh-100 d-flex flex-column">
       <Navbar bg="white" expand="lg" className="shadow-sm py-3">
@@ -782,7 +870,7 @@ export default function App() {
             className="d-flex align-items-center gap-3"
             onClick={(event) => {
               event.preventDefault();
-              navigate(DEFAULT_REDIRECT_PATH);
+              navigate(homePath);
             }}
           >
             <img src={logo} height={64} alt="GEP Group" />
@@ -794,7 +882,7 @@ export default function App() {
             </div>
           </Navbar.Brand>
           <Nav className="ms-auto gap-3">
-            {NAVIGATION_ITEMS.map((item) =>
+            {navigationItems.map((item) =>
               item.children ? (
                 <NavDropdown
                   key={item.key}
@@ -843,7 +931,7 @@ export default function App() {
             productosPageProps={productosPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
-            defaultRedirectPath={DEFAULT_REDIRECT_PATH}
+            defaultRedirectPath={defaultRedirectPath}
             knownPaths={KNOWN_APP_PATHS}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}
           />
