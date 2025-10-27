@@ -1,7 +1,7 @@
 // backend/functions/deals.ts
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { getPrisma } from "./_shared/prisma";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import {
   getDeal,
@@ -17,6 +17,9 @@ import {
   syncDealDocumentsToGoogleDrive,
   deleteDealFolderFromGoogleDrive,
 } from "./_shared/googleDrive";
+import { generateSessionsForDeal } from "./_shared/sessionGeneration";
+import { studentsFromNotes } from "./_shared/studentsFromNotes";
+import type { StudentIdentifier } from "./_shared/studentsFromNotes";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -68,6 +71,254 @@ function normalizePipelineLabelValue(value: unknown): string | null {
     .replace(/\s+/g, " ")
     .trim();
   return str.length ? str : null;
+}
+
+function normalizeLabelForComparison(value: unknown): string | null {
+  const label = normalizePipelineLabelValue(value);
+  if (!label) return null;
+  return label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function isFormacionAbiertaPipeline(value: unknown): boolean {
+  const normalized = normalizeLabelForComparison(value);
+  if (!normalized) return false;
+  return normalized === "formacion abierta";
+}
+
+function errorResponseToError(payload: ReturnType<typeof errorResponse>): Error {
+  let message = "Error generando sesiones para el deal";
+  try {
+    const parsed = JSON.parse(payload.body ?? "{}");
+    if (parsed && typeof parsed.message === "string" && parsed.message.trim().length) {
+      message = parsed.message.trim();
+    }
+  } catch {
+    // ignore JSON parse errors and keep fallback message
+  }
+  const error = new Error(message);
+  (error as any).statusCode = payload.statusCode;
+  return error;
+}
+
+type SessionForStudents = {
+  id: string;
+  estado: string | null;
+  fecha_inicio_utc: Date | string | null;
+  created_at: Date | string | null;
+  nombre_cache: string | null;
+};
+
+type FormacionAbiertaSyncResult = {
+  sessionsCreated: number;
+  studentsCreated: number;
+  studentsSkippedDuplicate: number;
+  studentsSkippedMissingIdentifier: number;
+  studentsSkippedNoSession: number;
+  primaryNoteId: string | null;
+};
+
+function toTimestamp(value: Date | string | null | undefined): number | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function pickDefaultSessionIdForStudents(sessions: readonly SessionForStudents[]): string | null {
+  const filtered = sessions
+    .map((session) => {
+      const id = typeof session?.id === "string" ? session.id.trim() : "";
+      if (!id.length) return null;
+      return { ...session, id } as SessionForStudents & { id: string };
+    })
+    .filter((session): session is SessionForStudents & { id: string } => Boolean(session));
+
+  if (!filtered.length) {
+    return null;
+  }
+
+  const preferred = filtered.filter((session) => session.estado !== "CANCELADA");
+  const candidates = preferred.length ? preferred : filtered;
+
+  const sorted = candidates.slice().sort((a, b) => {
+    const startA = toTimestamp(a.fecha_inicio_utc);
+    const startB = toTimestamp(b.fecha_inicio_utc);
+    if (startA !== null && startB !== null && startA !== startB) {
+      return startA - startB;
+    }
+    if (startA !== null && startB === null) return -1;
+    if (startA === null && startB !== null) return 1;
+
+    const createdA = toTimestamp(a.created_at) ?? 0;
+    const createdB = toTimestamp(b.created_at) ?? 0;
+    if (createdA !== createdB) return createdA - createdB;
+
+    const nameA = (a.nombre_cache ?? "").trim().toLowerCase();
+    const nameB = (b.nombre_cache ?? "").trim().toLowerCase();
+    if (nameA !== nameB) return nameA.localeCompare(nameB, "es");
+
+    return a.id.localeCompare(b.id, "es");
+  });
+
+  return sorted[0]?.id ?? null;
+}
+
+function buildStudentIdentifierKey(
+  sessionId: string | null | undefined,
+  identifier: StudentIdentifier | null,
+): string | null {
+  if (!identifier) return null;
+  if (!sessionId) return null;
+  const trimmedSessionId = sessionId.trim();
+  if (!trimmedSessionId.length) return null;
+  return `${trimmedSessionId}::${identifier.type}::${identifier.value}`;
+}
+
+async function syncFormacionAbiertaSessionsAndStudents(
+  prisma: PrismaClient,
+  dealId: string,
+) : Promise<FormacionAbiertaSyncResult> {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const generationResult = await generateSessionsForDeal(tx, dealId);
+    if ("error" in generationResult) {
+      throw errorResponseToError(generationResult.error);
+    }
+
+    const sessions = await tx.sessions.findMany({
+      where: { deal_id: dealId },
+      orderBy: [
+        { fecha_inicio_utc: "asc" },
+        { created_at: "asc" },
+        { id: "asc" },
+      ],
+      select: {
+        id: true,
+        estado: true,
+        fecha_inicio_utc: true,
+        created_at: true,
+        nombre_cache: true,
+      },
+    });
+
+    const notes = await tx.deal_notes.findMany({
+      where: { deal_id: dealId },
+      orderBy: [{ created_at: "desc" }],
+      select: { id: true, content: true },
+    });
+
+    const parsedStudents = studentsFromNotes(notes);
+    const primaryNoteId = parsedStudents[0]?.sourceNoteId ?? null;
+    const defaultSessionId = pickDefaultSessionIdForStudents(sessions);
+
+    if (!defaultSessionId) {
+      if (parsedStudents.length) {
+        console.warn(
+          "[formacion-abierta-import] No hay sesiones disponibles para crear alumnos",
+          { dealId, noteId: primaryNoteId },
+        );
+      }
+
+      return {
+        sessionsCreated: generationResult.created ?? 0,
+        studentsCreated: 0,
+        studentsSkippedDuplicate: 0,
+        studentsSkippedMissingIdentifier: 0,
+        studentsSkippedNoSession: parsedStudents.length,
+        primaryNoteId,
+      };
+    }
+
+    if (!parsedStudents.length) {
+      return {
+        sessionsCreated: generationResult.created ?? 0,
+        studentsCreated: 0,
+        studentsSkippedDuplicate: 0,
+        studentsSkippedMissingIdentifier: 0,
+        studentsSkippedNoSession: 0,
+        primaryNoteId,
+      };
+    }
+
+    const timestamp = nowInMadridDate();
+
+    const existingStudents = await tx.alumnos.findMany({
+      where: { deal_id: dealId },
+      select: { sesion_id: true, dni: true },
+    });
+
+    const existingKeys = new Set<string>();
+    for (const existing of existingStudents) {
+      const key = existing.dni
+        ? buildStudentIdentifierKey(existing.sesion_id, {
+            type: "DNI",
+            value: existing.dni,
+          })
+        : null;
+      if (key) existingKeys.add(key);
+    }
+
+    let studentsCreated = 0;
+    let studentsSkippedDuplicate = 0;
+    let studentsSkippedMissingIdentifier = 0;
+
+    for (const student of parsedStudents) {
+      const dniKey = student.dni
+        ? buildStudentIdentifierKey(defaultSessionId, { type: "DNI", value: student.dni })
+        : null;
+      const identifierKey = buildStudentIdentifierKey(defaultSessionId, student.identifier);
+      const keysToCheck = [identifierKey, dniKey].filter((key): key is string => Boolean(key));
+
+      if (keysToCheck.some((key) => existingKeys.has(key))) {
+        studentsSkippedDuplicate += 1;
+        continue;
+      }
+
+      const dni = typeof student.dni === "string" ? student.dni.trim() : "";
+      if (!dni.length) {
+        if (identifierKey) existingKeys.add(identifierKey);
+        studentsSkippedMissingIdentifier += 1;
+        continue;
+      }
+
+      const nombre = typeof student.nombre === "string" ? student.nombre.trim() : "";
+      const apellido = typeof student.apellido === "string" ? student.apellido.trim() : "";
+      if (!nombre.length || !apellido.length) {
+        if (identifierKey) existingKeys.add(identifierKey);
+        if (dniKey) existingKeys.add(dniKey);
+        studentsSkippedMissingIdentifier += 1;
+        continue;
+      }
+
+      await tx.alumnos.create({
+        data: {
+          deal_id: dealId,
+          sesion_id: defaultSessionId,
+          nombre,
+          apellido,
+          dni,
+          apto: false,
+          certificado: false,
+          created_at: timestamp,
+          updated_at: timestamp,
+        },
+      });
+
+      keysToCheck.forEach((key) => existingKeys.add(key));
+      studentsCreated += 1;
+    }
+
+    return {
+      sessionsCreated: generationResult.created ?? 0,
+      studentsCreated,
+      studentsSkippedDuplicate,
+      studentsSkippedMissingIdentifier,
+      studentsSkippedNoSession: 0,
+      primaryNoteId,
+    };
+  });
 }
 
 function looksLikePipelineNumericId(value: string): boolean {
@@ -478,6 +729,54 @@ async function importDealFromPipedrive(dealIdRaw: any) {
       });
     } finally {
       timings.persistMs = Date.now() - persistStart;
+    }
+
+    if (savedDealId) {
+      const persisted = await prisma.deals.findUnique({
+        where: { deal_id: String(savedDealId) },
+        select: { pipeline_label: true },
+      });
+
+      const pipelineLabelCandidate =
+        persisted?.pipeline_label ??
+        pipelineContext.label ??
+        (d as any)?.pipeline_label ??
+        (d as any)?.pipeline_name ??
+        null;
+
+      if (isFormacionAbiertaPipeline(pipelineLabelCandidate)) {
+        try {
+          const syncResult = await syncFormacionAbiertaSessionsAndStudents(
+            prisma,
+            String(savedDealId),
+          );
+          console.log(
+            JSON.stringify({
+              event: "formacion-abierta-import-summary",
+              deal_id: String(savedDealId),
+              sessions_created: syncResult.sessionsCreated,
+              students_created: syncResult.studentsCreated,
+              students_skipped_duplicate: syncResult.studentsSkippedDuplicate,
+              students_skipped_missing_identifier: syncResult.studentsSkippedMissingIdentifier,
+              students_skipped_no_session: syncResult.studentsSkippedNoSession,
+              note_id: syncResult.primaryNoteId,
+            }),
+          );
+        } catch (syncError) {
+          const message =
+            syncError instanceof Error
+              ? syncError.message
+              : "Error sincronizando sesiones y alumnos";
+          console.error(
+            "[formacion-abierta-import] Error sincronizando sesiones y alumnos",
+            {
+              dealId: String(savedDealId),
+              error: message,
+            },
+          );
+          throw syncError instanceof Error ? syncError : new Error(message);
+        }
+      }
     }
 
     // 3) Avisos no bloqueantes (warnings)
