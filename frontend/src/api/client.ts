@@ -57,6 +57,7 @@ export async function requestJson<T = any>(
   try {
     response = await fetch(resolveRequestInput(input), {
       headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+      credentials: init?.credentials ?? 'include',
       ...init,
     });
   } catch (error: unknown) {
