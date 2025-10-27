@@ -6,7 +6,7 @@ const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
 export const COMMON_HEADERS = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-User-Id, X-User-Name',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id, X-User-Name',
   'Content-Type': 'application/json',
 };
 

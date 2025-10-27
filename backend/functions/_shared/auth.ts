@@ -1,4 +1,5 @@
-import type { users } from '@prisma/client';
+import { createHash, randomBytes } from 'crypto';
+import type { user_sessions, users } from '@prisma/client';
 
 import type { HttpRequest } from './http';
 import { getPrisma } from './prisma';
@@ -12,7 +13,8 @@ export type AuthedHttpRequest<TBody = unknown> = HttpRequest<TBody> & {
   currentPermissions: RolePermissions;
 };
 
-const DEFAULT_CURRENT_USER_EMAIL = 'julio@gepgroup.es';
+const SESSION_TOKEN_BYTES = 48;
+const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 12; // 12 hours
 
 function normalizeEmail(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -20,12 +22,63 @@ function normalizeEmail(value: string | null | undefined): string | null {
   return email.length ? email : null;
 }
 
-async function findCurrentUserByEmail(email: string) {
+async function findActiveSessionByToken(token: string): Promise<ActiveSession | null> {
   const prisma = getPrisma();
-  return prisma.users.findFirst({
+  const tokenHash = hashSessionToken(token);
+  return prisma.user_sessions.findFirst({
     where: {
-      email: { equals: email, mode: 'insensitive' },
+      token_hash: tokenHash,
+      revoked_at: null,
+      expires_at: { gt: now() },
     },
+    include: { user: true },
+  });
+}
+
+async function touchSession(sessionId: string) {
+  const prisma = getPrisma();
+  try {
+    await prisma.user_sessions.update({
+      where: { id: sessionId },
+      data: { last_seen_at: now() },
+    });
+  } catch (error) {
+    console.warn('[auth] No se pudo actualizar last_seen_at de la sesión', error);
+  }
+}
+
+async function revokeSessionById(sessionId: string) {
+  const prisma = getPrisma();
+  await prisma.user_sessions.updateMany({
+    where: { id: sessionId, revoked_at: null },
+    data: { revoked_at: now() },
+  });
+}
+
+export async function createUserSession(
+  userId: string,
+  options?: { ttlMs?: number },
+): Promise<{ token: string; session: user_sessions }> {
+  const prisma = getPrisma();
+  const token = randomBytes(SESSION_TOKEN_BYTES).toString('base64url');
+  const expiresAt = new Date(now().getTime() + (options?.ttlMs ?? getSessionTtlMs()));
+  const session = await prisma.user_sessions.create({
+    data: {
+      user_id: userId,
+      token_hash: hashSessionToken(token),
+      expires_at: expiresAt,
+      last_seen_at: now(),
+    },
+  });
+  return { token, session };
+}
+
+export async function revokeUserSession(token: string): Promise<void> {
+  const prisma = getPrisma();
+  const tokenHash = hashSessionToken(token);
+  await prisma.user_sessions.updateMany({
+    where: { token_hash: tokenHash, revoked_at: null },
+    data: { revoked_at: now() },
   });
 }
 
@@ -67,6 +120,8 @@ export async function attachCurrentUser<TBody>(
     };
   }
 
+  await touchSession(session.id);
+
   const authedRequest: AuthedHttpRequest<TBody> = Object.assign({}, request, {
     currentUser: user,
     currentPermissions: permissions,
@@ -78,7 +133,7 @@ export async function attachCurrentUser<TBody>(
 export async function requireRole<TBody>(
   request: HttpRequest<TBody>,
   allowedRoles: readonly UserRole[],
-): Promise<{ request: AuthedHttpRequest<TBody> } | { error: ReturnType<typeof errorResponse> }> {
+): Promise<AttachResult<TBody>> {
   const authed = await attachCurrentUser(request);
   if ('error' in authed) {
     return authed;

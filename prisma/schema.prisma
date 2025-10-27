@@ -39,8 +39,30 @@ model users {
   active     Boolean  @default(true)
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @db.Timestamptz(6)
+  password_hash       String?  @db.Text
+  password_algo       String   @default("bcrypt")
+  password_updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  sessions user_sessions[]
 
   @@map("users")
+}
+
+model user_sessions {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String   @db.Uuid
+  token_hash  String   @unique @db.Text
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  expires_at  DateTime @db.Timestamptz(6)
+  revoked_at  DateTime? @db.Timestamptz(6)
+  last_seen_at DateTime? @db.Timestamptz(6)
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id], map: "idx_user_sessions_user_id")
+  @@index([expires_at], map: "idx_user_sessions_expires_at")
+
+  @@map("user_sessions")
 }
 
 model persons {
