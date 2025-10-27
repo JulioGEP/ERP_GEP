@@ -51,7 +51,7 @@ export const handler = createHttpHandler<LoginBody>(async (request) => {
     FROM users
     WHERE active = true
       AND password_hash IS NOT NULL
-      AND password_algo = 'bcrypt'
+      AND (password_algo IS NULL OR lower(password_algo) = 'bcrypt')
       AND lower(email) = lower(${email})
       AND password_hash = crypt(${password}, password_hash)
     LIMIT 1
