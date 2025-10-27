@@ -38,6 +38,12 @@ import { SessionsAccordionServices } from './sessions/SessionsAccordionServices'
 import type { DealEditablePatch } from '../api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../../types/deal';
 import { buildFieldTooltip } from '../../../utils/fieldTooltip';
+import {
+  FOLLOW_UP_FIELDS,
+  isAffirmativeLabel,
+  useDealFollowUpToggle,
+  type FollowUpFieldKey,
+} from '../hooks/useDealFollowUpToggle';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -194,6 +200,17 @@ export function BudgetDetailModalServices({
   const deal = detailQuery.data ?? null;
   const isLoading = detailQuery.isLoading;
 
+  const {
+    toggleFollowUp,
+    isLoading: followUpLoading,
+    pendingField: followUpPendingField,
+  } = useDealFollowUpToggle({
+    dealId: deal?.deal_id ?? (normalizedDealId.length ? normalizedDealId : null),
+    detailQueryKey,
+    userId,
+    userName,
+  });
+
   const refreshMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
     onSuccess: (payload) => {
@@ -285,6 +302,82 @@ export function BudgetDetailModalServices({
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isFollowUpFieldLoading = (field: FollowUpFieldKey) =>
+    followUpLoading && followUpPendingField === field;
+
+  const getFollowUpValue = (field: FollowUpFieldKey): boolean => {
+    const detailValue = deal?.[field];
+    if (typeof detailValue === 'boolean') return detailValue;
+    const summaryValue = summary?.[field as keyof DealSummary];
+    return typeof summaryValue === 'boolean' ? summaryValue : false;
+  };
+
+  const getFollowUpSourceValue = (
+    source: (typeof FOLLOW_UP_FIELDS)[number]['source'],
+  ): string | null => {
+    switch (source) {
+      case 'caes_label':
+        return form?.caes_label ?? deal?.caes_label ?? summary?.caes_label ?? null;
+      case 'fundae_label':
+        return form?.fundae_label ?? deal?.fundae_label ?? summary?.fundae_label ?? null;
+      case 'hotel_label':
+        return form?.hotel_label ?? deal?.hotel_label ?? summary?.hotel_label ?? null;
+      case 'transporte':
+        return deal?.transporte ?? summary?.transporte ?? null;
+      case 'po':
+        return deal?.po ?? summary?.po ?? null;
+      default:
+        return null;
+    }
+  };
+
+  const handleFollowUpToggle = async (
+    field: FollowUpFieldKey,
+    nextValue: boolean,
+    label: string,
+  ) => {
+    try {
+      await toggleFollowUp(field, nextValue);
+    } catch (error) {
+      const fallback = `No se pudo actualizar el seguimiento de ${label}.`;
+      const message =
+        error instanceof Error && error.message && error.message.trim().length
+          ? error.message
+          : fallback;
+      if (onNotify) {
+        onNotify({ variant: 'danger', message });
+      } else {
+        alert(message);
+      }
+    }
+  };
+
+  const renderFollowUpBlock = (field: FollowUpFieldKey) => {
+    const config = FOLLOW_UP_FIELDS.find((entry) => entry.field === field);
+    if (!config) return null;
+    const sourceValue = getFollowUpSourceValue(config.source);
+    if (!isAffirmativeLabel(sourceValue)) return null;
+
+    const checked = getFollowUpValue(field);
+    const baseId = deal?.deal_id ?? (normalizedDealId.length ? normalizedDealId : null);
+    const inputId = `${field}-${baseId ?? 'deal'}`;
+
+    return (
+      <div className="d-flex align-items-center gap-2 small text-nowrap">
+        <span className="text-muted text-uppercase fw-semibold">Seguimiento</span>
+        <Form.Check
+          id={inputId}
+          type="checkbox"
+          label={config.label}
+          className="d-flex align-items-center gap-1 mb-0"
+          checked={checked}
+          disabled={isFollowUpFieldLoading(field)}
+          onChange={(event) => handleFollowUpToggle(field, event.target.checked, config.label)}
+        />
+      </div>
+    );
+  };
 
   const getDocumentDisplayName = (doc: DealDocument | null | undefined): string => {
     if (!doc) return 'Documento';
@@ -970,7 +1063,10 @@ export function BudgetDetailModalServices({
                 </div>
               </Col>
               <Col md={2} className="budget-field-narrow">
-                <Form.Label>CAES</Form.Label>
+                <div className="d-flex justify-content-between align-items-center gap-2">
+                  <Form.Label className="mb-0">CAES</Form.Label>
+                  {renderFollowUpBlock('caes_val')}
+                </div>
                 <Form.Control
                   value={form.caes_label}
                   onChange={(e) => updateForm('caes_label', e.target.value)}
@@ -979,7 +1075,10 @@ export function BudgetDetailModalServices({
                 />
               </Col>
               <Col md={2} className="budget-field-narrow">
-                <Form.Label>Hotel</Form.Label>
+                <div className="d-flex justify-content-between align-items-center gap-2">
+                  <Form.Label className="mb-0">Hotel</Form.Label>
+                  {renderFollowUpBlock('hotel_val')}
+                </div>
                 <Form.Control
                   value={form.hotel_label}
                   onChange={(e) => updateForm('hotel_label', e.target.value)}
@@ -988,7 +1087,10 @@ export function BudgetDetailModalServices({
                 />
               </Col>
               <Col md={2} className="budget-field-wide">
-                <Form.Label>PO</Form.Label>
+                <div className="d-flex justify-content-between align-items-center gap-2">
+                  <Form.Label className="mb-0">PO</Form.Label>
+                  {renderFollowUpBlock('po_val')}
+                </div>
                 <Form.Control
                   value={displayOrDash(deal.po ?? null)}
                   readOnly

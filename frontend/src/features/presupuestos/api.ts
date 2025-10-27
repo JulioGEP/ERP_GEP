@@ -247,6 +247,10 @@ function isHttpUrl(value: unknown): boolean {
   }
 }
 
+function toBoolean(value: unknown): boolean {
+  return value === true;
+}
+
 function pickNonEmptyString(
   ...values: Array<string | null | undefined>
 ): string | null {
@@ -428,8 +432,15 @@ function normalizeDealSummary(row: Json): DealSummary {
 
     sede_label: toStringValue(row?.sede_label) ?? null,
     caes_label: toStringValue(row?.caes_label) ?? null,
+    caes_val: toBoolean(row?.caes_val),
     fundae_label: toStringValue(row?.fundae_label) ?? null,
+    fundae_val: toBoolean(row?.fundae_val),
     hotel_label: toStringValue(row?.hotel_label) ?? null,
+    hotel_val: toBoolean(row?.hotel_val),
+    transporte: toStringValue(row?.transporte) ?? null,
+    transporte_val: toBoolean(row?.transporte_val),
+    po: toStringValue(row?.po) ?? null,
+    po_val: toBoolean(row?.po_val),
     tipo_servicio: toStringValue(row?.tipo_servicio) ?? null,
     mail_invoice: toStringValue(row?.mail_invoice) ?? null,
     comercial: toStringValue(row?.comercial) ?? null,
@@ -476,8 +487,11 @@ function normalizeDealDetail(raw: Json): DealDetail {
 
     sede_label: toStringValue(raw.sede_label) ?? null,
     caes_label: toStringValue(raw.caes_label) ?? null,
+    caes_val: toBoolean(raw.caes_val),
     fundae_label: toStringValue(raw.fundae_label) ?? null,
+    fundae_val: toBoolean(raw.fundae_val),
     hotel_label: toStringValue(raw.hotel_label) ?? null,
+    hotel_val: toBoolean(raw.hotel_val),
     comercial: toStringValue(raw.comercial) ?? null,
     a_fecha: toStringValue(raw.a_fecha) ?? null,
     w_id_variation: toStringValue(raw.w_id_variation) ?? null,
@@ -487,7 +501,9 @@ function normalizeDealDetail(raw: Json): DealDetail {
       toStringValue(raw.transporte) === null
         ? null
         : (toStringValue(raw.transporte) as "Si" | "Sí" | "No"),
+    transporte_val: toBoolean(raw.transporte_val),
     po: toStringValue(raw.po) ?? null,
+    po_val: toBoolean(raw.po_val),
     tipo_servicio: toStringValue(raw.tipo_servicio) ?? null,
     mail_invoice: toStringValue(raw.mail_invoice) ?? null,
 
@@ -984,8 +1000,13 @@ export type DealEditablePatch = {
   hours?: number | null;
   training_address?: string | null; // dirección de formación
   caes_label?: string | null;
+  caes_val?: boolean;
   fundae_label?: string | null;
+  fundae_val?: boolean;
   hotel_label?: string | null;
+  hotel_val?: boolean;
+  transporte_val?: boolean;
+  po_val?: boolean;
   comercial?: string | null;
   w_id_variation?: string | null;
   a_fecha?: string | null;
