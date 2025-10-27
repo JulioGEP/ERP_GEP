@@ -25,7 +25,12 @@ import {
   type TrainingTemplatesManager,
 } from '../certificados/lib/templates/training-templates';
 import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
-import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
+import { buildFilterOptions } from '../../components/table/filterUtils';
+import {
+  useTableFilterState,
+  type TableFiltersState,
+  type TableSortingState,
+} from '../../hooks/useTableFilterState';
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -114,16 +119,25 @@ type ProductFilterRow = {
   search: string;
 };
 
-const PRODUCT_FILTER_DEFINITIONS: FilterDefinition[] = [
+const BASE_PRODUCT_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'id_pipe', label: 'ID de Pipedrive' },
   { key: 'id_woo', label: 'Id Producto WC', type: 'number' },
   { key: 'name', label: 'Nombre' },
   { key: 'code', label: 'Código' },
-  { key: 'category', label: 'Categoría' },
-  { key: 'type', label: 'Tipo' },
-  { key: 'template', label: 'Template' },
+  { key: 'category', label: 'Categoría', type: 'select', multiValue: true },
+  { key: 'type', label: 'Tipo', type: 'select', multiValue: true },
+  { key: 'template', label: 'Template', type: 'select', multiValue: true },
   { key: 'url_formacion', label: 'URL formación' },
-  { key: 'estado', label: 'Estado' },
+  {
+    key: 'estado',
+    label: 'Estado',
+    type: 'select',
+    multiValue: true,
+    options: [
+      { value: 'activo', label: 'Activo' },
+      { value: 'inactivo', label: 'Inactivo' },
+    ],
+  },
 ];
 
 const PRODUCT_FILTER_ACCESSORS: Record<string, (product: Product) => string> = {
@@ -139,6 +153,38 @@ const PRODUCT_FILTER_ACCESSORS: Record<string, (product: Product) => string> = {
 };
 
 const PRODUCT_FILTER_KEYS = Object.keys(PRODUCT_FILTER_ACCESSORS);
+
+const PRODUCT_DYNAMIC_FILTER_KEYS = new Set<string>(['category', 'type', 'template']);
+
+function createProductFilterDefinitions(products: Product[]): FilterDefinition[] {
+  const values = new Map<string, Set<string>>();
+  products.forEach((product) => {
+    PRODUCT_DYNAMIC_FILTER_KEYS.forEach((key) => {
+      const accessor = PRODUCT_FILTER_ACCESSORS[key];
+      if (!accessor) return;
+      const raw = accessor(product);
+      const value = raw.trim();
+      if (!value.length) return;
+      let set = values.get(key);
+      if (!set) {
+        set = new Set<string>();
+        values.set(key, set);
+      }
+      set.add(value);
+    });
+  });
+
+  return BASE_PRODUCT_FILTER_DEFINITIONS.map((definition) => {
+    if (!PRODUCT_DYNAMIC_FILTER_KEYS.has(definition.key)) {
+      return definition;
+    }
+    const set = values.get(definition.key) ?? new Set<string>();
+    return {
+      ...definition,
+      options: buildFilterOptions(set),
+    };
+  });
+}
 
 function createProductFilterRow(product: Product): ProductFilterRow {
   const values: Record<string, string> = {};
@@ -184,20 +230,21 @@ function computeFuzzyScore(text: string, query: string): number {
   return total;
 }
 
-function applyProductFilters(
-  rows: ProductFilterRow[],
-  filters: Record<string, string>,
-  search: string,
-): ProductFilterRow[] {
-  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+function applyProductFilters(rows: ProductFilterRow[], filters: TableFiltersState, search: string): ProductFilterRow[] {
+  const filterEntries = Object.entries(filters)
+    .map(([key, values]) => ({
+      key,
+      normalized: values
+        .map((value) => normalizeText(value))
+        .filter((value) => value.length > 0),
+    }))
+    .filter((entry) => entry.normalized.length > 0);
   let filtered = rows;
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
-      filterEntries.every(([key, value]) => {
-        const normalizedValue = normalizeText(value);
-        if (!normalizedValue.length) return true;
-        const target = row.normalized[key] ?? '';
-        return target.includes(normalizedValue);
+      filterEntries.every((entry) => {
+        const target = row.normalized[entry.key] ?? '';
+        return entry.normalized.some((value) => target.includes(value));
       }),
     );
   }
@@ -358,6 +405,11 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   const isSyncing = syncMutation.isPending;
   const isUpdating = updateMutation.isPending;
 
+  const productFilterDefinitions = useMemo(
+    () => createProductFilterDefinitions(products),
+    [products],
+  );
+
   const handleSync = useCallback(() => {
     if (isSyncing) return;
     syncMutation.mutate();
@@ -486,7 +538,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     sorting: sortingFromUrl,
     setSearchValue,
     setFilterValue,
-    clearFilter,
+    removeFilterValue,
     clearAllFilters,
     setSorting: setSortingInUrl,
   } = useTableFilterState({ tableKey: 'products-table' });
@@ -527,11 +579,17 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   );
 
   const handleFilterChange = useCallback(
-    (key: string, value: string) => {
-      const trimmed = value.trim();
-      setFilterValue(key, trimmed.length ? trimmed : null);
+    (key: string, values: string[]) => {
+      setFilterValue(key, values);
     },
     [setFilterValue],
+  );
+
+  const handleRemoveFilterValue = useCallback(
+    (key: string, value: string) => {
+      removeFilterValue(key, value);
+    },
+    [removeFilterValue],
   );
 
   const handleSearchChange = useCallback(
@@ -831,25 +889,60 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   const resultCount = filteredProducts.length;
   const noFilteredResults = !filteredProducts.length && products.length > 0;
 
+  const totalActiveFilters = useMemo(
+    () => Object.values(activeFilters).reduce((sum, values) => sum + values.length, 0),
+    [activeFilters],
+  );
+
   const subtitle = useMemo(
     () => 'Consulta y actualiza los productos de Pipedrive vinculados a formaciones.',
-    []
+    [],
   );
 
   return (
     <div className="d-grid gap-4">
-      <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-        <div>
-          <h1 className="h3 fw-bold mb-1">Productos</h1>
-          <p className="text-muted mb-0">{subtitle}</p>
-        </div>
-        <div className="d-flex align-items-center gap-3">
-          {(isFetching || isSyncing || isUpdating) && (
-            <Spinner animation="border" role="status" size="sm" />
-          )}
-          <Button onClick={handleSync} disabled={isSyncing} variant="primary">
-            Actualizar Productos
-          </Button>
+      <section className="d-grid gap-3">
+        <div className="d-flex flex-column flex-xl-row align-items-xl-center justify-content-between gap-3">
+          <div className="d-flex flex-column gap-2 flex-grow-1">
+            <div className="d-flex flex-wrap align-items-center gap-3">
+              <h1 className="h3 fw-bold mb-0">Productos</h1>
+              <FilterToolbar
+                filters={productFilterDefinitions}
+                activeFilters={activeFilters}
+                searchValue={searchValue}
+                onSearchChange={handleSearchChange}
+                onFilterChange={handleFilterChange}
+                onRemoveFilter={handleRemoveFilterValue}
+                onClearAll={clearAllFilters}
+                resultCount={resultCount}
+                isServerBusy={isFetching || isSyncing || isUpdating}
+                className="flex-grow-1 flex-lg-row align-items-lg-center gap-2"
+                renderTrigger={({ open, hasActiveFilters }) => (
+                  <Button
+                    variant={hasActiveFilters ? 'primary' : 'outline-primary'}
+                    className="fw-semibold d-flex align-items-center gap-2"
+                    onClick={open}
+                  >
+                    Filtros
+                    {totalActiveFilters > 0 ? (
+                      <Badge bg="light" text="dark" className="rounded-pill px-2 py-1 small fw-semibold">
+                        {totalActiveFilters}
+                      </Badge>
+                    ) : null}
+                  </Button>
+                )}
+              />
+            </div>
+            <p className="text-muted mb-0">{subtitle}</p>
+          </div>
+          <div className="d-flex align-items-center gap-3 flex-wrap">
+            {(isFetching || isSyncing || isUpdating) && (
+              <Spinner animation="border" role="status" size="sm" />
+            )}
+            <Button onClick={handleSync} disabled={isSyncing} variant="primary">
+              Actualizar Productos
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -860,25 +953,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
       )}
 
       <div className="bg-white rounded-4 shadow-sm">
-        <div className="px-3 py-3 border-bottom">
-          <FilterToolbar
-            filters={PRODUCT_FILTER_DEFINITIONS}
-            activeFilters={activeFilters}
-            searchValue={searchValue}
-            onSearchChange={handleSearchChange}
-            onFilterChange={handleFilterChange}
-            onRemoveFilter={clearFilter}
-            onClearAll={clearAllFilters}
-            resultCount={resultCount}
-            isServerBusy={false}
-            onSaveView={() => console.info('Guardar vista de productos')}
-          />
-        </div>
-        <div
-          className="table-responsive"
-          style={{ maxHeight: '70vh' }}
-          ref={tableContainerRef}
-        >
+        <div className="table-responsive" style={{ maxHeight: '70vh' }} ref={tableContainerRef}>
           <Table hover className="mb-0 align-middle">
             <thead>
               {table.getHeaderGroups().map((headerGroup) => (

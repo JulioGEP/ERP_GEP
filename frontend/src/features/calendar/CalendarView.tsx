@@ -1,6 +1,6 @@
 // frontend/src/features/calendar/CalendarView.tsx
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, ButtonGroup, OverlayTrigger, Spinner, Tooltip } from 'react-bootstrap';
+import { Alert, Badge, Button, ButtonGroup, OverlayTrigger, Spinner, Tooltip } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import {
   fetchCalendarAvailability,
@@ -24,8 +24,9 @@ import type {
   ProductInfo,
   VariantInfo,
 } from '../formacion_abierta/types';
-import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
-import { useTableFilterState } from '../../hooks/useTableFilterState';
+import { FilterToolbar, type FilterDefinition, type FilterOption } from '../../components/table/FilterToolbar';
+import { buildFilterOptions } from '../../components/table/filterUtils';
+import { useTableFilterState, type TableFiltersState } from '../../hooks/useTableFilterState';
 
 const STORAGE_KEY_PREFIX = 'erp-calendar-preferences';
 const MADRID_TZ = 'Europe/Madrid';
@@ -72,7 +73,7 @@ const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_sede_label', label: 'Sede' },
   { key: 'product_name', label: 'Producto' },
   { key: 'product_code', label: 'Código de producto' },
-  { key: 'estado', label: 'Estado', type: 'select', options: SESSION_ESTADO_OPTIONS },
+  { key: 'estado', label: 'Estado', type: 'select', options: SESSION_ESTADO_OPTIONS, multiValue: true },
   { key: 'trainer', label: 'Formador' },
   { key: 'unit', label: 'Unidad móvil' },
   { key: 'room', label: 'Sala' },
@@ -641,20 +642,21 @@ function createVariantFilterRow(variant: CalendarVariantEvent): CalendarFilterRo
   };
 }
 
-function applyCalendarFilters(
-  rows: CalendarFilterRow[],
-  filters: Record<string, string>,
-  search: string,
-): CalendarFilterRow[] {
-  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+function applyCalendarFilters(rows: CalendarFilterRow[], filters: TableFiltersState, search: string): CalendarFilterRow[] {
+  const filterEntries = Object.entries(filters)
+    .map(([key, values]) => ({
+      key,
+      normalized: values
+        .map((value) => normalizeText(safeString(value)))
+        .filter((value) => value.length > 0),
+    }))
+    .filter((entry) => entry.normalized.length > 0);
   let filtered = rows;
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
-      filterEntries.every(([key, value]) => {
-        const normalizedValue = normalizeText(safeString(value));
-        if (!normalizedValue.length) return true;
-        const target = row.normalized[key] ?? '';
-        return target.includes(normalizedValue);
+      filterEntries.every((entry) => {
+        const target = row.normalized[entry.key] ?? '';
+        return entry.normalized.some((value) => target.includes(value));
       }),
     );
   }
@@ -910,21 +912,114 @@ export function CalendarView({
   const variants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
   const availabilityDays = availabilityQuery.data?.days ?? {};
 
+  const roomOptions = useMemo(() => {
+    const values = new Set<string>();
+    sessions.forEach((session) => {
+      if (session.room) {
+        const label = formatResourceName(session.room);
+        if (label.length) {
+          values.add(label);
+        }
+      }
+    });
+    if (includeVariants) {
+      variants.forEach((variant) => {
+        const room = variant.variant.sala;
+        if (!room) return;
+        const parts = [safeString(room.name ?? ''), safeString(room.sede ?? '')].filter(Boolean);
+        const label = parts.join(' ').trim();
+        if (label.length) {
+          values.add(label);
+        }
+      });
+    }
+    return buildFilterOptions(values);
+  }, [sessions, variants, includeVariants]);
+
+  const trainerOptions = useMemo(() => {
+    const values = new Set<string>();
+    sessions.forEach((session) => {
+      session.trainers.forEach((trainer) => {
+        const label = formatResourceName(trainer);
+        if (label.length) {
+          values.add(label);
+        }
+      });
+    });
+    if (includeVariants) {
+      variants.forEach((variant) => {
+        const trainer = variant.variant.trainer;
+        if (!trainer) return;
+        const parts = [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')].filter(Boolean);
+        const label = parts.join(' ').trim();
+        if (label.length) {
+          values.add(label);
+        }
+      });
+    }
+    return buildFilterOptions(values);
+  }, [sessions, variants, includeVariants]);
+
+  const unitOptions = useMemo(() => {
+    const values = new Set<string>();
+    sessions.forEach((session) => {
+      session.units.forEach((unit) => {
+        const label = formatResourceName(unit);
+        if (label.length) {
+          values.add(label);
+        }
+      });
+    });
+    if (includeVariants) {
+      variants.forEach((variant) => {
+        const unit = variant.variant.unidad;
+        if (!unit) return;
+        const parts = [safeString(unit.name ?? ''), safeString(unit.matricula ?? '')].filter(Boolean);
+        const label = parts.join(' ').trim();
+        if (label.length) {
+          values.add(label);
+        }
+      });
+    }
+    return buildFilterOptions(values);
+  }, [sessions, variants, includeVariants]);
+
+  const calendarFilters = useMemo(() => {
+    return CALENDAR_FILTER_DEFINITIONS.map((definition) => {
+      if (definition.key === 'room') {
+        return { ...definition, type: 'select' as const, multiValue: true, options: roomOptions };
+      }
+      if (definition.key === 'trainer') {
+        return { ...definition, type: 'select' as const, multiValue: true, options: trainerOptions };
+      }
+      if (definition.key === 'unit') {
+        return { ...definition, type: 'select' as const, multiValue: true, options: unitOptions };
+      }
+      return definition;
+    });
+  }, [roomOptions, trainerOptions, unitOptions]);
+
   const {
     filters: activeFilters,
     searchValue,
     setSearchValue,
     setFilterValue,
-    clearFilter,
+    removeFilterValue,
     clearAllFilters,
   } = useTableFilterState({ tableKey: `calendar-${mode}` });
 
   const handleFilterChange = useCallback(
-    (key: string, value: string) => {
-      const trimmed = value.trim();
-      setFilterValue(key, trimmed.length ? trimmed : null);
+    (key: string, values: string[]) => {
+      setFilterValue(key, values);
     },
     [setFilterValue],
+  );
+
+  const handleRemoveFilterValue = useCallback(
+    (key: string, value: string) => {
+      removeFilterValue(key, value);
+    },
+    [removeFilterValue],
   );
 
   const handleSearchChange = useCallback(
@@ -975,6 +1070,25 @@ export function CalendarView({
   );
 
   const resultCount = filteredSessions.length;
+
+  useEffect(() => {
+    if (resultCount !== 1) return;
+    const session = filteredSessions[0];
+    if (!session) return;
+    const sessionDate = new Date(session.start);
+    const targetDay = getMadridDateTime(sessionDate);
+    const currentDay = getMadridDateTime(currentDate);
+    const isSameDay =
+      targetDay.year === currentDay.year &&
+      targetDay.month === currentDay.month &&
+      targetDay.day === currentDay.day;
+    if (!isSameDay) {
+      setCurrentDate(sessionDate);
+    }
+    if (view !== 'day') {
+      setView('day');
+    }
+  }, [currentDate, filteredSessions, resultCount, setCurrentDate, setView, view]);
 
   const events: CalendarEventItem[] = useMemo(() => {
     const items: CalendarEventItem[] = filteredSessions.map((session) => ({
@@ -1478,61 +1592,81 @@ export function CalendarView({
 
   const isDayView = view === 'day';
 
+  const totalActiveFilters = useMemo(
+    () => Object.values(activeFilters).reduce((sum, values) => sum + values.length, 0),
+    [activeFilters],
+  );
+
   return (
     <section className="d-grid gap-4">
-      <header className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-        <div>
-          <h1 className="h3 fw-bold mb-1">{title}</h1>
-        </div>
-        <div className="d-flex flex-wrap align-items-center gap-2">
-          <Button variant="outline-secondary" className="fw-semibold" onClick={handleToday}>
-            Hoy
-          </Button>
-          <div className="erp-calendar-nav">
-            <Button variant="outline-secondary" onClick={() => moveDate(-1)} aria-label="Anterior">
-              ←
-            </Button>
-            <Button variant="outline-secondary" onClick={() => moveDate(1)} aria-label="Siguiente">
-              →
-            </Button>
+      <header className="d-grid gap-3">
+        <div className="d-flex flex-column flex-xl-row align-items-xl-center justify-content-between gap-3">
+          <div className="d-flex flex-column gap-2 flex-grow-1">
+            <div className="d-flex flex-wrap align-items-center gap-3">
+              <h1 className="h3 fw-bold mb-0">{title}</h1>
+              <FilterToolbar
+                filters={calendarFilters}
+                activeFilters={activeFilters}
+                searchValue={searchValue}
+                onSearchChange={handleSearchChange}
+                onFilterChange={handleFilterChange}
+                onRemoveFilter={handleRemoveFilterValue}
+                onClearAll={clearAllFilters}
+                resultCount={resultCount}
+                isServerBusy={isFetching}
+                className="flex-grow-1 flex-lg-row align-items-lg-center gap-2"
+                renderTrigger={({ open, hasActiveFilters }) => (
+                  <Button
+                    variant={hasActiveFilters ? 'primary' : 'outline-primary'}
+                    className="fw-semibold d-flex align-items-center gap-2"
+                    onClick={open}
+                  >
+                    Filtros
+                    {totalActiveFilters > 0 ? (
+                      <Badge bg="light" text="dark" className="rounded-pill px-2 py-1 small fw-semibold">
+                        {totalActiveFilters}
+                      </Badge>
+                    ) : null}
+                  </Button>
+                )}
+              />
+            </div>
           </div>
-          <ButtonGroup>
-            <Button
-              variant={view === 'month' ? 'primary' : 'outline-secondary'}
-              onClick={() => handleViewChange('month')}
-            >
-              Mes
+          <div className="d-flex flex-wrap align-items-center gap-2">
+            <Button variant="outline-secondary" className="fw-semibold" onClick={handleToday}>
+              Hoy
             </Button>
-            <Button
-              variant={view === 'week' ? 'primary' : 'outline-secondary'}
-              onClick={() => handleViewChange('week')}
-            >
-              Semana
-            </Button>
-            <Button
-              variant={view === 'day' ? 'primary' : 'outline-secondary'}
-              onClick={() => handleViewChange('day')}
-            >
-              Día
-            </Button>
-          </ButtonGroup>
+            <div className="erp-calendar-nav">
+              <Button variant="outline-secondary" onClick={() => moveDate(-1)} aria-label="Anterior">
+                ←
+              </Button>
+              <Button variant="outline-secondary" onClick={() => moveDate(1)} aria-label="Siguiente">
+                →
+              </Button>
+            </div>
+            <ButtonGroup>
+              <Button
+                variant={view === 'month' ? 'primary' : 'outline-secondary'}
+                onClick={() => handleViewChange('month')}
+              >
+                Mes
+              </Button>
+              <Button
+                variant={view === 'week' ? 'primary' : 'outline-secondary'}
+                onClick={() => handleViewChange('week')}
+              >
+                Semana
+              </Button>
+              <Button
+                variant={view === 'day' ? 'primary' : 'outline-secondary'}
+                onClick={() => handleViewChange('day')}
+              >
+                Día
+              </Button>
+            </ButtonGroup>
+          </div>
         </div>
       </header>
-
-      <div className="rounded-4 shadow-sm bg-white p-3">
-        <FilterToolbar
-          filters={CALENDAR_FILTER_DEFINITIONS}
-          activeFilters={activeFilters}
-          searchValue={searchValue}
-          onSearchChange={handleSearchChange}
-          onFilterChange={handleFilterChange}
-          onRemoveFilter={clearFilter}
-          onClearAll={clearAllFilters}
-          resultCount={resultCount}
-          isServerBusy={isFetching}
-          onSaveView={() => console.info('Guardar vista del calendario')}
-        />
-      </div>
 
       {error ? (
         <Alert variant="danger" className="mb-0">

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Spinner, Table } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useReactTable,
@@ -9,8 +9,13 @@ import {
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DealSummary } from '../../types/deal';
-import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
-import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
+import { FilterToolbar, type FilterDefinition, type FilterOption } from '../../components/table/FilterToolbar';
+import { buildFilterOptions } from '../../components/table/filterUtils';
+import {
+  useTableFilterState,
+  type TableFiltersState,
+  type TableSortingState,
+} from '../../hooks/useTableFilterState';
 import {
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
 } from './queryKeys';
@@ -69,6 +74,9 @@ interface BudgetTableProps {
   onDelete?: (budget: DealSummary) => Promise<void>;
   labels?: Partial<BudgetTableLabels>;
   enableFallback?: boolean;
+  showToolbar?: boolean;
+  onResultCountChange?: (count: number) => void;
+  filterDefinitions?: FilterDefinition[];
 }
 
 /** ============ Helpers de presentación ============ */
@@ -276,7 +284,7 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   negocio: (budget) => getNegocioLabel(budget),
 };
 
-const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
+export const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_id', label: 'Presupuesto' },
   { key: 'title', label: 'Título' },
   { key: 'organization', label: 'Empresa' },
@@ -305,6 +313,65 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
 ];
 
 const BUDGET_FILTER_KEYS = Object.keys(BUDGET_FILTER_ACCESSORS);
+
+const BUDGET_SELECT_FILTER_KEYS = new Set<string>([
+  'pipeline',
+  'pipeline_id',
+  'sede_label',
+  'caes_label',
+  'fundae_label',
+  'hotel_label',
+  'tipo_servicio',
+  'comercial',
+  'presu_holded',
+  'modo_reserva',
+  'negocio',
+]);
+
+function collectBudgetFilterOptions(budgets: DealSummary[]): Map<string, FilterOption[]> {
+  const values = new Map<string, Set<string>>();
+  budgets.forEach((budget) => {
+    BUDGET_SELECT_FILTER_KEYS.forEach((key) => {
+      const accessor = BUDGET_FILTER_ACCESSORS[key];
+      if (!accessor) return;
+      const raw = accessor(budget) ?? '';
+      const value = raw.trim();
+      if (!value.length || value === '—') return;
+      let set = values.get(key);
+      if (!set) {
+        set = new Set<string>();
+        values.set(key, set);
+      }
+      set.add(value);
+    });
+  });
+  const options = new Map<string, FilterOption[]>();
+  values.forEach((set, key) => {
+    options.set(key, buildFilterOptions(set));
+  });
+  BUDGET_SELECT_FILTER_KEYS.forEach((key) => {
+    if (!options.has(key)) {
+      options.set(key, []);
+    }
+  });
+  return options;
+}
+
+export function createBudgetFilterDefinitions(budgets: DealSummary[]): FilterDefinition[] {
+  const optionsByKey = collectBudgetFilterOptions(budgets);
+  return BUDGET_FILTER_DEFINITIONS.map((definition) => {
+    if (!BUDGET_SELECT_FILTER_KEYS.has(definition.key)) {
+      return definition;
+    }
+    const options = optionsByKey.get(definition.key) ?? [];
+    return {
+      ...definition,
+      type: 'select',
+      multiValue: true,
+      options,
+    };
+  });
+}
 
 function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
   const values: Record<string, string> = {};
@@ -350,20 +417,21 @@ function computeFuzzyScore(text: string, query: string): number {
   return total;
 }
 
-function applyBudgetFilters(
-  rows: BudgetFilterRow[],
-  filters: Record<string, string>,
-  search: string,
-): BudgetFilterRow[] {
-  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+function applyBudgetFilters(rows: BudgetFilterRow[], filters: TableFiltersState, search: string): BudgetFilterRow[] {
+  const filterEntries = Object.entries(filters)
+    .map(([key, values]) => ({
+      key,
+      normalized: values
+        .map((value) => normalizeText(value))
+        .filter((value) => value.length > 0),
+    }))
+    .filter((entry) => entry.normalized.length > 0);
   let filtered = rows;
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
-      filterEntries.every(([key, value]) => {
-        const normalizedValue = normalizeText(value);
-        if (!normalizedValue.length) return true;
-        const target = row.normalized[key] ?? '';
-        return target.includes(normalizedValue);
+      filterEntries.every((entry) => {
+        const target = row.normalized[entry.key] ?? '';
+        return entry.normalized.some((value) => target.includes(value));
       }),
     );
   }
@@ -393,6 +461,9 @@ export function BudgetTable({
   onDelete,
   labels: labelsProp,
   enableFallback = true,
+  showToolbar = true,
+  onResultCountChange,
+  filterDefinitions: filterDefinitionsProp,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -416,13 +487,18 @@ export function BudgetTable({
     return budgets;
   }, [budgets, cachedFallbackBudgets, isShowingFallback]);
 
+  const filterDefinitions = useMemo(
+    () => filterDefinitionsProp ?? createBudgetFilterDefinitions(effectiveBudgets),
+    [effectiveBudgets, filterDefinitionsProp],
+  );
+
   const {
     filters: activeFilters,
     searchValue,
     sorting: sortingFromUrl,
     setSearchValue,
     setFilterValue,
-    clearFilter,
+    removeFilterValue,
     clearAllFilters,
     setSorting: setSortingInUrl,
   } = useTableFilterState({ tableKey: 'budgets-table' });
@@ -484,6 +560,17 @@ export function BudgetTable({
 
   const resultCount = tableBudgets.length;
 
+  const totalActiveFilters = useMemo(
+    () => Object.values(activeFilters).reduce((sum, values) => sum + values.length, 0),
+    [activeFilters],
+  );
+
+  useEffect(() => {
+    if (onResultCountChange) {
+      onResultCountChange(resultCount);
+    }
+  }, [onResultCountChange, resultCount]);
+
   const tanstackSortingState = useMemo<SortingState>(
     () => sortingState.map((item) => ({ id: item.id, desc: item.desc })),
     [sortingState],
@@ -492,11 +579,17 @@ export function BudgetTable({
   const showDeleteAction = typeof onDelete === 'function';
 
   const handleFilterChange = useCallback(
-    (key: string, value: string) => {
-      const trimmed = value.trim();
-      setFilterValue(key, trimmed.length ? trimmed : null);
+    (key: string, values: string[]) => {
+      setFilterValue(key, values);
     },
     [setFilterValue],
+  );
+
+  const handleRemoveFilterValue = useCallback(
+    (key: string, value: string) => {
+      removeFilterValue(key, value);
+    },
+    [removeFilterValue],
   );
 
   const handleSearchChange = useCallback(
@@ -829,20 +922,35 @@ export function BudgetTable({
           </Button>
         </div>
       )}
-      <div className="px-3 py-3 border-bottom">
-        <FilterToolbar
-          filters={BUDGET_FILTER_DEFINITIONS}
-          activeFilters={activeFilters}
-          searchValue={searchValue}
-          onSearchChange={handleSearchChange}
-          onFilterChange={handleFilterChange}
-          onRemoveFilter={clearFilter}
-          onClearAll={clearAllFilters}
-          resultCount={resultCount}
-          isServerBusy={isServerBusy}
-          onSaveView={() => console.info('Guardar vista de presupuestos')}
-        />
-      </div>
+      {showToolbar && (
+        <div className="px-3 py-3 border-bottom">
+          <FilterToolbar
+            filters={filterDefinitions}
+            activeFilters={activeFilters}
+            searchValue={searchValue}
+            onSearchChange={handleSearchChange}
+            onFilterChange={handleFilterChange}
+            onRemoveFilter={handleRemoveFilterValue}
+            onClearAll={clearAllFilters}
+            resultCount={resultCount}
+            isServerBusy={isServerBusy}
+            renderTrigger={({ open, hasActiveFilters }) => (
+              <Button
+                variant={hasActiveFilters ? 'primary' : 'outline-primary'}
+                className="fw-semibold d-flex align-items-center gap-2"
+                onClick={open}
+              >
+                Filtros
+                {totalActiveFilters > 0 ? (
+                  <Badge bg="light" text="dark" className="rounded-pill px-2 py-1 small fw-semibold">
+                    {totalActiveFilters}
+                  </Badge>
+                ) : null}
+              </Button>
+            )}
+          />
+        </div>
+      )}
       <div className="table-responsive" style={{ maxHeight: '70vh' }} ref={tableContainerRef}>
         <Table hover className="mb-0 align-middle">
           <thead>

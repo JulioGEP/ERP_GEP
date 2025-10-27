@@ -5,7 +5,7 @@ type SortingItem = { id: string; desc: boolean };
 
 export type TableSortingState = SortingItem[];
 
-export type TableFiltersState = Record<string, string>;
+export type TableFiltersState = Record<string, string[]>;
 
 export interface UseTableFilterStateOptions {
   tableKey: string;
@@ -49,9 +49,10 @@ export function useTableFilterState({ tableKey }: UseTableFilterStateOptions) {
     for (const [key, value] of entries) {
       if (key.startsWith(filterPrefix)) {
         const filterKey = decodeURIComponent(key.slice(filterPrefix.length));
-        if (filterKey.length) {
-          active[filterKey] = value;
-        }
+        if (!filterKey.length) continue;
+        const list = active[filterKey] ?? [];
+        list.push(value);
+        active[filterKey] = list;
       }
     }
     return active;
@@ -70,16 +71,39 @@ export function useTableFilterState({ tableKey }: UseTableFilterStateOptions) {
   );
 
   const setFilterValue = useCallback(
-    (key: string, value: string | null) => {
+    (key: string, values: string[]) => {
       const normalizedKey = key.trim();
       if (!normalizedKey.length) return;
       updateSearchParams((draft) => {
         const paramKey = `${filterPrefix}${encodeURIComponent(normalizedKey)}`;
-        if (value && value.trim().length) {
-          draft.set(paramKey, value);
-        } else {
-          draft.delete(paramKey);
-        }
+        draft.delete(paramKey);
+        const normalizedValues = Array.from(
+          new Set(
+            values
+              .map((value) => value.trim())
+              .filter((value) => value.length > 0),
+          ),
+        );
+        normalizedValues.forEach((value) => {
+          draft.append(paramKey, value);
+        });
+      });
+    },
+    [filterPrefix, updateSearchParams],
+  );
+
+  const removeFilterValue = useCallback(
+    (key: string, value: string) => {
+      const normalizedKey = key.trim();
+      if (!normalizedKey.length) return;
+      const normalizedValue = value.trim();
+      updateSearchParams((draft) => {
+        const paramKey = `${filterPrefix}${encodeURIComponent(normalizedKey)}`;
+        const remaining = draft
+          .getAll(paramKey)
+          .filter((current) => current !== normalizedValue);
+        draft.delete(paramKey);
+        remaining.forEach((item) => draft.append(paramKey, item));
       });
     },
     [filterPrefix, updateSearchParams],
@@ -143,6 +167,7 @@ export function useTableFilterState({ tableKey }: UseTableFilterStateOptions) {
     sorting,
     setSearchValue,
     setFilterValue,
+    removeFilterValue,
     clearFilter,
     clearAllFilters,
     setSorting,
