@@ -571,18 +571,15 @@ export function BudgetDetailModalAbierta({
     const inputId = `${field}-${baseId ?? 'deal'}`;
 
     return (
-      <div className="d-flex align-items-center gap-2 small text-nowrap">
-        <span className="text-muted text-uppercase fw-semibold">Seguimiento</span>
-        <Form.Check
-          id={inputId}
-          type="checkbox"
-          label={config.label}
-          className="d-flex align-items-center gap-1 mb-0"
-          checked={checked}
-          disabled={isFollowUpFieldLoading(field)}
-          onChange={(event) => handleFollowUpToggle(field, event.target.checked, config.label)}
-        />
-      </div>
+      <Form.Check
+        id={inputId}
+        type="checkbox"
+        className="budget-follow-up-checkbox mb-0"
+        title={`Seguimiento ${config.label}`}
+        checked={checked}
+        disabled={isFollowUpFieldLoading(field)}
+        onChange={(event) => handleFollowUpToggle(field, event.target.checked, config.label)}
+      />
     );
   };
 
