@@ -247,7 +247,6 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   organization: (budget) => getOrganizationLabel(budget),
   pipeline: (budget) =>
     safeTrim(budget.pipeline_label ?? budget.pipeline_id ?? '') ?? '',
-  pipeline_id: (budget) => safeTrim(budget.pipeline_id ?? '') ?? '',
   training_address: (budget) => safeTrim(budget.training_address ?? '') ?? '',
   sede_label: (budget) => safeTrim(budget.sede_label ?? '') ?? '',
   caes_label: (budget) => safeTrim(budget.caes_label ?? '') ?? '',
@@ -256,17 +255,7 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   tipo_servicio: (budget) => safeTrim(budget.tipo_servicio ?? '') ?? '',
   mail_invoice: (budget) => safeTrim(budget.mail_invoice ?? '') ?? '',
   comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
-  a_fecha: (budget) => safeTrim(budget.a_fecha ?? '') ?? '',
-  w_id_variation: (budget) => safeTrim(budget.w_id_variation ?? '') ?? '',
-  presu_holded: (budget) => safeTrim(budget.presu_holded ?? '') ?? '',
-  modo_reserva: (budget) => safeTrim(budget.modo_reserva ?? '') ?? '',
-  hours: (budget) => (budget.hours != null ? String(budget.hours) : ''),
   product_names: (budget) => getProductNames(budget).join(' '),
-  sessions: (budget) =>
-    (Array.isArray(budget.sessions) ? budget.sessions : [])
-      .map((session) => safeTrim(session?.fecha_inicio_utc ?? session?.fecha ?? '') ?? '')
-      .filter(Boolean)
-      .join(' '),
   person_name: (budget) => {
     const first = safeTrim(budget.person?.first_name ?? '') ?? '';
     const last = safeTrim(budget.person?.last_name ?? '') ?? '';
@@ -275,7 +264,6 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   person_email: (budget) => safeTrim(budget.person?.email ?? '') ?? '',
   person_phone: (budget) => safeTrim(budget.person?.phone ?? '') ?? '',
   training_date: (budget) => getTrainingDateInfo(budget).label,
-  negocio: (budget) => getNegocioLabel(budget),
 };
 
 const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
@@ -283,7 +271,6 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'title', label: 'Título' },
   { key: 'organization', label: 'Empresa' },
   { key: 'pipeline', label: 'Pipeline' },
-  { key: 'pipeline_id', label: 'Pipeline (ID)' },
   { key: 'training_address', label: 'Dirección de formación' },
   { key: 'sede_label', label: 'Sede' },
   { key: 'caes_label', label: 'CAES' },
@@ -292,19 +279,16 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'tipo_servicio', label: 'Tipo de servicio' },
   { key: 'mail_invoice', label: 'Email de facturación' },
   { key: 'comercial', label: 'Comercial' },
-  { key: 'a_fecha', label: 'A fecha' },
-  { key: 'w_id_variation', label: 'ID variación' },
-  { key: 'presu_holded', label: 'Presupuesto retenido' },
-  { key: 'modo_reserva', label: 'Modo reserva' },
-  { key: 'hours', label: 'Horas', type: 'number' },
   { key: 'product_names', label: 'Productos' },
-  { key: 'sessions', label: 'Sesiones' },
   { key: 'person_name', label: 'Persona de contacto' },
   { key: 'person_email', label: 'Email de contacto' },
   { key: 'person_phone', label: 'Teléfono de contacto' },
   { key: 'training_date', label: 'Fecha de formación' },
-  { key: 'negocio', label: 'Negocio' },
 ];
+
+const BUDGET_FILTER_DEFINITION_KEYS = new Set(
+  BUDGET_FILTER_DEFINITIONS.map((definition) => definition.key),
+);
 
 const BUDGET_FILTER_KEYS = Object.keys(BUDGET_FILTER_ACCESSORS);
 
@@ -357,7 +341,9 @@ function applyBudgetFilters(
   filters: Record<string, string>,
   search: string,
 ): BudgetFilterRow[] {
-  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+  const filterEntries = Object.entries(filters).filter(
+    ([key, value]) => value.trim().length && BUDGET_FILTER_DEFINITION_KEYS.has(key),
+  );
   let filtered = rows;
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
@@ -495,6 +481,13 @@ export function BudgetTable({
     : clientFilteredBudgets;
 
   const resultCount = tableBudgets.length;
+
+  const hasAppliedFilters = useMemo(() => {
+    const hasFilterValues = Object.entries(activeFilters).some(
+      ([key, value]) => BUDGET_FILTER_DEFINITION_KEYS.has(key) && value.trim().length > 0,
+    );
+    return hasFilterValues || searchValue.trim().length > 0;
+  }, [activeFilters, searchValue]);
 
   const tanstackSortingState = useMemo<SortingState>(
     () => sortingState.map((item) => ({ id: item.id, desc: item.desc })),
@@ -755,6 +748,7 @@ export function BudgetTable({
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const rowModel = table.getRowModel();
   const rows = rowModel.rows;
+  const noFilteredResults = hasAppliedFilters && rows.length === 0;
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,

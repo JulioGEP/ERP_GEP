@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useId } from 'react';
-import { Badge, Button, Form, Modal, Spinner } from 'react-bootstrap';
+import { Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { joinFilterValues, splitFilterValue } from './filterUtils';
 
 export type FilterInputType = 'text' | 'number' | 'select' | 'date';
@@ -221,6 +221,8 @@ export function FilterToolbar({
     return `${count.toLocaleString('es-ES')} resultado${count === 1 ? '' : 's'}`;
   }, [resultCount]);
 
+  const hasAppliedFilters = appliedBadges.length > 0;
+
   return (
     <>
       <div className="d-flex flex-column gap-2">
@@ -254,7 +256,7 @@ export function FilterToolbar({
               </button>
             </Badge>
           ))}
-          {!appliedBadges.length && (
+          {!hasAppliedFilters && (
             <span className="text-muted small">Sin filtros aplicados</span>
           )}
         </div>
@@ -265,76 +267,84 @@ export function FilterToolbar({
           <Modal.Title>Filtros</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Form className="d-grid gap-4">
-            <Form.Group controlId={`${idPrefix}-search`}>
-              <Form.Label>Búsqueda global</Form.Label>
-              <Form.Control
-                type="text"
-                value={searchDraft}
-                onChange={(event) => setSearchDraft(event.target.value)}
-                placeholder="Buscar en la tabla..."
-              />
-            </Form.Group>
-
-            {filters.map((definition) => {
-              const controlId = `${idPrefix}-${definition.key}`;
-              if (definition.type === 'select') {
-                const selected = new Set(splitFilterValue(draftFilters[definition.key]));
-                const options = definition.options ?? [];
-                return (
-                  <Form.Group controlId={controlId} key={definition.key}>
-                    <Form.Label className="d-block">
-                      {definition.label}
-                      {definition.description && (
-                        <span className="d-block text-muted small">{definition.description}</span>
-                      )}
-                    </Form.Label>
-                    {options.length ? (
-                      <div className="d-grid gap-2">
-                        {options.map((option) => {
-                          const optionId = `${controlId}-${option.value}`;
-                          return (
-                            <Form.Check
-                              type="checkbox"
-                              id={optionId}
-                              key={option.value}
-                              label={option.label}
-                              checked={selected.has(option.value)}
-                              onChange={() => handleToggleOption(definition.key, option.value)}
-                            />
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-muted small mb-0">No hay opciones disponibles.</p>
-                    )}
-                  </Form.Group>
-                );
-              }
-
-              const inputType = definition.type === 'number'
-                ? 'number'
-                : definition.type === 'date'
-                ? 'date'
-                : 'text';
-
-              return (
-                <Form.Group controlId={controlId} key={definition.key}>
-                  <Form.Label className="d-block">
-                    {definition.label}
-                    {definition.description && (
-                      <span className="d-block text-muted small">{definition.description}</span>
-                    )}
-                  </Form.Label>
+          <Form>
+            <Row className="g-4">
+              <Col xs={12} lg={4}>
+                <Form.Group controlId={`${idPrefix}-search`}>
+                  <Form.Label>Búsqueda global</Form.Label>
                   <Form.Control
-                    type={inputType}
-                    value={draftFilters[definition.key] ?? ''}
-                    onChange={(event) => handleDraftChange(definition.key, event.target.value)}
-                    placeholder={definition.placeholder ?? 'Introduce un valor'}
+                    type="text"
+                    value={searchDraft}
+                    onChange={(event) => setSearchDraft(event.target.value)}
+                    placeholder="Buscar en la tabla..."
                   />
                 </Form.Group>
-              );
-            })}
+              </Col>
+
+              {filters.map((definition) => {
+                const controlId = `${idPrefix}-${definition.key}`;
+                if (definition.type === 'select') {
+                  const selected = new Set(splitFilterValue(draftFilters[definition.key]));
+                  const options = definition.options ?? [];
+                  return (
+                    <Col xs={12} lg={4} key={definition.key}>
+                      <Form.Group controlId={controlId}>
+                        <Form.Label className="d-block">
+                          {definition.label}
+                          {definition.description && (
+                            <span className="d-block text-muted small">{definition.description}</span>
+                          )}
+                        </Form.Label>
+                        {options.length ? (
+                          <div className="d-grid gap-2">
+                            {options.map((option) => {
+                              const optionId = `${controlId}-${option.value}`;
+                              return (
+                                <Form.Check
+                                  type="checkbox"
+                                  id={optionId}
+                                  key={option.value}
+                                  label={option.label}
+                                  checked={selected.has(option.value)}
+                                  onChange={() => handleToggleOption(definition.key, option.value)}
+                                />
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-muted small mb-0">No hay opciones disponibles.</p>
+                        )}
+                      </Form.Group>
+                    </Col>
+                  );
+                }
+
+                const inputType = definition.type === 'number'
+                  ? 'number'
+                  : definition.type === 'date'
+                  ? 'date'
+                  : 'text';
+
+                return (
+                  <Col xs={12} lg={4} key={definition.key}>
+                    <Form.Group controlId={controlId}>
+                      <Form.Label className="d-block">
+                        {definition.label}
+                        {definition.description && (
+                          <span className="d-block text-muted small">{definition.description}</span>
+                        )}
+                      </Form.Label>
+                      <Form.Control
+                        type={inputType}
+                        value={draftFilters[definition.key] ?? ''}
+                        onChange={(event) => handleDraftChange(definition.key, event.target.value)}
+                        placeholder={definition.placeholder ?? 'Introduce un valor'}
+                      />
+                    </Form.Group>
+                  </Col>
+                );
+              })}
+            </Row>
           </Form>
         </Modal.Body>
         <Modal.Footer className="d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center justify-content-between gap-2">
