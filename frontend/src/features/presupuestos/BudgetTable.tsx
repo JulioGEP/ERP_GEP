@@ -453,6 +453,7 @@ export function BudgetTable({
     searchValue,
     sorting: sortingFromUrl,
     setSearchValue,
+    setFiltersAndSearch,
     setFilterValue,
     clearFilter,
     clearAllFilters,
@@ -977,6 +978,9 @@ export function BudgetTable({
                 resultCount={resultCount}
                 isServerBusy={isServerBusy}
                 viewStorageKey="budgets-table"
+                onApplyFilterState={({ filters, searchValue }) =>
+                  setFiltersAndSearch(filters, searchValue)
+                }
               />
             );
             if (filtersContainer) {

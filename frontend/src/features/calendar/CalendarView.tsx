@@ -953,6 +953,7 @@ export function CalendarView({
     filters: activeFilters,
     searchValue,
     setSearchValue,
+    setFiltersAndSearch,
     setFilterValue,
     clearFilter,
     clearAllFilters,
@@ -1556,12 +1557,15 @@ export function CalendarView({
                   searchValue={searchValue}
                   onSearchChange={handleSearchChange}
                   onFilterChange={handleFilterChange}
-                  onRemoveFilter={clearFilter}
-                  onClearAll={clearAllFilters}
-                  resultCount={resultCount}
-                  isServerBusy={isFetching}
-                  viewStorageKey={`calendar-${mode}`}
-                />
+                onRemoveFilter={clearFilter}
+                onClearAll={clearAllFilters}
+                resultCount={resultCount}
+                isServerBusy={isFetching}
+                viewStorageKey={`calendar-${mode}`}
+                onApplyFilterState={({ filters, searchValue }) =>
+                  setFiltersAndSearch(filters, searchValue)
+                }
+              />
               </div>
             </div>
           </div>

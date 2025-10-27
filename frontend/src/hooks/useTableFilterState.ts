@@ -123,6 +123,36 @@ export function useTableFilterState({ tableKey }: UseTableFilterStateOptions) {
     [searchKey, updateSearchParams],
   );
 
+  const setFiltersAndSearch = useCallback(
+    (nextFilters: TableFiltersState, nextSearchValue?: string) => {
+      updateSearchParams((draft) => {
+        const keys = Array.from(draft.keys());
+        keys.forEach((key) => {
+          if (key.startsWith(filterPrefix)) {
+            draft.delete(key);
+          }
+        });
+
+        Object.entries(nextFilters).forEach(([key, value]) => {
+          const normalizedKey = key.trim();
+          if (!normalizedKey.length) return;
+          const normalizedValue = String(value ?? '').trim();
+          if (!normalizedValue.length) return;
+          draft.set(`${filterPrefix}${encodeURIComponent(normalizedKey)}`, normalizedValue);
+        });
+
+        if (typeof nextSearchValue === 'string') {
+          if (nextSearchValue.trim().length) {
+            draft.set(searchKey, nextSearchValue);
+          } else {
+            draft.delete(searchKey);
+          }
+        }
+      });
+    },
+    [filterPrefix, searchKey, updateSearchParams],
+  );
+
   const setSorting = useCallback(
     (value: TableSortingState | null) => {
       updateSearchParams((draft) => {
@@ -142,6 +172,7 @@ export function useTableFilterState({ tableKey }: UseTableFilterStateOptions) {
     searchValue,
     sorting,
     setSearchValue,
+    setFiltersAndSearch,
     setFilterValue,
     clearFilter,
     clearAllFilters,

@@ -48,6 +48,7 @@ interface FilterToolbarProps {
   isServerBusy?: boolean;
   debounceMs?: number; // mantenido por compatibilidad, no se usa directamente
   viewStorageKey?: string;
+  onApplyFilterState?: (state: { filters: Record<string, string>; searchValue: string }) => void;
 }
 
 function formatFilterValue(
@@ -87,6 +88,7 @@ export function FilterToolbar({
   resultCount: _resultCount,
   isServerBusy = false,
   viewStorageKey,
+  onApplyFilterState,
 }: FilterToolbarProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [draftFilters, setDraftFilters] = useState<Record<string, string>>({});
@@ -434,20 +436,32 @@ export function FilterToolbar({
       const normalizedFilters = view.filters ?? {};
       const normalizedSearch = view.searchValue ?? '';
       const allowedKeys = new Set(filters.map((definition) => definition.key));
+      const filteredFilters = Object.entries(normalizedFilters).reduce<Record<string, string>>(
+        (acc, [key, value]) => {
+          if (!allowedKeys.has(key)) return acc;
+          acc[key] = value;
+          return acc;
+        },
+        {},
+      );
 
-      Object.keys(activeFilters).forEach((key) => {
-        if (!allowedKeys.has(key)) return;
-        if (!(key in normalizedFilters)) {
-          onRemoveFilter(key);
-        }
-      });
+      if (onApplyFilterState) {
+        onApplyFilterState({ filters: filteredFilters, searchValue: normalizedSearch });
+      } else {
+        Object.keys(activeFilters).forEach((key) => {
+          if (!allowedKeys.has(key)) return;
+          if (!(key in filteredFilters)) {
+            onRemoveFilter(key);
+          }
+        });
 
-      Object.entries(normalizedFilters).forEach(([key, value]) => {
-        if (!allowedKeys.has(key)) return;
-        onFilterChange(key, value);
-      });
+        Object.entries(filteredFilters).forEach(([key, value]) => {
+          onFilterChange(key, value);
+        });
 
-      onSearchChange(normalizedSearch);
+        onSearchChange(normalizedSearch);
+      }
+
       setDraftFilters({ ...normalizedFilters });
       setSearchDraft(normalizedSearch);
       setIsModalOpen(false);
@@ -464,7 +478,15 @@ export function FilterToolbar({
         return updated;
       });
     },
-    [activeFilters, filters, onFilterChange, onRemoveFilter, onSearchChange, persistSavedViews],
+    [
+      activeFilters,
+      filters,
+      onApplyFilterState,
+      onFilterChange,
+      onRemoveFilter,
+      onSearchChange,
+      persistSavedViews,
+    ],
   );
 
   const handleDeleteSavedView = useCallback(

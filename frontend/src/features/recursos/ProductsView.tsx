@@ -505,6 +505,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     searchValue,
     sorting: sortingFromUrl,
     setSearchValue,
+    setFiltersAndSearch,
     setFilterValue,
     clearFilter,
     clearAllFilters,
@@ -920,12 +921,15 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
                   searchValue={searchValue}
                   onSearchChange={handleSearchChange}
                   onFilterChange={handleFilterChange}
-                  onRemoveFilter={clearFilter}
-                  onClearAll={clearAllFilters}
-                  resultCount={resultCount}
-                  isServerBusy={isFetching}
-                  viewStorageKey="products-table"
-                />
+                onRemoveFilter={clearFilter}
+                onClearAll={clearAllFilters}
+                resultCount={resultCount}
+                isServerBusy={isFetching}
+                viewStorageKey="products-table"
+                onApplyFilterState={({ filters, searchValue }) =>
+                  setFiltersAndSearch(filters, searchValue)
+                }
+              />
               </div>
             </div>
             <p className="text-muted mb-0">{subtitle}</p>
