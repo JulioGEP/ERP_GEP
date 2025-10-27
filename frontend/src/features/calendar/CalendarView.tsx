@@ -19,6 +19,8 @@ import {
   type ProductInfo,
   type VariantInfo,
 } from '../formacion_abierta/ProductVariantsList';
+import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import { useTableFilterState } from '../../hooks/useTableFilterState';
 
 const STORAGE_KEY_PREFIX = 'erp-calendar-preferences';
 const MADRID_TZ = 'Europe/Madrid';
@@ -51,6 +53,29 @@ const SESSION_CLASSNAMES: Record<SessionEstado, string> = {
   CANCELADA: 'estado-cancelada',
   FINALIZADA: 'estado-finalizada',
 };
+
+const SESSION_ESTADO_OPTIONS = Object.entries(SESSION_ESTADO_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}));
+
+const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
+  { key: 'deal_id', label: 'Presupuesto' },
+  { key: 'deal_title', label: 'Título del deal' },
+  { key: 'deal_pipeline_id', label: 'Pipeline' },
+  { key: 'deal_training_address', label: 'Dirección de formación' },
+  { key: 'deal_sede_label', label: 'Sede' },
+  { key: 'product_name', label: 'Producto' },
+  { key: 'product_code', label: 'Código de producto' },
+  { key: 'estado', label: 'Estado', type: 'select', options: SESSION_ESTADO_OPTIONS },
+  { key: 'trainer', label: 'Formador' },
+  { key: 'unit', label: 'Unidad móvil' },
+  { key: 'room', label: 'Sala' },
+  { key: 'direccion', label: 'Dirección' },
+  { key: 'comentarios', label: 'Comentarios' },
+];
+
+const CALENDAR_FILTER_KEYS = CALENDAR_FILTER_DEFINITIONS.map((definition) => definition.key);
 
 type CalendarViewType = 'month' | 'week' | 'day';
 type CalendarMode = 'sessions' | 'trainers' | 'units';
@@ -338,6 +363,183 @@ function formatResourceDetail(resources: CalendarResource[], emptyLabel: string)
   return resources.map((resource) => formatResourceName(resource)).join(', ');
 }
 
+type CalendarFilterRow = {
+  id: string;
+  type: 'session' | 'variant';
+  normalized: Record<string, string>;
+  search: string;
+};
+
+function safeString(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  const text = String(value).trim();
+  return text.length ? text : '';
+}
+
+function normalizeText(value: string): string {
+  if (!value.length) return '';
+  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+}
+
+const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSession) => string> = {
+  deal_id: (session) => safeString(session.dealId),
+  deal_title: (session) => safeString(session.dealTitle ?? ''),
+  deal_pipeline_id: (session) => safeString(session.dealPipelineId ?? ''),
+  deal_training_address: (session) => safeString(session.dealAddress ?? session.direccion ?? ''),
+  deal_sede_label: (session) => safeString(session.dealSedeLabel ?? ''),
+  product_name: (session) => safeString(session.productName ?? ''),
+  product_code: (session) => safeString(session.productCode ?? ''),
+  estado: (session) =>
+    safeString(`${session.estado} ${SESSION_ESTADO_LABELS[session.estado] ?? session.estado}`),
+  trainer: (session) => safeString(session.trainers.map((trainer) => formatResourceName(trainer)).join(' ')),
+  unit: (session) => safeString(session.units.map((unit) => formatResourceName(unit)).join(' ')),
+  room: (session) => (session.room ? safeString(formatResourceName(session.room)) : ''),
+  direccion: (session) => safeString(session.direccion ?? session.dealAddress ?? ''),
+  comentarios: (session) => safeString(session.comentarios ?? ''),
+};
+
+const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVariantEvent) => string> = {
+  deal_id: () => '',
+  deal_title: () => '',
+  deal_pipeline_id: () => '',
+  deal_training_address: (variant) => safeString(variant.variant.sede ?? ''),
+  deal_sede_label: (variant) => safeString(variant.variant.sede ?? ''),
+  product_name: (variant) => safeString(variant.variant.name ?? variant.product.name ?? ''),
+  product_code: (variant) => safeString(variant.product.code ?? ''),
+  estado: (variant) => {
+    const status = safeString(variant.variant.status ?? '');
+    if (!status.length) return '';
+    const normalized = status.toLowerCase();
+    if (normalized === 'publish') return 'publish publicado';
+    if (normalized === 'private') return 'private cancelada';
+    return status;
+  },
+  trainer: (variant) => {
+    const trainer = variant.variant.trainer;
+    if (!trainer) return '';
+    const parts = [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')].filter(Boolean);
+    return safeString(parts.join(' '));
+  },
+  unit: (variant) => {
+    const unit = variant.variant.unidad;
+    if (!unit) return '';
+    const parts = [safeString(unit.name ?? ''), safeString(unit.matricula ?? '')].filter(Boolean);
+    return safeString(parts.join(' '));
+  },
+  room: (variant) => {
+    const room = variant.variant.sala;
+    if (!room) return '';
+    const parts = [safeString(room.name ?? ''), safeString(room.sede ?? '')].filter(Boolean);
+    return safeString(parts.join(' '));
+  },
+  direccion: (variant) => safeString(variant.variant.sede ?? ''),
+  comentarios: (variant) => safeString(variant.variant.status ?? ''),
+};
+
+function subsequenceScore(text: string, token: string): number {
+  if (!token.length) return Number.POSITIVE_INFINITY;
+  let score = 0;
+  let position = 0;
+  for (const char of token) {
+    const index = text.indexOf(char, position);
+    if (index === -1) {
+      return Number.POSITIVE_INFINITY;
+    }
+    score += index - position;
+    position = index + 1;
+  }
+  return score;
+}
+
+function computeFuzzyScore(text: string, query: string): number {
+  const tokens = query
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (!tokens.length) return Number.POSITIVE_INFINITY;
+  let total = 0;
+  for (const token of tokens) {
+    const score = subsequenceScore(text, token);
+    if (!Number.isFinite(score)) {
+      return Number.POSITIVE_INFINITY;
+    }
+    total += score;
+  }
+  return total;
+}
+
+function createSessionFilterRow(session: CalendarSession): CalendarFilterRow {
+  const normalized: Record<string, string> = {};
+  for (const key of CALENDAR_FILTER_KEYS) {
+    const accessor = CALENDAR_SESSION_FILTER_ACCESSORS[key];
+    const raw = accessor ? accessor(session) : '';
+    normalized[key] = normalizeText(raw);
+  }
+  const searchParts = [
+    ...CALENDAR_FILTER_KEYS.map((key) => normalized[key] ?? ''),
+    normalizeText(safeString(session.title)),
+    normalizeText(SESSION_ESTADO_LABELS[session.estado] ?? ''),
+  ];
+  return {
+    id: session.id,
+    type: 'session',
+    normalized,
+    search: searchParts.filter(Boolean).join(' '),
+  };
+}
+
+function createVariantFilterRow(variant: CalendarVariantEvent): CalendarFilterRow {
+  const normalized: Record<string, string> = {};
+  for (const key of CALENDAR_FILTER_KEYS) {
+    const accessor = CALENDAR_VARIANT_FILTER_ACCESSORS[key];
+    const raw = accessor ? accessor(variant) : '';
+    normalized[key] = normalizeText(raw);
+  }
+  const searchParts = [
+    ...CALENDAR_FILTER_KEYS.map((key) => normalized[key] ?? ''),
+    normalizeText(safeString(variant.variant.name ?? '')),
+    normalizeText(safeString(variant.product.name ?? '')),
+    normalizeText(safeString(variant.variant.status ?? '')),
+  ];
+  return {
+    id: variant.id,
+    type: 'variant',
+    normalized,
+    search: searchParts.filter(Boolean).join(' '),
+  };
+}
+
+function applyCalendarFilters(
+  rows: CalendarFilterRow[],
+  filters: Record<string, string>,
+  search: string,
+): CalendarFilterRow[] {
+  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+  let filtered = rows;
+  if (filterEntries.length) {
+    filtered = filtered.filter((row) =>
+      filterEntries.every(([key, value]) => {
+        const normalizedValue = normalizeText(safeString(value));
+        if (!normalizedValue.length) return true;
+        const target = row.normalized[key] ?? '';
+        return target.includes(normalizedValue);
+      }),
+    );
+  }
+
+  const normalizedSearch = normalizeText(safeString(search));
+  if (!normalizedSearch.length) {
+    return filtered;
+  }
+
+  const scored = filtered
+    .map((row) => ({ row, score: computeFuzzyScore(row.search, normalizedSearch) }))
+    .filter((item) => Number.isFinite(item.score));
+
+  scored.sort((a, b) => a.score - b.score);
+  return scored.map((item) => item.row);
+}
+
 function groupEventsByJulian(events: CalendarEventItem[]): Map<number, CalendarEventItem[]> {
   const map = new Map<number, CalendarEventItem[]>();
   events.forEach((event) => {
@@ -568,15 +770,81 @@ export function CalendarView({
   const sessions = sessionsQuery.data?.sessions ?? [];
   const variants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
 
+  const {
+    filters: activeFilters,
+    searchValue,
+    setSearchValue,
+    setFilterValue,
+    clearFilter,
+    clearAllFilters,
+  } = useTableFilterState({ tableKey: `calendar-${mode}` });
+
+  const handleFilterChange = useCallback(
+    (key: string, value: string) => {
+      const trimmed = value.trim();
+      setFilterValue(key, trimmed.length ? trimmed : null);
+    },
+    [setFilterValue],
+  );
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchValue(value);
+    },
+    [setSearchValue],
+  );
+
+  const sessionFilterRows = useMemo(
+    () => sessions.map((session) => createSessionFilterRow(session)),
+    [sessions],
+  );
+
+  const variantFilterRows = useMemo(
+    () => (includeVariants ? variants.map((variant) => createVariantFilterRow(variant)) : []),
+    [variants, includeVariants],
+  );
+
+  const filteredSessionRows = useMemo(
+    () => applyCalendarFilters(sessionFilterRows, activeFilters, searchValue),
+    [sessionFilterRows, activeFilters, searchValue],
+  );
+
+  const filteredVariantRows = useMemo(
+    () => applyCalendarFilters(variantFilterRows, activeFilters, searchValue),
+    [variantFilterRows, activeFilters, searchValue],
+  );
+
+  const filteredSessionIds = useMemo(
+    () => new Set(filteredSessionRows.map((row) => row.id)),
+    [filteredSessionRows],
+  );
+
+  const filteredVariantIds = useMemo(
+    () => new Set(filteredVariantRows.map((row) => row.id)),
+    [filteredVariantRows],
+  );
+
+  const filteredSessions = useMemo(
+    () => sessions.filter((session) => filteredSessionIds.has(session.id)),
+    [sessions, filteredSessionIds],
+  );
+
+  const filteredVariants = useMemo(
+    () => (includeVariants ? variants.filter((variant) => filteredVariantIds.has(variant.id)) : []),
+    [variants, filteredVariantIds, includeVariants],
+  );
+
+  const resultCount = filteredSessions.length;
+
   const events: CalendarEventItem[] = useMemo(() => {
-    const items: CalendarEventItem[] = sessions.map((session) => ({
+    const items: CalendarEventItem[] = filteredSessions.map((session) => ({
       kind: 'session',
       start: session.start,
       end: session.end,
       session,
     }));
     if (includeVariants) {
-      variants.forEach((variant) => {
+      filteredVariants.forEach((variant) => {
         items.push({
           kind: 'variant',
           start: variant.start,
@@ -586,7 +854,7 @@ export function CalendarView({
       });
     }
     return items;
-  }, [sessions, variants, includeVariants]);
+  }, [filteredSessions, filteredVariants, includeVariants]);
 
   const eventGroups = useMemo(() => groupEventsByJulian(events), [events]);
 
@@ -1104,6 +1372,21 @@ export function CalendarView({
           </ButtonGroup>
         </div>
       </header>
+
+      <div className="rounded-4 shadow-sm bg-white p-3">
+        <FilterToolbar
+          filters={CALENDAR_FILTER_DEFINITIONS}
+          activeFilters={activeFilters}
+          searchValue={searchValue}
+          onSearchChange={handleSearchChange}
+          onFilterChange={handleFilterChange}
+          onRemoveFilter={clearFilter}
+          onClearAll={clearAllFilters}
+          resultCount={resultCount}
+          isServerBusy={isFetching}
+          onSaveView={() => console.info('Guardar vista del calendario')}
+        />
+      </div>
 
       {error ? (
         <Alert variant="danger" className="mb-0">

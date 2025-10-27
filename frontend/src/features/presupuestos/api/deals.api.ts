@@ -41,8 +41,43 @@ async function request<T = any>(path: string, init?: RequestInit) {
   return requestJson<T>(path, init);
 }
 
-export async function fetchDealsWithoutSessions(): Promise<DealSummary[]> {
-  const data = await request<{ deals?: unknown[] }>('/deals?noSessions=true');
+export type DealsWithoutSessionsSort = { id: string; desc?: boolean };
+export type DealsWithoutSessionsOptions = {
+  filters?: Record<string, string>;
+  search?: string;
+  sorting?: DealsWithoutSessionsSort[];
+};
+
+export async function fetchDealsWithoutSessions(
+  options?: DealsWithoutSessionsOptions,
+): Promise<DealSummary[]> {
+  const searchParams = new URLSearchParams();
+  searchParams.set('noSessions', 'true');
+
+  if (options?.search && options.search.trim().length) {
+    searchParams.set('search', options.search.trim());
+  }
+
+  if (options?.filters) {
+    Object.entries(options.filters).forEach(([key, value]) => {
+      const normalizedValue = value?.trim();
+      if (!normalizedValue) return;
+      searchParams.append(`filter[${key}]`, normalizedValue);
+    });
+  }
+
+  if (options?.sorting && options.sorting.length) {
+    const sortValue = options.sorting
+      .filter((item) => item.id)
+      .map((item) => `${item.desc ? '-' : ''}${item.id}`)
+      .join(',');
+    if (sortValue.length) {
+      searchParams.set('sort', sortValue);
+    }
+  }
+
+  const query = searchParams.toString();
+  const data = await request<{ deals?: unknown[] }>(`/deals?${query}`);
   const rows: unknown[] = Array.isArray(data?.deals) ? data.deals ?? [] : [];
   return rows.map((row) => normalizeDealSummary(row));
 }

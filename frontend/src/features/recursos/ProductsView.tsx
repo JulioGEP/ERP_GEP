@@ -1,8 +1,14 @@
 // frontend/src/features/recursos/ProductsView.tsx
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, KeyboardEvent } from 'react';
 import { Alert, Badge, Button, Form, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useReactTable,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Product } from '../../types/product';
 import {
   fetchProducts,
@@ -17,6 +23,8 @@ import {
   type TrainingTemplate,
   type TrainingTemplatesManager,
 } from '../certificados/lib/templates/training-templates';
+import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -89,6 +97,121 @@ function formatSyncSummary(summary: ProductSyncSummary | null): string {
       : summary.deactivated;
 
   return `Productos importados: ${summary.imported}. Nuevos: ${summary.created}. Actualizados: ${summary.updated}. Desactivados: ${deactivated}.`;
+}
+
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+}
+
+type ProductFilterRow = {
+  product: Product;
+  values: Record<string, string>;
+  normalized: Record<string, string>;
+  search: string;
+};
+
+const PRODUCT_FILTER_DEFINITIONS: FilterDefinition[] = [
+  { key: 'id_pipe', label: 'ID de Pipedrive' },
+  { key: 'id_woo', label: 'Id Producto WC', type: 'number' },
+  { key: 'name', label: 'Nombre' },
+  { key: 'code', label: 'Código' },
+  { key: 'category', label: 'Categoría' },
+  { key: 'type', label: 'Tipo' },
+  { key: 'template', label: 'Template' },
+  { key: 'url_formacion', label: 'URL formación' },
+  { key: 'estado', label: 'Estado' },
+];
+
+const PRODUCT_FILTER_ACCESSORS: Record<string, (product: Product) => string> = {
+  id_pipe: (product) => String(product.id_pipe ?? '').trim(),
+  id_woo: (product) => (product.id_woo != null ? String(product.id_woo) : ''),
+  name: (product) => String(product.name ?? '').trim(),
+  code: (product) => String(product.code ?? '').trim(),
+  category: (product) => String(product.category ?? '').trim(),
+  type: (product) => String(product.type ?? '').trim(),
+  template: (product) => String(product.template ?? '').trim(),
+  url_formacion: (product) => String(product.url_formacion ?? '').trim(),
+  estado: (product) => (product.active ? 'activo' : 'inactivo'),
+};
+
+const PRODUCT_FILTER_KEYS = Object.keys(PRODUCT_FILTER_ACCESSORS);
+
+function createProductFilterRow(product: Product): ProductFilterRow {
+  const values: Record<string, string> = {};
+  const normalized: Record<string, string> = {};
+  for (const key of PRODUCT_FILTER_KEYS) {
+    const raw = PRODUCT_FILTER_ACCESSORS[key]?.(product) ?? '';
+    values[key] = raw;
+    normalized[key] = normalizeText(raw);
+  }
+  const search = PRODUCT_FILTER_KEYS.map((key) => normalized[key]).join(' ');
+  return { product, values, normalized, search };
+}
+
+function subsequenceScore(text: string, token: string): number {
+  if (!token.length) return 0;
+  let score = 0;
+  let position = 0;
+  for (const char of token) {
+    const index = text.indexOf(char, position);
+    if (index === -1) {
+      return Number.POSITIVE_INFINITY;
+    }
+    score += index - position;
+    position = index + 1;
+  }
+  return score;
+}
+
+function computeFuzzyScore(text: string, query: string): number {
+  const tokens = query
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (!tokens.length) return Number.POSITIVE_INFINITY;
+  let total = 0;
+  for (const token of tokens) {
+    const score = subsequenceScore(text, token);
+    if (!Number.isFinite(score)) {
+      return Number.POSITIVE_INFINITY;
+    }
+    total += score;
+  }
+  return total;
+}
+
+function applyProductFilters(
+  rows: ProductFilterRow[],
+  filters: Record<string, string>,
+  search: string,
+): ProductFilterRow[] {
+  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+  let filtered = rows;
+  if (filterEntries.length) {
+    filtered = filtered.filter((row) =>
+      filterEntries.every(([key, value]) => {
+        const normalizedValue = normalizeText(value);
+        if (!normalizedValue.length) return true;
+        const target = row.normalized[key] ?? '';
+        return target.includes(normalizedValue);
+      }),
+    );
+  }
+
+  const normalizedSearch = normalizeText(search);
+  if (!normalizedSearch.length) {
+    return filtered;
+  }
+
+  const scored = filtered
+    .map((row) => ({ row, score: computeFuzzyScore(row.search, normalizedSearch) }))
+    .filter((item) => Number.isFinite(item.score));
+
+  scored.sort((a, b) => a.score - b.score);
+  return scored.map((item) => item.row);
 }
 
 export function ProductsView({ onNotify }: ProductsViewProps) {
@@ -356,6 +479,357 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     [handleUrlCommit]
   );
 
+  const {
+    filters: activeFilters,
+    searchValue,
+    sorting: sortingFromUrl,
+    setSearchValue,
+    setFilterValue,
+    clearFilter,
+    clearAllFilters,
+    setSorting: setSortingInUrl,
+  } = useTableFilterState({ tableKey: 'products-table' });
+
+  const [sortingState, setSortingState] = useState<TableSortingState>(sortingFromUrl);
+
+  useEffect(() => {
+    setSortingState(sortingFromUrl);
+  }, [sortingFromUrl]);
+
+  const handleSortingChange = useCallback(
+    (next: SortingState) => {
+      const normalized = next.map((item) => ({ id: item.id, desc: Boolean(item.desc) }));
+      setSortingState(normalized);
+      setSortingInUrl(normalized);
+    },
+    [setSortingInUrl],
+  );
+
+  const preparedRows = useMemo(
+    () => products.map((product) => createProductFilterRow(product)),
+    [products],
+  );
+
+  const filteredRows = useMemo(
+    () => applyProductFilters(preparedRows, activeFilters, searchValue),
+    [preparedRows, activeFilters, searchValue],
+  );
+
+  const filteredProducts = useMemo(
+    () => filteredRows.map((row) => row.product),
+    [filteredRows],
+  );
+
+  const tanstackSortingState = useMemo<SortingState>(
+    () => sortingState.map((item) => ({ id: item.id, desc: item.desc })),
+    [sortingState],
+  );
+
+  const handleFilterChange = useCallback(
+    (key: string, value: string) => {
+      const trimmed = value.trim();
+      setFilterValue(key, trimmed.length ? trimmed : null);
+    },
+    [setFilterValue],
+  );
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchValue(value);
+    },
+    [setSearchValue],
+  );
+
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const columns = useMemo<ColumnDef<Product>[]>(() => {
+    const baseColumns: ColumnDef<Product>[] = [
+      {
+        id: 'id_pipe',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              ID de Pipedrive
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (product) => String(product.id_pipe ?? '').trim(),
+        cell: ({ row }) => <span className="font-monospace">{row.original.id_pipe ?? '—'}</span>,
+        meta: { style: { minWidth: 140 } },
+      },
+      {
+        id: 'id_woo',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Id Producto WC
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (product) => (product.id_woo != null ? Number(product.id_woo) : Number.POSITIVE_INFINITY),
+        cell: ({ row }) => {
+          const product = row.original;
+          const idWooValue = idWooDrafts[product.id] ?? (product.id_woo?.toString() ?? '');
+          return (
+            <Form.Control
+              type="number"
+              placeholder="—"
+              value={idWooValue}
+              onChange={(event) => handleIdWooChange(product.id, event.target.value)}
+              onBlur={() => handleIdWooCommit(product)}
+              onKeyDown={(event) => handleIdWooKeyDown(event, product)}
+              disabled={isUpdating}
+              min={0}
+              step={1}
+            />
+          );
+        },
+        enableSorting: true,
+        meta: { style: { minWidth: 160 } },
+      },
+      {
+        id: 'name',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Nombre
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (product) => String(product.name ?? '').trim(),
+        cell: ({ row }) => {
+          const product = row.original;
+          return (
+            <div className="d-flex flex-column gap-1">
+              <span className="fw-semibold">{product.name ?? '—'}</span>
+              <Badge bg={product.active ? 'success' : 'secondary'} className="align-self-start">
+                {product.active ? 'Activo' : 'Inactivo'}
+              </Badge>
+            </div>
+          );
+        },
+        meta: { style: { minWidth: 200 } },
+      },
+      {
+        id: 'code',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Código
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (product) => String(product.code ?? '').trim(),
+        cell: ({ row }) => row.original.code ?? '—',
+      },
+      {
+        id: 'category',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Categoría
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (product) => String(product.category ?? '').trim(),
+        cell: ({ row }) => row.original.category ?? '—',
+      },
+      {
+        id: 'type',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Tipo
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (product) => String(product.type ?? '').trim(),
+        cell: ({ row }) => row.original.type ?? '—',
+      },
+      {
+        id: 'template',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Template
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (product) => String(product.template ?? '').trim(),
+        cell: ({ row }) => {
+          const product = row.original;
+          const templateValue = templateDrafts[product.id] ?? product.template ?? '';
+          return (
+            <Form.Select
+              value={templateValue}
+              onChange={(event) => handleTemplateChange(product, event.target.value)}
+              disabled={isUpdating}
+            >
+              <option value="">Sin template</option>
+              {templateOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Form.Select>
+          );
+        },
+        meta: { style: { minWidth: 200 } },
+      },
+      {
+        id: 'url_formacion',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              URL formación
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (product) => String(product.url_formacion ?? '').trim(),
+        cell: ({ row }) => {
+          const product = row.original;
+          const urlValue = urlDrafts[product.id] ?? product.url_formacion ?? '';
+          return (
+            <Form.Control
+              type="url"
+              placeholder="https://..."
+              value={urlValue}
+              onChange={(event) => handleUrlChange(product.id, event.target.value)}
+              onBlur={() => handleUrlCommit(product)}
+              onKeyDown={(event) => handleUrlKeyDown(event, product)}
+              disabled={isUpdating}
+            />
+          );
+        },
+        meta: { style: { minWidth: 240 } },
+      },
+    ];
+
+    return baseColumns;
+  }, [
+    handleIdWooChange,
+    handleIdWooCommit,
+    handleIdWooKeyDown,
+    handleTemplateChange,
+    handleUrlChange,
+    handleUrlCommit,
+    handleUrlKeyDown,
+    idWooDrafts,
+    isUpdating,
+    templateDrafts,
+    templateOptions,
+    urlDrafts,
+  ]);
+
+  const table = useReactTable({
+    data: filteredProducts,
+    columns,
+    state: { sorting: tanstackSortingState },
+    onSortingChange: handleSortingChange,
+    getRowId: (row) => row.id,
+  });
+
+  const rowModel = table.getRowModel();
+  const rows = rowModel.rows;
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 72,
+    overscan: 8,
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const paddingBottom =
+    virtualRows.length > 0
+      ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
+      : 0;
+
+  const columnsCount = table.getAllColumns().length;
+  const resultCount = filteredProducts.length;
+  const noFilteredResults = !filteredProducts.length && products.length > 0;
+
   const subtitle = useMemo(
     () => 'Consulta y actualiza los productos de Pipedrive vinculados a formaciones.',
     []
@@ -385,93 +859,91 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
       )}
 
       <div className="bg-white rounded-4 shadow-sm">
-        <div className="table-responsive">
+        <div className="px-3 py-3 border-bottom">
+          <FilterToolbar
+            filters={PRODUCT_FILTER_DEFINITIONS}
+            activeFilters={activeFilters}
+            searchValue={searchValue}
+            onSearchChange={handleSearchChange}
+            onFilterChange={handleFilterChange}
+            onRemoveFilter={clearFilter}
+            onClearAll={clearAllFilters}
+            resultCount={resultCount}
+            isServerBusy={false}
+            onSaveView={() => console.info('Guardar vista de productos')}
+          />
+        </div>
+        <div
+          className="table-responsive"
+          style={{ maxHeight: '70vh' }}
+          ref={tableContainerRef}
+        >
           <Table hover className="mb-0 align-middle">
             <thead>
-              <tr className="text-muted text-uppercase small">
-                <th className="fw-semibold">ID de Pipedrive</th>
-                <th className="fw-semibold">Id Producto WC</th>
-                <th className="fw-semibold">Nombre</th>
-                <th className="fw-semibold">Código</th>
-                <th className="fw-semibold">Categoría</th>
-                <th className="fw-semibold">Tipo</th>
-                <th className="fw-semibold">Template</th>
-                <th className="fw-semibold">URL formación</th>
-              </tr>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => {
+                    const meta = header.column.columnDef.meta as { style?: CSSProperties } | undefined;
+                    const style = meta?.style;
+                    return (
+                      <th key={header.id} style={style} scope="col">
+                        {header.isPlaceholder ? null : header.renderHeader()}
+                      </th>
+                    );
+                  })}
+                </tr>
+              ))}
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="py-5 text-center">
+                  <td colSpan={columnsCount} className="py-5 text-center">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-5 text-center text-muted">
+                  <td colSpan={columnsCount} className="py-5 text-center text-muted">
                     No hay productos disponibles. Pulsa "Actualizar Productos" para sincronizar.
                   </td>
                 </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={columnsCount} className="py-5 text-center text-muted">
+                    {noFilteredResults
+                      ? 'No hay productos que coincidan con los filtros aplicados.'
+                      : 'No hay productos disponibles.'}
+                  </td>
+                </tr>
               ) : (
-                products.map((product) => {
-                  const urlValue = urlDrafts[product.id] ?? product.url_formacion ?? '';
-                  const templateValue = templateDrafts[product.id] ?? product.template ?? '';
-                  const idWooValue = idWooDrafts[product.id] ?? (product.id_woo?.toString() ?? '');
-                  return (
-                    <tr key={product.id}>
-                      <td className="font-monospace">{product.id_pipe}</td>
-                      <td style={{ minWidth: 160 }}>
-                        <Form.Control
-                          type="number"
-                          placeholder="—"
-                          value={idWooValue}
-                          onChange={(event) => handleIdWooChange(product.id, event.target.value)}
-                          onBlur={() => handleIdWooCommit(product)}
-                          onKeyDown={(event) => handleIdWooKeyDown(event, product)}
-                          disabled={isUpdating}
-                          min={0}
-                          step={1}
-                        />
-                      </td>
-                      <td>
-                        <div className="d-flex flex-column gap-1">
-                          <span className="fw-semibold">{product.name ?? '—'}</span>
-                          <Badge bg={product.active ? 'success' : 'secondary'} className="align-self-start">
-                            {product.active ? 'Activo' : 'Inactivo'}
-                          </Badge>
-                        </div>
-                      </td>
-                      <td>{product.code ?? '—'}</td>
-                      <td>{product.category ?? '—'}</td>
-                      <td>{product.type ?? '—'}</td>
-                      <td style={{ minWidth: 200 }}>
-                        <Form.Select
-                          value={templateValue}
-                          onChange={(event) => handleTemplateChange(product, event.target.value)}
-                          disabled={isUpdating}
-                        >
-                          <option value="">Sin template</option>
-                          {templateOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </Form.Select>
-                      </td>
-                      <td style={{ minWidth: 240 }}>
-                        <Form.Control
-                          type="url"
-                          placeholder="https://..."
-                          value={urlValue}
-                          onChange={(event) => handleUrlChange(product.id, event.target.value)}
-                          onBlur={() => handleUrlCommit(product)}
-                          onKeyDown={(event) => handleUrlKeyDown(event, product)}
-                          disabled={isUpdating}
-                        />
-                      </td>
+                <>
+                  {paddingTop > 0 && (
+                    <tr>
+                      <td colSpan={columnsCount} style={{ height: `${paddingTop}px` }} />
                     </tr>
-                  );
-                })
+                  )}
+                  {virtualRows.map((virtualRow) => {
+                    const row = rows[virtualRow.index];
+                    return (
+                      <tr key={row.id}>
+                        {row.getVisibleCells().map((cell) => {
+                          const meta = cell.column.columnDef.meta as { style?: CSSProperties } | undefined;
+                          const style = meta?.style;
+                          return (
+                            <td key={cell.id} style={style}>
+                              {cell.renderValue()}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                  {paddingBottom > 0 && (
+                    <tr>
+                      <td colSpan={columnsCount} style={{ height: `${paddingBottom}px` }} />
+                    </tr>
+                  )}
+                </>
               )}
             </tbody>
           </Table>
