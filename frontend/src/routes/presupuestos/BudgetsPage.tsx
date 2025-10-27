@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
 import { BudgetTable } from '../../features/presupuestos/BudgetTable';
@@ -25,11 +26,16 @@ export function BudgetsPage({
   onOpenImportModal,
   isImporting,
 }: BudgetsPageProps) {
+  const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
+
   return (
     <div className="d-grid gap-4">
       <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-        <div>
-          <h1 className="h3 fw-bold mb-1">Presupuestos · Sin planificar</h1>
+        <div className="d-flex flex-column gap-2">
+          <div className="d-flex flex-wrap align-items-center gap-3">
+            <h1 className="h3 fw-bold mb-0">Presupuestos · Sin planificar</h1>
+            <div ref={setFiltersContainer} className="d-flex align-items-center gap-2 flex-wrap" />
+          </div>
           <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
         </div>
         <div className="d-flex align-items-center gap-3">
@@ -48,6 +54,7 @@ export function BudgetsPage({
         onRetry={onRetry}
         onSelect={onSelect}
         onDelete={onDelete}
+        filtersContainer={filtersContainer}
       />
     </div>
   );

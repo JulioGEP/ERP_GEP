@@ -8,6 +8,7 @@ import type {
   DealNote,
 } from '../../../types/deal';
 import { ApiError, requestJson, toStringValue } from '../../../api/client';
+import { splitFilterValue } from '../../../components/table/filterUtils';
 import { blobOrFileToBase64 } from '../../../utils/base64';
 import {
   buildDealDetailViewModel,
@@ -60,9 +61,13 @@ export async function fetchDealsWithoutSessions(
 
   if (options?.filters) {
     Object.entries(options.filters).forEach(([key, value]) => {
-      const normalizedValue = value?.trim();
-      if (!normalizedValue) return;
-      searchParams.append(`filter[${key}]`, normalizedValue);
+      const parts = splitFilterValue(value);
+      if (!parts.length) return;
+      parts.forEach((part) => {
+        const normalizedValue = part.trim();
+        if (!normalizedValue.length) return;
+        searchParams.append(`filter[${key}]`, normalizedValue);
+      });
     });
   }
 

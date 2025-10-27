@@ -24,6 +24,7 @@ import {
   type TrainingTemplatesManager,
 } from '../certificados/lib/templates/training-templates';
 import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
 
 type ToastParams = {
@@ -193,6 +194,15 @@ function applyProductFilters(
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
       filterEntries.every(([key, value]) => {
+        const parts = splitFilterValue(value);
+        if (parts.length > 1) {
+          return parts.some((part) => {
+            const normalizedPart = normalizeText(part);
+            if (!normalizedPart.length) return false;
+            const targetValue = row.normalized[key] ?? '';
+            return targetValue.includes(normalizedPart);
+          });
+        }
         const normalizedValue = normalizeText(value);
         if (!normalizedValue.length) return true;
         const target = row.normalized[key] ?? '';
@@ -837,18 +847,36 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
 
   return (
     <div className="d-grid gap-4">
-      <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-        <div>
-          <h1 className="h3 fw-bold mb-1">Productos</h1>
-          <p className="text-muted mb-0">{subtitle}</p>
-        </div>
-        <div className="d-flex align-items-center gap-3">
-          {(isFetching || isSyncing || isUpdating) && (
-            <Spinner animation="border" role="status" size="sm" />
-          )}
-          <Button onClick={handleSync} disabled={isSyncing} variant="primary">
-            Actualizar Productos
-          </Button>
+      <section className="d-grid gap-3">
+        <div className="d-flex flex-column flex-lg-row align-items-lg-start justify-content-between gap-3">
+          <div className="d-flex flex-column gap-2 flex-grow-1">
+            <div className="d-flex flex-wrap align-items-center gap-3">
+              <h1 className="h3 fw-bold mb-0">Productos</h1>
+              <div className="flex-grow-1" style={{ minWidth: '240px' }}>
+                <FilterToolbar
+                  filters={PRODUCT_FILTER_DEFINITIONS}
+                  activeFilters={activeFilters}
+                  searchValue={searchValue}
+                  onSearchChange={handleSearchChange}
+                  onFilterChange={handleFilterChange}
+                  onRemoveFilter={clearFilter}
+                  onClearAll={clearAllFilters}
+                  resultCount={resultCount}
+                  isServerBusy={isFetching}
+                  onSaveView={() => console.info('Guardar vista de productos')}
+                />
+              </div>
+            </div>
+            <p className="text-muted mb-0">{subtitle}</p>
+          </div>
+          <div className="d-flex align-items-center gap-3 flex-wrap justify-content-lg-end">
+            {(isFetching || isSyncing || isUpdating) && (
+              <Spinner animation="border" role="status" size="sm" />
+            )}
+            <Button onClick={handleSync} disabled={isSyncing} variant="primary">
+              Actualizar Productos
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -859,20 +887,6 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
       )}
 
       <div className="bg-white rounded-4 shadow-sm">
-        <div className="px-3 py-3 border-bottom">
-          <FilterToolbar
-            filters={PRODUCT_FILTER_DEFINITIONS}
-            activeFilters={activeFilters}
-            searchValue={searchValue}
-            onSearchChange={handleSearchChange}
-            onFilterChange={handleFilterChange}
-            onRemoveFilter={clearFilter}
-            onClearAll={clearAllFilters}
-            resultCount={resultCount}
-            isServerBusy={false}
-            onSaveView={() => console.info('Guardar vista de productos')}
-          />
-        </div>
         <div
           className="table-responsive"
           style={{ maxHeight: '70vh' }}

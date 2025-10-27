@@ -20,6 +20,7 @@ import {
   type VariantInfo,
 } from '../formacion_abierta/ProductVariantsList';
 import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState } from '../../hooks/useTableFilterState';
 
 const STORAGE_KEY_PREFIX = 'erp-calendar-preferences';
@@ -519,6 +520,15 @@ function applyCalendarFilters(
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
       filterEntries.every(([key, value]) => {
+        const parts = splitFilterValue(value);
+        if (parts.length > 1) {
+          return parts.some((part) => {
+            const normalizedPart = normalizeText(safeString(part));
+            if (!normalizedPart.length) return false;
+            const targetValue = row.normalized[key] ?? '';
+            return targetValue.includes(normalizedPart);
+          });
+        }
         const normalizedValue = normalizeText(safeString(value));
         if (!normalizedValue.length) return true;
         const target = row.normalized[key] ?? '';
@@ -723,6 +733,8 @@ export function CalendarView({
   const [view, setView] = useState<CalendarViewType>(stored.view);
   const [currentDate, setCurrentDate] = useState<Date>(stored.date);
   const [visibleRange, setVisibleRange] = useState<VisibleRange>(() => computeVisibleRange(stored.view, stored.date));
+  const userPreferredViewRef = useRef<CalendarViewType>(stored.view);
+  const autoFocusSessionIdRef = useRef<string | null>(null);
   const debouncedRange = useDebouncedValue(visibleRange, DEBOUNCE_MS);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -836,6 +848,36 @@ export function CalendarView({
 
   const resultCount = filteredSessions.length;
 
+  useEffect(() => {
+    const hasFilter = Object.keys(activeFilters).length > 0;
+    const hasSearch = searchValue.trim().length > 0;
+    if ((hasFilter || hasSearch) && resultCount === 1) {
+      const session = filteredSessions[0];
+      if (session) {
+        const sessionId = session.id;
+        if (autoFocusSessionIdRef.current !== sessionId) {
+          autoFocusSessionIdRef.current = sessionId;
+          const targetDate = new Date(session.start);
+          if (!Number.isNaN(targetDate.getTime())) {
+            setCurrentDate(targetDate);
+          }
+          if (view !== 'day') {
+            setView('day');
+          }
+        }
+        return;
+      }
+    }
+
+    if (autoFocusSessionIdRef.current) {
+      autoFocusSessionIdRef.current = null;
+      const preferred = userPreferredViewRef.current;
+      if (view !== preferred) {
+        setView(preferred);
+      }
+    }
+  }, [activeFilters, filteredSessions, resultCount, searchValue, view]);
+
   const events: CalendarEventItem[] = useMemo(() => {
     const items: CalendarEventItem[] = filteredSessions.map((session) => ({
       kind: 'session',
@@ -901,6 +943,7 @@ export function CalendarView({
   }, [sessionsQuery, variantsQuery, includeVariants]);
 
   const handleViewChange = useCallback((nextView: CalendarViewType) => {
+    userPreferredViewRef.current = nextView;
     setView(nextView);
   }, []);
 
@@ -1334,59 +1377,62 @@ export function CalendarView({
 
   return (
     <section className="d-grid gap-4">
-      <header className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
-        <div>
-          <h1 className="h3 fw-bold mb-1">{title}</h1>
-        </div>
-        <div className="d-flex flex-wrap align-items-center gap-2">
-          <Button variant="outline-secondary" className="fw-semibold" onClick={handleToday}>
-            Hoy
-          </Button>
-          <div className="erp-calendar-nav">
-            <Button variant="outline-secondary" onClick={() => moveDate(-1)} aria-label="Anterior">
-              ←
-            </Button>
-            <Button variant="outline-secondary" onClick={() => moveDate(1)} aria-label="Siguiente">
-              →
-            </Button>
+      <header className="d-grid gap-3">
+        <div className="d-flex flex-column flex-xl-row align-items-xl-start justify-content-between gap-3">
+          <div className="d-flex flex-column gap-2 flex-grow-1">
+            <div className="d-flex flex-wrap align-items-center gap-3">
+              <h1 className="h3 fw-bold mb-0">{title}</h1>
+              <div className="flex-grow-1" style={{ minWidth: '240px' }}>
+                <FilterToolbar
+                  filters={CALENDAR_FILTER_DEFINITIONS}
+                  activeFilters={activeFilters}
+                  searchValue={searchValue}
+                  onSearchChange={handleSearchChange}
+                  onFilterChange={handleFilterChange}
+                  onRemoveFilter={clearFilter}
+                  onClearAll={clearAllFilters}
+                  resultCount={resultCount}
+                  isServerBusy={isFetching}
+                  onSaveView={() => console.info('Guardar vista del calendario')}
+                />
+              </div>
+            </div>
           </div>
-          <ButtonGroup>
-            <Button
-              variant={view === 'month' ? 'primary' : 'outline-secondary'}
-              onClick={() => handleViewChange('month')}
-            >
-              Mes
+          <div className="d-flex flex-wrap align-items-center gap-2 justify-content-xl-end">
+            <Button variant="outline-secondary" className="fw-semibold" onClick={handleToday}>
+              Hoy
             </Button>
-            <Button
-              variant={view === 'week' ? 'primary' : 'outline-secondary'}
-              onClick={() => handleViewChange('week')}
-            >
-              Semana
-            </Button>
-            <Button
-              variant={view === 'day' ? 'primary' : 'outline-secondary'}
-              onClick={() => handleViewChange('day')}
-            >
-              Día
-            </Button>
-          </ButtonGroup>
+            <div className="erp-calendar-nav">
+              <Button variant="outline-secondary" onClick={() => moveDate(-1)} aria-label="Anterior">
+                ←
+              </Button>
+              <Button variant="outline-secondary" onClick={() => moveDate(1)} aria-label="Siguiente">
+                →
+              </Button>
+            </div>
+            <ButtonGroup>
+              <Button
+                variant={view === 'month' ? 'primary' : 'outline-secondary'}
+                onClick={() => handleViewChange('month')}
+              >
+                Mes
+              </Button>
+              <Button
+                variant={view === 'week' ? 'primary' : 'outline-secondary'}
+                onClick={() => handleViewChange('week')}
+              >
+                Semana
+              </Button>
+              <Button
+                variant={view === 'day' ? 'primary' : 'outline-secondary'}
+                onClick={() => handleViewChange('day')}
+              >
+                Día
+              </Button>
+            </ButtonGroup>
+          </div>
         </div>
       </header>
-
-      <div className="rounded-4 shadow-sm bg-white p-3">
-        <FilterToolbar
-          filters={CALENDAR_FILTER_DEFINITIONS}
-          activeFilters={activeFilters}
-          searchValue={searchValue}
-          onSearchChange={handleSearchChange}
-          onFilterChange={handleFilterChange}
-          onRemoveFilter={clearFilter}
-          onClearAll={clearAllFilters}
-          resultCount={resultCount}
-          isServerBusy={isFetching}
-          onSaveView={() => console.info('Guardar vista del calendario')}
-        />
-      </div>
 
       {error ? (
         <Alert variant="danger" className="mb-0">
