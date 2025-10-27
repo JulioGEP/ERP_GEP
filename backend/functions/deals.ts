@@ -909,8 +909,22 @@ export const handler = async (event: any) => {
         body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
       if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
 
+      const incomingIdStr = String(incomingId ?? "").trim();
+      const existedBeforeImport = incomingIdStr
+        ? Boolean(
+            await prisma.deals.findUnique({
+              where: { deal_id: incomingIdStr },
+              select: { deal_id: true },
+            }),
+          )
+        : false;
+
       try {
-        const { deal_id, warnings } = await importDealFromPipedrive(incomingId);
+        const { deal_id, warnings: importWarnings } = await importDealFromPipedrive(incomingId);
+        const warnings = [...(importWarnings ?? [])];
+        if (existedBeforeImport) {
+          warnings.push("Este presupuesto ya existe en la base de datos.");
+        }
         const dealInclude = {
           organization: { select: { org_id: true, name: true } },
           person: {
