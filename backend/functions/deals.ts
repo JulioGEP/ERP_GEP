@@ -174,23 +174,7 @@ function buildStudentIdentifierKey(
   if (!sessionId) return null;
   const trimmedSessionId = sessionId.trim();
   if (!trimmedSessionId.length) return null;
-  const normalizedValue = String(identifier.value ?? "").trim();
-  if (!normalizedValue.length) return null;
-  return `${trimmedSessionId}::${identifier.type}::${normalizedValue}`;
-}
-
-function buildStudentKeyFromValue(
-  sessionId: string | null | undefined,
-  type: "DNI" | "EMAIL" | "PHONE",
-  value: string | null | undefined,
-): string | null {
-  if (!sessionId) return null;
-  const trimmedSessionId = sessionId.trim();
-  if (!trimmedSessionId.length) return null;
-  if (value === null || value === undefined) return null;
-  const trimmedValue = String(value).trim();
-  if (!trimmedValue.length) return null;
-  return `${trimmedSessionId}::${type}::${trimmedValue}`;
+  return `${trimmedSessionId}::${identifier.type}::${identifier.value}`;
 }
 
 async function syncFormacionAbiertaSessionsAndStudents(
@@ -261,18 +245,19 @@ async function syncFormacionAbiertaSessionsAndStudents(
     const timestamp = nowInMadridDate();
 
     const existingStudents = await tx.alumnos.findMany({
-      where: { sesion_id: defaultSessionId },
-      select: { sesion_id: true, dni: true, email: true, telefono: true },
+      where: { deal_id: dealId },
+      select: { sesion_id: true, dni: true },
     });
 
     const existingKeys = new Set<string>();
     for (const existing of existingStudents) {
-      const dniKey = buildStudentKeyFromValue(existing.sesion_id, "DNI", existing.dni);
-      if (dniKey) existingKeys.add(dniKey);
-      const emailKey = buildStudentKeyFromValue(existing.sesion_id, "EMAIL", existing.email);
-      if (emailKey) existingKeys.add(emailKey);
-      const phoneKey = buildStudentKeyFromValue(existing.sesion_id, "PHONE", existing.telefono);
-      if (phoneKey) existingKeys.add(phoneKey);
+      const key = existing.dni
+        ? buildStudentIdentifierKey(existing.sesion_id, {
+            type: "DNI",
+            value: existing.dni,
+          })
+        : null;
+      if (key) existingKeys.add(key);
     }
 
     let studentsCreated = 0;
@@ -280,13 +265,11 @@ async function syncFormacionAbiertaSessionsAndStudents(
     let studentsSkippedMissingIdentifier = 0;
 
     for (const student of parsedStudents) {
-      const dniKey = buildStudentKeyFromValue(defaultSessionId, "DNI", student.dni);
-      const emailKey = buildStudentKeyFromValue(defaultSessionId, "EMAIL", student.email);
-      const phoneKey = buildStudentKeyFromValue(defaultSessionId, "PHONE", student.telefono);
+      const dniKey = student.dni
+        ? buildStudentIdentifierKey(defaultSessionId, { type: "DNI", value: student.dni })
+        : null;
       const identifierKey = buildStudentIdentifierKey(defaultSessionId, student.identifier);
-      const keysToCheck = [identifierKey, dniKey, emailKey, phoneKey].filter(
-        (key): key is string => Boolean(key),
-      );
+      const keysToCheck = [identifierKey, dniKey].filter((key): key is string => Boolean(key));
 
       if (keysToCheck.some((key) => existingKeys.has(key))) {
         studentsSkippedDuplicate += 1;
@@ -294,11 +277,8 @@ async function syncFormacionAbiertaSessionsAndStudents(
       }
 
       const dni = typeof student.dni === "string" ? student.dni.trim() : "";
-      const email = typeof student.email === "string" ? student.email.trim() : "";
-      const telefono = typeof student.telefono === "string" ? student.telefono.trim() : "";
-
-      if (!dni.length && !email.length && !telefono.length) {
-        keysToCheck.forEach((key) => existingKeys.add(key));
+      if (!dni.length) {
+        if (identifierKey) existingKeys.add(identifierKey);
         studentsSkippedMissingIdentifier += 1;
         continue;
       }
@@ -306,7 +286,8 @@ async function syncFormacionAbiertaSessionsAndStudents(
       const nombre = typeof student.nombre === "string" ? student.nombre.trim() : "";
       const apellido = typeof student.apellido === "string" ? student.apellido.trim() : "";
       if (!nombre.length || !apellido.length) {
-        keysToCheck.forEach((key) => existingKeys.add(key));
+        if (identifierKey) existingKeys.add(identifierKey);
+        if (dniKey) existingKeys.add(dniKey);
         studentsSkippedMissingIdentifier += 1;
         continue;
       }
@@ -317,9 +298,7 @@ async function syncFormacionAbiertaSessionsAndStudents(
           sesion_id: defaultSessionId,
           nombre,
           apellido,
-          dni: dni.length ? dni : null,
-          email: email.length ? email : null,
-          telefono: telefono.length ? telefono : null,
+          dni,
           apto: false,
           certificado: false,
           created_at: timestamp,
@@ -612,7 +591,6 @@ async function importDealFromPipedrive(dealIdRaw: any) {
   let d: any;
   let pipelineContext: { id?: unknown; label?: unknown } = {};
   let savedDealId: any;
-  let resolvedPipelineLabel: string | null = null;
 
   try {
     // 1) Traer árbol completo desde Pipedrive
@@ -760,8 +738,6 @@ async function importDealFromPipedrive(dealIdRaw: any) {
         (d as any)?.pipeline_name ??
         null;
 
-      resolvedPipelineLabel = normalizePipelineLabelValue(pipelineLabelCandidate);
-
       if (isFormacionAbiertaPipeline(pipelineLabelCandidate)) {
         try {
           const syncResult = await syncFormacionAbiertaSessionsAndStudents(
@@ -804,7 +780,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
       warnings.push("El deal no tiene productos vinculados en Pipedrive.");
     }
 
-    return { deal_id: savedDealId, warnings, pipeline_label: resolvedPipelineLabel };
+    return { deal_id: savedDealId, warnings };
   } catch (err: any) {
     errorMessage = err instanceof Error ? err.message : String(err);
     throw err;
@@ -852,7 +828,7 @@ export const handler = async (event: any) => {
       if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
 
       try {
-        const { deal_id, warnings, pipeline_label } = await importDealFromPipedrive(incomingId);
+        const { deal_id, warnings } = await importDealFromPipedrive(incomingId);
         const dealInclude = {
           organization: { select: { org_id: true, name: true } },
           person: {
@@ -895,13 +871,7 @@ export const handler = async (event: any) => {
           }
         }
         const deal = mapDealForApi(dealRaw);
-        const dealWithPipelineLabel = deal
-          ? await ensureDealPipelineLabel(deal, {
-              pipelineId: dealRaw?.pipeline_id ?? null,
-              pipelineLabel: pipeline_label ?? (dealRaw as any)?.pipeline_label ?? null,
-            })
-          : deal;
-        return successResponse({ ok: true, warnings, deal: dealWithPipelineLabel });
+        return successResponse({ ok: true, warnings, deal });
       } catch (e: any) {
         return errorResponse("IMPORT_ERROR", e?.message || "Error importando deal", 502);
       }
