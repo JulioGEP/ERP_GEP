@@ -26,10 +26,23 @@ const EDITABLE_FIELDS = new Set([
   "training_address_label", // alias de entrada…
   "training_address", // …campo real en BD
   "caes_label",
+  "caes_val",
   "fundae_label",
+  "fundae_val",
   "hotel_label",
+  "hotel_val",
+  "transporte_val",
+  "po_val",
   "w_id_variation",
   "a_fecha",
+]);
+
+const BOOLEAN_EDITABLE_FIELDS = new Set([
+  "caes_val",
+  "fundae_val",
+  "hotel_val",
+  "transporte_val",
+  "po_val",
 ]);
 
 const DEAL_NOT_WON_ERROR_CODE = "DEAL_NOT_WON";
@@ -1090,6 +1103,17 @@ export const handler = async (event: any) => {
         }
       }
 
+      for (const field of BOOLEAN_EDITABLE_FIELDS) {
+        if (!Object.prototype.hasOwnProperty.call(patch, field)) continue;
+        if (typeof patch[field] !== "boolean") {
+          return errorResponse(
+            "VALIDATION_ERROR",
+            `El campo ${field} debe ser booleano`,
+            400,
+          );
+        }
+      }
+
       const productPatches: Array<{ id: string; data: Record<string, any> }> = [];
       if (Array.isArray(body.products)) {
         for (const entry of body.products) {
@@ -1193,14 +1217,19 @@ export const handler = async (event: any) => {
           sede_label: true,
           training_address: true,
           caes_label: true,
+          caes_val: true,
           fundae_label: true,
+          fundae_val: true,
           po: true,
+          po_val: true,
           hotel_label: true,
+          hotel_val: true,
           comercial: true,
           a_fecha: true,
           w_id_variation: true,
           presu_holded: true,
           modo_reserva: true,
+          transporte_val: true,
           org_id: true,
           person_id: true,
           created_at: true,
@@ -1341,10 +1370,15 @@ export const handler = async (event: any) => {
           sede_label: true,
           training_address: true,
           caes_label: true,
+          caes_val: true,
           fundae_label: true,
+          fundae_val: true,
           hotel_label: true,
+          hotel_val: true,
           transporte: true,
+          transporte_val: true,
           po: true,
+          po_val: true,
           comercial: true,
           a_fecha: true,
           w_id_variation: true,
@@ -1403,10 +1437,15 @@ export const handler = async (event: any) => {
           sede_label: true,
           training_address: true,
           caes_label: true,
+          caes_val: true,
           fundae_label: true,
+          fundae_val: true,
           hotel_label: true,
+          hotel_val: true,
           transporte: true,
+          transporte_val: true,
           po: true,
+          po_val: true,
           comercial: true,
           a_fecha: true,
           w_id_variation: true,

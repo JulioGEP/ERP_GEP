@@ -45,11 +45,16 @@ model deals {
   pipeline_id      String?
   training_address String?
   sede_label       String?
+  caes_val        Boolean   @default(false)
   caes_label       String?
+  fundae_val      Boolean   @default(false)
   fundae_label     String?
+  hotel_val       Boolean   @default(false)
   hotel_label      String?
   person_id        String?
+  transporte_val  Boolean   @default(false)
   transporte       String?                @db.VarChar(10)
+  po_val          Boolean   @default(false)
   po               String?                @db.VarChar(191)
   tipo_servicio    String?                @db.VarChar(50)
   mail_invoice     String?                @db.VarChar(255)

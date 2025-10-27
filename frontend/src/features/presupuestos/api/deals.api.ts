@@ -25,8 +25,13 @@ export type DealEditablePatch = {
   hours?: number | null;
   training_address?: string | null;
   caes_label?: string | null;
+  caes_val?: boolean;
   fundae_label?: string | null;
+  fundae_val?: boolean;
   hotel_label?: string | null;
+  hotel_val?: boolean;
+  transporte_val?: boolean;
+  po_val?: boolean;
   comercial?: string | null;
   w_id_variation?: string | null;
   a_fecha?: string | null;

@@ -42,6 +42,10 @@ function isHttpUrl(value: unknown): boolean {
   }
 }
 
+function toBoolean(value: unknown): boolean {
+  return value === true;
+}
+
 function toSessionEstadoValue(value: unknown): SessionEstado {
   const text = toStringValue(value);
   if (!text) return 'BORRADOR';
@@ -195,8 +199,15 @@ export function normalizeDealSummary(row: Json): DealSummary {
     w_id_variation: toStringValue(row?.w_id_variation) ?? null,
     sede_label: toStringValue(row?.sede_label) ?? null,
     caes_label: toStringValue(row?.caes_label) ?? null,
+    caes_val: toBoolean(row?.caes_val),
     fundae_label: toStringValue(row?.fundae_label) ?? null,
+    fundae_val: toBoolean(row?.fundae_val),
     hotel_label: toStringValue(row?.hotel_label) ?? null,
+    hotel_val: toBoolean(row?.hotel_val),
+    transporte: toStringValue(row?.transporte) ?? null,
+    transporte_val: toBoolean(row?.transporte_val),
+    po: toStringValue(row?.po) ?? null,
+    po_val: toBoolean(row?.po_val),
     comercial: toStringValue(row?.comercial) ?? null,
     presu_holded: toStringValue(row?.presu_holded) ?? null,
     modo_reserva: toStringValue(row?.modo_reserva) ?? null,
@@ -244,8 +255,15 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     training_address: trainingAddress,
     sede_label: toStringValue(raw?.sede_label) ?? null,
     caes_label: toStringValue(raw?.caes_label) ?? null,
+    caes_val: toBoolean(raw?.caes_val),
     fundae_label: toStringValue(raw?.fundae_label) ?? null,
+    fundae_val: toBoolean(raw?.fundae_val),
     hotel_label: toStringValue(raw?.hotel_label) ?? null,
+    hotel_val: toBoolean(raw?.hotel_val),
+    transporte: toStringValue(raw?.transporte) ?? null,
+    transporte_val: toBoolean(raw?.transporte_val),
+    po: toStringValue(raw?.po) ?? null,
+    po_val: toBoolean(raw?.po_val),
     comercial: toStringValue(raw?.comercial) ?? null,
     w_id_variation: toStringValue(raw?.w_id_variation) ?? null,
     a_fecha: toStringValue(raw?.a_fecha) ?? null,
