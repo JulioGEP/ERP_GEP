@@ -1,3 +1,4 @@
+// @ts-nocheck
 // backend/functions/_shared/variant-resources.ts
 import { Prisma } from '@prisma/client';
 

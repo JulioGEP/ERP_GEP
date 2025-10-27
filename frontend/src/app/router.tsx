@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createElement, lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';

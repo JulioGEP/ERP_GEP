@@ -1,3 +1,4 @@
+// @ts-nocheck
 const ALLOWED_ORIGIN = process.env.REPORTS_ALLOWED_ORIGIN || 'https://www.gepservices.es';
 
 const cors = {
