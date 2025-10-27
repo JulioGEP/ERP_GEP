@@ -44,6 +44,7 @@ import {
   useDealFollowUpToggle,
   type FollowUpFieldKey,
 } from '../hooks/useDealFollowUpToggle';
+import { FieldWithStatus } from '../components/FieldWithStatus';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -368,7 +369,8 @@ export function BudgetDetailModalServices({
         id={inputId}
         type="checkbox"
         className="budget-follow-up-checkbox mb-0"
-        title={`Seguimiento ${config.label}`}
+        title="Campo trabajado"
+        aria-label="Campo trabajado"
         checked={checked}
         disabled={isFollowUpFieldLoading(field)}
         onChange={(event) => handleFollowUpToggle(field, event.target.checked, config.label)}
@@ -1060,39 +1062,39 @@ export function BudgetDetailModalServices({
                 </div>
               </Col>
               <Col md={2} className="budget-field-narrow">
-                <div className="d-flex justify-content-between align-items-center gap-2">
-                  <Form.Label className="mb-0">CAES</Form.Label>
-                  {renderFollowUpBlock('caes_val')}
-                </div>
-                <Form.Control
-                  value={form.caes_label}
-                  onChange={(e) => updateForm('caes_label', e.target.value)}
-                  style={affirmativeBorder(form.caes_label)}
-                  title={buildFieldTooltip(form.caes_label)}
-                />
+                <FieldWithStatus
+                  label={<Form.Label className="mb-0">CAES</Form.Label>}
+                  status={renderFollowUpBlock('caes_val')}
+                >
+                  <Form.Control
+                    value={form.caes_label}
+                    onChange={(e) => updateForm('caes_label', e.target.value)}
+                    style={affirmativeBorder(form.caes_label)}
+                    title={buildFieldTooltip(form.caes_label)}
+                  />
+                </FieldWithStatus>
               </Col>
               <Col md={2} className="budget-field-narrow">
-                <div className="d-flex justify-content-between align-items-center gap-2">
-                  <Form.Label className="mb-0">Hotel</Form.Label>
-                  {renderFollowUpBlock('hotel_val')}
-                </div>
-                <Form.Control
-                  value={form.hotel_label}
-                  onChange={(e) => updateForm('hotel_label', e.target.value)}
-                  style={affirmativeBorder(form.hotel_label)}
-                  title={buildFieldTooltip(form.hotel_label)}
-                />
+                <FieldWithStatus
+                  label={<Form.Label className="mb-0">Hotel</Form.Label>}
+                  status={renderFollowUpBlock('hotel_val')}
+                >
+                  <Form.Control
+                    value={form.hotel_label}
+                    onChange={(e) => updateForm('hotel_label', e.target.value)}
+                    style={affirmativeBorder(form.hotel_label)}
+                    title={buildFieldTooltip(form.hotel_label)}
+                  />
+                </FieldWithStatus>
               </Col>
               <Col md={2} className="budget-field-wide">
-                <div className="d-flex justify-content-between align-items-center gap-2">
-                  <Form.Label className="mb-0">PO</Form.Label>
-                  {renderFollowUpBlock('po_val')}
-                </div>
-                <Form.Control
-                  value={displayOrDash(deal.po ?? null)}
-                  readOnly
-                  title={buildFieldTooltip(deal.po ?? null)}
-                />
+                <FieldWithStatus label={<Form.Label className="mb-0">PO</Form.Label>} status={renderFollowUpBlock('po_val')}>
+                  <Form.Control
+                    value={displayOrDash(deal.po ?? null)}
+                    readOnly
+                    title={buildFieldTooltip(deal.po ?? null)}
+                  />
+                </FieldWithStatus>
               </Col>
               <Col md={2} className="budget-field-wide">
                 <Form.Label>Mail Factura</Form.Label>
