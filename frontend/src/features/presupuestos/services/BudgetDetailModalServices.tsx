@@ -29,7 +29,11 @@ import {
   MANUAL_DOCUMENT_SIZE_LIMIT_BYTES,
   MANUAL_DOCUMENT_SIZE_LIMIT_MESSAGE
 } from '../api';
-import { normalizeImportDealResult } from '../importDealUtils';
+import {
+  DEAL_NOT_WON_ERROR_CODE,
+  DEAL_NOT_WON_ERROR_MESSAGE,
+  normalizeImportDealResult,
+} from '../importDealUtils';
 import { SessionsAccordionServices } from './sessions/SessionsAccordionServices';
 import type { DealEditablePatch } from '../api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../../types/deal';
@@ -223,6 +227,15 @@ export function BudgetDetailModalServices({
       }
     },
     onError: (error: unknown) => {
+      if (isApiError(error) && error.code === DEAL_NOT_WON_ERROR_CODE) {
+        const message = DEAL_NOT_WON_ERROR_MESSAGE;
+        if (onNotify) {
+          onNotify({ variant: 'danger', message });
+        } else {
+          alert(message);
+        }
+        return;
+      }
       const defaultMessage = 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
       const notifyMessage = isApiError(error)
         ? `No se pudo importar. [${error.code}] ${error.message}`

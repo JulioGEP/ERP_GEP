@@ -32,6 +32,9 @@ const EDITABLE_FIELDS = new Set([
   "a_fecha",
 ]);
 
+const DEAL_NOT_WON_ERROR_CODE = "DEAL_NOT_WON";
+const DEAL_NOT_WON_ERROR_MESSAGE = "Este negocio no está Ganado, no lo podemos subir";
+
 /* -------------------- Helpers -------------------- */
 function parsePathId(path: any): string | null {
   if (!path) return null;
@@ -86,6 +89,11 @@ function isFormacionAbiertaPipeline(value: unknown): boolean {
   const normalized = normalizeLabelForComparison(value);
   if (!normalized) return false;
   return normalized === "formacion abierta";
+}
+
+function isDealWonStatus(status: unknown): boolean {
+  if (typeof status !== "string") return false;
+  return status.trim().toLowerCase() === "won";
 }
 
 function errorResponseToError(payload: ReturnType<typeof errorResponse>): Error {
@@ -610,6 +618,23 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     }
     if (!d) throw new Error("Deal no encontrado en Pipedrive");
 
+    const rawStatus = d?.status ?? null;
+    if (!isDealWonStatus(rawStatus)) {
+      console.log(
+        JSON.stringify({
+          event: "deal-import-blocked",
+          deal_id: d?.id ?? dealIdNum,
+          status: rawStatus ?? null,
+          reason: "deal_not_won",
+        }),
+      );
+      const notWonError = new Error(DEAL_NOT_WON_ERROR_MESSAGE);
+      (notWonError as any).code = DEAL_NOT_WON_ERROR_CODE;
+      (notWonError as any).statusCode = 409;
+      (notWonError as any).dealStatus = rawStatus ?? null;
+      throw notWonError;
+    }
+
     const orgId = resolvePipedriveId(d.org_id);
     const personId = resolvePipedriveId(d.person_id);
 
@@ -873,6 +898,17 @@ export const handler = async (event: any) => {
         const deal = mapDealForApi(dealRaw);
         return successResponse({ ok: true, warnings, deal });
       } catch (e: any) {
+        if (e?.code === DEAL_NOT_WON_ERROR_CODE) {
+          const statusCode =
+            typeof e?.statusCode === "number" && Number.isFinite(e.statusCode)
+              ? e.statusCode
+              : 409;
+          const message =
+            typeof e?.message === "string" && e.message.trim().length
+              ? e.message.trim()
+              : DEAL_NOT_WON_ERROR_MESSAGE;
+          return errorResponse(DEAL_NOT_WON_ERROR_CODE, message, statusCode);
+        }
         return errorResponse("IMPORT_ERROR", e?.message || "Error importando deal", 502);
       }
     }

@@ -1,6 +1,9 @@
 import type { ImportDealResult } from './api';
 import type { DealDetail, DealSummary } from '../../types/deal';
 
+export const DEAL_NOT_WON_ERROR_CODE = 'DEAL_NOT_WON';
+export const DEAL_NOT_WON_ERROR_MESSAGE = 'Este negocio no está Ganado, no lo podemos subir';
+
 type ImportResultDeal = DealDetail | DealSummary | null;
 
 type UnknownWithDeal = {
