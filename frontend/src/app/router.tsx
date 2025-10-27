@@ -106,6 +106,18 @@ export function AppRouter({
           element={withRoleGuard('/presupuestos/sinplanificar', <BudgetsPage {...budgetsPageProps} />)}
         />
         <Route
+          path="/presupuestos/sintrabajar"
+          element={withRoleGuard(
+            '/presupuestos/sintrabajar',
+            <BudgetsPage
+              {...budgetsPageProps}
+              title="Presupuestos · Sin trabajar"
+              subtitle="Revisa el estado de validación de tus presupuestos"
+              showFollowUpColumns
+            />,
+          )}
+        />
+        <Route
           path="/calendario/por_sesiones"
           element={withRoleGuard(
             '/calendario/por_sesiones',
