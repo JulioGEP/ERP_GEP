@@ -16,7 +16,11 @@
     "allowSyntheticDefaultImports": true,
 
     "types": ["vite/client", "node", "@testing-library/jest-dom"],
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "@tanstack/react-table": ["src/vendor/tanstack/react-table"],
+      "@tanstack/react-virtual": ["src/vendor/tanstack/react-virtual"]
+    }
   },
   "include": ["src", "vite-env.d.ts"],
   "exclude": ["dist", "node_modules"],

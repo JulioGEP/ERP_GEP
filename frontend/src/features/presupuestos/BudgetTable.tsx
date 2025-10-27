@@ -1,13 +1,19 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useReactTable,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DealSummary } from '../../types/deal';
-import { useDataTable } from '../../hooks/useDataTable';
-import { SortableHeader } from '../../components/table/SortableHeader';
-import { DataTablePagination } from '../../components/table/DataTablePagination';
+import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
 import {
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
 } from './queryKeys';
+import { fetchDealsWithoutSessions as fetchDealsWithoutSessionsApi } from './api';
 
 function TrashIcon({ size = 16 }: { size?: number }) {
   return (
@@ -218,6 +224,162 @@ function getTrainingDateInfo(budget: DealSummary): { label: string; sortValue: n
   };
 }
 
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+}
+
+type BudgetFilterRow = {
+  budget: DealSummary;
+  values: Record<string, string>;
+  normalized: Record<string, string>;
+  search: string;
+};
+
+const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> = {
+  deal_id: (budget) => getBudgetId(budget) ?? '',
+  title: (budget) => getTitleLabel(budget),
+  organization: (budget) => getOrganizationLabel(budget),
+  pipeline: (budget) =>
+    safeTrim(budget.pipeline_label ?? budget.pipeline_id ?? '') ?? '',
+  pipeline_id: (budget) => safeTrim(budget.pipeline_id ?? '') ?? '',
+  training_address: (budget) => safeTrim(budget.training_address ?? '') ?? '',
+  sede_label: (budget) => safeTrim(budget.sede_label ?? '') ?? '',
+  caes_label: (budget) => safeTrim(budget.caes_label ?? '') ?? '',
+  fundae_label: (budget) => safeTrim(budget.fundae_label ?? '') ?? '',
+  hotel_label: (budget) => safeTrim(budget.hotel_label ?? '') ?? '',
+  tipo_servicio: (budget) => safeTrim(budget.tipo_servicio ?? '') ?? '',
+  mail_invoice: (budget) => safeTrim(budget.mail_invoice ?? '') ?? '',
+  comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
+  a_fecha: (budget) => safeTrim(budget.a_fecha ?? '') ?? '',
+  w_id_variation: (budget) => safeTrim(budget.w_id_variation ?? '') ?? '',
+  presu_holded: (budget) => safeTrim(budget.presu_holded ?? '') ?? '',
+  modo_reserva: (budget) => safeTrim(budget.modo_reserva ?? '') ?? '',
+  hours: (budget) => (budget.hours != null ? String(budget.hours) : ''),
+  product_names: (budget) => getProductNames(budget).join(' '),
+  sessions: (budget) =>
+    (Array.isArray(budget.sessions) ? budget.sessions : [])
+      .map((session) => safeTrim(session?.fecha_inicio_utc ?? session?.fecha ?? '') ?? '')
+      .filter(Boolean)
+      .join(' '),
+  person_name: (budget) => {
+    const first = safeTrim(budget.person?.first_name ?? '') ?? '';
+    const last = safeTrim(budget.person?.last_name ?? '') ?? '';
+    return [first, last].filter(Boolean).join(' ');
+  },
+  person_email: (budget) => safeTrim(budget.person?.email ?? '') ?? '',
+  person_phone: (budget) => safeTrim(budget.person?.phone ?? '') ?? '',
+  training_date: (budget) => getTrainingDateInfo(budget).label,
+  negocio: (budget) => getNegocioLabel(budget),
+};
+
+const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
+  { key: 'deal_id', label: 'Presupuesto' },
+  { key: 'title', label: 'Título' },
+  { key: 'organization', label: 'Empresa' },
+  { key: 'pipeline', label: 'Pipeline' },
+  { key: 'pipeline_id', label: 'Pipeline (ID)' },
+  { key: 'training_address', label: 'Dirección de formación' },
+  { key: 'sede_label', label: 'Sede' },
+  { key: 'caes_label', label: 'CAES' },
+  { key: 'fundae_label', label: 'FUNDAE' },
+  { key: 'hotel_label', label: 'Hotel' },
+  { key: 'tipo_servicio', label: 'Tipo de servicio' },
+  { key: 'mail_invoice', label: 'Email de facturación' },
+  { key: 'comercial', label: 'Comercial' },
+  { key: 'a_fecha', label: 'A fecha' },
+  { key: 'w_id_variation', label: 'ID variación' },
+  { key: 'presu_holded', label: 'Presupuesto retenido' },
+  { key: 'modo_reserva', label: 'Modo reserva' },
+  { key: 'hours', label: 'Horas', type: 'number' },
+  { key: 'product_names', label: 'Productos' },
+  { key: 'sessions', label: 'Sesiones' },
+  { key: 'person_name', label: 'Persona de contacto' },
+  { key: 'person_email', label: 'Email de contacto' },
+  { key: 'person_phone', label: 'Teléfono de contacto' },
+  { key: 'training_date', label: 'Fecha de formación' },
+  { key: 'negocio', label: 'Negocio' },
+];
+
+const BUDGET_FILTER_KEYS = Object.keys(BUDGET_FILTER_ACCESSORS);
+
+function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
+  const values: Record<string, string> = {};
+  const normalized: Record<string, string> = {};
+  for (const key of BUDGET_FILTER_KEYS) {
+    const raw = BUDGET_FILTER_ACCESSORS[key]?.(budget) ?? '';
+    values[key] = raw;
+    normalized[key] = normalizeText(raw);
+  }
+  const search = BUDGET_FILTER_KEYS.map((key) => normalized[key]).join(' ');
+  return { budget, values, normalized, search };
+}
+
+function subsequenceScore(text: string, token: string): number {
+  if (!token.length) return 0;
+  let score = 0;
+  let position = 0;
+  for (const char of token) {
+    const index = text.indexOf(char, position);
+    if (index === -1) {
+      return Number.POSITIVE_INFINITY;
+    }
+    score += index - position;
+    position = index + 1;
+  }
+  return score;
+}
+
+function computeFuzzyScore(text: string, query: string): number {
+  const tokens = query
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  if (!tokens.length) return Number.POSITIVE_INFINITY;
+  let total = 0;
+  for (const token of tokens) {
+    const score = subsequenceScore(text, token);
+    if (!Number.isFinite(score)) {
+      return Number.POSITIVE_INFINITY;
+    }
+    total += score;
+  }
+  return total;
+}
+
+function applyBudgetFilters(
+  rows: BudgetFilterRow[],
+  filters: Record<string, string>,
+  search: string,
+): BudgetFilterRow[] {
+  const filterEntries = Object.entries(filters).filter(([, value]) => value.trim().length);
+  let filtered = rows;
+  if (filterEntries.length) {
+    filtered = filtered.filter((row) =>
+      filterEntries.every(([key, value]) => {
+        const normalizedValue = normalizeText(value);
+        if (!normalizedValue.length) return true;
+        const target = row.normalized[key] ?? '';
+        return target.includes(normalizedValue);
+      }),
+    );
+  }
+
+  const normalizedSearch = normalizeText(search);
+  if (!normalizedSearch.length) {
+    return filtered;
+  }
+
+  const scored = filtered
+    .map((row) => ({ row, score: computeFuzzyScore(row.search, normalizedSearch) }))
+    .filter((item) => Number.isFinite(item.score));
+
+  scored.sort((a, b) => a.score - b.score);
+  return scored.map((item) => item.row);
+}
+
 /** ============ Componente ============ */
 
 export function BudgetTable({
@@ -253,42 +415,95 @@ export function BudgetTable({
     return budgets;
   }, [budgets, cachedFallbackBudgets, isShowingFallback]);
 
-  const getSortValue = useCallback((budget: DealSummary, column: string) => {
-    switch (column) {
-      case 'presupuesto':
-        const budgetId = getBudgetId(budget);
-        if (!budgetId) return null;
-        const numericId = Number(budgetId);
-        return Number.isFinite(numericId) ? numericId : budgetId;
-      case 'empresa':
-        return getOrganizationLabel(budget);
-      case 'titulo':
-        return getTitleLabel(budget);
-      case 'formacion':
-        return getProductNames(budget).join(', ');
-      case 'fecha_formacion':
-        return getTrainingDateInfo(budget).sortValue;
-      case 'negocio':
-        return getNegocioLabel(budget);
-      default:
-        return null;
-    }
-  }, []);
-
   const {
-    pageItems,
-    sortState,
-    currentPage,
-    totalPages,
-    totalItems,
-    pageSize,
-    requestSort,
-    goToPage,
-  } = useDataTable(effectiveBudgets, {
-    getSortValue,
+    filters: activeFilters,
+    searchValue,
+    sorting: sortingFromUrl,
+    setSearchValue,
+    setFilterValue,
+    clearFilter,
+    clearAllFilters,
+    setSorting: setSortingInUrl,
+  } = useTableFilterState({ tableKey: 'budgets-table' });
+
+  const [sortingState, setSortingState] = useState<TableSortingState>(sortingFromUrl);
+
+  useEffect(() => {
+    setSortingState(sortingFromUrl);
+  }, [sortingFromUrl]);
+
+  const handleSortingChange = useCallback(
+    (next: SortingState) => {
+      const normalized = next.map((item) => ({ id: item.id, desc: Boolean(item.desc) }));
+      setSortingState(normalized);
+      setSortingInUrl(normalized);
+    },
+    [setSortingInUrl],
+  );
+
+  const preparedRows = useMemo(
+    () => effectiveBudgets.map((budget) => createBudgetFilterRow(budget)),
+    [effectiveBudgets],
+  );
+
+  const filteredRows = useMemo(
+    () => applyBudgetFilters(preparedRows, activeFilters, searchValue),
+    [preparedRows, activeFilters, searchValue],
+  );
+
+  const clientFilteredBudgets = useMemo(
+    () => filteredRows.map((row) => row.budget),
+    [filteredRows],
+  );
+
+  const shouldUseServerFiltering = effectiveBudgets.length > 100_000;
+
+  const serverQuery = useQuery({
+    queryKey: [
+      'budget-table-filters',
+      activeFilters,
+      searchValue,
+      sortingState,
+    ],
+    queryFn: () =>
+      fetchDealsWithoutSessionsApi({
+        filters: activeFilters,
+        search: searchValue,
+        sorting: sortingState,
+      }),
+    enabled: shouldUseServerFiltering,
+    keepPreviousData: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
+  const tableBudgets = shouldUseServerFiltering
+    ? serverQuery.data ?? []
+    : clientFilteredBudgets;
+
+  const resultCount = tableBudgets.length;
+
+  const tanstackSortingState = useMemo<SortingState>(
+    () => sortingState.map((item) => ({ id: item.id, desc: item.desc })),
+    [sortingState],
+  );
+
   const showDeleteAction = typeof onDelete === 'function';
+
+  const handleFilterChange = useCallback(
+    (key: string, value: string) => {
+      const trimmed = value.trim();
+      setFilterValue(key, trimmed.length ? trimmed : null);
+    },
+    [setFilterValue],
+  );
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchValue(value);
+    },
+    [setSearchValue],
+  );
 
   const handleDelete = useCallback(
     async (event: React.MouseEvent, budget: DealSummary) => {
@@ -322,6 +537,228 @@ export function BudgetTable({
     },
     [onDelete, showDeleteAction]
   );
+
+  const columns = useMemo<ColumnDef<DealSummary>[]>(() => {
+    const baseColumns: ColumnDef<DealSummary>[] = [
+      {
+        id: 'presupuesto',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Presupuesto
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (budget) => {
+          const budgetId = getBudgetId(budget);
+          if (!budgetId) return '';
+          const numericId = Number(budgetId);
+          return Number.isFinite(numericId) ? numericId : budgetId;
+        },
+        cell: ({ row }) => {
+          const budget = row.original;
+          const budgetId = getBudgetId(budget);
+          const presupuestoLabel = budgetId ? `#${budgetId}` : '—';
+          const title = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
+          return (
+            <span className="fw-semibold" title={title}>
+              {presupuestoLabel}
+            </span>
+          );
+        },
+        enableSorting: true,
+        meta: { style: { width: 160 } },
+      },
+      {
+        id: 'empresa',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Empresa
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (budget) => getOrganizationLabel(budget),
+        cell: ({ row }) => getOrganizationLabel(row.original),
+      },
+      {
+        id: 'titulo',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Título
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (budget) => getTitleLabel(budget),
+        cell: ({ row }) => {
+          const budget = row.original;
+          const titleLabel = getTitleLabel(budget);
+          return <span title={budget.title ?? ''}>{titleLabel}</span>;
+        },
+      },
+      {
+        id: 'formacion',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Formación
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (budget) => getProductNames(budget).join(', '),
+        cell: ({ row }) => {
+          const budget = row.original;
+          const names = getProductNames(budget);
+          const { label } = getProductLabel(budget);
+          return <span title={names.join(', ')}>{label}</span>;
+        },
+      },
+      {
+        id: 'fecha_formacion',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Fecha formación
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (budget) => getTrainingDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER,
+        cell: ({ row }) => getTrainingDateInfo(row.original).label,
+        meta: { style: { width: 160 } },
+      },
+      {
+        id: 'negocio',
+        header: ({ column }) => {
+          const sorted = column.getIsSorted();
+          return (
+            <button
+              type="button"
+              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+              onClick={column.getToggleSortingHandler()}
+            >
+              Negocio
+              {sorted && (
+                <span className="ms-1" aria-hidden="true">
+                  {sorted === 'asc' ? '▲' : '▼'}
+                </span>
+              )}
+            </button>
+          );
+        },
+        accessorFn: (budget) => getNegocioLabel(budget),
+        cell: ({ row }) => getNegocioLabel(row.original),
+      },
+    ];
+
+    if (showDeleteAction) {
+      baseColumns.push({
+        id: 'acciones',
+        header: () => <span className="visually-hidden">Acciones</span>,
+        cell: ({ row }) => {
+          const budget = row.original;
+          const budgetId = getBudgetId(budget);
+          const isDeleting = deletingId === budgetId;
+          return (
+            <div className="text-end">
+              <button
+                type="button"
+                className="btn btn-link text-danger p-0 border-0"
+                onClick={(event) => handleDelete(event, budget)}
+                disabled={isDeleting}
+                aria-label="Eliminar presupuesto"
+              >
+                {isDeleting ? <Spinner animation="border" size="sm" /> : <TrashIcon />}
+              </button>
+            </div>
+          );
+        },
+        enableSorting: false,
+        meta: { style: { width: 56 } },
+      });
+    }
+
+    return baseColumns;
+  }, [deletingId, handleDelete, showDeleteAction]);
+
+  const table = useReactTable({
+    data: tableBudgets,
+    columns,
+    state: { sorting: tanstackSortingState },
+    onSortingChange: handleSortingChange,
+    getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
+  });
+
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
+  const rowModel = table.getRowModel();
+  const rows = rowModel.rows;
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 64,
+    overscan: 8,
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const paddingTop = virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const paddingBottom =
+    virtualRows.length > 0
+      ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
+      : 0;
+
+  const columnsCount = table.getAllColumns().length;
+  const isServerBusy = shouldUseServerFiltering && (serverQuery.isFetching || serverQuery.isLoading);
 
   if (isLoading) {
     return (
@@ -391,107 +828,91 @@ export function BudgetTable({
           </Button>
         </div>
       )}
-      <div className="table-responsive">
+      <div className="px-3 py-3 border-bottom">
+        <FilterToolbar
+          filters={BUDGET_FILTER_DEFINITIONS}
+          activeFilters={activeFilters}
+          searchValue={searchValue}
+          onSearchChange={handleSearchChange}
+          onFilterChange={handleFilterChange}
+          onRemoveFilter={clearFilter}
+          onClearAll={clearAllFilters}
+          resultCount={resultCount}
+          isServerBusy={isServerBusy}
+          onSaveView={() => console.info('Guardar vista de presupuestos')}
+        />
+      </div>
+      <div className="table-responsive" style={{ maxHeight: '70vh' }} ref={tableContainerRef}>
         <Table hover className="mb-0 align-middle">
           <thead>
-            <tr>
-              <SortableHeader
-                columnKey="presupuesto"
-                label="Presupuesto"
-              sortState={sortState}
-              onSort={requestSort}
-              style={{ width: 160 }}
-            />
-            <SortableHeader
-              columnKey="empresa"
-              label="Empresa"
-              sortState={sortState}
-              onSort={requestSort}
-            />
-            <SortableHeader
-              columnKey="titulo"
-              label="Título"
-              sortState={sortState}
-              onSort={requestSort}
-            />
-            <SortableHeader
-              columnKey="formacion"
-              label="Formación"
-              sortState={sortState}
-              onSort={requestSort}
-            />
-            <SortableHeader
-              columnKey="fecha_formacion"
-              label="Fecha formación"
-              sortState={sortState}
-              onSort={requestSort}
-              style={{ width: 160 }}
-            />
-            <SortableHeader
-              columnKey="negocio"
-              label="Negocio"
-              sortState={sortState}
-              onSort={requestSort}
-              style={{ width: showDeleteAction ? 120 : 140 }}
-            />
-            {showDeleteAction && (
-              <th className="text-end" style={{ width: 56 }}>
-                <span className="visually-hidden">Acciones</span>
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {pageItems.map((budget, index) => {
-            const names = getProductNames(budget);
-            const { label: productLabel } = getProductLabel(budget);
-
-            const id = getBudgetId(budget);
-            const presupuestoLabel = id ? `#${id}` : '—';
-            const presupuestoTitle = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
-            const organizationLabel = getOrganizationLabel(budget);
-            const titleLabel = getTitleLabel(budget);
-            const negocioLabel = getNegocioLabel(budget);
-            const trainingDateInfo = getTrainingDateInfo(budget);
-
-            const rowKey = id ?? `${organizationLabel}-${titleLabel}-${index}`;
-
-            return (
-              <tr key={rowKey} role="button" onClick={() => onSelect(budget)}>
-                <td className="fw-semibold" title={presupuestoTitle}>
-                  {presupuestoLabel}
-                </td>
-                <td>{organizationLabel}</td>
-                <td title={budget.title ?? ''}>{titleLabel}</td>
-                <td title={names.join(', ')}>{productLabel}</td>
-                <td>{trainingDateInfo.label}</td>
-                <td>{negocioLabel}</td>
-                {showDeleteAction && (
-                  <td className="text-end">
-                    <button
-                      type="button"
-                      className="btn btn-link text-danger p-0 border-0"
-                      onClick={(event) => handleDelete(event, budget)}
-                      disabled={deletingId === id}
-                      aria-label="Eliminar presupuesto"
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map((header) => {
+                  const meta = header.column.columnDef.meta as { style?: React.CSSProperties } | undefined;
+                  const style = meta?.style;
+                  const alignRight = header.column.id === 'acciones';
+                  return (
+                    <th
+                      key={header.id}
+                      style={style}
+                      className={alignRight ? 'text-end' : undefined}
+                      scope="col"
                     >
-                      {deletingId === id ? <Spinner animation="border" size="sm" /> : <TrashIcon />}
-                    </button>
-                  </td>
-                )}
+                      {header.isPlaceholder ? null : header.renderHeader()}
+                    </th>
+                  );
+                })}
               </tr>
-            );
-          })}
+            ))}
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={columnsCount} className="py-5 text-center text-muted">
+                  {noFilteredResults
+                    ? 'No hay presupuestos que coincidan con los filtros aplicados.'
+                    : 'No hay presupuestos disponibles.'}
+                </td>
+              </tr>
+            ) : (
+              <>
+                {paddingTop > 0 && (
+                  <tr>
+                    <td colSpan={columnsCount} style={{ height: `${paddingTop}px` }} />
+                  </tr>
+                )}
+                {virtualRows.map((virtualRow) => {
+                  const row = rows[virtualRow.index];
+                  const budget = row.original;
+                  return (
+                    <tr key={row.id} role="button" onClick={() => onSelect(budget)}>
+                      {row.getVisibleCells().map((cell) => {
+                        const meta = cell.column.columnDef.meta as { style?: React.CSSProperties } | undefined;
+                        const style = meta?.style;
+                        const alignRight = cell.column.id === 'acciones';
+                        return (
+                          <td
+                            key={cell.id}
+                            style={style}
+                            className={alignRight ? 'text-end' : undefined}
+                          >
+                            {cell.renderValue()}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                {paddingBottom > 0 && (
+                  <tr>
+                    <td colSpan={columnsCount} style={{ height: `${paddingBottom}px` }} />
+                  </tr>
+                )}
+              </>
+            )}
           </tbody>
         </Table>
       </div>
-      <DataTablePagination
-        page={currentPage}
-        totalPages={totalPages}
-        pageSize={pageSize}
-        totalItems={totalItems}
-        onPageChange={goToPage}
-      />
     </div>
   );
 }
