@@ -732,13 +732,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     }
 
     if (savedDealId) {
-      const persisted = await prisma.deals.findUnique({
-        where: { deal_id: String(savedDealId) },
-        select: { pipeline_label: true },
-      });
-
       const pipelineLabelCandidate =
-        persisted?.pipeline_label ??
         pipelineContext.label ??
         (d as any)?.pipeline_label ??
         (d as any)?.pipeline_name ??
