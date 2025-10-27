@@ -89,6 +89,7 @@ interface Props {
   onClose: () => void;
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
+  autoRefreshOnOpen?: boolean;
 }
 
 function useAuth() {
@@ -165,7 +166,9 @@ export function BudgetDetailModalServices({
   onClose,
   onShowProductComment,
   onNotify,
+  autoRefreshOnOpen: _autoRefreshOnOpen,
 }: Props) {
+  void _autoRefreshOnOpen;
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
 

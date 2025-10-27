@@ -96,6 +96,7 @@ interface Props {
   onClose: () => void;
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
+  autoRefreshOnOpen?: boolean;
 }
 
 function useAuth() {
@@ -357,6 +358,7 @@ export function BudgetDetailModalAbierta({
   onClose,
   onShowProductComment,
   onNotify,
+  autoRefreshOnOpen = false,
 }: Props) {
   const qc = useQueryClient();
   const { userId, userName } = useAuth();
@@ -475,6 +477,8 @@ export function BudgetDetailModalAbierta({
   const processedNoteSignatureRef = useRef<string | null>(null);
   const processedNoteDealIdRef = useRef<string | null>(null);
   const noteWarningSignatureRef = useRef<string | null>(null);
+  const autoRefreshTriggeredRef = useRef(false);
+  const lastAutoRefreshDealIdRef = useRef<string | null>(null);
 
   const getDocumentDisplayName = (doc: DealDocument | null | undefined): string => {
     if (!doc) return 'Documento';
@@ -1235,10 +1239,40 @@ export function BudgetDetailModalAbierta({
     }
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     if (!normalizedDealId || refreshMutation.isPending) return;
     refreshMutation.mutate(normalizedDealId);
-  };
+  }, [normalizedDealId, refreshMutation]);
+
+  useEffect(() => {
+    if (!dealId || !autoRefreshOnOpen) {
+      autoRefreshTriggeredRef.current = false;
+      lastAutoRefreshDealIdRef.current = null;
+      return;
+    }
+
+    if (lastAutoRefreshDealIdRef.current !== dealId) {
+      autoRefreshTriggeredRef.current = false;
+      lastAutoRefreshDealIdRef.current = dealId;
+    }
+
+    if (autoRefreshTriggeredRef.current) {
+      return;
+    }
+
+    if (isLoading || refreshMutation.isPending) {
+      return;
+    }
+
+    autoRefreshTriggeredRef.current = true;
+    handleRefresh();
+  }, [
+    dealId,
+    autoRefreshOnOpen,
+    isLoading,
+    refreshMutation.isPending,
+    handleRefresh,
+  ]);
 
   const startEditingNote = (note: DealDetailViewModel['notes'][number]) => {
     if (!note?.id) return;
