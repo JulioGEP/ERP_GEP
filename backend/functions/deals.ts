@@ -1,4 +1,3 @@
-// @ts-nocheck
 // backend/functions/deals.ts
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { getPrisma } from "./_shared/prisma";

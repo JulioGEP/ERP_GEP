@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { Prisma } from '@prisma/client';
 
 import { getPrisma } from './_shared/prisma';

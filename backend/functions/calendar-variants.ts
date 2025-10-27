@@ -1,4 +1,3 @@
-// @ts-nocheck
 // backend/functions/calendar-variants.ts
 import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';

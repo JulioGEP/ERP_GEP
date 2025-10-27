@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type {
   DealProductInfo,
   DealTag,
