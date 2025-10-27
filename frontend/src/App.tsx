@@ -370,18 +370,26 @@ export default function App() {
 
       }
 
-      const extractPipelineInfo = (
+      const extractPipelineData = (
         source: DealSummary | null | undefined,
-      ): { info: string | null; key: string } => {
-        const info =
-          normalizeOptionalString(source?.pipeline_label) ??
-          normalizeOptionalString(source?.pipeline_id);
-        const key = info ? normalizePipelineKey(info) : '';
-        return { info, key };
+      ): { label: string | null; labelKey: string; id: string | null; idKey: string } => {
+        const label = normalizeOptionalString(source?.pipeline_label);
+        const id = normalizeOptionalString(source?.pipeline_id);
+        return {
+          label,
+          labelKey: label ? normalizePipelineKey(label) : '',
+          id,
+          idKey: id ? normalizePipelineKey(id) : '',
+        };
       };
 
       if (summary && normalizedDealId) {
-        let { info: pipelineInfo, key: pipelineKey } = extractPipelineInfo(summary);
+        let {
+          label: pipelineLabel,
+          labelKey: pipelineLabelKey,
+          id: pipelineId,
+          idKey: pipelineIdKey,
+        } = extractPipelineData(summary);
 
         const ensurePipelineFromDetail = async () => {
           if (!normalizedDealId) return;
@@ -393,20 +401,24 @@ export default function App() {
           if (cachedDetail) {
             summary = buildSummaryFromDeal(cachedDetail);
             normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
-            const extracted = extractPipelineInfo(summary);
-            pipelineInfo = extracted.info;
-            pipelineKey = extracted.key;
+            const extracted = extractPipelineData(summary);
+            pipelineLabel = extracted.label;
+            pipelineLabelKey = extracted.labelKey;
+            pipelineId = extracted.id;
+            pipelineIdKey = extracted.idKey;
           }
 
-          if (!pipelineInfo || !pipelineKey || !KNOWN_PIPELINE_KEYS.has(pipelineKey)) {
+          if (!pipelineLabel || !pipelineLabelKey || !KNOWN_PIPELINE_KEYS.has(pipelineLabelKey)) {
             try {
               const refreshedDetail = await fetchDealDetail(normalizedDealId);
               queryClient.setQueryData(['deal', normalizedDealId], refreshedDetail);
               summary = buildSummaryFromDeal(refreshedDetail);
               normalizedDealId = summary.dealId ?? summary.deal_id ?? normalizedDealId;
-              const extracted = extractPipelineInfo(summary);
-              pipelineInfo = extracted.info;
-              pipelineKey = extracted.key;
+              const extracted = extractPipelineData(summary);
+              pipelineLabel = extracted.label;
+              pipelineLabelKey = extracted.labelKey;
+              pipelineId = extracted.id;
+              pipelineIdKey = extracted.idKey;
             } catch (error) {
               console.error(
                 '[App] No se pudo obtener el pipeline del presupuesto importado',
@@ -416,7 +428,7 @@ export default function App() {
           }
         };
 
-        if (!pipelineInfo || !pipelineKey || !KNOWN_PIPELINE_KEYS.has(pipelineKey)) {
+        if (!pipelineLabel || !pipelineLabelKey || !KNOWN_PIPELINE_KEYS.has(pipelineLabelKey)) {
           await ensurePipelineFromDetail();
         }
       }
@@ -701,13 +713,20 @@ export default function App() {
   const certificadosPageProps: CertificadosPageProps = {};
   const recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps = {};
 
-  const pipelineLabelKey = (selectedBudgetSummary?.pipeline_label ?? '').trim();
-  const pipelineIdKey =
-    selectedBudgetSummary?.pipeline_id != null
-      ? String(selectedBudgetSummary.pipeline_id).trim()
-      : '';
+  const pipelineLabelValue = normalizeOptionalString(selectedBudgetSummary?.pipeline_label);
+  const pipelineIdValue = pipelineLabelValue
+    ? null
+    : normalizeOptionalString(selectedBudgetSummary?.pipeline_id);
 
-  const BudgetModalComponent = resolveBudgetModalComponent([pipelineLabelKey, pipelineIdKey]);
+  const pipelineLabelKey = pipelineLabelValue ? normalizePipelineKey(pipelineLabelValue) : '';
+  const pipelineIdKey = pipelineIdValue ? normalizePipelineKey(pipelineIdValue) : '';
+  const pipelineKeyCandidates = pipelineLabelKey
+    ? [pipelineLabelKey]
+    : pipelineIdKey
+    ? [pipelineIdKey]
+    : [];
+
+  const BudgetModalComponent = resolveBudgetModalComponent(pipelineKeyCandidates);
 
   const budgetModalProps: BudgetModalProps = {
     dealId: selectedBudgetId,

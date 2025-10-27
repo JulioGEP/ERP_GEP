@@ -10,6 +10,7 @@ import {
   getDealProducts,
   getDealNotes,
   getDealFiles,
+  getPipelines,
 } from "./_shared/pipedrive";
 import { mapAndUpsertDealTree } from "./_shared/mappers";
 import {
@@ -58,6 +59,86 @@ function parseProductHours(raw: any): { ok: boolean; value: number | null } {
     return { ok: true, value: Math.round(parsed) };
   }
   return { ok: false, value: null };
+}
+
+function normalizePipelineLabelValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const str = String(value)
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim();
+  return str.length ? str : null;
+}
+
+function looksLikePipelineNumericId(value: string): boolean {
+  return /^\d+$/.test(value);
+}
+
+async function resolvePipelineLabelFromId(pipelineId: unknown): Promise<string | null> {
+  if (pipelineId === null || pipelineId === undefined) return null;
+
+  const normalized = normalizePipelineLabelValue(pipelineId);
+  if (!normalized) return null;
+
+  const numericId =
+    typeof pipelineId === "number"
+      ? Number.isFinite(pipelineId)
+        ? pipelineId
+        : null
+      : looksLikePipelineNumericId(normalized)
+      ? Number(normalized)
+      : null;
+
+  if (numericId === null) {
+    // El pipeline_id ya parece ser un label legible.
+    return normalized;
+  }
+
+  try {
+    const pipelines = await getPipelines();
+    if (!Array.isArray(pipelines)) return null;
+    const match = pipelines.find((pl: any) => pl?.id === numericId);
+    const name = match?.name ?? match?.label ?? match?.title ?? null;
+    return normalizePipelineLabelValue(name);
+  } catch (error) {
+    console.warn("[deals] No se pudo resolver el pipeline por ID", {
+      error,
+      pipelineId: numericId,
+    });
+    return null;
+  }
+}
+
+async function ensureDealPipelineLabel<T extends Record<string, any>>(
+  deal: T,
+  options: { pipelineId?: unknown; pipelineLabel?: unknown } = {}
+): Promise<T> {
+  if (!deal || typeof deal !== "object") return deal;
+
+  const currentLabel = normalizePipelineLabelValue((deal as any).pipeline_label);
+  const fallbackLabel = normalizePipelineLabelValue(options.pipelineLabel);
+
+  let resolvedLabel = currentLabel ?? fallbackLabel ?? null;
+
+  if (!resolvedLabel) {
+    const pipelineIdCandidate =
+      (deal as any).pipeline_id ?? options.pipelineId ?? (deal as any).deal_pipeline_id ?? null;
+
+    const normalizedCandidate = normalizePipelineLabelValue(pipelineIdCandidate);
+    if (normalizedCandidate && !looksLikePipelineNumericId(normalizedCandidate)) {
+      resolvedLabel = normalizedCandidate;
+    } else {
+      const resolvedFromId = await resolvePipelineLabelFromId(pipelineIdCandidate);
+      if (resolvedFromId) {
+        resolvedLabel = resolvedFromId;
+      } else if (normalizedCandidate && !looksLikePipelineNumericId(normalizedCandidate)) {
+        resolvedLabel = normalizedCandidate;
+      }
+    }
+  }
+
+  (deal as Record<string, any>).pipeline_label = resolvedLabel ?? null;
+  return deal;
 }
 
 function resolvePipedriveId(raw: any): number | null {
@@ -257,6 +338,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
   let errorMessage: string | undefined;
 
   let d: any;
+  let pipelineContext: { id?: unknown; label?: unknown } = {};
   let savedDealId: any;
 
   try {
@@ -264,6 +346,14 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     const getDealStart = Date.now();
     try {
       d = await getDeal(dealIdNum);
+      pipelineContext = {
+        id: d?.pipeline_id ?? null,
+        label:
+          d?.pipeline_name ??
+          (d as any)?.pipeline?.name ??
+          (d as any)?.pipeline?.label ??
+          null,
+      };
     } finally {
       timings.getDealMs = Date.now() - getDealStart;
     }
@@ -747,7 +837,14 @@ export const handler = async (event: any) => {
       });
 
       const deal = mapDealForApi(updatedRaw);
-      return successResponse({ ok: true, deal });
+      const dealWithPipelineLabel = deal
+        ? await ensureDealPipelineLabel(deal, {
+            pipelineId: updatedRaw?.pipeline_id ?? pipelineContext.id ?? null,
+            pipelineLabel:
+              (updatedRaw as any)?.pipeline_label ?? pipelineContext.label ?? null,
+          })
+        : deal;
+      return successResponse({ ok: true, deal: dealWithPipelineLabel });
     }
 
     if (method === "GET" && event.queryStringParameters?.w_id_variation) {
