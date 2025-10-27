@@ -1079,24 +1079,8 @@ function LoadingScreen() {
   );
 }
 
-function ErrorScreen({ onRetry }: { onRetry: () => void }) {
-  return (
-    <Container className="min-vh-100 d-flex align-items-center justify-content-center py-5">
-      <div className="w-100" style={{ maxWidth: 420 }}>
-        <Alert variant="danger" className="shadow-sm">
-          <Alert.Heading className="h5">No se pudo verificar la sesión</Alert.Heading>
-          <p className="mb-3">Se ha producido un error al comprobar tu sesión. Inténtalo de nuevo.</p>
-          <div className="d-grid">
-            <Button onClick={onRetry}>Reintentar</Button>
-          </div>
-        </Alert>
-      </div>
-    </Container>
-  );
-}
-
 function RequireAuth({ children }: { children: JSX.Element }) {
-  const { status, isFetching, user, refresh } = useCurrentUser();
+  const { status, isFetching, user, error } = useCurrentUser();
   const location = useLocation();
 
   if (status === 'loading' || isFetching) {
@@ -1104,7 +1088,17 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   }
 
   if (status === 'error') {
-    return <ErrorScreen onRetry={() => { void refresh(); }} />;
+    console.error('No se pudo verificar la sesión actual', error);
+    return (
+      <Navigate
+        to="/login"
+        state={{
+          from: `${location.pathname}${location.search}`,
+          sessionError: true,
+        }}
+        replace
+      />
+    );
   }
 
   if (!user) {
