@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, useId } from 'react';
+import { useCallback, useEffect, useMemo, useState, useId, useRef } from 'react';
 import { Badge, Button, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import { joinFilterValues, splitFilterValue } from './filterUtils';
 
@@ -81,7 +81,7 @@ export function FilterToolbar({
   onFilterChange,
   onRemoveFilter,
   onClearAll,
-  resultCount,
+  resultCount: _resultCount,
   isServerBusy = false,
   viewStorageKey,
 }: FilterToolbarProps) {
@@ -90,8 +90,12 @@ export function FilterToolbar({
   const [searchDraft, setSearchDraft] = useState(searchValue);
   const [savedViews, setSavedViews] = useState<SavedFilterView[]>([]);
   const [optionSearchTerms, setOptionSearchTerms] = useState<Record<string, string>>({});
+  const [openSelectKey, setOpenSelectKey] = useState<string | null>(null);
+  const [isSavedViewsOpen, setIsSavedViewsOpen] = useState(false);
   const idPrefix = useId();
   const storageKey = viewStorageKey ? `filter-toolbar:${viewStorageKey}` : null;
+  const selectRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const savedViewsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setSearchDraft(searchValue);
@@ -228,10 +232,14 @@ export function FilterToolbar({
     setDraftFilters({ ...activeFilters });
     setSearchDraft(searchValue);
     setOptionSearchTerms({});
+    setOpenSelectKey(null);
+    setIsSavedViewsOpen(false);
     setIsModalOpen(true);
   }, [activeFilters, searchValue]);
 
   const handleModalClose = useCallback(() => {
+    setOpenSelectKey(null);
+    setIsSavedViewsOpen(false);
     setIsModalOpen(false);
   }, []);
 
@@ -304,6 +312,7 @@ export function FilterToolbar({
     });
 
     setIsModalOpen(false);
+    setOpenSelectKey(null);
   }, [
     activeFilters,
     draftFilters,
@@ -320,6 +329,7 @@ export function FilterToolbar({
     setSearchDraft('');
     onClearAll();
     setIsModalOpen(false);
+    setOpenSelectKey(null);
   }, [onClearAll]);
 
   const handleSaveCurrentView = useCallback(() => {
@@ -387,6 +397,7 @@ export function FilterToolbar({
     });
 
     setIsModalOpen(false);
+    setOpenSelectKey(null);
   }, [
     draftFilters,
     filters,
@@ -418,6 +429,8 @@ export function FilterToolbar({
       setDraftFilters({ ...normalizedFilters });
       setSearchDraft(normalizedSearch);
       setIsModalOpen(false);
+      setIsSavedViewsOpen(false);
+      setOpenSelectKey(null);
     },
     [activeFilters, filters, onFilterChange, onRemoveFilter, onSearchChange],
   );
@@ -446,14 +459,49 @@ export function FilterToolbar({
     [persistSavedViews, savedViews, storageKey],
   );
 
-  const resultLabel = useMemo(() => {
-    const count = Number.isFinite(resultCount) ? resultCount : 0;
-    return `${count.toLocaleString('es-ES')} resultado${count === 1 ? '' : 's'}`;
-  }, [resultCount]);
-
-  const hasAppliedFilters = appliedBadges.length > 0;
   const canSaveViews = Boolean(storageKey);
   const hasSavedViews = savedViews.length > 0;
+  const shouldDisplaySavedViewsControl = canSaveViews || hasSavedViews;
+
+  useEffect(() => {
+    if (!openSelectKey) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const container = selectRefs.current[openSelectKey];
+      if (container && container.contains(event.target as Node)) {
+        return;
+      }
+      setOpenSelectKey(null);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [openSelectKey]);
+
+  useEffect(() => {
+    if (!isSavedViewsOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const container = savedViewsRef.current;
+      if (container && container.contains(event.target as Node)) {
+        return;
+      }
+      setIsSavedViewsOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSavedViewsOpen]);
+
+  useEffect(() => {
+    if (!shouldDisplaySavedViewsControl) {
+      setIsSavedViewsOpen(false);
+    }
+  }, [shouldDisplaySavedViewsControl]);
 
   return (
     <>
@@ -462,8 +510,65 @@ export function FilterToolbar({
           <Button variant="outline-primary" onClick={handleModalOpen} className="fw-semibold">
             Filtros
           </Button>
-          <span className="text-muted small">{resultLabel}</span>
           {isServerBusy && <Spinner animation="border" size="sm" role="status" />}
+          {shouldDisplaySavedViewsControl && (
+            <div className="position-relative" ref={savedViewsRef}>
+              <Button
+                variant="outline-secondary"
+                onClick={() => setIsSavedViewsOpen((previous) => !previous)}
+                className="fw-semibold"
+              >
+                Vistas guardadas
+              </Button>
+              {isSavedViewsOpen && (
+                <div
+                  className="position-absolute mt-2 bg-white border rounded shadow-sm"
+                  style={{ zIndex: 1060, minWidth: '240px' }}
+                >
+                  <div className="list-group list-group-flush">
+                    {hasSavedViews ? (
+                      savedViews.map((view) => (
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          key={view.id}
+                          className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                          onClick={() => handleApplySavedView(view)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              handleApplySavedView(view);
+                            }
+                          }}
+                        >
+                          <span className="text-start">{view.name}</span>
+                          {canSaveViews && (
+                            <button
+                              type="button"
+                              className="btn btn-link p-0 text-danger"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                handleDeleteSavedView(view.id);
+                              }}
+                              aria-label={`Eliminar vista ${view.name}`}
+                              style={{ textDecoration: 'none' }}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="list-group-item text-muted small">
+                        No hay vistas guardadas.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="d-flex align-items-center gap-2 flex-wrap">
           {appliedBadges.map((badge) => (
@@ -488,49 +593,12 @@ export function FilterToolbar({
               </button>
             </Badge>
           ))}
-          {!hasAppliedFilters && (
-            <span className="text-muted small">Sin filtros aplicados</span>
-          )}
         </div>
-        {hasSavedViews && (
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            <span className="text-muted small">Vistas guardadas:</span>
-            {savedViews.map((view) => (
-              <div
-                key={view.id}
-                className="d-inline-flex align-items-center gap-2 bg-light border border-secondary rounded-pill px-2 py-1"
-              >
-                <button
-                  type="button"
-                  className="btn btn-link p-0 text-decoration-none text-secondary fw-semibold"
-                  onClick={() => handleApplySavedView(view)}
-                >
-                  {view.name}
-                </button>
-                {canSaveViews && (
-                  <button
-                    type="button"
-                    className="btn btn-link p-0 text-danger"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      handleDeleteSavedView(view.id);
-                    }}
-                    aria-label={`Eliminar vista ${view.name}`}
-                    style={{ textDecoration: 'none' }}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       <Modal show={isModalOpen} onHide={handleModalClose} size="lg" centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Filtros</Modal.Title>
+        <Modal.Header closeButton closeVariant="white" className="bg-danger text-white">
+          <Modal.Title className="text-white">Filtros</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Form>
@@ -561,70 +629,83 @@ export function FilterToolbar({
                       )
                     : options;
 
+                  const isOpen = openSelectKey === definition.key;
                   return (
                     <Col xs={12} lg={4} key={definition.key}>
-                      <Form.Group controlId={controlId}>
-                        <Form.Label className="d-block">
-                          {definition.label}
-                          {definition.description && (
-                            <span className="d-block text-muted small">{definition.description}</span>
-                          )}
-                        </Form.Label>
-                        <Form.Control
-                          type="text"
-                          value={displayValue}
-                          onChange={(event) =>
-                            handleSelectInputChange(definition.key, event.target.value)
+                      <div
+                        ref={(node) => {
+                          if (node) {
+                            selectRefs.current[definition.key] = node;
+                          } else {
+                            delete selectRefs.current[definition.key];
                           }
-                          placeholder={
-                            definition.placeholder ??
-                            'Escribe valores separados por comas para filtrar'
-                          }
-                          className="mb-2"
-                        />
-                        <Form.Text className="text-muted">
-                          Selecciona de la lista o añade valores manualmente separados por comas.
-                        </Form.Text>
-                        <Form.Control
-                          type="search"
-                          value={query}
-                          onChange={(event) =>
-                            handleOptionSearchChange(definition.key, event.target.value)
-                          }
-                          placeholder="Filtrar opciones"
-                          className="mt-2 mb-2"
-                        />
-                        {options.length ? (
-                          filteredOptions.length ? (
-                            <div
-                              className="d-grid gap-2"
-                              style={{ maxHeight: '200px', overflowY: 'auto' }}
-                            >
-                              {filteredOptions.map((option) => {
-                                const optionId = `${controlId}-${option.value}`;
-                                return (
-                                  <Form.Check
-                                    type="checkbox"
-                                    id={optionId}
-                                    key={option.value}
-                                    label={option.label}
-                                    checked={selected.has(option.value)}
-                                    onChange={() =>
-                                      handleToggleOption(definition.key, option.value)
-                                    }
-                                  />
-                                );
-                              })}
+                        }}
+                      >
+                        <Form.Group controlId={controlId}>
+                          <Form.Label className="d-block">
+                            {definition.label}
+                            {definition.description && (
+                              <span className="d-block text-muted small">{definition.description}</span>
+                            )}
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={displayValue}
+                            onFocus={() => setOpenSelectKey(definition.key)}
+                            onClick={() => setOpenSelectKey(definition.key)}
+                            onChange={(event) =>
+                              handleSelectInputChange(definition.key, event.target.value)
+                            }
+                            placeholder={
+                              definition.placeholder ??
+                              'Escribe valores separados por comas para filtrar'
+                            }
+                          />
+                          {isOpen && (
+                            <div className="border rounded mt-2 p-3 bg-white shadow-sm">
+                              <Form.Control
+                                type="search"
+                                value={query}
+                                onChange={(event) =>
+                                  handleOptionSearchChange(definition.key, event.target.value)
+                                }
+                                placeholder="Filtrar opciones"
+                                className="mb-3"
+                              />
+                              {options.length ? (
+                                filteredOptions.length ? (
+                                  <div
+                                    className="d-grid gap-2"
+                                    style={{ maxHeight: '200px', overflowY: 'auto' }}
+                                  >
+                                    {filteredOptions.map((option) => {
+                                      const optionId = `${controlId}-${option.value}`;
+                                      return (
+                                        <Form.Check
+                                          type="checkbox"
+                                          id={optionId}
+                                          key={option.value}
+                                          label={option.label}
+                                          checked={selected.has(option.value)}
+                                          onChange={() =>
+                                            handleToggleOption(definition.key, option.value)
+                                          }
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-muted small mb-0">
+                                    No hay coincidencias para ese término.
+                                  </p>
+                                )
+                              ) : (
+                                <p className="text-muted small mb-0">No hay opciones disponibles.</p>
+                              )}
                             </div>
-                          ) : (
-                            <p className="text-muted small mb-0">
-                              No hay coincidencias para ese término.
-                            </p>
-                          )
-                        ) : (
-                          <p className="text-muted small mb-0">No hay opciones disponibles.</p>
-                        )}
-                      </Form.Group>
+                          )}
+                        </Form.Group>
+                      </div>
                     </Col>
                   );
                 }
