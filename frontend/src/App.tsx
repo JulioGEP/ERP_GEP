@@ -9,7 +9,8 @@ import { BudgetDetailModalServices } from './features/presupuestos/services/Budg
 import { BudgetDetailModalMaterial } from './features/presupuestos/material/BudgetDetailModalMaterial';
 import { ProductCommentWindow } from './features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from './features/presupuestos/ProductCommentWindow';
-import { ApiError } from "./api/client";
+import { ApiError } from './api/client';
+import { logout as logoutRequest } from './api/auth';
 import {
   deleteDeal,
   fetchDealDetail,
@@ -31,6 +32,7 @@ import logo from './assets/gep-group-logo.png';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { AppRouter } from './app/router';
 import { useCurrentUser } from './app/CurrentUserContext';
+import LoginPage from './pages/LoginPage';
 import type { BudgetsPageProps } from './pages/presupuestos/BudgetsPage';
 import type { PorSesionesPageProps } from './pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from './pages/calendario/PorUnidadMovilPage';
@@ -263,13 +265,15 @@ export default function App() {
   const {
     currentUser,
     authorization,
-    isLoading: isUserLoading,
+    status: userStatus,
     isError: isUserError,
     error: currentUserError,
+    setAuthToken,
   } = useCurrentUser();
 
   const defaultRedirectPath = authorization.defaultRoute;
   const homePath = defaultRedirectPath || DEFAULT_REDIRECT_PATH;
+  const isAuthLoading = userStatus === 'loading';
 
   const navigationItems = useMemo(() => {
     const items: NavItem[] = [];
@@ -356,6 +360,28 @@ export default function App() {
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  const logoutMutation = useMutation({
+    mutationFn: logoutRequest,
+    onError: (error: unknown) => {
+      const message =
+        error instanceof ApiError
+          ? error.message || 'No se pudo cerrar sesión.'
+          : 'No se pudo cerrar sesión.';
+      pushToast({ variant: 'danger', message });
+    },
+    onSettled: () => {
+      setAuthToken(null);
+      queryClient.removeQueries({ queryKey: ['current-user'], exact: false });
+    },
+  });
+
+  const handleLogout = useCallback(() => {
+    if (logoutMutation.isPending) {
+      return;
+    }
+    logoutMutation.mutate();
+  }, [logoutMutation]);
 
   const handleOpenImportModal = useCallback(() => {
     if (!canImportBudgets) {
@@ -830,7 +856,7 @@ export default function App() {
     autoRefreshOnOpen: !!selectedBudgetId && selectedBudgetId === autoRefreshBudgetId,
   };
 
-  if (isUserLoading) {
+  if (isAuthLoading) {
     return (
       <div className="min-vh-100 d-flex align-items-center justify-content-center">
         <Spinner animation="border" role="status" />
@@ -839,7 +865,11 @@ export default function App() {
     );
   }
 
-  if (!currentUser) {
+  if (userStatus === 'unauthenticated') {
+    return <LoginPage />;
+  }
+
+  if (userStatus === 'error') {
     const errorMessage =
       isUserError && currentUserError instanceof Error
         ? currentUserError.message
@@ -861,6 +891,17 @@ export default function App() {
     );
   }
 
+  if (!currentUser) {
+    return null;
+  }
+
+  const userFullName = useMemo(() => {
+    const parts = [currentUser.first_name, currentUser.last_name]
+      .map((value) => (value ?? '').trim())
+      .filter((value) => value.length);
+    return parts.length ? parts.join(' ') : currentUser.email;
+  }, [currentUser]);
+
   return (
     <div className="min-vh-100 d-flex flex-column">
       <Navbar bg="white" expand="lg" className="shadow-sm py-3">
@@ -881,7 +922,7 @@ export default function App() {
               </span>
             </div>
           </Navbar.Brand>
-          <Nav className="ms-auto gap-3">
+          <Nav className="ms-auto gap-3 align-items-center">
             {navigationItems.map((item) =>
               item.children ? (
                 <NavDropdown
@@ -913,6 +954,27 @@ export default function App() {
                 </Nav.Item>
               )
             )}
+            <NavDropdown
+              align="end"
+              title={<span className="text-uppercase">{userFullName}</span>}
+              id="nav-user-menu"
+            >
+              <NavDropdown.ItemText>
+                <div className="fw-semibold">{userFullName}</div>
+                <div className="text-muted small">{currentUser.email}</div>
+              </NavDropdown.ItemText>
+              <NavDropdown.Divider />
+              <NavDropdown.Item onClick={handleLogout} disabled={logoutMutation.isPending}>
+                {logoutMutation.isPending ? (
+                  <>
+                    <Spinner animation="border" size="sm" role="status" className="me-2" />
+                    Cerrando sesión…
+                  </>
+                ) : (
+                  'Cerrar sesión'
+                )}
+              </NavDropdown.Item>
+            </NavDropdown>
           </Nav>
         </Container>
       </Navbar>

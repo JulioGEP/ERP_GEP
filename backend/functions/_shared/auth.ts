@@ -1,4 +1,5 @@
-import type { users } from '@prisma/client';
+import { createHash, randomBytes } from 'crypto';
+import type { user_sessions, users } from '@prisma/client';
 
 import type { HttpRequest } from './http';
 import { getPrisma } from './prisma';
@@ -12,61 +13,125 @@ export type AuthedHttpRequest<TBody = unknown> = HttpRequest<TBody> & {
   currentPermissions: RolePermissions;
 };
 
-const DEFAULT_CURRENT_USER_EMAIL = 'julio@gepgroup.es';
+const SESSION_TOKEN_BYTES = 48;
+const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 12; // 12 hours
 
-async function findFallbackActiveUser() {
-  const prisma = getPrisma();
+type ActiveSession = user_sessions & { user: users };
 
-  const adminUser = await prisma.users.findFirst({
-    where: { active: true, role: 'admin' },
-    orderBy: { created_at: 'asc' },
-  });
+type AttachResult<TBody> =
+  | { request: AuthedHttpRequest<TBody> }
+  | { error: ReturnType<typeof errorResponse> };
 
-  if (adminUser) {
-    return adminUser;
+function now(): Date {
+  return new Date();
+}
+
+function getSessionTtlMs(): number {
+  const raw = process.env.USER_SESSION_TTL_SECONDS;
+  if (raw) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed * 1000;
+    }
   }
+  return DEFAULT_SESSION_TTL_SECONDS * 1000;
+}
 
-  return prisma.users.findFirst({
-    where: { active: true },
-    orderBy: { created_at: 'asc' },
+function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+export function extractAuthToken(headers: Record<string, string>): string | null {
+  const header = headers['authorization'];
+  if (!header) return null;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const token = match[1].trim();
+  return token.length ? token : null;
+}
+
+async function findActiveSessionByToken(token: string): Promise<ActiveSession | null> {
+  const prisma = getPrisma();
+  const tokenHash = hashSessionToken(token);
+  return prisma.user_sessions.findFirst({
+    where: {
+      token_hash: tokenHash,
+      revoked_at: null,
+      expires_at: { gt: now() },
+    },
+    include: { user: true },
   });
 }
 
-function normalizeEmail(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const email = value.trim().toLowerCase();
-  return email.length ? email : null;
+async function touchSession(sessionId: string) {
+  const prisma = getPrisma();
+  try {
+    await prisma.user_sessions.update({
+      where: { id: sessionId },
+      data: { last_seen_at: now() },
+    });
+  } catch (error) {
+    console.warn('[auth] No se pudo actualizar last_seen_at de la sesión', error);
+  }
 }
 
-async function findCurrentUserByEmail(email: string) {
+async function revokeSessionById(sessionId: string) {
   const prisma = getPrisma();
-  return prisma.users.findFirst({
-    where: {
-      email: { equals: email, mode: 'insensitive' },
+  await prisma.user_sessions.updateMany({
+    where: { id: sessionId, revoked_at: null },
+    data: { revoked_at: now() },
+  });
+}
+
+export async function createUserSession(
+  userId: string,
+  options?: { ttlMs?: number },
+): Promise<{ token: string; session: user_sessions }> {
+  const prisma = getPrisma();
+  const token = randomBytes(SESSION_TOKEN_BYTES).toString('base64url');
+  const expiresAt = new Date(now().getTime() + (options?.ttlMs ?? getSessionTtlMs()));
+  const session = await prisma.user_sessions.create({
+    data: {
+      user_id: userId,
+      token_hash: hashSessionToken(token),
+      expires_at: expiresAt,
+      last_seen_at: now(),
     },
+  });
+  return { token, session };
+}
+
+export async function revokeUserSession(token: string): Promise<void> {
+  const prisma = getPrisma();
+  const tokenHash = hashSessionToken(token);
+  await prisma.user_sessions.updateMany({
+    where: { token_hash: tokenHash, revoked_at: null },
+    data: { revoked_at: now() },
   });
 }
 
 export async function attachCurrentUser<TBody>(
   request: HttpRequest<TBody>,
-): Promise<{ request: AuthedHttpRequest<TBody> } | { error: ReturnType<typeof errorResponse> }> {
-  const resolvedEmail =
-    normalizeEmail(request.headers['x-current-user-email']) ??
-    normalizeEmail(process.env.CURRENT_USER_EMAIL) ??
-    normalizeEmail(DEFAULT_CURRENT_USER_EMAIL);
-
-  let user = resolvedEmail ? await findCurrentUserByEmail(resolvedEmail) : null;
-
-  if ((!user || !user.active) && !process.env.CURRENT_USER_EMAIL) {
-    user = await findFallbackActiveUser();
+): Promise<AttachResult<TBody>> {
+  const token = extractAuthToken(request.headers);
+  if (!token) {
+    return {
+      error: errorResponse('UNAUTHORIZED', 'Debes iniciar sesión para continuar.', 401),
+    };
   }
 
-  if (!user || !user.active) {
-    const message = resolvedEmail
-      ? `No existe un usuario activo con email ${resolvedEmail}.`
-      : 'No se encontró un usuario activo disponible.';
+  const session = await findActiveSessionByToken(token);
+  if (!session) {
     return {
-      error: errorResponse('CURRENT_USER_NOT_FOUND', message, 401),
+      error: errorResponse('UNAUTHORIZED', 'La sesión no es válida o ha expirado.', 401),
+    };
+  }
+
+  const user = session.user;
+  if (!user.active) {
+    await revokeSessionById(session.id);
+    return {
+      error: errorResponse('USER_INACTIVE', 'El usuario actual está inactivo.', 403),
     };
   }
 
@@ -81,6 +146,8 @@ export async function attachCurrentUser<TBody>(
     };
   }
 
+  await touchSession(session.id);
+
   const authedRequest: AuthedHttpRequest<TBody> = Object.assign({}, request, {
     currentUser: user,
     currentPermissions: permissions,
@@ -92,7 +159,7 @@ export async function attachCurrentUser<TBody>(
 export async function requireRole<TBody>(
   request: HttpRequest<TBody>,
   allowedRoles: readonly UserRole[],
-): Promise<{ request: AuthedHttpRequest<TBody> } | { error: ReturnType<typeof errorResponse> }> {
+): Promise<AttachResult<TBody>> {
   const authed = await attachCurrentUser(request);
   if ('error' in authed) {
     return authed;

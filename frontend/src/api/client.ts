@@ -1,3 +1,5 @@
+import { getStoredAuthToken } from '../auth/tokenStorage';
+
 export const API_BASE =
   typeof window !== 'undefined' && window.location
     ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -55,9 +57,19 @@ export async function requestJson<T = any>(
   let response: Response;
 
   try {
+    const headers = new Headers(init?.headers as HeadersInit | undefined);
+    if (!headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
+    const token = getStoredAuthToken();
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
     response = await fetch(resolveRequestInput(input), {
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
       ...init,
+      headers,
     });
   } catch (error: unknown) {
     const message = options?.networkErrorMessage ?? 'No se pudo conectar con el servidor.';
