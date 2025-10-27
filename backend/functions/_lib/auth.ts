@@ -4,6 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 
 import { json } from './http';
 import type { HttpRequest } from '../_shared/http';
+import { getPrisma } from '../_shared/prisma';
 
 const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 días
 const MIN_SESSION_TTL_SECONDS = 60 * 10; // 10 minutos para evitar caducidades ridículas
@@ -296,4 +297,19 @@ export function validatePassword(password: string): { ok: true } | { ok: false; 
 
 export function generateResetToken(): string {
   return randomBytes(32).toString('hex');
+}
+
+export async function hashPassword(
+  password: string,
+  prismaClient: PrismaClient = getPrisma(),
+): Promise<string> {
+  const rows = await prismaClient.$queryRaw<{ hash: string }[]>`
+    SELECT crypt(${password}, gen_salt('bf')) AS hash
+  `;
+
+  if (!rows.length || !rows[0]?.hash) {
+    throw new Error('HASH_GENERATION_FAILED');
+  }
+
+  return rows[0].hash;
 }

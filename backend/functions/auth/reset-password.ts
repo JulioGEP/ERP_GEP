@@ -2,7 +2,7 @@
 import { createHttpHandler } from '../_shared/http';
 import { errorResponse, successResponse } from '../_shared/response';
 import { getPrisma } from '../_shared/prisma';
-import { invalidateUserSessions, validatePassword } from '../_lib/auth';
+import { hashPassword, invalidateUserSessions, validatePassword } from '../_lib/auth';
 
 interface ResetPasswordBody {
   token?: unknown;
@@ -26,16 +26,6 @@ function normalizePassword(value: unknown): string | null {
     return null;
   }
   return value;
-}
-
-async function hashPassword(prisma = getPrisma(), password: string): Promise<string> {
-  const rows = await prisma.$queryRaw<{ hash: string }[]>`
-    SELECT crypt(${password}, gen_salt('bf')) AS hash
-  `;
-  if (!rows.length || !rows[0].hash) {
-    throw new Error('HASH_GENERATION_FAILED');
-  }
-  return rows[0].hash;
 }
 
 export const handler = createHttpHandler<ResetPasswordBody>(async (request) => {
@@ -72,7 +62,7 @@ export const handler = createHttpHandler<ResetPasswordBody>(async (request) => {
   }
 
   const user = users[0];
-  const hashedPassword = await hashPassword(prisma, password);
+  const hashedPassword = await hashPassword(password, prisma);
 
   await prisma.$executeRaw`
     UPDATE users
