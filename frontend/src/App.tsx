@@ -78,6 +78,12 @@ const NAVIGATION_ITEMS: readonly NavItemConfig[] = [
         path: '/presupuestos/sinplanificar',
         allowedRoles: ['admin', 'comercial', 'administracion', 'logistica', 'people'],
       },
+      {
+        key: 'Presupuestos/SinTrabajar',
+        label: 'Sin trabajar',
+        path: '/presupuestos/sintrabajar',
+        allowedRoles: ['admin', 'comercial', 'administracion', 'logistica', 'people'],
+      },
     ],
     allowedRoles: ['admin', 'comercial', 'administracion', 'logistica', 'people'],
   },

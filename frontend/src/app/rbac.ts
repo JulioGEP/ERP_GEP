@@ -12,6 +12,7 @@ export const ALL_USER_ROLES: readonly UserRole[] = [
 const ROUTE_ROLE_PERMISSIONS: Record<string, readonly UserRole[]> = {
   '/presupuestos': ['admin', 'comercial', 'administracion', 'logistica', 'people'],
   '/presupuestos/sinplanificar': ['admin', 'comercial', 'administracion', 'logistica', 'people'],
+  '/presupuestos/sintrabajar': ['admin', 'comercial', 'administracion', 'logistica', 'people'],
   '/calendario/por_sesiones': ['admin'],
   '/calendario/por_unidad_movil': ['admin'],
   '/calendario/por_formador': ['admin'],
