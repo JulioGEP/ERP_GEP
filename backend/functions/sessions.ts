@@ -16,10 +16,6 @@ import {
   reindexSessionNames,
   toNonNegativeInt,
 } from './_shared/sessionGeneration';
-import {
-  isFormacionAbiertaPipeline,
-  syncFormacionAbiertaStudentsFromNotes,
-} from './_shared/formacionAbierta';
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 30;
@@ -1119,10 +1115,6 @@ export const handler = async (event: any) => {
         }
 
         await reindexSessionNames(tx, product.id, baseName);
-
-        if (isFormacionAbiertaPipeline(deal.pipeline_id)) {
-          await syncFormacionAbiertaStudentsFromNotes(tx, deal.deal_id);
-        }
 
         const stored = await tx.sessions.findUnique({
           where: { id: created.id },
