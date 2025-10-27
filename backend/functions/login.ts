@@ -59,7 +59,7 @@ export default createHttpHandler(async (request) => {
     const records = await prisma.$queryRaw<users[]>`
       SELECT *
       FROM "users"
-      WHERE lower(email) = ${email}
+      WHERE email = ${email}
         AND active = true
         AND password_hash IS NOT NULL
         AND password_hash = crypt(${password}, password_hash)
@@ -67,26 +67,6 @@ export default createHttpHandler(async (request) => {
     `;
     user = records.length ? records[0] : null;
   } catch (error) {
-    const errorWithCode =
-      error && typeof error === 'object'
-        ? (error as { code?: string; message?: string })
-        : null;
-    const needsPgcrypto =
-      errorWithCode?.code === '42883' ||
-      (errorWithCode?.message ?? '').includes('crypt');
-
-    if (needsPgcrypto) {
-      console.error(
-        '[login] pgcrypto (crypt) no está disponible en la base de datos',
-        error
-      );
-      return errorResponse(
-        'AUTH_BACKEND_MISCONFIGURED',
-        'El servicio de autenticación no está disponible. Pide al administrador que habilite la extensión pgcrypto.',
-        503
-      );
-    }
-
     console.error('[login] Error verificando credenciales con crypt()', error);
     return errorResponse('UNEXPECTED_ERROR', 'No se pudo validar las credenciales.', 500);
   }
