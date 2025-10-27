@@ -114,6 +114,7 @@ export interface DealSummary {
   products?: DealProduct[];
   productNames?: string[];
   sessions?: DealSummarySession[];
+  studentNames?: string[];
 }
 
 /** Detalle completo (para el modal) */

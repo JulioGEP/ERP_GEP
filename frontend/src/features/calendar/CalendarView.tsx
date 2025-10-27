@@ -19,9 +19,10 @@ import {
   type ProductInfo,
   type VariantInfo,
 } from '../formacion_abierta/ProductVariantsList';
-import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import { FilterToolbar, type FilterDefinition, type FilterOption } from '../../components/table/FilterToolbar';
 import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState } from '../../hooks/useTableFilterState';
+import { fetchProducts } from '../recursos/products.api';
 
 const STORAGE_KEY_PREFIX = 'erp-calendar-preferences';
 const MADRID_TZ = 'Europe/Madrid';
@@ -62,19 +63,41 @@ const SESSION_ESTADO_OPTIONS = Object.entries(SESSION_ESTADO_LABELS).map(([value
 
 const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_id', label: 'Presupuesto' },
-  { key: 'deal_title', label: 'Título del deal' },
-  { key: 'deal_pipeline_id', label: 'Pipeline' },
+  { key: 'deal_title', label: 'Título del Presupuesto' },
+  { key: 'deal_pipeline_id', label: 'Negocio' },
   { key: 'deal_training_address', label: 'Dirección de formación' },
   { key: 'deal_sede_label', label: 'Sede' },
+  { key: 'deal_caes_label', label: 'CAES' },
+  { key: 'deal_fundae_label', label: 'FUNDAE' },
+  { key: 'deal_hotel_label', label: 'Hotel' },
+  { key: 'deal_transporte', label: 'Transporte' },
   { key: 'product_name', label: 'Producto' },
-  { key: 'product_code', label: 'Código de producto' },
   { key: 'estado', label: 'Estado', type: 'select', options: SESSION_ESTADO_OPTIONS },
   { key: 'trainer', label: 'Formador' },
   { key: 'unit', label: 'Unidad móvil' },
   { key: 'room', label: 'Sala' },
-  { key: 'direccion', label: 'Dirección' },
   { key: 'comentarios', label: 'Comentarios' },
 ];
+
+const CALENDAR_SELECT_FILTER_KEYS = new Set<string>([
+  'deal_pipeline_id',
+  'deal_sede_label',
+  'deal_caes_label',
+  'deal_fundae_label',
+  'deal_hotel_label',
+  'deal_transporte',
+  'product_name',
+  'estado',
+  'trainer',
+  'unit',
+  'room',
+]);
+
+const CALENDAR_DYNAMIC_SELECT_KEYS = new Set<string>(
+  Array.from(CALENDAR_SELECT_FILTER_KEYS).filter(
+    (key) => key !== 'product_name' && key !== 'estado',
+  ),
+);
 
 const CALENDAR_FILTER_KEYS = CALENDAR_FILTER_DEFINITIONS.map((definition) => definition.key);
 
@@ -388,14 +411,16 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
   deal_pipeline_id: (session) => safeString(session.dealPipelineId ?? ''),
   deal_training_address: (session) => safeString(session.dealAddress ?? session.direccion ?? ''),
   deal_sede_label: (session) => safeString(session.dealSedeLabel ?? ''),
+  deal_caes_label: (session) => safeString(session.dealCaesLabel ?? ''),
+  deal_fundae_label: (session) => safeString(session.dealFundaeLabel ?? ''),
+  deal_hotel_label: (session) => safeString(session.dealHotelLabel ?? ''),
+  deal_transporte: (session) => safeString(session.dealTransporte ?? ''),
   product_name: (session) => safeString(session.productName ?? ''),
-  product_code: (session) => safeString(session.productCode ?? ''),
   estado: (session) =>
     safeString(`${session.estado} ${SESSION_ESTADO_LABELS[session.estado] ?? session.estado}`),
   trainer: (session) => safeString(session.trainers.map((trainer) => formatResourceName(trainer)).join(' ')),
   unit: (session) => safeString(session.units.map((unit) => formatResourceName(unit)).join(' ')),
   room: (session) => (session.room ? safeString(formatResourceName(session.room)) : ''),
-  direccion: (session) => safeString(session.direccion ?? session.dealAddress ?? ''),
   comentarios: (session) => safeString(session.comentarios ?? ''),
 };
 
@@ -405,8 +430,11 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
   deal_pipeline_id: () => '',
   deal_training_address: (variant) => safeString(variant.variant.sede ?? ''),
   deal_sede_label: (variant) => safeString(variant.variant.sede ?? ''),
+  deal_caes_label: () => '',
+  deal_fundae_label: () => '',
+  deal_hotel_label: () => '',
+  deal_transporte: () => '',
   product_name: (variant) => safeString(variant.variant.name ?? variant.product.name ?? ''),
-  product_code: (variant) => safeString(variant.product.code ?? ''),
   estado: (variant) => {
     const status = safeString(variant.variant.status ?? '');
     if (!status.length) return '';
@@ -433,7 +461,6 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
     const parts = [safeString(room.name ?? ''), safeString(room.sede ?? '')].filter(Boolean);
     return safeString(parts.join(' '));
   },
-  direccion: (variant) => safeString(variant.variant.sede ?? ''),
   comentarios: (variant) => safeString(variant.variant.status ?? ''),
 };
 
@@ -781,6 +808,146 @@ export function CalendarView({
 
   const sessions = sessionsQuery.data?.sessions ?? [];
   const variants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
+
+  const productOptionsQuery = useQuery({
+    queryKey: ['calendar-filter-products'],
+    queryFn: fetchProducts,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const productFilterOptions = useMemo<FilterOption[]>(() => {
+    const products = productOptionsQuery.data ?? [];
+    if (!products.length) {
+      return [];
+    }
+
+    const seen = new Set<string>();
+    const options: FilterOption[] = [];
+
+    products.forEach((product) => {
+      const name = typeof product?.name === 'string' ? product.name.trim() : '';
+      const code = typeof product?.code === 'string' ? product.code.trim() : '';
+      const value = name.length ? name : code;
+      if (!value.length) {
+        return;
+      }
+      const normalized = value.toLocaleLowerCase('es-ES');
+      if (seen.has(normalized)) {
+        return;
+      }
+      seen.add(normalized);
+      const label = name.length && code.length && code !== name ? `${name} (${code})` : value;
+      options.push({ value, label });
+    });
+
+    options.sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+    return options;
+  }, [productOptionsQuery.data]);
+
+  const selectOptionsByKey = useMemo(() => {
+    const accumulator = new Map<string, Set<string>>();
+    CALENDAR_DYNAMIC_SELECT_KEYS.forEach((key) => {
+      accumulator.set(key, new Set<string>());
+    });
+
+    const addValue = (key: string, value: string | null | undefined) => {
+      if (!CALENDAR_DYNAMIC_SELECT_KEYS.has(key)) {
+        return;
+      }
+      const trimmed = safeString(value ?? '');
+      if (!trimmed.length) {
+        return;
+      }
+      accumulator.get(key)?.add(trimmed);
+    };
+
+    sessions.forEach((session) => {
+      addValue('deal_pipeline_id', session.dealPipelineId);
+      addValue('deal_sede_label', session.dealSedeLabel);
+      addValue('deal_caes_label', session.dealCaesLabel);
+      addValue('deal_fundae_label', session.dealFundaeLabel);
+      addValue('deal_hotel_label', session.dealHotelLabel);
+      addValue('deal_transporte', session.dealTransporte);
+      session.trainers.forEach((trainer) => addValue('trainer', formatResourceName(trainer)));
+      session.units.forEach((unit) => addValue('unit', formatResourceName(unit)));
+      if (session.room) {
+        addValue('room', formatResourceName(session.room));
+      }
+    });
+
+    if (includeVariants) {
+      variants.forEach((variant) => {
+        addValue('deal_sede_label', variant.variant.sede ?? '');
+
+        const trainer = variant.variant.trainer;
+        if (trainer) {
+          const parts = [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')].filter(Boolean);
+          addValue('trainer', parts.join(' '));
+        }
+
+        const unit = variant.variant.unidad;
+        if (unit) {
+          const parts = [safeString(unit.name ?? ''), safeString(unit.matricula ?? '')].filter(Boolean);
+          addValue('unit', parts.join(' '));
+        }
+
+        const room = variant.variant.sala;
+        if (room) {
+          const parts = [safeString(room.name ?? ''), safeString(room.sede ?? '')].filter(Boolean);
+          addValue('room', parts.join(' '));
+        }
+      });
+    }
+
+    const result: Record<string, FilterOption[]> = {};
+    CALENDAR_DYNAMIC_SELECT_KEYS.forEach((key) => {
+      const values = accumulator.get(key);
+      if (!values || !values.size) {
+        result[key] = [];
+        return;
+      }
+      const sorted = Array.from(values).sort((a, b) =>
+        a.localeCompare(b, 'es', { sensitivity: 'base' }),
+      );
+      result[key] = sorted.map((value) => ({ value, label: value }));
+    });
+
+    return result;
+  }, [sessions, variants, includeVariants]);
+
+  const calendarFilterDefinitions = useMemo<FilterDefinition[]>(
+    () =>
+      CALENDAR_FILTER_DEFINITIONS.map((definition) => {
+        if (definition.key === 'product_name') {
+          return {
+            ...definition,
+            type: 'select',
+            options: productFilterOptions,
+            placeholder: definition.placeholder ?? 'Selecciona un producto',
+          } satisfies FilterDefinition;
+        }
+
+        if (definition.key === 'estado') {
+          return {
+            ...definition,
+            placeholder: definition.placeholder ?? 'Selecciona un estado',
+          } satisfies FilterDefinition;
+        }
+
+        if (CALENDAR_DYNAMIC_SELECT_KEYS.has(definition.key)) {
+          const options = selectOptionsByKey[definition.key] ?? [];
+          return {
+            ...definition,
+            type: 'select',
+            options,
+            placeholder: definition.placeholder ?? 'Selecciona una opción',
+          } satisfies FilterDefinition;
+        }
+
+        return definition;
+      }),
+    [productFilterOptions, selectOptionsByKey],
+  );
 
   const {
     filters: activeFilters,
@@ -1384,7 +1551,7 @@ export function CalendarView({
               <h1 className="h3 fw-bold mb-0">{title}</h1>
               <div className="flex-grow-1" style={{ minWidth: '240px' }}>
                 <FilterToolbar
-                  filters={CALENDAR_FILTER_DEFINITIONS}
+                  filters={calendarFilterDefinitions}
                   activeFilters={activeFilters}
                   searchValue={searchValue}
                   onSearchChange={handleSearchChange}

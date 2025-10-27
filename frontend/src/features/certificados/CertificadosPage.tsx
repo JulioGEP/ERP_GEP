@@ -1642,6 +1642,7 @@ export function CertificadosPage() {
               onSelect={handleSelectPendingBudget}
               labels={pendingBudgetsTableLabels}
               enableFallback={false}
+              showFilters={false}
             />
           </section>
 

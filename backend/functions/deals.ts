@@ -467,6 +467,35 @@ function mapDealFileForApi(file: any) {
   };
 }
 
+function mapStudentForApi(student: any) {
+  if (!student || typeof student !== "object") {
+    return null;
+  }
+
+  const idRaw = (student as any)?.id;
+  const id =
+    typeof idRaw === "string"
+      ? idRaw
+      : idRaw === null || idRaw === undefined
+      ? null
+      : String(idRaw);
+
+  const nombre = typeof student?.nombre === "string" ? student.nombre : null;
+  const apellido = typeof student?.apellido === "string" ? student.apellido : null;
+  const dni = typeof student?.dni === "string" ? student.dni : null;
+
+  if (!id && !nombre && !apellido && !dni) {
+    return null;
+  }
+
+  return {
+    id,
+    nombre,
+    apellido,
+    dni,
+  };
+}
+
 function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null {
   if (!deal) return deal;
   const out: any = { ...deal };
@@ -522,6 +551,21 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
           };
         })
       : out.sessions;
+  }
+
+  if ("alumnos" in out) {
+    const students = Array.isArray(out.alumnos)
+      ? out.alumnos
+          .map((student: any) => mapStudentForApi(student))
+          .filter(
+            (value): value is { id: string | null; nombre: string | null; apellido: string | null; dni: string | null } =>
+              value !== null,
+          )
+      : [];
+    delete out.alumnos;
+    if (students.length) {
+      out.students = students;
+    }
   }
 
   return out as T;
@@ -1255,6 +1299,10 @@ export const handler = async (event: any) => {
             },
             orderBy: { created_at: "asc" },
           },
+          alumnos: {
+            select: { id: true, nombre: true, apellido: true, dni: true },
+            orderBy: { created_at: "asc" },
+          },
           _count: {
             select: {
               alumnos: true,
@@ -1394,6 +1442,10 @@ export const handler = async (event: any) => {
             },
             orderBy: { fecha_inicio_utc: "asc" },
           },
+          alumnos: {
+            select: { id: true, nombre: true, apellido: true, dni: true },
+            orderBy: { created_at: "asc" },
+          },
           organization: { select: { org_id: true, name: true } },
           person: {
             select: {
@@ -1474,6 +1526,10 @@ export const handler = async (event: any) => {
               hours: true,       // hours existe en deal_products
               created_at: true,
             },
+            orderBy: { created_at: "asc" },
+          },
+          alumnos: {
+            select: { id: true, nombre: true, apellido: true, dni: true },
             orderBy: { created_at: "asc" },
           },
         },
