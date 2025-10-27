@@ -18,6 +18,7 @@ export default function LoginPage() {
 
   const resetNotice = searchParams.get('reset') === 'success';
   const redirectedFromProtectedRoute = Boolean((location.state as any)?.from);
+  const sessionError = Boolean((location.state as any)?.sessionError);
 
   const loginMutation = useMutation({
     mutationFn: login,
@@ -65,7 +66,11 @@ export default function LoginPage() {
           </Alert>
         ) : null}
 
-        {redirectedFromProtectedRoute ? (
+        {sessionError ? (
+          <Alert variant="danger" className="mb-0">
+            No se pudo verificar tu sesión anterior. Inicia sesión de nuevo para continuar.
+          </Alert>
+        ) : redirectedFromProtectedRoute ? (
           <Alert variant="info" className="mb-0">
             Tu sesión ha finalizado. Vuelve a iniciar sesión para continuar.
           </Alert>
