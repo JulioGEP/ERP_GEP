@@ -215,6 +215,7 @@ const BUDGET_MODAL_COMPONENTS = new Map<string, ComponentType<BudgetModalProps>>
 );
 
 const KNOWN_PIPELINE_KEYS = new Set(BUDGET_MODAL_COMPONENTS.keys());
+const FORMACION_ABIERTA_PIPELINE_KEY = normalizePipelineKey('Formación Abierta');
 
 function resolveBudgetModalComponent(
   keyCandidates: readonly unknown[],
@@ -258,6 +259,7 @@ export default function App() {
   const [importResultWarnings, setImportResultWarnings] = useState<string[] | null>(null);
   const [importResultDealId, setImportResultDealId] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [autoRefreshBudgetId, setAutoRefreshBudgetId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -339,12 +341,14 @@ export default function App() {
       setImportError(null);
       setImportResultDealId(null);
       setImportResultWarnings(null);
+      setAutoRefreshBudgetId(null);
     },
     onSuccess: async (payload) => {
       const { deal, warnings } = normalizeImportDealResult(payload);
 
       let summary: DealSummary | null = null;
       let normalizedDealId: string | null = null;
+      let resolvedPipelineKey: string | null = null;
 
       if (deal) {
         summary = buildSummaryFromDeal(deal as DealDetail | DealSummary);
@@ -431,9 +435,23 @@ export default function App() {
         if (!pipelineLabel || !pipelineLabelKey || !KNOWN_PIPELINE_KEYS.has(pipelineLabelKey)) {
           await ensurePipelineFromDetail();
         }
+
+        const candidatePipelineKey =
+          pipelineLabelKey && KNOWN_PIPELINE_KEYS.has(pipelineLabelKey)
+            ? pipelineLabelKey
+            : pipelineIdKey && KNOWN_PIPELINE_KEYS.has(pipelineIdKey)
+            ? pipelineIdKey
+            : '';
+
+        resolvedPipelineKey = candidatePipelineKey || null;
       }
 
       const normalizedId = normalizeDealId(normalizedDealId);
+      if (normalizedId && resolvedPipelineKey === FORMACION_ABIERTA_PIPELINE_KEY) {
+        setAutoRefreshBudgetId(normalizedId);
+      } else {
+        setAutoRefreshBudgetId(null);
+      }
       setImportResultWarnings(warnings);
       setImportResultDealId(normalizedId);
       setImportError(null);
@@ -468,6 +486,7 @@ export default function App() {
       } else {
         setSelectedBudgetSummary(null);
         setSelectedBudgetId(null);
+        setAutoRefreshBudgetId(null);
       }
 
       pushToast({ variant: 'success', message: 'Presupuesto importado' });
@@ -481,6 +500,7 @@ export default function App() {
       setImportError(detailedMessage);
       setImportResultDealId(null);
       setImportResultWarnings(null);
+      setAutoRefreshBudgetId(null);
       pushToast({ variant: 'danger', message: detailedMessage });
     }
   });
@@ -532,6 +552,7 @@ export default function App() {
     setSelectedBudgetSummary(budget);
     // 👇 asegura string | null
     setSelectedBudgetId(budget.dealId ?? null);
+    setAutoRefreshBudgetId(null);
   }, []);
 
   const handleDeleteBudget = useCallback(
@@ -550,6 +571,7 @@ export default function App() {
   const handleCloseDetail = useCallback(() => {
     setSelectedBudgetSummary(null);
     setSelectedBudgetId(null);
+    setAutoRefreshBudgetId(null);
   }, []);
 
   const handleShowProductComment = useCallback((payload: ProductCommentPayload) => {
@@ -734,6 +756,7 @@ export default function App() {
     onClose: handleCloseDetail,
     onShowProductComment: handleShowProductComment,
     onNotify: pushToast,
+    autoRefreshOnOpen: !!selectedBudgetId && selectedBudgetId === autoRefreshBudgetId,
   };
 
   return (
