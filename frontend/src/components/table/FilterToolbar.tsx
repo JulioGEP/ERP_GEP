@@ -25,12 +25,15 @@ type BadgeDescriptor = {
   onRemove: () => void;
 };
 
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
 type SavedFilterView = {
   id: string;
   name: string;
   filters: Record<string, string>;
   searchValue: string;
   createdAt: number;
+  lastAccessedAt: number;
 };
 
 interface FilterToolbarProps {
@@ -101,6 +104,18 @@ export function FilterToolbar({
     setSearchDraft(searchValue);
   }, [searchValue]);
 
+  const persistSavedViews = useCallback(
+    (views: SavedFilterView[]) => {
+      if (!storageKey || typeof window === 'undefined') return;
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(views));
+      } catch {
+        // ignorar errores de almacenamiento (p. ej. cuota superada)
+      }
+    },
+    [storageKey],
+  );
+
   useEffect(() => {
     if (!storageKey) {
       setSavedViews([]);
@@ -141,31 +156,36 @@ export function FilterToolbar({
             typeof candidate.createdAt === 'number' && Number.isFinite(candidate.createdAt)
               ? candidate.createdAt
               : Date.now();
-          return { id, name, filters, searchValue: search, createdAt } satisfies SavedFilterView;
+          const lastAccessedAt =
+            typeof candidate.lastAccessedAt === 'number' &&
+            Number.isFinite(candidate.lastAccessedAt)
+              ? candidate.lastAccessedAt
+              : createdAt;
+          return {
+            id,
+            name,
+            filters,
+            searchValue: search,
+            createdAt,
+            lastAccessedAt,
+          } satisfies SavedFilterView;
         })
         .filter((item): item is SavedFilterView => Boolean(item));
-      normalized.sort((a, b) => {
+      const now = Date.now();
+      const active = normalized.filter((view) => now - view.lastAccessedAt <= THIRTY_DAYS_MS);
+      if (active.length !== normalized.length) {
+        persistSavedViews(active);
+      }
+      active.sort((a, b) => {
         const byName = a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
         if (byName !== 0) return byName;
         return a.createdAt - b.createdAt;
       });
-      setSavedViews(normalized);
+      setSavedViews(active);
     } catch {
       setSavedViews([]);
     }
-  }, [storageKey]);
-
-  const persistSavedViews = useCallback(
-    (views: SavedFilterView[]) => {
-      if (!storageKey || typeof window === 'undefined') return;
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify(views));
-      } catch {
-        // ignorar errores de almacenamiento (p. ej. cuota superada)
-      }
-    },
-    [storageKey],
-  );
+  }, [persistSavedViews, storageKey]);
 
   const filterMap = useMemo(() => {
     const map = new Map<string, FilterDefinition>();
@@ -374,6 +394,7 @@ export function FilterToolbar({
         ? crypto.randomUUID()
         : `${Date.now()}`);
     const createdAt = existing?.createdAt ?? Date.now();
+    const lastAccessedAt = Date.now();
 
     const nextView: SavedFilterView = {
       id: viewId,
@@ -381,6 +402,7 @@ export function FilterToolbar({
       filters: normalizedFilters,
       searchValue: normalizedSearch,
       createdAt,
+      lastAccessedAt,
     };
 
     setSavedViews((current) => {
@@ -431,8 +453,18 @@ export function FilterToolbar({
       setIsModalOpen(false);
       setIsSavedViewsOpen(false);
       setOpenSelectKey(null);
+      setSavedViews((current) => {
+        const now = Date.now();
+        const updated = current.map((candidate) =>
+          candidate.id === view.id
+            ? { ...candidate, lastAccessedAt: now }
+            : candidate,
+        );
+        persistSavedViews(updated);
+        return updated;
+      });
     },
-    [activeFilters, filters, onFilterChange, onRemoveFilter, onSearchChange],
+    [activeFilters, filters, onFilterChange, onRemoveFilter, onSearchChange, persistSavedViews],
   );
 
   const handleDeleteSavedView = useCallback(
