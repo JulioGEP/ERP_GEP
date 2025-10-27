@@ -8,6 +8,7 @@ export const COMMON_HEADERS = {
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-User-Id, X-User-Name',
   'Content-Type': 'application/json',
+  'Access-Control-Allow-Credentials': 'true',
 };
 
 // Serializador seguro: convierte BigInt a string

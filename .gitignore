@@ -36,7 +36,10 @@ backend/functions/**
 !backend/functions/package.json
 !backend/functions/tsconfig.json
 !backend/functions/_shared/**
+!backend/functions/_shared/
 !backend/functions/_lib/**
+!backend/functions/_lib/
+!backend/functions/auth/
 
 # Mantener fuera cualquier node_modules local dentro de functions
 backend/functions/node_modules/
