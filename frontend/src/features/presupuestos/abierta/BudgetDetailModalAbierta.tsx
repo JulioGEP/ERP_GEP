@@ -35,7 +35,11 @@ import {
   type SessionDTO,
   type SessionStudent,
 } from '../api';
-import { normalizeImportDealResult } from '../importDealUtils';
+import {
+  DEAL_NOT_WON_ERROR_CODE,
+  DEAL_NOT_WON_ERROR_MESSAGE,
+  normalizeImportDealResult,
+} from '../importDealUtils';
 import { formatSedeLabel } from '../formatSedeLabel';
 import { SessionStudentsAccordionItem, SessionsAccordionAbierta } from './sessions/SessionsAccordionAbierta';
 import type { DealEditablePatch, DealProductEditablePatch } from '../api';
@@ -425,6 +429,15 @@ export function BudgetDetailModalAbierta({
       }
     },
     onError: (error: unknown) => {
+      if (isApiError(error) && error.code === DEAL_NOT_WON_ERROR_CODE) {
+        const message = DEAL_NOT_WON_ERROR_MESSAGE;
+        if (onNotify) {
+          onNotify({ variant: 'danger', message });
+        } else {
+          alert(message);
+        }
+        return;
+      }
       const defaultMessage = 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
       const notifyMessage = isApiError(error)
         ? `No se pudo importar. [${error.code}] ${error.message}`

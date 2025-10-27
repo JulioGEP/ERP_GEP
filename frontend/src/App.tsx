@@ -20,7 +20,11 @@ import {
   DEALS_WITHOUT_SESSIONS_QUERY_KEY,
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
 } from './features/presupuestos/queryKeys';
-import { normalizeImportDealResult } from './features/presupuestos/importDealUtils';
+import {
+  DEAL_NOT_WON_ERROR_CODE,
+  DEAL_NOT_WON_ERROR_MESSAGE,
+  normalizeImportDealResult,
+} from './features/presupuestos/importDealUtils';
 import type { CalendarSession } from './features/calendar/api';
 import type { DealDetail, DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
@@ -493,6 +497,16 @@ export default function App() {
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
+      if (apiError?.code === DEAL_NOT_WON_ERROR_CODE) {
+        const message = DEAL_NOT_WON_ERROR_MESSAGE;
+        setImportError(message);
+        setImportResultDealId(null);
+        setImportResultWarnings(null);
+        setAutoRefreshBudgetId(null);
+        pushToast({ variant: 'danger', message });
+        return;
+      }
+
       const code = apiError?.code ?? 'UNKNOWN_ERROR';
       const message =
         apiError?.message ?? 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
