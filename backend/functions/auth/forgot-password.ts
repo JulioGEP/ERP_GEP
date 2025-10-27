@@ -80,7 +80,7 @@ export const handler = createHttpHandler<ForgotPasswordBody>(async (request) => 
         reset_token_expires = ${expiresAt},
         reset_requested_at = now(),
         updated_at = now()
-    WHERE id = ${user.id}::uuid
+    WHERE id = ${user.id}
   `;
 
   const link = buildResetLink(token);
