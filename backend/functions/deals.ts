@@ -1192,9 +1192,8 @@ export const handler = async (event: any) => {
       const deal = mapDealForApi(updatedRaw);
       const dealWithPipelineLabel = deal
         ? await ensureDealPipelineLabel(deal, {
-            pipelineId: updatedRaw?.pipeline_id ?? pipelineContext.id ?? null,
-            pipelineLabel:
-              (updatedRaw as any)?.pipeline_label ?? pipelineContext.label ?? null,
+            pipelineId: updatedRaw?.pipeline_id ?? null,
+            pipelineLabel: (updatedRaw as any)?.pipeline_label ?? null,
           })
         : deal;
       return successResponse({ ok: true, deal: dealWithPipelineLabel });
