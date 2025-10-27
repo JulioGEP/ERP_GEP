@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ComponentProps, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType } from 'react';
 import { Alert, Button, Container, Nav, Navbar, NavDropdown, Spinner, Toast, ToastContainer } from 'react-bootstrap';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -47,89 +47,175 @@ import type { ProductosPageProps } from './pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from './pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from './pages/recursos/FormacionAbiertaPage';
 import { TOAST_EVENT, type ToastEventDetail } from './utils/toast';
+import { getAllowedPathsForRole, isRoleAllowedForPath, normalizeNavigationPath, resolveDefaultPathForRole } from './app/rbac';
+import type { UserRole } from './types/user';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 
-type NavChild = {
+type NavChildConfig = {
   key: string;
   label: string;
   path: string;
+  allowedRoles?: readonly UserRole[];
 };
 
-type NavItem = {
+type NavItemConfig = {
   key: string;
   label: string;
   path?: string;
-  children?: NavChild[];
+  children?: NavChildConfig[];
+  allowedRoles?: readonly UserRole[];
 };
 
-const NAVIGATION_ITEMS: NavItem[] = [
+const NAVIGATION_ITEMS: readonly NavItemConfig[] = [
   {
     key: 'Presupuestos',
     label: 'Presupuestos',
     children: [
-      { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
+      {
+        key: 'Presupuestos/SinPlanificar',
+        label: 'Sin planificar',
+        path: '/presupuestos/sinplanificar',
+        allowedRoles: ['admin', 'comercial', 'administracion', 'logistica', 'people'],
+      },
     ],
+    allowedRoles: ['admin', 'comercial', 'administracion', 'logistica', 'people'],
   },
   {
     key: 'Calendario',
     label: 'Calendario',
     children: [
-      { key: 'Calendario/Sesiones', label: 'Por sesiones', path: '/calendario/por_sesiones' },
-      { key: 'Calendario/Formadores', label: 'Por formador', path: '/calendario/por_formador' },
-      { key: 'Calendario/Unidades', label: 'Por unidad móvil', path: '/calendario/por_unidad_movil' },
+      {
+        key: 'Calendario/Sesiones',
+        label: 'Por sesiones',
+        path: '/calendario/por_sesiones',
+        allowedRoles: ['admin'],
+      },
+      {
+        key: 'Calendario/Formadores',
+        label: 'Por formador',
+        path: '/calendario/por_formador',
+        allowedRoles: ['admin'],
+      },
+      {
+        key: 'Calendario/Unidades',
+        label: 'Por unidad móvil',
+        path: '/calendario/por_unidad_movil',
+        allowedRoles: ['admin'],
+      },
     ],
+    allowedRoles: ['admin'],
   },
   {
     key: 'Recursos',
     label: 'Recursos',
     children: [
-      { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores_bomberos' },
-      { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
-      { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
-      { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
-      { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
+      {
+        key: 'Recursos/Formadores',
+        label: 'Formadores / Bomberos',
+        path: '/recursos/formadores_bomberos',
+        allowedRoles: ['admin', 'people'],
+      },
+      {
+        key: 'Recursos/Unidades',
+        label: 'Unidades Móviles',
+        path: '/recursos/unidades_moviles',
+        allowedRoles: ['admin', 'logistica'],
+      },
+      {
+        key: 'Recursos/Salas',
+        label: 'Salas',
+        path: '/recursos/salas',
+        allowedRoles: ['admin', 'logistica'],
+      },
+      {
+        key: 'Recursos/Productos',
+        label: 'Productos',
+        path: '/recursos/productos',
+        allowedRoles: ['admin'],
+      },
+      {
+        key: 'Recursos/FormacionAbierta',
+        label: 'Formación Abierta',
+        path: '/recursos/formacion_abierta',
+        allowedRoles: ['admin'],
+      },
     ],
   },
   {
     key: 'Certificados',
     label: 'Certificados',
-    path: '/certificados',
     children: [
-      { key: 'Certificados/Principal', label: 'Certificados', path: '/certificados' },
+      {
+        key: 'Certificados/Principal',
+        label: 'Certificados',
+        path: '/certificados',
+        allowedRoles: ['admin', 'administracion'],
+      },
       {
         key: 'Certificados/Templates',
         label: 'Plantillas de Certificados',
         path: '/certificados/templates_certificados',
+        allowedRoles: ['admin', 'administracion'],
       },
     ],
+    allowedRoles: ['admin', 'administracion'],
   },
   {
     key: 'Informes',
     label: 'Informes',
     children: [
-      { key: 'Informes/Formacion', label: 'Formación', path: '/informes/formacion' },
-      { key: 'Informes/Preventivo', label: 'Preventivo', path: '/informes/preventivo' },
-      { key: 'Informes/Simulacro', label: 'Simulacro', path: '/informes/simulacro' },
+      {
+        key: 'Informes/Formacion',
+        label: 'Formación',
+        path: '/informes/formacion',
+        allowedRoles: ['admin'],
+      },
+      {
+        key: 'Informes/Preventivo',
+        label: 'Preventivo',
+        path: '/informes/preventivo',
+        allowedRoles: ['admin'],
+      },
+      {
+        key: 'Informes/Simulacro',
+        label: 'Simulacro',
+        path: '/informes/simulacro',
+        allowedRoles: ['admin'],
+      },
       {
         key: 'Informes/RecursoPreventivoEbro',
         label: 'Recurso Preventivo EBRO',
         path: '/informes/recurso_preventivo_ebro',
+        allowedRoles: ['admin'],
       },
     ],
+    allowedRoles: ['admin'],
+  },
+  {
+    key: 'Usuarios',
+    label: 'Usuarios',
+    path: '/usuarios',
+    allowedRoles: ['admin'],
   },
 ];
 
-const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
-
-const KNOWN_APP_PATHS = new Set(
-  [
-    ...NAVIGATION_ITEMS.flatMap((item) => [item.path, ...(item.children?.map((child) => child.path) ?? [])]),
-    ...LEGACY_APP_PATHS,
-  ].filter((path): path is string => Boolean(path))
-);
-
-const DEFAULT_REDIRECT_PATH = '/presupuestos/sinplanificar';
+function canAccessNavEntry(
+  role: UserRole,
+  allowedRoles: readonly UserRole[] | undefined,
+  path?: string,
+): boolean {
+  if (role === 'admin') {
+    return true;
+  }
+  if (allowedRoles && allowedRoles.length > 0) {
+    return allowedRoles.includes(role);
+  }
+  if (path) {
+    return isRoleAllowedForPath(role, path);
+  }
+  return false;
+}
 
 type BudgetModalProps = ComponentProps<typeof BudgetDetailModalEmpresas>;
 
@@ -251,6 +337,50 @@ type ToastMessage = {
 function AuthenticatedApp() {
   const { user, setUser } = useCurrentUser();
 
+  const role: UserRole = (user?.role as UserRole) ?? 'formador';
+
+  const navigationItems = useMemo(() => {
+    return NAVIGATION_ITEMS.map((item) => {
+      const normalizedPath = item.path ? normalizeNavigationPath(item.path) : undefined;
+      const normalizedChildren = item.children
+        ?.map((child) => {
+          const normalizedChildPath = normalizeNavigationPath(child.path);
+          if (!canAccessNavEntry(role, child.allowedRoles, normalizedChildPath)) {
+            return null;
+          }
+          return { ...child, path: normalizedChildPath };
+        })
+        .filter((child): child is NavChildConfig => Boolean(child));
+
+      const itemAllowed =
+        canAccessNavEntry(role, item.allowedRoles, normalizedPath) ||
+        (normalizedChildren && normalizedChildren.length > 0);
+
+      if (!itemAllowed) {
+        return null;
+      }
+
+      return {
+        ...item,
+        path: normalizedPath,
+        children: normalizedChildren,
+      };
+    }).filter((entry): entry is NavItemConfig => Boolean(entry));
+  }, [role]);
+
+  const allowedPaths = useMemo(() => getAllowedPathsForRole(role), [role]);
+
+  const knownPaths = useMemo<ReadonlySet<string>>(() => {
+    const paths = new Set<string>();
+    allowedPaths.forEach((path) => paths.add(normalizeNavigationPath(path)));
+    paths.add('/');
+    return paths;
+  }, [allowedPaths]);
+
+  const defaultRedirectPath = useMemo(() => resolveDefaultPathForRole(role), [role]);
+
+  const canImportBudget = role !== 'logistica';
+
   const location = useLocation();
   const navigate = useNavigate();
   const isBudgetsRoute = location.pathname.startsWith('/presupuestos');
@@ -328,11 +458,14 @@ function AuthenticatedApp() {
   }, [logoutMutation]);
 
   const handleOpenImportModal = useCallback(() => {
+    if (!canImportBudget) {
+      return;
+    }
     setImportResultWarnings(null);
     setImportResultDealId(null);
     setImportError(null);
     setShowImportModal(true);
-  }, []);
+  }, [canImportBudget]);
 
   const handleCloseImportModal = useCallback(() => {
     setShowImportModal(false);
@@ -541,14 +674,15 @@ function AuthenticatedApp() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (KNOWN_APP_PATHS.has(location.pathname)) {
+    const normalizedPath = normalizeNavigationPath(location.pathname);
+    if (knownPaths.has(normalizedPath)) {
       try {
         window.localStorage.setItem(ACTIVE_PATH_STORAGE_KEY, location.pathname);
       } catch (error) {
         console.warn('No se pudo guardar la ruta activa', error);
       }
     }
-  }, [location.pathname]);
+  }, [location.pathname, knownPaths]);
 
   useEffect(() => {
     if (!location.pathname.startsWith('/presupuestos')) {
@@ -729,6 +863,7 @@ function AuthenticatedApp() {
     onDelete: handleDeleteBudget,
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
+    canImportBudget,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {
@@ -802,7 +937,7 @@ function AuthenticatedApp() {
             className="d-flex align-items-center gap-3"
             onClick={(event) => {
               event.preventDefault();
-              navigate(DEFAULT_REDIRECT_PATH);
+              navigate(defaultRedirectPath);
             }}
           >
             <img src={logo} height={64} alt="GEP Group" />
@@ -815,7 +950,7 @@ function AuthenticatedApp() {
           </Navbar.Brand>
           <div className="ms-auto d-flex align-items-center gap-4 flex-wrap justify-content-end">
             <Nav className="gap-3">
-              {NAVIGATION_ITEMS.map((item) =>
+              {navigationItems.map((item) =>
                 item.children ? (
                   <NavDropdown
                     key={item.key}
@@ -881,8 +1016,8 @@ function AuthenticatedApp() {
             productosPageProps={productosPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
-            defaultRedirectPath={DEFAULT_REDIRECT_PATH}
-            knownPaths={KNOWN_APP_PATHS}
+            defaultRedirectPath={defaultRedirectPath}
+            knownPaths={knownPaths}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}
           />
         </Container>
