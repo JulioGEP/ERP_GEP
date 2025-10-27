@@ -116,6 +116,8 @@ const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_DATES = new Set([
   'formacion empresa',
 ]);
 
+const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_ROOM = new Set(['gep services']);
+
 function normalizePipelineLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
   const trimmed = String(value).trim();
@@ -132,6 +134,12 @@ function allowsAutomaticPlanificadaWithoutDates(
   const normalized = normalizePipelineLabel(pipelineLabel);
   if (!normalized) return false;
   return PIPELINES_ALLOW_PLANIFICADA_WITHOUT_DATES.has(normalized);
+}
+
+function allowsAutomaticPlanificadaWithoutRoom(pipelineLabel: string | null | undefined): boolean {
+  const normalized = normalizePipelineLabel(pipelineLabel);
+  if (!normalized) return false;
+  return PIPELINES_ALLOW_PLANIFICADA_WITHOUT_ROOM.has(normalized);
 }
 
 function toSessionEstado(value: unknown): SessionEstado | null {
@@ -169,9 +177,10 @@ function computeAutomaticSessionEstadoFromValues({
   dealPipeline?: string | null;
 }): AutomaticSessionEstado {
   const allowWithoutDates = allowsAutomaticPlanificadaWithoutDates(dealPipeline);
+  const allowWithoutRoom = allowsAutomaticPlanificadaWithoutRoom(dealPipeline);
   const hasValidDates = Boolean(fechaInicio && fechaFin);
   const normalizedSede = normalizeSedeLabel(dealSede);
-  const requiresRoom = normalizedSede !== 'In Company';
+  const requiresRoom = !allowWithoutRoom && normalizedSede !== 'In Company';
   if (
     requiresRoom &&
     (!salaId || !String(salaId).trim().length)
