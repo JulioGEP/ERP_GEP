@@ -3,7 +3,7 @@ export type NoteRecord = { id?: unknown; content?: unknown };
 export type StudentIdentifier =
   | { type: 'EMAIL'; value: string }
   | { type: 'DNI'; value: string }
-  | { type: 'NAME_PHONE'; value: string };
+  | { type: 'PHONE'; value: string };
 
 export type ParsedNoteStudent = {
   sourceNoteId: string | null;
@@ -64,17 +64,14 @@ function normalizeDni(value: string): string | null {
 function resolveIdentifier(
   student: Omit<ParsedNoteStudent, 'identifier' | 'sourceNoteId'>,
 ): StudentIdentifier | null {
-  if (student.email) {
-    return { type: 'EMAIL', value: student.email };
-  }
   if (student.dni) {
     return { type: 'DNI', value: student.dni };
   }
+  if (student.email) {
+    return { type: 'EMAIL', value: student.email };
+  }
   if (student.telefono) {
-    const key = `${normalizeWhitespace(`${student.nombre} ${student.apellido}`.trim()).toLowerCase()}|${student.telefono}`;
-    if (key.trim().length) {
-      return { type: 'NAME_PHONE', value: key };
-    }
+    return { type: 'PHONE', value: student.telefono };
   }
   return null;
 }
@@ -136,6 +133,10 @@ function parseEntry(entry: string) {
     return null;
   }
 
+  if (!dni && !email && !telefono) {
+    return null;
+  }
+
   return { nombre, apellido, dni, email, telefono };
 }
 
@@ -191,13 +192,24 @@ export function studentsFromNotes(notes: readonly NoteRecord[] | null | undefine
         }
 
         const identifier = resolveIdentifier(parsed);
-        const key = identifier ? `${identifier.type}|${identifier.value}` : null;
-        if (key && seen.has(key)) {
+        const keys: string[] = [];
+        if (identifier) {
+          keys.push(`${identifier.type}|${identifier.value}`);
+        }
+        if (parsed.dni) {
+          keys.push(`DNI|${parsed.dni}`);
+        }
+        if (parsed.email) {
+          keys.push(`EMAIL|${parsed.email}`);
+        }
+        if (parsed.telefono) {
+          keys.push(`PHONE|${parsed.telefono}`);
+        }
+
+        if (keys.some((key) => seen.has(key))) {
           return;
         }
-        if (key) {
-          seen.add(key);
-        }
+        keys.forEach((key) => seen.add(key));
 
         results.push({
           sourceNoteId: noteId,

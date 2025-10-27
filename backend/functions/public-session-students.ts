@@ -108,7 +108,9 @@ function mapStudent(student: any) {
     sesion_id: normalizeUuid(student.sesion_id) ?? normalizeId(student.sesion_id),
     nombre: student.nombre,
     apellido: student.apellido,
-    dni: student.dni,
+    dni: student.dni ?? null,
+    email: typeof student.email === 'string' ? student.email : null,
+    telefono: typeof student.telefono === 'string' ? student.telefono : null,
     apto: Boolean(student.apto),
     certificado: Boolean(student.certificado),
     drive_url:
