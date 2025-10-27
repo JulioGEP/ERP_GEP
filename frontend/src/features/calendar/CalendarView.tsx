@@ -400,6 +400,37 @@ function safeString(value: unknown): string {
   return text.length ? text : '';
 }
 
+function collectVariantDealValues(
+  variant: CalendarVariantEvent,
+  extractor: (deal: CalendarVariantEvent['deals'][number]) => string | null | undefined,
+): string[] {
+  if (!Array.isArray(variant.deals) || !variant.deals.length) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const values: string[] = [];
+  variant.deals.forEach((deal) => {
+    const value = safeString(extractor(deal));
+    if (!value.length) {
+      return;
+    }
+    const key = value.toLocaleLowerCase('es-ES');
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    values.push(value);
+  });
+  return values;
+}
+
+function joinVariantDealValues(
+  variant: CalendarVariantEvent,
+  extractor: (deal: CalendarVariantEvent['deals'][number]) => string | null | undefined,
+): string {
+  return collectVariantDealValues(variant, extractor).join(' ');
+}
+
 function normalizeText(value: string): string {
   if (!value.length) return '';
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -425,15 +456,25 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
 };
 
 const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVariantEvent) => string> = {
-  deal_id: () => '',
-  deal_title: () => '',
-  deal_pipeline_id: () => '',
-  deal_training_address: (variant) => safeString(variant.variant.sede ?? ''),
-  deal_sede_label: (variant) => safeString(variant.variant.sede ?? ''),
-  deal_caes_label: () => '',
-  deal_fundae_label: () => '',
-  deal_hotel_label: () => '',
-  deal_transporte: () => '',
+  deal_id: (variant) => joinVariantDealValues(variant, (deal) => deal.id),
+  deal_title: (variant) => joinVariantDealValues(variant, (deal) => deal.title),
+  deal_pipeline_id: (variant) => joinVariantDealValues(variant, (deal) => deal.pipelineId),
+  deal_training_address: (variant) => {
+    const values = [safeString(variant.variant.sede ?? '')]
+      .concat(collectVariantDealValues(variant, (deal) => deal.trainingAddress))
+      .filter((value) => value.length);
+    return values.join(' ');
+  },
+  deal_sede_label: (variant) => {
+    const values = [safeString(variant.variant.sede ?? '')]
+      .concat(collectVariantDealValues(variant, (deal) => deal.sedeLabel))
+      .filter((value) => value.length);
+    return values.join(' ');
+  },
+  deal_caes_label: (variant) => joinVariantDealValues(variant, (deal) => deal.caesLabel),
+  deal_fundae_label: (variant) => joinVariantDealValues(variant, (deal) => deal.fundaeLabel),
+  deal_hotel_label: (variant) => joinVariantDealValues(variant, (deal) => deal.hotelLabel),
+  deal_transporte: (variant) => joinVariantDealValues(variant, (deal) => deal.transporte),
   product_name: (variant) => safeString(variant.variant.name ?? variant.product.name ?? ''),
   estado: (variant) => {
     const status = safeString(variant.variant.status ?? '');
@@ -877,7 +918,18 @@ export function CalendarView({
 
     if (includeVariants) {
       variants.forEach((variant) => {
+        addValue('deal_training_address', variant.variant.sede ?? '');
         addValue('deal_sede_label', variant.variant.sede ?? '');
+
+        variant.deals.forEach((deal) => {
+          addValue('deal_pipeline_id', deal.pipelineId);
+          addValue('deal_training_address', deal.trainingAddress);
+          addValue('deal_sede_label', deal.sedeLabel);
+          addValue('deal_caes_label', deal.caesLabel);
+          addValue('deal_fundae_label', deal.fundaeLabel);
+          addValue('deal_hotel_label', deal.hotelLabel);
+          addValue('deal_transporte', deal.transporte);
+        });
 
         const trainer = variant.variant.trainer;
         if (trainer) {

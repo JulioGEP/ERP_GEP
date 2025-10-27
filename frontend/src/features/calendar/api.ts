@@ -38,12 +38,25 @@ export type CalendarVariantDetails = {
   updated_at: string | null;
 };
 
+export type CalendarVariantDeal = {
+  id: string | null;
+  title: string | null;
+  pipelineId: string | null;
+  trainingAddress: string | null;
+  sedeLabel: string | null;
+  caesLabel: string | null;
+  fundaeLabel: string | null;
+  hotelLabel: string | null;
+  transporte: string | null;
+};
+
 export type CalendarVariantEvent = {
   id: string;
   start: string;
   end: string;
   product: CalendarVariantProduct;
   variant: CalendarVariantDetails;
+  deals: CalendarVariantDeal[];
 };
 
 export type CalendarResource = {
@@ -238,6 +251,42 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
   } satisfies CalendarVariantDetails;
 }
 
+function sanitizeVariantDeals(payload: any): CalendarVariantDeal[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload
+    .map((item) => {
+      const id = toTrimmed(item?.id ?? item?.deal_id);
+      const title = toTrimmed(item?.title);
+      const pipelineId = toTrimmed(item?.pipeline_id);
+      const trainingAddress = toTrimmed(item?.training_address);
+      const sedeLabel = toTrimmed(item?.sede_label);
+      const caesLabel = toTrimmed(item?.caes_label);
+      const fundaeLabel = toTrimmed(item?.fundae_label);
+      const hotelLabel = toTrimmed(item?.hotel_label);
+      const transporte = toTrimmed(item?.transporte);
+
+      if (!id && !title && !pipelineId && !trainingAddress && !sedeLabel && !caesLabel && !fundaeLabel && !hotelLabel && !transporte) {
+        return null;
+      }
+
+      return {
+        id,
+        title,
+        pipelineId,
+        trainingAddress,
+        sedeLabel,
+        caesLabel,
+        fundaeLabel,
+        hotelLabel,
+        transporte,
+      } satisfies CalendarVariantDeal;
+    })
+    .filter((deal): deal is CalendarVariantDeal => deal !== null);
+}
+
 function sanitizeVariantsPayload(payload: any[]): CalendarVariantEvent[] {
   const rows = Array.isArray(payload) ? payload : [];
   return rows
@@ -257,6 +306,7 @@ function sanitizeVariantsPayload(payload: any[]): CalendarVariantEvent[] {
         end,
         product,
         variant,
+        deals: sanitizeVariantDeals(row?.deals),
       } satisfies CalendarVariantEvent;
     })
     .filter((variant): variant is CalendarVariantEvent => variant !== null);

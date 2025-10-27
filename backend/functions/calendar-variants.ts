@@ -10,6 +10,18 @@ import {
   setVariantResourceColumnsSupport,
 } from './_shared/variant-resources';
 
+type CalendarVariantDeal = {
+  id: string | null;
+  title: string | null;
+  pipeline_id: string | null;
+  training_address: string | null;
+  sede_label: string | null;
+  caes_label: string | null;
+  fundae_label: string | null;
+  hotel_label: string | null;
+  transporte: string | null;
+};
+
 type CalendarVariantEvent = {
   id: string;
   start: string;
@@ -48,6 +60,7 @@ type CalendarVariantEvent = {
     created_at: string | null;
     updated_at: string | null;
   };
+  deals: CalendarVariantDeal[];
 };
 
 type DateRange = { start: Date; end: Date };
@@ -208,7 +221,10 @@ function normalizeProductRecord(record: {
   };
 }
 
-function computeEventTimes(variantDate: Date | null, product: { hora_inicio: string | null; hora_fin: string | null }) {
+function computeEventTimes(
+  variantDate: Date | null,
+  product: { hora_inicio: string | null; hora_fin: string | null },
+) {
   if (!variantDate) {
     return null;
   }
@@ -251,6 +267,44 @@ function isTwoDayVerticalProduct(product: { name: string | null; code: string | 
     .filter((value): value is string => Boolean(value));
 
   return identifiers.some((identifier) => TWO_DAY_VERTICAL_PRODUCT_KEYS.has(identifier));
+}
+
+function sanitizeVariantDeal(record: {
+  deal_id: string | null;
+  title: string | null;
+  pipeline_id: string | null;
+  training_address: string | null;
+  sede_label: string | null;
+  caes_label: string | null;
+  fundae_label: string | null;
+  hotel_label: string | null;
+  transporte: string | null;
+}): CalendarVariantDeal | null {
+  const id = toTrimmed(record.deal_id);
+  const title = toTrimmed(record.title);
+  const pipelineId = toTrimmed(record.pipeline_id);
+  const trainingAddress = toTrimmed(record.training_address);
+  const sedeLabel = toTrimmed(record.sede_label);
+  const caesLabel = toTrimmed(record.caes_label);
+  const fundaeLabel = toTrimmed(record.fundae_label);
+  const hotelLabel = toTrimmed(record.hotel_label);
+  const transporte = toTrimmed(record.transporte);
+
+  if (!id && !title && !pipelineId && !trainingAddress && !sedeLabel && !caesLabel && !fundaeLabel && !hotelLabel && !transporte) {
+    return null;
+  }
+
+  return {
+    id,
+    title,
+    pipeline_id: pipelineId,
+    training_address: trainingAddress,
+    sede_label: sedeLabel,
+    caes_label: caesLabel,
+    fundae_label: fundaeLabel,
+    hotel_label: hotelLabel,
+    transporte,
+  } satisfies CalendarVariantDeal;
 }
 
 const variantSelectionBase = {
@@ -384,11 +438,21 @@ export const handler = async (event: any) => {
       : [];
 
     const studentsCountByVariant = new Map<string, number>();
+    const dealsByVariant = new Map<string, CalendarVariantDeal[]>();
 
     if (variantWooIds.length) {
       const dealsWithCounts = await prisma.deals.findMany({
         where: { w_id_variation: { in: variantWooIds } },
         select: {
+          deal_id: true,
+          title: true,
+          pipeline_id: true,
+          training_address: true,
+          sede_label: true,
+          caes_label: true,
+          fundae_label: true,
+          hotel_label: true,
+          transporte: true,
           w_id_variation: true,
           _count: {
             select: { alumnos: true },
@@ -411,24 +475,43 @@ export const handler = async (event: any) => {
         const rawCount = deal?._count?.alumnos;
         const count = typeof rawCount === 'number' && Number.isFinite(rawCount) ? rawCount : 0;
         studentsCountByVariant.set(keyRaw, (studentsCountByVariant.get(keyRaw) ?? 0) + count);
+
+        const normalizedDeal = sanitizeVariantDeal({
+          deal_id: deal.deal_id ?? null,
+          title: deal.title ?? null,
+          pipeline_id: deal.pipeline_id ?? null,
+          training_address: deal.training_address ?? null,
+          sede_label: deal.sede_label ?? null,
+          caes_label: deal.caes_label ?? null,
+          fundae_label: deal.fundae_label ?? null,
+          hotel_label: deal.hotel_label ?? null,
+          transporte: deal.transporte ?? null,
+        });
+
+        if (normalizedDeal) {
+          const list = dealsByVariant.get(keyRaw) ?? [];
+          list.push(normalizedDeal);
+          dealsByVariant.set(keyRaw, list);
+        }
       });
     }
 
-    variants.forEach((variant) => {
-      if (!variant.product) {
+    (Array.isArray(variants) ? variants : []).forEach((variant) => {
+      const record = variant as any;
+      if (!record?.product) {
         return;
       }
 
-      const product = normalizeProductRecord(variant.product);
-      const variantDate = toDate(variant.date);
+      const product = normalizeProductRecord(record.product);
+      const variantDate = toDate(record.date);
       const times = computeEventTimes(variantDate, product);
       if (!times) {
         return;
       }
 
       let wooIdKey: string | null = null;
-      if (variant?.id_woo !== null && variant?.id_woo !== undefined) {
-        const rawId = variant.id_woo;
+      if (record?.id_woo !== null && record?.id_woo !== undefined) {
+        const rawId = record.id_woo;
         if (typeof rawId === 'bigint') {
           wooIdKey = rawId.toString();
         } else if (typeof rawId === 'number') {
@@ -445,8 +528,9 @@ export const handler = async (event: any) => {
       }
 
       const studentsTotal = wooIdKey ? studentsCountByVariant.get(wooIdKey) ?? 0 : null;
+      const variantDeals = wooIdKey ? dealsByVariant.get(wooIdKey) ?? [] : [];
 
-      const normalizedVariant = normalizeVariantRecord(variant, studentsTotal);
+      const normalizedVariant = normalizeVariantRecord(record, studentsTotal);
 
       const pushEvent = (id: string, start: Date, end: Date) => {
         events.push({
@@ -455,17 +539,18 @@ export const handler = async (event: any) => {
           end: end.toISOString(),
           product,
           variant: normalizedVariant,
+          deals: variantDeals,
         });
       };
 
-      pushEvent(variant.id, times.start, times.end);
+      pushEvent(record.id, times.start, times.end);
 
       if (variantDate && isTwoDayVerticalProduct(product)) {
         const nextDayDate = new Date(variantDate.getTime());
         nextDayDate.setUTCDate(nextDayDate.getUTCDate() + 1);
         const nextTimes = computeEventTimes(nextDayDate, product);
         if (nextTimes) {
-          pushEvent(`${variant.id}:day2`, nextTimes.start, nextTimes.end);
+          pushEvent(`${record.id}:day2`, nextTimes.start, nextTimes.end);
         }
       }
     });
