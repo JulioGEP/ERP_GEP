@@ -13,13 +13,50 @@ export type AuthedHttpRequest<TBody = unknown> = HttpRequest<TBody> & {
   currentPermissions: RolePermissions;
 };
 
+export type AttachResult<TBody> =
+  | { request: AuthedHttpRequest<TBody> }
+  | { error: ReturnType<typeof errorResponse> };
+
+type ActiveSession = user_sessions & { user: users };
+
 const SESSION_TOKEN_BYTES = 48;
 const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 12; // 12 hours
 
-function normalizeEmail(value: string | null | undefined): string | null {
+function now(): Date {
+  return new Date();
+}
+
+function parsePositiveInt(value: string | null | undefined): number | null {
   if (!value) return null;
-  const email = value.trim().toLowerCase();
-  return email.length ? email : null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.floor(parsed);
+}
+
+function getSessionTtlMs(): number {
+  const ttlSeconds = parsePositiveInt(process.env.SESSION_TTL_SECONDS) ?? DEFAULT_SESSION_TTL_SECONDS;
+  return ttlSeconds * 1000;
+}
+
+export function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+export function extractAuthToken(headers: Record<string, string> | undefined | null): string | null {
+  if (!headers) return null;
+  const raw = headers['authorization'] ?? headers['Authorization'];
+  if (!raw) return null;
+
+  const value = raw.trim();
+  if (!value.length) return null;
+
+  const bearerMatch = value.match(/^Bearer\s+(.+)$/i);
+  if (bearerMatch) {
+    const token = bearerMatch[1].trim();
+    return token.length ? token : null;
+  }
+
+  return value;
 }
 
 async function findActiveSessionByToken(token: string): Promise<ActiveSession | null> {
@@ -84,28 +121,26 @@ export async function revokeUserSession(token: string): Promise<void> {
 
 export async function attachCurrentUser<TBody>(
   request: HttpRequest<TBody>,
-): Promise<{ request: AuthedHttpRequest<TBody> } | { error: ReturnType<typeof errorResponse> }> {
-  const resolvedEmail =
-    normalizeEmail(process.env.CURRENT_USER_EMAIL) ?? normalizeEmail(DEFAULT_CURRENT_USER_EMAIL);
-
-  if (!resolvedEmail) {
+): Promise<AttachResult<TBody>> {
+  const token = extractAuthToken(request.headers);
+  if (!token) {
     return {
-      error: errorResponse(
-        'CURRENT_USER_MISSING',
-        'No se pudo determinar el usuario actual (CURRENT_USER_EMAIL no configurado).',
-        401,
-      ),
+      error: errorResponse('UNAUTHORIZED', 'Se requiere autenticación.', 401),
     };
   }
 
-  const user = await findCurrentUserByEmail(resolvedEmail);
-  if (!user || !user.active) {
+  const session = await findActiveSessionByToken(token);
+  if (!session) {
     return {
-      error: errorResponse(
-        'CURRENT_USER_NOT_FOUND',
-        `No existe un usuario activo con email ${resolvedEmail}.`,
-        401,
-      ),
+      error: errorResponse('UNAUTHORIZED', 'Sesión inválida o expirada.', 401),
+    };
+  }
+
+  const { user } = session;
+  if (!user.active) {
+    await revokeSessionById(session.id);
+    return {
+      error: errorResponse('USER_INACTIVE', 'El usuario no está activo.', 403),
     };
   }
 
