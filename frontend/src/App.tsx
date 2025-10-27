@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ComponentProps, type ComponentType } from 'react';
-import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Alert, Button, Container, Nav, Navbar, NavDropdown, Spinner, Toast, ToastContainer } from 'react-bootstrap';
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetDetailModalEmpresas } from './features/presupuestos/empresas/BudgetDetailModalEmpresas';
@@ -30,6 +30,11 @@ import type { DealDetail, DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { AppRouter } from './app/router';
+import LoginPage from './pages/auth/LoginPage';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
+import { useCurrentUser } from './app/auth/UserContext';
+import { logout as requestLogout } from './api/auth';
 import type { BudgetsPageProps } from './pages/presupuestos/BudgetsPage';
 import type { PorSesionesPageProps } from './pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from './pages/calendario/PorUnidadMovilPage';
@@ -243,13 +248,8 @@ type ToastMessage = {
   message: string;
 };
 
-export default function App() {
-  const isPublicStudentsPage =
-    typeof window !== 'undefined' && /\/public\/sesiones\/[^/]+\/alumnos/i.test(window.location.pathname);
-
-  if (isPublicStudentsPage) {
-    return <PublicSessionStudentsPage />;
-  }
+function AuthenticatedApp() {
+  const { user, setUser } = useCurrentUser();
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -306,6 +306,26 @@ export default function App() {
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  const logoutMutation = useMutation({
+    mutationFn: requestLogout,
+    onSuccess: () => {
+      setUser(null);
+      queryClient.clear();
+      navigate('/login', { replace: true });
+    },
+    onError: (error: unknown) => {
+      console.error('No se pudo cerrar la sesión', error);
+      pushToast({ variant: 'danger', message: 'No se pudo cerrar la sesión. Inténtalo de nuevo.' });
+    },
+  });
+
+  const handleLogout = useCallback(() => {
+    if (logoutMutation.isPending) {
+      return;
+    }
+    logoutMutation.mutate();
+  }, [logoutMutation]);
 
   const handleOpenImportModal = useCallback(() => {
     setImportResultWarnings(null);
@@ -793,39 +813,57 @@ export default function App() {
               </span>
             </div>
           </Navbar.Brand>
-          <Nav className="ms-auto gap-3">
-            {NAVIGATION_ITEMS.map((item) =>
-              item.children ? (
-                <NavDropdown
-                  key={item.key}
-                  title={<span className="text-uppercase">{item.label}</span>}
-                  id={`nav-${item.key}`}
-                  active={item.children.some((child) => location.pathname.startsWith(child.path))}
-                >
-                  {item.children.map((child) => (
-                    <NavDropdown.Item
-                      key={child.key}
+          <div className="ms-auto d-flex align-items-center gap-4 flex-wrap justify-content-end">
+            <Nav className="gap-3">
+              {NAVIGATION_ITEMS.map((item) =>
+                item.children ? (
+                  <NavDropdown
+                    key={item.key}
+                    title={<span className="text-uppercase">{item.label}</span>}
+                    id={`nav-${item.key}`}
+                    active={item.children.some((child) => location.pathname.startsWith(child.path))}
+                  >
+                    {item.children.map((child) => (
+                      <NavDropdown.Item
+                        key={child.key}
+                        as={NavLink}
+                        to={child.path}
+                        className="text-uppercase"
+                      >
+                        {child.label}
+                      </NavDropdown.Item>
+                    ))}
+                  </NavDropdown>
+                ) : (
+                  <Nav.Item key={item.key}>
+                    <Nav.Link
                       as={NavLink}
-                      to={child.path}
+                      to={item.path ?? '#'}
                       className="text-uppercase"
                     >
-                      {child.label}
-                    </NavDropdown.Item>
-                  ))}
-                </NavDropdown>
-              ) : (
-                <Nav.Item key={item.key}>
-                  <Nav.Link
-                    as={NavLink}
-                    to={item.path ?? '#'}
-                    className="text-uppercase"
-                  >
-                    {item.label}
-                  </Nav.Link>
-                </Nav.Item>
-              )
-            )}
-          </Nav>
+                      {item.label}
+                    </Nav.Link>
+                  </Nav.Item>
+                )
+              )}
+            </Nav>
+
+            <div className="d-flex align-items-center gap-2">
+              {user ? (
+                <span className="text-muted small mb-0 text-end">
+                  {user.name?.trim()?.length ? user.name : user.email}
+                </span>
+              ) : null}
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={handleLogout}
+                disabled={logoutMutation.isPending}
+              >
+                {logoutMutation.isPending ? 'Saliendo…' : 'Salir'}
+              </Button>
+            </div>
+          </div>
         </Container>
       </Navbar>
 
@@ -893,5 +931,104 @@ export default function App() {
         })}
       </ToastContainer>
     </div>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <Container className="min-vh-100 d-flex align-items-center justify-content-center">
+      <Spinner animation="border" role="status" variant="primary">
+        <span className="visually-hidden">Cargando…</span>
+      </Spinner>
+    </Container>
+  );
+}
+
+function ErrorScreen({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Container className="min-vh-100 d-flex align-items-center justify-content-center py-5">
+      <div className="w-100" style={{ maxWidth: 420 }}>
+        <Alert variant="danger" className="shadow-sm">
+          <Alert.Heading className="h5">No se pudo verificar la sesión</Alert.Heading>
+          <p className="mb-3">Se ha producido un error al comprobar tu sesión. Inténtalo de nuevo.</p>
+          <div className="d-grid">
+            <Button onClick={onRetry}>Reintentar</Button>
+          </div>
+        </Alert>
+      </div>
+    </Container>
+  );
+}
+
+function RequireAuth({ children }: { children: JSX.Element }) {
+  const { status, isFetching, user, refresh } = useCurrentUser();
+  const location = useLocation();
+
+  if (status === 'loading' || isFetching) {
+    return <LoadingScreen />;
+  }
+
+  if (status === 'error') {
+    return <ErrorScreen onRetry={() => { void refresh(); }} />;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" state={{ from: `${location.pathname}${location.search}` }} replace />;
+  }
+
+  return children;
+}
+
+function PublicOnlyRoute({ children }: { children: JSX.Element }) {
+  const { status, isFetching, user } = useCurrentUser();
+
+  if (status === 'loading' || isFetching) {
+    return <LoadingScreen />;
+  }
+
+  if (status === 'authenticated' && user) {
+    return <Navigate to="/presupuestos" replace />;
+  }
+
+  return children;
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/public/*" element={<PublicSessionStudentsPage />} />
+      <Route
+        path="/login"
+        element={
+          <PublicOnlyRoute>
+            <LoginPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicOnlyRoute>
+            <ForgotPasswordPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <PublicOnlyRoute>
+            <ResetPasswordPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/*"
+        element={
+          <RequireAuth>
+            <AuthenticatedApp />
+          </RequireAuth>
+        }
+      />
+    </Routes>
   );
 }
