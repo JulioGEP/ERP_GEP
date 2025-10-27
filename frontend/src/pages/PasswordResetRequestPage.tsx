@@ -4,16 +4,13 @@ import { Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 
 import logo from '../assets/gep-group-logo.png';
-import { login, type LoginInput } from '../api/auth';
+import { requestPasswordReset, type PasswordResetRequestInput } from '../api/auth';
 import { isApiError } from '../api/client';
-import { useCurrentUser } from '../app/CurrentUserContext';
 
-export default function LoginPage() {
-  const { setAuthToken, refetch } = useCurrentUser();
-  const [email, setEmail] = useState('julio@gepgroup.es');
-  const [password, setPassword] = useState('');
+export default function PasswordResetRequestPage() {
+  const [email, setEmail] = useState('');
   const emailInputRef = useRef<HTMLInputElement | null>(null);
-  const passwordInputRef = useRef<HTMLInputElement | null>(null);
+  const [requestCompleted, setRequestCompleted] = useState(false);
 
   useEffect(() => {
     if (emailInputRef.current) {
@@ -22,27 +19,30 @@ export default function LoginPage() {
   }, []);
 
   const mutation = useMutation({
-    mutationFn: (input: LoginInput) => login(input),
-    onSuccess: async (response) => {
-      setAuthToken(response.data.token);
-      await refetch();
+    mutationFn: (input: PasswordResetRequestInput) => requestPasswordReset(input),
+    onSuccess: () => {
+      setRequestCompleted(true);
     },
   });
+
+  useEffect(() => {
+    if (requestCompleted && emailInputRef.current) {
+      emailInputRef.current.blur();
+    }
+  }, [requestCompleted]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (mutation.isPending) {
       return;
     }
-    if (!email.trim().length) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail.length) {
       emailInputRef.current?.focus();
       return;
     }
-    if (!password.trim().length) {
-      passwordInputRef.current?.focus();
-      return;
-    }
-    mutation.mutate({ email: email.trim(), password: password });
+    setRequestCompleted(false);
+    mutation.mutate({ email: trimmedEmail });
   };
 
   const isLoading = mutation.isPending;
@@ -52,13 +52,17 @@ export default function LoginPage() {
       return null;
     }
     if (isApiError(mutation.error)) {
-      if (mutation.error.status === 401) {
-        return 'Credenciales no válidas. Revisa el usuario y la contraseña.';
+      if (mutation.error.status === 429) {
+        return 'Has solicitado demasiados restablecimientos en poco tiempo. Inténtalo de nuevo más tarde.';
       }
-      return mutation.error.message ?? 'No se pudo iniciar sesión.';
+      return mutation.error.message ?? 'No se pudo enviar la solicitud.';
     }
-    return 'No se pudo iniciar sesión.';
+    return 'No se pudo enviar la solicitud.';
   }, [mutation.error, mutation.isError]);
+
+  const successMessage = requestCompleted
+    ? 'Si el correo existe en nuestro sistema, recibirás un email con instrucciones para restablecer la contraseña.'
+    : null;
 
   return (
     <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
@@ -67,36 +71,35 @@ export default function LoginPage() {
           <Card.Body className="p-4">
             <div className="text-center mb-4">
               <img src={logo} alt="GEP Group" height={72} className="mb-3" />
-              <h1 className="h4 fw-bold mb-1">Acceso al planificador</h1>
-              <p className="text-muted mb-0">Introduce tus credenciales para continuar.</p>
+              <h1 className="h4 fw-bold mb-1">Recuperar contraseña</h1>
+              <p className="text-muted mb-0">
+                Introduce el correo asociado a tu cuenta para enviarte las instrucciones de restablecimiento.
+              </p>
             </div>
             <Form onSubmit={handleSubmit} className="d-grid gap-3">
-              <Form.Group controlId="login-email">
-                <Form.Label className="fw-semibold text-uppercase small">Usuario</Form.Label>
+              <Form.Group controlId="password-reset-email">
+                <Form.Label className="fw-semibold text-uppercase small">Correo electrónico</Form.Label>
                 <Form.Control
                   ref={emailInputRef}
                   type="email"
                   placeholder="correo@ejemplo.com"
                   value={email}
-                  autoComplete="username"
-                  onChange={(event) => setEmail(event.currentTarget.value)}
+                  autoComplete="email"
+                  onChange={(event) => {
+                    setEmail(event.currentTarget.value);
+                    if (requestCompleted) {
+                      setRequestCompleted(false);
+                    }
+                  }}
                   disabled={isLoading}
                   required
                 />
               </Form.Group>
-              <Form.Group controlId="login-password">
-                <Form.Label className="fw-semibold text-uppercase small">Contraseña</Form.Label>
-                <Form.Control
-                  ref={passwordInputRef}
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  autoComplete="current-password"
-                  onChange={(event) => setPassword(event.currentTarget.value)}
-                  disabled={isLoading}
-                  required
-                />
-              </Form.Group>
+              {successMessage ? (
+                <Alert variant="success" className="mb-0">
+                  {successMessage}
+                </Alert>
+              ) : null}
               {errorMessage ? (
                 <Alert variant="danger" className="mb-0">
                   {errorMessage}
@@ -107,15 +110,15 @@ export default function LoginPage() {
                   {isLoading ? (
                     <>
                       <Spinner animation="border" size="sm" role="status" className="me-2" />
-                      Iniciando sesión…
+                      Enviando instrucciones…
                     </>
                   ) : (
-                    'Iniciar sesión'
+                    'Enviar instrucciones'
                   )}
                 </Button>
                 <div className="text-center">
-                  <Link to="/recuperar-contraseña" className="small">
-                    ¿Olvidaste tu contraseña?
+                  <Link to="/" className="small">
+                    Volver al inicio de sesión
                   </Link>
                 </div>
               </div>

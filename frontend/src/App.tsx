@@ -33,6 +33,8 @@ import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { AppRouter } from './app/router';
 import { useCurrentUser } from './app/CurrentUserContext';
 import LoginPage from './pages/LoginPage';
+import PasswordResetRequestPage from './pages/PasswordResetRequestPage';
+import PasswordResetPage from './pages/PasswordResetPage';
 import type { BudgetsPageProps } from './pages/presupuestos/BudgetsPage';
 import type { PorSesionesPageProps } from './pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from './pages/calendario/PorUnidadMovilPage';
@@ -866,6 +868,12 @@ export default function App() {
   }
 
   if (userStatus === 'unauthenticated') {
+    if (location.pathname === '/recuperar-contraseña') {
+      return <PasswordResetRequestPage />;
+    }
+    if (location.pathname === '/restablecer-contraseña') {
+      return <PasswordResetPage />;
+    }
     return <LoginPage />;
   }
 
