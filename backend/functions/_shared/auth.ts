@@ -16,38 +16,10 @@ export type AuthedHttpRequest<TBody = unknown> = HttpRequest<TBody> & {
 const SESSION_TOKEN_BYTES = 48;
 const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 12; // 12 hours
 
-type ActiveSession = user_sessions & { user: users };
-
-type AttachResult<TBody> =
-  | { request: AuthedHttpRequest<TBody> }
-  | { error: ReturnType<typeof errorResponse> };
-
-function now(): Date {
-  return new Date();
-}
-
-function getSessionTtlMs(): number {
-  const raw = process.env.USER_SESSION_TTL_SECONDS;
-  if (raw) {
-    const parsed = Number(raw);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed * 1000;
-    }
-  }
-  return DEFAULT_SESSION_TTL_SECONDS * 1000;
-}
-
-function hashSessionToken(token: string): string {
-  return createHash('sha256').update(token, 'utf8').digest('hex');
-}
-
-export function extractAuthToken(headers: Record<string, string>): string | null {
-  const header = headers['authorization'];
-  if (!header) return null;
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
-  const token = match[1].trim();
-  return token.length ? token : null;
+function normalizeEmail(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const email = value.trim().toLowerCase();
+  return email.length ? email : null;
 }
 
 async function findActiveSessionByToken(token: string): Promise<ActiveSession | null> {
@@ -112,26 +84,28 @@ export async function revokeUserSession(token: string): Promise<void> {
 
 export async function attachCurrentUser<TBody>(
   request: HttpRequest<TBody>,
-): Promise<AttachResult<TBody>> {
-  const token = extractAuthToken(request.headers);
-  if (!token) {
+): Promise<{ request: AuthedHttpRequest<TBody> } | { error: ReturnType<typeof errorResponse> }> {
+  const resolvedEmail =
+    normalizeEmail(process.env.CURRENT_USER_EMAIL) ?? normalizeEmail(DEFAULT_CURRENT_USER_EMAIL);
+
+  if (!resolvedEmail) {
     return {
-      error: errorResponse('UNAUTHORIZED', 'Debes iniciar sesión para continuar.', 401),
+      error: errorResponse(
+        'CURRENT_USER_MISSING',
+        'No se pudo determinar el usuario actual (CURRENT_USER_EMAIL no configurado).',
+        401,
+      ),
     };
   }
 
-  const session = await findActiveSessionByToken(token);
-  if (!session) {
+  const user = await findCurrentUserByEmail(resolvedEmail);
+  if (!user || !user.active) {
     return {
-      error: errorResponse('UNAUTHORIZED', 'La sesión no es válida o ha expirado.', 401),
-    };
-  }
-
-  const user = session.user;
-  if (!user.active) {
-    await revokeSessionById(session.id);
-    return {
-      error: errorResponse('USER_INACTIVE', 'El usuario actual está inactivo.', 403),
+      error: errorResponse(
+        'CURRENT_USER_NOT_FOUND',
+        `No existe un usuario activo con email ${resolvedEmail}.`,
+        401,
+      ),
     };
   }
 
