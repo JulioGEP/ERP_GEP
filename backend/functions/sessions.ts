@@ -1,4 +1,3 @@
-// @ts-nocheck
 // backend/functions/sessions.ts
 import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';

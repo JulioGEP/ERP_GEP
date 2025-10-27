@@ -1,4 +1,3 @@
-// @ts-nocheck
 // backend/functions/public-session-students.ts
 import { validate as isUUID } from 'uuid';
 import type { Prisma } from '@prisma/client';

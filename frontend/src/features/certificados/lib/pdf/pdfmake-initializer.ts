@@ -1,4 +1,3 @@
-// @ts-nocheck
 import pdfMake from 'pdfmake/build/pdfmake';
 
 const CERTIFICATE_ASSETS_BASE_PATH = '/certificados/';
