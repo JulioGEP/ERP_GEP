@@ -44,7 +44,6 @@ import {
   useDealFollowUpToggle,
   type FollowUpFieldKey,
 } from './hooks/useDealFollowUpToggle';
-import { FieldWithStatus } from './components/FieldWithStatus';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -383,8 +382,7 @@ export function BudgetDetailModal({
         id={inputId}
         type="checkbox"
         className="budget-follow-up-checkbox mb-0"
-        title="Campo trabajado"
-        aria-label="Campo trabajado"
+        title={`Seguimiento ${config.label}`}
         checked={checked}
         disabled={isFollowUpFieldLoading(field)}
         onChange={(event) => handleFollowUpToggle(field, event.target.checked, config.label)}
@@ -1154,65 +1152,63 @@ export function BudgetDetailModal({
                 </div>
               </Col>
               <Col md={2} className="budget-field-narrow">
-                <FieldWithStatus
-                  label={<Form.Label className="mb-0">CAES</Form.Label>}
-                  status={renderFollowUpBlock('caes_val')}
-                >
-                  <Form.Control
-                    value={form.caes_label}
-                    onChange={(e) => updateForm('caes_label', e.target.value)}
-                    style={affirmativeBorder(form.caes_label)}
-                    title={buildFieldTooltip(form.caes_label)}
-                  />
-                </FieldWithStatus>
+                <div className="d-flex justify-content-between align-items-center gap-2">
+                  <Form.Label className="mb-0">CAES</Form.Label>
+                  {renderFollowUpBlock('caes_val')}
+                </div>
+                <Form.Control
+                  value={form.caes_label}
+                  onChange={(e) => updateForm('caes_label', e.target.value)}
+                  style={affirmativeBorder(form.caes_label)}
+                  title={buildFieldTooltip(form.caes_label)}
+                />
               </Col>
               <Col md={2} className="budget-field-narrow">
-                <FieldWithStatus
-                  label={<Form.Label className="mb-0">FUNDAE</Form.Label>}
-                  status={renderFollowUpBlock('fundae_val')}
-                >
-                  <Form.Control
-                    value={form.fundae_label}
-                    onChange={(e) => updateForm('fundae_label', e.target.value)}
-                    style={affirmativeBorder(form.fundae_label)}
-                    title={buildFieldTooltip(form.fundae_label)}
-                  />
-                </FieldWithStatus>
+                <div className="d-flex justify-content-between align-items-center gap-2">
+                  <Form.Label className="mb-0">FUNDAE</Form.Label>
+                  {renderFollowUpBlock('fundae_val')}
+                </div>
+                <Form.Control
+                  value={form.fundae_label}
+                  onChange={(e) => updateForm('fundae_label', e.target.value)}
+                  style={affirmativeBorder(form.fundae_label)}
+                  title={buildFieldTooltip(form.fundae_label)}
+                />
               </Col>
               <Col md={2} className="budget-field-narrow">
-                <FieldWithStatus
-                  label={<Form.Label className="mb-0">Hotel</Form.Label>}
-                  status={renderFollowUpBlock('hotel_val')}
-                >
-                  <Form.Control
-                    value={form.hotel_label}
-                    onChange={(e) => updateForm('hotel_label', e.target.value)}
-                    style={affirmativeBorder(form.hotel_label)}
-                    title={buildFieldTooltip(form.hotel_label)}
-                  />
-                </FieldWithStatus>
+                <div className="d-flex justify-content-between align-items-center gap-2">
+                  <Form.Label className="mb-0">Hotel</Form.Label>
+                  {renderFollowUpBlock('hotel_val')}
+                </div>
+                <Form.Control
+                  value={form.hotel_label}
+                  onChange={(e) => updateForm('hotel_label', e.target.value)}
+                  style={affirmativeBorder(form.hotel_label)}
+                  title={buildFieldTooltip(form.hotel_label)}
+                />
               </Col>
               <Col md={2}>
-                <FieldWithStatus
-                  label={<Form.Label className="mb-0">Transporte</Form.Label>}
-                  status={renderFollowUpBlock('transporte_val')}
-                >
-                  <Form.Control
-                    value={displayOrDash(deal.transporte ?? null)}
-                    readOnly
-                    style={affirmativeBorder(deal.transporte ?? null)}
-                    title={buildFieldTooltip(deal.transporte ?? null)}
-                  />
-                </FieldWithStatus>
+                <div className="d-flex justify-content-between align-items-center gap-2">
+                  <Form.Label className="mb-0">Transporte</Form.Label>
+                  {renderFollowUpBlock('transporte_val')}
+                </div>
+                <Form.Control
+                  value={displayOrDash(deal.transporte ?? null)}
+                  readOnly
+                  style={affirmativeBorder(deal.transporte ?? null)}
+                  title={buildFieldTooltip(deal.transporte ?? null)}
+                />
               </Col>
               <Col md={2} className="budget-field-wide">
-                <FieldWithStatus label={<Form.Label className="mb-0">PO</Form.Label>} status={renderFollowUpBlock('po_val')}>
-                  <Form.Control
-                    value={displayOrDash(deal.po ?? null)}
-                    readOnly
-                    title={buildFieldTooltip(deal.po ?? null)}
-                  />
-                </FieldWithStatus>
+                <div className="d-flex justify-content-between align-items-center gap-2">
+                  <Form.Label className="mb-0">PO</Form.Label>
+                  {renderFollowUpBlock('po_val')}
+                </div>
+                <Form.Control
+                  value={displayOrDash(deal.po ?? null)}
+                  readOnly
+                  title={buildFieldTooltip(deal.po ?? null)}
+                />
               </Col>
               <Col md={2} className="budget-field-wide">
                 <Form.Label>Mail Factura</Form.Label>
