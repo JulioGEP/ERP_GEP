@@ -41,6 +41,13 @@ function resolveRequestInput(input: RequestInfo | URL): RequestInfo | URL {
     }
 
     const path = input.startsWith('/') ? input : `/${input}`;
+
+    if (path.startsWith('/api/')) {
+      const relativePath = path.slice('/api'.length);
+      const normalizedPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+      return `${API_BASE}${normalizedPath}`;
+    }
+
     return `${API_BASE}${path}`;
   }
 
