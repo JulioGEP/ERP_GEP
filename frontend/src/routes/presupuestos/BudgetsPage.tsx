@@ -13,10 +13,6 @@ type BudgetsPageProps = {
   onDelete?: (budget: DealSummary) => Promise<void>;
   onOpenImportModal: () => void;
   isImporting: boolean;
-  canImportBudget: boolean;
-  title?: string;
-  subtitle?: string;
-  showFollowUpColumns?: boolean;
 };
 
 export function BudgetsPage({
@@ -29,33 +25,24 @@ export function BudgetsPage({
   onDelete,
   onOpenImportModal,
   isImporting,
-  canImportBudget,
-  title,
-  subtitle,
-  showFollowUpColumns = false,
 }: BudgetsPageProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
-
-  const heading = title ?? 'Presupuestos · Sin planificar';
-  const description = subtitle ?? 'Sube tu presupuesto y planifica';
 
   return (
     <div className="d-grid gap-4">
       <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
         <div className="d-flex flex-column gap-2">
           <div className="d-flex flex-wrap align-items-center gap-3">
-            <h1 className="h3 fw-bold mb-0">{heading}</h1>
+            <h1 className="h3 fw-bold mb-0">Presupuestos · Sin planificar</h1>
             <div ref={setFiltersContainer} className="d-flex align-items-center gap-2 flex-wrap" />
           </div>
-          <p className="text-muted mb-0">{description}</p>
+          <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
         </div>
         <div className="d-flex align-items-center gap-3">
           {(isImporting || isFetching) && <Spinner animation="border" role="status" size="sm" />}
-          {canImportBudget ? (
-            <Button size="lg" onClick={onOpenImportModal}>
-              Importar presupuesto
-            </Button>
-          ) : null}
+          <Button size="lg" onClick={onOpenImportModal}>
+            Importar presupuesto
+          </Button>
         </div>
       </section>
 
@@ -68,7 +55,6 @@ export function BudgetsPage({
         onSelect={onSelect}
         onDelete={onDelete}
         filtersContainer={filtersContainer}
-        showFollowUpColumns={showFollowUpColumns}
       />
     </div>
   );

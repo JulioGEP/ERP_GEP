@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType } from 'react';
-import { Alert, Button, Container, Nav, Navbar, NavDropdown, Spinner, Toast, ToastContainer } from 'react-bootstrap';
-import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState, type ComponentProps, type ComponentType } from 'react';
+import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
 import { BudgetDetailModalEmpresas } from './features/presupuestos/empresas/BudgetDetailModalEmpresas';
@@ -30,11 +30,6 @@ import type { DealDetail, DealSummary } from './types/deal';
 import logo from './assets/gep-group-logo.png';
 import { PublicSessionStudentsPage } from './public/PublicSessionStudentsPage';
 import { AppRouter } from './app/router';
-import LoginPage from './pages/auth/LoginPage';
-import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
-import ResetPasswordPage from './pages/auth/ResetPasswordPage';
-import { useCurrentUser } from './app/auth/UserContext';
-import { logout as requestLogout } from './api/auth';
 import type { BudgetsPageProps } from './pages/presupuestos/BudgetsPage';
 import type { PorSesionesPageProps } from './pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from './pages/calendario/PorUnidadMovilPage';
@@ -47,181 +42,89 @@ import type { ProductosPageProps } from './pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from './pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from './pages/recursos/FormacionAbiertaPage';
 import { TOAST_EVENT, type ToastEventDetail } from './utils/toast';
-import { getAllowedPathsForRole, isRoleAllowedForPath, normalizeNavigationPath, resolveDefaultPathForRole } from './app/rbac';
-import type { UserRole } from './types/user';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 
-type NavChildConfig = {
+type NavChild = {
   key: string;
   label: string;
   path: string;
-  allowedRoles?: readonly UserRole[];
 };
 
-type NavItemConfig = {
+type NavItem = {
   key: string;
   label: string;
   path?: string;
-  children?: NavChildConfig[];
-  allowedRoles?: readonly UserRole[];
+  children?: NavChild[];
 };
 
-const NAVIGATION_ITEMS: readonly NavItemConfig[] = [
+const NAVIGATION_ITEMS: NavItem[] = [
   {
     key: 'Presupuestos',
     label: 'Presupuestos',
     children: [
-      {
-        key: 'Presupuestos/SinPlanificar',
-        label: 'Sin planificar',
-        path: '/presupuestos/sinplanificar',
-        allowedRoles: ['admin', 'comercial', 'administracion', 'logistica', 'people'],
-      },
-      {
-        key: 'Presupuestos/SinTrabajar',
-        label: 'Sin trabajar',
-        path: '/presupuestos/sintrabajar',
-        allowedRoles: ['admin', 'comercial', 'administracion', 'logistica', 'people'],
-      },
+      { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
     ],
-    allowedRoles: ['admin', 'comercial', 'administracion', 'logistica', 'people'],
   },
   {
     key: 'Calendario',
     label: 'Calendario',
     children: [
-      {
-        key: 'Calendario/Sesiones',
-        label: 'Por sesiones',
-        path: '/calendario/por_sesiones',
-        allowedRoles: ['admin'],
-      },
-      {
-        key: 'Calendario/Formadores',
-        label: 'Por formador',
-        path: '/calendario/por_formador',
-        allowedRoles: ['admin'],
-      },
-      {
-        key: 'Calendario/Unidades',
-        label: 'Por unidad móvil',
-        path: '/calendario/por_unidad_movil',
-        allowedRoles: ['admin'],
-      },
+      { key: 'Calendario/Sesiones', label: 'Por sesiones', path: '/calendario/por_sesiones' },
+      { key: 'Calendario/Formadores', label: 'Por formador', path: '/calendario/por_formador' },
+      { key: 'Calendario/Unidades', label: 'Por unidad móvil', path: '/calendario/por_unidad_movil' },
     ],
-    allowedRoles: ['admin'],
   },
   {
     key: 'Recursos',
     label: 'Recursos',
     children: [
-      {
-        key: 'Recursos/Formadores',
-        label: 'Formadores / Bomberos',
-        path: '/recursos/formadores_bomberos',
-        allowedRoles: ['admin', 'people'],
-      },
-      {
-        key: 'Recursos/Unidades',
-        label: 'Unidades Móviles',
-        path: '/recursos/unidades_moviles',
-        allowedRoles: ['admin', 'logistica'],
-      },
-      {
-        key: 'Recursos/Salas',
-        label: 'Salas',
-        path: '/recursos/salas',
-        allowedRoles: ['admin', 'logistica'],
-      },
-      {
-        key: 'Recursos/Productos',
-        label: 'Productos',
-        path: '/recursos/productos',
-        allowedRoles: ['admin'],
-      },
-      {
-        key: 'Recursos/FormacionAbierta',
-        label: 'Formación Abierta',
-        path: '/recursos/formacion_abierta',
-        allowedRoles: ['admin'],
-      },
+      { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores_bomberos' },
+      { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
+      { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
+      { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
+      { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
     ],
   },
   {
     key: 'Certificados',
     label: 'Certificados',
+    path: '/certificados',
     children: [
-      {
-        key: 'Certificados/Principal',
-        label: 'Certificados',
-        path: '/certificados',
-        allowedRoles: ['admin', 'administracion'],
-      },
+      { key: 'Certificados/Principal', label: 'Certificados', path: '/certificados' },
       {
         key: 'Certificados/Templates',
         label: 'Plantillas de Certificados',
         path: '/certificados/templates_certificados',
-        allowedRoles: ['admin', 'administracion'],
       },
     ],
-    allowedRoles: ['admin', 'administracion'],
   },
   {
     key: 'Informes',
     label: 'Informes',
     children: [
-      {
-        key: 'Informes/Formacion',
-        label: 'Formación',
-        path: '/informes/formacion',
-        allowedRoles: ['admin'],
-      },
-      {
-        key: 'Informes/Preventivo',
-        label: 'Preventivo',
-        path: '/informes/preventivo',
-        allowedRoles: ['admin'],
-      },
-      {
-        key: 'Informes/Simulacro',
-        label: 'Simulacro',
-        path: '/informes/simulacro',
-        allowedRoles: ['admin'],
-      },
+      { key: 'Informes/Formacion', label: 'Formación', path: '/informes/formacion' },
+      { key: 'Informes/Preventivo', label: 'Preventivo', path: '/informes/preventivo' },
+      { key: 'Informes/Simulacro', label: 'Simulacro', path: '/informes/simulacro' },
       {
         key: 'Informes/RecursoPreventivoEbro',
         label: 'Recurso Preventivo EBRO',
         path: '/informes/recurso_preventivo_ebro',
-        allowedRoles: ['admin'],
       },
     ],
-    allowedRoles: ['admin'],
-  },
-  {
-    key: 'Usuarios',
-    label: 'Usuarios',
-    path: '/usuarios',
-    allowedRoles: ['admin'],
   },
 ];
 
-function canAccessNavEntry(
-  role: UserRole,
-  allowedRoles: readonly UserRole[] | undefined,
-  path?: string,
-): boolean {
-  if (role === 'admin') {
-    return true;
-  }
-  if (allowedRoles && allowedRoles.length > 0) {
-    return allowedRoles.includes(role);
-  }
-  if (path) {
-    return isRoleAllowedForPath(role, path);
-  }
-  return false;
-}
+const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
+
+const KNOWN_APP_PATHS = new Set(
+  [
+    ...NAVIGATION_ITEMS.flatMap((item) => [item.path, ...(item.children?.map((child) => child.path) ?? [])]),
+    ...LEGACY_APP_PATHS,
+  ].filter((path): path is string => Boolean(path))
+);
+
+const DEFAULT_REDIRECT_PATH = '/presupuestos/sinplanificar';
 
 type BudgetModalProps = ComponentProps<typeof BudgetDetailModalEmpresas>;
 
@@ -340,52 +243,13 @@ type ToastMessage = {
   message: string;
 };
 
-function AuthenticatedApp() {
-  const { user, setUser } = useCurrentUser();
+export default function App() {
+  const isPublicStudentsPage =
+    typeof window !== 'undefined' && /\/public\/sesiones\/[^/]+\/alumnos/i.test(window.location.pathname);
 
-  const role: UserRole = (user?.role as UserRole) ?? 'formador';
-
-  const navigationItems = useMemo(() => {
-    return NAVIGATION_ITEMS.map((item) => {
-      const normalizedPath = item.path ? normalizeNavigationPath(item.path) : undefined;
-      const normalizedChildren = item.children
-        ?.map((child) => {
-          const normalizedChildPath = normalizeNavigationPath(child.path);
-          if (!canAccessNavEntry(role, child.allowedRoles, normalizedChildPath)) {
-            return null;
-          }
-          return { ...child, path: normalizedChildPath };
-        })
-        .filter((child): child is NavChildConfig => Boolean(child));
-
-      const itemAllowed =
-        canAccessNavEntry(role, item.allowedRoles, normalizedPath) ||
-        (normalizedChildren && normalizedChildren.length > 0);
-
-      if (!itemAllowed) {
-        return null;
-      }
-
-      return {
-        ...item,
-        path: normalizedPath,
-        children: normalizedChildren,
-      };
-    }).filter((entry): entry is NavItemConfig => Boolean(entry));
-  }, [role]);
-
-  const allowedPaths = useMemo(() => getAllowedPathsForRole(role), [role]);
-
-  const knownPaths = useMemo<ReadonlySet<string>>(() => {
-    const paths = new Set<string>();
-    allowedPaths.forEach((path) => paths.add(normalizeNavigationPath(path)));
-    paths.add('/');
-    return paths;
-  }, [allowedPaths]);
-
-  const defaultRedirectPath = useMemo(() => resolveDefaultPathForRole(role), [role]);
-
-  const canImportBudget = role !== 'logistica';
+  if (isPublicStudentsPage) {
+    return <PublicSessionStudentsPage />;
+  }
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -443,35 +307,12 @@ function AuthenticatedApp() {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const logoutMutation = useMutation({
-    mutationFn: requestLogout,
-    onSuccess: () => {
-      setUser(null);
-      queryClient.clear();
-      navigate('/login', { replace: true });
-    },
-    onError: (error: unknown) => {
-      console.error('No se pudo cerrar la sesión', error);
-      pushToast({ variant: 'danger', message: 'No se pudo cerrar la sesión. Inténtalo de nuevo.' });
-    },
-  });
-
-  const handleLogout = useCallback(() => {
-    if (logoutMutation.isPending) {
-      return;
-    }
-    logoutMutation.mutate();
-  }, [logoutMutation]);
-
   const handleOpenImportModal = useCallback(() => {
-    if (!canImportBudget) {
-      return;
-    }
     setImportResultWarnings(null);
     setImportResultDealId(null);
     setImportError(null);
     setShowImportModal(true);
-  }, [canImportBudget]);
+  }, []);
 
   const handleCloseImportModal = useCallback(() => {
     setShowImportModal(false);
@@ -680,15 +521,14 @@ function AuthenticatedApp() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const normalizedPath = normalizeNavigationPath(location.pathname);
-    if (knownPaths.has(normalizedPath)) {
+    if (KNOWN_APP_PATHS.has(location.pathname)) {
       try {
         window.localStorage.setItem(ACTIVE_PATH_STORAGE_KEY, location.pathname);
       } catch (error) {
         console.warn('No se pudo guardar la ruta activa', error);
       }
     }
-  }, [location.pathname, knownPaths]);
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!location.pathname.startsWith('/presupuestos')) {
@@ -869,7 +709,6 @@ function AuthenticatedApp() {
     onDelete: handleDeleteBudget,
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
-    canImportBudget,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {
@@ -943,7 +782,7 @@ function AuthenticatedApp() {
             className="d-flex align-items-center gap-3"
             onClick={(event) => {
               event.preventDefault();
-              navigate(defaultRedirectPath);
+              navigate(DEFAULT_REDIRECT_PATH);
             }}
           >
             <img src={logo} height={64} alt="GEP Group" />
@@ -954,57 +793,39 @@ function AuthenticatedApp() {
               </span>
             </div>
           </Navbar.Brand>
-          <div className="ms-auto d-flex align-items-center gap-4 flex-wrap justify-content-end">
-            <Nav className="gap-3">
-              {navigationItems.map((item) =>
-                item.children ? (
-                  <NavDropdown
-                    key={item.key}
-                    title={<span className="text-uppercase">{item.label}</span>}
-                    id={`nav-${item.key}`}
-                    active={item.children.some((child) => location.pathname.startsWith(child.path))}
-                  >
-                    {item.children.map((child) => (
-                      <NavDropdown.Item
-                        key={child.key}
-                        as={NavLink}
-                        to={child.path}
-                        className="text-uppercase"
-                      >
-                        {child.label}
-                      </NavDropdown.Item>
-                    ))}
-                  </NavDropdown>
-                ) : (
-                  <Nav.Item key={item.key}>
-                    <Nav.Link
+          <Nav className="ms-auto gap-3">
+            {NAVIGATION_ITEMS.map((item) =>
+              item.children ? (
+                <NavDropdown
+                  key={item.key}
+                  title={<span className="text-uppercase">{item.label}</span>}
+                  id={`nav-${item.key}`}
+                  active={item.children.some((child) => location.pathname.startsWith(child.path))}
+                >
+                  {item.children.map((child) => (
+                    <NavDropdown.Item
+                      key={child.key}
                       as={NavLink}
-                      to={item.path ?? '#'}
+                      to={child.path}
                       className="text-uppercase"
                     >
-                      {item.label}
-                    </Nav.Link>
-                  </Nav.Item>
-                )
-              )}
-            </Nav>
-
-            <div className="d-flex align-items-center gap-2">
-              {user ? (
-                <span className="text-muted small mb-0 text-end">
-                  {user.name?.trim()?.length ? user.name : user.email}
-                </span>
-              ) : null}
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={handleLogout}
-                disabled={logoutMutation.isPending}
-              >
-                {logoutMutation.isPending ? 'Saliendo…' : 'Salir'}
-              </Button>
-            </div>
-          </div>
+                      {child.label}
+                    </NavDropdown.Item>
+                  ))}
+                </NavDropdown>
+              ) : (
+                <Nav.Item key={item.key}>
+                  <Nav.Link
+                    as={NavLink}
+                    to={item.path ?? '#'}
+                    className="text-uppercase"
+                  >
+                    {item.label}
+                  </Nav.Link>
+                </Nav.Item>
+              )
+            )}
+          </Nav>
         </Container>
       </Navbar>
 
@@ -1022,8 +843,8 @@ function AuthenticatedApp() {
             productosPageProps={productosPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
-            defaultRedirectPath={defaultRedirectPath}
-            knownPaths={knownPaths}
+            defaultRedirectPath={DEFAULT_REDIRECT_PATH}
+            knownPaths={KNOWN_APP_PATHS}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}
           />
         </Container>
@@ -1072,98 +893,5 @@ function AuthenticatedApp() {
         })}
       </ToastContainer>
     </div>
-  );
-}
-
-function LoadingScreen() {
-  return (
-    <Container className="min-vh-100 d-flex align-items-center justify-content-center">
-      <Spinner animation="border" role="status" variant="primary">
-        <span className="visually-hidden">Cargando…</span>
-      </Spinner>
-    </Container>
-  );
-}
-
-function RequireAuth({ children }: { children: JSX.Element }) {
-  const { status, isFetching, user, error } = useCurrentUser();
-  const location = useLocation();
-
-  if (status === 'loading' || isFetching) {
-    return <LoadingScreen />;
-  }
-
-  if (status === 'error') {
-    console.error('No se pudo verificar la sesión actual', error);
-    return (
-      <Navigate
-        to="/login"
-        state={{
-          from: `${location.pathname}${location.search}`,
-          sessionError: true,
-        }}
-        replace
-      />
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/login" state={{ from: `${location.pathname}${location.search}` }} replace />;
-  }
-
-  return children;
-}
-
-function PublicOnlyRoute({ children }: { children: JSX.Element }) {
-  const { status, isFetching, user } = useCurrentUser();
-
-  if (status === 'loading' || isFetching) {
-    return <LoadingScreen />;
-  }
-
-  if (status === 'authenticated' && user) {
-    return <Navigate to="/presupuestos" replace />;
-  }
-
-  return children;
-}
-
-export default function App() {
-  return (
-    <Routes>
-      <Route path="/public/*" element={<PublicSessionStudentsPage />} />
-      <Route
-        path="/login"
-        element={
-          <PublicOnlyRoute>
-            <LoginPage />
-          </PublicOnlyRoute>
-        }
-      />
-      <Route
-        path="/forgot-password"
-        element={
-          <PublicOnlyRoute>
-            <ForgotPasswordPage />
-          </PublicOnlyRoute>
-        }
-      />
-      <Route
-        path="/reset-password"
-        element={
-          <PublicOnlyRoute>
-            <ResetPasswordPage />
-          </PublicOnlyRoute>
-        }
-      />
-      <Route
-        path="/*"
-        element={
-          <RequireAuth>
-            <AuthenticatedApp />
-          </RequireAuth>
-        }
-      />
-    </Routes>
   );
 }
