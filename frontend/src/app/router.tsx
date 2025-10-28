@@ -81,17 +81,6 @@ export function AppRouter({
         <Route path="/presupuestos" element={<Navigate to="/presupuestos/sinplanificar" replace />} />
         <Route path="/presupuestos/sinplanificar" element={<BudgetsPage {...budgetsPageProps} />} />
         <Route
-          path="/presupuestos/sintrabajar"
-          element={
-            <BudgetsPage
-              {...budgetsPageProps}
-              title="Presupuestos · Sin trabajar"
-              subtitle="Revisa el estado de validación de tus presupuestos"
-              showFollowUpColumns
-            />
-          }
-        />
-        <Route
           path="/calendario/por_sesiones"
           element={createElement(PorSesionesPage, { ...porSesionesPageProps, key: 'calendar-sesiones' })}
         />

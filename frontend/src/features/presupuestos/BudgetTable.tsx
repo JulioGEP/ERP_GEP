@@ -21,11 +21,6 @@ import {
 } from './queryKeys';
 import { fetchDealsWithoutSessions as fetchDealsWithoutSessionsApi } from './api';
 import { fetchProducts } from '../recursos/products.api';
-import {
-  FOLLOW_UP_FIELDS,
-  isAffirmativeLabel,
-  type FollowUpFieldConfig,
-} from './hooks/useDealFollowUpToggle';
 
 function TrashIcon({ size = 16 }: { size?: number }) {
   return (
@@ -82,7 +77,6 @@ interface BudgetTableProps {
   enableFallback?: boolean;
   filtersContainer?: HTMLElement | null;
   showFilters?: boolean;
-  showFollowUpColumns?: boolean;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -122,31 +116,6 @@ function getTitleLabel(budget: DealSummary): string {
 
 function getNegocioLabel(budget: DealSummary): string {
   return safeTrim(budget.pipeline_label ?? budget.pipeline_id ?? '') ?? '—';
-}
-
-function getFollowUpSourceValue(
-  budget: DealSummary,
-  source: FollowUpFieldConfig['source'],
-): string | null | undefined {
-  return budget[source as keyof DealSummary] as string | null | undefined;
-}
-
-function getFollowUpValue(
-  budget: DealSummary,
-  field: FollowUpFieldConfig['field'],
-): boolean {
-  return Boolean(budget[field as keyof DealSummary]);
-}
-
-function isNegativeLabel(value: string | null | undefined): boolean {
-  if (typeof value !== 'string') {
-    return false;
-  }
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase() === 'no';
 }
 
 function getBudgetId(budget: DealSummary): string | null {
@@ -456,7 +425,6 @@ export function BudgetTable({
   enableFallback = true,
   filtersContainer,
   showFilters = true,
-  showFollowUpColumns = false,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -868,41 +836,6 @@ export function BudgetTable({
       },
     ];
 
-    if (showFollowUpColumns) {
-      const followUpColumns: ColumnDef<DealSummary>[] = FOLLOW_UP_FIELDS.map((config) => ({
-        id: `follow-up-${config.field}`,
-        header: () => (
-          <span className="d-block text-center text-muted text-uppercase small fw-semibold">
-            {config.label}
-          </span>
-        ),
-        cell: ({ row }) => {
-          const budget = row.original;
-          const sourceValue = getFollowUpSourceValue(budget, config.source);
-          if (!isAffirmativeLabel(sourceValue) || isNegativeLabel(sourceValue)) {
-            return <span className="d-block text-center text-muted">-</span>;
-          }
-
-          const checked = getFollowUpValue(budget, config.field);
-          return (
-            <div className="budget-follow-up-checkbox form-check justify-content-center mb-0">
-              <input
-                type="checkbox"
-                className="form-check-input"
-                checked={checked}
-                disabled
-                aria-label={`Seguimiento ${config.label}`}
-              />
-            </div>
-          );
-        },
-        enableSorting: false,
-        meta: { style: { width: 110 } },
-      }));
-
-      baseColumns.push(...followUpColumns);
-    }
-
     if (showDeleteAction) {
       baseColumns.push({
         id: 'acciones',
@@ -931,7 +864,7 @@ export function BudgetTable({
     }
 
     return baseColumns;
-  }, [deletingId, handleDelete, showDeleteAction, showFollowUpColumns]);
+  }, [deletingId, handleDelete, showDeleteAction]);
 
   const table = useReactTable({
     data: tableBudgets,
