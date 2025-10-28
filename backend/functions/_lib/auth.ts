@@ -9,6 +9,8 @@ import { getPrisma } from '../_shared/prisma';
 const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 días
 const MIN_SESSION_TTL_SECONDS = 60 * 10; // 10 minutos para evitar caducidades ridículas
 
+let pgcryptoReady: boolean | null = null;
+
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
@@ -345,10 +347,33 @@ export function generateResetToken(): string {
   return randomBytes(32).toString('hex');
 }
 
+export async function ensurePgcrypto(prismaClient: PrismaClient = getPrisma()): Promise<boolean> {
+  if (pgcryptoReady === true) {
+    return true;
+  }
+
+  try {
+    await prismaClient.$executeRaw`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+    pgcryptoReady = true;
+    return true;
+  } catch (error) {
+    if (pgcryptoReady !== false) {
+      console.error('[auth] No se pudo inicializar la extensión pgcrypto', error);
+    }
+    pgcryptoReady = false;
+    return false;
+  }
+}
+
 export async function hashPassword(
   password: string,
   prismaClient: PrismaClient = getPrisma(),
 ): Promise<string> {
+  const pgcryptoAvailable = await ensurePgcrypto(prismaClient);
+  if (!pgcryptoAvailable) {
+    throw new Error('PGCRYPTO_EXTENSION_UNAVAILABLE');
+  }
+
   const rows = await prismaClient.$queryRaw<{ hash: string }[]>`
     SELECT crypt(${password}, gen_salt('bf')) AS hash
   `;
