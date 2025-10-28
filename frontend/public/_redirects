@@ -1,7 +1,8 @@
-/api/diag            /.netlify/functions/diag            200
-/api/health          /.netlify/functions/health          200
-/api/deals/import    /.netlify/functions/deals_import    200
-/api/*               /.netlify/functions/:splat          200
-/*                   /index.html                         200
-/*                   /index.html   200
-/api/*               /.netlify/functions/:splat  200
+/api/health                       /.netlify/functions/health                       200
+/api/auth/session                 /.netlify/functions/auth-session                 200
+/api/auth/login                   /.netlify/functions/auth-login                   200
+/api/auth/logout                  /.netlify/functions/auth-logout                  200
+/api/auth/password-reset/request  /.netlify/functions/auth-password-reset-request  200
+/api/auth/password-reset/confirm  /.netlify/functions/auth-password-reset-confirm  200
+/api/*                            /.netlify/functions/:splat                       200
+/*                                /index.html                                      200
