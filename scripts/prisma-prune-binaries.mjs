@@ -1,14 +1,7 @@
 import { readdir, rm, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const KEEP_PATTERNS = [
-  /libquery_engine-rhel-openssl-3\.0\.x\.so\.node$/,
-  /libquery_engine-debian-openssl-3\.0\.x\.so\.node$/,
-];
-
-function shouldKeep(entry) {
-  return KEEP_PATTERNS.some((pattern) => pattern.test(entry));
-}
+const KEEP_PATTERN = /libquery_engine-rhel-openssl-3\.0\.x\.so\.node$/;
 const isNetlify = process.env.NETLIFY === 'true' || process.env.CI === 'true';
 
 if (!isNetlify) {
@@ -30,7 +23,7 @@ async function pruneDirectory(root) {
 
   await Promise.all(
     entries
-      .filter((entry) => entry.startsWith('libquery_engine-') && !shouldKeep(entry))
+      .filter((entry) => entry.startsWith('libquery_engine-') && !KEEP_PATTERN.test(entry))
       .map(async (entry) => {
         const filePath = resolve(root, entry);
         await rm(filePath, { force: true });
