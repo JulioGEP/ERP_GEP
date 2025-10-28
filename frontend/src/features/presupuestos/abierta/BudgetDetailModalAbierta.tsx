@@ -1762,6 +1762,7 @@ export function BudgetDetailModalAbierta({
                   title={buildFieldTooltip(form.fundae_label)}
                 />
               </Col>
+              <div className="w-100 d-none d-md-block" />
               <Col md={3} className="budget-field-wide">
                 <div className="d-flex justify-content-between align-items-center gap-2">
                   <Form.Label className="mb-0">PO</Form.Label>
