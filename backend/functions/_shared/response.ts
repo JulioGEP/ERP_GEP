@@ -1,4 +1,5 @@
 // backend/functions/_shared/response.ts
+import type { Handler } from '@netlify/functions';
 import { randomUUID } from 'crypto';
 
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
@@ -53,4 +54,70 @@ export function errorResponse(
  */
 export function preflightResponse() {
   return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
+}
+
+type JsonResponseOptions = {
+  statusCode?: number;
+  headers?: Record<string, string>;
+  setCookie?: string | string[];
+};
+
+function applySetCookie(
+  headers: Record<string, string>,
+  cookie: string | string[] | undefined,
+) {
+  if (!cookie) return;
+  if (Array.isArray(cookie)) {
+    if (cookie.length === 1) {
+      headers['Set-Cookie'] = cookie[0];
+    } else if (cookie.length > 1) {
+      headers['Set-Cookie'] = cookie.join(', ');
+    }
+  } else {
+    headers['Set-Cookie'] = cookie;
+  }
+}
+
+export function jsonOk(payload: unknown = {}, options: JsonResponseOptions = {}) {
+  const statusCode = options.statusCode ?? 200;
+  const headers = { ...COMMON_HEADERS, ...(options.headers ?? {}) };
+  applySetCookie(headers, options.setCookie);
+  return {
+    statusCode,
+    headers,
+    body: safeStringify(payload),
+  };
+}
+
+export function jsonError(
+  statusCode: number,
+  message: string,
+  options: JsonResponseOptions & { code?: string } = {},
+) {
+  const body = {
+    ok: false,
+    message,
+    ...(options.code ? { code: options.code } : {}),
+  };
+  return jsonOk(body, { ...options, statusCode });
+}
+
+export function withCorsAndCookies(handler: Handler): Handler {
+  return async (event, context) => {
+    if ((event.httpMethod ?? '').toUpperCase() === 'OPTIONS') {
+      return preflightResponse();
+    }
+
+    const result = await handler(event, context);
+    if (!result) {
+      return {
+        statusCode: 204,
+        headers: COMMON_HEADERS,
+        body: '',
+      };
+    }
+
+    const headers = { ...COMMON_HEADERS, ...(result.headers ?? {}) };
+    return { ...result, headers };
+  };
 }
