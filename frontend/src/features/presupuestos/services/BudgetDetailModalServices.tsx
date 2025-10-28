@@ -1032,7 +1032,7 @@ export function BudgetDetailModalServices({
         {!isLoading && deal && form && (
           <>
             {/* Editables */}
-            <Row className="g-3">
+            <Row className="g-3 align-items-end">
               <Col md={4}>
                 <Form.Label>Comercial</Form.Label>
                 <Form.Control
@@ -1083,7 +1083,6 @@ export function BudgetDetailModalServices({
                   title={buildFieldTooltip(form.hotel_label)}
                 />
               </Col>
-              <div className="w-100 d-none d-md-block" />
               <Col md={2} className="budget-field-wide">
                 <div className="d-flex justify-content-between align-items-center gap-2">
                   <Form.Label className="mb-0">PO</Form.Label>
@@ -1096,7 +1095,7 @@ export function BudgetDetailModalServices({
                 />
               </Col>
               <Col md={2} className="budget-field-wide">
-                <Form.Label>Mail Factura</Form.Label>
+                <Form.Label className="mb-0">Mail Factura</Form.Label>
                 <Form.Control
                   value={displayOrDash(deal.mail_invoice ?? null)}
                   readOnly
