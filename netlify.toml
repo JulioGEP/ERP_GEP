@@ -35,6 +35,31 @@
   status = 200
 
 [[redirects]]
+  from = "/api/auth/session"
+  to = "/.netlify/functions/auth-session"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/login"
+  to = "/.netlify/functions/auth-login"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/logout"
+  to = "/.netlify/functions/auth-logout"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/password-reset/request"
+  to = "/.netlify/functions/auth-password-reset-request"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/password-reset/confirm"
+  to = "/.netlify/functions/auth-password-reset-confirm"
+  status = 200
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
