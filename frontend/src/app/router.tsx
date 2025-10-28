@@ -11,6 +11,7 @@ import type { TemplatesCertificadosPageProps } from '../pages/recursos/Templates
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
+import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
@@ -31,6 +32,7 @@ const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroRepo
 const InformesRecursoPreventivoEbroPage = lazy(
   () => import('../pages/informes/RecursoPreventivoEbroReportPage'),
 );
+const UsersPage = lazy(() => import('../pages/usuarios/UsersPage'));
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -44,9 +46,11 @@ type AppRouterProps = {
   productosPageProps: ProductosPageProps;
   certificadosPageProps: CertificadosPageProps;
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
+  usersPageProps: UsersPageProps;
   defaultRedirectPath: string;
   knownPaths: ReadonlySet<string>;
   activePathStorageKey: string;
+  allowedPaths: ReadonlySet<string>;
 };
 
 export function AppRouter({
@@ -61,10 +65,15 @@ export function AppRouter({
   productosPageProps,
   certificadosPageProps,
   recursosFormacionAbiertaPageProps,
+  usersPageProps,
   defaultRedirectPath,
   knownPaths,
   activePathStorageKey,
+  allowedPaths,
 }: AppRouterProps) {
+  const guard = (path: string, element: JSX.Element) =>
+    allowedPaths.has(path) ? element : <Navigate to={defaultRedirectPath} replace />;
+
   return (
     <Suspense fallback={null}>
       <Routes>
@@ -78,47 +87,114 @@ export function AppRouter({
             />
           }
         />
-        <Route path="/presupuestos" element={<Navigate to="/presupuestos/sinplanificar" replace />} />
-        <Route path="/presupuestos/sinplanificar" element={<BudgetsPage {...budgetsPageProps} />} />
+        <Route
+          path="/presupuestos"
+          element={guard('/presupuestos', <Navigate to="/presupuestos/sinplanificar" replace />)}
+        />
+        <Route
+          path="/presupuestos/sinplanificar"
+          element={guard('/presupuestos/sinplanificar', <BudgetsPage {...budgetsPageProps} />)}
+        />
         <Route
           path="/calendario/por_sesiones"
-          element={createElement(PorSesionesPage, { ...porSesionesPageProps, key: 'calendar-sesiones' })}
+          element={guard(
+            '/calendario/por_sesiones',
+            createElement(PorSesionesPage, {
+              ...porSesionesPageProps,
+              key: 'calendar-sesiones',
+            }),
+          )}
         />
         <Route
           path="/calendario/por_unidad_movil"
-          element={createElement(PorUnidadMovilPage, { ...porUnidadMovilPageProps, key: 'calendar-unidades' })}
+          element={guard(
+            '/calendario/por_unidad_movil',
+            createElement(PorUnidadMovilPage, {
+              ...porUnidadMovilPageProps,
+              key: 'calendar-unidades',
+            }),
+          )}
         />
         <Route
           path="/calendario/por_formador"
-          element={createElement(PorFormadorPage, { ...porFormadorPageProps, key: 'calendar-formadores' })}
+          element={guard(
+            '/calendario/por_formador',
+            createElement(PorFormadorPage, {
+              ...porFormadorPageProps,
+              key: 'calendar-formadores',
+            }),
+          )}
         />
         <Route
           path="/recursos/formadores_bomberos"
-          element={<FormadoresBomberosPage {...formadoresBomberosPageProps} />}
+          element={guard(
+            '/recursos/formadores_bomberos',
+            <FormadoresBomberosPage {...formadoresBomberosPageProps} />,
+          )}
         />
         <Route
           path="/recursos/unidades_moviles"
-          element={<UnidadesMovilesPage {...unidadesMovilesPageProps} />}
+          element={guard(
+            '/recursos/unidades_moviles',
+            <UnidadesMovilesPage {...unidadesMovilesPageProps} />,
+          )}
         />
-        <Route path="/recursos/salas" element={<SalasPage {...salasPageProps} />} />
+        <Route
+          path="/recursos/salas"
+          element={guard('/recursos/salas', <SalasPage {...salasPageProps} />)}
+        />
         <Route
           path="/certificados/templates_certificados"
-          element={<TemplatesCertificadosPage {...templatesCertificadosPageProps} />}
+          element={guard(
+            '/certificados/templates_certificados',
+            <TemplatesCertificadosPage {...templatesCertificadosPageProps} />,
+          )}
         />
-        <Route path="/recursos/productos" element={<ProductosPage {...productosPageProps} />} />
+        <Route
+          path="/recursos/productos"
+          element={guard('/recursos/productos', <ProductosPage {...productosPageProps} />)}
+        />
         <Route
           path="/recursos/formacion_abierta"
-          element={<RecursosFormacionAbiertaPage {...recursosFormacionAbiertaPageProps} />}
+          element={guard(
+            '/recursos/formacion_abierta',
+            <RecursosFormacionAbiertaPage {...recursosFormacionAbiertaPageProps} />,
+          )}
         />
-        <Route path="/formacion_abierta/cursos" element={<Navigate to="/recursos/formacion_abierta" replace />} />
-        <Route path="/informes/formacion" element={<InformesFormacionPage />} />
-        <Route path="/informes/preventivo" element={<InformesPreventivoPage />} />
-        <Route path="/informes/simulacro" element={<InformesSimulacroPage />} />
+        <Route
+          path="/formacion_abierta/cursos"
+          element={guard(
+            '/recursos/formacion_abierta',
+            <Navigate to="/recursos/formacion_abierta" replace />,
+          )}
+        />
+        <Route
+          path="/informes/formacion"
+          element={guard('/informes/formacion', <InformesFormacionPage />)}
+        />
+        <Route
+          path="/informes/preventivo"
+          element={guard('/informes/preventivo', <InformesPreventivoPage />)}
+        />
+        <Route
+          path="/informes/simulacro"
+          element={guard('/informes/simulacro', <InformesSimulacroPage />)}
+        />
         <Route
           path="/informes/recurso_preventivo_ebro"
-          element={<InformesRecursoPreventivoEbroPage />}
+          element={guard(
+            '/informes/recurso_preventivo_ebro',
+            <InformesRecursoPreventivoEbroPage />,
+          )}
         />
-        <Route path="/certificados" element={<CertificadosPage {...certificadosPageProps} />} />
+        <Route
+          path="/certificados"
+          element={guard('/certificados', <CertificadosPage {...certificadosPageProps} />)}
+        />
+        <Route
+          path="/usuarios"
+          element={guard('/usuarios', <UsersPage {...usersPageProps} />)}
+        />
         <Route path="*" element={<Navigate to={defaultRedirectPath} replace />} />
       </Routes>
     </Suspense>
