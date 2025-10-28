@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { errorResponse } from './response';
+import { prisma } from './prisma';
 
 export const SESSION_COOKIE_NAME = 'erp_session';
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 días
@@ -234,4 +235,60 @@ export function createResetToken(): string {
 
 export function resetTokenExpiryDate(): Date {
   return new Date(Date.now() + RESET_TOKEN_TTL_SECONDS * 1000);
+}
+
+type RequestHeaders = Record<string, string | string[] | undefined> | undefined;
+
+function normalizeHeaders(headers: RequestHeaders): Record<string, string> {
+  if (!headers) return {};
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (!key) continue;
+    if (typeof value === 'string') {
+      normalized[key] = value;
+    } else if (Array.isArray(value)) {
+      normalized[key] = value.join(', ');
+    }
+  }
+  return normalized;
+}
+
+export type SessionCookieUser = {
+  id: string;
+  email: string;
+  role: Prisma.$Enums.erp_role;
+  name?: string | null;
+};
+
+export async function signSessionCookie(user: SessionCookieUser): Promise<string> {
+  const session = await prisma.auth_sessions.create({
+    data: {
+      user_id: user.id,
+      expires_at: sessionExpiryDate(),
+    },
+  });
+
+  return createSessionCookie(session.id);
+}
+
+export async function getSessionFromCookie(
+  event: { headers?: Record<string, string | string[] | undefined> },
+): Promise<SessionCookieUser | null> {
+  const headers = normalizeHeaders(event.headers);
+  const sessionId = getSessionIdFromHeaders(headers);
+  if (!sessionId) return null;
+
+  const session = await findActiveSession(prisma, sessionId);
+  if (!session) return null;
+
+  const user = session.user;
+  const displayName =
+    (user as any).name ?? `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim();
+
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    name: displayName || null,
+  };
 }
