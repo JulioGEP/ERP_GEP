@@ -564,7 +564,7 @@ export function BudgetDetailModalAbierta({
     const config = FOLLOW_UP_FIELDS.find((entry) => entry.field === field);
     if (!config) return null;
     const sourceValue = getFollowUpSourceValue(config.source);
-    if (!isAffirmativeLabel(sourceValue)) return null;
+    if (!isAffirmativeLabel(sourceValue) && field !== 'fundae_val') return null;
 
     const checked = getFollowUpValue(field);
     const baseId = deal?.deal_id ?? (normalizedDealId.length ? normalizedDealId : null);
@@ -1762,7 +1762,6 @@ export function BudgetDetailModalAbierta({
                   title={buildFieldTooltip(form.fundae_label)}
                 />
               </Col>
-              <div className="w-100 d-none d-md-block" />
               <Col md={3} className="budget-field-wide">
                 <div className="d-flex justify-content-between align-items-center gap-2">
                   <Form.Label className="mb-0">PO</Form.Label>
@@ -1775,7 +1774,7 @@ export function BudgetDetailModalAbierta({
                 />
               </Col>
               <Col md={3} className="budget-field-wide">
-                <Form.Label>Mail Factura</Form.Label>
+                <Form.Label className="mb-0">Mail Factura</Form.Label>
                 <Form.Control
                   value={displayOrDash(deal.mail_invoice ?? null)}
                   readOnly
