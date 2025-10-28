@@ -1,12 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ComponentProps,
-  type ComponentType,
-} from 'react';
-import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown, Spinner } from 'react-bootstrap';
+import { useCallback, useEffect, useState, type ComponentProps, type ComponentType } from 'react';
+import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from './features/presupuestos/BudgetImportModal';
@@ -48,16 +41,7 @@ import type { TemplatesCertificadosPageProps } from './pages/recursos/TemplatesC
 import type { ProductosPageProps } from './pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from './pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from './pages/recursos/FormacionAbiertaPage';
-import type { UsersPageProps } from './pages/usuarios/UsersPage';
-import type { UserRole } from './types/user';
 import { TOAST_EVENT, type ToastEventDetail } from './utils/toast';
-import { useAuth } from './features/auth/AuthContext';
-import { LoginPage } from './features/auth/LoginPage';
-import {
-  canImportBudgets as canImportBudgetsForRole,
-  getAllowedPaths,
-  getDefaultPath,
-} from './features/auth/permissions';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 
@@ -74,16 +58,7 @@ type NavItem = {
   children?: NavChild[];
 };
 
-const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
-  admin: 'Admin',
-  comercial: 'Comercial',
-  administracion: 'Administración',
-  logistica: 'Logística',
-  people: 'People',
-  formador: 'Formador',
-};
-
-const BASE_NAVIGATION_ITEMS: NavItem[] = [
+const NAVIGATION_ITEMS: NavItem[] = [
   {
     key: 'Presupuestos',
     label: 'Presupuestos',
@@ -138,14 +113,18 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       },
     ],
   },
-  {
-    key: 'Usuarios',
-    label: 'Usuarios',
-    path: '/usuarios',
-  },
 ];
 
 const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
+
+const KNOWN_APP_PATHS = new Set(
+  [
+    ...NAVIGATION_ITEMS.flatMap((item) => [item.path, ...(item.children?.map((child) => child.path) ?? [])]),
+    ...LEGACY_APP_PATHS,
+  ].filter((path): path is string => Boolean(path))
+);
+
+const DEFAULT_REDIRECT_PATH = '/presupuestos/sinplanificar';
 
 type BudgetModalProps = ComponentProps<typeof BudgetDetailModalEmpresas>;
 
@@ -272,56 +251,9 @@ export default function App() {
     return <PublicSessionStudentsPage />;
   }
 
-  const { user, status: authStatus, logout, isLoggingOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const isBudgetsRoute = location.pathname.startsWith('/presupuestos');
-
-  if (authStatus === 'loading') {
-    return (
-      <div className="min-vh-100 d-flex align-items-center justify-content-center">
-        <Spinner animation="border" role="status" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <LoginPage />;
-  }
-
-  const allowedPaths = useMemo(() => getAllowedPaths(user.role), [user.role]);
-  const defaultRedirectPath = useMemo(() => getDefaultPath(user.role), [user.role]);
-  const knownPaths = useMemo(() => {
-    const combined = new Set<string>([...allowedPaths]);
-    for (const legacy of LEGACY_APP_PATHS) {
-      combined.add(legacy);
-    }
-    return combined;
-  }, [allowedPaths]);
-  const navigationItems = useMemo<NavItem[]>(() => {
-    const items: NavItem[] = [];
-    for (const item of BASE_NAVIGATION_ITEMS) {
-      if (item.children && item.children.length) {
-        const children = item.children.filter((child) => allowedPaths.has(child.path));
-        if (children.length) {
-          items.push({ ...item, children });
-        }
-      } else if (item.path && allowedPaths.has(item.path)) {
-        items.push(item);
-      }
-    }
-    return items;
-  }, [allowedPaths]);
-  const userDisplayName = useMemo(() => {
-    const fullName = [user.firstName ?? '', user.lastName ?? '']
-      .map((value) => value.trim())
-      .filter((value) => value.length)
-      .join(' ')
-      .trim();
-    return fullName.length ? fullName : user.email;
-  }, [user.email, user.firstName, user.lastName]);
-  const userRoleLabel = ROLE_DISPLAY_NAMES[user.role] ?? user.role;
-  const canImportBudgets = canImportBudgetsForRole(user.role);
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
@@ -349,7 +281,7 @@ export default function App() {
     refetchInterval: false,
     retry: 0,
     staleTime: Infinity,
-    enabled: isBudgetsRoute && allowedPaths.has('/presupuestos/sinplanificar'),
+    enabled: isBudgetsRoute,
   });
 
   useEffect(() => {
@@ -370,18 +302,6 @@ export default function App() {
         : `${Date.now()}-${Math.random()}`;
     setToasts((prev) => [...prev, { ...toast, id }]);
   }, []);
-
-  const handleLogout = useCallback(async () => {
-    try {
-      await logout();
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : 'No se pudo cerrar sesión.';
-      pushToast({ variant: 'danger', message });
-    }
-  }, [logout, pushToast]);
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
@@ -601,14 +521,14 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (knownPaths.has(location.pathname)) {
+    if (KNOWN_APP_PATHS.has(location.pathname)) {
       try {
         window.localStorage.setItem(ACTIVE_PATH_STORAGE_KEY, location.pathname);
       } catch (error) {
         console.warn('No se pudo guardar la ruta activa', error);
       }
     }
-  }, [knownPaths, location.pathname]);
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!location.pathname.startsWith('/presupuestos')) {
@@ -789,10 +709,7 @@ export default function App() {
     onDelete: handleDeleteBudget,
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
-    canImportBudgets,
   };
-
-  const usersPageProps: UsersPageProps = {};
 
   const calendarSessionsPageProps: PorSesionesPageProps = {
     onNotify: pushToast,
@@ -865,7 +782,7 @@ export default function App() {
             className="d-flex align-items-center gap-3"
             onClick={(event) => {
               event.preventDefault();
-              navigate(defaultRedirectPath);
+              navigate(DEFAULT_REDIRECT_PATH);
             }}
           >
             <img src={logo} height={64} alt="GEP Group" />
@@ -876,8 +793,8 @@ export default function App() {
               </span>
             </div>
           </Navbar.Brand>
-          <Nav className="ms-auto gap-3 align-items-center">
-            {navigationItems.map((item) =>
+          <Nav className="ms-auto gap-3">
+            {NAVIGATION_ITEMS.map((item) =>
               item.children ? (
                 <NavDropdown
                   key={item.key}
@@ -908,14 +825,6 @@ export default function App() {
                 </Nav.Item>
               )
             )}
-            <NavDropdown align="end" title={userDisplayName} id="nav-user">
-              <NavDropdown.Header>{userRoleLabel}</NavDropdown.Header>
-              <NavDropdown.Item disabled>{user.email}</NavDropdown.Item>
-              <NavDropdown.Divider />
-              <NavDropdown.Item onClick={handleLogout} disabled={isLoggingOut}>
-                {isLoggingOut ? 'Cerrando sesión…' : 'Cerrar sesión'}
-              </NavDropdown.Item>
-            </NavDropdown>
           </Nav>
         </Container>
       </Navbar>
@@ -934,11 +843,9 @@ export default function App() {
             productosPageProps={productosPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
-            usersPageProps={usersPageProps}
-            defaultRedirectPath={defaultRedirectPath}
-            knownPaths={knownPaths}
+            defaultRedirectPath={DEFAULT_REDIRECT_PATH}
+            knownPaths={KNOWN_APP_PATHS}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}
-            allowedPaths={allowedPaths}
           />
         </Container>
       </main>

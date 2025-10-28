@@ -9,12 +9,18 @@
 [functions]
   directory = "backend/functions"
   node_bundler = "esbuild"
-  external_node_modules = ["@prisma/client", "prisma", "bcryptjs"]
+  # Sólo runtime, fuera la CLI 'prisma' para no engordar el zip
+  external_node_modules = ["@prisma/client"]
+  # Netlify sólo necesita el runtime de Prisma y el binario RHEL para Amazon Linux.
+  # Evitamos subir todos los motores y tipos duplicados por cada función (16MB extra cada uno).
   included_files = [
-    "backend/node_modules/@prisma/client/**",
-    "backend/node_modules/.prisma/**",
-    "backend/functions/node_modules/@prisma/client/**",
-    "backend/functions/node_modules/.prisma/**"
+    "node_modules/.prisma/client/default.*",
+    "node_modules/.prisma/client/index.*",
+    "node_modules/.prisma/client/edge.*",
+    "node_modules/.prisma/client/package.json",
+    "node_modules/.prisma/client/schema.prisma",
+    "node_modules/.prisma/client/wasm.*",
+    "node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node"
   ]
 
 # --------- Redirects ---------
@@ -29,31 +35,6 @@
   status = 200
 
 [[redirects]]
-  from = "/api/auth/session"
-  to = "/.netlify/functions/auth-session"
-  status = 200
-
-[[redirects]]
-  from = "/api/auth/login"
-  to = "/.netlify/functions/auth-login"
-  status = 200
-
-[[redirects]]
-  from = "/api/auth/logout"
-  to = "/.netlify/functions/auth-logout"
-  status = 200
-
-[[redirects]]
-  from = "/api/auth/password-reset/request"
-  to = "/.netlify/functions/auth-password-reset-request"
-  status = 200
-
-[[redirects]]
-  from = "/api/auth/password-reset/confirm"
-  to = "/.netlify/functions/auth-password-reset-confirm"
-  status = 200
-
-[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
@@ -62,6 +43,3 @@
   from = "/*"
   to = "/index.html"
   status = 200
-
-[[plugins]]
-  package = "@netlify/plugin-functions-install-core"
