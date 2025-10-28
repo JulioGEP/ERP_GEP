@@ -12,7 +12,7 @@
   "scripts": {
     "clean": "rm -rf node_modules .prisma",
     "build": "npm run build:frontend",
-    "prebuild:frontend": "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ]; then npm install --prefer-offline --include-workspace-root --workspaces; fi",
+    "prebuild:frontend": "if [ ! -x frontend/node_modules/.bin/vite ]; then npm install --prefer-offline --include=dev --include-workspace-root --workspaces; fi",
     "build:frontend": "npm run build --workspace frontend",
     "build:functions": "echo \"Functions bundled by Netlify\"",
     "generate": "prisma generate --schema prisma/schema.prisma",
