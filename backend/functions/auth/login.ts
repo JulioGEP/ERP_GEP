@@ -9,6 +9,7 @@ import {
   buildSessionCookie,
   buildUserDisplayName,
   createSession,
+  ensurePgcrypto,
   hashPassword,
   validatePassword,
 } from '../_lib/auth';
@@ -209,6 +210,15 @@ export const handler = createHttpHandler<LoginBody>(async (request) => {
   }
 
   const prisma = getPrisma();
+
+  const pgcryptoAvailable = await ensurePgcrypto(prisma);
+  if (!pgcryptoAvailable) {
+    return errorResponse(
+      'AUTH_CONFIGURATION_ERROR',
+      'No se puede iniciar sesión en este momento. Inténtalo de nuevo más tarde.',
+      500,
+    );
+  }
 
   const users = await prisma.$queryRaw<UserRecord[]>`
     SELECT id, first_name, last_name, email, role, active, password_hash, password_algo
