@@ -1,0 +1,281 @@
+import { createHash, randomBytes } from 'crypto';
+import type { PrismaClient } from '@prisma/client';
+import type { HttpRequest } from './http';
+import { errorResponse } from './response';
+
+export const SESSION_COOKIE_NAME = 'erp_session';
+const SESSION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 horas
+const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
+
+const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+  Admin: ['ALL'],
+  Comercial: ['/presupuestos/sinplanificar', '/presupuestos/*'],
+  Administracion: [
+    '/presupuestos/sinplanificar',
+    '/presupuestos/*',
+    '/certificados',
+    '/certificados/*',
+  ],
+  Logistica: [
+    '/presupuestos/sinplanificar',
+    '/presupuestos/*',
+    '/recursos/unidades_moviles',
+    '/recursos/salas',
+  ],
+  People: [
+    '/presupuestos/sinplanificar',
+    '/presupuestos/*',
+    '/recursos/formadores_bomberos',
+  ],
+  Formador: [],
+};
+
+const DEFAULT_ROUTE_ORDER = [
+  '/presupuestos/sinplanificar',
+  '/recursos/formadores_bomberos',
+  '/recursos/unidades_moviles',
+  '/recursos/salas',
+  '/certificados',
+  '/certificados/templates_certificados',
+  '/calendario/por_sesiones',
+  '/calendario/por_formador',
+  '/calendario/por_unidad_movil',
+  '/informes/formacion',
+  '/informes/preventivo',
+  '/informes/simulacro',
+  '/informes/recurso_preventivo_ebro',
+  '/usuarios',
+];
+
+type UserRecord = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  role: string;
+  active: boolean;
+  password_hash?: string | null;
+  password_algo?: string | null;
+  password_updated_at?: Date | null;
+  reset_token?: string | null;
+  reset_token_expires?: Date | null;
+  reset_requested_at?: Date | null;
+  reset_used_at?: Date | null;
+};
+
+type AuthSessionRecord = {
+  id: string;
+  user_id: string;
+  created_at: Date;
+  expires_at: Date;
+  revoked_at: Date | null;
+  ip_hash: string | null;
+  user_agent: string | null;
+  user?: UserRecord | null;
+};
+
+export type AuthenticatedContext = {
+  session: AuthSessionRecord;
+  user: UserRecord;
+  permissions: readonly string[];
+};
+
+type RequireAuthOptions = {
+  requireRoles?: readonly string[];
+};
+
+export function getPermissionsForRole(role: string | null | undefined): readonly string[] {
+  if (!role) return [];
+  const normalized = role.trim();
+  if (!normalized.length) return [];
+  return ROLE_PERMISSIONS[normalized] ?? [];
+}
+
+export function computeDefaultPath(permissions: readonly string[]): string {
+  if (permissions.includes('ALL')) {
+    return DEFAULT_ROUTE_ORDER[0];
+  }
+  for (const route of DEFAULT_ROUTE_ORDER) {
+    if (hasPermission(route, permissions)) {
+      return route;
+    }
+  }
+  return '/';
+}
+
+export function normalizeEmail(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const normalized = input.trim().toLowerCase();
+  return normalized.length ? normalized : null;
+}
+
+export function shouldUseSecureCookies(): boolean {
+  if (process.env.FORCE_SECURE_COOKIE === 'true') return true;
+  if (process.env.DISABLE_SECURE_COOKIE === 'true') return false;
+  if (process.env.NETLIFY_DEV === 'true') return false;
+  return process.env.NODE_ENV === 'production';
+}
+
+export function buildSessionCookie(sessionId: string, expiresAt: Date): string {
+  const maxAge = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+  const parts = [
+    `${SESSION_COOKIE_NAME}=${sessionId}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${maxAge}`,
+    `Expires=${expiresAt.toUTCString()}`,
+  ];
+  if (shouldUseSecureCookies()) {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
+}
+
+export function buildClearSessionCookie(): string {
+  const parts = [
+    `${SESSION_COOKIE_NAME}=`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Max-Age=0',
+    'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+  ];
+  if (shouldUseSecureCookies()) {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
+}
+
+export function parseCookies(header: string | undefined): Record<string, string> {
+  if (!header) return {};
+  const entries: Record<string, string> = {};
+  const parts = header.split(';');
+  for (const part of parts) {
+    const [rawName, ...rawValue] = part.split('=');
+    const name = rawName?.trim();
+    if (!name) continue;
+    const value = rawValue.join('=').trim();
+    entries[name] = value;
+  }
+  return entries;
+}
+
+export function extractSessionIdFromRequest(request: HttpRequest<any>): string | null {
+  const cookieHeader = request.headers['cookie'] ?? request.headers['cookies'];
+  if (!cookieHeader) return null;
+  const cookies = parseCookies(cookieHeader);
+  const sessionId = cookies[SESSION_COOKIE_NAME];
+  return sessionId && sessionId.length ? sessionId : null;
+}
+
+function isSessionActive(
+  session: AuthSessionRecord | null | undefined,
+): session is AuthSessionRecord {
+  if (!session) return false;
+  if (session.revoked_at) return false;
+  if (!session.expires_at) return false;
+  return session.expires_at.getTime() > Date.now();
+}
+
+export async function findActiveSession(
+  prisma: PrismaClient,
+  sessionId: string,
+): Promise<AuthenticatedContext | null> {
+  const session = (await prisma.auth_sessions.findUnique({
+    where: { id: sessionId },
+    include: { user: true },
+  })) as (AuthSessionRecord & { user: UserRecord | null }) | null;
+
+  if (!session || !isSessionActive(session) || !session.user || !session.user.active) {
+    return null;
+  }
+
+  const permissions = getPermissionsForRole(session.user.role);
+  return { session, user: session.user, permissions };
+}
+
+export async function requireAuth(
+  request: HttpRequest<any>,
+  prisma: PrismaClient,
+  options?: RequireAuthOptions,
+): Promise<AuthenticatedContext | { error: ReturnType<typeof errorResponse> }> {
+  const sessionId = extractSessionIdFromRequest(request);
+  if (!sessionId) {
+    return { error: errorResponse('UNAUTHORIZED', 'Sesión no válida o expirada', 401) };
+  }
+
+  const result = await findActiveSession(prisma, sessionId);
+  if (!result) {
+    return { error: errorResponse('UNAUTHORIZED', 'Sesión no válida o expirada', 401) };
+  }
+
+  if (options?.requireRoles && options.requireRoles.length) {
+    const role = result.user.role?.trim();
+    if (!role || !options.requireRoles.includes(role)) {
+      return { error: errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403) };
+    }
+  }
+
+  return result;
+}
+
+export function resolveClientIp(request: HttpRequest<any>): string | null {
+  const forwarded = request.headers['x-forwarded-for'];
+  if (forwarded) {
+    const parts = forwarded.split(',');
+    const first = parts[0]?.trim();
+    if (first) return first;
+  }
+  const rawIp = (request as any)?.event?.ip ?? request.headers['client-ip'];
+  if (typeof rawIp === 'string' && rawIp.trim().length) {
+    return rawIp.trim();
+  }
+  return null;
+}
+
+export function hashIp(ip: string | null): string | null {
+  if (!ip) return null;
+  return createHash('sha256').update(ip).digest('hex');
+}
+
+export function hasPermission(path: string, permissions: readonly string[]): boolean {
+  if (!path) return false;
+  if (!permissions.length) return false;
+  if (permissions.includes('ALL')) return true;
+
+  const normalizedPath = normalizePath(path);
+
+  return permissions.some((permission) => {
+    const normalizedPermission = normalizePath(permission);
+    if (normalizedPermission === normalizedPath) {
+      return true;
+    }
+    if (normalizedPermission.endsWith('/*')) {
+      const base = normalizedPermission.slice(0, -2);
+      return normalizedPath === base || normalizedPath.startsWith(`${base}/`);
+    }
+    return false;
+  });
+}
+
+function normalizePath(path: string): string {
+  if (!path) return '';
+  if (path === '/') return '/';
+  const trimmed = path.trim();
+  if (!trimmed.length) return '';
+  const normalized = trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+  return normalized || '/';
+}
+
+export function generateResetToken(): string {
+  return randomBytes(32).toString('hex');
+}
+
+export function getSessionExpirationDate(): Date {
+  return new Date(Date.now() + SESSION_DURATION_MS);
+}
+
+export function getResetTokenExpirationDate(): Date {
+  return new Date(Date.now() + RESET_TOKEN_DURATION_MS);
+}
