@@ -1,8 +1,5 @@
 import { createElement, lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { useCurrentUser } from './auth/UserContext';
-import type { UserRole } from '../types/user';
-import { isRoleAllowedForPath, normalizeNavigationPath } from './rbac';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
@@ -34,22 +31,6 @@ const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroRepo
 const InformesRecursoPreventivoEbroPage = lazy(
   () => import('../pages/informes/RecursoPreventivoEbroReportPage'),
 );
-const UsersPage = lazy(() => import('../pages/usuarios/UsersPage'));
-const UnauthorizedPage = lazy(() => import('../pages/misc/UnauthorizedPage'));
-
-function RequireRole({ path, children }: { path: string; children: JSX.Element }) {
-  const { user } = useCurrentUser();
-  const role: UserRole = (user?.role as UserRole) ?? 'formador';
-  const normalizedPath = normalizeNavigationPath(path);
-  if (isRoleAllowedForPath(role, normalizedPath)) {
-    return children;
-  }
-  return <UnauthorizedPage />;
-}
-
-function withRoleGuard(path: string, element: JSX.Element) {
-  return <RequireRole path={path}>{element}</RequireRole>;
-}
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -97,115 +78,58 @@ export function AppRouter({
             />
           }
         />
-        <Route
-          path="/presupuestos"
-          element={withRoleGuard('/presupuestos', <Navigate to="/presupuestos/sinplanificar" replace />)}
-        />
-        <Route
-          path="/presupuestos/sinplanificar"
-          element={withRoleGuard('/presupuestos/sinplanificar', <BudgetsPage {...budgetsPageProps} />)}
-        />
+        <Route path="/presupuestos" element={<Navigate to="/presupuestos/sinplanificar" replace />} />
+        <Route path="/presupuestos/sinplanificar" element={<BudgetsPage {...budgetsPageProps} />} />
         <Route
           path="/presupuestos/sintrabajar"
-          element={withRoleGuard(
-            '/presupuestos/sintrabajar',
+          element={
             <BudgetsPage
               {...budgetsPageProps}
               title="Presupuestos · Sin trabajar"
               subtitle="Revisa el estado de validación de tus presupuestos"
               showFollowUpColumns
-            />,
-          )}
+            />
+          }
         />
         <Route
           path="/calendario/por_sesiones"
-          element={withRoleGuard(
-            '/calendario/por_sesiones',
-            createElement(PorSesionesPage, { ...porSesionesPageProps, key: 'calendar-sesiones' }),
-          )}
+          element={createElement(PorSesionesPage, { ...porSesionesPageProps, key: 'calendar-sesiones' })}
         />
         <Route
           path="/calendario/por_unidad_movil"
-          element={withRoleGuard(
-            '/calendario/por_unidad_movil',
-            createElement(PorUnidadMovilPage, { ...porUnidadMovilPageProps, key: 'calendar-unidades' }),
-          )}
+          element={createElement(PorUnidadMovilPage, { ...porUnidadMovilPageProps, key: 'calendar-unidades' })}
         />
         <Route
           path="/calendario/por_formador"
-          element={withRoleGuard(
-            '/calendario/por_formador',
-            createElement(PorFormadorPage, { ...porFormadorPageProps, key: 'calendar-formadores' }),
-          )}
+          element={createElement(PorFormadorPage, { ...porFormadorPageProps, key: 'calendar-formadores' })}
         />
         <Route
           path="/recursos/formadores_bomberos"
-          element={withRoleGuard(
-            '/recursos/formadores_bomberos',
-            <FormadoresBomberosPage {...formadoresBomberosPageProps} />,
-          )}
+          element={<FormadoresBomberosPage {...formadoresBomberosPageProps} />}
         />
         <Route
           path="/recursos/unidades_moviles"
-          element={withRoleGuard(
-            '/recursos/unidades_moviles',
-            <UnidadesMovilesPage {...unidadesMovilesPageProps} />,
-          )}
+          element={<UnidadesMovilesPage {...unidadesMovilesPageProps} />}
         />
-        <Route
-          path="/recursos/salas"
-          element={withRoleGuard('/recursos/salas', <SalasPage {...salasPageProps} />)}
-        />
+        <Route path="/recursos/salas" element={<SalasPage {...salasPageProps} />} />
         <Route
           path="/certificados/templates_certificados"
-          element={withRoleGuard(
-            '/certificados/templates_certificados',
-            <TemplatesCertificadosPage {...templatesCertificadosPageProps} />,
-          )}
+          element={<TemplatesCertificadosPage {...templatesCertificadosPageProps} />}
         />
-        <Route
-          path="/recursos/productos"
-          element={withRoleGuard('/recursos/productos', <ProductosPage {...productosPageProps} />)}
-        />
+        <Route path="/recursos/productos" element={<ProductosPage {...productosPageProps} />} />
         <Route
           path="/recursos/formacion_abierta"
-          element={withRoleGuard(
-            '/recursos/formacion_abierta',
-            <RecursosFormacionAbiertaPage {...recursosFormacionAbiertaPageProps} />,
-          )}
+          element={<RecursosFormacionAbiertaPage {...recursosFormacionAbiertaPageProps} />}
         />
-        <Route
-          path="/formacion_abierta/cursos"
-          element={withRoleGuard(
-            '/formacion_abierta/cursos',
-            <Navigate to="/recursos/formacion_abierta" replace />,
-          )}
-        />
-        <Route
-          path="/informes/formacion"
-          element={withRoleGuard('/informes/formacion', <InformesFormacionPage />)}
-        />
-        <Route
-          path="/informes/preventivo"
-          element={withRoleGuard('/informes/preventivo', <InformesPreventivoPage />)}
-        />
-        <Route
-          path="/informes/simulacro"
-          element={withRoleGuard('/informes/simulacro', <InformesSimulacroPage />)}
-        />
+        <Route path="/formacion_abierta/cursos" element={<Navigate to="/recursos/formacion_abierta" replace />} />
+        <Route path="/informes/formacion" element={<InformesFormacionPage />} />
+        <Route path="/informes/preventivo" element={<InformesPreventivoPage />} />
+        <Route path="/informes/simulacro" element={<InformesSimulacroPage />} />
         <Route
           path="/informes/recurso_preventivo_ebro"
-          element={withRoleGuard(
-            '/informes/recurso_preventivo_ebro',
-            <InformesRecursoPreventivoEbroPage />,
-          )}
+          element={<InformesRecursoPreventivoEbroPage />}
         />
-        <Route
-          path="/certificados"
-          element={withRoleGuard('/certificados', <CertificadosPage {...certificadosPageProps} />)}
-        />
-        <Route path="/usuarios" element={withRoleGuard('/usuarios', <UsersPage />)} />
-        <Route path="/no-autorizado" element={<UnauthorizedPage />} />
+        <Route path="/certificados" element={<CertificadosPage {...certificadosPageProps} />} />
         <Route path="*" element={<Navigate to={defaultRedirectPath} replace />} />
       </Routes>
     </Suspense>
@@ -223,11 +147,8 @@ function HomeRedirect({ defaultRedirectPath, knownPaths, activePathStorageKey }:
     if (typeof window === 'undefined') return defaultRedirectPath;
     try {
       const storedPath = window.localStorage.getItem(activePathStorageKey);
-      if (storedPath) {
-        const normalizedStoredPath = normalizeNavigationPath(storedPath);
-        if (knownPaths.has(normalizedStoredPath)) {
-          return storedPath;
-        }
+      if (storedPath && knownPaths.has(storedPath)) {
+        return storedPath;
       }
     } catch (error) {
       console.warn('No se pudo leer la ruta activa almacenada', error);

@@ -34,47 +34,17 @@ export type RequestJsonOptions = {
   parseJson?: (text: string) => any;
 };
 
-type RequestTarget = RequestInfo | URL;
-
-function resolveRequestTargets(input: RequestInfo | URL): RequestTarget[] {
-  if (typeof input !== 'string') {
-    return [input];
-  }
-
-  if (/^https?:/i.test(input)) {
-    return [input];
-  }
-
-  const path = input.startsWith('/') ? input : `/${input}`;
-  const targets: string[] = [`${API_BASE}${path}`];
-
-  if (API_BASE.includes('/.netlify/functions')) {
-    const fallback = buildNetlifyFallbackPath(path);
-    if (fallback && fallback !== path) {
-      targets.push(`${API_BASE}${fallback}`);
+function resolveRequestInput(input: RequestInfo | URL): RequestInfo | URL {
+  if (typeof input === 'string') {
+    if (/^https?:/i.test(input)) {
+      return input;
     }
+
+    const path = input.startsWith('/') ? input : `/${input}`;
+    return `${API_BASE}${path}`;
   }
 
-  return targets;
-}
-
-const NETLIFY_NESTED_FUNCTION_DIRECTORIES = new Set(['auth']);
-
-function buildNetlifyFallbackPath(path: string): string | null {
-  const [pathname, search = ''] = path.split('?');
-  const segments = pathname.split('/').filter(Boolean);
-
-  if (segments.length !== 2) {
-    return null;
-  }
-
-  const [rootSegment] = segments;
-  if (!NETLIFY_NESTED_FUNCTION_DIRECTORIES.has(rootSegment)) {
-    return null;
-  }
-
-  const fallbackPathname = `/${segments.join('-')}`;
-  return `${fallbackPathname}${search ? `?${search}` : ''}`;
+  return input;
 }
 
 export async function requestJson<T = any>(
@@ -82,83 +52,43 @@ export async function requestJson<T = any>(
   init?: RequestInit,
   options?: RequestJsonOptions,
 ): Promise<T> {
-  const targets = resolveRequestTargets(input);
-  const networkMessage = options?.networkErrorMessage ?? 'No se pudo conectar con el servidor.';
-  const invalidResponseMessage =
-    options?.invalidResponseMessage ?? 'Respuesta JSON inválida del servidor.';
-  let lastApiError: ApiError | null = null;
-  let hadNetworkError = false;
+  let response: Response;
 
-  for (let index = 0; index < targets.length; index += 1) {
-    const target = targets[index];
-    const isLastAttempt = index === targets.length - 1;
-    let response: Response;
+  try {
+    response = await fetch(resolveRequestInput(input), {
+      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+      ...init,
+    });
+  } catch (error: unknown) {
+    const message = options?.networkErrorMessage ?? 'No se pudo conectar con el servidor.';
+    throw new ApiError('NETWORK_ERROR', message, undefined);
+  }
 
+  let text = '';
+  try {
+    text = await response.text();
+  } catch {
+    text = '';
+  }
+
+  let json: any = {};
+  if (text) {
     try {
-      response = await fetch(target, {
-        headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-        credentials: init?.credentials ?? 'include',
-        ...init,
-      });
-    } catch (error: unknown) {
-      hadNetworkError = true;
-      if (isLastAttempt) {
-        throw new ApiError('NETWORK_ERROR', networkMessage, undefined);
-      }
-      continue;
-    }
-
-    let text = '';
-    try {
-      text = await response.text();
+      json = options?.parseJson ? options.parseJson(text) : JSON.parse(text);
     } catch {
-      text = '';
-    }
-
-    let json: any = {};
-    if (text) {
-      try {
-        json = options?.parseJson ? options.parseJson(text) : JSON.parse(text);
-      } catch {
-        const error = new ApiError(
-          'INVALID_RESPONSE',
-          invalidResponseMessage,
-          response.status || undefined,
-        );
-        lastApiError = error;
-        if (isLastAttempt) {
-          throw error;
-        }
-        continue;
-      }
-    }
-
-    if (!response.ok || (json && typeof json === 'object' && json.ok === false)) {
       const message =
-        json?.message ?? options?.defaultErrorMessage ?? 'No se pudo completar la solicitud.';
-      const code = json?.error_code ?? options?.defaultErrorCode ?? `HTTP_${response.status}`;
-      const error = new ApiError(code, message, response.status || undefined);
-
-      if (!isLastAttempt && response.status === 404) {
-        lastApiError = error;
-        continue;
-      }
-
-      throw error;
+        options?.invalidResponseMessage ?? 'Respuesta JSON inválida del servidor.';
+      throw new ApiError('INVALID_RESPONSE', message, response.status || undefined);
     }
-
-    return (json ?? {}) as T;
   }
 
-  if (lastApiError) {
-    throw lastApiError;
+  if (!response.ok || (json && typeof json === 'object' && json.ok === false)) {
+    const message = json?.message ?? options?.defaultErrorMessage ?? 'No se pudo completar la solicitud.';
+    const code = json?.error_code ?? options?.defaultErrorCode ?? `HTTP_${response.status}`;
+    throw new ApiError(code, message, response.status || undefined);
   }
 
-  if (hadNetworkError) {
-    throw new ApiError('NETWORK_ERROR', networkMessage, undefined);
-  }
-
-  throw new ApiError('UNKNOWN_ERROR', 'No se pudo completar la solicitud.', undefined);
+  return (json ?? {}) as T;
 }
 
 export function toNumber(value: unknown): number | null {
