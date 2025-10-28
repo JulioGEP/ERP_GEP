@@ -1,11 +1,15 @@
-export const API_BASE =
-  typeof window !== 'undefined' && window.location
-    ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? window.location.port === '8888'
-        ? '/.netlify/functions'
-        : 'http://localhost:8888/.netlify/functions'
-      : '/.netlify/functions'
-    : '/.netlify/functions';
+const location = typeof window !== 'undefined' ? window.location : undefined;
+const isLocalHost =
+  !!location && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+const isNetlifyDev = isLocalHost && location?.port === '8888';
+
+export const API_ORIGIN = isLocalHost ? (isNetlifyDev ? '' : 'http://localhost:8888') : '';
+
+export const API_BASE = isLocalHost
+  ? isNetlifyDev
+    ? '/.netlify/functions'
+    : 'http://localhost:8888/.netlify/functions'
+  : '/.netlify/functions';
 
 export class ApiError extends Error {
   code: string;
@@ -43,9 +47,7 @@ function resolveRequestInput(input: RequestInfo | URL): RequestInfo | URL {
     const path = input.startsWith('/') ? input : `/${input}`;
 
     if (path.startsWith('/api/')) {
-      const relativePath = path.slice('/api'.length);
-      const normalizedPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-      return `${API_BASE}${normalizedPath}`;
+      return API_ORIGIN ? `${API_ORIGIN}${path}` : path;
     }
 
     return `${API_BASE}${path}`;
