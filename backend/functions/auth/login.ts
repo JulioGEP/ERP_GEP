@@ -7,6 +7,7 @@ import { errorResponse, successResponse } from '../_shared/response';
 import { getPrisma } from '../_shared/prisma';
 import {
   buildSessionCookie,
+  buildUserDisplayName,
   createSession,
   hashPassword,
   validatePassword,
@@ -19,7 +20,8 @@ interface LoginBody {
 
 interface UserRecord {
   id: string;
-  name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   email: string;
   role: string;
   active: boolean;
@@ -141,11 +143,44 @@ async function bootstrapFirstUserIfEmpty(
     const passwordHash = await hashPassword(password, prisma);
     const userId = randomUUID();
     const displayName = buildBootstrapDisplayName(email);
+    const [firstName, lastName] = (() => {
+      if (!displayName) return [null, null] as const;
+      const parts = displayName
+        .split(/\s+/)
+        .map((part) => part.trim())
+        .filter((part) => part.length);
+      if (!parts.length) {
+        return [null, null] as const;
+      }
+      const first = parts.shift() ?? null;
+      const last = parts.length ? parts.join(' ') : null;
+      return [first, last] as const;
+    })();
 
     const createdUsers = await prisma.$queryRaw<UserRecord[]>`
-      INSERT INTO users (id, email, name, role, active, password_hash, password_algo, password_updated_at, created_at, updated_at)
-      VALUES (${userId}::uuid, ${email}, ${displayName}, 'admin', true, ${passwordHash}, 'bcrypt', now(), now(), now())
-      RETURNING id, name, email, role, active, password_hash, password_algo
+      INSERT INTO users (
+        id,
+        email,
+        role,
+        active,
+        password_hash,
+        password_algo,
+        password_updated_at,
+        first_name,
+        last_name
+      )
+      VALUES (
+        ${userId}::uuid,
+        ${email},
+        'admin',
+        true,
+        ${passwordHash},
+        'bcrypt',
+        now(),
+        ${firstName},
+        ${lastName}
+      )
+      RETURNING id, first_name, last_name, email, role, active, password_hash, password_algo
     `;
 
     if (!createdUsers.length) {
@@ -176,7 +211,7 @@ export const handler = createHttpHandler<LoginBody>(async (request) => {
   const prisma = getPrisma();
 
   const users = await prisma.$queryRaw<UserRecord[]>`
-    SELECT id, name, email, role, active, password_hash, password_algo
+    SELECT id, first_name, last_name, email, role, active, password_hash, password_algo
     FROM users
     WHERE active = true
       AND password_hash IS NOT NULL
@@ -196,7 +231,18 @@ export const handler = createHttpHandler<LoginBody>(async (request) => {
   }
 
   await upgradePasswordHashIfNeeded(prisma, user, password);
-  const { password_hash: _passwordHash, password_algo: _passwordAlgo, ...publicUser } = user;
+  const { password_hash: _passwordHash, password_algo: _passwordAlgo, ...restUser } = user;
+
+  const displayName =
+    buildUserDisplayName(restUser.first_name, restUser.last_name, buildBootstrapDisplayName(restUser.email)) ?? null;
+
+  const publicUser = {
+    id: restUser.id,
+    name: displayName,
+    email: restUser.email,
+    role: restUser.role,
+    active: restUser.active,
+  };
 
   const { sessionId, expiresAt } = await createSession(prisma, publicUser.id, request.headers);
   const cookie = buildSessionCookie(sessionId, expiresAt);
