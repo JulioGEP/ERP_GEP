@@ -1,13 +1,17 @@
 import { ApiError, requestJson } from './client';
 import type { CurrentUser } from '../types/user';
 
+// Nota: Las funciones de Netlify dentro de subcarpetas se exponen con guiones
+// en lugar de barras. Ej.: backend/functions/auth/login.ts -> /.netlify/functions/auth-login
+// Por ello las rutas aquí utilizan la variante con guion para evitar respuestas 404.
+
 export type LoginPayload = {
   email: string;
   password: string;
 };
 
 export async function login(payload: LoginPayload): Promise<CurrentUser> {
-  const response = await requestJson<{ me: CurrentUser | null }>('/auth/login', {
+  const response = await requestJson<{ me: CurrentUser | null }>('/auth-login', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -21,7 +25,7 @@ export async function login(payload: LoginPayload): Promise<CurrentUser> {
 
 export async function fetchCurrentUser(): Promise<CurrentUser | null> {
   try {
-    const response = await requestJson<{ me: CurrentUser | null }>('/auth/me', {
+    const response = await requestJson<{ me: CurrentUser | null }>('/auth-me', {
       method: 'GET',
     });
     return response?.me ?? null;
@@ -34,14 +38,14 @@ export async function fetchCurrentUser(): Promise<CurrentUser | null> {
 }
 
 export async function logout(): Promise<void> {
-  await requestJson('/auth/logout', {
+  await requestJson('/auth-logout', {
     method: 'POST',
   });
 }
 
 export async function forgotPassword(email: string): Promise<string | null> {
   const response = await requestJson<{ message?: string }>(
-    '/auth/forgot-password',
+    '/auth-forgot-password',
     {
       method: 'POST',
       body: JSON.stringify({ email }),
@@ -60,7 +64,7 @@ export type ResetPasswordPayload = {
 
 export async function resetPassword({ token, newPassword }: ResetPasswordPayload): Promise<string | null> {
   const response = await requestJson<{ message?: string }>(
-    '/auth/reset-password',
+    '/auth-reset-password',
     {
       method: 'POST',
       body: JSON.stringify({ token, new_password: newPassword }),
