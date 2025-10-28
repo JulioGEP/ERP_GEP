@@ -18,7 +18,6 @@ type AllowedRole = (typeof ALLOWED_ROLES)[number];
 
 type UserRecord = {
   id: string;
-  name: string | null;
   first_name: string | null;
   last_name: string | null;
   email: string;
@@ -120,7 +119,7 @@ function normalizeUser(record: UserRecord) {
     email: record.email,
     role: record.role,
     active: Boolean(record.active),
-    name: record.name ?? buildDisplayName(record.first_name, record.last_name),
+    name: buildDisplayName(record.first_name, record.last_name),
   };
 }
 
@@ -149,12 +148,12 @@ export const handler = createHttpHandler<any>(async (request) => {
   try {
     if (method === 'GET' && !userIdFromPath) {
       const rows = await prisma.$queryRaw<UserRecord[]>`
-        SELECT id, first_name, last_name, name, email, role, active
+        SELECT id, first_name, last_name, email, role, active
         FROM users
         ORDER BY lower(last_name) NULLS FIRST, lower(first_name) NULLS FIRST, lower(email)
       `;
 
-      const response = successResponse({ users: rows.map((row) => normalizeUser(row)) });
+      const response = successResponse({ users: rows.map((row: UserRecord) => normalizeUser(row)) });
       return withSessionCookie(response, auth.sessionCookie);
     }
 
@@ -181,12 +180,10 @@ export const handler = createHttpHandler<any>(async (request) => {
       const userId = randomUUID();
       const firstName = firstNameInput ?? null;
       const lastName = lastNameInput ?? null;
-      const displayName = buildDisplayName(firstName, lastName);
-
       const createdUsers = await prisma.$queryRaw<UserRecord[]>`
-        INSERT INTO users (id, first_name, last_name, name, email, role, active)
-        VALUES (${userId}::uuid, ${firstName}, ${lastName}, ${displayName}, ${emailInput}, ${roleInput}, true)
-        RETURNING id, first_name, last_name, name, email, role, active
+        INSERT INTO users (id, first_name, last_name, email, role, active)
+        VALUES (${userId}::uuid, ${firstName}, ${lastName}, ${emailInput}, ${roleInput}, true)
+        RETURNING id, first_name, last_name, email, role, active
       `;
 
       if (!createdUsers.length) {
@@ -203,7 +200,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       }
 
       const existingUsers = await prisma.$queryRaw<UserRecord[]>`
-        SELECT id, first_name, last_name, name, email, role, active
+        SELECT id, first_name, last_name, email, role, active
         FROM users
         WHERE id = ${userIdFromPath}::uuid
         LIMIT 1
@@ -239,15 +236,12 @@ export const handler = createHttpHandler<any>(async (request) => {
       const nextEmail = emailInput !== undefined ? emailInput : existing.email;
       const nextRole = roleInput !== undefined ? roleInput : (existing.role as AllowedRole);
       const nextActive = activeInput !== undefined ? activeInput : Boolean(existing.active);
-      const nextDisplayName = buildDisplayName(nextFirstName, nextLastName);
-
       const hasChanges =
         nextFirstName !== existing.first_name ||
         nextLastName !== existing.last_name ||
         nextEmail !== existing.email ||
         nextRole !== existing.role ||
-        nextActive !== existing.active ||
-        nextDisplayName !== (existing.name ?? buildDisplayName(existing.first_name, existing.last_name));
+        nextActive !== existing.active;
 
       if (!hasChanges) {
         return errorResponse('VALIDATION_ERROR', 'No se han proporcionado cambios', 400);
@@ -257,12 +251,11 @@ export const handler = createHttpHandler<any>(async (request) => {
         UPDATE users
         SET first_name = ${nextFirstName},
             last_name = ${nextLastName},
-            name = ${nextDisplayName},
             email = ${nextEmail},
             role = ${nextRole},
             active = ${nextActive}
         WHERE id = ${userIdFromPath}::uuid
-        RETURNING id, first_name, last_name, name, email, role, active
+        RETURNING id, first_name, last_name, email, role, active
       `;
 
       if (!updatedUsers.length) {

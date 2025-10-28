@@ -30,6 +30,29 @@ const SESSION_TTL_SECONDS = Math.max(
   parsePositiveInt(process.env.AUTH_SESSION_TTL_SECONDS, DEFAULT_SESSION_TTL_SECONDS),
 );
 
+export function buildUserDisplayName(
+  firstName?: string | null,
+  lastName?: string | null,
+  fallback?: string | null,
+): string | null {
+  const parts = [firstName, lastName]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value): value is string => Boolean(value));
+
+  if (parts.length) {
+    return parts.join(' ');
+  }
+
+  if (typeof fallback === 'string') {
+    const trimmedFallback = fallback.trim();
+    if (trimmedFallback.length) {
+      return trimmedFallback;
+    }
+  }
+
+  return null;
+}
+
 export interface AuthenticatedUser {
   id: string;
   name: string | null;
@@ -116,17 +139,30 @@ export function buildClearSessionCookie(): string {
   return parts.join('; ');
 }
 
+type SessionUserRow = {
+  session_id: string;
+  expires_at: Date | null;
+  revoked_at: Date | null;
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  role: string;
+  active: boolean;
+};
+
 async function fetchAuthenticatedUser(
   prisma: PrismaClient,
   sessionId: string,
 ): Promise<(AuthenticatedUser & { session_id: string; expires_at: Date | null }) | null> {
-  const results = await prisma.$queryRaw<(AuthenticatedUser & { session_id: string; expires_at: Date | null; revoked_at: Date | null })[]>`
+  const results = await prisma.$queryRaw<SessionUserRow[]>`
     SELECT
       s.id as session_id,
       s.expires_at,
       s.revoked_at,
       u.id,
-      u.name,
+      u.first_name,
+      u.last_name,
       u.email,
       u.role,
       u.active
@@ -153,7 +189,17 @@ async function fetchAuthenticatedUser(
     return null;
   }
 
-  return record;
+  const fallbackName = record.email?.split('@')[0] ?? record.email ?? null;
+
+  return {
+    session_id: record.session_id,
+    expires_at: record.expires_at,
+    id: record.id,
+    name: buildUserDisplayName(record.first_name, record.last_name, fallbackName),
+    email: record.email,
+    role: record.role,
+    active: record.active,
+  };
 }
 
 export async function createSession(
