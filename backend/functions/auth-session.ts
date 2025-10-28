@@ -1,7 +1,11 @@
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
-import { requireAuth } from './_shared/auth';
+import {
+  buildClearSessionCookie,
+  extractSessionIdFromRequest,
+  findActiveSession,
+} from './_shared/auth';
 
 function serializeUser(user: any) {
   return {
@@ -20,10 +24,21 @@ export const handler = createHttpHandler(async (request) => {
   }
 
   const prisma = getPrisma();
-  const auth = await requireAuth(request, prisma);
+  const sessionId = extractSessionIdFromRequest(request);
 
-  if ('error' in auth) {
-    return auth.error;
+  if (!sessionId) {
+    return successResponse({ user: null, permissions: [] });
+  }
+
+  const auth = await findActiveSession(prisma, sessionId);
+
+  if (!auth) {
+    return {
+      ...successResponse({ user: null, permissions: [] }),
+      headers: {
+        'Set-Cookie': buildClearSessionCookie(),
+      },
+    };
   }
 
   return successResponse({ user: serializeUser(auth.user), permissions: auth.permissions });

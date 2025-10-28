@@ -14,6 +14,11 @@ export type AuthResponse = {
   permissions: string[];
 };
 
+export type AuthSessionResponse = {
+  user: AuthUser | null;
+  permissions: string[];
+};
+
 export async function login(email: string, password: string): Promise<AuthResponse> {
   return requestJson<AuthResponse>('/auth-login', {
     method: 'POST',
@@ -21,8 +26,8 @@ export async function login(email: string, password: string): Promise<AuthRespon
   });
 }
 
-export async function fetchSession(): Promise<AuthResponse> {
-  return requestJson<AuthResponse>('/auth-session', { method: 'GET' });
+export async function fetchSession(): Promise<AuthSessionResponse> {
+  return requestJson<AuthSessionResponse>('/auth-session', { method: 'GET' });
 }
 
 export async function logout(): Promise<void> {
