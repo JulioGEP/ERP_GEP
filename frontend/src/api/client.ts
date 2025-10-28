@@ -56,8 +56,9 @@ export async function requestJson<T = any>(
 
   try {
     response = await fetch(resolveRequestInput(input), {
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
       ...init,
+      credentials: init?.credentials ?? 'include',
+      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     });
   } catch (error: unknown) {
     const message = options?.networkErrorMessage ?? 'No se pudo conectar con el servidor.';
