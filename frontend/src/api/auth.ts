@@ -3,8 +3,9 @@ import type { CurrentUser } from '../types/user';
 
 // Aunque las funciones de Netlify anidadas suelen exponerse con guiones,
 // algunas configuraciones recientes las sirven con barras. Para ser compatibles
-// con ambos escenarios usamos la variante con barras (`/auth/login`). Netlify
-// redirige automáticamente a la versión con guiones si es necesario.
+// con ambos escenarios usamos la variante con barras (`/auth/login`). La capa
+// de cliente vuelve a intentarlo automáticamente con guiones cuando es
+// necesario.
 
 export type LoginPayload = {
   email: string;
