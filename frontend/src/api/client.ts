@@ -1,3 +1,6 @@
+// frontend/src/api/client.ts
+
+// Determina la base de funciones Netlify en local/prod
 export const API_BASE =
   typeof window !== 'undefined' && window.location
     ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -36,17 +39,18 @@ export type RequestJsonOptions = {
 
 function resolveRequestInput(input: RequestInfo | URL): RequestInfo | URL {
   if (typeof input === 'string') {
-    if (/^https?:/i.test(input)) {
-      return input;
-    }
-
+    if (/^https?:/i.test(input)) return input;
     const path = input.startsWith('/') ? input : `/${input}`;
     return `${API_BASE}${path}`;
   }
-
   return input;
 }
 
+/**
+ * requestJson: hace fetch JSON con credenciales incluidas por defecto.
+ * - Fuerza 'include' en credentials para enviar/recibir cookie HttpOnly (erp_session).
+ * - Lanza ApiError con code y status cuando no es ok.
+ */
 export async function requestJson<T = any>(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -58,31 +62,34 @@ export async function requestJson<T = any>(
     response = await fetch(resolveRequestInput(input), {
       ...init,
       credentials: init?.credentials ?? 'include',
-      headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers || {}),
+      },
     });
-  } catch (error: unknown) {
+  } catch (_err) {
     const message = options?.networkErrorMessage ?? 'No se pudo conectar con el servidor.';
     throw new ApiError('NETWORK_ERROR', message, undefined);
   }
 
-  let text = '';
+  let raw = '';
   try {
-    text = await response.text();
+    raw = await response.text();
   } catch {
-    text = '';
+    raw = '';
   }
 
   let json: any = {};
-  if (text) {
+  if (raw) {
     try {
-      json = options?.parseJson ? options.parseJson(text) : JSON.parse(text);
+      json = options?.parseJson ? options.parseJson(raw) : JSON.parse(raw);
     } catch {
-      const message =
-        options?.invalidResponseMessage ?? 'Respuesta JSON inválida del servidor.';
+      const message = options?.invalidResponseMessage ?? 'Respuesta JSON inválida del servidor.';
       throw new ApiError('INVALID_RESPONSE', message, response.status || undefined);
     }
   }
 
+  // Consideramos error si HTTP !ok o payload ok === false
   if (!response.ok || (json && typeof json === 'object' && json.ok === false)) {
     const message = json?.message ?? options?.defaultErrorMessage ?? 'No se pudo completar la solicitud.';
     const code = json?.error_code ?? options?.defaultErrorCode ?? `HTTP_${response.status}`;
@@ -91,6 +98,42 @@ export async function requestJson<T = any>(
 
   return (json ?? {}) as T;
 }
+
+/* ------------------------- Helpers de conveniencia ------------------------- */
+
+export function isUnauthorized(err: unknown): boolean {
+  return isApiError(err) && (err.status === 401 || err.code === 'HTTP_401');
+}
+
+export async function getJson<T = any>(path: string, init?: RequestInit) {
+  return requestJson<T>(path, { ...(init || {}), method: 'GET' });
+}
+
+export async function postJson<T = any>(path: string, body?: any, init?: RequestInit) {
+  return requestJson<T>(path, {
+    ...(init || {}),
+    method: 'POST',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+export async function patchJson<T = any>(path: string, body?: any, init?: RequestInit) {
+  return requestJson<T>(path, {
+    ...(init || {}),
+    method: 'PATCH',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+export async function delJson<T = any>(path: string, body?: any, init?: RequestInit) {
+  return requestJson<T>(path, {
+    ...(init || {}),
+    method: 'DELETE',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+/* ------------------------- Utilidades varias (immutables) ------------------ */
 
 export function toNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
@@ -124,9 +167,7 @@ export function toStringArray(value: unknown): string[] {
   return out;
 }
 
-export function pickNonEmptyString(
-  ...values: Array<string | null | undefined>
-): string | null {
+export function pickNonEmptyString(...values: Array<string | null | undefined>): string | null {
   for (const value of values) {
     if (typeof value === 'string') {
       const trimmed = value.trim();
@@ -145,9 +186,7 @@ export function sanitizeStringArray(values: string[] | undefined): string[] | un
 }
 
 export function normalizeDriveUrlInput(value: unknown): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
+  if (value === null || value === undefined) return null;
   const text = String(value ?? '').trim();
   return text.length ? text : null;
 }

@@ -1,0 +1,112 @@
+// backend/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// --- Modelos mínimos para habilitar tipos Prisma usados por el código ---
+/// NOTA: Campos mínimos; más adelante alinearemos con Neon.
+
+model users {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  first_name    String?
+  last_name     String?
+  password_hash String?
+  password_algo String?
+  role          String?  // 'Admin' | 'Comercial' | ...
+  active        Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+}
+
+model auth_sessions {
+  id         String   @id @default(uuid())
+  user_id    String
+  created_at DateTime @default(now())
+  expires_at DateTime
+  revoked_at DateTime?
+}
+
+model tokens {
+  id                 String   @id @default(uuid())
+  user_id            String
+  reset_token        String?
+  reset_token_expires DateTime?
+  reset_requested_at DateTime?
+  reset_used_at      DateTime?
+}
+
+model products {
+  id        String   @id @default(uuid())
+  name      String?
+  code      String?
+  id_woo    BigInt?
+  price     Decimal?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model variants {
+  id        String   @id @default(uuid())
+  product_id String?
+  name      String?
+  date      DateTime?
+  sede      String?
+  price     Decimal?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model deals {
+  id              String   @id @default(uuid())
+  title           String?
+  pipeline_id     Int?
+  training_address String?
+  sede_label      String?
+  caes_label      String?
+  fundae_label    String?
+  hotel_label     String?
+  transporte      String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+}
+
+model sessions {
+  id                String   @id @default(uuid())
+  deal_id           String?
+  deal_product_id   String?
+  fecha_inicio_utc  DateTime?
+  fecha_fin_utc     DateTime?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+}
+
+model alumnos {
+  id        String   @id @default(uuid())
+  dni       String?
+  nombre    String?
+  apellido  String?
+  email     String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model comments {
+  id        String   @id @default(uuid())
+  deal_id   String?
+  text      String?
+  created_at DateTime @default(now())
+}
+
+model documents {
+  id        String   @id @default(uuid())
+  deal_id   String?
+  name      String?
+  mime      String?
+  created_at DateTime @default(now())
+}

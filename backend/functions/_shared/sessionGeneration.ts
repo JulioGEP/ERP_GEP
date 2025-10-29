@@ -39,14 +39,14 @@ export async function reindexSessionNames(
   baseName: string,
 ) {
   const base = baseName.trim().length ? baseName.trim() : 'Sesión';
-  const sessions = await tx.sessions.findMany({
+  const sessions: { id: string; nombre_cache: string | null }[] = await tx.sessions.findMany({
     where: { deal_product_id: dealProductId },
     orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
     select: { id: true, nombre_cache: true },
   });
 
   const updates: Array<ReturnType<typeof tx.sessions.update>> = [];
-  sessions.forEach((session, index) => {
+  sessions.forEach((session: { id: string; nombre_cache: string | null }, index: number) => {
     const expected = `${base} #${index + 1}`;
     if (session.nombre_cache === expected) return;
     updates.push(
@@ -96,7 +96,7 @@ async function syncSessionsForProduct(
     const toDelete = existing.slice(targetQuantity);
     if (toDelete.length) {
       const result = await tx.sessions.deleteMany({
-        where: { id: { in: toDelete.map(({ id }) => id) } },
+        where: { id: { in: toDelete.map(({ id }: { id: string }) => id) } },
       });
       deleted += result.count;
     }
@@ -141,11 +141,13 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
     return { error: errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404) } as const;
   }
 
-  const applicableProducts = (deal.deal_products ?? []).filter((product): product is DealProductRecord =>
-    hasApplicableCode(product.code),
+  const applicableProducts: DealProductRecord[] =
+  (deal.deal_products ?? []).filter(
+    (product: unknown): product is DealProductRecord =>
+      typeof (product as any)?.code === 'string' && hasApplicableCode((product as any).code)
   );
 
-  const applicableIds = applicableProducts.map((product) => product.id);
+  const applicableIds = applicableProducts.map((product: DealProductRecord) => product.id);
 
   if (applicableIds.length === 0) {
     const result = await tx.sessions.deleteMany({ where: { deal_id: dealId } });
@@ -160,8 +162,8 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
   });
 
   const syncResults = await Promise.all(
-    applicableProducts.map((product) =>
-      syncSessionsForProduct(tx, deal.deal_id, product, deal.training_address ?? null),
+    applicableProducts.map((product: DealProductRecord) =>
+  syncSessionsForProduct(tx, deal.deal_id, product, deal.training_address ?? null),
     ),
   );
 

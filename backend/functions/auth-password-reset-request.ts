@@ -12,16 +12,28 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
   }
 
-  const email = normalizeEmail((request.body as any)?.email);
-  if (!email) {
-    // Respuesta genérica para evitar enumeración
-    return successResponse({ message: 'Si el usuario existe, recibirá un email con instrucciones.' });
-  }
-
   const prisma = getPrisma();
-  const user = await prisma.users.findUnique({ where: { email } });
 
-  if (user && user.active) {
+  try {
+    const email = normalizeEmail((request.body as any)?.email);
+
+    // Respuesta genérica para evitar enumeración de usuarios
+    const genericOk = () =>
+      successResponse({
+        message: 'Si el usuario existe, recibirá un email con instrucciones.',
+      });
+
+    if (!email) {
+      return genericOk();
+    }
+
+    const user = await prisma.users.findUnique({ where: { email } });
+
+    if (!user || !user.active) {
+      // Usuario inexistente o inactivo → misma respuesta genérica
+      return genericOk();
+    }
+
     const token = generateResetToken();
     const expiresAt = getResetTokenExpirationDate();
 
@@ -35,13 +47,17 @@ export const handler = createHttpHandler<any>(async (request) => {
       },
     });
 
+    // Stub "envío de email"
     console.info('[auth] Password reset requested', {
       userId: user.id,
       email: user.email,
-      token,
+      token, // En producción no logarías el token; aquí está a modo de stub.
       expiresAt: expiresAt.toISOString(),
     });
-  }
 
-  return successResponse({ message: 'Si el usuario existe, recibirá un email con instrucciones.' });
+    return genericOk();
+  } catch (_err) {
+    // No exponemos detalles internos
+    return errorResponse('INTERNAL', 'No se pudo procesar la solicitud', 500);
+  }
 });

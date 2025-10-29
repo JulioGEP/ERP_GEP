@@ -41,7 +41,7 @@ import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
-import { useAuth } from '../shared/auth/AuthContext';
+import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
@@ -243,18 +243,34 @@ type ToastMessage = {
 };
 
 export default function AuthenticatedApp() {
-  const { user, logout, permissions, hasPermission, getDefaultPath } = useAuth();
+  const { user, logout, permissions, hasPermission } = useAuth(); // ⬅️ sin getDefaultPath
   const location = useLocation();
   const navigate = useNavigate();
   const canImportBudgets = user?.role !== 'Logistica';
 
-  const defaultRedirectPath = useMemo(() => {
-    const computed = getDefaultPath();
-    if (computed === '/' && hasPermission(DEFAULT_REDIRECT_PATH)) {
-      return DEFAULT_REDIRECT_PATH;
+  // Redirección defensiva si por cualquier motivo se monta sin sesión
+  useEffect(() => {
+    if (!user) {
+      navigate('/login', { replace: true });
     }
-    return computed;
-  }, [getDefaultPath, hasPermission]);
+  }, [user, navigate]);
+
+  // Calcula path por defecto según permisos visibles en el menú
+  const computeDefaultPath = useCallback((): string => {
+    // Prioriza hijos en el orden declarado en NAVIGATION_ITEMS
+    for (const item of NAVIGATION_ITEMS) {
+      if (item.path && hasPermission(item.path)) return item.path;
+      for (const child of item.children ?? []) {
+        if (hasPermission(child.path)) return child.path;
+      }
+    }
+    // Fallback configurable
+    if (hasPermission(DEFAULT_REDIRECT_PATH)) return DEFAULT_REDIRECT_PATH;
+    // Último recurso: primer legacy conocido o raíz
+    return LEGACY_APP_PATHS[0] ?? '/';
+  }, [hasPermission]);
+
+  const defaultRedirectPath = useMemo(() => computeDefaultPath(), [computeDefaultPath]);
 
   const filteredNavItems = useMemo(() => {
     return NAVIGATION_ITEMS.map((item) => {
@@ -264,7 +280,10 @@ export default function AuthenticatedApp() {
         return null;
       }
       return { ...item, children };
-    }).filter((item): item is NavItem => Boolean(item));
+    }).filter(
+  (item): item is { children: NavChild[]; key: string; label: string; path?: string } =>
+    !!item && Array.isArray((item as any).children)
+);
   }, [hasPermission, permissions]);
 
   const allowedPaths = useMemo(() => {
@@ -325,7 +344,7 @@ export default function AuthenticatedApp() {
 
   const budgetsQuery = useQuery({
     queryKey: DEALS_WITHOUT_SESSIONS_QUERY_KEY,
-    queryFn: fetchDealsWithoutSessions,
+    queryFn: () => fetchDealsWithoutSessions(),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchInterval: false,

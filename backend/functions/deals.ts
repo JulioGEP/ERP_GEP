@@ -1,7 +1,7 @@
 // backend/functions/deals.ts
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
+import type { PrismaClient } from "@prisma/client";
 import { getPrisma } from "./_shared/prisma";
-import type { Prisma, PrismaClient } from "@prisma/client";
 import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import {
   getDeal,
@@ -109,21 +109,6 @@ function isDealWonStatus(status: unknown): boolean {
   return status.trim().toLowerCase() === "won";
 }
 
-function errorResponseToError(payload: ReturnType<typeof errorResponse>): Error {
-  let message = "Error generando sesiones para el deal";
-  try {
-    const parsed = JSON.parse(payload.body ?? "{}");
-    if (parsed && typeof parsed.message === "string" && parsed.message.trim().length) {
-      message = parsed.message.trim();
-    }
-  } catch {
-    // ignore JSON parse errors and keep fallback message
-  }
-  const error = new Error(message);
-  (error as any).statusCode = payload.statusCode;
-  return error;
-}
-
 type SessionForStudents = {
   id: string;
   estado: string | null;
@@ -201,20 +186,23 @@ function buildStudentIdentifierKey(
 async function syncFormacionAbiertaSessionsAndStudents(
   prisma: PrismaClient,
   dealId: string,
-) : Promise<FormacionAbiertaSyncResult> {
-  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+): Promise<FormacionAbiertaSyncResult> {
+    return prisma.$transaction(async (tx: PrismaClient) => {
     const generationResult = await generateSessionsForDeal(tx, dealId);
+
     if ("error" in generationResult) {
-      throw errorResponseToError(generationResult.error);
+      // Aquí generationResult.error puede ser un Response (sin .message) o un Error.
+      const maybeErr: any = (generationResult as any).error;
+      const err = new Error(
+        typeof maybeErr?.message === "string" ? maybeErr.message : "Session generation failed",
+      );
+      (err as any).cause = maybeErr;
+      throw err;
     }
 
     const sessions = await tx.sessions.findMany({
       where: { deal_id: dealId },
-      orderBy: [
-        { fecha_inicio_utc: "asc" },
-        { created_at: "asc" },
-        { id: "asc" },
-      ],
+      orderBy: [{ fecha_inicio_utc: "asc" }, { created_at: "asc" }, { id: "asc" }],
       select: {
         id: true,
         estado: true,
@@ -383,7 +371,7 @@ async function resolvePipelineLabelFromId(pipelineId: unknown): Promise<string |
 
 async function ensureDealPipelineLabel<T extends Record<string, any>>(
   deal: T,
-  options: { pipelineId?: unknown; pipelineLabel?: unknown } = {}
+  options: { pipelineId?: unknown; pipelineLabel?: unknown } = {},
 ): Promise<T> {
   if (!deal || typeof deal !== "object") return deal;
 
@@ -554,17 +542,18 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
   }
 
   if ("alumnos" in out) {
+    // Alias de tipo para lo que devuelve mapStudentForApi
+    type MappedStudent = ReturnType<typeof mapStudentForApi>;
+
     const students = Array.isArray(out.alumnos)
-      ? out.alumnos
-          .map((student: any) => mapStudentForApi(student))
-          .filter(
-            (value): value is { id: string | null; nombre: string | null; apellido: string | null; dni: string | null } =>
-              value !== null,
-          )
+      ? (out.alumnos as unknown[])
+          .map((student: unknown) => mapStudentForApi(student))
+          .filter((v): v is NonNullable<MappedStudent> => v !== null)
       : [];
+
     delete out.alumnos;
     if (students.length) {
-      out.students = students;
+      (out as any).students = students;
     }
   }
 
@@ -607,7 +596,7 @@ function parseSedeLabels(value: unknown): string[] {
 async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs?: number | null,
-  label?: string
+  label?: string,
 ): Promise<T> {
   if (!timeoutMs || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return promise;
@@ -617,7 +606,7 @@ async function withTimeout<T>(
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutHandle = setTimeout(() => {
       const err = new Error(
-        label ? `${label} timed out after ${timeoutMs}ms` : `Timeout after ${timeoutMs}ms`
+        label ? `${label} timed out after ${timeoutMs}ms` : `Timeout after ${timeoutMs}ms`,
       );
       (err as any).code = "TIMEOUT";
       reject(err);
@@ -696,7 +685,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     const personId = resolvePipedriveId(d.person_id);
 
     const parallelTimeoutMs = Number(
-      process.env.PIPEDRIVE_TIMEOUT_MS ?? process.env.PIPEDRIVE_FETCH_TIMEOUT_MS ?? null
+      process.env.PIPEDRIVE_TIMEOUT_MS ?? process.env.PIPEDRIVE_FETCH_TIMEOUT_MS ?? null,
     );
 
     const parallelStart = Date.now();
@@ -706,7 +695,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
         Promise<any>,
         Promise<any[]>,
         Promise<any[]>,
-        Promise<any[]>
+        Promise<any[]>,
       ] = [
         orgId ? getOrganization(orgId) : Promise.resolve(null),
         personId ? getPerson(personId) : Promise.resolve(null),
@@ -734,8 +723,8 @@ async function importDealFromPipedrive(dealIdRaw: any) {
             if (orgId) {
               warnings.push(
                 `No se pudo obtener la organización desde Pipedrive (${resolveErrorMessage(
-                  orgRes.reason
-                )})`
+                  orgRes.reason,
+                )})`,
               );
             }
             return null;
@@ -748,8 +737,8 @@ async function importDealFromPipedrive(dealIdRaw: any) {
             if (personId) {
               warnings.push(
                 `No se pudo obtener la persona desde Pipedrive (${resolveErrorMessage(
-                  personRes.reason
-                )})`
+                  personRes.reason,
+                )})`,
               );
             }
             return null;
@@ -764,7 +753,9 @@ async function importDealFromPipedrive(dealIdRaw: any) {
         : [];
     if (productsFetchFailed) {
       warnings.push(
-        `No se pudieron obtener los productos del deal (${resolveErrorMessage(productsRes.reason)})`
+        `No se pudieron obtener los productos del deal (${resolveErrorMessage(
+          productsRes.reason,
+        )})`,
       );
     }
 
@@ -777,7 +768,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
         : [];
     if (notesFetchFailed) {
       warnings.push(
-        `No se pudieron obtener las notas del deal (${resolveErrorMessage(notesRes.reason)})`
+        `No se pudieron obtener las notas del deal (${resolveErrorMessage(notesRes.reason)})`,
       );
     }
 
@@ -790,7 +781,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
         : [];
     if (filesFetchFailed) {
       warnings.push(
-        `No se pudieron obtener los archivos del deal (${resolveErrorMessage(filesRes.reason)})`
+        `No se pudieron obtener los archivos del deal (${resolveErrorMessage(filesRes.reason)})`,
       );
     }
 
@@ -822,6 +813,7 @@ async function importDealFromPipedrive(dealIdRaw: any) {
 
       if (isFormacionAbiertaPipeline(pipelineLabelCandidate)) {
         try {
+          const prisma = getPrisma();
           const syncResult = await syncFormacionAbiertaSessionsAndStudents(
             prisma,
             String(savedDealId),
@@ -879,7 +871,6 @@ async function importDealFromPipedrive(dealIdRaw: any) {
     console.log(JSON.stringify(logPayload));
   }
 }
-
 /* ============================== HANDLER ============================== */
 export const handler = async (event: any) => {
   try {
@@ -887,8 +878,13 @@ export const handler = async (event: any) => {
     if (event.httpMethod === "OPTIONS") {
       return { statusCode: 204, headers: COMMON_HEADERS, body: "" };
     }
+  const prisma = getPrisma();
+// Tipos derivados del método real, evitando indexar 'where' directamente
+type _DealsFindManyArg = Parameters<typeof prisma.deals.findMany>[0];
+type DealsWhere = _DealsFindManyArg extends { where?: infer W } ? NonNullable<W> : never;
+type DealsFindManyArgs = _DealsFindManyArg;
 
-    const prisma = getPrisma();
+
     const method = event.httpMethod;
     const path = event.path || "";
 
@@ -1090,7 +1086,7 @@ export const handler = async (event: any) => {
         ? commentsTableExistsResult.some((row) => Boolean(row?.table_ref))
         : false;
 
-      const transactionOperations: Parameters<typeof prisma.$transaction>[0] = [
+      const transactionOperations = [
         prisma.deal_products.deleteMany({ where: { deal_id: id } }),
         prisma.deal_notes.deleteMany({ where: { deal_id: id } }),
         prisma.deal_files.deleteMany({ where: { deal_id: id } }),
@@ -1099,7 +1095,11 @@ export const handler = async (event: any) => {
       ];
 
       if (commentsTableExists) {
-        transactionOperations.splice(3, 0, prisma.comments.deleteMany({ where: { deal_id: id } }));
+        transactionOperations.splice(
+          3,
+          0,
+          prisma.comments.deleteMany({ where: { deal_id: id } }),
+        );
       }
 
       await prisma.$transaction(transactionOperations);
@@ -1223,8 +1223,8 @@ export const handler = async (event: any) => {
             prisma.deal_products.updateMany({
               where: { id: product.id, deal_id: String(dealId) },
               data: { ...product.data, updated_at: timestamp },
-            })
-          )
+            }),
+          ),
         );
       }
 
@@ -1259,7 +1259,10 @@ export const handler = async (event: any) => {
 
     if (method === "GET" && event.queryStringParameters?.w_id_variation) {
       const rawVariationId = event.queryStringParameters.w_id_variation;
-      const variationId = typeof rawVariationId === "string" ? rawVariationId.trim() : String(rawVariationId ?? "").trim();
+      const variationId =
+        typeof rawVariationId === "string"
+          ? rawVariationId.trim()
+          : String(rawVariationId ?? "").trim();
 
       if (!variationId) {
         return successResponse({ deals: [] });
@@ -1346,84 +1349,73 @@ export const handler = async (event: any) => {
       return successResponse({ deals });
     }
 
-    /* -------------- GET listado: /.netlify/functions/deals?pendingCertificates=true -------------- */
+    /* --------------- GET listado: .netlify/functions/deals?pendingCertificates=true --------------- */
     if (method === "GET" && event.queryStringParameters?.pendingCertificates === "true") {
       const now = nowInMadridDate();
 
+      // 1) Variantes de productos pasadas (para limitar búsqueda)
       let variantIdsForPendingCertificates: string[] = [];
-
       try {
         const variantRows = await prisma.variants.findMany({
-          where: {
-            date: { lt: now },
-          },
+          where: { date: { lt: now } },
           select: { id_woo: true },
         });
 
         const seenVariantIds = new Set<string>();
-        variantRows.forEach((variant) => {
+        variantRows.forEach((variant: { id_woo: unknown }) => {
           const rawId = variant?.id_woo;
-          if (rawId === null || rawId === undefined) return;
+          if (rawId == null) return;
 
           let normalized: string | null = null;
-          if (typeof rawId === "bigint") {
-            normalized = rawId.toString();
-          } else if (typeof rawId === "number") {
+          if (typeof rawId === "bigint") normalized = rawId.toString();
+          else if (typeof rawId === "number")
             normalized = Number.isFinite(rawId) ? String(rawId) : null;
-          } else if (typeof rawId === "string") {
-            const trimmed = rawId.trim();
-            normalized = trimmed.length ? trimmed : null;
-          }
+          else if (typeof rawId === "string") normalized = rawId.trim().length ? rawId.trim() : null;
 
-          if (normalized && !seenVariantIds.has(normalized)) {
-            seenVariantIds.add(normalized);
-          }
+          if (normalized) seenVariantIds.add(normalized);
         });
 
         variantIdsForPendingCertificates = Array.from(seenVariantIds);
       } catch (error) {
         console.warn("[deals] pendingCertificates fallback without variant data", { error });
+        variantIdsForPendingCertificates = [];
       }
 
-      const conditions: Prisma.dealsWhereInput[] = [
-        {
-          sessions: {
-            some: {
-              AND: [
-                {
-                  OR: [
-                    { fecha_inicio_utc: { lt: now } },
-                    { fecha_fin_utc: { lt: now } },
-                  ],
-                },
-                {
-                  alumnos: {
-                    some: {
-                      certificado: false,
-                    },
-                  },
-                },
-              ],
-            },
+      // 2) Condiciones base: sesiones pasadas + algún alumno sin certificar
+      const conditions: DealsWhere[] = [
+  {
+    AND: [
+      {
+        sessions: {
+          some: {
+            OR: [
+              { fecha_inicio_utc: { lt: now } },
+              { fecha_fin_utc:  { lt: now } },
+            ],
           },
         },
-      ];
+      },
+      {
+        alumnos: {
+          some: { certificado: false },
+        },
+      },
+    ],
+  },
+];
 
+      // 3) Filtro opcional por variación
       if (variantIdsForPendingCertificates.length > 0) {
         conditions.push({
           w_id_variation: { in: variantIdsForPendingCertificates },
-          alumnos: {
-            some: {
-              certificado: false,
-            },
-          },
-        });
+          alumnos: { some: { certificado: false } },
+        } as DealsWhere);
       }
 
-      const rowsRaw = await prisma.deals.findMany({
-        where: {
-          OR: conditions,
-        },
+      // 4) Consulta
+      const query: DealsFindManyArgs = {
+        where: { OR: conditions },
+        orderBy: [{ created_at: "asc" }],
         select: {
           deal_id: true,
           title: true,
@@ -1484,11 +1476,12 @@ export const handler = async (event: any) => {
             orderBy: { created_at: "asc" },
           },
         },
-        orderBy: { created_at: "desc" },
-      });
+      };
 
-      const deals = rowsRaw.map((r: any) => mapDealForApi(r));
-      return successResponse({ deals });
+      const rowsRaw = await prisma.deals.findMany(query);
+
+      const deals = rowsRaw.map((row: any) => mapDealForApi(row));
+      return successResponse(deals);
     }
 
     /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
@@ -1537,7 +1530,7 @@ export const handler = async (event: any) => {
               quantity: true,
               price: true,
               type: true,
-              hours: true,       // hours existe en deal_products
+              hours: true, // hours existe en deal_products
               created_at: true,
             },
             orderBy: { created_at: "asc" },

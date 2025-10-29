@@ -7,7 +7,8 @@ export const SESSION_COOKIE_NAME = 'erp_session';
 const SESSION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 horas
 const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
 
-const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
+// Exportado por si otros módulos necesitan el mapping
+export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
   Comercial: ['/presupuestos/sinplanificar', '/presupuestos/*'],
   Administracion: [
@@ -30,7 +31,8 @@ const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Formador: [],
 };
 
-const DEFAULT_ROUTE_ORDER = [
+// Exportado para que el front o los guards puedan reutilizar el orden por defecto
+export const DEFAULT_ROUTE_ORDER = [
   '/presupuestos/sinplanificar',
   '/recursos/formadores_bomberos',
   '/recursos/unidades_moviles',
@@ -47,7 +49,7 @@ const DEFAULT_ROUTE_ORDER = [
   '/usuarios',
 ];
 
-type UserRecord = {
+export type UserRecord = {
   id: string;
   first_name: string;
   last_name: string;
@@ -63,7 +65,7 @@ type UserRecord = {
   reset_used_at?: Date | null;
 };
 
-type AuthSessionRecord = {
+export type AuthSessionRecord = {
   id: string;
   user_id: string;
   created_at: Date;
@@ -80,7 +82,7 @@ export type AuthenticatedContext = {
   permissions: readonly string[];
 };
 
-type RequireAuthOptions = {
+export type RequireAuthOptions = {
   requireRoles?: readonly string[];
 };
 
@@ -112,6 +114,7 @@ export function normalizeEmail(input: unknown): string | null {
 export function shouldUseSecureCookies(): boolean {
   if (process.env.FORCE_SECURE_COOKIE === 'true') return true;
   if (process.env.DISABLE_SECURE_COOKIE === 'true') return false;
+  // En netlify dev no marcamos Secure
   if (process.env.NETLIFY_DEV === 'true') return false;
   return process.env.NODE_ENV === 'production';
 }
@@ -119,16 +122,14 @@ export function shouldUseSecureCookies(): boolean {
 export function buildSessionCookie(sessionId: string, expiresAt: Date): string {
   const maxAge = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
   const parts = [
-    `${SESSION_COOKIE_NAME}=${sessionId}`,
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(sessionId)}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
     `Max-Age=${maxAge}`,
     `Expires=${expiresAt.toUTCString()}`,
   ];
-  if (shouldUseSecureCookies()) {
-    parts.push('Secure');
-  }
+  if (shouldUseSecureCookies()) parts.push('Secure');
   return parts.join('; ');
 }
 
@@ -141,21 +142,19 @@ export function buildClearSessionCookie(): string {
     'Max-Age=0',
     'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
   ];
-  if (shouldUseSecureCookies()) {
-    parts.push('Secure');
-  }
+  if (shouldUseSecureCookies()) parts.push('Secure');
   return parts.join('; ');
 }
 
 export function parseCookies(header: string | undefined): Record<string, string> {
   if (!header) return {};
   const entries: Record<string, string> = {};
-  const parts = header.split(';');
-  for (const part of parts) {
-    const [rawName, ...rawValue] = part.split('=');
+  // Soportar múltiples cookies separadas por ';'
+  for (const chunk of header.split(';')) {
+    const [rawName, ...rest] = chunk.split('=');
     const name = rawName?.trim();
     if (!name) continue;
-    const value = rawValue.join('=').trim();
+    const value = rest.join('=').trim();
     entries[name] = value;
   }
   return entries;
@@ -166,7 +165,7 @@ export function extractSessionIdFromRequest(request: HttpRequest<any>): string |
   if (!cookieHeader) return null;
   const cookies = parseCookies(cookieHeader);
   const sessionId = cookies[SESSION_COOKIE_NAME];
-  return sessionId && sessionId.length ? sessionId : null;
+  return sessionId && sessionId.length ? decodeURIComponent(sessionId) : null;
 }
 
 function isSessionActive(
@@ -248,9 +247,7 @@ export function hasPermission(path: string, permissions: readonly string[]): boo
 
   return permissions.some((permission) => {
     const normalizedPermission = normalizePath(permission);
-    if (normalizedPermission === normalizedPath) {
-      return true;
-    }
+    if (normalizedPermission === normalizedPath) return true;
     if (normalizedPermission.endsWith('/*')) {
       const base = normalizedPermission.slice(0, -2);
       return normalizedPath === base || normalizedPath.startsWith(`${base}/`);

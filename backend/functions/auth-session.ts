@@ -24,22 +24,45 @@ export const handler = createHttpHandler(async (request) => {
   }
 
   const prisma = getPrisma();
-  const sessionId = extractSessionIdFromRequest(request);
 
-  if (!sessionId) {
-    return successResponse({ user: null, permissions: [] });
-  }
+  try {
+    const sessionId = extractSessionIdFromRequest(request);
 
-  const auth = await findActiveSession(prisma, sessionId);
+    // Sin cookie -> sesión no iniciada
+    if (!sessionId) {
+      return {
+        ...successResponse({ user: null, permissions: [] }),
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      };
+    }
 
-  if (!auth) {
+    const auth = await findActiveSession(prisma, sessionId);
+
+    // Sesión inválida/expirada -> devolvemos user null y limpiamos cookie
+    if (!auth) {
+      return {
+        ...successResponse({ user: null, permissions: [] }),
+        headers: {
+          'Set-Cookie': buildClearSessionCookie(),
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      };
+    }
+
+    // OK
     return {
-      ...successResponse({ user: null, permissions: [] }),
+      ...successResponse({ user: serializeUser(auth.user), permissions: auth.permissions }),
       headers: {
-        'Set-Cookie': buildClearSessionCookie(),
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        Pragma: 'no-cache',
       },
     };
+  } catch (_err) {
+    // No exponemos detalles internos
+    return errorResponse('INTERNAL', 'No se pudo validar la sesión', 500);
   }
-
-  return successResponse({ user: serializeUser(auth.user), permissions: auth.permissions });
 });

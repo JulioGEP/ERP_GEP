@@ -20,8 +20,9 @@ export const handler = createHttpHandler(async (request) => {
         where: { id: sessionId },
         data: { revoked_at: new Date() },
       });
-    } catch (error) {
-      console.warn('[auth] No se pudo revocar la sesión', error);
+    } catch (err) {
+      // Si la sesión no existe o ya está revocada, no rompemos el logout.
+      console.warn('[auth-logout] No se pudo revocar la sesión:', err);
     }
   }
 
@@ -29,6 +30,8 @@ export const handler = createHttpHandler(async (request) => {
     ...successResponse(),
     headers: {
       'Set-Cookie': buildClearSessionCookie(),
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      Pragma: 'no-cache',
     },
   };
 });

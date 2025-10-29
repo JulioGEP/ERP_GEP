@@ -13,7 +13,10 @@
     "build": "vite build",
     "preview": "vite preview --port 5173",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "guard:no-ellipsis": "bash ../scripts/guard-no-ellipsis.sh",
+    "prebuild": "npm run guard:no-ellipsis",
+    "prenetlify:build": "npm run guard:no-ellipsis"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
@@ -27,7 +30,7 @@
     "react": "^18.3.1",
     "react-bootstrap": "^2.10.10",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.9.3"
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

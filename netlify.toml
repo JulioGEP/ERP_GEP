@@ -24,21 +24,52 @@
   ]
 
 # --------- Redirects ---------
+
+# Health
 [[redirects]]
   from = "/api/health"
   to = "/.netlify/functions/health"
   status = 200
 
+# Deals
 [[redirects]]
   from = "/api/deals/import"
   to = "/.netlify/functions/deals/import"
   status = 200
 
+# Auth (endpoints explícitos)
+[[redirects]]
+  from = "/auth/login"
+  to = "/.netlify/functions/auth-login"
+  status = 200
+
+[[redirects]]
+  from = "/auth/session"
+  to = "/.netlify/functions/auth-session"
+  status = 200
+
+[[redirects]]
+  from = "/auth/logout"
+  to = "/.netlify/functions/auth-logout"
+  status = 200
+
+[[redirects]]
+  from = "/auth/password/reset/request"
+  to = "/.netlify/functions/auth-password-reset-request"
+  status = 200
+
+[[redirects]]
+  from = "/auth/password/reset/confirm"
+  to = "/.netlify/functions/auth-password-reset-confirm"
+  status = 200
+
+# API catch-all (otras funciones bajo /api/*)
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
 
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"

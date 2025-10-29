@@ -1,10 +1,8 @@
 {
   "name": "erp_gep_monorepo",
   "private": true,
-  "version": "1.0.7",
-  "workspaces": [
-    "frontend"
-  ],
+  "version": "1.0.9",
+  "workspaces": ["frontend", "backend"],
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=10.8.0"
@@ -14,14 +12,10 @@
     "build": "npm run build:frontend",
     "prebuild:frontend": "if [ ! -x frontend/node_modules/.bin/vite ]; then npm install --prefer-offline --include=dev --include-workspace-root --workspaces; fi",
     "build:frontend": "npm run build --workspace frontend",
-    "build:functions": "echo \"Functions bundled by Netlify\"",
-    "generate": "prisma generate --schema prisma/schema.prisma",
-    "postinstall": "prisma generate --schema prisma/schema.prisma",
-    "db:init": "dotenv -e .env -- node scripts/init-db.mjs",
-    "typecheck:functions": "tsc -p backend/tsconfig.json",
-    "prisma:prune": "node scripts/prisma-prune-binaries.mjs",
-    "netlify:build": "npm run generate && node scripts/prisma-prune-binaries.mjs && npm run build",
-    "dev": "echo \"Dev local: usa 'npx netlify dev -p 8888' si tienes Netlify CLI disponible\""
+    "netlify:build": "npm run -w backend generate && npm run -w backend prisma:prune && npm run build",
+    "dev": "echo \"Dev local: usa 'npx netlify dev -p 8888' si tienes Netlify CLI disponible\"",
+    "prisma:generate": "npm run -w backend generate",
+    "typecheck:functions": "npm run -w backend typecheck"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
@@ -39,6 +33,6 @@
     "typescript": "^5.9.3"
   },
   "prisma": {
-    "schema": "prisma/schema.prisma"
+    "schema": "backend/prisma/schema.prisma"
   }
 }

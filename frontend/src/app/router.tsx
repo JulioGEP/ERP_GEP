@@ -12,7 +12,7 @@ import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
-import { useAuth } from '../shared/auth/AuthContext';
+import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
@@ -84,11 +84,14 @@ export function AppRouter({
             />
           }
         />
+
         <Route path="/presupuestos" element={<Navigate to="/presupuestos/sinplanificar" replace />} />
+
         <Route
           path="/presupuestos/sinplanificar"
           element={<GuardedRoute path="/presupuestos/sinplanificar" element={<BudgetsPage {...budgetsPageProps} />} />}
         />
+
         <Route
           path="/calendario/por_sesiones"
           element={
@@ -119,6 +122,7 @@ export function AppRouter({
             />
           }
         />
+
         <Route
           path="/recursos/formadores_bomberos"
           element={
@@ -164,6 +168,7 @@ export function AppRouter({
           }
         />
         <Route path="/formacion_abierta/cursos" element={<Navigate to="/recursos/formacion_abierta" replace />} />
+
         <Route
           path="/informes/formacion"
           element={<GuardedRoute path="/informes/formacion" element={<InformesFormacionPage />} />}
@@ -178,13 +183,9 @@ export function AppRouter({
         />
         <Route
           path="/informes/recurso_preventivo_ebro"
-          element={
-            <GuardedRoute
-              path="/informes/recurso_preventivo_ebro"
-              element={<InformesRecursoPreventivoEbroPage />}
-            />
-          }
+          element={<GuardedRoute path="/informes/recurso_preventivo_ebro" element={<InformesRecursoPreventivoEbroPage />} />}
         />
+
         <Route
           path="/certificados"
           element={<GuardedRoute path="/certificados" element={<CertificadosPage {...certificadosPageProps} />} />}
@@ -193,6 +194,7 @@ export function AppRouter({
           path="/usuarios"
           element={<GuardedRoute path="/usuarios" element={<UsersPage {...usersPageProps} />} />}
         />
+
         <Route path="*" element={<Navigate to={defaultRedirectPath} replace />} />
       </Routes>
     </Suspense>
@@ -211,10 +213,18 @@ type GuardedRouteProps = {
 };
 
 function GuardedRoute({ path, element }: GuardedRouteProps) {
-  const { hasPermission } = useAuth();
+  const { isAuthenticated, hasPermission } = useAuth();
+
+  // No autenticado → a /login
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Autenticado pero sin permiso → 403
   if (!hasPermission(path)) {
     return <ForbiddenPage />;
   }
+
   return element;
 }
 

@@ -119,7 +119,7 @@ export interface DealSummary {
 
 /** Detalle completo (para el modal) */
 export interface DealDetail {
-  deal_id: string;
+  deal_id: string | null;
   title?: string | null;
 
   pipeline_label?: string | null;     // label (no ID)

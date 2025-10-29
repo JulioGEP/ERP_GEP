@@ -10,6 +10,7 @@ import {
   setVariantResourceColumnsSupport,
 } from './_shared/variant-resources';
 
+/** ====== Tipos de respuesta ====== */
 type CalendarVariantDeal = {
   id: string | null;
   title: string | null;
@@ -63,8 +64,26 @@ type CalendarVariantEvent = {
   deals: CalendarVariantDeal[];
 };
 
+/** ====== Tipo exacto de cada fila devuelta por deals.findMany (select usado abajo) ====== */
+type DealRow = {
+  w_id_variation: string | number | null;
+
+  deal_id: string | null;
+  title: string | null;
+  pipeline_id: string | null;
+  training_address: string | null;
+  sede_label: string | null;
+  caes_label: string | null;
+  fundae_label: string | null;
+  hotel_label: string | null;
+  transporte: string | null;
+
+  _count: { alumnos: number };
+};
+
 type DateRange = { start: Date; end: Date };
 
+/** ====== Utils de parsing ====== */
 function toDate(value: Date | string | null | undefined): Date | null {
   if (!value) return null;
   if (value instanceof Date) {
@@ -88,14 +107,8 @@ function parseDate(value: unknown): Date | null {
 }
 
 function ensureValidRange(start: Date | null, end: Date | null): DateRange | null {
-  if (!start || !end) {
-    return null;
-  }
-
-  if (end.getTime() < start.getTime()) {
-    return null;
-  }
-
+  if (!start || !end) return null;
+  if (end.getTime() < start.getTime()) return null;
   return { start, end };
 }
 
@@ -120,13 +133,14 @@ function buildDateTime(date: Date, time: TimeParts | null, fallback: TimeParts):
   return buildMadridDateTime({ year, month, day, hour: parts.hour, minute: parts.minute });
 }
 
+/** ====== Normalizadores ====== */
 function normalizeVariantRecord(
   record: {
     id: string;
-    id_woo: Prisma.Decimal | bigint | number;
+    id_woo: number | bigint | string;
     name: string | null;
     status: string | null;
-    price: Prisma.Decimal | string | number | null;
+    price: number | string | null;
     stock: number | null;
     stock_status: string | null;
     sede: string | null;
@@ -188,7 +202,7 @@ function normalizeVariantRecord(
 
 function normalizeProductRecord(record: {
   id: string;
-  id_woo: Prisma.Decimal | bigint | number | null;
+  id_woo: number | bigint | string;
   name: string | null;
   code: string | null;
   category: string | null;
@@ -198,7 +212,7 @@ function normalizeProductRecord(record: {
   default_variant_end: Date | null;
   default_variant_stock_status: string | null;
   default_variant_stock_quantity: number | null;
-  default_variant_price: Prisma.Decimal | string | number | null;
+  default_variant_price: string | number | null;
 }) {
   return {
     id: record.id,
@@ -225,14 +239,10 @@ function computeEventTimes(
   variantDate: Date | null,
   product: { hora_inicio: string | null; hora_fin: string | null },
 ) {
-  if (!variantDate) {
-    return null;
-  }
+  if (!variantDate) return null;
 
   const parsedDate = new Date(variantDate);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null;
-  }
+  if (Number.isNaN(parsedDate.getTime())) return null;
 
   const startTime = parseHHMM(product.hora_inicio);
   const endTime = parseHHMM(product.hora_fin);
@@ -261,7 +271,11 @@ function normalizeProductIdentifier(value: string | null | undefined): string | 
 
 const TWO_DAY_VERTICAL_PRODUCT_KEYS = new Set(['atrabajosverticales', 'trabajosverticales']);
 
-function isTwoDayVerticalProduct(product: { name: string | null; code: string | null; category: string | null }): boolean {
+function isTwoDayVerticalProduct(product: {
+  name: string | null;
+  code: string | null;
+  category: string | null;
+}): boolean {
   const identifiers = [product.name, product.code, product.category]
     .map((value) => normalizeProductIdentifier(value))
     .filter((value): value is string => Boolean(value));
@@ -290,7 +304,17 @@ function sanitizeVariantDeal(record: {
   const hotelLabel = toTrimmed(record.hotel_label);
   const transporte = toTrimmed(record.transporte);
 
-  if (!id && !title && !pipelineId && !trainingAddress && !sedeLabel && !caesLabel && !fundaeLabel && !hotelLabel && !transporte) {
+  if (
+    !id &&
+    !title &&
+    !pipelineId &&
+    !trainingAddress &&
+    !sedeLabel &&
+    !caesLabel &&
+    !fundaeLabel &&
+    !hotelLabel &&
+    !transporte
+  ) {
     return null;
   }
 
@@ -307,6 +331,7 @@ function sanitizeVariantDeal(record: {
   } satisfies CalendarVariantDeal;
 }
 
+/** ====== Selects para la query de variants ====== */
 const variantSelectionBase = {
   id: true,
   id_woo: true,
@@ -347,6 +372,20 @@ const variantSelectionWithResources = {
   unidad: { select: { unidad_id: true, name: true, matricula: true } },
 };
 
+/** toMaybeString: convierte un valor con .toString() (ej. Decimal/BigInt wrapper) a string seguro */
+function toMaybeString(value: unknown): string | null {
+  try {
+    if (value != null && typeof (value as any).toString === 'function') {
+      const s = (value as any).toString();
+      return typeof s === 'string' ? s : String(s);
+    }
+  } catch {
+    // ignoramos errores de toString no seguro
+  }
+  return null;
+}
+
+/** ====== Handler ====== */
 export const handler = async (event: any) => {
   try {
     if (event.httpMethod === 'OPTIONS') {
@@ -361,13 +400,11 @@ export const handler = async (event: any) => {
 
     const { start: startParam, end: endParam } = event.queryStringParameters ?? {};
     const range = ensureValidRange(parseDate(startParam), parseDate(endParam));
-
     if (!range) {
       return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
     }
 
     const prisma = getPrisma();
-
     const shouldIncludeResources = getVariantResourceColumnsSupport() !== false;
 
     const buildQuery = (includeResources: boolean) =>
@@ -379,7 +416,7 @@ export const handler = async (event: any) => {
             lte: range.end,
           },
         },
-        orderBy: [{ date: 'asc' as Prisma.SortOrder }, { name: 'asc' as Prisma.SortOrder }],
+        orderBy: [{ date: 'asc' }, { name: 'asc' }],
         select: (includeResources ? variantSelectionWithResources : variantSelectionBase) as any,
       });
 
@@ -404,27 +441,18 @@ export const handler = async (event: any) => {
 
     const events: CalendarVariantEvent[] = [];
 
+    // Claves únicas de variación (Woo)
     const variantWooIds = Array.isArray(variants)
       ? Array.from(
           new Set(
             variants
               .map((variant: any) => {
-                if (variant?.id_woo === null || variant?.id_woo === undefined) {
-                  return null;
-                }
+                if (variant?.id_woo === null || variant?.id_woo === undefined) return null;
                 const rawId = variant.id_woo;
-                if (typeof rawId === 'bigint') {
-                  return rawId.toString();
-                }
-                if (typeof rawId === 'number') {
-                  return Number.isFinite(rawId) ? String(rawId) : null;
-                }
+                if (typeof rawId === 'bigint') return rawId.toString();
+                if (typeof rawId === 'number') return Number.isFinite(rawId) ? String(rawId) : null;
                 if (typeof rawId === 'object' && rawId !== null && 'toString' in rawId) {
-                  try {
-                    return (rawId as Prisma.Decimal).toString();
-                  } catch {
-                    return null;
-                  }
+                  return toMaybeString(rawId);
                 }
                 if (typeof rawId === 'string') {
                   const trimmed = rawId.trim();
@@ -460,7 +488,9 @@ export const handler = async (event: any) => {
         },
       });
 
-      dealsWithCounts.forEach((deal) => {
+      // === BLOQUE con tipos fuertes (DealRow) ===
+      dealsWithCounts.forEach((deal: DealRow) => {
+        // normaliza la clave de variación
         let keyRaw: string | null = null;
         if (typeof deal.w_id_variation === 'string') {
           const trimmed = deal.w_id_variation.trim();
@@ -468,14 +498,14 @@ export const handler = async (event: any) => {
         } else if (typeof deal.w_id_variation === 'number') {
           keyRaw = Number.isFinite(deal.w_id_variation) ? String(deal.w_id_variation) : null;
         }
+        if (!keyRaw) return;
 
-        if (!keyRaw) {
-          return;
-        }
+        // suma alumnos
         const rawCount = deal?._count?.alumnos;
         const count = typeof rawCount === 'number' && Number.isFinite(rawCount) ? rawCount : 0;
         studentsCountByVariant.set(keyRaw, (studentsCountByVariant.get(keyRaw) ?? 0) + count);
 
+        // normaliza deal
         const normalizedDeal = sanitizeVariantDeal({
           deal_id: deal.deal_id ?? null,
           title: deal.title ?? null,
@@ -498,32 +528,22 @@ export const handler = async (event: any) => {
 
     (Array.isArray(variants) ? variants : []).forEach((variant) => {
       const record = variant as any;
-      if (!record?.product) {
-        return;
-      }
+      if (!record?.product) return;
 
       const product = normalizeProductRecord(record.product);
       const variantDate = toDate(record.date);
       const times = computeEventTimes(variantDate, product);
-      if (!times) {
-        return;
-      }
+      if (!times) return;
 
+      // clave woo de la variación
       let wooIdKey: string | null = null;
       if (record?.id_woo !== null && record?.id_woo !== undefined) {
         const rawId = record.id_woo;
-        if (typeof rawId === 'bigint') {
-          wooIdKey = rawId.toString();
-        } else if (typeof rawId === 'number') {
-          wooIdKey = Number.isFinite(rawId) ? String(rawId) : null;
-        } else if (typeof rawId === 'string') {
-          wooIdKey = rawId.trim().length ? rawId.trim() : null;
-        } else if (rawId && typeof rawId === 'object' && 'toString' in rawId) {
-          try {
-            wooIdKey = (rawId as Prisma.Decimal).toString();
-          } catch {
-            wooIdKey = null;
-          }
+        if (typeof rawId === 'bigint') wooIdKey = rawId.toString();
+        else if (typeof rawId === 'number') wooIdKey = Number.isFinite(rawId) ? String(rawId) : null;
+        else if (typeof rawId === 'string') wooIdKey = rawId.trim().length ? rawId.trim() : null;
+        else if (rawId && typeof rawId === 'object' && 'toString' in rawId) {
+          wooIdKey = toMaybeString(rawId);
         }
       }
 
@@ -545,6 +565,7 @@ export const handler = async (event: any) => {
 
       pushEvent(record.id, times.start, times.end);
 
+      // duplicado para verticales 2 días
       if (variantDate && isTwoDayVerticalProduct(product)) {
         const nextDayDate = new Date(variantDate.getTime());
         nextDayDate.setUTCDate(nextDayDate.getUTCDate() + 1);
@@ -567,4 +588,3 @@ export const handler = async (event: any) => {
     return errorResponse('UNEXPECTED_ERROR', 'Se ha producido un error inesperado', 500);
   }
 };
-
