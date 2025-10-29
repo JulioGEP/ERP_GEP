@@ -1382,7 +1382,8 @@ type DealsFindManyArgs = _DealsFindManyArg;
       }
 
       // 2) Condiciones base: sesiones pasadas + algún alumno sin certificar
-      const conditions: DealsWhere[] = [
+      // 2) Condiciones base: sesiones pasadas + algún alumno sin certificar
+const conditions: DealsWhere[] = [
   {
     AND: [
       {
@@ -1402,7 +1403,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
       },
     ],
   },
-];
+] as unknown as DealsWhere[]; // cast final para cortar el bucle de TS
 
       // 3) Filtro opcional por variación
       if (variantIdsForPendingCertificates.length > 0) {

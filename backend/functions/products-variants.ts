@@ -1,6 +1,12 @@
 // backend/functions/products-variants.ts
+
 import { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
+import {
+  PrismaClientKnownRequestError,
+  PrismaClientUnknownRequestError,
+  Decimal,
+} from '@prisma/client/runtime/library';
 
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
@@ -104,48 +110,39 @@ async function ensureVariantResourcesAvailable(
     range: DateRange | null;
   },
 ): Promise<ReturnType<typeof errorResponse> | null> {
-  if (!range) {
-    return null;
-  }
+  if (!range) return null;
 
   const normalizedTrainerId = trainerId ?? null;
   const normalizedSalaId = salaId ?? null;
   const normalizedUnidadId =
     unidadId && !ALWAYS_AVAILABLE_UNIT_IDS.has(unidadId) ? unidadId : null;
 
-  if (!normalizedTrainerId && !normalizedSalaId && !normalizedUnidadId) {
-    return null;
-  }
+  if (!normalizedTrainerId && !normalizedSalaId && !normalizedUnidadId) return null;
+  if (getVariantResourceColumnsSupport() === false) return null;
 
-  if (getVariantResourceColumnsSupport() === false) {
-    return null;
-  }
-
-  const sessionConditions: Prisma.sessionsWhereInput[] = [];
-  if (normalizedTrainerId) {
-    sessionConditions.push({ trainers: { some: { trainer_id: normalizedTrainerId } } });
-  }
-  if (normalizedSalaId) {
-    sessionConditions.push({ sala_id: normalizedSalaId });
-  }
-  if (normalizedUnidadId) {
-    sessionConditions.push({ unidades: { some: { unidad_id: normalizedUnidadId } } });
-  }
+  // Tipos generados pueden variar; usamos `any` para compatibilidad con Prisma v5
+  const sessionConditions: any[] = [];
+  if (normalizedTrainerId) sessionConditions.push({ trainers: { some: { trainer_id: normalizedTrainerId } } });
+  if (normalizedSalaId) sessionConditions.push({ sala_id: normalizedSalaId });
+  if (normalizedUnidadId) sessionConditions.push({ unidades: { some: { unidad_id: normalizedUnidadId } } });
 
   if (sessionConditions.length) {
     const sessions = await prisma.sessions.findMany({
-      where: { OR: sessionConditions },
+      where: { OR: sessionConditions as any },
       select: { fecha_inicio_utc: true, fecha_fin_utc: true },
     });
 
-    const hasSessionConflict = sessions.some((session) => {
-      const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
-      if (!sessionRange) return false;
-      return (
-        sessionRange.start.getTime() <= range.end.getTime() &&
-        sessionRange.end.getTime() >= range.start.getTime()
-      );
-    });
+    const hasSessionConflict = sessions.some(
+  (session: { fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null }) => {
+    const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
+    if (!sessionRange) return false;
+    return (
+      sessionRange.start.getTime() <= range.end.getTime() &&
+      sessionRange.end.getTime() >= range.start.getTime()
+    );
+  },
+);
+
 
     if (hasSessionConflict) {
       return errorResponse(
@@ -156,20 +153,12 @@ async function ensureVariantResourcesAvailable(
     }
   }
 
-  const variantConditions: Prisma.variantsWhereInput[] = [];
-  if (normalizedTrainerId) {
-    variantConditions.push({ trainer_id: normalizedTrainerId });
-  }
-  if (normalizedSalaId) {
-    variantConditions.push({ sala_id: normalizedSalaId });
-  }
-  if (normalizedUnidadId) {
-    variantConditions.push({ unidad_movil_id: normalizedUnidadId });
-  }
+  const variantConditions: any[] = [];
+  if (normalizedTrainerId) variantConditions.push({ trainer_id: normalizedTrainerId });
+  if (normalizedSalaId) variantConditions.push({ sala_id: normalizedSalaId });
+  if (normalizedUnidadId) variantConditions.push({ unidad_movil_id: normalizedUnidadId });
 
-  if (!variantConditions.length) {
-    return null;
-  }
+  if (!variantConditions.length) return null;
 
   let variants;
   try {
@@ -177,7 +166,7 @@ async function ensureVariantResourcesAvailable(
       where: {
         ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
         date: { not: null },
-        OR: variantConditions,
+        OR: variantConditions as any,
       },
       select: {
         id: true,
@@ -201,9 +190,20 @@ async function ensureVariantResourcesAvailable(
     throw error;
   }
 
-  const hasVariantConflict = variants.some((variant) => {
-    const otherRange = computeVariantRange(variant.date, variant.product ?? { hora_inicio: null, hora_fin: null });
+  const hasVariantConflict = variants.some(
+  (variant: {
+    date: Date | string | null;
+    trainer_id: string | null;
+    sala_id: string | null;
+    unidad_movil_id: string | null;
+    product?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
+  }) => {
+    const otherRange = computeVariantRange(
+      variant.date,
+      variant.product ?? { hora_inicio: null, hora_fin: null },
+    );
     if (!otherRange) return false;
+
     const overlaps =
       otherRange.start.getTime() <= range.end.getTime() &&
       otherRange.end.getTime() >= range.start.getTime();
@@ -214,7 +214,8 @@ async function ensureVariantResourcesAvailable(
     const unidadConflict = normalizedUnidadId && variant.unidad_movil_id === normalizedUnidadId;
 
     return Boolean(trainerConflict || salaConflict || unidadConflict);
-  });
+  },
+);
 
   if (hasVariantConflict) {
     return errorResponse(
@@ -231,10 +232,7 @@ const WOO_BASE = (process.env.WOO_BASE_URL || '').replace(/\/$/, '');
 const WOO_KEY = process.env.WOO_KEY || '';
 const WOO_SECRET = process.env.WOO_SECRET || '';
 
-type VariantDeletionResult = {
-  success: boolean;
-  message?: string;
-};
+type VariantDeletionResult = { success: boolean; message?: string };
 
 type WooVariationAttribute = {
   id?: number;
@@ -244,9 +242,7 @@ type WooVariationAttribute = {
 };
 
 function ensureWooConfigured() {
-  if (!WOO_BASE || !WOO_KEY || !WOO_SECRET) {
-    throw new Error('WooCommerce configuration missing');
-  }
+  if (!WOO_BASE || !WOO_KEY || !WOO_SECRET) throw new Error('WooCommerce configuration missing');
 }
 
 function parseVariantIdFromPath(path: string): string | null {
@@ -262,27 +258,20 @@ const DATE_KEYWORDS = ['fecha'];
 
 function normalizeAttributeText(value: string | undefined | null): string {
   if (!value) return '';
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
 function matchesAttributeKeywords(attribute: WooVariationAttribute, keywords: string[]): boolean {
   const normalizedName = normalizeAttributeText(attribute?.name ?? attribute?.slug ?? null);
   if (!normalizedName) return false;
-
   return keywords.some((keyword) => normalizedName.includes(keyword));
 }
 
 function formatDateAttributeValue(date: Date | null): string {
   if (!date) return '';
-
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   const day = String(date.getUTCDate()).padStart(2, '0');
-
   return `${day}/${month}/${year}`;
 }
 
@@ -331,7 +320,6 @@ async function fetchWooVariation(
 
   const text = await response.text();
   let data: any = {};
-
   if (text) {
     try {
       data = JSON.parse(text);
@@ -355,7 +343,6 @@ async function fetchWooVariation(
   }
 
   const attributes = Array.isArray(data?.attributes) ? (data.attributes as WooVariationAttribute[]) : [];
-
   return { attributes };
 }
 
@@ -401,7 +388,7 @@ async function updateVariantInWooCommerce(
     Object.prototype.hasOwnProperty.call(updates, 'date')
   ) {
     const { attributes } = await fetchWooVariation(productWooId, variantWooId, token);
-    const updatedAttributes = attributes.map((attribute) => ({ ...attribute }));
+    const updatedAttributes = attributes.map((a) => ({ ...a }));
 
     let attributesChanged = false;
     let sedeMatched = false;
@@ -448,9 +435,7 @@ async function updateVariantInWooCommerce(
     }
   }
 
-  if (!Object.keys(body).length) {
-    return;
-  }
+  if (!Object.keys(body).length) return;
 
   let response: FetchResponse;
   try {
@@ -475,7 +460,6 @@ async function updateVariantInWooCommerce(
 
   const text = await response.text();
   let data: any = {};
-
   if (text) {
     try {
       data = JSON.parse(text);
@@ -530,17 +514,12 @@ async function deleteVariantFromWooCommerce(
   }
 
   if (response.status === 404) {
-    // Consideramos la ausencia en WooCommerce como éxito para mantener consistencia
-    return {
-      success: true,
-      message: 'La variante no existe en WooCommerce, se eliminará localmente.',
-    };
+    return { success: true, message: 'La variante no existe en WooCommerce, se eliminará localmente.' };
   }
 
   if (!response.ok) {
     const text = await response.text();
     let message = `Error al eliminar la variante en WooCommerce (status ${response.status})`;
-
     if (text) {
       try {
         const data = JSON.parse(text);
@@ -555,7 +534,6 @@ async function deleteVariantFromWooCommerce(
         });
       }
     }
-
     throw new Error(message);
   }
 
@@ -568,7 +546,7 @@ type VariantRecord = {
   id_padre: bigint;
   name: string | null;
   status: string | null;
-  price: Prisma.Decimal | string | null;
+  price: Decimal | string | null;
   stock: number | null;
   stock_status: string | null;
   sede: string | null;
@@ -596,7 +574,7 @@ type ProductRecord = {
   default_variant_end: Date | string | null;
   default_variant_stock_status: string | null;
   default_variant_stock_quantity: number | null;
-  default_variant_price: Prisma.Decimal | string | null;
+  default_variant_price: Decimal | string | null;
   variants: VariantRecord[];
 };
 
@@ -612,44 +590,32 @@ const PRODUCT_DEFAULT_COLUMN_PATTERNS = [
   /variant_(start|end|stock_status|stock_quantity|price)/i,
 ];
 
-function isPrismaErrorInstance(
-  error: unknown,
-  ctor: unknown,
-): boolean {
-  if (!ctor || typeof ctor !== 'function') {
-    return false;
-  }
-
+function isPrismaErrorInstance(error: unknown, ctor: unknown): boolean {
+  if (!ctor || typeof ctor !== 'function') return false;
   try {
     return error instanceof (ctor as new (...args: any[]) => Error);
-  } catch (_err) {
+  } catch {
     return false;
   }
 }
 
 function isMissingProductDefaultColumns(error: unknown): boolean {
-  if (isPrismaErrorInstance(error, Prisma.PrismaClientKnownRequestError)) {
-    return (error as Prisma.PrismaClientKnownRequestError).code === 'P2021';
+  if (isPrismaErrorInstance(error, PrismaClientKnownRequestError)) {
+    return (error as PrismaClientKnownRequestError).code === 'P2021';
   }
-
-  if (isPrismaErrorInstance(error, Prisma.PrismaClientUnknownRequestError)) {
-    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test((error as Error).message));
+  if (isPrismaErrorInstance(error, PrismaClientUnknownRequestError)) {
+    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((p) => p.test((error as Error).message));
   }
-
   if (error instanceof Error) {
-    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((pattern) => pattern.test(error.message));
+    return PRODUCT_DEFAULT_COLUMN_PATTERNS.some((p) => p.test(error.message));
   }
-
   return false;
 }
 
 async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
-  const baseWhere = {
-    id_woo: { not: null },
-    variants: { some: {} },
-  };
+  const baseWhere = { id_woo: { not: null }, variants: { some: {} } };
 
-  const buildVariantSelect = (includeResources: boolean): Prisma.variantsSelect => {
+  const buildVariantSelect = (includeResources: boolean): any => {
     const base = {
       id: true,
       id_woo: true,
@@ -665,9 +631,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       updated_at: true,
     };
 
-    if (!includeResources) {
-      return base as Prisma.variantsSelect;
-    }
+    if (!includeResources) return base;
 
     return {
       ...base,
@@ -675,24 +639,21 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       sala_id: true,
       unidad_movil_id: true,
       trainer: { select: { trainer_id: true, name: true, apellido: true } },
-      sala: { select: { sala_id: true, name: true, sede: true } },
+      sala: { select: { sala_id: true, name: true, sede: true} },
       unidad: { select: { unidad_id: true, name: true, matricula: true } },
-    } as Prisma.variantsSelect;
+    };
   };
 
   const buildVariantsSelection = (includeResources: boolean) => ({
-    orderBy: [
-      { date: 'asc' as Prisma.SortOrder },
-      { name: 'asc' as Prisma.SortOrder },
-    ],
+    orderBy: [{ date: 'asc' as const }, { name: 'asc' as const }],
     select: buildVariantSelect(includeResources),
   });
 
-  const orderByName: Array<Record<string, Prisma.SortOrder>> = [{ name: 'asc' as Prisma.SortOrder }];
+  const orderByName = [{ name: 'asc' as const }];
 
   const mapLegacyProducts = (products: LegacyProductRecord[]): ProductRecord[] =>
-    products.map((product) => ({
-      ...product,
+    products.map((p) => ({
+      ...p,
       default_variant_start: null,
       default_variant_end: null,
       default_variant_stock_status: null,
@@ -703,6 +664,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
   let includeDefaults = productsDefaultFieldsSupported !== false;
   let includeVariantResources = getVariantResourceColumnsSupport() !== false;
 
+  // Bucle de reintento con degradaciones controladas
   while (true) {
     const variantSelectionArgs = buildVariantsSelection(includeVariantResources);
 
@@ -737,23 +699,19 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
 
     try {
       const products = await prisma.products.findMany({
-        where: baseWhere,
+        where: baseWhere as any,
         select,
-        orderBy: orderByName,
+        orderBy: orderByName as any,
       });
 
       if (!includeDefaults) {
-        if (includeVariantResources) {
-          setVariantResourceColumnsSupport(true);
-        }
-        const legacyProducts = products as unknown as LegacyProductRecord[];
-        return mapLegacyProducts(legacyProducts);
+        if (includeVariantResources) setVariantResourceColumnsSupport(true);
+        const legacy = products as unknown as LegacyProductRecord[];
+        return mapLegacyProducts(legacy);
       }
 
       productsDefaultFieldsSupported = true;
-      if (includeVariantResources) {
-        setVariantResourceColumnsSupport(true);
-      }
+      if (includeVariantResources) setVariantResourceColumnsSupport(true);
 
       return products as unknown as ProductRecord[];
     } catch (error) {
@@ -783,7 +741,8 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
 }
 
 function normalizeVariant(record: VariantRecord) {
-  const price = record.price == null ? null : typeof record.price === 'string' ? record.price : record.price.toString();
+  const price =
+    record.price == null ? null : typeof record.price === 'string' ? record.price : record.price.toString();
 
   return {
     id: record.id,
@@ -798,23 +757,13 @@ function normalizeVariant(record: VariantRecord) {
     date: toMadridISOString(record.date),
     trainer_id: record.trainer_id ?? null,
     trainer: record.trainer
-      ? {
-          trainer_id: record.trainer.trainer_id,
-          name: record.trainer.name ?? null,
-          apellido: record.trainer.apellido ?? null,
-        }
+      ? { trainer_id: record.trainer.trainer_id, name: record.trainer.name ?? null, apellido: record.trainer.apellido ?? null }
       : null,
     sala_id: record.sala_id ?? null,
-    sala: record.sala
-      ? { sala_id: record.sala.sala_id, name: record.sala.name, sede: record.sala.sede ?? null }
-      : null,
+    sala: record.sala ? { sala_id: record.sala.sala_id, name: record.sala.name, sede: record.sala.sede ?? null } : null,
     unidad_movil_id: record.unidad_movil_id ?? null,
     unidad: record.unidad
-      ? {
-          unidad_id: record.unidad.unidad_id,
-          name: record.unidad.name,
-          matricula: record.unidad.matricula ?? null,
-        }
+      ? { unidad_id: record.unidad.unidad_id, name: record.unidad.name, matricula: record.unidad.matricula ?? null }
       : null,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
@@ -853,125 +802,83 @@ export const handler = createHttpHandler<any>(async (request) => {
 
   if (method === 'PATCH') {
     const variantId = parseVariantIdFromPath(request.path || '');
+    if (!variantId) return errorResponse('VALIDATION_ERROR', 'ID de variante requerido', 400);
+    if (!request.rawBody) return errorResponse('VALIDATION_ERROR', 'Cuerpo de la petición requerido', 400);
 
-    if (!variantId) {
-      return errorResponse('VALIDATION_ERROR', 'ID de variante requerido', 400);
-    }
-
-    if (!request.rawBody) {
-      return errorResponse('VALIDATION_ERROR', 'Cuerpo de la petición requerido', 400);
-    }
-
-    const payload =
-      request.body && typeof request.body === 'object' ? (request.body as any) : {};
-
+    const payload = request.body && typeof request.body === 'object' ? (request.body as any) : {};
     const updates: VariantUpdateInput = {};
 
     if (Object.prototype.hasOwnProperty.call(payload, 'price')) {
-        const rawPrice = payload.price;
-        if (rawPrice === null || rawPrice === undefined || rawPrice === '') {
-          updates.price = null;
-        } else {
-          const text = String(rawPrice).replace(',', '.').trim();
-          if (!text || Number.isNaN(Number(text))) {
-            return errorResponse('VALIDATION_ERROR', 'Precio inválido', 400);
-          }
-          updates.price = text;
-        }
+      const rawPrice = payload.price;
+      if (rawPrice == null || rawPrice === '') {
+        updates.price = null;
+      } else {
+        const text = String(rawPrice).replace(',', '.').trim();
+        if (!text || Number.isNaN(Number(text))) return errorResponse('VALIDATION_ERROR', 'Precio inválido', 400);
+        updates.price = text;
       }
-
-      if (Object.prototype.hasOwnProperty.call(payload, 'stock')) {
-        const rawStock = payload.stock;
-        if (rawStock === null || rawStock === undefined || rawStock === '') {
-          updates.stock = null;
-        } else {
-          const numberValue = Number(rawStock);
-          if (!Number.isFinite(numberValue)) {
-            return errorResponse('VALIDATION_ERROR', 'Stock inválido', 400);
-          }
-          updates.stock = Math.trunc(numberValue);
-        }
-      }
-
-      if (Object.prototype.hasOwnProperty.call(payload, 'stock_status')) {
-        if (payload.stock_status === null || payload.stock_status === undefined || payload.stock_status === '') {
-          updates.stock_status = 'instock';
-        } else {
-          updates.stock_status = String(payload.stock_status).trim();
-        }
-      }
-
-      if (Object.prototype.hasOwnProperty.call(payload, 'status')) {
-        if (payload.status === null || payload.status === undefined || payload.status === '') {
-          updates.status = 'publish';
-        } else {
-          const text = String(payload.status).trim().toLowerCase();
-          if (text !== 'publish' && text !== 'private') {
-            return errorResponse('VALIDATION_ERROR', 'Estado de publicación inválido', 400);
-          }
-          updates.status = text;
-        }
-      }
-
-      if (Object.prototype.hasOwnProperty.call(payload, 'sede')) {
-        if (payload.sede === null || payload.sede === undefined) {
-          updates.sede = null;
-        } else {
-          updates.sede = String(payload.sede).trim();
-        }
-      }
-
-      if (Object.prototype.hasOwnProperty.call(payload, 'date')) {
-        if (payload.date === null || payload.date === undefined || payload.date === '') {
-          updates.date = null;
-        } else {
-          const text = String(payload.date).trim();
-          const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-
-          if (isoMatch) {
-            const [, yearText, monthText, dayText] = isoMatch;
-            const year = Number.parseInt(yearText, 10);
-            const month = Number.parseInt(monthText, 10);
-            const day = Number.parseInt(dayText, 10);
-
-            if (
-              !Number.isFinite(year) ||
-              !Number.isFinite(month) ||
-              !Number.isFinite(day) ||
-              month < 1 ||
-              month > 12 ||
-              day < 1 ||
-              day > 31
-            ) {
-              return errorResponse('VALIDATION_ERROR', 'Fecha inválida', 400);
-            }
-
-            updates.date = new Date(Date.UTC(year, month - 1, day));
-          } else {
-            const parsed = new Date(text);
-            if (Number.isNaN(parsed.getTime())) {
-              return errorResponse('VALIDATION_ERROR', 'Fecha inválida', 400);
-            }
-            updates.date = parsed;
-          }
-        }
-      }
-
-      if (Object.prototype.hasOwnProperty.call(payload, 'trainer_id')) {
-        updates.trainer_id = toTrimmed(payload.trainer_id);
-      }
-
-      if (Object.prototype.hasOwnProperty.call(payload, 'sala_id')) {
-        updates.sala_id = toTrimmed(payload.sala_id);
-      }
-
-      if (Object.prototype.hasOwnProperty.call(payload, 'unidad_movil_id')) {
-        updates.unidad_movil_id = toTrimmed(payload.unidad_movil_id);
-      }
-
-    if (!Object.keys(updates).length) {
-      return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
     }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'stock')) {
+      const rawStock = payload.stock;
+      if (rawStock == null || rawStock === '') {
+        updates.stock = null;
+      } else {
+        const numberValue = Number(rawStock);
+        if (!Number.isFinite(numberValue)) return errorResponse('VALIDATION_ERROR', 'Stock inválido', 400);
+        updates.stock = Math.trunc(numberValue);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'stock_status')) {
+      updates.stock_status =
+        payload.stock_status == null || payload.stock_status === '' ? 'instock' : String(payload.stock_status).trim();
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'status')) {
+      if (payload.status == null || payload.status === '') {
+        updates.status = 'publish';
+      } else {
+        const text = String(payload.status).trim().toLowerCase();
+        if (text !== 'publish' && text !== 'private')
+          return errorResponse('VALIDATION_ERROR', 'Estado de publicación inválido', 400);
+        updates.status = text;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'sede')) {
+      updates.sede = payload.sede == null ? null : String(payload.sede).trim();
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'date')) {
+      if (payload.date == null || payload.date === '') {
+        updates.date = null;
+      } else {
+        const text = String(payload.date).trim();
+        const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (isoMatch) {
+          const [, y, m, d] = isoMatch;
+          const year = Number.parseInt(y, 10);
+          const month = Number.parseInt(m, 10);
+          const day = Number.parseInt(d, 10);
+          if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day) || month < 1 || month > 12 || day < 1 || day > 31) {
+            return errorResponse('VALIDATION_ERROR', 'Fecha inválida', 400);
+          }
+          updates.date = new Date(Date.UTC(year, month - 1, day));
+        } else {
+          const parsed = new Date(text);
+          if (Number.isNaN(parsed.getTime())) return errorResponse('VALIDATION_ERROR', 'Fecha inválida', 400);
+          updates.date = parsed;
+        }
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'trainer_id')) updates.trainer_id = toTrimmed(payload.trainer_id);
+    if (Object.prototype.hasOwnProperty.call(payload, 'sala_id')) updates.sala_id = toTrimmed(payload.sala_id);
+    if (Object.prototype.hasOwnProperty.call(payload, 'unidad_movil_id'))
+      updates.unidad_movil_id = toTrimmed(payload.unidad_movil_id);
+
+    if (!Object.keys(updates).length) return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
 
     const existing = await prisma.variants.findUnique({
       where: { id: variantId },
@@ -992,41 +899,19 @@ export const handler = createHttpHandler<any>(async (request) => {
         product: { select: { hora_inicio: true, hora_fin: true } },
       },
     });
+    if (!existing) return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
 
-    if (!existing) {
-      return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
-    }
-
-    const nextTrainerId = Object.prototype.hasOwnProperty.call(updates, 'trainer_id')
-      ? updates.trainer_id ?? null
-      : existing.trainer_id ?? null;
-    const nextSalaId = Object.prototype.hasOwnProperty.call(updates, 'sala_id')
-      ? updates.sala_id ?? null
-      : existing.sala_id ?? null;
-    const nextUnidadId = Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id')
-      ? updates.unidad_movil_id ?? null
-      : existing.unidad_movil_id ?? null;
-    const nextSede = Object.prototype.hasOwnProperty.call(updates, 'sede')
-      ? updates.sede ?? null
-      : existing.sede ?? null;
-    const nextDate = Object.prototype.hasOwnProperty.call(updates, 'date')
-      ? updates.date ?? null
-      : existing.date ?? null;
+    const nextTrainerId = Object.prototype.hasOwnProperty.call(updates, 'trainer_id') ? updates.trainer_id ?? null : existing.trainer_id ?? null;
+    const nextSalaId    = Object.prototype.hasOwnProperty.call(updates, 'sala_id')    ? updates.sala_id ?? null    : existing.sala_id ?? null;
+    const nextUnidadId  = Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id') ? updates.unidad_movil_id ?? null : existing.unidad_movil_id ?? null;
+    const nextSede      = Object.prototype.hasOwnProperty.call(updates, 'sede') ? updates.sede ?? null : existing.sede ?? null;
+    const nextDate      = Object.prototype.hasOwnProperty.call(updates, 'date') ? updates.date ?? null : existing.date ?? null;
 
     if (nextSede && nextSalaId && nextSede.trim().toLowerCase() === 'sabadell') {
-      const room = await prisma.salas.findUnique({
-        where: { sala_id: nextSalaId },
-        select: { sala_id: true, sede: true },
-      });
-      if (!room) {
-        return errorResponse('VALIDATION_ERROR', 'La sala seleccionada no existe', 400);
-      }
+      const room = await prisma.salas.findUnique({ where: { sala_id: nextSalaId }, select: { sala_id: true, sede: true } });
+      if (!room) return errorResponse('VALIDATION_ERROR', 'La sala seleccionada no existe', 400);
       if ((room.sede ?? '').trim().toLowerCase() !== 'gep sabadell') {
-        return errorResponse(
-          'VALIDATION_ERROR',
-          'La sala seleccionada no pertenece a GEP Sabadell.',
-          400,
-        );
+        return errorResponse('VALIDATION_ERROR', 'La sala seleccionada no pertenece a GEP Sabadell.', 400);
       }
     }
 
@@ -1040,77 +925,38 @@ export const handler = createHttpHandler<any>(async (request) => {
       unidadId: nextUnidadId,
       range: variantRange,
     });
-    if (availabilityError) {
-      return availabilityError;
-    }
+    if (availabilityError) return availabilityError;
 
     const wooUpdates: VariantWooUpdateInput = {};
-
-      if (Object.prototype.hasOwnProperty.call(updates, 'price')) {
-        wooUpdates.price = updates.price ?? null;
-      }
-      if (Object.prototype.hasOwnProperty.call(updates, 'stock')) {
-        wooUpdates.stock = updates.stock ?? null;
-      }
-      if (Object.prototype.hasOwnProperty.call(updates, 'stock_status')) {
-        wooUpdates.stock_status = updates.stock_status ?? null;
-      }
-      if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
-        wooUpdates.status = updates.status ?? null;
-      }
-      if (Object.prototype.hasOwnProperty.call(updates, 'sede')) {
-        wooUpdates.sede = updates.sede ?? null;
-      }
-      if (Object.prototype.hasOwnProperty.call(updates, 'date')) {
-        wooUpdates.date = updates.date ?? null;
-      }
+    if ('price' in updates) wooUpdates.price = updates.price ?? null;
+    if ('stock' in updates) wooUpdates.stock = updates.stock ?? null;
+    if ('stock_status' in updates) wooUpdates.stock_status = updates.stock_status ?? null;
+    if ('status' in updates) wooUpdates.status = updates.status ?? null;
+    if ('sede' in updates) wooUpdates.sede = updates.sede ?? null;
+    if ('date' in updates) wooUpdates.date = updates.date ?? null;
 
     if (Object.keys(wooUpdates).length) {
       try {
         await updateVariantInWooCommerce(existing.id_padre, existing.id_woo, wooUpdates);
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'No se pudo actualizar la variante en WooCommerce';
+        const message = error instanceof Error ? error.message : 'No se pudo actualizar la variante en WooCommerce';
         return errorResponse('WOO_UPDATE_ERROR', message, 502);
       }
     }
 
     const timestamp = new Date();
-    const data: Prisma.variantsUncheckedUpdateInput = { updated_at: timestamp };
+    const data: any = { updated_at: timestamp };
+    if ('price' in updates) data.price = updates.price == null ? null : new Decimal(updates.price);
+    if ('stock' in updates) data.stock = updates.stock ?? null;
+    if ('stock_status' in updates) data.stock_status = updates.stock_status ?? null;
+    if ('status' in updates) data.status = updates.status ?? null;
+    if ('sede' in updates) data.sede = updates.sede ?? null;
+    if ('date' in updates) data.date = updates.date ?? null;
+    if ('trainer_id' in updates) data.trainer_id = updates.trainer_id ?? null;
+    if ('sala_id' in updates) data.sala_id = updates.sala_id ?? null;
+    if ('unidad_movil_id' in updates) data.unidad_movil_id = updates.unidad_movil_id ?? null;
 
-    if (Object.prototype.hasOwnProperty.call(updates, 'price')) {
-      data.price =
-        updates.price === null || updates.price === undefined ? null : new Prisma.Decimal(updates.price);
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'stock')) {
-      data.stock = updates.stock ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'stock_status')) {
-      data.stock_status = updates.stock_status ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'status')) {
-      data.status = updates.status ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'sede')) {
-      data.sede = updates.sede ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'date')) {
-      data.date = updates.date ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'trainer_id')) {
-      data.trainer_id = updates.trainer_id ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'sala_id')) {
-      data.sala_id = updates.sala_id ?? null;
-    }
-    if (Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id')) {
-      data.unidad_movil_id = updates.unidad_movil_id ?? null;
-    }
-
-    await prisma.variants.update({
-      where: { id: variantId },
-      data,
-    });
+    await prisma.variants.update({ where: { id: variantId }, data });
 
     const refreshed = await prisma.variants.findUnique({
       where: { id: variantId },
@@ -1141,45 +987,30 @@ export const handler = createHttpHandler<any>(async (request) => {
 
   if (method === 'DELETE') {
     const variantId = parseVariantIdFromPath(request.path || '');
-
-    if (!variantId) {
-      return errorResponse('VALIDATION_ERROR', 'ID de variante requerido', 400);
-    }
+    if (!variantId) return errorResponse('VALIDATION_ERROR', 'ID de variante requerido', 400);
 
     const variant = await prisma.variants.findUnique({
       where: { id: variantId },
       select: { id: true, id_padre: true, id_woo: true },
     });
-
-    if (!variant) {
-      return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
-    }
+    if (!variant) return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
 
     let wooMessage: string | undefined;
     try {
       const result = await deleteVariantFromWooCommerce(variant.id_padre, variant.id_woo);
       wooMessage = result.message;
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'No se pudo eliminar la variante en WooCommerce';
+      const message = error instanceof Error ? error.message : 'No se pudo eliminar la variante en WooCommerce';
       return errorResponse('WOO_DELETE_ERROR', message, 502);
     }
 
     await prisma.variants.delete({ where: { id: variantId } });
-
-    return successResponse({
-      ok: true,
-      message: wooMessage ?? 'Variante eliminada correctamente',
-    });
+    return successResponse({ ok: true, message: wooMessage ?? 'Variante eliminada correctamente' });
   }
 
-  if (method !== 'GET') {
-    return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
-  }
+  if (method !== 'GET') return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
 
   const productsRaw = await findProducts(prisma);
-
   const products = productsRaw.map(normalizeProduct);
-
   return successResponse({ products });
 });

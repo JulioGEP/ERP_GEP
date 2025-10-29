@@ -1,6 +1,5 @@
 // backend/functions/public-session-students.ts
 import { validate as isUUID } from 'uuid';
-import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
@@ -139,24 +138,11 @@ function mapSessionInfo(link: any) {
   };
 }
 
+// Deja que TS infiera el tipo correcto (Promise<... | null>) sin usar tokensGetPayload (eliminado en Prisma v5)
 async function resolveLink(
   prisma: ReturnType<typeof getPrisma>,
   token: string,
-): Promise<
-  Prisma.tokensGetPayload<{
-    include: {
-      session: {
-        select: {
-          id: true;
-          deal_id: true;
-          nombre_cache: true;
-          deal_product: { select: { id: true; name: true; code: true } };
-          deal: { select: { deal_id: true; title: true } };
-        };
-      };
-    };
-  }>
-> | null {
+) {
   if (!token.trim().length) return null;
   return prisma.tokens.findUnique({
     where: { token },
@@ -355,7 +341,8 @@ export const handler = async (event: any) => {
       const apellido = payload.apellido === undefined ? undefined : normalizeText(payload.apellido);
       const dni = payload.dni === undefined ? undefined : normalizeDni(payload.dni);
 
-      const data: Prisma.alumnosUpdateInput = {};
+      // Usamos tipo estructural para evitar choques con tipos generados cambiantes en Prisma v5
+      const data: any = {};
 
       if (nombre !== undefined) {
         if (!nombre) {

@@ -1,10 +1,8 @@
 // backend/functions/products-sync.ts
+import type { PrismaClient } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
-import {
-  extractProductCatalogAttributes,
-  listAllProducts,
-} from './_shared/pipedrive';
+import { extractProductCatalogAttributes, listAllProducts } from './_shared/pipedrive';
 
 const CATEGORY_FILTER = 'formación';
 const TYPE_FIELD_HASH = '5bad94030bb7917c186f3238fb2cd8f7a91cf30b';
@@ -25,6 +23,18 @@ function isMatchingCategory(value: string | null | undefined) {
   return value.trim().toLowerCase() === CATEGORY_FILTER;
 }
 
+/* ---------- Tipos auxiliares ---------- */
+type ProductInput = {
+  id_pipe: string;
+  name: string | null;
+  code: string | null;
+  category: string | null;
+  type: string | null;
+  active: boolean;
+};
+
+type ExistingRow = { id: string; id_pipe: string; active: boolean };
+
 export const handler = async (event: any) => {
   try {
     if (event.httpMethod === 'OPTIONS') {
@@ -38,29 +48,18 @@ export const handler = async (event: any) => {
     const prisma = getPrisma();
     const rawProducts = await listAllProducts();
 
-    const mappedProducts = [] as {
-      id_pipe: string;
-      name: string | null;
-      code: string | null;
-      category: string | null;
-      type: string | null;
-      active: boolean;
-    }[];
+    const mappedProducts: ProductInput[] = [];
 
     for (const raw of rawProducts) {
       const idPipe = normalizeText(raw?.id);
-      if (!idPipe) {
-        continue;
-      }
+      if (!idPipe) continue;
 
       const attributes = await extractProductCatalogAttributes(raw);
       const categoryLabel = normaliseCategory(attributes.category ?? normalizeText(raw?.category));
-      if (!isMatchingCategory(categoryLabel)) {
-        continue;
-      }
+      if (!isMatchingCategory(categoryLabel)) continue;
 
       const typeFromAttributes = normalizeText(attributes.type);
-      const typeRawValue = normalizeText(raw?.[TYPE_FIELD_HASH]);
+      const typeRawValue = normalizeText((raw as any)?.[TYPE_FIELD_HASH]);
       const typeLabel = typeFromAttributes ?? typeRawValue;
 
       mappedProducts.push({
@@ -69,7 +68,7 @@ export const handler = async (event: any) => {
         code: normalizeText(attributes.code ?? raw?.code),
         category: categoryLabel,
         type: typeLabel,
-        active: raw?.selectable === undefined ? true : Boolean(raw.selectable),
+        active: (raw as any)?.selectable === undefined ? true : Boolean((raw as any).selectable),
       });
     }
 
@@ -92,8 +91,8 @@ export const handler = async (event: any) => {
 
     const now = new Date();
 
-    const result = await prisma.$transaction(async (tx) => {
-      const existing = await tx.products.findMany({
+    const result = await prisma.$transaction(async (tx: PrismaClient) => {
+      const existing: ExistingRow[] = await tx.products.findMany({
         select: { id: true, id_pipe: true, active: true },
       });
       const existingByPipe = new Map(existing.map((product) => [product.id_pipe, product]));
@@ -136,8 +135,8 @@ export const handler = async (event: any) => {
       }
 
       const missing = existing
-        .filter((product) => !processed.has(product.id_pipe))
-        .map((product) => product.id_pipe);
+        .filter((product: ExistingRow) => !processed.has(product.id_pipe))
+        .map((product: ExistingRow) => product.id_pipe);
 
       let deactivated = 0;
       if (missing.length > 0) {

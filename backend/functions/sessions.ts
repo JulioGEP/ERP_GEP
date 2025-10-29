@@ -12,7 +12,6 @@ import {
 import {
   generateSessionsForDeal,
   hasApplicableCode,
-  hasPrevencionPrefix,
   reindexSessionNames,
   toNonNegativeInt,
 } from './_shared/sessionGeneration';
@@ -33,7 +32,7 @@ const BORRADOR_TRANSITION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCEL
 
 type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>;
 
-// Certain unidades móviles act as placeholders and should never block availability checks.
+// Unidades “comodín” que no bloquean disponibilidad
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 
 function toTrimmed(value: unknown): string | null {
@@ -41,12 +40,10 @@ function toTrimmed(value: unknown): string | null {
   const text = String(value).trim();
   return text.length ? text : null;
 }
-
 function toOptionalText(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   return String(value);
 }
-
 function parseJson(body: string | null | undefined): any {
   if (!body) return {};
   try {
@@ -55,20 +52,17 @@ function parseJson(body: string | null | undefined): any {
     return {};
   }
 }
-
 function toPositiveInt(value: unknown, fallback = 0): number {
   if (value === null || value === undefined) return fallback;
   const num = Number(value);
   if (!Number.isFinite(num) || num <= 0) return fallback;
   return Math.floor(num);
 }
-
 function parseSessionIdFromPath(path: string): string | null {
   const value = String(path || '');
   const match = value.match(/\/(?:\.netlify\/functions\/)?sessions\/([^/?#]+)/i);
   return match ? decodeURIComponent(match[1]) : null;
 }
-
 function toIsoOrNull(date: Date | string | null | undefined): string | null {
   if (!date) return null;
   try {
@@ -100,7 +94,6 @@ const SEDE_ALIASES: Record<string, string> = {
   'c/ primavera, 1, 28500, arganda del rey, madrid': 'GEP Arganda',
   'in company - unidad móvil': 'In Company',
 };
-
 function normalizeSedeLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
   const trimmed = String(value).trim();
@@ -114,33 +107,24 @@ const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_DATES = new Set([
   'formacion empresas',
   'formacion empresa',
 ]);
-
 const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_ROOM = new Set(['gep services']);
 
 function normalizePipelineLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
   const trimmed = String(value).trim();
   if (!trimmed.length) return null;
-  return trimmed
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
+  return trimmed.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
-
-function allowsAutomaticPlanificadaWithoutDates(
-  pipelineLabel: string | null | undefined,
-): boolean {
+function allowsAutomaticPlanificadaWithoutDates(pipelineLabel: string | null | undefined): boolean {
   const normalized = normalizePipelineLabel(pipelineLabel);
   if (!normalized) return false;
   return PIPELINES_ALLOW_PLANIFICADA_WITHOUT_DATES.has(normalized);
 }
-
 function allowsAutomaticPlanificadaWithoutRoom(pipelineLabel: string | null | undefined): boolean {
   const normalized = normalizePipelineLabel(pipelineLabel);
   if (!normalized) return false;
   return PIPELINES_ALLOW_PLANIFICADA_WITHOUT_ROOM.has(normalized);
 }
-
 function toSessionEstado(value: unknown): SessionEstado | null {
   if (value === null || value === undefined) return null;
   const normalized = String(value).trim().toUpperCase();
@@ -149,24 +133,14 @@ function toSessionEstado(value: unknown): SessionEstado | null {
     ? (normalized as SessionEstado)
     : null;
 }
-
 function isManualSessionEstado(value: SessionEstado | null | undefined): boolean {
   return value ? MANUAL_SESSION_STATES.has(value) : false;
 }
-
 function isBorradorTransitionEstado(value: SessionEstado | null | undefined): boolean {
   return value ? BORRADOR_TRANSITION_STATES.has(value) : false;
 }
 
-function computeAutomaticSessionEstadoFromValues({
-  fechaInicio,
-  fechaFin,
-  salaId,
-  trainerIds,
-  unidadIds,
-  dealSede,
-  dealPipeline,
-}: {
+function computeAutomaticSessionEstadoFromValues(args: {
   fechaInicio: Date | null | undefined;
   fechaFin: Date | null | undefined;
   salaId: string | null | undefined;
@@ -175,28 +149,21 @@ function computeAutomaticSessionEstadoFromValues({
   dealSede?: string | null;
   dealPipeline?: string | null;
 }): AutomaticSessionEstado {
+  const { fechaInicio, fechaFin, salaId, trainerIds, unidadIds, dealSede, dealPipeline } = args;
   const allowWithoutDates = allowsAutomaticPlanificadaWithoutDates(dealPipeline);
   const allowWithoutRoom = allowsAutomaticPlanificadaWithoutRoom(dealPipeline);
   const hasValidDates = Boolean(fechaInicio && fechaFin);
   const normalizedSede = normalizeSedeLabel(dealSede);
   const requiresRoom = !allowWithoutRoom && normalizedSede !== 'In Company';
-  if (
-    requiresRoom &&
-    (!salaId || !String(salaId).trim().length)
-  ) {
-    return 'BORRADOR';
-  }
+  if (requiresRoom && (!salaId || !String(salaId).trim().length)) return 'BORRADOR';
   if (!trainerIds || !trainerIds.length) return 'BORRADOR';
   if (!unidadIds || !unidadIds.length) return 'BORRADOR';
-  if (hasValidDates || allowWithoutDates) {
-    return 'PLANIFICADA';
-  }
+  if (hasValidDates || allowWithoutDates) return 'PLANIFICADA';
   return 'BORRADOR';
 }
-
 function resolveAutomaticSessionEstado(row: SessionRecord): AutomaticSessionEstado {
-  const trainerIds = row.trainers.map((trainer) => trainer.trainer_id).filter(Boolean);
-  const unidadIds = row.unidades.map((unidad) => unidad.unidad_id).filter(Boolean);
+  const trainerIds = row.trainers.map((t) => t.trainer_id).filter(Boolean);
+  const unidadIds = row.unidades.map((u) => u.unidad_id).filter(Boolean);
   return computeAutomaticSessionEstadoFromValues({
     fechaInicio: row.fecha_inicio_utc,
     fechaFin: row.fecha_fin_utc,
@@ -207,48 +174,37 @@ function resolveAutomaticSessionEstado(row: SessionRecord): AutomaticSessionEsta
     dealPipeline: row.deal?.pipeline_id ?? null,
   });
 }
-
 function resolveSessionEstado(row: SessionRecord): SessionEstado {
-  if (isManualSessionEstado(row.estado)) {
-    return row.estado;
-  }
+  if (isManualSessionEstado(row.estado)) return row.estado;
   return resolveAutomaticSessionEstado(row);
 }
-
 async function applyAutomaticSessionState(
   tx: Prisma.TransactionClient,
   sessions: SessionRecord[],
 ): Promise<void> {
   const updates: Promise<unknown>[] = [];
-
-  sessions.forEach((session) => {
-    if (isManualSessionEstado(session.estado)) {
-      return;
-    }
+  sessions.forEach((session: SessionRecord) => {
+    if (isManualSessionEstado(session.estado)) return;
     const autoEstado = resolveAutomaticSessionEstado(session);
     if (session.estado !== autoEstado) {
       session.estado = autoEstado;
       updates.push(
         tx.sessions.update({
           where: { id: session.id },
-          data: { estado: autoEstado } as any,
+          data: { estado: autoEstado } as Record<string, any>,
         }),
       );
     } else {
       session.estado = autoEstado;
     }
   });
-
-  if (updates.length) {
-    await Promise.all(updates);
-  }
+  if (updates.length) await Promise.all(updates);
 }
 
 function normalizeSession(row: SessionRecord) {
-  const trainerIds = row.trainers.map((trainer) => trainer.trainer_id);
-  const unidadIds = row.unidades.map((unidad) => unidad.unidad_id);
+  const trainerIds = row.trainers.map((t) => t.trainer_id);
+  const unidadIds = row.unidades.map((u) => u.unidad_id);
   const estado = resolveSessionEstado(row);
-
   return {
     id: row.id,
     deal_id: row.deal_id,
@@ -264,30 +220,25 @@ function normalizeSession(row: SessionRecord) {
     unidad_movil_ids: unidadIds,
   };
 }
-
 function buildNombreBase(name?: string | null, code?: string | null): string {
   const fallback = 'Sesión';
   const raw = toTrimmed(name) ?? toTrimmed(code);
   return raw ?? fallback;
 }
 
-
 function parseDateInput(value: unknown) {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
-  if (value instanceof Date) {
-    return Number.isFinite(value.getTime()) ? value : null;
-  }
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null;
   const text = String(value).trim();
   if (!text.length) return null;
   const parsed = new Date(text);
-  if (!Number.isFinite(parsed.getTime())) {
-    return { error: errorResponse('VALIDATION_ERROR', 'Fecha inválida', 400) };
-  }
+  if (!Number.isFinite(parsed.getTime())) return { error: errorResponse('VALIDATION_ERROR', 'Fecha inválida', 400) };
   return parsed;
 }
-
-function ensureArrayOfStrings(value: unknown): string[] | { error: ReturnType<typeof errorResponse> } {
+function ensureArrayOfStrings(
+  value: unknown,
+): string[] | { error: ReturnType<typeof errorResponse> } {
   if (value === undefined) return [];
   if (value === null) return [];
   if (!Array.isArray(value)) {
@@ -304,7 +255,7 @@ function ensureArrayOfStrings(value: unknown): string[] | { error: ReturnType<ty
 
 type SessionPatchResult =
   | {
-      data: Prisma.sessionsUpdateInput;
+      data: Record<string, any>;
       trainerIds?: string[];
       unidadIds?: string[];
       estado?: SessionEstado;
@@ -315,34 +266,27 @@ function buildSessionPatch(body: any): SessionPatchResult {
   if (!body || typeof body !== 'object') {
     return { error: errorResponse('VALIDATION_ERROR', 'Body inválido', 400) };
   }
-
-  const data: Prisma.sessionsUpdateInput & Record<string, any> = {};
+  const data: Record<string, any> = {};
 
   if (Object.prototype.hasOwnProperty.call(body, 'fecha_inicio_utc')) {
     const parsed = parseDateInput(body.fecha_inicio_utc);
     if (parsed && 'error' in parsed) return { error: parsed.error };
     data.fecha_inicio_utc = parsed === undefined ? undefined : (parsed as Date | null);
   }
-
   if (Object.prototype.hasOwnProperty.call(body, 'fecha_fin_utc')) {
     const parsed = parseDateInput(body.fecha_fin_utc);
     if (parsed && 'error' in parsed) return { error: parsed.error };
     data.fecha_fin_utc = parsed === undefined ? undefined : (parsed as Date | null);
   }
-
   if (Object.prototype.hasOwnProperty.call(body, 'sala_id')) {
     const value = body.sala_id === null ? null : toTrimmed(body.sala_id);
     data.sala_id = value ?? null;
   }
-
   if (Object.prototype.hasOwnProperty.call(body, 'direccion')) {
     const value = toOptionalText(body.direccion);
-    if (value == null) {
-      return { error: errorResponse('VALIDATION_ERROR', 'La dirección es obligatoria', 400) };
-    }
+    if (value == null) return { error: errorResponse('VALIDATION_ERROR', 'La dirección es obligatoria', 400) };
     data.direccion = value;
   }
-
   if (Object.prototype.hasOwnProperty.call(body, 'nombre_cache')) {
     const value = toOptionalText(body.nombre_cache);
     data.nombre_cache = value ?? 'Sesión';
@@ -350,28 +294,21 @@ function buildSessionPatch(body: any): SessionPatchResult {
 
   let trainerIds: string[] | undefined;
   if (Object.prototype.hasOwnProperty.call(body, 'trainer_ids')) {
-    const trainerIdsResult = ensureArrayOfStrings(body.trainer_ids);
-    if (trainerIdsResult && 'error' in trainerIdsResult) {
-      return { error: trainerIdsResult.error };
-    }
-    trainerIds = trainerIdsResult;
+    const res = ensureArrayOfStrings(body.trainer_ids);
+    if (res && 'error' in res) return { error: res.error };
+    trainerIds = res;
   }
-
   let unidadIds: string[] | undefined;
   if (Object.prototype.hasOwnProperty.call(body, 'unidad_movil_ids')) {
-    const unidadIdsResult = ensureArrayOfStrings(body.unidad_movil_ids);
-    if (unidadIdsResult && 'error' in unidadIdsResult) {
-      return { error: unidadIdsResult.error };
-    }
-    unidadIds = unidadIdsResult;
+    const res = ensureArrayOfStrings(body.unidad_movil_ids);
+    if (res && 'error' in res) return { error: res.error };
+    unidadIds = res;
   }
 
   let estado: SessionEstado | undefined;
   if (Object.prototype.hasOwnProperty.call(body, 'estado')) {
     const parsedEstado = toSessionEstado(body.estado);
-    if (!parsedEstado) {
-      return { error: errorResponse('VALIDATION_ERROR', 'Estado inválido', 400) };
-    }
+    if (!parsedEstado) return { error: errorResponse('VALIDATION_ERROR', 'Estado inválido', 400) };
     estado = parsedEstado;
   }
 
@@ -386,7 +323,6 @@ function ensureValidDateRange(start?: Date | null, end?: Date | null) {
 }
 
 type DateRange = { start: Date; end: Date };
-
 function normalizeDateRange(
   start: Date | null | undefined,
   end: Date | null | undefined,
@@ -394,56 +330,39 @@ function normalizeDateRange(
   const effectiveStart = start ?? end ?? null;
   const effectiveEnd = end ?? start ?? null;
   if (!effectiveStart || !effectiveEnd) return null;
-
   const startTime = effectiveStart.getTime();
   const endTime = effectiveEnd.getTime();
   if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return null;
   if (endTime < startTime) return null;
-
-  return {
-    start: new Date(startTime),
-    end: new Date(endTime),
-  };
+  return { start: new Date(startTime), end: new Date(endTime) };
 }
 
 type VariantTimeParts = { hour: number; minute: number };
-
 function extractVariantTimeParts(value: Date | string | null | undefined): VariantTimeParts | null {
   const formatted = formatTimeFromDb(value);
   if (!formatted) return null;
-  const match = formatted.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const hour = Number.parseInt(match[1], 10);
-  const minute = Number.parseInt(match[2], 10);
+  const m = formatted.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const hour = Number.parseInt(m[1], 10);
+  const minute = Number.parseInt(m[2], 10);
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
   return { hour, minute };
 }
-
-function buildVariantDateTime(
-  date: Date,
-  time: VariantTimeParts | null,
-  fallback: VariantTimeParts,
-): Date {
+function buildVariantDateTime(date: Date, time: VariantTimeParts | null, fallback: VariantTimeParts): Date {
   const parts = time ?? fallback;
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth() + 1;
   const day = date.getUTCDate();
   return buildMadridDateTime({ year, month, day, hour: parts.hour, minute: parts.minute });
 }
-
 function computeVariantRange(
   variantDate: Date | string | null | undefined,
   productTimes: { hora_inicio: Date | string | null; hora_fin: Date | string | null },
 ): DateRange | null {
-  if (!variantDate) {
-    return null;
-  }
-
-  const parsedDate = new Date(variantDate);
-  if (Number.isNaN(parsedDate.getTime())) {
-    return null;
-  }
+  if (!variantDate) return null;
+  const parsedDate = new Date(variantDate as any);
+  if (Number.isNaN(parsedDate.getTime())) return null;
 
   const startTime = extractVariantTimeParts(productTimes.hora_inicio);
   const endTime = extractVariantTimeParts(productTimes.hora_fin);
@@ -452,24 +371,13 @@ function computeVariantRange(
 
   const start = buildVariantDateTime(parsedDate, startTime, fallbackStart);
   let end = buildVariantDateTime(parsedDate, endTime, fallbackEnd);
-
-  if (end.getTime() <= start.getTime()) {
-    end = new Date(start.getTime() + 60 * 60 * 1000);
-  }
-
+  if (end.getTime() <= start.getTime()) end = new Date(start.getTime() + 60 * 60 * 1000);
   return { start, end };
 }
 
 async function ensureResourcesAvailable(
   tx: Prisma.TransactionClient,
-  {
-    sessionId,
-    trainerIds,
-    unidadIds,
-    salaId,
-    start,
-    end,
-  }: {
+  args: {
     sessionId?: string;
     trainerIds?: string[];
     unidadIds?: string[];
@@ -478,34 +386,26 @@ async function ensureResourcesAvailable(
     end?: Date | null;
   },
 ) {
+  const { sessionId, trainerIds, unidadIds, salaId, start, end } = args;
   const range = normalizeDateRange(start ?? null, end ?? null);
   if (!range) return;
 
-  const resourceConditions: Prisma.sessionsWhereInput[] = [];
+  const resourceConditions: any[] = [];
 
   if (trainerIds && trainerIds.length) {
     resourceConditions.push({ trainers: { some: { trainer_id: { in: trainerIds } } } });
   }
-
-  const filteredUnidadIds = (unidadIds ?? []).filter((unidadId) =>
-    unidadId ? !ALWAYS_AVAILABLE_UNIT_IDS.has(unidadId) : false,
-  );
-
+  const filteredUnidadIds = (unidadIds ?? []).filter((id) => (id ? !ALWAYS_AVAILABLE_UNIT_IDS.has(id) : false));
   if (filteredUnidadIds.length) {
     resourceConditions.push({ unidades: { some: { unidad_id: { in: filteredUnidadIds } } } });
   }
-
   if (salaId) {
     resourceConditions.push({ sala_id: salaId });
   }
-
   if (!resourceConditions.length) return;
 
   const sessions = await tx.sessions.findMany({
-    where: {
-      ...(sessionId ? { id: { not: sessionId } } : {}),
-      OR: resourceConditions,
-    },
+    where: { ...(sessionId ? { id: { not: sessionId } } : {}), OR: resourceConditions },
     select: {
       id: true,
       fecha_inicio_utc: true,
@@ -516,22 +416,14 @@ async function ensureResourcesAvailable(
     },
   });
 
-  const conflicting = sessions.filter((session) => {
-    const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
-    if (!sessionRange) return false;
-    return (
-      sessionRange.start.getTime() <= range.end.getTime() &&
-      sessionRange.end.getTime() >= range.start.getTime()
-    );
-  });
-
+  const conflicting = (sessions as any[]).filter((s: any) => {
+    const r = normalizeDateRange(s.fecha_inicio_utc, s.fecha_fin_utc);
+    if (!r) return false;
+    return r.start.getTime() <= range.end.getTime() && r.end.getTime() >= range.start.getTime();
+    });
   if (!conflicting.length) return;
 
-  throw errorResponse(
-    'RESOURCE_UNAVAILABLE',
-    'Algunos recursos ya están asignados en las fechas seleccionadas.',
-    409,
-  );
+  throw errorResponse('RESOURCE_UNAVAILABLE', 'Algunos recursos ya están asignados en las fechas seleccionadas.', 409);
 }
 
 function parseLimit(value: unknown): number {
@@ -562,66 +454,48 @@ async function fetchSessionsByProduct(
   ]);
 
   await applyAutomaticSessionState(prisma, rows as unknown as SessionRecord[]);
-
   return { total, rows };
 }
 
 export const handler = async (event: any) => {
   try {
-    if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse();
-    }
+    if (event.httpMethod === 'OPTIONS') return preflightResponse();
 
     const prisma = getPrisma();
     const method = event.httpMethod;
     const path = event.path || '';
-    const isAvailabilityRequest =
-      /\/(?:\.netlify\/functions\/)?sessions\/availability$/i.test(path);
+    const isAvailabilityRequest = /\/(?:\.netlify\/functions\/)?sessions\/availability$/i.test(path);
     const isRangeRequest = /\/(?:\.netlify\/functions\/)?sessions\/range$/i.test(path);
-    const isDealSessionsRequest =
-      /\/(?:\.netlify\/functions\/)?sessions\/by-deal$/i.test(path);
-    const isCountsRequest =
-      /\/(?:\.netlify\/functions\/)?sessions\/[^/]+\/counts$/i.test(path);
-    const sessionIdFromPath =
-      isAvailabilityRequest || isDealSessionsRequest ? null : parseSessionIdFromPath(path);
+    const isDealSessionsRequest = /\/(?:\.netlify\/functions\/)?sessions\/by-deal$/i.test(path);
+    const isCountsRequest = /\/(?:\.netlify\/functions\/)?sessions\/[^/]+\/counts$/i.test(path);
+    const sessionIdFromPath = isAvailabilityRequest || isDealSessionsRequest ? null : parseSessionIdFromPath(path);
 
+    // Generate from deal
     if (method === 'POST' && /\/sessions\/generate-from-deal$/i.test(path)) {
       const body = parseJson(event.body);
       const dealId = toTrimmed(body?.dealId);
-      if (!dealId) {
-        return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
-      }
-
-      const result = await prisma.$transaction((tx) => generateSessionsForDeal(tx, dealId));
+      if (!dealId) return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
+      const result = await prisma.$transaction((tx: Prisma.TransactionClient) => generateSessionsForDeal(tx, dealId));
       if ('error' in result) return result.error;
       return successResponse({ count: result.count ?? 0 });
     }
 
+    // Availability
     if (method === 'GET' && isAvailabilityRequest) {
       const startParam = toTrimmed(event.queryStringParameters?.start);
-      if (!startParam) {
-        return errorResponse('VALIDATION_ERROR', 'El parámetro start es obligatorio', 400);
-      }
-
+      if (!startParam) return errorResponse('VALIDATION_ERROR', 'El parámetro start es obligatorio', 400);
       const startResult = parseDateInput(startParam);
       if (startResult && 'error' in startResult) return startResult.error;
       const startDate = startResult as Date | null | undefined;
-      if (!startDate) {
-        return errorResponse('VALIDATION_ERROR', 'El parámetro start es inválido', 400);
-      }
+      if (!startDate) return errorResponse('VALIDATION_ERROR', 'El parámetro start es inválido', 400);
 
       const endParam = toTrimmed(event.queryStringParameters?.end);
       const endResult = endParam === null ? null : parseDateInput(endParam ?? undefined);
-      if (endResult && typeof endResult === 'object' && 'error' in endResult) {
-        return endResult.error;
-      }
+      if (endResult && typeof endResult === 'object' && 'error' in endResult) return endResult.error;
+      const endDate = endResult === undefined ? null : ((endResult as Date | null | undefined) ?? null);
 
-      const endDate =
-        endResult === undefined ? null : ((endResult as Date | null | undefined) ?? null);
       const range = normalizeDateRange(startDate, endDate ?? startDate);
-      if (!range) {
-        return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
-      }
+      if (!range) return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
 
       const excludeSessionId = toTrimmed(event.queryStringParameters?.excludeSessionId);
       const excludeVariantId = toTrimmed(event.queryStringParameters?.excludeVariantId);
@@ -629,11 +503,7 @@ export const handler = async (event: any) => {
       const sessions = await prisma.sessions.findMany({
         where: {
           ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
-          OR: [
-            { sala_id: { not: null } },
-            { trainers: { some: {} } },
-            { unidades: { some: {} } },
-          ],
+          OR: [{ sala_id: { not: null } }, { trainers: { some: {} } }, { unidades: { some: {} } }],
         },
         select: {
           id: true,
@@ -649,30 +519,23 @@ export const handler = async (event: any) => {
       const roomLocks = new Set<string>();
       const unitLocks = new Set<string>();
 
-      sessions.forEach((session) => {
-        const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
-        if (!sessionRange) return;
-        if (
-          sessionRange.start.getTime() <= range.end.getTime() &&
-          sessionRange.end.getTime() >= range.start.getTime()
-        ) {
-          session.trainers.forEach((trainer) => trainerLocks.add(trainer.trainer_id));
-          session.unidades.forEach((unit) => unitLocks.add(unit.unidad_id));
-          if (session.sala_id) roomLocks.add(session.sala_id);
+      (sessions as any[]).forEach((s: any) => {
+        const r = normalizeDateRange(s.fecha_inicio_utc, s.fecha_fin_utc);
+        if (!r) return;
+        if (r.start.getTime() <= range.end.getTime() && r.end.getTime() >= range.start.getTime()) {
+          (s.trainers as Array<{ trainer_id: string }>).forEach((t) => trainerLocks.add(t.trainer_id));
+          (s.unidades as Array<{ unidad_id: string }>).forEach((u) => unitLocks.add(u.unidad_id));
+          if (s.sala_id) roomLocks.add(s.sala_id as string);
         }
       });
 
       if (getVariantResourceColumnsSupport() !== false) {
         try {
-          const variantQueryArgs = {
+          const variants = await prisma.variants.findMany({
             where: {
               ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
               date: { not: null },
-              OR: [
-                { trainer_id: { not: null } },
-                { sala_id: { not: null } },
-                { unidad_movil_id: { not: null } },
-              ],
+              OR: [{ trainer_id: { not: null } }, { sala_id: { not: null } }, { unidad_movil_id: { not: null } }],
             },
             select: {
               id: true,
@@ -682,33 +545,24 @@ export const handler = async (event: any) => {
               unidad_movil_id: true,
               product: { select: { hora_inicio: true, hora_fin: true } },
             },
-          } as const;
-
-          const variants = await prisma.variants.findMany(variantQueryArgs as any);
-
+          } as any);
           setVariantResourceColumnsSupport(true);
 
-          variants.forEach((variant) => {
-            const variantRange = computeVariantRange(variant.date, variant.product ?? { hora_inicio: null, hora_fin: null });
-            if (!variantRange) return;
-            if (
-              variantRange.start.getTime() <= range.end.getTime() &&
-              variantRange.end.getTime() >= range.start.getTime()
-            ) {
-              if (variant.trainer_id) trainerLocks.add(variant.trainer_id);
-              if (variant.sala_id) roomLocks.add(variant.sala_id);
-              if (variant.unidad_movil_id && !ALWAYS_AVAILABLE_UNIT_IDS.has(variant.unidad_movil_id)) {
-                unitLocks.add(variant.unidad_movil_id);
+          (variants as any[]).forEach((v: any) => {
+            const vr = computeVariantRange(v.date, v.product ?? { hora_inicio: null, hora_fin: null });
+            if (!vr) return;
+            if (vr.start.getTime() <= range.end.getTime() && vr.end.getTime() >= range.start.getTime()) {
+              if (v.trainer_id) trainerLocks.add(v.trainer_id as string);
+              if (v.sala_id) roomLocks.add(v.sala_id as string);
+              if (v.unidad_movil_id && !ALWAYS_AVAILABLE_UNIT_IDS.has(v.unidad_movil_id as string)) {
+                unitLocks.add(v.unidad_movil_id as string);
               }
             }
           });
         } catch (error) {
           if (isVariantResourceColumnError(error)) {
             setVariantResourceColumnsSupport(false);
-            console.warn(
-              '[sessions] skipping variant resource availability check (missing resource columns)',
-              { error },
-            );
+            console.warn('[sessions] skipping variant resource check (missing resource columns)', { error });
           } else {
             throw error;
           }
@@ -724,67 +578,45 @@ export const handler = async (event: any) => {
       });
     }
 
+    // Sessions by deal (lightweight)
     if (method === 'GET' && isDealSessionsRequest) {
       const dealId = toTrimmed(event.queryStringParameters?.dealId);
-      if (!dealId) {
-        return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
-      }
+      if (!dealId) return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
 
       const sessions = await prisma.sessions.findMany({
         where: { deal_id: dealId },
-        orderBy: [
-          { fecha_inicio_utc: 'asc' },
-          { created_at: 'asc' },
-        ],
-        select: {
-          id: true,
-          fecha_inicio_utc: true,
-          fecha_fin_utc: true,
-          sala: { select: { sala_id: true, name: true } },
-        },
+        orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
+        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, sala: { select: { sala_id: true, name: true } } },
       });
 
-      const payload = sessions.map((session) => ({
-        id: session.id,
-        fecha_inicio_utc: toIsoOrNull(session.fecha_inicio_utc),
-        fecha_fin_utc: toIsoOrNull(session.fecha_fin_utc),
-        room: session.sala
-          ? {
-              id: session.sala.sala_id,
-              name: session.sala.name,
-            }
-          : null,
+      const payload = (sessions as any[]).map((s: any) => ({
+        id: s.id as string,
+        fecha_inicio_utc: toIsoOrNull(s.fecha_inicio_utc),
+        fecha_fin_utc: toIsoOrNull(s.fecha_fin_utc),
+        room: s.sala ? { id: (s.sala.sala_id as string) ?? null, name: (s.sala.name as string) ?? null } : null,
       }));
 
       return successResponse({ sessions: payload });
     }
 
+    // Range query
     if (method === 'GET' && isRangeRequest) {
       const startParam = toTrimmed(event.queryStringParameters?.start);
-      if (!startParam) {
-        return errorResponse('VALIDATION_ERROR', 'El parámetro start es obligatorio', 400);
-      }
-
+      if (!startParam) return errorResponse('VALIDATION_ERROR', 'El parámetro start es obligatorio', 400);
       const startResult = parseDateInput(startParam);
       if (startResult && 'error' in startResult) return startResult.error;
       const startDate = startResult as Date | null | undefined;
-      if (!startDate) {
-        return errorResponse('VALIDATION_ERROR', 'El parámetro start es inválido', 400);
-      }
+      if (!startDate) return errorResponse('VALIDATION_ERROR', 'El parámetro start es inválido', 400);
 
       const endParam = toTrimmed(event.queryStringParameters?.end);
       const endResult = endParam === null ? null : parseDateInput(endParam ?? undefined);
-      if (endResult && typeof endResult === 'object' && 'error' in endResult) {
-        return endResult.error;
-      }
+      if (endResult && typeof endResult === 'object' && 'error' in endResult) return endResult.error;
       const endDate = endResult === undefined ? null : ((endResult as Date | null | undefined) ?? null);
 
       const range = normalizeDateRange(startDate, endDate ?? startDate);
-      if (!range) {
-        return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
-      }
+      if (!range) return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
 
-      const maxRangeMs = 120 * 24 * 60 * 60 * 1000; // 120 días
+      const maxRangeMs = 120 * 24 * 60 * 60 * 1000;
       if (range.end.getTime() - range.start.getTime() > maxRangeMs) {
         return errorResponse('VALIDATION_ERROR', 'El rango máximo permitido es de 120 días', 400);
       }
@@ -800,8 +632,8 @@ export const handler = async (event: any) => {
       if (estadoParam) {
         const values = estadoParam
           .split(',')
-          .map((value) => toSessionEstado(value))
-          .filter((value): value is SessionEstado => !!value);
+          .map((v) => toSessionEstado(v))
+          .filter((v): v is SessionEstado => !!v);
         estadoFilters = values.length ? values : null;
       }
 
@@ -824,12 +656,7 @@ export const handler = async (event: any) => {
               OR: [
                 { fecha_inicio_utc: { gte: range.start, lte: range.end } },
                 { fecha_fin_utc: { gte: range.start, lte: range.end } },
-                {
-                  AND: [
-                    { fecha_inicio_utc: { lte: range.start } },
-                    { fecha_fin_utc: { gte: range.end } },
-                  ],
-                },
+                { AND: [{ fecha_inicio_utc: { lte: range.start } }, { fecha_fin_utc: { gte: range.end } }] },
               ],
             },
           ],
@@ -850,105 +677,82 @@ export const handler = async (event: any) => {
           },
           deal_product: { select: { id: true, name: true, code: true } },
           sala: { select: { sala_id: true, name: true, sede: true } },
-          trainers: {
-            select: {
-              trainer_id: true,
-              trainer: { select: { trainer_id: true, name: true, apellido: true } },
-            },
-          },
-          unidades: {
-            select: {
-              unidad_id: true,
-              unidad: { select: { unidad_id: true, name: true, matricula: true } },
-            },
-          },
+          trainers: { select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } } },
+          unidades: { select: { unidad_id: true, unidad: { select: { unidad_id: true, name: true, matricula: true } } } },
         },
-        orderBy: [
-          { fecha_inicio_utc: 'asc' },
-          { nombre_cache: 'asc' },
-        ],
+        orderBy: [{ fecha_inicio_utc: 'asc' }, { nombre_cache: 'asc' }],
       });
 
-      const rowsById = new Map(sessions.map((row) => [row.id, row]));
+      const rowsAny = sessions as any[];
+      const rowsById = new Map<string, any>(rowsAny.map((row: any) => [row.id as string, row]));
 
-      const payload = sessions
-        .map((session) => normalizeSession(session as unknown as SessionRecord))
-        .filter((session) => session.fecha_inicio_utc && session.fecha_fin_utc)
-        .map((session) => {
-          const raw = rowsById.get(session.id);
+      const payload = rowsAny
+        .map((s: any) => normalizeSession(s as unknown as SessionRecord))
+        .filter((s: any) => s.fecha_inicio_utc && s.fecha_fin_utc)
+        .map((s: any) => {
+          const raw: any = rowsById.get(s.id);
           const sala = raw?.sala
-            ? {
-                sala_id: raw.sala.sala_id,
-                name: raw.sala.name,
-                sede: raw.sala.sede ?? null,
-              }
+            ? { sala_id: raw.sala.sala_id as string, name: raw.sala.name as string, sede: (raw.sala.sede as string) ?? null }
             : null;
-          const trainers = (raw?.trainers ?? [])
-            .map((link) =>
-              link.trainer
+
+          const trainers = ((raw?.trainers ?? []) as any[])
+            .map((l: any) =>
+              l.trainer
                 ? {
-                    trainer_id: link.trainer.trainer_id,
-                    name: link.trainer.name,
-                    apellido: link.trainer.apellido ?? null,
+                    trainer_id: l.trainer.trainer_id as string,
+                    name: (l.trainer.name as string) ?? null,
+                    apellido: (l.trainer.apellido as string) ?? null,
                   }
                 : null,
             )
-            .filter((value): value is { trainer_id: string; name: string; apellido: string | null } => !!value);
-          const unidades = (raw?.unidades ?? [])
-            .map((link) =>
-              link.unidad
+            .filter(
+              (v: any): v is { trainer_id: string; name: string | null; apellido: string | null } => !!v,
+            );
+
+          const unidades = ((raw?.unidades ?? []) as any[])
+            .map((l: any) =>
+              l.unidad
                 ? {
-                    unidad_id: link.unidad.unidad_id,
-                    name: link.unidad.name,
-                    matricula: link.unidad.matricula ?? null,
+                    unidad_id: l.unidad.unidad_id as string,
+                    name: (l.unidad.name as string) ?? null,
+                    matricula: (l.unidad.matricula as string) ?? null,
                   }
                 : null,
             )
-            .filter((value): value is NonNullable<typeof value> => value != null);
+            .filter((v: any): v is NonNullable<typeof v> => v != null);
 
           return {
-            id: session.id,
-            deal_id: session.deal_id,
-            deal_title: raw?.deal?.title ?? null,
-            deal_training_address: raw?.deal?.training_address ?? null,
-            deal_sede_label: raw?.deal?.sede_label ?? null,
-            deal_product_id: session.deal_product_id,
-            product_name: raw?.deal_product?.name ?? null,
-            product_code: raw?.deal_product?.code ?? null,
-            nombre_cache: session.nombre_cache,
-            fecha_inicio_utc: session.fecha_inicio_utc,
-            fecha_fin_utc: session.fecha_fin_utc,
-            direccion: session.direccion,
-            estado: session.estado,
-            deal_pipeline_id: raw?.deal?.pipeline_id ?? null,
-            deal_caes_label: raw?.deal?.caes_label ?? null,
-            deal_fundae_label: raw?.deal?.fundae_label ?? null,
-            deal_hotel_label: raw?.deal?.hotel_label ?? null,
-            deal_transporte: raw?.deal?.transporte ?? null,
+            id: s.id as string,
+            deal_id: s.deal_id as string,
+            deal_title: (raw?.deal?.title as string) ?? null,
+            deal_training_address: (raw?.deal?.training_address as string) ?? null,
+            deal_sede_label: (raw?.deal?.sede_label as string) ?? null,
+            deal_product_id: s.deal_product_id as string,
+            product_name: (raw?.deal_product?.name as string) ?? null,
+            product_code: (raw?.deal_product?.code as string) ?? null,
+            nombre_cache: s.nombre_cache as string,
+            fecha_inicio_utc: s.fecha_inicio_utc as string,
+            fecha_fin_utc: s.fecha_fin_utc as string,
+            direccion: s.direccion as string,
+            estado: s.estado as SessionEstado,
+            deal_pipeline_id: (raw?.deal?.pipeline_id as string) ?? null,
+            deal_caes_label: (raw?.deal?.caes_label as string) ?? null,
+            deal_fundae_label: (raw?.deal?.fundae_label as string) ?? null,
+            deal_hotel_label: (raw?.deal?.hotel_label as string) ?? null,
+            deal_transporte: (raw?.deal?.transporte as string) ?? null,
             sala,
             trainers,
             unidades,
           };
         });
 
-      return successResponse({
-        range: {
-          start: range.start.toISOString(),
-          end: range.end.toISOString(),
-        },
-        sessions: payload,
-      });
+      return successResponse({ range: { start: range.start.toISOString(), end: range.end.toISOString() }, sessions: payload });
     }
 
+    // Counts for a single session
     if (method === 'GET' && isCountsRequest && sessionIdFromPath) {
-      const existing = await prisma.sessions.findUnique({
-        where: { id: sessionIdFromPath },
-        select: { id: true },
-      });
-
-      if (!existing) {
-        return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
-      }
+      const existing = await prisma.sessions.findUnique({ where: { id: sessionIdFromPath }, select: { id: true } });
+      if (!existing) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
       const [comentarios, documentos, alumnos, tokens] = await prisma.$transaction([
         prisma.sesiones_comentarios.count({ where: { sesion_id: sessionIdFromPath } }),
@@ -956,91 +760,70 @@ export const handler = async (event: any) => {
         prisma.alumnos.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.tokens.count({ where: { sesion_id: sessionIdFromPath, active: true } }),
       ]);
-
       return successResponse({ comentarios, documentos, alumnos, tokens });
     }
 
+    // List by deal (grouped by product)
     if (method === 'GET') {
       const dealId = toTrimmed(event.queryStringParameters?.dealId);
-      if (!dealId) {
-        return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
-      }
+      if (!dealId) return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
 
       const productIdParam = toTrimmed(event.queryStringParameters?.productId);
       const page = Math.max(1, toPositiveInt(event.queryStringParameters?.page, 1));
       const limit = parseLimit(event.queryStringParameters?.limit);
 
-      const response = await prisma.$transaction(async (tx) => {
+      const response = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const deal = await tx.deals.findUnique({
           where: { deal_id: dealId },
           select: {
             deal_id: true,
-            deal_products: {
-              select: { id: true, code: true, name: true, quantity: true },
-              orderBy: [{ created_at: 'asc' }],
-            },
+            deal_products: { select: { id: true, code: true, name: true, quantity: true }, orderBy: [{ created_at: 'asc' }] },
           },
         });
+        if (!deal) throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
 
-        if (!deal) {
-          throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
-        }
-
-        const products = (deal.deal_products ?? []).filter((product) =>
-          hasApplicableCode(product.code),
-        );
-
+        const products = (deal.deal_products ?? []).filter(
+  (p: { id: string; code: string }) => hasApplicableCode(p.code));
         const filteredProducts = productIdParam
-          ? products.filter((product) => product.id === productIdParam)
-          : products;
+  ? products.filter((p: { id: string }) => p.id === productIdParam)
+  : products;
 
         const payload = await Promise.all(
-          filteredProducts.map(async (product) => {
+          filteredProducts.map(async (product: any) => {
             const { total, rows } = await fetchSessionsByProduct(tx, deal.deal_id, product.id, page, limit);
-            const mapped = rows.map((row) =>
-              normalizeSession(row as unknown as SessionRecord),
-            );
+            const mapped = (rows as any[]).map((r: any) => normalizeSession(r as unknown as SessionRecord));
             return {
               product: {
-                id: product.id,
-                code: product.code,
-                name: product.name,
+                id: product.id as string,
+                code: product.code as string,
+                name: product.name as string,
                 quantity: toNonNegativeInt(product.quantity, 0),
               },
               sessions: mapped,
-              pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.max(1, Math.ceil(total / limit)),
-              },
+              pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
             };
           }),
         );
-
         return payload;
       });
 
       return successResponse({ groups: response });
     }
 
+    // Create
     if (method === 'POST' && !sessionIdFromPath) {
       const body = parseJson(event.body);
       const dealId = toTrimmed(body?.deal_id);
       const dealProductId = toTrimmed(body?.deal_product_id);
-      if (!dealId || !dealProductId) {
-        return errorResponse('VALIDATION_ERROR', 'deal_id y deal_product_id son obligatorios', 400);
-      }
+      if (!dealId || !dealProductId) return errorResponse('VALIDATION_ERROR', 'deal_id y deal_product_id son obligatorios', 400);
 
       const trainerIdsResult = ensureArrayOfStrings(body.trainer_ids);
       if (trainerIdsResult && 'error' in trainerIdsResult) return trainerIdsResult.error;
-
       const unidadIdsResult = ensureArrayOfStrings(body.unidad_movil_ids);
       if (unidadIdsResult && 'error' in unidadIdsResult) return unidadIdsResult.error;
 
       const fechaInicioResult = parseDateInput(body.fecha_inicio_utc);
       if (fechaInicioResult && 'error' in fechaInicioResult) return fechaInicioResult.error;
-
       const fechaFinResult = parseDateInput(body.fecha_fin_utc);
       if (fechaFinResult && 'error' in fechaFinResult) return fechaFinResult.error;
 
@@ -1051,34 +834,28 @@ export const handler = async (event: any) => {
       if (rangeError) return rangeError;
 
       const direccion = toOptionalText(body.direccion);
-      const fechaInicioDate =
-        fechaInicioResult === undefined ? null : (fechaInicioResult as Date | null);
-      const fechaFinDate =
-        fechaFinResult === undefined ? null : (fechaFinResult as Date | null);
+      const fechaInicioDate = fechaInicioResult === undefined ? null : (fechaInicioResult as Date | null);
+      const fechaFinDate = fechaFinResult === undefined ? null : (fechaFinResult as Date | null);
       const salaId = toTrimmed(body.sala_id);
 
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const deal = await tx.deals.findUnique({
           where: { deal_id: dealId },
           select: { deal_id: true, training_address: true, sede_label: true, pipeline_id: true },
         });
-        if (!deal) {
-          throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
-        }
+        if (!deal) throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
 
         const product = await tx.deal_products.findUnique({
           where: { id: dealProductId },
           select: { id: true, deal_id: true, name: true, code: true },
         });
-        if (!product || product.deal_id !== deal.deal_id) {
-          throw errorResponse('NOT_FOUND', 'Producto del presupuesto no encontrado', 404);
-        }
+        if (!product || product.deal_id !== deal.deal_id) throw errorResponse('NOT_FOUND', 'Producto del presupuesto no encontrado', 404);
 
         const baseName = buildNombreBase(product.name, product.code);
 
         await ensureResourcesAvailable(tx, {
-          trainerIds: trainerIdsResult.length ? trainerIdsResult : undefined,
-          unidadIds: unidadIdsResult.length ? unidadIdsResult : undefined,
+          trainerIds: (trainerIdsResult as string[]).length ? (trainerIdsResult as string[]) : undefined,
+          unidadIds: (unidadIdsResult as string[]).length ? (unidadIdsResult as string[]) : undefined,
           salaId: salaId ?? null,
           start: fechaInicioDate,
           end: fechaFinDate,
@@ -1088,8 +865,8 @@ export const handler = async (event: any) => {
           fechaInicio: fechaInicioDate,
           fechaFin: fechaFinDate,
           salaId: salaId ?? null,
-          trainerIds: trainerIdsResult,
-          unidadIds: unidadIdsResult,
+          trainerIds: trainerIdsResult as string[],
+          unidadIds: unidadIdsResult as string[],
           dealSede: deal.sede_label ?? null,
           dealPipeline: deal.pipeline_id ?? null,
         });
@@ -1102,30 +879,23 @@ export const handler = async (event: any) => {
             nombre_cache: baseName,
             direccion: direccion ?? deal.training_address ?? '',
             sala_id: salaId ?? null,
-            fecha_inicio_utc:
-              fechaInicioResult === undefined
-                ? undefined
-                : ((fechaInicioDate as Date | null | undefined) ?? null),
-            fecha_fin_utc:
-              fechaFinResult === undefined
-                ? undefined
-                : ((fechaFinDate as Date | null | undefined) ?? null),
+            fecha_inicio_utc: fechaInicioResult === undefined ? undefined : (fechaInicioDate as Date | null),
+            fecha_fin_utc: fechaFinResult === undefined ? undefined : (fechaFinDate as Date | null),
             estado: autoEstado,
-          } as any,
+          } as Record<string, any>,
         });
 
-        if (trainerIdsResult.length) {
+        if ((trainerIdsResult as string[]).length) {
           await tx.session_trainers.createMany({
-            data: trainerIdsResult.map((trainerId) => ({
+            data: (trainerIdsResult as string[]).map((trainerId: string) => ({
               session_id: created.id,
               trainer_id: trainerId,
             })),
           });
         }
-
-        if (unidadIdsResult.length) {
+        if ((unidadIdsResult as string[]).length) {
           await tx.session_unidades.createMany({
-            data: unidadIdsResult.map((unidadId) => ({
+            data: (unidadIdsResult as string[]).map((unidadId: string) => ({
               session_id: created.id,
               unidad_id: unidadId,
             })),
@@ -1149,6 +919,7 @@ export const handler = async (event: any) => {
       return successResponse({ session: result }, 201);
     }
 
+    // Patch
     if (method === 'PATCH' && sessionIdFromPath) {
       const body = parseJson(event.body);
       const result = buildSessionPatch(body);
@@ -1167,37 +938,24 @@ export const handler = async (event: any) => {
           unidades: { select: { unidad_id: true } },
         },
       });
-
-      if (!stored) {
-        return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
-      }
+      if (!stored) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
       const storedRecord = stored as unknown as SessionRecord;
 
-      const fechaInicio =
-        data.fecha_inicio_utc === undefined
-          ? storedRecord.fecha_inicio_utc
-          : (data.fecha_inicio_utc as Date | null);
-      const fechaFin =
-        data.fecha_fin_utc === undefined
-          ? storedRecord.fecha_fin_utc
-          : (data.fecha_fin_utc as Date | null);
+      const fechaInicio = (data as any).fecha_inicio_utc === undefined ? storedRecord.fecha_inicio_utc : ((data as any).fecha_inicio_utc as Date | null);
+      const fechaFin = (data as any).fecha_fin_utc === undefined ? storedRecord.fecha_fin_utc : ((data as any).fecha_fin_utc as Date | null);
       const rangeError = ensureValidDateRange(fechaInicio, fechaFin);
       if (rangeError) return rangeError;
 
-      const nextTrainerIds =
-        trainerIds === undefined ? storedRecord.trainers.map((entry) => entry.trainer_id) : trainerIds;
-      const nextUnidadIds =
-        unidadIds === undefined ? storedRecord.unidades.map((entry) => entry.unidad_id) : unidadIds;
+      const nextTrainerIds = trainerIds === undefined ? storedRecord.trainers.map((e) => e.trainer_id) : trainerIds;
+      const nextUnidadIds = unidadIds === undefined ? storedRecord.unidades.map((e) => e.unidad_id) : unidadIds;
 
-      let nextSalaId = stored.sala_id;
+      let nextSalaId = (stored as any).sala_id as string | null;
       if (Object.prototype.hasOwnProperty.call(data, 'sala_id')) {
         const rawSala = (data as Record<string, any>).sala_id as any;
-        if (rawSala && typeof rawSala === 'object' && Object.prototype.hasOwnProperty.call(rawSala, 'set')) {
-          nextSalaId = (rawSala.set as string | null | undefined) ?? null;
-        } else {
-          nextSalaId = (rawSala as string | null | undefined) ?? null;
-        }
+        nextSalaId = rawSala && typeof rawSala === 'object' && Object.prototype.hasOwnProperty.call(rawSala, 'set')
+          ? ((rawSala.set as string | null | undefined) ?? null)
+          : ((rawSala as string | null | undefined) ?? null);
       }
 
       const storedEstado = toSessionEstado(storedRecord.estado);
@@ -1206,75 +964,62 @@ export const handler = async (event: any) => {
         fechaInicio,
         fechaFin,
         salaId: nextSalaId,
-        trainerIds: nextTrainerIds,
-        unidadIds: nextUnidadIds,
+        trainerIds: nextTrainerIds as string[],
+        unidadIds: nextUnidadIds as string[],
         dealSede: storedRecord.deal?.sede_label ?? null,
         dealPipeline: storedRecord.deal?.pipeline_id ?? null,
       });
 
       if (requestedEstado !== undefined) {
         const isCurrentManual = isManualSessionEstado(currentEstado);
-        const allowsBorradorToManual =
-          currentEstado === 'BORRADOR' && isBorradorTransitionEstado(requestedEstado);
-        const allowsManualToBorrador =
-          requestedEstado === 'BORRADOR' && isBorradorTransitionEstado(currentEstado);
+        const allowsBorradorToManual = currentEstado === 'BORRADOR' && isBorradorTransitionEstado(requestedEstado);
+        const allowsManualToBorrador = requestedEstado === 'BORRADOR' && isBorradorTransitionEstado(currentEstado);
 
         if (!isManualSessionEstado(requestedEstado) && !allowsManualToBorrador) {
           return errorResponse('VALIDATION_ERROR', 'Estado no editable', 400);
         }
         if (!isCurrentManual && !allowsBorradorToManual && autoEstado !== 'PLANIFICADA') {
-          return errorResponse(
-            'VALIDATION_ERROR',
-            'La sesión debe estar planificada para cambiar el estado',
-            400,
-          );
+          return errorResponse('VALIDATION_ERROR', 'La sesión debe estar planificada para cambiar el estado', 400);
         }
-        if (requestedEstado !== currentEstado) {
-          (data as Record<string, SessionEstado>).estado = requestedEstado;
-        }
+        if (requestedEstado !== currentEstado) (data as Record<string, SessionEstado>).estado = requestedEstado;
       } else if (!isManualSessionEstado(currentEstado) && currentEstado !== autoEstado) {
         (data as Record<string, SessionEstado>).estado = autoEstado;
       }
 
-      const updated = await prisma.$transaction(async (tx) => {
+      const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         await ensureResourcesAvailable(tx, {
           sessionId: sessionIdFromPath,
-          trainerIds: nextTrainerIds,
-          unidadIds: nextUnidadIds,
+          trainerIds: nextTrainerIds as string[],
+          unidadIds: nextUnidadIds as string[],
           salaId: nextSalaId,
           start: fechaInicio,
           end: fechaFin,
         });
 
-        const patch = await tx.sessions.update({
-          where: { id: sessionIdFromPath },
-          data,
-        });
+        const patch = await tx.sessions.update({ where: { id: sessionIdFromPath }, data });
 
         if (trainerIds !== undefined) {
           await tx.session_trainers.deleteMany({ where: { session_id: sessionIdFromPath } });
-          if (trainerIds.length) {
+          if ((trainerIds as string[]).length) {
             await tx.session_trainers.createMany({
-              data: trainerIds.map((trainerId) => ({
+              data: (trainerIds as string[]).map((trainerId: string) => ({
                 session_id: sessionIdFromPath,
                 trainer_id: trainerId,
               })),
             });
           }
         }
-
         if (unidadIds !== undefined) {
           await tx.session_unidades.deleteMany({ where: { session_id: sessionIdFromPath } });
-          if (unidadIds.length) {
+          if ((unidadIds as string[]).length) {
             await tx.session_unidades.createMany({
-              data: unidadIds.map((unidadId) => ({
+              data: (unidadIds as string[]).map((unidadId: string) => ({
                 session_id: sessionIdFromPath,
                 unidad_id: unidadId,
               })),
             });
           }
         }
-
         return patch;
       });
 
@@ -1286,20 +1031,18 @@ export const handler = async (event: any) => {
           unidades: { select: { unidad_id: true } },
         },
       });
-
       return successResponse({ session: normalizeSession(refreshed as unknown as SessionRecord) });
     }
 
+    // Delete
     if (method === 'DELETE' && sessionIdFromPath) {
       const existing = await prisma.sessions.findUnique({
         where: { id: sessionIdFromPath },
         select: { id: true, deal_product_id: true },
       });
-      if (!existing) {
-        return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
-      }
+      if (!existing) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         await tx.session_trainers.deleteMany({ where: { session_id: sessionIdFromPath } });
         await tx.session_unidades.deleteMany({ where: { session_id: sessionIdFromPath } });
         await tx.session_files.deleteMany({ where: { sesion_id: sessionIdFromPath } });
@@ -1312,9 +1055,7 @@ export const handler = async (event: any) => {
           where: { id: existing.deal_product_id },
           select: { id: true, name: true, code: true },
         });
-        if (product) {
-          await reindexSessionNames(tx, product.id, buildNombreBase(product.name, product.code));
-        }
+        if (product) await reindexSessionNames(tx, product.id, buildNombreBase(product.name, product.code));
       });
 
       return successResponse({});
@@ -1322,7 +1063,7 @@ export const handler = async (event: any) => {
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
   } catch (error) {
-    if (error && typeof error === 'object' && 'statusCode' in error) {
+    if (error && typeof error === 'object' && 'statusCode' in (error as any)) {
       return error as any;
     }
     const message = error instanceof Error ? error.message : 'Error inesperado';

@@ -1,32 +1,117 @@
-const ALLOWED_ORIGIN = process.env.REPORTS_ALLOWED_ORIGIN || 'https://www.gepservices.es';
+/* ---------- CORS ---------- */
+const ALLOWED_ORIGIN: string =
+  process.env.REPORTS_ALLOWED_ORIGIN || 'https://www.gepservices.es';
 
-const cors = {
+const cors: Record<string, string> = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization,content-type',
   'Access-Control-Expose-Headers': 'content-type',
 };
 
+/* ---------- Tipos ---------- */
+type Idioma3 = 'ES' | 'CA' | 'EN';
+
+type ChatRole = 'system' | 'user' | 'assistant';
+interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+interface CronoItem {
+  hora?: string;
+  texto?: string;
+}
+
+interface Escalas {
+  participacion?: number | string;
+  compromiso?: number | string;
+  superacion?: number | string;
+}
+
+interface Comentarios {
+  c11?: string;
+  c12?: string;
+  c13?: string;
+  c14?: string;
+  c15?: string;
+  c16?: string;
+  c17?: string;
+}
+
+interface PreventivoData {
+  trabajos?: string;
+  tareas?: string;
+  observaciones?: string;
+  incidencias?: string;
+}
+
+interface Datos {
+  cliente?: string;
+  sede?: string;
+  sesiones?: number | string;
+  duracion?: number | string;
+  desarrollo?: string;
+  cronologia?: CronoItem[];
+  escalas?: Escalas;
+  comentarios?: Comentarios;
+  formacionTitulo?: string;
+  contenidoTeorica?: string[];
+  contenidoPractica?: string[];
+  alumnos?: number | string;
+  fecha?: string;
+  tipo?: string;
+  preventivo?: PreventivoData;
+  contacto?: string;
+  comercial?: string;
+}
+
+interface Formador {
+  nombre?: string;
+  idioma?: string;
+}
+
+interface ChatCallOpts {
+  apiKey: string;
+  baseUrl?: string;
+  temperature?: number;
+  messages: ChatMessage[];
+}
+
+interface HandlerEvent {
+  httpMethod: string;
+  body?: string | null;
+}
+
+interface HandlerResponse {
+  statusCode: number;
+  headers: Record<string, string>;
+  body?: string;
+}
+
+/* ---------- Constantes ---------- */
 const MODEL = 'gpt-4o-mini';
 
-const sanitizeContent = (content = '') =>
+/* ---------- Utils de texto ---------- */
+const sanitizeContent = (content: string = ''): string =>
   (content || '')
     .replace(/^\s*```(?:html)?\s*/i, '')
     .replace(/\s*```\s*$/i, '')
     .trim();
 
-const compactText = (value) => {
+const compactText = (value: unknown): string => {
   if (value === null || value === undefined) return '';
   const str = typeof value === 'string' ? value : String(value);
   return str.replace(/\s+/g, ' ').trim();
 };
 
-const pickLabel = (idioma, es, ca, en) => {
-  if ((idioma || '').toUpperCase() === 'CA') return ca;
-  if ((idioma || '').toUpperCase() === 'EN') return en;
+const pickLabel = (idioma: string | undefined, es: string, ca: string, en: string): string => {
+  const code = (idioma || '').toUpperCase();
+  if (code === 'CA') return ca;
+  if (code === 'EN') return en;
   return es;
 };
 
-const ensureSection = (html, title) => {
+const ensureSection = (html: string, title: string): string => {
   const trimmed = sanitizeContent(html);
   if (!trimmed) return '';
   if (/<section[\s>]/i.test(trimmed)) return trimmed;
@@ -35,12 +120,18 @@ const ensureSection = (html, title) => {
   return `<section><h3>${title}</h3><p>${safe}</p></section>`;
 };
 
-const resolveOpenAIBase = (baseUrl) => {
+const resolveOpenAIBase = (baseUrl?: string): string => {
   const raw = baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
   return raw.replace(/\/+$/, '');
 };
 
-const callChatCompletion = async ({ apiKey, baseUrl, temperature, messages }) => {
+/* ---------- Llamada OpenAI ---------- */
+const callChatCompletion = async ({
+  apiKey,
+  baseUrl,
+  temperature,
+  messages,
+}: ChatCallOpts): Promise<string> => {
   const url = `${resolveOpenAIBase(baseUrl)}/chat/completions`;
   const resp = await fetch(url, {
     method: 'POST',
@@ -56,7 +147,8 @@ const callChatCompletion = async ({ apiKey, baseUrl, temperature, messages }) =>
   });
 
   const raw = await resp.text();
-  let data = null;
+  let data: any = null;
+
   if (raw) {
     try {
       data = JSON.parse(raw);
@@ -68,15 +160,16 @@ const callChatCompletion = async ({ apiKey, baseUrl, temperature, messages }) =>
   }
 
   if (!resp.ok) {
-    const message = data?.error?.message || raw || 'OpenAI error';
+    const message: string = data?.error?.message || raw || 'OpenAI error';
     throw new Error(message);
   }
 
   return sanitizeContent(data?.choices?.[0]?.message?.content || '');
 };
 
-const buildSimulacroSystem = (idioma) => {
-  const lang = (idioma || 'ES').toUpperCase();
+/* ---------- Prompts ---------- */
+const buildSimulacroSystem = (idioma: string | undefined): string => {
+  const lang = ((idioma || 'ES').toUpperCase() as Idioma3);
   if (lang === 'EN') {
     return 'You are a technical writer for GEP Group, expert in emergency drills. Reply in first person plural (we) with a formal PRL/PCI emergency tone. Respond only with HTML using <section>, <h3>, <h4>, <p>, <ul>, <li>. Never show numeric scores and never invent data.';
   }
@@ -117,10 +210,10 @@ const preventivoHeadings = {
     firma: 'Signature',
     anexos: 'Image annex',
   },
-};
+} as const;
 
-const buildPreventivoSystem = (idioma) => {
-  const lang = (idioma || 'ES').toUpperCase();
+const buildPreventivoSystem = (idioma: string | undefined): string => {
+  const lang = ((idioma || 'ES').toUpperCase() as Idioma3);
   if (lang === 'EN') {
     return [
       'You are a technical writer for GEP Group, specialised in preventive emergency drills.',
@@ -148,17 +241,30 @@ const buildPreventivoSystem = (idioma) => {
   ].join('\n');
 };
 
-async function generarHtmlSimulacro({ apiKey, baseUrl, idioma, datos, formador }) {
-  const lang = (idioma || 'ES').toUpperCase();
-  const safe = (value) => {
+/* ---------- Generadores ---------- */
+async function generarHtmlSimulacro({
+  apiKey,
+  baseUrl,
+  idioma,
+  datos,
+  formador,
+}: {
+  apiKey: string;
+  baseUrl?: string;
+  idioma?: string;
+  datos: Datos;
+  formador: Formador;
+}): Promise<string> {
+  const lang = ((idioma || 'ES').toUpperCase() as Idioma3);
+  const safe = (value: unknown): string => {
     const text = compactText(value);
     return text === '' ? '-' : text;
   };
 
-  const cronologiaArray = Array.isArray(datos?.cronologia) ? datos.cronologia : [];
+  const cronologiaArray: CronoItem[] = Array.isArray(datos?.cronologia) ? datos.cronologia! : [];
   const cronologiaJson = JSON.stringify(cronologiaArray, null, 2);
   const cronologiaListado = cronologiaArray
-    .map((c, idx) => {
+    .map((c: CronoItem, idx: number) => {
       const hora = safe(c?.hora);
       const texto = safe(c?.texto);
       return `${idx + 1}. ${hora} — ${texto}`;
@@ -209,7 +315,11 @@ async function generarHtmlSimulacro({ apiKey, baseUrl, idioma, datos, formador }
   const mejoraTitle = pickLabel(idioma, 'Líneas de mejora prioritarias', 'Línies de millora prioritàries', 'Priority improvement actions');
   const cierreTitle = pickLabel(idioma, 'Cierre de la auditoría', "Tancament de l'auditoria", 'Audit closing remarks');
 
-  const sections = [
+  const sections: Array<{
+    title: string;
+    temperature: number;
+    instructions: string;
+  }> = [
     {
       title: desarrolloTitle,
       temperature: 0.4,
@@ -292,21 +402,34 @@ async function generarHtmlSimulacro({ apiKey, baseUrl, idioma, datos, formador }
   return htmlSections.filter(Boolean).join('\n');
 }
 
-async function generarInformePreventivo({ apiKey, baseUrl, idioma, datos, formador }) {
-  const lang = (idioma || 'ES').toUpperCase();
+async function generarInformePreventivo({
+  apiKey,
+  baseUrl,
+  idioma,
+  datos,
+  formador,
+}: {
+  apiKey: string;
+  baseUrl?: string;
+  idioma?: string;
+  datos: Datos;
+  formador: Formador;
+}): Promise<string> {
+  const lang = ((idioma || 'ES').toUpperCase() as Idioma3);
   const headings = preventivoHeadings[lang] || preventivoHeadings.ES;
   const system = buildPreventivoSystem(lang);
 
-  const safe = (value) => {
+  const safe = (value: unknown): string => {
     if (value === null || value === undefined) return '-';
     const text = typeof value === 'string' ? value : String(value);
     const compact = text.replace(/\s+/g, ' ').trim();
     return compact || '-';
   };
 
-  const bloque = (titulo, contenido) => `${titulo} (original):\n${(contenido || '').trim() || '-'}`;
+  const bloque = (titulo: string, contenido?: string) =>
+    `${titulo} (original):\n${(contenido || '').trim() || '-'}`;
 
-  const prev = datos?.preventivo || {};
+  const prev: PreventivoData = datos?.preventivo || {};
 
   const contexto = [
     `Cliente: ${safe(datos?.cliente)}`,
@@ -355,11 +478,16 @@ ${contexto}
   });
 }
 
-// ───────── Utils mínimas (solo lo necesario) ─────────
-const normalize = (s = '') =>
-  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+/* ---------- Utils mínimas ---------- */
+const normalize = (s: string = ''): string =>
+  s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 
-const formatFechaDDMMYYYY = (iso) => {
+const formatFechaDDMMYYYY = (iso?: string): string => {
   if (!iso) return '';
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
   if (!m) return iso;
@@ -367,24 +495,31 @@ const formatFechaDDMMYYYY = (iso) => {
   return `${d}/${mo}/${y}`;
 };
 
-const esInstalacionGEPCO = (direccion = '') => {
+const esInstalacionGEPCO = (direccion: string = ''): boolean => {
   const n = normalize(direccion);
   const a = n.includes('primavera, 1') && n.includes('arganda del rey') && n.includes('madrid');
   const b = n.includes('moratin, 100') && n.includes('sabadell') && n.includes('barcelona');
   return a || b;
 };
 
-export async function handler(event) {
+/* ---------- Handler Netlify ---------- */
+export async function handler(event: HandlerEvent): Promise<HandlerResponse> {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors };
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers: cors, body: 'Method Not Allowed' };
+  if (event.httpMethod !== 'POST')
+    return { statusCode: 405, headers: cors, body: 'Method Not Allowed' };
 
   try {
-    const API_KEY = process.env.OPENAI_API_KEY;
-    const BASE_URL = process.env.OPENAI_BASE_URL;
+    const API_KEY = process.env.OPENAI_API_KEY as string | undefined;
+    const BASE_URL = process.env.OPENAI_BASE_URL as string | undefined;
     if (!API_KEY) throw new Error('Missing OPENAI_API_KEY');
 
-    const { formador, datos, previousHtml } = JSON.parse(event.body || '{}');
-    const idioma = (formador?.idioma || 'ES').toUpperCase();
+    const { formador, datos, previousHtml } = JSON.parse(event.body || '{}') as {
+      formador?: Formador;
+      datos?: Datos;
+      previousHtml?: string;
+    };
+
+    const idioma = ((formador?.idioma || 'ES').toUpperCase() as Idioma3);
     const tipo = datos?.tipo || 'formacion';
 
     const fechaFmt = formatFechaDDMMYYYY(datos?.fecha || '');
@@ -392,7 +527,13 @@ export async function handler(event) {
     const sedeEsGEPCO = esInstalacionGEPCO(sede);
 
     if (tipo === 'simulacro') {
-      const html = await generarHtmlSimulacro({ apiKey: API_KEY, baseUrl: BASE_URL, idioma, datos, formador });
+      const html = await generarHtmlSimulacro({
+        apiKey: API_KEY,
+        baseUrl: BASE_URL,
+        idioma,
+        datos: datos || {},
+        formador: formador || {},
+      });
       return {
         statusCode: 200,
         headers: { 'Content-Type': 'application/json', ...cors },
@@ -401,7 +542,13 @@ export async function handler(event) {
     }
 
     if (tipo === 'preventivo' || tipo === 'preventivo-ebro') {
-      const texto = await generarInformePreventivo({ apiKey: API_KEY, baseUrl: BASE_URL, idioma, datos, formador });
+      const texto = await generarInformePreventivo({
+        apiKey: API_KEY,
+        baseUrl: BASE_URL,
+        idioma,
+        datos: datos || {},
+        formador: formador || {},
+      });
       return {
         statusCode: 200,
         headers: { 'Content-Type': 'application/json', ...cors },
@@ -436,13 +583,15 @@ Comentarios:
 - Materiales: ${datos?.comentarios?.c17 || '-'}
 `.trim();
 
-    const system = (idioma === 'EN')
-      ? 'You are a technical writer. Write in first person as the trainer, formal and precise. Temperature 0.3. Never show numeric scores.'
-      : (idioma === 'CA')
+    const system =
+      idioma === 'EN'
+        ? 'You are a technical writer. Write in first person as the trainer, formal and precise. Temperature 0.3. Never show numeric scores.'
+        : idioma === 'CA'
         ? 'Ets un redactor tècnic. Escriu en primera persona com a formador, to formal i precís. Temperatura 0.3. No mostris puntuacions numèriques.'
         : 'Eres un redactor técnico. Escribe en primera persona como el formador, tono formal y preciso. Temperatura 0.3. No muestres puntuaciones numéricas.';
 
-    const borradorPrevio = typeof previousHtml === 'string' ? sanitizeContent(previousHtml) : '';
+    const borradorPrevio =
+      typeof previousHtml === 'string' ? sanitizeContent(previousHtml) : '';
 
     const prompt = `
 Redacta un INFORME TÉCNICO en primera persona (yo) basado en el contexto.
@@ -487,12 +636,13 @@ ${borradorPrevio}` : ''}
       headers: { 'Content-Type': 'application/json', ...cors },
       body: JSON.stringify({ html }),
     };
-  } catch (err) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error('[generateReport] error:', err);
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json', ...cors },
-      body: JSON.stringify({ error: err.message }),
+      body: JSON.stringify({ error: message }),
     };
   }
 }

@@ -1,6 +1,6 @@
 // backend/functions/rooms.ts
 import { randomUUID } from 'crypto';
-import { Prisma } from '@prisma/client';
+// import { Prisma } from '@prisma/client'; // ❌ ya no se usa en v5
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
@@ -156,7 +156,8 @@ export const handler = async (event: any) => {
         ? {
             name: {
               contains: search,
-              mode: Prisma.QueryMode.insensitive,
+              // En Prisma v5 usar literal en lugar de Prisma.QueryMode
+              mode: 'insensitive' as const,
             },
           }
         : undefined;

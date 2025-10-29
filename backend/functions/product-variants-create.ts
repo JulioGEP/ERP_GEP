@@ -1,4 +1,8 @@
-import { Prisma } from '@prisma/client';
+// backend/functions/product-variants-create.ts
+
+// ❌ quitamos Prisma porque solo lo usabas para Decimal
+// import { Prisma } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
@@ -23,7 +27,7 @@ type VariantRecord = {
   id_woo: bigint;
   name: string | null;
   status: string | null;
-  price: Prisma.Decimal | string | null;
+  price: Decimal | string | null; // ✅ Decimal correcto
   stock: number | null;
   stock_status: string | null;
   sede: string | null;
@@ -302,7 +306,6 @@ function ensureWooProductAttributesForCombos(
     for (const option of dateOptions) {
       if (!optionSet.has(option)) {
         attribute.options = [...(attribute.options ?? []), option];
-        optionSet.add(option);
         changed = true;
       }
     }
@@ -559,8 +562,15 @@ export const handler = async (event: any) => {
       select: { sede: true, date: true },
     });
 
-    const existingSet = new Set(existing.map((variant) => normalizeExistingKey(variant.sede, variant.date)));
-    const combosToCreate = combos.filter((combo) => !existingSet.has(normalizeExistingKey(combo.sede, combo.date.value)));
+    // ✅ Evita 'any' implícito en el map
+    const existingSet = new Set(
+      (existing as Array<{ sede: string | null; date: Date | string | null }>)
+        .map((variant) => normalizeExistingKey(variant.sede, variant.date))
+    );
+
+    const combosToCreate = combos.filter(
+      (combo) => !existingSet.has(normalizeExistingKey(combo.sede, combo.date.value))
+    );
 
     if (!combosToCreate.length) {
       return successResponse({ ok: true, created: [], skipped: combos.length, message: 'Todas las combinaciones ya existen.' });
@@ -673,7 +683,7 @@ export const handler = async (event: any) => {
         },
       });
 
-      createdVariants.push(record);
+      createdVariants.push(record as VariantRecord);
     }
 
     return successResponse({

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { Decimal, PrismaClientKnownRequestError, PrismaClientUnknownRequestError } from '@prisma/client/runtime/library';
 
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
@@ -16,7 +17,7 @@ type ProductDefaultsRecord = {
   default_variant_end?: Date | string | null;
   default_variant_stock_status?: string | null;
   default_variant_stock_quantity?: number | null;
-  default_variant_price?: Prisma.Decimal | string | null;
+  default_variant_price?: Decimal | string | null;
   hora_inicio?: Date | string | null;
   hora_fin?: Date | string | null;
 };
@@ -81,7 +82,7 @@ function parseDateInput(value: unknown): Date | null {
 function parseStockStatus(value: unknown): string | null {
   try {
     return mapApiStockStatusToDbValue(value as string | null | undefined);
-  } catch (error) {
+  } catch {
     throw new Error('INVALID_STOCK_STATUS');
   }
 }
@@ -97,7 +98,7 @@ function parseStockQuantity(value: unknown): number | null {
   return Math.max(0, Math.floor(parsed));
 }
 
-function parsePrice(value: unknown): Prisma.Decimal | null {
+function parsePrice(value: unknown): Decimal | null {
   if (value === null || value === undefined || value === '') {
     return null;
   }
@@ -105,7 +106,7 @@ function parsePrice(value: unknown): Prisma.Decimal | null {
   if (!Number.isFinite(normalized)) {
     throw new Error('INVALID_PRICE');
   }
-  return new Prisma.Decimal(normalized);
+  return new Decimal(normalized.toString());
 }
 
 function parseProductId(value: unknown): string {
@@ -142,19 +143,11 @@ function parseTimeInput(value: unknown): Date | null {
 }
 
 function isMissingVariantDateColumns(error: unknown): boolean {
-  const isKnownRequestError =
-    typeof Prisma.PrismaClientKnownRequestError === 'function' &&
-    error instanceof Prisma.PrismaClientKnownRequestError;
-
-  if (isKnownRequestError) {
+  if (error instanceof PrismaClientKnownRequestError) {
     return error.code === 'P2021';
   }
 
-  const isUnknownRequestError =
-    typeof Prisma.PrismaClientUnknownRequestError === 'function' &&
-    error instanceof Prisma.PrismaClientUnknownRequestError;
-
-  if (isUnknownRequestError) {
+  if (error instanceof PrismaClientUnknownRequestError) {
     return VARIANT_DATE_COLUMN_PATTERNS.some((pattern) => pattern.test((error as Error).message));
   }
 
@@ -165,7 +158,8 @@ function isMissingVariantDateColumns(error: unknown): boolean {
   return false;
 }
 
-function buildProductSelect(includeVariantDates: boolean): Prisma.productsSelect {
+// NOTA: evitamos tipos de Prisma generados aquí; devolvemos un objeto literal “select” válido
+function buildProductSelect(includeVariantDates: boolean) /* : any */ {
   if (includeVariantDates) {
     return {
       id: true,
@@ -176,7 +170,7 @@ function buildProductSelect(includeVariantDates: boolean): Prisma.productsSelect
       default_variant_price: true,
       hora_inicio: true,
       hora_fin: true,
-    } satisfies Prisma.productsSelect;
+    } as const;
   }
 
   return {
@@ -186,16 +180,16 @@ function buildProductSelect(includeVariantDates: boolean): Prisma.productsSelect
     default_variant_price: true,
     hora_inicio: true,
     hora_fin: true,
-  } satisfies Prisma.productsSelect;
+  } as const;
 }
 
 async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: string) {
   const includeVariantDates = variantDateColumnsSupported !== false;
 
   try {
-    const product = await prisma.products.findUnique({
+    const product = await prisma.product.findUnique({
       where: { id: productId },
-      select: buildProductSelect(includeVariantDates),
+      select: buildProductSelect(includeVariantDates) as any,
     });
 
     if (includeVariantDates && variantDateColumnsSupported !== false) {
@@ -211,9 +205,9 @@ async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: strin
     variantDateColumnsSupported = false;
     console.warn('[product-variant-settings] Variant date columns not available, falling back', { error });
 
-    return prisma.products.findUnique({
+    return prisma.product.findUnique({
       where: { id: productId },
-      select: buildProductSelect(false),
+      select: buildProductSelect(false) as any,
     });
   }
 }
@@ -232,10 +226,10 @@ function buildUpdateData(params: {
   endDate: Date | null;
   stockStatus: string | null;
   stockQuantity: number | null;
-  price: Prisma.Decimal | null;
+  price: Decimal | null;
   horaInicio: Date | null;
   horaFin: Date | null;
-}): Prisma.productsUpdateInput {
+}) /* : any */ {
   const {
     timestamp,
     includeVariantDates,
@@ -255,7 +249,7 @@ function buildUpdateData(params: {
     horaFin,
   } = params;
 
-  const data: Prisma.productsUpdateInput = { updated_at: timestamp };
+  const data: Record<string, unknown> = { updated_at: timestamp };
 
   if (includeVariantDates) {
     if (hasStartDate) {
@@ -276,10 +270,10 @@ function buildUpdateData(params: {
     data.default_variant_price = price;
   }
   if (hasHoraInicio) {
-    data.hora_inicio = (horaInicio ?? null) as Prisma.productsUpdateInput['hora_inicio'];
+    data.hora_inicio = horaInicio ?? null;
   }
   if (hasHoraFin) {
-    data.hora_fin = (horaFin ?? null) as Prisma.productsUpdateInput['hora_fin'];
+    data.hora_fin = horaFin ?? null;
   }
 
   return data;
@@ -304,7 +298,7 @@ export const handler = async (event: any) => {
       if (!product) {
         return errorResponse('NOT_FOUND', 'Producto no encontrado', 404);
       }
-      return successResponse({ ok: true, product: normalizeDefaults(product) });
+      return successResponse({ ok: true, product: normalizeDefaults(product as unknown as ProductDefaultsRecord) });
     }
 
     if (event.httpMethod !== 'PATCH') {
@@ -337,7 +331,7 @@ export const handler = async (event: any) => {
     let endDate: Date | null = null;
     let stockStatus: string | null = null;
     let stockQuantity: number | null = null;
-    let price: Prisma.Decimal | null = null;
+    let price: Decimal | null = null;
     let horaInicio: Date | null = null;
     let horaFin: Date | null = null;
 
@@ -417,17 +411,17 @@ export const handler = async (event: any) => {
     });
 
     try {
-      const updated = await prisma.products.update({
+      const updated = await prisma.product.update({
         where: { id: productId },
-        data,
-        select: buildProductSelect(includeVariantDates),
+        data: data as any,
+        select: buildProductSelect(includeVariantDates) as any,
       });
 
       if (includeVariantDates && variantDateColumnsSupported !== false) {
         variantDateColumnsSupported = true;
       }
 
-      return successResponse({ ok: true, product: normalizeDefaults(updated) });
+      return successResponse({ ok: true, product: normalizeDefaults(updated as unknown as ProductDefaultsRecord) });
     } catch (error) {
       if (!includeVariantDates || !isMissingVariantDateColumns(error)) {
         throw error;
@@ -455,13 +449,13 @@ export const handler = async (event: any) => {
         horaFin,
       });
 
-      const updated = await prisma.products.update({
+      const updated = await prisma.product.update({
         where: { id: productId },
-        data: fallbackData,
-        select: buildProductSelect(false),
+        data: fallbackData as any,
+        select: buildProductSelect(false) as any,
       });
 
-      return successResponse({ ok: true, product: normalizeDefaults(updated) });
+      return successResponse({ ok: true, product: normalizeDefaults(updated as unknown as ProductDefaultsRecord) });
     }
   } catch (error) {
     console.error('[product-variant-settings] handler error', error);

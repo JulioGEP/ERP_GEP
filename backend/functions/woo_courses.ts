@@ -1,4 +1,6 @@
+// backend/functions/woo_courses.ts
 import type { Prisma } from '@prisma/client';
+import type { Decimal } from '@prisma/client/runtime/library';
 
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
@@ -142,22 +144,16 @@ function ensureConfigured() {
 
 function resolveSyncConcurrency(): number {
   const raw = process.env.WOO_SYNC_CONCURRENCY;
-  if (!raw) {
-    return DEFAULT_SYNC_CONCURRENCY;
-  }
+  if (!raw) return DEFAULT_SYNC_CONCURRENCY;
 
   const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_SYNC_CONCURRENCY;
-  }
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_SYNC_CONCURRENCY;
 
   return Math.min(parsed, 6);
 }
 
 function removeImageFields(input: any): any {
-  if (Array.isArray(input)) {
-    return input.map((item) => removeImageFields(item));
-  }
+  if (Array.isArray(input)) return input.map((item) => removeImageFields(item));
 
   if (input && typeof input === 'object') {
     const result: Record<string, any> = {};
@@ -173,19 +169,16 @@ function removeImageFields(input: any): any {
 
 function pickFields(input: Record<string, any>, allowedKeys: Set<string>) {
   const output: Record<string, any> = {};
-
   for (const key of allowedKeys) {
     if (Object.prototype.hasOwnProperty.call(input, key)) {
       output[key] = input[key];
     }
   }
-
   return output;
 }
 
 function sanitizeVariationAttributes(attributes: unknown): VariationAttribute[] {
   if (!Array.isArray(attributes)) return [];
-
   return attributes
     .filter((attribute) => attribute && typeof attribute === 'object')
     .map((attribute) =>
@@ -196,7 +189,6 @@ function sanitizeVariationAttributes(attributes: unknown): VariationAttribute[] 
 
 function sanitizeVariationMetaData(meta: unknown): VariationMetaData[] {
   if (!Array.isArray(meta)) return [];
-
   return meta
     .filter((entry) => entry && typeof entry === 'object')
     .map((entry) => pickFields(entry as Record<string, any>, ESSENTIAL_VARIATION_META_FIELDS))
@@ -205,13 +197,10 @@ function sanitizeVariationMetaData(meta: unknown): VariationMetaData[] {
 
 function sanitizeVariation(input: unknown): SanitizedVariation {
   if (!input || typeof input !== 'object') return {};
-
   const variation = input as Record<string, any>;
   const sanitized = pickFields(variation, ESSENTIAL_VARIATION_FIELDS) as SanitizedVariation;
-
   sanitized.attributes = sanitizeVariationAttributes(variation.attributes);
   sanitized.meta_data = sanitizeVariationMetaData(variation.meta_data);
-
   return sanitized;
 }
 
@@ -306,10 +295,7 @@ function findAttributeOptionByKeywords(
 }
 
 function parseDateFromParts(year: number, month: number, day: number): Date | null {
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    return null;
-  }
-
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > 31) return null;
 
@@ -322,7 +308,6 @@ function parseDateFromParts(year: number, month: number, day: number): Date | nu
   ) {
     return null;
   }
-
   return date;
 }
 
@@ -346,9 +331,7 @@ function parseDateFromText(value: string | null): Date | null {
     const day = Number.parseInt(match[1], 10);
     const month = Number.parseInt(match[2], 10);
     let year = Number.parseInt(match[3], 10);
-    if (year < 100) {
-      year += year < 50 ? 2000 : 1900;
-    }
+    if (year < 100) year += year < 50 ? 2000 : 1900;
 
     const parsed = parseDateFromParts(year, month, day);
     if (parsed) return parsed;
@@ -425,12 +408,12 @@ function extractDateFromMetaData(meta: VariationMetaData[] | undefined): Date | 
   return null;
 }
 
-function decimalToNumber(value: Prisma.Decimal | number | null | undefined): number | null {
+function decimalToNumber(value: Decimal | number | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
 
   try {
-    return Number(value);
+    return Number(value as unknown as Decimal);
   } catch (error) {
     console.error('[woo_courses] invalid decimal value', { value, error });
     return null;
@@ -485,7 +468,7 @@ async function fetchWooVariations(productId: bigint): Promise<SanitizedVariation
 
   for (let page = 1; ; page += 1) {
     const url = buildWooUrl(resource, { per_page: perPage, page });
-    let response: any;
+    let response: Response;
 
     try {
       response = await fetch(url.toString(), {
@@ -525,9 +508,7 @@ async function fetchWooVariations(productId: bigint): Promise<SanitizedVariation
     const sanitized = sanitizeVariationList(rawArray);
     all.push(...sanitized);
 
-    if (!Array.isArray(data) || rawArray.length < perPage) {
-      break;
-    }
+    if (!Array.isArray(data) || rawArray.length < perPage) break;
   }
 
   return all;
@@ -537,7 +518,7 @@ type ExistingVariant = {
   id_woo: bigint;
   name: string | null;
   status: string | null;
-  price: Prisma.Decimal | null;
+  price: Decimal | number | null;
   stock: number | null;
   stock_status: string | null;
   sede: string | null;
@@ -624,8 +605,8 @@ async function syncProductVariations(
   const persistable = Array.from(uniqueVariations.values());
   const timestamp = new Date();
 
-  const transactionResult = await prisma.$transaction(async (tx) => {
-    const client = tx as any;
+  const transactionResult = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const client = tx;
 
     const existing = (await client.variants.findMany({
       where: { id_padre: product.id_woo },
@@ -639,7 +620,7 @@ async function syncProductVariations(
         sede: true,
         date: true,
       },
-    })) as ExistingVariant[];
+    })) as unknown as ExistingVariant[];
 
     const existingMap = new Map(existing.map((variant) => [variant.id_woo.toString(), variant]));
     const processedIds = new Set<string>();
@@ -884,7 +865,9 @@ async function syncAllProducts(): Promise<SyncResult> {
 
   for (let index = 0; index < productsRaw.length; index += concurrency) {
     const batch = productsRaw.slice(index, index + concurrency);
-    const results = await Promise.all(batch.map((product) => processProduct(product)));
+    const results = await Promise.all(
+      batch.map((product: (typeof productsRaw)[number]) => processProduct(product)),
+    );
 
     for (const result of results) {
       logs.push(...result.logs);
