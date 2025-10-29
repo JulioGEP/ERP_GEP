@@ -23,11 +23,6 @@ export const handler = createHttpHandler(async (request) => {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
   }
 
-  if (!process.env.DATABASE_URL) {
-    console.warn('[auth-session] DATABASE_URL no está configurada. Se devuelve sesión vacía');
-    return successResponse({ user: null, permissions: [] });
-  }
-
   const prisma = getPrisma();
   const sessionId = extractSessionIdFromRequest(request);
 
@@ -35,20 +30,14 @@ export const handler = createHttpHandler(async (request) => {
     return successResponse({ user: null, permissions: [] });
   }
 
-  let auth = null;
-
-  try {
-    auth = await findActiveSession(prisma, sessionId);
-  } catch (error) {
-    console.error('[auth-session] Error al recuperar la sesión', error);
-    return successResponse({ user: null, permissions: [] });
-  }
+  const auth = await findActiveSession(prisma, sessionId);
 
   if (!auth) {
-    const response = successResponse({ user: null, permissions: [] });
     return {
-      ...response,
-      headers: { ...response.headers, 'Set-Cookie': buildClearSessionCookie() },
+      ...successResponse({ user: null, permissions: [] }),
+      headers: {
+        'Set-Cookie': buildClearSessionCookie(),
+      },
     };
   }
 

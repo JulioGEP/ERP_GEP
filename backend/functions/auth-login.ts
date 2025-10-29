@@ -8,7 +8,6 @@ import {
   hashIp,
   normalizeEmail,
   resolveClientIp,
-  verifyPassword,
 } from './_shared/auth';
 
 function serializeUser(user: any) {
@@ -43,20 +42,11 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('INVALID_CREDENTIALS', 'Credenciales inválidas', 401);
   }
 
-  let match = verifyPassword(password, user.password_hash);
+  const [match] = await prisma.$queryRaw<{ valid: boolean }[]>`
+    SELECT crypt(${password}, ${user.password_hash}) = ${user.password_hash} AS valid
+  `;
 
-  if (!match && user.password_algo !== 'bcrypt' && user.password_hash) {
-    try {
-      const [legacyMatch] = await prisma.$queryRaw<{ valid: boolean }[]>`
-        SELECT crypt(${password}, ${user.password_hash}) = ${user.password_hash} AS valid
-      `;
-      match = Boolean(legacyMatch?.valid);
-    } catch (error) {
-      console.error('[auth-login] Failed to validate legacy password hash', error);
-    }
-  }
-
-  if (!match) {
+  if (!match?.valid) {
     return errorResponse('INVALID_CREDENTIALS', 'Credenciales inválidas', 401);
   }
 
