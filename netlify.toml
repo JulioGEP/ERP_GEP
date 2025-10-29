@@ -6,9 +6,6 @@
   NODE_VERSION = "22"
   NPM_FLAGS = "--no-audit --fund=false --progress=false --prefer-offline"
 
-[[plugins]]
-  package = "@netlify/plugin-functions-install-core"
-
 [functions]
   directory = "backend/functions"
   node_bundler = "esbuild"

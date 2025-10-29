@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from 'crypto';
-import bcrypt from 'bcryptjs';
 import type { PrismaClient } from '@prisma/client';
 import type { HttpRequest } from './http';
 import { errorResponse } from './response';
@@ -7,8 +6,6 @@ import { errorResponse } from './response';
 export const SESSION_COOKIE_NAME = 'erp_session';
 const SESSION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 horas
 const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
-const DEFAULT_BCRYPT_COST = 12;
-const BCRYPT_PREFIXES = ['$2a$', '$2b$', '$2y$'] as const;
 
 const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
@@ -110,28 +107,6 @@ export function normalizeEmail(input: unknown): string | null {
   if (typeof input !== 'string') return null;
   const normalized = input.trim().toLowerCase();
   return normalized.length ? normalized : null;
-}
-
-function isBcryptHash(hash: string | null | undefined): hash is string {
-  if (!hash) return false;
-  return BCRYPT_PREFIXES.some((prefix) => hash.startsWith(prefix));
-}
-
-export function hashPassword(password: string, cost: number = DEFAULT_BCRYPT_COST): string {
-  return bcrypt.hashSync(password, cost);
-}
-
-export function verifyPassword(password: string, hash: string | null | undefined): boolean {
-  if (!isBcryptHash(hash)) {
-    return false;
-  }
-
-  try {
-    return bcrypt.compareSync(password, hash);
-  } catch (error) {
-    console.error('[auth] Failed to verify password hash', error);
-    return false;
-  }
 }
 
 export function shouldUseSecureCookies(): boolean {

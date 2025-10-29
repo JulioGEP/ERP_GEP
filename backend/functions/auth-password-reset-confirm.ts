@@ -1,7 +1,6 @@
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
-import { hashPassword } from './_shared/auth';
 
 export const handler = createHttpHandler<any>(async (request) => {
   if (request.method !== 'POST') {
@@ -33,11 +32,11 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('INVALID_TOKEN', 'Token de restablecimiento inválido o caducado', 400);
   }
 
-  let hashedPassword: string;
-  try {
-    hashedPassword = hashPassword(newPassword);
-  } catch (error) {
-    console.error('[auth-password-reset-confirm] Failed to hash password', error);
+  const [generated] = await prisma.$queryRaw<{ hash: string }[]>`
+    SELECT crypt(${newPassword}, gen_salt('bf', 12)) AS hash
+  `;
+
+  if (!generated?.hash) {
     return errorResponse('HASH_FAILED', 'No se pudo generar la contraseña', 500);
   }
 
@@ -47,7 +46,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     prisma.users.update({
       where: { id: user.id },
       data: {
-        password_hash: hashedPassword,
+        password_hash: generated.hash,
         password_algo: 'bcrypt',
         password_updated_at: now,
         reset_used_at: now,
