@@ -127,7 +127,7 @@ async function ensureVariantResourcesAvailable(
   if (normalizedUnidadId) sessionConditions.push({ unidades: { some: { unidad_id: normalizedUnidadId } } });
 
   if (sessionConditions.length) {
-    const sessions = await prisma.sessions.findMany({
+    const sessions = await prisma.sesiones.findMany({
       where: { OR: sessionConditions as any },
       select: { fecha_inicio_utc: true, fecha_fin_utc: true },
     });

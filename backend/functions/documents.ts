@@ -252,7 +252,7 @@ export const handler = async (event: any) => {
     const currentSessionDriveUrl = normalizeDriveUrl(resolvedSession.drive_url ?? null);
     if (sessionFolderLink && sessionFolderLink !== currentSessionDriveUrl) {
       try {
-        await prisma.sessions.update({
+        await prisma.sesiones.update({
           where: { id: resolvedSession.id },
           data: { drive_url: sessionFolderLink },
         });

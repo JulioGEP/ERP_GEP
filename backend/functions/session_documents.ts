@@ -142,7 +142,7 @@ export const handler = async (event: any) => {
       const session = context.session!;
       const sessionDriveUrl = normalizeDriveUrl(session?.drive_url ?? null);
 
-      const files = await prisma.session_files.findMany({
+      const files = await prisma.sesion_files.findMany({
         where: { deal_id: dealId, sesion_id: sessionId },
         orderBy: { added_at: 'desc' },
       });
@@ -297,7 +297,7 @@ export const handler = async (event: any) => {
         const folderLink = normalizeDriveUrl(uploadResult.sessionFolderWebViewLink ?? null);
         if (folderLink && folderLink !== sessionDriveUrl) {
           try {
-            await prisma.sessions.update({
+            await prisma.sesiones.update({
               where: { id: sessionId },
               data: { drive_url: folderLink },
             });
@@ -315,7 +315,7 @@ export const handler = async (event: any) => {
         }
 
         const id = randomUUID();
-        const created = await prisma.session_files.create({
+        const created = await prisma.sesion_files.create({
           data: {
             id,
             deal_id: dealId,
@@ -366,12 +366,12 @@ export const handler = async (event: any) => {
         false,
       );
 
-      const existing = await prisma.session_files.findUnique({ where: { id: docId } });
+      const existing = await prisma.sesion_files.findUnique({ where: { id: docId } });
       if (!existing || existing.deal_id !== dealId || existing.sesion_id !== sessionId) {
         return errorResponse('NOT_FOUND', 'Documento no encontrado', 404);
       }
 
-      const updated = await prisma.session_files.update({
+      const updated = await prisma.sesion_files.update({
         where: { id: docId },
         data: {
           compartir_formador: compartirFormador,
@@ -410,7 +410,7 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'sessionId inválido (UUID)', 400);
       }
 
-      const existing = await prisma.session_files.findUnique({ where: { id: docId } });
+      const existing = await prisma.sesion_files.findUnique({ where: { id: docId } });
       if (!existing || existing.deal_id !== dealId || existing.sesion_id !== sessionId) {
         return errorResponse('NOT_FOUND', 'Documento no encontrado', 404);
       }
@@ -426,7 +426,7 @@ export const handler = async (event: any) => {
       const sessionNumber = await resolveSessionNumber(prisma, session);
       const sessionName = toStringOrNull(session?.nombre_cache) ?? `Sesión ${sessionNumber}`;
 
-      const remainingCount = await prisma.session_files.count({
+      const remainingCount = await prisma.sesion_files.count({
         where: {
           deal_id: dealId,
           sesion_id: sessionId,
@@ -451,7 +451,7 @@ export const handler = async (event: any) => {
         return errorResponse('UPLOAD_ERROR', message, 502);
       }
 
-      await prisma.session_files.delete({ where: { id: docId } });
+      await prisma.sesion_files.delete({ where: { id: docId } });
 
       return successResponse({ ok: true });
     }

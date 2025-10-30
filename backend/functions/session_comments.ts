@@ -87,7 +87,7 @@ export const handler = async (event: any) => {
       headerValue(event, 'X-User-Name')?.trim() || headerValue(event, 'X-User-Id')?.trim() || null;
 
     if (method === 'GET' && !commentId) {
-      const session = await prisma.sessions.findUnique({
+      const session = await prisma.sesiones.findUnique({
         where: { id: sessionIdStr },
         select: { id: true },
       });
@@ -106,7 +106,7 @@ export const handler = async (event: any) => {
     if (method === 'POST' && !commentId) {
       if (!event.body) return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
 
-      const session = await prisma.sessions.findUnique({
+      const session = await prisma.sesiones.findUnique({
         where: { id: sessionIdStr },
         select: { id: true, deal_id: true },
       });

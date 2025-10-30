@@ -200,7 +200,7 @@ async function syncFormacionAbiertaSessionsAndStudents(
       throw err;
     }
 
-    const sessions = await tx.sessions.findMany({
+    const sessions = await tx.sesiones.findMany({
       where: { deal_id: dealId },
       orderBy: [{ fecha_inicio_utc: "asc" }, { created_at: "asc" }, { id: "asc" }],
       select: {
@@ -1119,7 +1119,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
         prisma.deal_products.deleteMany({ where: { deal_id: id } }),
         prisma.deal_notes.deleteMany({ where: { deal_id: id } }),
         prisma.deal_files.deleteMany({ where: { deal_id: id } }),
-        prisma.sessions.deleteMany({ where: { deal_id: id } }),
+        prisma.sesiones.deleteMany({ where: { deal_id: id } }),
         prisma.deals.delete({ where: { deal_id: id } }),
       ];
 

@@ -174,7 +174,7 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
       }
 
-      const session = await prisma.sessions.findUnique({
+      const session = await prisma.sesiones.findUnique({
         where: { id: sessionId },
         select: { id: true, deal_id: true },
       });
@@ -217,7 +217,7 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
       }
 
-      const session = await prisma.sessions.findUnique({
+      const session = await prisma.sesiones.findUnique({
         where: { id: sessionId },
         select: { id: true, deal_id: true },
       });
@@ -283,7 +283,7 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
       }
 
-      const session = await prisma.sessions.findUnique({
+      const session = await prisma.sesiones.findUnique({
         where: { id: sessionId },
         select: { id: true, deal_id: true },
       });

@@ -39,18 +39,18 @@ export async function reindexSessionNames(
   baseName: string,
 ) {
   const base = baseName.trim().length ? baseName.trim() : 'Sesión';
-  const sessions: { id: string; nombre_cache: string | null }[] = await tx.sessions.findMany({
+  const sessions: { id: string; nombre_cache: string | null }[] = await tx.sesiones.findMany({
     where: { deal_product_id: dealProductId },
     orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
     select: { id: true, nombre_cache: true },
   });
 
-  const updates: Array<ReturnType<typeof tx.sessions.update>> = [];
+  const updates: Array<ReturnType<typeof tx.sesiones.update>> = [];
   sessions.forEach((session: { id: string; nombre_cache: string | null }, index: number) => {
     const expected = `${base} #${index + 1}`;
     if (session.nombre_cache === expected) return;
     updates.push(
-      tx.sessions.update({
+      tx.sesiones.update({
         where: { id: session.id },
         data: { nombre_cache: expected },
       }),
@@ -85,7 +85,7 @@ async function syncSessionsForProduct(
     : toNonNegativeInt(product.quantity, 0);
   const baseName = buildNombreBase(product.name, product.code);
 
-  const existing = await tx.sessions.findMany({
+  const existing = await tx.sesiones.findMany({
     where: { deal_product_id: product.id },
     orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
     select: { id: true },
@@ -95,7 +95,7 @@ async function syncSessionsForProduct(
   if (existing.length > targetQuantity) {
     const toDelete = existing.slice(targetQuantity);
     if (toDelete.length) {
-      const result = await tx.sessions.deleteMany({
+      const result = await tx.sesiones.deleteMany({
         where: { id: { in: toDelete.map(({ id }: { id: string }) => id) } },
       });
       deleted += result.count;
@@ -106,7 +106,7 @@ async function syncSessionsForProduct(
   if (existing.length < targetQuantity) {
     const totalToCreate = targetQuantity - existing.length;
     for (let index = 0; index < totalToCreate; index += 1) {
-      await tx.sessions.create({
+      await tx.sesiones.create({
         data: {
           id: randomUUID(),
           deal_id: dealId,
@@ -150,11 +150,11 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
   const applicableIds = applicableProducts.map((product: DealProductRecord) => product.id);
 
   if (applicableIds.length === 0) {
-    const result = await tx.sessions.deleteMany({ where: { deal_id: dealId } });
+    const result = await tx.sesiones.deleteMany({ where: { deal_id: dealId } });
     return { count: 0, created: 0, deleted: result.count } as const;
   }
 
-  const pruneResult = await tx.sessions.deleteMany({
+  const pruneResult = await tx.sesiones.deleteMany({
     where: {
       deal_id: dealId,
       NOT: { deal_product_id: { in: applicableIds } },
@@ -171,6 +171,6 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
   const deleted =
     pruneResult.count + syncResults.reduce((sum, result) => sum + result.deleted, 0);
 
-  const count = await tx.sessions.count({ where: { deal_id: deal.deal_id } });
+  const count = await tx.sesiones.count({ where: { deal_id: deal.deal_id } });
   return { count, created, deleted } as const;
 }
