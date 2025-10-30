@@ -471,6 +471,7 @@ function mapStudentForApi(student: any) {
   const nombre = typeof student?.nombre === "string" ? student.nombre : null;
   const apellido = typeof student?.apellido === "string" ? student.apellido : null;
   const dni = typeof student?.dni === "string" ? student.dni : null;
+  const certificado = Boolean((student as any)?.certificado);
 
   if (!id && !nombre && !apellido && !dni) {
     return null;
@@ -481,6 +482,7 @@ function mapStudentForApi(student: any) {
     nombre,
     apellido,
     dni,
+    certificado,
   };
 }
 
@@ -1354,7 +1356,14 @@ type DealsFindManyArgs = _DealsFindManyArg;
             orderBy: { created_at: "asc" },
           },
           alumnos: {
-            select: { id: true, nombre: true, apellido: true, dni: true },
+            where: { certificado: false },
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              dni: true,
+              certificado: true,
+            },
             orderBy: { created_at: "asc" },
           },
           _count: {
