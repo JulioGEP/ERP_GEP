@@ -100,6 +100,8 @@ type SessionRecord = {
   unidades: SessionUnitLink[];
   sesion_unidades?: SessionUnitLink[];
   deal?: { sede_label: string | null; pipeline_id: string | null } | null;
+  deal_product?: { id?: string | null; name?: string | null; code?: string | null } | null;
+  sala?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
 };
 
 function normalizeSessionUnitLink(link: any): SessionUnitLink {
@@ -131,6 +133,15 @@ function ensureSessionRelations(row: any): SessionRecord {
     sesion_trainers?: SessionTrainerLink[];
     sesion_unidades?: SessionUnitLink[];
   };
+  if (record.deal == null && (record as any).deals !== undefined) {
+    (record as any).deal = (record as any).deals;
+  }
+  if ((record as any).deal_product == null && (record as any).deal_products !== undefined) {
+    (record as any).deal_product = (record as any).deal_products;
+  }
+  if ((record as any).sala == null && (record as any).salas !== undefined) {
+    (record as any).sala = (record as any).salas;
+  }
   record.trainers = Array.isArray(record.trainers)
     ? record.trainers
     : Array.isArray(record.sesion_trainers)
@@ -520,7 +531,7 @@ async function fetchSessionsByProduct(
       include: {
         sesion_trainers: { select: { trainer_id: true } },
         sesion_unidades: { select: { unidad_movil_id: true } },
-        deal: { select: { sede_label: true, pipeline_id: true } },
+        deals: { select: { sede_label: true, pipeline_id: true } },
       },
     }),
   ]);
@@ -741,7 +752,7 @@ export const handler = async (event: any) => {
           ],
         },
         include: {
-          deal: {
+          deals: {
             select: {
               deal_id: true,
               title: true,
@@ -754,8 +765,8 @@ export const handler = async (event: any) => {
               transporte: true,
             },
           },
-          deal_product: { select: { id: true, name: true, code: true } },
-          sala: { select: { sala_id: true, name: true, sede: true } },
+          deal_products: { select: { id: true, name: true, code: true } },
+          salas: { select: { sala_id: true, name: true, sede: true } },
           sesion_trainers: {
             select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
           },
@@ -990,7 +1001,7 @@ export const handler = async (event: any) => {
         const storedRaw = await tx.sesiones.findUnique({
           where: { id: created.id },
           include: {
-            deal: { select: { sede_label: true, pipeline_id: true } },
+            deals: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
             sesion_unidades: { select: { unidad_movil_id: true } },
           },
@@ -1016,7 +1027,7 @@ export const handler = async (event: any) => {
       const storedRaw = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deal: { select: { sede_label: true, pipeline_id: true } },
+          deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
         },
@@ -1108,7 +1119,7 @@ export const handler = async (event: any) => {
       const refreshedRaw = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deal: { select: { sede_label: true, pipeline_id: true } },
+          deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
         },
