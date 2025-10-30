@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Alert, Button, Card, Col, Form, Row, Spinner } from 'react-bootstrap';
+import { Alert, Button, Card, Col, Form, InputGroup, Row, Spinner } from 'react-bootstrap';
 import { changePassword } from '../../api/auth';
 import { ApiError } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -12,6 +12,9 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () => changePassword(currentPassword, newPassword),
@@ -100,29 +103,49 @@ export default function ProfilePage() {
               <Col xs={12} md={6}>
                 <Form.Group controlId="profileCurrentPassword">
                   <Form.Label>Contraseña actual</Form.Label>
-                  <Form.Control
-                    type="password"
-                    value={currentPassword}
-                    onChange={(event) => setCurrentPassword(event.currentTarget.value)}
-                    required
-                    autoComplete="current-password"
-                    disabled={mutation.isPending}
-                  />
+                  <InputGroup>
+                    <Form.Control
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      value={currentPassword}
+                      onChange={(event) => setCurrentPassword(event.currentTarget.value)}
+                      required
+                      autoComplete="current-password"
+                      disabled={mutation.isPending}
+                    />
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() => setShowCurrentPassword((prev) => !prev)}
+                      type="button"
+                      disabled={mutation.isPending}
+                    >
+                      {showCurrentPassword ? 'Ocultar' : 'Mostrar'}
+                    </Button>
+                  </InputGroup>
                 </Form.Group>
               </Col>
               <Col xs={12} md={6}>
                 <Form.Group controlId="profileNewPassword">
                   <Form.Label>Nueva contraseña</Form.Label>
-                  <Form.Control
-                    type="password"
-                    value={newPassword}
-                    onChange={(event) => setNewPassword(event.currentTarget.value)}
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    disabled={mutation.isPending}
-                    isInvalid={newPassword.length > 0 && !passwordLengthValid}
-                  />
+                  <InputGroup hasValidation>
+                    <Form.Control
+                      type={showNewPassword ? 'text' : 'password'}
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.currentTarget.value)}
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      disabled={mutation.isPending}
+                      isInvalid={newPassword.length > 0 && !passwordLengthValid}
+                    />
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() => setShowNewPassword((prev) => !prev)}
+                      type="button"
+                      disabled={mutation.isPending}
+                    >
+                      {showNewPassword ? 'Ocultar' : 'Mostrar'}
+                    </Button>
+                  </InputGroup>
                   <Form.Control.Feedback type="invalid">
                     Debe tener al menos 8 caracteres.
                   </Form.Control.Feedback>
@@ -131,16 +154,26 @@ export default function ProfilePage() {
               <Col xs={12} md={6}>
                 <Form.Group controlId="profileConfirmPassword">
                   <Form.Label>Repetir nueva contraseña</Form.Label>
-                  <Form.Control
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.currentTarget.value)}
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    disabled={mutation.isPending}
-                    isInvalid={confirmPassword.length > 0 && !passwordsMatch}
-                  />
+                  <InputGroup hasValidation>
+                    <Form.Control
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.currentTarget.value)}
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      disabled={mutation.isPending}
+                      isInvalid={confirmPassword.length > 0 && !passwordsMatch}
+                    />
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      type="button"
+                      disabled={mutation.isPending}
+                    >
+                      {showConfirmPassword ? 'Ocultar' : 'Mostrar'}
+                    </Button>
+                  </InputGroup>
                   <Form.Control.Feedback type="invalid">
                     Las contraseñas no coinciden.
                   </Form.Control.Feedback>

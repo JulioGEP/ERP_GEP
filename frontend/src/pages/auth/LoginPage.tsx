@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Container, Form, Spinner } from 'react-bootstrap';
+import { Button, Card, Container, Form, InputGroup, Spinner } from 'react-bootstrap';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ApiError, isApiError } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
   // Si ya hay sesión, redirige a home para evitar volver a loguear
@@ -90,13 +91,22 @@ export default function LoginPage() {
 
               <Form.Group className="mb-3" controlId="loginPassword">
                 <Form.Label>Contraseña</Form.Label>
-                <Form.Control
-                  type="password"
-                  placeholder="********"
-                  value={password}
-                  onChange={(e) => setPassword(e.currentTarget.value)}
-                  required
-                />
+                <InputGroup>
+                  <Form.Control
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="********"
+                    value={password}
+                    onChange={(e) => setPassword(e.currentTarget.value)}
+                    required
+                  />
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    type="button"
+                  >
+                    {showPassword ? 'Ocultar' : 'Mostrar'}
+                  </Button>
+                </InputGroup>
               </Form.Group>
 
               {errorText && (
