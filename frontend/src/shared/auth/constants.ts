@@ -2,25 +2,28 @@ export const SESSION_COOKIE_NAME = 'erp_session';
 
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
-  Comercial: ['/presupuestos/sinplanificar', '/presupuestos/*'],
+  Comercial: ['/perfil', '/presupuestos/sinplanificar', '/presupuestos/*'],
   Administracion: [
+    '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/certificados',
     '/certificados/*',
   ],
   Logistica: [
+    '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/recursos/unidades_moviles',
     '/recursos/salas',
   ],
   People: [
+    '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/recursos/formadores_bomberos',
   ],
-  Formador: [],
+  Formador: ['/perfil'],
 };
 
 export const DEFAULT_ROUTE_ORDER = [

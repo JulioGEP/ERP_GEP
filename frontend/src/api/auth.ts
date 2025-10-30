@@ -60,3 +60,17 @@ export async function confirmPasswordReset(
     body: JSON.stringify({ token, new_password: newPassword }),
   });
 }
+
+export type ChangePasswordResponse = {
+  message: string;
+};
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<ChangePasswordResponse> {
+  return requestJson<ChangePasswordResponse>('/auth-password-change', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}

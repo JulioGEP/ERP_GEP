@@ -10,25 +10,28 @@ const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
 // Exportado por si otros módulos necesitan el mapping
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
-  Comercial: ['/presupuestos/sinplanificar', '/presupuestos/*'],
+  Comercial: ['/perfil', '/presupuestos/sinplanificar', '/presupuestos/*'],
   Administracion: [
+    '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/certificados',
     '/certificados/*',
   ],
   Logistica: [
+    '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/recursos/unidades_moviles',
     '/recursos/salas',
   ],
   People: [
+    '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/recursos/formadores_bomberos',
   ],
-  Formador: [],
+  Formador: ['/perfil'],
 };
 
 const ROLE_LABEL_TO_STORAGE_ENTRIES = [
@@ -161,6 +164,9 @@ export function computeDefaultPath(permissions: readonly string[]): string {
     if (hasPermission(route, permissions)) {
       return route;
     }
+  }
+  if (hasPermission('/perfil', permissions)) {
+    return '/perfil';
   }
   return '/';
 }

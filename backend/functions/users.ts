@@ -1,4 +1,5 @@
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import * as bcrypt from 'bcryptjs';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
@@ -11,6 +12,8 @@ import {
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
+const DEFAULT_PASSWORD = '123456';
+const BCRYPT_SALT_ROUNDS = 10;
 
 function serializeUser(user: any) {
   return {
@@ -123,6 +126,9 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
   }
 
   try {
+    const now = new Date();
+    const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
+
     const user = await prisma.users.create({
       data: {
         first_name: firstName,
@@ -130,6 +136,9 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
         email,
         role,
         active,
+        password_hash: passwordHash,
+        password_algo: 'bcrypt',
+        password_updated_at: now,
       },
     });
 

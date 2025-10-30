@@ -32,6 +32,7 @@ const InformesRecursoPreventivoEbroPage = lazy(
   () => import('../pages/informes/RecursoPreventivoEbroReportPage'),
 );
 const UsersPage = lazy(() => import('../pages/usuarios/UsersPage'));
+const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 
 type AppRouterProps = {
@@ -217,6 +218,8 @@ export function AppRouter({
           path="/usuarios"
           element={<GuardedRoute path="/usuarios" element={<UsersPage {...usersPageProps} />} />}
         />
+
+        <Route path="/perfil" element={<GuardedRoute path="/perfil" element={<ProfilePage />} />} />
 
         <Route path="*" element={<Navigate to={defaultRedirectPath} replace />} />
       </Routes>

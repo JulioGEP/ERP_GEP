@@ -264,6 +264,7 @@ export default function AuthenticatedApp() {
         if (hasPermission(child.path)) return child.path;
       }
     }
+    if (hasPermission('/perfil')) return '/perfil';
     // Fallback configurable
     if (hasPermission(DEFAULT_REDIRECT_PATH)) return DEFAULT_REDIRECT_PATH;
     // Último recurso: primer legacy conocido o raíz
@@ -301,6 +302,7 @@ export default function AuthenticatedApp() {
     for (const legacy of LEGACY_APP_PATHS) {
       paths.add(legacy);
     }
+    paths.add('/perfil');
     return paths;
   }, [hasPermission, permissions]);
 
@@ -892,7 +894,10 @@ export default function AuthenticatedApp() {
             )}
             {user && (
               <NavDropdown align="end" title={<span>{userDisplayName || 'Cuenta'}</span>} id="nav-user">
-                <NavDropdown.Header>{user.email}</NavDropdown.Header>
+                <NavDropdown.Item as={NavLink} to="/perfil">
+                  Mi perfil
+                </NavDropdown.Item>
+                <NavDropdown.Divider />
                 <NavDropdown.Item onClick={handleLogout}>Cerrar sesión</NavDropdown.Item>
               </NavDropdown>
             )}
