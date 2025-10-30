@@ -531,7 +531,7 @@ async function fetchSessionsByProduct(
       include: {
         sesion_trainers: { select: { trainer_id: true } },
         sesion_unidades: { select: { unidad_movil_id: true } },
-        deals: { select: { sede_label: true, pipeline_id: true } },
+        deal: { select: { sede_label: true, pipeline_id: true } },
       },
     }),
   ]);
@@ -752,7 +752,7 @@ export const handler = async (event: any) => {
           ],
         },
         include: {
-          deals: {
+          deal: {
             select: {
               deal_id: true,
               title: true,
@@ -765,8 +765,8 @@ export const handler = async (event: any) => {
               transporte: true,
             },
           },
-          deal_products: { select: { id: true, name: true, code: true } },
-          salas: { select: { sala_id: true, name: true, sede: true } },
+          deal_product: { select: { id: true, name: true, code: true } },
+          sala: { select: { sala_id: true, name: true, sede: true } },
           sesion_trainers: {
             select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
           },
@@ -1001,7 +1001,7 @@ export const handler = async (event: any) => {
         const storedRaw = await tx.sesiones.findUnique({
           where: { id: created.id },
           include: {
-            deals: { select: { sede_label: true, pipeline_id: true } },
+            deal: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
             sesion_unidades: { select: { unidad_movil_id: true } },
           },
@@ -1027,7 +1027,7 @@ export const handler = async (event: any) => {
       const storedRaw = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deals: { select: { sede_label: true, pipeline_id: true } },
+          deal: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
         },
@@ -1119,7 +1119,7 @@ export const handler = async (event: any) => {
       const refreshedRaw = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deals: { select: { sede_label: true, pipeline_id: true } },
+          deal: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
         },
