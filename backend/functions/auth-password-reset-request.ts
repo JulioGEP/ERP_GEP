@@ -31,7 +31,9 @@ export const handler = createHttpHandler<any>(async (request) => {
       return genericOk();
     }
 
-    const user = await prisma.users.findUnique({ where: { email } });
+    const user = await prisma.users.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+    });
 
     if (!user || !user.active) {
       // Usuario inexistente o inactivo → misma respuesta genérica
