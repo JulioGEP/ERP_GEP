@@ -219,8 +219,12 @@ export async function requireAuth(
   }
 
   if (options?.requireRoles && options.requireRoles.length) {
-    const role = result.user.role?.trim();
-    if (!role || !options.requireRoles.includes(role)) {
+    const role = result.user.role?.trim().toLowerCase();
+    const allowedRoles = options.requireRoles
+      .map((value) => value.trim().toLowerCase())
+      .filter((value) => value.length > 0);
+
+    if (!role || !allowedRoles.includes(role)) {
       return { error: errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403) };
     }
   }
