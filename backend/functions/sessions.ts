@@ -189,7 +189,7 @@ async function applyAutomaticSessionState(
     if (session.estado !== autoEstado) {
       session.estado = autoEstado;
       updates.push(
-        tx.sessions.update({
+        tx.sesiones.update({
           where: { id: session.id },
           data: { estado: autoEstado } as Record<string, any>,
         }),
@@ -404,7 +404,7 @@ async function ensureResourcesAvailable(
   }
   if (!resourceConditions.length) return;
 
-  const sessions = await tx.sessions.findMany({
+  const sessions = await tx.sesiones.findMany({
     where: { ...(sessionId ? { id: { not: sessionId } } : {}), OR: resourceConditions },
     select: {
       id: true,
@@ -439,8 +439,8 @@ async function fetchSessionsByProduct(
   limit: number,
 ) {
   const [total, rows] = await Promise.all([
-    prisma.sessions.count({ where: { deal_id: dealId, deal_product_id: productId } }),
-    prisma.sessions.findMany({
+    prisma.sesiones.count({ where: { deal_id: dealId, deal_product_id: productId } }),
+    prisma.sesiones.findMany({
       where: { deal_id: dealId, deal_product_id: productId },
       orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
       skip: (page - 1) * limit,
@@ -500,7 +500,7 @@ export const handler = async (event: any) => {
       const excludeSessionId = toTrimmed(event.queryStringParameters?.excludeSessionId);
       const excludeVariantId = toTrimmed(event.queryStringParameters?.excludeVariantId);
 
-      const sessions = await prisma.sessions.findMany({
+      const sessions = await prisma.sesiones.findMany({
         where: {
           ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
           OR: [{ sala_id: { not: null } }, { trainers: { some: {} } }, { unidades: { some: {} } }],
@@ -583,7 +583,7 @@ export const handler = async (event: any) => {
       const dealId = toTrimmed(event.queryStringParameters?.dealId);
       if (!dealId) return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
 
-      const sessions = await prisma.sessions.findMany({
+      const sessions = await prisma.sesiones.findMany({
         where: { deal_id: dealId },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
         select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, sala: { select: { sala_id: true, name: true } } },
@@ -637,7 +637,7 @@ export const handler = async (event: any) => {
         estadoFilters = values.length ? values : null;
       }
 
-      const sessions = await prisma.sessions.findMany({
+      const sessions = await prisma.sesiones.findMany({
         where: {
           fecha_inicio_utc: { not: null },
           fecha_fin_utc: { not: null },
@@ -751,12 +751,12 @@ export const handler = async (event: any) => {
 
     // Counts for a single session
     if (method === 'GET' && isCountsRequest && sessionIdFromPath) {
-      const existing = await prisma.sessions.findUnique({ where: { id: sessionIdFromPath }, select: { id: true } });
+      const existing = await prisma.sesiones.findUnique({ where: { id: sessionIdFromPath }, select: { id: true } });
       if (!existing) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
       const [comentarios, documentos, alumnos, tokens] = await prisma.$transaction([
         prisma.sesiones_comentarios.count({ where: { sesion_id: sessionIdFromPath } }),
-        prisma.session_files.count({ where: { sesion_id: sessionIdFromPath } }),
+        prisma.sesion_files.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.alumnos.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.tokens.count({ where: { sesion_id: sessionIdFromPath, active: true } }),
       ]);
@@ -871,7 +871,7 @@ export const handler = async (event: any) => {
           dealPipeline: deal.pipeline_id ?? null,
         });
 
-        const created = await tx.sessions.create({
+        const created = await tx.sesiones.create({
           data: {
             id: randomUUID(),
             deal_id: deal.deal_id,
@@ -886,7 +886,7 @@ export const handler = async (event: any) => {
         });
 
         if ((trainerIdsResult as string[]).length) {
-          await tx.session_trainers.createMany({
+          await tx.sesion_trainers.createMany({
             data: (trainerIdsResult as string[]).map((trainerId: string) => ({
               session_id: created.id,
               trainer_id: trainerId,
@@ -894,7 +894,7 @@ export const handler = async (event: any) => {
           });
         }
         if ((unidadIdsResult as string[]).length) {
-          await tx.session_unidades.createMany({
+          await tx.sesion_unidades.createMany({
             data: (unidadIdsResult as string[]).map((unidadId: string) => ({
               session_id: created.id,
               unidad_id: unidadId,
@@ -904,7 +904,7 @@ export const handler = async (event: any) => {
 
         await reindexSessionNames(tx, product.id, baseName);
 
-        const stored = await tx.sessions.findUnique({
+        const stored = await tx.sesiones.findUnique({
           where: { id: created.id },
           include: {
             deal: { select: { sede_label: true, pipeline_id: true } },
@@ -930,7 +930,7 @@ export const handler = async (event: any) => {
       const data = result.data;
       const requestedEstado = result.estado;
 
-      const stored = await prisma.sessions.findUnique({
+      const stored = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
           deal: { select: { sede_label: true, pipeline_id: true } },
@@ -996,12 +996,12 @@ export const handler = async (event: any) => {
           end: fechaFin,
         });
 
-        const patch = await tx.sessions.update({ where: { id: sessionIdFromPath }, data });
+        const patch = await tx.sesiones.update({ where: { id: sessionIdFromPath }, data });
 
         if (trainerIds !== undefined) {
-          await tx.session_trainers.deleteMany({ where: { session_id: sessionIdFromPath } });
+          await tx.sesion_trainers.deleteMany({ where: { session_id: sessionIdFromPath } });
           if ((trainerIds as string[]).length) {
-            await tx.session_trainers.createMany({
+            await tx.sesion_trainers.createMany({
               data: (trainerIds as string[]).map((trainerId: string) => ({
                 session_id: sessionIdFromPath,
                 trainer_id: trainerId,
@@ -1010,9 +1010,9 @@ export const handler = async (event: any) => {
           }
         }
         if (unidadIds !== undefined) {
-          await tx.session_unidades.deleteMany({ where: { session_id: sessionIdFromPath } });
+          await tx.sesion_unidades.deleteMany({ where: { session_id: sessionIdFromPath } });
           if ((unidadIds as string[]).length) {
-            await tx.session_unidades.createMany({
+            await tx.sesion_unidades.createMany({
               data: (unidadIds as string[]).map((unidadId: string) => ({
                 session_id: sessionIdFromPath,
                 unidad_id: unidadId,
@@ -1023,7 +1023,7 @@ export const handler = async (event: any) => {
         return patch;
       });
 
-      const refreshed = await prisma.sessions.findUnique({
+      const refreshed = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
           deal: { select: { sede_label: true, pipeline_id: true } },
@@ -1036,21 +1036,21 @@ export const handler = async (event: any) => {
 
     // Delete
     if (method === 'DELETE' && sessionIdFromPath) {
-      const existing = await prisma.sessions.findUnique({
+      const existing = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         select: { id: true, deal_product_id: true },
       });
       if (!existing) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
       await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        await tx.session_trainers.deleteMany({ where: { session_id: sessionIdFromPath } });
-        await tx.session_unidades.deleteMany({ where: { session_id: sessionIdFromPath } });
-        await tx.session_files.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+        await tx.sesion_trainers.deleteMany({ where: { session_id: sessionIdFromPath } });
+        await tx.sesion_unidades.deleteMany({ where: { session_id: sessionIdFromPath } });
+        await tx.sesion_files.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.sesiones_comentarios.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.alumnos.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.tokens.deleteMany({ where: { sesion_id: sessionIdFromPath } });
 
-        await tx.sessions.delete({ where: { id: sessionIdFromPath } });
+        await tx.sesiones.delete({ where: { id: sessionIdFromPath } });
         const product = await tx.deal_products.findUnique({
           where: { id: existing.deal_product_id },
           select: { id: true, name: true, code: true },

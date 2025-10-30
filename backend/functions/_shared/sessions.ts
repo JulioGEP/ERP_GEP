@@ -101,7 +101,7 @@ export async function resolveSessionNumber(
   const persisted = extractPersistedSessionNumber(session);
   if (persisted) return persisted;
 
-  const siblings = await prisma.sessions.findMany({
+  const siblings = await prisma.sesiones.findMany({
     where: { deal_id: session.deal_id },
     select: { id: true, fecha_inicio_utc: true, created_at: true },
   });
@@ -120,7 +120,7 @@ export async function ensureSessionContext(
   dealId: string,
   sessionId: string,
 ): Promise<EnsureSessionContextResult> {
-  const session = await prisma.sessions.findUnique({
+  const session = await prisma.sesiones.findUnique({
     where: { id: sessionId },
     include: {
       deal: {

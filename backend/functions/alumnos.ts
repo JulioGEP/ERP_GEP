@@ -139,7 +139,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       return errorResponse('VALIDATION_ERROR', 'dni inválido', 400);
     }
 
-    const session = await prisma.sessions.findUnique({
+    const session = await prisma.sesiones.findUnique({
       where: { id: sessionId },
       select: { id: true, deal_id: true },
     });

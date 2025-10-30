@@ -100,7 +100,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     const folderLink = normalizeDriveUrl(uploadResult.sessionFolderWebViewLink ?? null)
     if (folderLink && folderLink !== sessionDriveUrl) {
       try {
-        await prisma.sessions.update({
+        await prisma.sesiones.update({
           where: { id: sessionId },
           data: { drive_url: folderLink },
         })
@@ -129,14 +129,14 @@ export const handler = createHttpHandler<any>(async (request) => {
     }
 
     try {
-      record = await prisma.session_files.create({
+      record = await prisma.sesion_files.create({
         data: createPayload,
       })
     } catch (error: any) {
       const errorCode = error?.code ?? (typeof error === 'object' ? (error as any)?.code : null)
       if (errorCode === 'P2002') {
         try {
-          record = await prisma.session_files.update({
+          record = await prisma.sesion_files.update({
             where: {
               sesion_id_drive_file_name: {
                 sesion_id: sessionId,
