@@ -280,17 +280,29 @@ export const handler = async (event: any) => {
 
         const deal = await prisma.deals.findUnique({
           where: { deal_id: dealIdStr },
-          include: { organization: { select: { name: true } } },
+          include: { organizations: { select: { name: true } } },
         });
         if (!deal) {
           return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
         }
 
+        if (
+          typeof deal === "object" &&
+          deal !== null &&
+          !("organization" in deal) &&
+          "organizations" in (deal as Record<string, any>)
+        ) {
+          (deal as Record<string, any>).organization = (deal as Record<string, any>).organizations;
+        }
+
+        const organizationName =
+          deal.organization?.name ?? (deal as any)?.organizations?.name ?? null;
+
         let uploadResult: { driveFileName: string; driveWebViewLink: string | null };
         try {
           uploadResult = await uploadDealDocumentToGoogleDrive({
             deal,
-            organizationName: deal.organization?.name ?? null,
+            organizationName,
             fileName: normalizeIncomingFileName(fileName) || fileName,
             mimeType: mimeType || "application/octet-stream",
             data: buffer,

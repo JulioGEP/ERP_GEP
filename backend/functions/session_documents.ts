@@ -281,7 +281,8 @@ export const handler = async (event: any) => {
           uploadResult = await uploadSessionDocumentToGoogleDrive({
             deal,
             session,
-            organizationName: deal.organization?.name ?? null,
+            organizationName:
+              deal.organization?.name ?? (deal as any)?.organizations?.name ?? null,
             sessionNumber,
             sessionName,
             fileName: normalizedFileName,
@@ -437,7 +438,8 @@ export const handler = async (event: any) => {
         await deleteSessionDocumentFromGoogleDrive({
           deal,
           session,
-          organizationName: deal.organization?.name ?? null,
+          organizationName:
+            deal.organization?.name ?? (deal as any)?.organizations?.name ?? null,
           sessionNumber,
           sessionName,
           driveFileName: existing.drive_file_name,

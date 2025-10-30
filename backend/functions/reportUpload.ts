@@ -88,7 +88,8 @@ export const handler = createHttpHandler<any>(async (request) => {
     const uploadResult = await uploadSessionDocumentToGoogleDrive({
       deal: session.deal,
       session,
-      organizationName: session.deal?.organization?.name ?? null,
+      organizationName:
+        session.deal?.organization?.name ?? (session.deal as any)?.organizations?.name ?? null,
       sessionNumber,
       sessionName,
       fileName,

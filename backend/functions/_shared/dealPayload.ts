@@ -71,12 +71,21 @@ export function buildDealPayloadFromRecord(record: any) {
     (typeof record.hours === 'string' && record.hours.trim().length ? record.hours.trim() : null) ??
     (toNonNegativeIntOrNull(record.hours) != null ? String(toNonNegativeIntOrNull(record.hours)) : null);
 
+  const organization =
+    record.organization ?? (record as Record<string, any>)?.organizations ?? null;
+
+  if (
+    organization &&
+    !('organization' in (record as Record<string, any>)) &&
+    'organizations' in (record as Record<string, any>)
+  ) {
+    (record as Record<string, any>).organization = organization;
+  }
+
   const orgId =
     toNullableString(record.organizationId) ??
     toNullableString(record.org_id) ??
-    (record.organization?.org_id ? toNullableString(record.organization.org_id) : null);
-
-  const organization = record.organization ?? null;
+    (organization?.org_id ? toNullableString(organization.org_id) : null);
 
   // Dirección de formación: resolvemos ambas variantes y exponemos las dos
   const trainingAddressLabel =

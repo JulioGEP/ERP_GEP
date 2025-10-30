@@ -227,7 +227,7 @@ export const handler = async (event: any) => {
       uploadResult = await uploadSessionCertificateToGoogleDrive({
         deal,
         session: resolvedSession,
-        organizationName: deal.organization?.name ?? null,
+        organizationName: deal.organization?.name ?? (deal as any)?.organizations?.name ?? null,
         sessionNumber,
         sessionName,
         fileName: normalizedFileName,
