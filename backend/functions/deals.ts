@@ -552,9 +552,10 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
     out.a_fecha = toMadridISOString(out.a_fecha);
   }
 
-  if ("sessions" in out) {
-    out.sessions = Array.isArray(out.sessions)
-      ? out.sessions.map((session: any) => {
+  if ("sessions" in out || "sesiones" in out) {
+    const rawSessions = "sessions" in out ? out.sessions : out.sesiones;
+    const mappedSessions = Array.isArray(rawSessions)
+      ? rawSessions.map((session: any) => {
           if (!session || typeof session !== "object") {
             return session;
           }
@@ -564,7 +565,13 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
             fecha_fin_utc: toMadridISOString((session as any)?.fecha_fin_utc ?? null),
           };
         })
-      : out.sessions;
+      : rawSessions;
+
+    if ("sesiones" in out) {
+      delete out.sesiones;
+    }
+
+    out.sessions = mappedSessions;
   }
 
   if ("alumnos" in out) {
@@ -1412,28 +1419,27 @@ type DealsFindManyArgs = _DealsFindManyArg;
       }
 
       // 2) Condiciones base: sesiones pasadas + algún alumno sin certificar
-      // 2) Condiciones base: sesiones pasadas + algún alumno sin certificar
-const conditions: DealsWhere[] = [
-  {
-    AND: [
-      {
-        sessions: {
-          some: {
-            OR: [
-              { fecha_inicio_utc: { lt: now } },
-              { fecha_fin_utc:  { lt: now } },
-            ],
-          },
+      const conditions: DealsWhere[] = [
+        {
+          AND: [
+            {
+              sesiones: {
+                some: {
+                  OR: [
+                    { fecha_inicio_utc: { lt: now } },
+                    { fecha_fin_utc: { lt: now } },
+                  ],
+                },
+              },
+            },
+            {
+              alumnos: {
+                some: { certificado: false },
+              },
+            },
+          ],
         },
-      },
-      {
-        alumnos: {
-          some: { certificado: false },
-        },
-      },
-    ],
-  },
-] as unknown as DealsWhere[]; // cast final para cortar el bucle de TS
+      ] as unknown as DealsWhere[]; // cast final para cortar el bucle de TS
 
       // 3) Filtro opcional por variación
       if (variantIdsForPendingCertificates.length > 0) {
@@ -1471,7 +1477,7 @@ const conditions: DealsWhere[] = [
           org_id: true,
           person_id: true,
           created_at: true,
-          sessions: {
+          sesiones: {
             select: {
               id: true,
               fecha_inicio_utc: true,
