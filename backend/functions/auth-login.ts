@@ -49,7 +49,7 @@ export const handler = createHttpHandler<any>(async (request) => {
   }
 
   // Buscar usuario por email (normalizado a lower en DB)
-  const user = await prisma.users.findUnique({ where: { email } });
+  const user = await prisma.users.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
 
   // Mantenemos mensaje genérico para no filtrar existencia de usuarios
   if (!user || !user.active || !user.password_hash) {
@@ -95,7 +95,13 @@ export const handler = createHttpHandler<any>(async (request) => {
       },
     };
   } catch (err) {
-    // Si algo falla al crear la sesión, no exponemos detalles
-    return errorResponse('INTERNAL', 'No se pudo iniciar la sesión', 500);
-  }
+  const e: any = err as any;
+  console.error("[auth-login] session create error", {
+    name: e?.name,
+    message: e?.message,
+    code: e?.code,
+    meta: e?.meta
+  });
+  return errorResponse("INTERNAL", "No se pudo iniciar la sesión", 500);
+}
 });

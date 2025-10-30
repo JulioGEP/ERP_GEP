@@ -1,4 +1,3 @@
-// backend/prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,105 +7,429 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// --- Modelos mínimos para habilitar tipos Prisma usados por el código ---
-/// NOTA: Campos mínimos; más adelante alinearemos con Neon.
-
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model users {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  first_name    String?
-  last_name     String?
-  password_hash String?
-  password_algo String?
-  role          String?  // 'Admin' | 'Comercial' | ...
-  active        Boolean  @default(true)
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
-}
-
-model auth_sessions {
-  id         String   @id @default(uuid())
-  user_id    String
-  created_at DateTime @default(now())
-  expires_at DateTime
-  revoked_at DateTime?
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  first_name          String
+  last_name           String
+  email               String
+  role                erp_role
+  active              Boolean         @default(true)
+  created_at          DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime        @default(now()) @updatedAt @db.Timestamptz(6)
+  password_hash       String?
+  password_algo       String          @default("bcrypt")
+  password_updated_at DateTime        @default(now()) @db.Timestamptz(6)
+  name                String?
+  reset_token         String?
+  reset_token_expires DateTime?       @db.Timestamptz(6)
+  reset_requested_at  DateTime?       @db.Timestamptz(6)
+  auth_sessions       auth_sessions[]
 }
 
 model tokens {
-  id                 String   @id @default(uuid())
-  user_id            String
-  reset_token        String?
-  reset_token_expires DateTime?
-  reset_requested_at DateTime?
-  reset_used_at      DateTime?
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id String    @db.Uuid
+  token      String    @unique
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  expires_at DateTime? @db.Timestamptz(6)
+  active     Boolean?  @default(true)
+  ip_created String?
+  user_agent String?
+  sesiones   sesiones  @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model products {
-  id        String   @id @default(uuid())
-  name      String?
-  code      String?
-  id_woo    BigInt?
-  price     Decimal?
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id                     String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_pipe                String     @unique
+  name                   String?
+  code                   String?
+  category               String?
+  type                   String?
+  template               String?
+  url_formacion          String?
+  active                 Boolean?   @default(true)
+  created_at             DateTime?  @default(now()) @db.Timestamp(6)
+  updated_at             DateTime?  @default(now()) @updatedAt @db.Timestamp(6)
+  id_woo                 BigInt?    @unique
+  variant_stock_status   String?
+  variant_stock_quantity Int?
+  variant_price          Decimal?   @db.Decimal(12, 2)
+  hora_inicio            DateTime?  @db.Time(6)
+  hora_fin               DateTime?  @db.Time(6)
+  variant_start          DateTime?  @db.Date
+  variant_end            DateTime?  @db.Date
+  variants               variants[]
 }
 
 model variants {
-  id        String   @id @default(uuid())
-  product_id String?
-  name      String?
-  date      DateTime?
-  sede      String?
-  price     Decimal?
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_woo           BigInt            @unique
+  name             String?
+  status           String?
+  price            Decimal?          @db.Decimal(12, 2)
+  stock            Int?
+  stock_status     String?
+  sede             String?
+  date             DateTime?         @db.Timestamp(6)
+  id_padre         BigInt
+  created_at       DateTime?         @default(now()) @db.Timestamp(6)
+  updated_at       DateTime?         @default(now()) @updatedAt @db.Timestamp(6)
+  trainer_id       String?
+  sala_id          String?           @db.Uuid
+  unidad_movil_id  String?
+  products         products          @relation(fields: [id_padre], references: [id_woo], map: "variants_product_fk")
+  salas            salas?            @relation(fields: [sala_id], references: [id], onUpdate: NoAction, map: "variants_sala_fk")
+  trainers         trainers?         @relation(fields: [trainer_id], references: [trainer_id], onUpdate: NoAction, map: "variants_trainer_fk")
+  unidades_moviles unidades_moviles? @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction, map: "variants_unidad_fk")
+
+  @@index([id_padre], map: "idx_variants_id_padre")
+  @@index([sala_id], map: "idx_variants_sala_id")
+  @@index([status], map: "idx_variants_status")
+  @@index([trainer_id], map: "idx_variants_trainer_id")
+  @@index([unidad_movil_id], map: "idx_variants_unidad_id")
 }
 
 model deals {
-  id              String   @id @default(uuid())
-  title           String?
-  pipeline_id     Int?
-  training_address String?
-  sede_label      String?
-  caes_label      String?
-  fundae_label    String?
-  hotel_label     String?
-  transporte      String?
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
-}
+  deal_id              String                 @id
+  created_at           DateTime               @default(now())
+  updated_at           DateTime               @default(now()) @updatedAt
+  title                String?
+  org_id               String?
+  pipeline_id          String?
+  training_address     String?
+  sede_label           String?
+  caes_label           String?
+  fundae_label         String?
+  hotel_label          String?
+  person_id            String?
+  transporte           String?                @db.VarChar(10)
+  po                   String?                @db.VarChar(191)
+  tipo_servicio        String?                @db.VarChar(50)
+  mail_invoice         String?                @db.VarChar(255)
+  comercial            String?
+  a_fecha              DateTime?              @db.Timestamp(6)
+  w_id_variation       String?
+  presu_holded         String?
+  modo_reserva         String?
+  caes_val             Boolean                @default(false)
+  fundae_val           Boolean                @default(false)
+  hotel_val            Boolean                @default(false)
+  transporte_val       Boolean                @default(false)
+  po_val               Boolean                @default(false)
+  alumnos              alumnos[]
+  deal_files           deal_files[]
+  deal_notes           deal_notes[]
+  deal_products        deal_products[]
+  organizations        organizations?         @relation(fields: [org_id], references: [org_id], map: "deals_org_fk")
+  persons              persons?               @relation(fields: [person_id], references: [person_id], map: "deals_person_fk")
+  sesion_files         sesion_files[]
+  sesiones             sesiones[]
+  sesiones_comentarios sesiones_comentarios[]
 
-model sessions {
-  id                String   @id @default(uuid())
-  deal_id           String?
-  deal_product_id   String?
-  fecha_inicio_utc  DateTime?
-  fecha_fin_utc     DateTime?
-  created_at        DateTime @default(now())
-  updated_at        DateTime @updatedAt
+  @@index([org_id], map: "idx_deals_org_id")
+  @@index([person_id], map: "idx_deals_person_id")
 }
 
 model alumnos {
-  id        String   @id @default(uuid())
-  dni       String?
-  nombre    String?
-  apellido  String?
-  email     String?
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deal_id     String
+  sesion_id   String   @db.Uuid
+  nombre      String
+  apellido    String
+  dni         String   @db.VarChar(20)
+  apto        Boolean  @default(false)
+  certificado Boolean  @default(false)
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  drive_url   String?
+  deals       deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, onUpdate: NoAction)
+  sesiones    sesiones @relation(fields: [sesion_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([sesion_id, dni], map: "ux_alumnos_sesion_dni")
+  @@index([apellido], map: "idx_alumnos_apellido")
+  @@index([deal_id], map: "idx_alumnos_deal_id")
+  @@index([sesion_id], map: "idx_alumnos_sesion_id")
 }
 
-model comments {
-  id        String   @id @default(uuid())
-  deal_id   String?
-  text      String?
-  created_at DateTime @default(now())
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model deal_files {
+  id                  String    @id
+  deal_id             String?
+  file_name           String?
+  file_url            String?
+  file_type           String?
+  added_at            DateTime? @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime  @default(now()) @db.Timestamptz(6)
+  drive_file_name     String?
+  drive_web_view_link String?
+  uploaded_at         DateTime? @db.Timestamptz(6)
+  deals               deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_files_deal_fk")
+
+  @@index([deal_id], map: "idx_deal_files_deal_id")
 }
 
-model documents {
-  id        String   @id @default(uuid())
-  deal_id   String?
-  name      String?
-  mime      String?
-  created_at DateTime @default(now())
+model deal_notes {
+  id         String    @id
+  deal_id    String?
+  content    String?
+  author     String?
+  created_at DateTime? @db.Timestamptz(6)
+  updated_at DateTime? @db.Timestamptz(6)
+  deals      deals?    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_notes_deal_fk")
+
+  @@index([deal_id], map: "idx_deal_notes_deal_id")
+}
+
+model deal_products {
+  id               String     @id
+  deal_id          String?
+  name             String?
+  code             String?
+  quantity         Decimal    @db.Decimal(10, 0)
+  price            Decimal    @db.Decimal(12, 2)
+  created_at       DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime   @default(now()) @db.Timestamptz(6)
+  type             String?
+  hours            Decimal?   @db.Decimal(10, 0)
+  product_comments String?
+  category         String?
+  deals            deals?     @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_products_deal_fk")
+  sesiones         sesiones[]
+
+  @@index([deal_id])
+  @@index([type])
+  @@index([deal_id], map: "idx_deal_products_deal_id")
+}
+
+model organizations {
+  org_id     String    @id
+  name       String
+  address    String?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  cif        String?
+  phone      String?
+  deals      deals[]
+  persons    persons[]
+}
+
+model persons {
+  person_id     String         @id
+  first_name    String?
+  last_name     String?
+  email         String?
+  phone         String?
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @default(now())
+  org_id        String?
+  deals         deals[]
+  organizations organizations? @relation(fields: [org_id], references: [org_id], map: "persons_org_fk")
+
+  @@index([org_id], map: "idx_persons_org_id")
+}
+
+model plantillas {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String   @unique
+  title      String
+  slug       String   @unique
+  puntos     Json
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model salas {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  sede       String
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+  updated_at DateTime   @default(now()) @db.Timestamptz(6)
+  sesiones   sesiones[]
+  variants   variants[]
+
+  @@unique([name, sede], map: "uq_salas_name_sede")
+  @@index([name], map: "idx_salas_name")
+  @@index([sede], map: "idx_salas_sede")
+}
+
+model sesion_files {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deal_id             String
+  sesion_id           String   @db.Uuid
+  file_type           String   @db.VarChar(16)
+  compartir_formador  Boolean  @default(false)
+  added_at            DateTime @default(now()) @db.Timestamptz(6)
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @db.Timestamptz(6)
+  drive_file_name     String
+  drive_web_view_link String?
+  deals               deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, onUpdate: NoAction)
+  sesiones            sesiones @relation(fields: [sesion_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([added_at], map: "idx_sesion_files_added_at")
+  @@index([deal_id], map: "idx_sesion_files_deal_id")
+  @@index([sesion_id], map: "idx_sesion_files_sesion_id")
+}
+
+model sesion_trainers {
+  sesion_id  String   @db.Uuid
+  trainer_id String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+  sesiones   sesiones @relation(fields: [sesion_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  trainers   trainers @relation(fields: [trainer_id], references: [trainer_id], onUpdate: NoAction)
+
+  @@id([sesion_id, trainer_id])
+  @@index([trainer_id], map: "idx_sesion_trainers_trainer")
+}
+
+model sesion_unidades {
+  sesion_id        String           @db.Uuid
+  unidad_movil_id  String
+  created_at       DateTime         @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime         @default(now()) @db.Timestamptz(6)
+  sesiones         sesiones         @relation(fields: [sesion_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  unidades_moviles unidades_moviles @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction)
+
+  @@id([sesion_id, unidad_movil_id])
+  @@index([unidad_movil_id], map: "idx_sesion_unidades_unidad")
+}
+
+model sesiones {
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deal_id              String
+  deal_product_id      String
+  nombre_cache         String
+  fecha_inicio_utc     DateTime?              @db.Timestamptz(6)
+  fecha_fin_utc        DateTime?              @db.Timestamptz(6)
+  sala_id              String?                @db.Uuid
+  direccion            String                 @default("")
+  comentarios          String?
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  estado               SessionEstado          @default(BORRADOR)
+  drive_url            String?
+  alumnos              alumnos[]
+  sesion_files         sesion_files[]
+  sesion_trainers      sesion_trainers[]
+  sesion_unidades      sesion_unidades[]
+  deals                deals                  @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, onUpdate: NoAction)
+  deal_products        deal_products          @relation(fields: [deal_product_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  salas                salas?                 @relation(fields: [sala_id], references: [id], onUpdate: NoAction)
+  sesiones_comentarios sesiones_comentarios[]
+  tokens               tokens[]
+
+  @@index([deal_id], map: "idx_sesiones_deal")
+  @@index([deal_product_id], map: "idx_sesiones_deal_product")
+  @@index([fecha_inicio_utc], map: "idx_sesiones_fecha_inicio")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model sesiones_comentarios {
+  id                 BigInt   @id @default(autoincrement())
+  deal_id            String
+  sesion_id          String   @db.Uuid
+  content            String
+  author             String
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime @default(now()) @db.Timestamptz(6)
+  compartir_formador Boolean  @default(false)
+  deals              deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, onUpdate: NoAction, map: "sesiones_comentarios_deal_fk")
+  sesiones           sesiones @relation(fields: [sesion_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "sesiones_comentarios_sesion_fk")
+
+  @@index([created_at(sort: Desc)], map: "idx_sesiones_comentarios_created")
+  @@index([deal_id], map: "idx_sesiones_comentarios_deal_id")
+  @@index([sesion_id], map: "idx_sesiones_comentarios_sesion_id")
+}
+
+model trainers {
+  trainer_id      String            @id
+  name            String
+  email           String?           @unique
+  phone           String?
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime          @db.Timestamptz(6)
+  activo          Boolean           @default(true)
+  apellido        String?
+  dni             String?           @unique
+  direccion       String?
+  especialidad    String?
+  titulacion      String?
+  sede            String[]          @default([])
+  sesion_trainers sesion_trainers[]
+  variants        variants[]
+
+  @@index([apellido])
+  @@index([especialidad])
+}
+
+model unidades_moviles {
+  unidad_id       String            @id
+  name            String?
+  created_at      DateTime          @default(now())
+  updated_at      DateTime
+  matricula       String?           @db.VarChar(50)
+  tipo            String[]          @default([])
+  sede            String[]          @default([])
+  sesion_unidades sesion_unidades[]
+  variants        variants[]
+}
+
+enum DocumentOrigin {
+  imported
+  user_upload
+}
+
+enum SessionEstado {
+  BORRADOR
+  PLANIFICADA
+  SUSPENDIDA
+  CANCELADA
+  FINALIZADA
+}
+
+enum deal_session_status {
+  Borrador
+  Planificada
+  Suspendido
+  Cancelado
+}
+
+enum dealproducttype {
+  TRAINING
+  EXTRA
+}
+
+enum erp_role {
+  comercial
+  administracion
+  logistica
+  admin
+  people
+  formador
+}
+
+enum session_status {
+  Borrador
+  Planificada
+  Suspendido
+  Cancelado
+}
+
+model auth_sessions {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at DateTime  @db.Timestamptz(6)
+  revoked_at DateTime? @db.Timestamptz(6)
+  ip_hash    String?
+  user_agent String?
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id], map: "auth_sessions_user_id_idx")
+  @@index([expires_at], map: "auth_sessions_expires_at_idx")
+  @@map("auth_sessions")
 }

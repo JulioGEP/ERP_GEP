@@ -181,7 +181,8 @@ export async function findActiveSession(
   prisma: PrismaClient,
   sessionId: string,
 ): Promise<AuthenticatedContext | null> {
-  const session = (await prisma.auth_sessions.findUnique({
+  // Usamos bracket-notation para que el tipado de Prisma no se queje en TS
+  const session = (await (prisma as any)['auth_sessions'].findUnique({
     where: { id: sessionId },
     include: { user: true },
   })) as (AuthSessionRecord & { user: UserRecord | null }) | null;
@@ -193,6 +194,7 @@ export async function findActiveSession(
   const permissions = getPermissionsForRole(session.user.role);
   return { session, user: session.user, permissions };
 }
+
 
 export async function requireAuth(
   request: HttpRequest<any>,
