@@ -182,9 +182,13 @@ function normalizeVariantRecord(
           apellido: record.trainer.apellido ?? null,
         }
       : null,
-    sala_id: record.sala_id ?? null,
+    sala_id: record.sala_id ?? getSalaIdentifier(record.sala) ?? null,
     sala: record.sala
-      ? { sala_id: record.sala.sala_id, name: record.sala.name, sede: record.sala.sede ?? null }
+      ? {
+          sala_id: getSalaIdentifier(record.sala),
+          name: record.sala.name ?? null,
+          sede: record.sala.sede ?? null,
+        }
       : null,
     unidad_movil_id: record.unidad_movil_id ?? null,
     unidad: record.unidad
@@ -368,7 +372,7 @@ const variantSelectionWithResources = {
   sala_id: true,
   unidad_movil_id: true,
   trainer: { select: { trainer_id: true, name: true, apellido: true } },
-  sala: { select: { sala_id: true, name: true, sede: true } },
+  sala: true,
   unidad: { select: { unidad_id: true, name: true, matricula: true } },
 };
 
@@ -381,6 +385,16 @@ function toMaybeString(value: unknown): string | null {
     }
   } catch {
     // ignoramos errores de toString no seguro
+  }
+  return null;
+}
+
+function getSalaIdentifier(record: any): string | null {
+  if (!record || typeof record !== 'object') return null;
+  const candidates = [(record as { sala_id?: unknown }).sala_id, (record as { id?: unknown }).id];
+  for (const candidate of candidates) {
+    const value = toMaybeString(candidate);
+    if (value) return value;
   }
   return null;
 }
