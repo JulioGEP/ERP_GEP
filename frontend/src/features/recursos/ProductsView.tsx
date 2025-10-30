@@ -844,8 +844,8 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
           return (
             <Form.Control
               type="url"
-              placeholder="https://www.gepservices.es/producto/curso-trabajos-en-altura"
-              title="Introduce la URL pública del curso en gepservices.es (WooCommerce)"
+              placeholder="https://gepcoformacion.es/producto/curso-trabajos-en-altura"
+              title="Introduce la URL pública del curso en gepcoformacion.es (WooCommerce)"
               value={urlValue}
               onChange={(event) => handleUrlChange(product.id, event.target.value)}
               onBlur={() => handleUrlCommit(product)}
