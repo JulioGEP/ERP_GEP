@@ -331,8 +331,10 @@ function normalizePath(path: string): string {
   return normalized || '/';
 }
 
+const RESET_TOKEN_BYTE_LENGTH = 16; // 16 bytes → 32 hex chars (~128 bits of entropy)
+
 export function generateResetToken(): string {
-  return randomBytes(32).toString('hex');
+  return randomBytes(RESET_TOKEN_BYTE_LENGTH).toString('hex');
 }
 
 export function getSessionExpirationDate(): Date {
