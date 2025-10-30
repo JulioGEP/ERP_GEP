@@ -122,7 +122,7 @@ async function ensureVariantResourcesAvailable(
 
   // Tipos generados pueden variar; usamos `any` para compatibilidad con Prisma v5
   const sessionConditions: any[] = [];
-  if (normalizedTrainerId) sessionConditions.push({ trainers: { some: { trainer_id: normalizedTrainerId } } });
+  if (normalizedTrainerId) sessionConditions.push({ sesion_trainers: { some: { trainer_id: normalizedTrainerId } } });
   if (normalizedSalaId) sessionConditions.push({ sala_id: normalizedSalaId });
   if (normalizedUnidadId) sessionConditions.push({ unidades: { some: { unidad_id: normalizedUnidadId } } });
 
