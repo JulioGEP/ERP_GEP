@@ -1,18 +1,21 @@
-import { FormEvent, useCallback, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Container, Form, Spinner } from 'react-bootstrap';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ApiError, isApiError } from '../../api/client';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../shared/auth/AuthContext';
 
 type LocationState = {
   from?: string;
 };
 
 export default function LoginPage() {
-  const { login, isLoading, isAuthenticated } = useAuth();
+  const { login, status } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as LocationState | null)?.from || '/';
+
+  const isLoading = status === 'loading';
+  const isAuthenticated = status === 'authenticated';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,9 +23,11 @@ export default function LoginPage() {
   const [errorText, setErrorText] = useState<string | null>(null);
 
   // Si ya hay sesión, redirige a home para evitar volver a loguear
-  if (!isLoading && isAuthenticated) {
-    navigate(from, { replace: true });
-  }
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      navigate(from, { replace: true });
+    }
+  }, [from, isAuthenticated, isLoading, navigate]);
 
   const formValid = useMemo(() => {
     const e = email.trim();
