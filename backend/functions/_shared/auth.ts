@@ -34,6 +34,16 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Formador: ['/perfil'],
 };
 
+function normalizeRoleKey(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+  return trimmed
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
 const ROLE_LABEL_TO_STORAGE_ENTRIES = [
   ['Admin', 'admin'],
   ['Comercial', 'comercial'],
@@ -48,43 +58,49 @@ const ROLE_STORAGE_TO_LABEL = new Map<string, string>(
   ROLE_LABEL_TO_STORAGE_ENTRIES.map(([label, storage]) => [storage, label]),
 );
 
+const NORMALIZED_ROLE_TO_STORAGE = new Map<string, string>(
+  ROLE_LABEL_TO_STORAGE_ENTRIES.flatMap(([label, storage]) => {
+    const normalizedLabel = normalizeRoleKey(label);
+    const normalizedStorage = normalizeRoleKey(storage);
+    const entries: Array<[string, string]> = [];
+    if (normalizedLabel) entries.push([normalizedLabel, storage]);
+    if (normalizedStorage) entries.push([normalizedStorage, storage]);
+    return entries;
+  }),
+);
+
+const NORMALIZED_ROLE_TO_LABEL = new Map<string, string>(
+  ROLE_LABEL_TO_STORAGE_ENTRIES.flatMap(([label, storage]) => {
+    const normalizedLabel = normalizeRoleKey(label);
+    const normalizedStorage = normalizeRoleKey(storage);
+    const entries: Array<[string, string]> = [];
+    if (normalizedLabel) entries.push([normalizedLabel, label]);
+    if (normalizedStorage) entries.push([normalizedStorage, label]);
+    return entries;
+  }),
+);
+
 export const ROLE_DISPLAY_NAMES: readonly string[] = ROLE_LABEL_TO_STORAGE_ENTRIES.map(
   ([label]) => label,
 );
 
 export function getRoleStorageValue(role: string | null | undefined): string | null {
-  if (typeof role !== 'string') return null;
-  const trimmed = role.trim();
-  if (!trimmed.length) return null;
-  const normalized = trimmed.toLowerCase();
-
-  for (const [label, storage] of ROLE_LABEL_TO_STORAGE.entries()) {
-    if (label.toLowerCase() === normalized || storage === normalized) {
-      return storage;
-    }
-  }
-
-  return null;
+  const normalized = normalizeRoleKey(role);
+  if (!normalized) return null;
+  return NORMALIZED_ROLE_TO_STORAGE.get(normalized) ?? null;
 }
 
 export function getRoleDisplayValue(role: string | null | undefined): string | null {
-  if (typeof role !== 'string') return null;
-  const trimmed = role.trim();
-  if (!trimmed.length) return null;
-  const normalized = trimmed.toLowerCase();
+  const normalized = normalizeRoleKey(role);
+  if (!normalized) return null;
 
-  const display = ROLE_STORAGE_TO_LABEL.get(normalized);
-  if (display) {
-    return display;
+  const storage = NORMALIZED_ROLE_TO_STORAGE.get(normalized);
+  if (storage) {
+    const display = ROLE_STORAGE_TO_LABEL.get(storage);
+    if (display) return display;
   }
 
-  for (const [label] of ROLE_LABEL_TO_STORAGE.entries()) {
-    if (label.toLowerCase() === normalized) {
-      return label;
-    }
-  }
-
-  return null;
+  return NORMALIZED_ROLE_TO_LABEL.get(normalized) ?? null;
 }
 
 // Exportado para que el front o los guards puedan reutilizar el orden por defecto
@@ -143,12 +159,11 @@ export type RequireAuthOptions = {
 };
 
 export function getPermissionsForRole(role: string | null | undefined): readonly string[] {
-  if (!role) return [];
-  const normalized = role.trim().toLowerCase();
-  if (!normalized.length) return [];
+  const normalized = normalizeRoleKey(role);
+  if (!normalized) return [];
 
   for (const [roleName, permissions] of Object.entries(ROLE_PERMISSIONS)) {
-    if (roleName.trim().toLowerCase() === normalized) {
+    if (normalizeRoleKey(roleName) === normalized) {
       return permissions;
     }
   }
@@ -278,10 +293,10 @@ export async function requireAuth(
   }
 
   if (options?.requireRoles && options.requireRoles.length) {
-    const role = result.user.role?.trim().toLowerCase();
+    const role = normalizeRoleKey(result.user.role);
     const allowedRoles = options.requireRoles
-      .map((value) => value.trim().toLowerCase())
-      .filter((value) => value.length > 0);
+      .map((value) => normalizeRoleKey(value))
+      .filter((value): value is string => !!value);
 
     if (!role || !allowedRoles.includes(role)) {
       return { error: errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403) };
