@@ -74,8 +74,8 @@ export const handler = async (event: any) => {
     const deal = await prisma.deals.findUnique({
       where: { deal_id: dealId },
       include: {
-        organization: { select: { name: true } },
-        person: { select: { first_name: true, last_name: true } },
+        organizations: { select: { name: true } },
+        persons: { select: { first_name: true, last_name: true } },
         sessions: {
           select: {
             id: true,
@@ -190,9 +190,26 @@ export const handler = async (event: any) => {
       }
     })
 
-    const organizationName = toStringOrNull(deal.organization?.name)
-    const contactFirst = toStringOrNull(deal.person?.first_name)
-    const contactLast = toStringOrNull(deal.person?.last_name)
+    if (
+      typeof deal === 'object' &&
+      deal !== null &&
+      !('organization' in deal) &&
+      'organizations' in (deal as Record<string, any>)
+    ) {
+      (deal as Record<string, any>).organization = (deal as Record<string, any>).organizations
+    }
+    if (
+      typeof deal === 'object' &&
+      deal !== null &&
+      !('person' in deal) &&
+      'persons' in (deal as Record<string, any>)
+    ) {
+      (deal as Record<string, any>).person = (deal as Record<string, any>).persons
+    }
+
+    const organizationName = toStringOrNull(deal.organization?.name ?? (deal as any)?.organizations?.name)
+    const contactFirst = toStringOrNull(deal.person?.first_name ?? (deal as any)?.persons?.first_name)
+    const contactLast = toStringOrNull(deal.person?.last_name ?? (deal as any)?.persons?.last_name)
     const contacto = [contactFirst, contactLast].filter(Boolean).join(' ').trim()
 
     return successResponse({

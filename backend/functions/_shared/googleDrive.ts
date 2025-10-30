@@ -37,11 +37,28 @@ function toNonEmptyString(value: unknown): string | null {
   return trimmed.length ? trimmed : null;
 }
 
+function resolveDealOrganization(deal: any): any {
+  if (!deal || typeof deal !== "object") {
+    return null;
+  }
+
+  const raw = deal as Record<string, any>;
+  const organization = raw.organization ?? raw.organizations ?? null;
+
+  if (organization !== undefined && !("organization" in raw)) {
+    raw.organization = organization;
+  }
+
+  return organization ?? null;
+}
+
 function resolveOrganizationNameFromDeal(deal: any): string | null {
   if (!deal) return null;
+
+  const organization = resolveDealOrganization(deal);
   const candidates: unknown[] = [
-    deal?.organization?.name,
-    deal?.organization?.nombre,
+    organization?.name,
+    organization?.nombre,
     deal?.organization_name,
     deal?.organizationName,
     deal?.org_name,
@@ -58,10 +75,12 @@ function resolveOrganizationNameFromDeal(deal: any): string | null {
 
 function resolveOrganizationIdFromDeal(deal: any): string | null {
   if (!deal) return null;
+
+  const organization = resolveDealOrganization(deal);
   const candidates: unknown[] = [
-    deal?.organization?.org_id,
-    deal?.organization?.orgId,
-    deal?.organization?.id,
+    organization?.org_id,
+    organization?.orgId,
+    organization?.id,
     deal?.org_id,
     deal?.organization_id,
     typeof deal?.org_id === "object" ? deal?.org_id?.value ?? deal?.org_id?.id ?? null : null,

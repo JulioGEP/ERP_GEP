@@ -484,9 +484,35 @@ function mapStudentForApi(student: any) {
   };
 }
 
+function normalizeDealRelations<T extends Record<string, any>>(deal: T | null): T | null {
+  if (!deal || typeof deal !== "object") {
+    return deal;
+  }
+
+  const raw = deal as Record<string, any>;
+
+  if (!("organization" in raw) && "organizations" in raw) {
+    raw.organization = raw.organizations;
+  }
+  if (!("person" in raw) && "persons" in raw) {
+    raw.person = raw.persons;
+  }
+
+  return deal;
+}
+
 function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null {
   if (!deal) return deal;
-  const out: any = { ...deal };
+
+  const normalized = normalizeDealRelations(deal);
+  const out: any = { ...normalized };
+
+  if ("organizations" in out) {
+    delete out.organizations;
+  }
+  if ("persons" in out) {
+    delete out.persons;
+  }
 
   if ("created_at" in out) {
     out.created_at = toMadridISOString(out.created_at);
@@ -922,8 +948,8 @@ type DealsFindManyArgs = _DealsFindManyArg;
           warnings.push("Este presupuesto ya existe en la base de datos.");
         }
         const dealInclude = {
-          organization: { select: { org_id: true, name: true } },
-          person: {
+          organizations: { select: { org_id: true, name: true } },
+          persons: {
             select: {
               person_id: true,
               first_name: true,
@@ -941,6 +967,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
           where: { deal_id: String(deal_id) },
           include: dealInclude,
         });
+        dealRaw = normalizeDealRelations(dealRaw);
         if (dealRaw) {
           try {
             await syncDealDocumentsToGoogleDrive({
@@ -953,7 +980,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
               include: dealInclude,
             });
             if (refreshed) {
-              dealRaw = refreshed;
+              dealRaw = normalizeDealRelations(refreshed);
             }
           } catch (driveError) {
             console.warn("[google-drive-sync] Error no bloqueante", {
@@ -982,11 +1009,11 @@ type DealsFindManyArgs = _DealsFindManyArg;
 
     /* ------------------- GET detalle: /deals/:id o ?dealId= ------------------- */
     if (method === "GET" && dealId !== null) {
-      const dealRaw = await prisma.deals.findUnique({
+      let dealRaw = await prisma.deals.findUnique({
         where: { deal_id: String(dealId) },
         include: {
-          organization: { select: { org_id: true, name: true } },
-          person: {
+          organizations: { select: { org_id: true, name: true } },
+          persons: {
             select: {
               person_id: true,
               first_name: true,
@@ -1000,6 +1027,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
           deal_files: { orderBy: { created_at: "desc" } },
         },
       });
+      dealRaw = normalizeDealRelations(dealRaw);
       if (!dealRaw) return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
 
       const dealProductNames = (dealRaw.deal_products ?? [])
@@ -1067,12 +1095,13 @@ type DealsFindManyArgs = _DealsFindManyArg;
     if (method === "DELETE" && dealId !== null) {
       const id = String(dealId);
 
-      const existing = await prisma.deals.findUnique({
+      const existingRaw = await prisma.deals.findUnique({
         where: { deal_id: id },
         include: {
-          organization: { select: { name: true } },
+          organizations: { select: { name: true } },
         },
       });
+      const existing = normalizeDealRelations(existingRaw);
 
       if (!existing) {
         return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
@@ -1231,8 +1260,8 @@ type DealsFindManyArgs = _DealsFindManyArg;
       const updatedRaw = await prisma.deals.findUnique({
         where: { deal_id: String(dealId) },
         include: {
-          organization: { select: { org_id: true, name: true } },
-          person: {
+          organizations: { select: { org_id: true, name: true } },
+          persons: {
             select: {
               person_id: true,
               first_name: true,
@@ -1247,7 +1276,8 @@ type DealsFindManyArgs = _DealsFindManyArg;
         },
       });
 
-      const deal = mapDealForApi(updatedRaw);
+      const normalizedUpdated = normalizeDealRelations(updatedRaw);
+      const deal = mapDealForApi(normalizedUpdated);
       const dealWithPipelineLabel = deal
         ? await ensureDealPipelineLabel(deal, {
             pipelineId: updatedRaw?.pipeline_id ?? null,
@@ -1293,8 +1323,8 @@ type DealsFindManyArgs = _DealsFindManyArg;
           org_id: true,
           person_id: true,
           created_at: true,
-          organization: { select: { org_id: true, name: true } },
-          person: {
+          organizations: { select: { org_id: true, name: true } },
+          persons: {
             select: {
               person_id: true,
               first_name: true,
@@ -1330,7 +1360,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
       });
 
       const deals = rowsRaw.map((row: any) => {
-        const mapped = mapDealForApi(row);
+        const mapped = mapDealForApi(normalizeDealRelations(row));
         if (!mapped) return mapped;
 
         const studentsCountRaw = row?._count?.alumnos;
@@ -1453,8 +1483,8 @@ const conditions: DealsWhere[] = [
             select: { id: true, nombre: true, apellido: true, dni: true },
             orderBy: { created_at: "asc" },
           },
-          organization: { select: { org_id: true, name: true } },
-          person: {
+          organizations: { select: { org_id: true, name: true } },
+          persons: {
             select: {
               person_id: true,
               first_name: true,
@@ -1481,7 +1511,7 @@ const conditions: DealsWhere[] = [
 
       const rowsRaw = await prisma.deals.findMany(query);
 
-      const deals = rowsRaw.map((row: any) => mapDealForApi(row));
+      const deals = rowsRaw.map((row: any) => mapDealForApi(normalizeDealRelations(row)));
       return successResponse(deals);
     }
 
@@ -1513,8 +1543,8 @@ const conditions: DealsWhere[] = [
           org_id: true,
           person_id: true,
           created_at: true,
-          organization: { select: { org_id: true, name: true } },
-          person: {
+          organizations: { select: { org_id: true, name: true } },
+          persons: {
             select: {
               person_id: true,
               first_name: true,
@@ -1544,7 +1574,7 @@ const conditions: DealsWhere[] = [
         orderBy: { created_at: "desc" },
       });
 
-      const deals = rowsRaw.map((r: any) => mapDealForApi(r));
+      const deals = rowsRaw.map((r: any) => mapDealForApi(normalizeDealRelations(r)));
       return successResponse({ deals });
     }
 

@@ -124,13 +124,22 @@ export async function ensureSessionContext(
     where: { id: sessionId },
     include: {
       deal: {
-        include: { organization: { select: { name: true } } },
+        include: { organizations: { select: { name: true } } },
       },
     },
   });
 
   if (!session) {
     return { error: errorResponse('NOT_FOUND', 'Sesión no encontrada', 404) };
+  }
+
+  if (
+    session.deal &&
+    typeof session.deal === 'object' &&
+    !('organization' in session.deal) &&
+    'organizations' in (session.deal as Record<string, any>)
+  ) {
+    (session.deal as Record<string, any>).organization = (session.deal as Record<string, any>).organizations;
   }
 
   if (session.deal_id !== dealId) {
@@ -146,10 +155,19 @@ export async function ensureSessionContext(
   if (!session.deal) {
     const deal = await prisma.deals.findUnique({
       where: { deal_id: dealId },
-      include: { organization: { select: { name: true } } },
+      include: { organizations: { select: { name: true } } },
     });
     if (!deal) {
       return { error: errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404) };
+    }
+
+    if (
+      typeof deal === 'object' &&
+      deal !== null &&
+      !('organization' in deal) &&
+      'organizations' in (deal as Record<string, any>)
+    ) {
+      (deal as Record<string, any>).organization = (deal as Record<string, any>).organizations;
     }
     return { session: { ...session, deal } };
   }
