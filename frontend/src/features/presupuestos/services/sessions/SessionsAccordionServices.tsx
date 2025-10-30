@@ -61,6 +61,7 @@ import {
 } from '../../api';
 import { isApiError } from '../../api';
 import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
+import { isUuid } from '../../../../utils/uuid';
 import { formatSedeLabel } from '../../formatSedeLabel';
 import { useApplicableDealProducts } from '../../shared/useApplicableDealProducts';
 import {
@@ -2092,6 +2093,8 @@ function SessionEditor({
     [form.fecha_inicio_local, form.fecha_fin_local],
   );
 
+  const excludeSessionId = isUuid(form.id) ? form.id : undefined;
+
   const availabilityQuery = useQuery({
     queryKey: availabilityRange
       ? ['session-availability', form.id, availabilityRange.startIso, availabilityRange.endIso]
@@ -2100,7 +2103,7 @@ function SessionEditor({
       fetchSessionAvailability({
         start: availabilityRange!.startIso,
         end: availabilityRange!.endIso,
-        excludeSessionId: form.id,
+        ...(excludeSessionId ? { excludeSessionId } : {}),
       }),
     enabled: Boolean(availabilityRange),
     staleTime: 60_000,
