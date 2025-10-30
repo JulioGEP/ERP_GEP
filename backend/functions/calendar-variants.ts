@@ -633,12 +633,14 @@ export const handler = async (event: any) => {
     }
 
     const prisma = getPrisma();
-    const hasVariantDelegate = Boolean((prisma as any)?.variants?.findMany);
+    const variantDelegate = (prisma as any)?.variants;
+    const hasVariantDelegate =
+      variantDelegate != null && typeof variantDelegate.findMany === 'function';
     const shouldIncludeResources = getVariantResourceColumnsSupport() !== false;
 
     const buildQuery = (includeResources: boolean) =>
       hasVariantDelegate
-        ? prisma.variants.findMany({
+        ? variantDelegate.findMany({
             where: {
               date: {
                 not: null,
