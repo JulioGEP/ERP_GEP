@@ -13,6 +13,6 @@
     "baseUrl": ".",
     "outDir": "dist"
   },
-  "include": ["functions/**/*.ts", "functions/**/*.d.ts", "prisma/**/*.prisma"],
+  "include": ["functions/**/*.ts", "prisma/**/*.prisma"],
   "exclude": ["node_modules", "dist"]
 }

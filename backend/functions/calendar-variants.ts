@@ -1,4 +1,5 @@
 // backend/functions/calendar-variants.ts
+import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { ensureMadridTimezone, toMadridISOString } from './_shared/timezone';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
@@ -371,235 +372,6 @@ const variantSelectionWithResources = {
   unidad: { select: { unidad_id: true, name: true, matricula: true } },
 };
 
-type RawProductRecord = {
-  id: unknown;
-  id_woo: unknown;
-  name: unknown;
-  code: unknown;
-  category: unknown;
-  hora_inicio: unknown;
-  hora_fin: unknown;
-  default_variant_start: unknown;
-  default_variant_end: unknown;
-  default_variant_stock_status: unknown;
-  default_variant_stock_quantity: unknown;
-  default_variant_price: unknown;
-};
-
-type RawTrainerRecord = {
-  trainer_id: unknown;
-  name: unknown;
-  apellido: unknown;
-};
-
-type RawSalaRecord = {
-  sala_id: unknown;
-  name: unknown;
-  sede: unknown;
-};
-
-type RawUnidadRecord = {
-  unidad_id: unknown;
-  name: unknown;
-  matricula: unknown;
-};
-
-type RawVariantRow = {
-  id: string;
-  id_woo: unknown;
-  name: string | null;
-  status: string | null;
-  price: unknown;
-  stock: number | null;
-  stock_status: string | null;
-  sede: string | null;
-  date: Date | string | null;
-  created_at: Date | string | null;
-  updated_at: Date | string | null;
-  trainer_id: string | null;
-  sala_id: string | null;
-  unidad_movil_id: string | null;
-  product: unknown;
-  trainer: unknown;
-  sala: unknown;
-  unidad: unknown;
-};
-
-function toJsonRecord<T extends Record<string, unknown>>(value: unknown): T | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null;
-  }
-  return value as T;
-}
-
-function toNullableNumber(value: unknown): number | null {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (typeof value === 'bigint') {
-    return Number(value);
-  }
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-async function findVariantsWithRawQuery(
-  prisma: ReturnType<typeof getPrisma>,
-  includeResources: boolean,
-  range: DateRange,
-) {
-  const rows = await prisma.$queryRaw<RawVariantRow[]>`
-    SELECT
-      v.id,
-      v.id_woo,
-      v.name,
-      v.status,
-      v.price,
-      v.stock,
-      v.stock_status,
-      v.sede,
-      v.date,
-      v.created_at,
-      v.updated_at,
-      v.trainer_id,
-      v.sala_id,
-      v.unidad_movil_id,
-      CASE
-        WHEN p.id IS NULL THEN NULL
-        ELSE jsonb_build_object(
-          'id', p.id,
-          'id_woo', p.id_woo,
-          'name', p.name,
-          'code', p.code,
-          'category', p.category,
-          'hora_inicio', p.hora_inicio,
-          'hora_fin', p.hora_fin,
-          'default_variant_start', p.variant_start,
-          'default_variant_end', p.variant_end,
-          'default_variant_stock_status', p.variant_stock_status,
-          'default_variant_stock_quantity', p.variant_stock_quantity,
-          'default_variant_price', p.variant_price
-        )
-      END AS product,
-      CASE
-        WHEN t.trainer_id IS NULL THEN NULL
-        ELSE jsonb_build_object(
-          'trainer_id', t.trainer_id,
-          'name', t.name,
-          'apellido', t.apellido
-        )
-      END AS trainer,
-      CASE
-        WHEN s.sala_id IS NULL THEN NULL
-        ELSE jsonb_build_object(
-          'sala_id', s.sala_id,
-          'name', s.name,
-          'sede', s.sede
-        )
-      END AS sala,
-      CASE
-        WHEN u.unidad_id IS NULL THEN NULL
-        ELSE jsonb_build_object(
-          'unidad_id', u.unidad_id,
-          'name', u.name,
-          'matricula', u.matricula
-        )
-      END AS unidad
-    FROM variants v
-    LEFT JOIN products p ON p.id_woo = v.id_padre
-    LEFT JOIN trainers t ON t.trainer_id = v.trainer_id
-    LEFT JOIN salas s ON s.sala_id = v.sala_id
-    LEFT JOIN unidades_moviles u ON u.unidad_id = v.unidad_movil_id
-    WHERE
-      v.date IS NOT NULL
-      AND v.date >= ${range.start}
-      AND v.date <= ${range.end}
-    ORDER BY v.date ASC, v.name ASC NULLS LAST
-  `;
-
-  return rows.map((row: RawVariantRow) => {
-    const productRecord = toJsonRecord<RawProductRecord>(row.product);
-    const productId = productRecord ? toMaybeString(productRecord.id) : null;
-    const product =
-      productRecord && productId
-        ? {
-            id: productId,
-            id_woo: productRecord.id_woo ?? null,
-            name: typeof productRecord.name === 'string' ? productRecord.name : null,
-            code: typeof productRecord.code === 'string' ? productRecord.code : null,
-            category: typeof productRecord.category === 'string' ? productRecord.category : null,
-            hora_inicio:
-              productRecord.hora_inicio == null ? null : (productRecord.hora_inicio as string),
-            hora_fin: productRecord.hora_fin == null ? null : (productRecord.hora_fin as string),
-            default_variant_start: (productRecord.default_variant_start as Date | string | null) ?? null,
-            default_variant_end: (productRecord.default_variant_end as Date | string | null) ?? null,
-            default_variant_stock_status:
-              typeof productRecord.default_variant_stock_status === 'string'
-                ? productRecord.default_variant_stock_status
-                : null,
-            default_variant_stock_quantity: toNullableNumber(
-              productRecord.default_variant_stock_quantity,
-            ),
-            default_variant_price:
-              productRecord.default_variant_price == null
-                ? null
-                : (productRecord.default_variant_price as string | number),
-          }
-        : null;
-
-    const base: Record<string, unknown> = {
-      id: row.id,
-      id_woo: row.id_woo,
-      name: row.name,
-      status: row.status,
-      price: row.price,
-      stock: row.stock,
-      stock_status: row.stock_status,
-      sede: row.sede,
-      date: row.date,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      product,
-    };
-
-    if (includeResources) {
-      const trainerRecord = toJsonRecord<RawTrainerRecord>(row.trainer);
-      const salaRecord = toJsonRecord<RawSalaRecord>(row.sala);
-      const unidadRecord = toJsonRecord<RawUnidadRecord>(row.unidad);
-
-      base.trainer_id = row.trainer_id ?? null;
-      base.trainer = trainerRecord
-        ? {
-            trainer_id: toMaybeString(trainerRecord.trainer_id),
-            name: typeof trainerRecord.name === 'string' ? trainerRecord.name : null,
-            apellido: typeof trainerRecord.apellido === 'string' ? trainerRecord.apellido : null,
-          }
-        : null;
-      base.sala_id = row.sala_id ?? null;
-      base.sala = salaRecord
-        ? {
-            sala_id: toMaybeString(salaRecord.sala_id),
-            name: typeof salaRecord.name === 'string' ? salaRecord.name : null,
-            sede: typeof salaRecord.sede === 'string' ? salaRecord.sede : null,
-          }
-        : null;
-      base.unidad_movil_id = row.unidad_movil_id ?? null;
-      base.unidad = unidadRecord
-        ? {
-            unidad_id: toMaybeString(unidadRecord.unidad_id),
-            name: typeof unidadRecord.name === 'string' ? unidadRecord.name : null,
-            matricula: typeof unidadRecord.matricula === 'string' ? unidadRecord.matricula : null,
-          }
-        : null;
-    }
-
-    return base;
-  });
-}
-
 /** toMaybeString: convierte un valor con .toString() (ej. Decimal/BigInt wrapper) a string seguro */
 function toMaybeString(value: unknown): string | null {
   try {
@@ -633,25 +405,20 @@ export const handler = async (event: any) => {
     }
 
     const prisma = getPrisma();
-    const variantDelegate = (prisma as any)?.variants;
-    const hasVariantDelegate =
-      variantDelegate != null && typeof variantDelegate.findMany === 'function';
     const shouldIncludeResources = getVariantResourceColumnsSupport() !== false;
 
     const buildQuery = (includeResources: boolean) =>
-      hasVariantDelegate
-        ? variantDelegate.findMany({
-            where: {
-              date: {
-                not: null,
-                gte: range.start,
-                lte: range.end,
-              },
-            },
-            orderBy: [{ date: 'asc' }, { name: 'asc' }],
-            select: (includeResources ? variantSelectionWithResources : variantSelectionBase) as any,
-          })
-        : findVariantsWithRawQuery(prisma, includeResources, range);
+      prisma.variants.findMany({
+        where: {
+          date: {
+            not: null,
+            gte: range.start,
+            lte: range.end,
+          },
+        },
+        orderBy: [{ date: 'asc' }, { name: 'asc' }],
+        select: (includeResources ? variantSelectionWithResources : variantSelectionBase) as any,
+      });
 
     let variants;
     try {
