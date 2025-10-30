@@ -11,14 +11,10 @@ import {
   type CalendarVariantEvent,
   type CalendarVariantsResponse,
 } from './api';
-import type { SessionEstado } from "../../api/sessions.types";
-import { ApiError } from "../../api/client";
-import {
-  VariantModal,
-  type ActiveVariant,
-  type ProductInfo,
-  type VariantInfo,
-} from '../formacion_abierta/ProductVariantsList';
+import type { SessionEstado } from '../../api/sessions.types';
+import { ApiError } from '../../api/client';
+import { VariantModal } from '../formacion_abierta/ProductVariantsList';
+import type { ActiveVariant, ProductInfo, VariantInfo } from '../formacion_abierta/types';
 import { FilterToolbar, type FilterDefinition, type FilterOption } from '../../components/table/FilterToolbar';
 import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState } from '../../hooks/useTableFilterState';
@@ -39,6 +35,14 @@ const VISIBLE_DAY_HOURS = Array.from(
   { length: VISIBLE_DAY_END_HOUR - VISIBLE_DAY_START_HOUR + 1 },
   (_, index) => VISIBLE_DAY_START_HOUR + index,
 );
+
+// --- Helpers numéricos ---
+const toNumberOrNull = (v: unknown): number | null => {
+  if (v == null) return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const n = Number(String(v).replace(',', '.').trim());
+  return Number.isFinite(n) ? n : null;
+};
 
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
@@ -705,7 +709,7 @@ function buildWeekColumns(range: VisibleRange, events: CalendarEventItem[]): Wee
     return end > weekStartUTC && start < weekEndUTC;
   });
 
-  columns.forEach((column, index) => {
+  columns.forEach((column) => {
     const dayStart = madridDateToUTC(column.date);
     const dayEnd = madridDateToUTC(julianToMadridDate(column.julian + 1));
     const dayEvents: DayEvent[] = [];
@@ -1381,7 +1385,7 @@ export function CalendarView({
       name: event.variant.name ?? null,
       status: event.variant.status ?? null,
       price: event.variant.price ?? null,
-      stock: event.variant.stock ?? null,
+      stock: toNumberOrNull(event.variant.stock),
       stock_status: event.variant.stock_status ?? null,
       sede: event.variant.sede ?? null,
       date: event.variant.date ?? null,
@@ -1406,8 +1410,9 @@ export function CalendarView({
       default_variant_start: event.product.default_variant_start ?? null,
       default_variant_end: event.product.default_variant_end ?? null,
       default_variant_stock_status: event.product.default_variant_stock_status ?? null,
-      default_variant_stock_quantity: event.product.default_variant_stock_quantity ?? null,
+      default_variant_stock_quantity: toNumberOrNull(event.product.default_variant_stock_quantity),
       default_variant_price: event.product.default_variant_price ?? null,
+
       variants: [variant],
     };
 
@@ -1420,14 +1425,14 @@ export function CalendarView({
 
   const handleVariantUpdated = useCallback(
     (updated: VariantInfo) => {
-      setActiveVariant((prev) => {
+      setActiveVariant((prev: ActiveVariant | null) => {
         if (!prev || prev.variant.id !== updated.id) {
           return prev;
         }
         return {
           product: {
             ...prev.product,
-            variants: prev.product.variants.map((item) =>
+            variants: prev.product.variants.map((item: VariantInfo) =>
               item.id === updated.id ? { ...item, ...updated } : item,
             ),
           },
@@ -1609,15 +1614,15 @@ export function CalendarView({
                   searchValue={searchValue}
                   onSearchChange={handleSearchChange}
                   onFilterChange={handleFilterChange}
-                onRemoveFilter={clearFilter}
-                onClearAll={clearAllFilters}
-                resultCount={resultCount}
-                isServerBusy={isFetching}
-                viewStorageKey={`calendar-${mode}`}
-                onApplyFilterState={({ filters, searchValue }) =>
-                  setFiltersAndSearch(filters, searchValue)
-                }
-              />
+                  onRemoveFilter={clearFilter}
+                  onClearAll={clearAllFilters}
+                  resultCount={resultCount}
+                  isServerBusy={isFetching}
+                  viewStorageKey={`calendar-${mode}`}
+                  onApplyFilterState={({ filters, searchValue }) =>
+                    setFiltersAndSearch(filters, searchValue)
+                  }
+                />
               </div>
             </div>
           </div>

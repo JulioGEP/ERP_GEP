@@ -320,7 +320,7 @@ export function BudgetDetailModalServices({
       case 'caes_label':
         return form?.caes_label ?? deal?.caes_label ?? summary?.caes_label ?? null;
       case 'fundae_label':
-        return form?.fundae_label ?? deal?.fundae_label ?? summary?.fundae_label ?? null;
+        return deal?.fundae_label ?? summary?.fundae_label ?? null;
       case 'hotel_label':
         return form?.hotel_label ?? deal?.hotel_label ?? summary?.hotel_label ?? null;
       case 'transporte':

@@ -1117,7 +1117,7 @@ export function CertificadosPage() {
 
       type ProcessRowError = { stage: GenerationFailureStage; error: unknown };
 
-      const processRowWithRetry = async (row: CertificateRow) => {
+      const processRowWithRetry = async (row: CertificateRow): Promise<GenerationResult> => {
         const studentLabel = buildStudentDisplayName(row);
         let lastError: ProcessRowError | null = null;
 
@@ -1189,7 +1189,7 @@ export function CertificadosPage() {
               ),
             );
 
-            return { id: row.id, label: studentLabel, status: 'success', url: resolvedUrl };
+            return { id: row.id, label: studentLabel, status: 'success' as const, url: resolvedUrl ?? null };
           } catch (error: unknown) {
             if (error instanceof GenerationCancelledError) {
               throw error;
@@ -1219,7 +1219,7 @@ export function CertificadosPage() {
         return {
           id: row.id,
           label: studentLabel,
-          status: 'error',
+          status: 'error' as const,
           stage: failureStage,
           message: `${failurePrefix}${messageBody}${attemptsInfo}`,
           url: null,

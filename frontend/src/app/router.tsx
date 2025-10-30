@@ -1,4 +1,4 @@
-import { createElement, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
@@ -12,7 +12,7 @@ import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
-import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
+import { useAuth } from '../context/AuthContext';
 
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
@@ -24,9 +24,7 @@ const SalasPage = lazy(() => import('../pages/recursos/SalasPage'));
 const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/TemplatesCertificadosPage'));
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
-const RecursosFormacionAbiertaPage = lazy(
-  () => import('../pages/recursos/FormacionAbiertaPage'),
-);
+const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/FormacionAbiertaPage'));
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
 const InformesPreventivoPage = lazy(() => import('../pages/informes/PreventivoReportPage'));
 const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroReportPage'));
@@ -89,7 +87,12 @@ export function AppRouter({
 
         <Route
           path="/presupuestos/sinplanificar"
-          element={<GuardedRoute path="/presupuestos/sinplanificar" element={<BudgetsPage {...budgetsPageProps} />} />}
+          element={
+            <GuardedRoute
+              path="/presupuestos/sinplanificar"
+              element={<BudgetsPage {...budgetsPageProps} />}
+            />
+          }
         />
 
         <Route
@@ -97,28 +100,43 @@ export function AppRouter({
           element={
             <GuardedRoute
               path="/calendario/por_sesiones"
-              element={createElement(PorSesionesPage, { ...porSesionesPageProps, key: 'calendar-sesiones' })}
+              element={
+                // Cast para evitar TS2698 cuando el tipo importado es unknown
+                <PorSesionesPage
+                  {...(porSesionesPageProps as PorSesionesPageProps & Record<string, unknown>)}
+                  key="calendar-sesiones"
+                />
+              }
             />
           }
         />
+
         <Route
           path="/calendario/por_unidad_movil"
           element={
             <GuardedRoute
               path="/calendario/por_unidad_movil"
-              element={createElement(PorUnidadMovilPage, {
-                ...porUnidadMovilPageProps,
-                key: 'calendar-unidades',
-              })}
+              element={
+                <PorUnidadMovilPage
+                  {...(porUnidadMovilPageProps as PorUnidadMovilPageProps & Record<string, unknown>)}
+                  key="calendar-unidades"
+                />
+              }
             />
           }
         />
+
         <Route
           path="/calendario/por_formador"
           element={
             <GuardedRoute
               path="/calendario/por_formador"
-              element={createElement(PorFormadorPage, { ...porFormadorPageProps, key: 'calendar-formadores' })}
+              element={
+                <PorFormadorPage
+                  {...(porFormadorPageProps as PorFormadorPageProps & Record<string, unknown>)}
+                  key="calendar-formadores"
+                />
+              }
             />
           }
         />
@@ -183,12 +201,17 @@ export function AppRouter({
         />
         <Route
           path="/informes/recurso_preventivo_ebro"
-          element={<GuardedRoute path="/informes/recurso_preventivo_ebro" element={<InformesRecursoPreventivoEbroPage />} />}
+          element={
+            <GuardedRoute
+              path="/informes/recurso_preventivo_ebro"
+              element={<InformesRecursoPreventivoEbroPage />}
+            />
+          }
         />
 
         <Route
           path="/certificados"
-          element={<GuardedRoute path="/certificados" element={<CertificadosPage {...certificadosPageProps} />} />}
+          element={<GuardedRoute path="/certificados" element={<CertificadosPage {...(certificadosPageProps as CertificadosPageProps & Record<string, unknown>)} />} />}
         />
         <Route
           path="/usuarios"
@@ -215,12 +238,10 @@ type GuardedRouteProps = {
 function GuardedRoute({ path, element }: GuardedRouteProps) {
   const { isAuthenticated, hasPermission } = useAuth();
 
-  // No autenticado → a /login
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  // Autenticado pero sin permiso → 403
   if (!hasPermission(path)) {
     return <ForbiddenPage />;
   }

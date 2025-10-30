@@ -1,3 +1,4 @@
+// src/App.tsx
 import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
@@ -5,13 +6,21 @@ import { useAuth } from './shared/auth/AuthContext';
 
 const AuthenticatedApp = lazy(() => import('./app/AuthenticatedApp'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
-const PublicSessionStudentsPage = lazy(() => import('./public/PublicSessionStudentsPage'));
+// El módulo no exporta por defecto; mapea el named export a default para React.lazy
+const PublicSessionStudentsPage = lazy(() =>
+  import('./public/PublicSessionStudentsPage').then((m) => ({
+    default: m.PublicSessionStudentsPage,
+  }))
+);
 
 export default function App() {
   return (
     <Suspense fallback={<FullPageLoader />}>
       <Routes>
-        <Route path="/public/sesiones/:sessionId/alumnos" element={<PublicSessionStudentsPage />} />
+        <Route
+          path="/public/sesiones/:sessionId/alumnos"
+          element={<PublicSessionStudentsPage />}
+        />
         <Route path="/login" element={<LoginRoute />} />
         <Route path="/*" element={<ProtectedApp />} />
       </Routes>
@@ -29,7 +38,10 @@ function LoginRoute() {
 
   if (status === 'authenticated') {
     const preferredPath = getDefaultPath();
-    const target = preferredPath !== '/' && hasPermission(preferredPath) ? preferredPath : '/';
+    const target =
+      preferredPath !== '/' && hasPermission(preferredPath)
+        ? preferredPath
+        : '/';
     return <Navigate to={target} replace state={location.state} />;
   }
 
