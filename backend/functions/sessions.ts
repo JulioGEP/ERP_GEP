@@ -1,6 +1,6 @@
 // backend/functions/sessions.ts
 import { randomUUID } from 'crypto';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
@@ -106,6 +106,125 @@ type SessionRecord = {
   sala?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
   salas?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
 };
+
+type SessionRelationClient = Prisma.TransactionClient | PrismaClient;
+
+type SessionRelationHydrationOptions = {
+  deal?: boolean;
+  product?: boolean;
+  sala?: boolean;
+};
+
+async function hydrateSessionRelationData(
+  prisma: SessionRelationClient,
+  rows: Array<Record<string, any>>,
+  options: SessionRelationHydrationOptions,
+): Promise<void> {
+  if (!rows.length) return;
+
+  const includeDeal = Boolean(options.deal);
+  const includeProduct = Boolean(options.product);
+  const includeSala = Boolean(options.sala);
+
+  const dealIds = includeDeal
+    ? Array.from(
+        new Set(
+          rows
+            .map((row) => toTrimmed((row?.deal_id as string | null | undefined) ?? null))
+            .filter((value): value is string => Boolean(value)),
+        ),
+      )
+    : [];
+  const productIds = includeProduct
+    ? Array.from(
+        new Set(
+          rows
+            .map((row) => toTrimmed((row?.deal_product_id as string | null | undefined) ?? null))
+            .filter((value): value is string => Boolean(value)),
+        ),
+      )
+    : [];
+  const salaIds = includeSala
+    ? Array.from(
+        new Set(
+          rows
+            .map((row) => toTrimmed((row?.sala_id as string | null | undefined) ?? null))
+            .filter((value): value is string => Boolean(value)),
+        ),
+      )
+    : [];
+
+  const [dealRecords, productRecords, salaRecords] = await Promise.all([
+    includeDeal && dealIds.length
+      ? prisma.deals.findMany({
+          where: { deal_id: { in: dealIds } },
+          select: {
+            deal_id: true,
+            title: true,
+            training_address: true,
+            pipeline_id: true,
+            sede_label: true,
+            caes_label: true,
+            fundae_label: true,
+            hotel_label: true,
+            transporte: true,
+          },
+        })
+      : Promise.resolve([] as any[]),
+    includeProduct && productIds.length
+      ? prisma.deal_products.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, name: true, code: true },
+        })
+      : Promise.resolve([] as any[]),
+    includeSala && salaIds.length
+      ? prisma.salas.findMany({
+          where: { sala_id: { in: salaIds } },
+          select: { sala_id: true, name: true, sede: true },
+        })
+      : Promise.resolve([] as any[]),
+  ]);
+
+  const dealMap = new Map<string, any>();
+  (dealRecords as any[]).forEach((deal) => {
+    if (deal && typeof deal === 'object' && deal.deal_id) {
+      dealMap.set(deal.deal_id as string, deal);
+    }
+  });
+
+  const productMap = new Map<string, any>();
+  (productRecords as any[]).forEach((product) => {
+    if (product && typeof product === 'object' && product.id) {
+      productMap.set(product.id as string, product);
+    }
+  });
+
+  const salaMap = new Map<string, any>();
+  (salaRecords as any[]).forEach((sala) => {
+    if (sala && typeof sala === 'object' && sala.sala_id) {
+      salaMap.set(sala.sala_id as string, sala);
+    }
+  });
+
+  rows.forEach((row) => {
+    if (!row || typeof row !== 'object') return;
+    if (includeDeal) {
+      const deal = dealMap.get(row.deal_id as string) ?? null;
+      (row as any).deal = deal;
+      (row as any).deals = deal;
+    }
+    if (includeProduct) {
+      const product = productMap.get(row.deal_product_id as string) ?? null;
+      (row as any).deal_product = product;
+      (row as any).deal_products = product;
+    }
+    if (includeSala) {
+      const sala = row.sala_id ? salaMap.get(row.sala_id as string) ?? null : null;
+      (row as any).sala = sala;
+      (row as any).salas = sala;
+    }
+  });
+}
 
 function normalizeSessionUnitLink(link: any): SessionUnitLink {
   if (!link || typeof link !== 'object') {
@@ -528,10 +647,11 @@ async function fetchSessionsByProduct(
       include: {
         sesion_trainers: { select: { trainer_id: true } },
         sesion_unidades: { select: { unidad_movil_id: true } },
-        deals: { select: { sede_label: true, pipeline_id: true } },
       },
     }),
   ]);
+
+  await hydrateSessionRelationData(prisma, rawRows as any[], { deal: true });
 
   const rows = ensureSessionRelationsList(rawRows as any[]);
 
@@ -673,15 +793,22 @@ export const handler = async (event: any) => {
       const sessions = await prisma.sesiones.findMany({
         where: { deal_id: dealId },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
-        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, sala: { select: { sala_id: true, name: true } } },
+        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, sala_id: true },
       });
 
-      const payload = (sessions as any[]).map((s: any) => ({
-        id: s.id as string,
-        fecha_inicio_utc: toIsoOrNull(s.fecha_inicio_utc),
-        fecha_fin_utc: toIsoOrNull(s.fecha_fin_utc),
-        room: s.sala ? { id: (s.sala.sala_id as string) ?? null, name: (s.sala.name as string) ?? null } : null,
-      }));
+      await hydrateSessionRelationData(prisma, sessions as any[], { sala: true });
+
+      const payload = (sessions as any[]).map((s: any) => {
+        const sala = (s.sala ?? s.salas) as any;
+        return {
+          id: s.id as string,
+          fecha_inicio_utc: toIsoOrNull(s.fecha_inicio_utc),
+          fecha_fin_utc: toIsoOrNull(s.fecha_fin_utc),
+          room: sala
+            ? { id: (sala.sala_id as string) ?? null, name: (sala.name as string) ?? null }
+            : null,
+        };
+      });
 
       return successResponse({ sessions: payload });
     }
@@ -749,21 +876,6 @@ export const handler = async (event: any) => {
           ],
         },
         include: {
-          deals: {
-            select: {
-              deal_id: true,
-              title: true,
-              training_address: true,
-              pipeline_id: true,
-              sede_label: true,
-              caes_label: true,
-              fundae_label: true,
-              hotel_label: true,
-              transporte: true,
-            },
-          },
-          deal_products: { select: { id: true, name: true, code: true } },
-          salas: { select: { sala_id: true, name: true, sede: true } },
           sesion_trainers: {
             select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
           },
@@ -773,6 +885,8 @@ export const handler = async (event: any) => {
         },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { nombre_cache: 'asc' }],
       });
+
+      await hydrateSessionRelationData(prisma, sessions as any[], { deal: true, product: true, sala: true });
 
       const rowsAny = ensureSessionRelationsList(sessions as any[]);
       const rowsById = new Map<string, any>(rowsAny.map((row: any) => [row.id as string, row]));
@@ -1001,7 +1115,6 @@ export const handler = async (event: any) => {
         const storedRaw = await tx.sesiones.findUnique({
           where: { id: created.id },
           include: {
-            deal: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
             sesion_unidades: { select: { unidad_movil_id: true } },
           },
@@ -1027,11 +1140,11 @@ export const handler = async (event: any) => {
       const storedRaw = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deal: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
         },
       });
+      await hydrateSessionRelationData(prisma, storedRaw ? ([storedRaw] as any[]) : [], { deal: true });
       const storedRecord = ensureSessionRelationsOrNull(storedRaw as any);
       if (!storedRecord) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
@@ -1119,7 +1232,6 @@ export const handler = async (event: any) => {
       const refreshedRaw = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deal: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
         },
