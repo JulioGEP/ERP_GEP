@@ -2,16 +2,12 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
-import { normalizeEmail, requireAuth } from './_shared/auth';
-
-const ALLOWED_ROLES = new Set([
-  'Admin',
-  'Comercial',
-  'Administracion',
-  'Logistica',
-  'People',
-  'Formador',
-]);
+import {
+  getRoleDisplayValue,
+  getRoleStorageValue,
+  normalizeEmail,
+  requireAuth,
+} from './_shared/auth';
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
@@ -22,7 +18,7 @@ function serializeUser(user: any) {
     firstName: user.first_name,
     lastName: user.last_name,
     email: user.email,
-    role: user.role,
+    role: getRoleDisplayValue(user.role) ?? user.role,
     active: user.active,
     createdAt: user.created_at,
     updatedAt: user.updated_at,
@@ -114,14 +110,15 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
   const firstName = sanitizeName(request.body?.firstName);
   const lastName = sanitizeName(request.body?.lastName);
   const email = normalizeEmail(request.body?.email);
-  const role = typeof request.body?.role === 'string' ? request.body.role.trim() : '';
+  const roleInput = typeof request.body?.role === 'string' ? request.body.role.trim() : '';
   const active = request.body?.active === undefined ? true : Boolean(request.body.active);
 
-  if (!firstName || !lastName || !email || !role.length) {
+  if (!firstName || !lastName || !email || !roleInput.length) {
     return errorResponse('INVALID_INPUT', 'Todos los campos son obligatorios', 400);
   }
 
-  if (!ALLOWED_ROLES.has(role)) {
+  const role = getRoleStorageValue(roleInput);
+  if (!role) {
     return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
   }
 
@@ -188,8 +185,10 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
   }
 
   if ('role' in (request.body ?? {})) {
-    const role = typeof request.body?.role === 'string' ? request.body.role.trim() : '';
-    if (!role.length || !ALLOWED_ROLES.has(role)) {
+    const roleInput =
+      typeof request.body?.role === 'string' ? request.body.role.trim() : '';
+    const role = getRoleStorageValue(roleInput);
+    if (!role) {
       return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
     }
     data.role = role;
