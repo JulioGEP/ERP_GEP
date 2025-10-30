@@ -174,7 +174,7 @@ async function ensureVariantResourcesAvailable(
         trainer_id: true,
         sala_id: true,
         unidad_movil_id: true,
-        product: { select: { hora_inicio: true, hora_fin: true } },
+        products: { select: { hora_inicio: true, hora_fin: true } },
       },
     });
     setVariantResourceColumnsSupport(true);
@@ -196,11 +196,11 @@ async function ensureVariantResourcesAvailable(
     trainer_id: string | null;
     sala_id: string | null;
     unidad_movil_id: string | null;
-    product?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
+    products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   }) => {
     const otherRange = computeVariantRange(
       variant.date,
-      variant.product ?? { hora_inicio: null, hora_fin: null },
+      variant.products ?? { hora_inicio: null, hora_fin: null },
     );
     if (!otherRange) return false;
 
@@ -554,9 +554,10 @@ type VariantRecord = {
   trainer_id?: string | null;
   sala_id?: string | null;
   unidad_movil_id?: string | null;
-  trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
-  sala?: { sala_id: string; name: string; sede: string | null } | null;
-  unidad?: { unidad_id: string; name: string; matricula: string | null } | null;
+  products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
+  trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  salas?: { sala_id: string; name: string; sede: string | null } | null;
+  unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
 };
@@ -638,9 +639,9 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       trainer_id: true,
       sala_id: true,
       unidad_movil_id: true,
-      trainer: { select: { trainer_id: true, name: true, apellido: true } },
-      sala: { select: { sala_id: true, name: true, sede: true} },
-      unidad: { select: { unidad_id: true, name: true, matricula: true } },
+      trainers: { select: { trainer_id: true, name: true, apellido: true } },
+      salas: { select: { sala_id: true, name: true, sede: true } },
+      unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
     };
   };
 
@@ -756,14 +757,24 @@ function normalizeVariant(record: VariantRecord) {
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
     trainer_id: record.trainer_id ?? null,
-    trainer: record.trainer
-      ? { trainer_id: record.trainer.trainer_id, name: record.trainer.name ?? null, apellido: record.trainer.apellido ?? null }
+    trainer: record.trainers
+      ? {
+          trainer_id: record.trainers.trainer_id,
+          name: record.trainers.name ?? null,
+          apellido: record.trainers.apellido ?? null,
+        }
       : null,
     sala_id: record.sala_id ?? null,
-    sala: record.sala ? { sala_id: record.sala.sala_id, name: record.sala.name, sede: record.sala.sede ?? null } : null,
+    sala: record.salas
+      ? { sala_id: record.salas.sala_id, name: record.salas.name, sede: record.salas.sede ?? null }
+      : null,
     unidad_movil_id: record.unidad_movil_id ?? null,
-    unidad: record.unidad
-      ? { unidad_id: record.unidad.unidad_id, name: record.unidad.name, matricula: record.unidad.matricula ?? null }
+    unidad: record.unidades_moviles
+      ? {
+          unidad_id: record.unidades_moviles.unidad_id,
+          name: record.unidades_moviles.name,
+          matricula: record.unidades_moviles.matricula ?? null,
+        }
       : null,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
@@ -896,7 +907,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         trainer_id: true,
         sala_id: true,
         unidad_movil_id: true,
-        product: { select: { hora_inicio: true, hora_fin: true } },
+        products: { select: { hora_inicio: true, hora_fin: true } },
       },
     });
     if (!existing) return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
@@ -915,7 +926,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       }
     }
 
-    const productTimes = existing.product ?? { hora_inicio: null, hora_fin: null };
+    const productTimes = existing.products ?? { hora_inicio: null, hora_fin: null };
     const variantRange = computeVariantRange(nextDate, productTimes);
 
     const availabilityError = await ensureVariantResourcesAvailable(prisma, {
@@ -974,9 +985,9 @@ export const handler = createHttpHandler<any>(async (request) => {
         trainer_id: true,
         sala_id: true,
         unidad_movil_id: true,
-        trainer: { select: { trainer_id: true, name: true, apellido: true } },
-        sala: { select: { sala_id: true, name: true, sede: true } },
-        unidad: { select: { unidad_id: true, name: true, matricula: true } },
+        trainers: { select: { trainer_id: true, name: true, apellido: true } },
+        salas: { select: { sala_id: true, name: true, sede: true } },
+        unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
         created_at: true,
         updated_at: true,
       },
