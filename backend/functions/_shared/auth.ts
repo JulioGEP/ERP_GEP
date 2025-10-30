@@ -88,9 +88,16 @@ export type RequireAuthOptions = {
 
 export function getPermissionsForRole(role: string | null | undefined): readonly string[] {
   if (!role) return [];
-  const normalized = role.trim();
+  const normalized = role.trim().toLowerCase();
   if (!normalized.length) return [];
-  return ROLE_PERMISSIONS[normalized] ?? [];
+
+  for (const [roleName, permissions] of Object.entries(ROLE_PERMISSIONS)) {
+    if (roleName.trim().toLowerCase() === normalized) {
+      return permissions;
+    }
+  }
+
+  return [];
 }
 
 export function computeDefaultPath(permissions: readonly string[]): string {
