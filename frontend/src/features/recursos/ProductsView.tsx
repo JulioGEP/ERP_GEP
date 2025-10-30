@@ -844,7 +844,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
           return (
             <Form.Control
               type="url"
-              placeholder="https://..."
+              placeholder="https://ejemplo.com/formacion"
               value={urlValue}
               onChange={(event) => handleUrlChange(product.id, event.target.value)}
               onBlur={() => handleUrlCommit(product)}
