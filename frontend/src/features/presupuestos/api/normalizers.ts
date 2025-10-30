@@ -46,6 +46,14 @@ function toBoolean(value: unknown): boolean {
   return value === true;
 }
 
+function toSiNoLabel(value: unknown): DealDetail['transporte'] {
+  const v = toStringValue(value)?.trim().toLowerCase();
+  if (!v) return null;
+  if (v === 'si' || v === 'sí') return 'Si';
+  if (v === 'no') return 'No';
+  return null;
+}
+
 function toSessionEstadoValue(value: unknown): SessionEstado {
   const text = toStringValue(value);
   if (!text) return 'BORRADOR';
@@ -223,7 +231,6 @@ export function normalizeDealSummary(row: Json): DealSummary {
     title,
     organization,
     person,
-    status: toStringValue(row?.status) ?? null,
     pipeline_id: toStringValue(row?.pipeline_id) ?? null,
     pipeline_label: pipelineLabel ?? null,
     training_address: toStringValue(row?.training_address) ?? null,
@@ -238,7 +245,7 @@ export function normalizeDealSummary(row: Json): DealSummary {
     fundae_val: toBoolean(row?.fundae_val),
     hotel_label: toStringValue(row?.hotel_label) ?? null,
     hotel_val: toBoolean(row?.hotel_val),
-    transporte: toStringValue(row?.transporte) ?? null,
+    transporte: toSiNoLabel(row?.transporte),
     transporte_val: toBoolean(row?.transporte_val),
     po: toStringValue(row?.po) ?? null,
     po_val: toBoolean(row?.po_val),
@@ -283,7 +290,6 @@ export function normalizeDealDetail(raw: Json): DealDetail {
         }
       : null,
     products: products.products ?? [],
-    productNames: products.productNames ?? [],
     hours: toNumber(raw?.hours),
     pipeline_label: pipelineLabel,
     pipeline_id: pipelineId,
@@ -295,7 +301,7 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     fundae_val: toBoolean(raw?.fundae_val),
     hotel_label: toStringValue(raw?.hotel_label) ?? null,
     hotel_val: toBoolean(raw?.hotel_val),
-    transporte: toStringValue(raw?.transporte) ?? null,
+    transporte: toSiNoLabel(raw?.transporte),
     transporte_val: toBoolean(raw?.transporte_val),
     po: toStringValue(raw?.po) ?? null,
     po_val: toBoolean(raw?.po_val),
@@ -306,7 +312,6 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     notes: Array.isArray(raw?.notes)
       ? (raw.notes as unknown[]).map((note) => normalizeDealNote(note))
       : [],
-    extras: raw?.extras ?? undefined,
     presu_holded: toStringValue(raw?.presu_holded) ?? null,
   };
 
@@ -333,10 +338,12 @@ export function normalizeDealDocument(raw: any): DealDocument {
   return {
     id: toStringValue(raw?.id) ?? '',
     deal_id: toStringValue(raw?.deal_id ?? raw?.dealId) ?? '',
-    file_name: toStringValue(raw?.file_name ?? raw?.fileName) ?? null,
-    file_type: toStringValue(raw?.file_type ?? raw?.mime_type) ?? null,
-    compartir_formador:
-      typeof raw?.compartir_formador === 'boolean' ? raw.compartir_formador : false,
+    name: toStringValue(raw?.name ?? raw?.file_name ?? raw?.fileName) ?? null,
+    mime_type: toStringValue(raw?.mime_type ?? raw?.file_type) ?? null,
+    url: isHttpUrl(raw?.url) ? String(raw?.url) : null,
+    source: toStringValue(raw?.source) ?? (raw?.drive_file_name || raw?.driveUrl ? 'PIPEDRIVE' : 'MANUAL'),
+    size: typeof raw?.size === 'number' ? raw.size : null,
+    compartir_formador: typeof raw?.compartir_formador === 'boolean' ? raw.compartir_formador : false,
     added_at: toStringValue(raw?.added_at) ?? null,
     updated_at: toStringValue(raw?.updated_at) ?? null,
     drive_file_name: toStringValue(raw?.drive_file_name) ?? null,

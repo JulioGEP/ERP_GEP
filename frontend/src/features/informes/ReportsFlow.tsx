@@ -86,14 +86,22 @@ export function ReportsFlow({ type, title }: ReportsFlowProps) {
     );
   }
 
-  return (
-    <Form
-      initial={formInitial}
-      title={resolvedTitle}
-      type={type}
-      onNext={handleNext}
-    />
-  );
+  // arriba, junto a los otros handlers
+const handleChooseAnother = () => {
+  setDraft(createEmptyDraft(type));
+  setStage('form');
+};
+
+return (
+  <Form
+    initial={formInitial}
+    title={resolvedTitle}
+    type={type}
+    onNext={handleNext}
+    onChooseAnother={handleChooseAnother}
+  />
+);
+
 }
 
 export default ReportsFlow;

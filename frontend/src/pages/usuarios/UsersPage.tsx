@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Alert,
   Badge,
@@ -39,6 +39,8 @@ type UserFormValues = {
   active: boolean;
 };
 
+type UsersListResponse = { total: number; page: number; pageSize: number; users: UserSummary[] };
+
 export default function UsersPage({ onNotify }: UsersPageProps) {
   const notify = useCallback(
     (variant: 'success' | 'danger' | 'info' | 'warning', message: string) => {
@@ -59,11 +61,11 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
 
-  const usersQuery = useQuery({
-    queryKey: ['users', page, searchTerm],
-    queryFn: () => fetchUsers({ page, pageSize: PAGE_SIZE, search: searchTerm || undefined }),
-    keepPreviousData: true,
-  });
+  const usersQuery = useQuery<UsersListResponse>({
+  queryKey: ['users', page, searchTerm],
+  queryFn: () => fetchUsers({ page, pageSize: PAGE_SIZE, search: searchTerm || undefined }),
+  placeholderData: keepPreviousData,
+});
 
   useEffect(() => {
     if (!usersQuery.data) return;
@@ -154,7 +156,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   );
 
   const totalUsers = usersQuery.data?.total ?? 0;
-  const users = usersQuery.data?.users ?? [];
+  const users = usersQuery.data?.users ?? ([] as UserSummary[]);
   const currentPage = usersQuery.data?.page ?? page;
   const totalPages = usersQuery.data ? Math.max(1, Math.ceil(usersQuery.data.total / usersQuery.data.pageSize)) : 1;
 
@@ -237,7 +239,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
                       </td>
                     </tr>
                   ) : (
-                    users.map((user) => (
+                    users.map((user: UserSummary) => (
                       <tr key={user.id}>
                         <td>{`${user.firstName} ${user.lastName}`}</td>
                         <td>{user.email}</td>

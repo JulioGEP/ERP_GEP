@@ -74,40 +74,43 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     date: input?.date ?? null,
     trainer_id: trainerId,
     trainer:
-      input?.trainer && typeof input.trainer === 'object'
-        ? {
-            trainer_id:
-              input.trainer.trainer_id != null && String(input.trainer.trainer_id).trim().length
-                ? String(input.trainer.trainer_id).trim()
-                : trainerId,
-            name: input.trainer.name ?? null,
-            apellido: input.trainer.apellido ?? null,
-          }
-        : null,
+  input?.trainer && typeof input.trainer === 'object'
+    ? {
+        // debe ser string siempre
+        trainer_id:
+          input.trainer.trainer_id != null && String(input.trainer.trainer_id).trim().length
+            ? String(input.trainer.trainer_id).trim()
+            : (trainerId ?? ''),
+        name: toTrimmedString(input.trainer.name),
+        apellido: toTrimmedString(input.trainer.apellido),
+      }
+    : null,
     sala_id: salaId,
     sala:
-      input?.sala && typeof input.sala === 'object'
-        ? {
-            sala_id:
-              input.sala.sala_id != null && String(input.sala.sala_id).trim().length
-                ? String(input.sala.sala_id).trim()
-                : salaId,
-            name: input.sala.name ?? '',
-            sede: input.sala.sede ?? null,
-          }
-        : null,
+  input?.sala && typeof input.sala === 'object'
+    ? {
+        // debe ser string siempre
+        sala_id:
+          input.sala.sala_id != null && String(input.sala.sala_id).trim().length
+            ? String(input.sala.sala_id).trim()
+            : (salaId ?? ''),
+        name: toTrimmedString(input.sala.name) ?? '',
+        sede: toTrimmedString(input.sala.sede),
+      }
+    : null,
     unidad_movil_id: unidadId,
     unidad:
-      input?.unidad && typeof input.unidad === 'object'
-        ? {
-            unidad_id:
-              input.unidad.unidad_id != null && String(input.unidad.unidad_id).trim().length
-                ? String(input.unidad.unidad_id).trim()
-                : unidadId,
-            name: input.unidad.name ?? '',
-            matricula: input.unidad.matricula ?? null,
-          }
-        : null,
+  input?.unidad && typeof input.unidad === 'object'
+    ? {
+        // debe ser string siempre
+        unidad_id:
+          input.unidad.unidad_id != null && String(input.unidad.unidad_id).trim().length
+            ? String(input.unidad.unidad_id).trim()
+            : (unidadId ?? ''),
+        name: toTrimmedString(input.unidad.name) ?? '',
+        matricula: toTrimmedString(input.unidad.matricula),
+      }
+    : null,
     created_at: input?.created_at ?? null,
     updated_at: input?.updated_at ?? null,
   } satisfies VariantInfo;

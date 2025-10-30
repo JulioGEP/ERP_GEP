@@ -75,10 +75,15 @@ export function useCertificateData() {
     setSelectedSessionId(null);
   }, []);
 
+  // ⬇️ Acepta string | number | null | undefined y normaliza internamente
   const loadStudentsForSession = useCallback(
-    async (dealId: string, sessionId: string) => {
+    async (
+      dealId: string | number | null | undefined,
+      sessionId: string | number | null | undefined
+    ) => {
       const normalizedDealId = String(dealId ?? '').trim();
       const normalizedSessionId = String(sessionId ?? '').trim();
+
       if (!normalizedDealId || !normalizedSessionId) {
         setStudents([]);
         return;
@@ -139,6 +144,7 @@ export function useCertificateData() {
         if (flattenedSessions.length === 1) {
           const onlySession = flattenedSessions[0];
           setSelectedSessionId(onlySession.id);
+          // ⬇️ Ahora compila aunque deal_id sea string | null
           await loadStudentsForSession(dealDetail.deal_id, onlySession.id);
         } else {
           setSelectedSessionId(null);

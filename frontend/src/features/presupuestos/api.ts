@@ -448,7 +448,7 @@ function normalizeDealSummary(row: Json): DealSummary {
     : [];
   const sessions = rawSessions
     .map((session: Json) => normalizeDealSummarySession(session))
-    .filter((session): session is DealSummarySession => session !== null);
+    .filter((session: DealSummarySession | null): session is DealSummarySession => session !== null);
 
   const studentNames = normalizeDealStudentNames(row?.students ?? null);
 
@@ -1619,7 +1619,7 @@ export async function fetchVariantSiblings(params: {
 
   const data = await request(url);
 
-  const rawVariants = Array.isArray(data?.variants) ? data.variants : [];
+  const rawVariants = Array.isArray(data?.variants) ? (data.variants as unknown[]) : [];
   const normalizedVariants = rawVariants
     .map<VariantSiblingOption | null>((variant: any) => {
       const id = toStringValue(variant?.id);
@@ -1640,7 +1640,7 @@ export async function fetchVariantSiblings(params: {
         date,
       } satisfies VariantSiblingOption;
     })
-    .filter((variant): variant is VariantSiblingOption => variant !== null);
+    .filter((variant: VariantSiblingOption | null): variant is VariantSiblingOption => variant !== null);
 
   const variants: VariantSiblingOption[] = normalizedVariants;
 

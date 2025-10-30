@@ -614,8 +614,8 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
 
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const columns = useMemo<ColumnDef<Product>[]>(() => {
-    const baseColumns: ColumnDef<Product>[] = [
+  const columns = useMemo<ColumnDef<Product, unknown>[]>(() => {
+    const baseColumns: ColumnDef<Product, unknown>[] = [
       {
         id: 'id_pipe',
         header: ({ column }) => {
@@ -874,12 +874,12 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   ]);
 
   const table = useReactTable({
-    data: filteredProducts,
-    columns,
-    state: { sorting: tanstackSortingState },
-    onSortingChange: handleSortingChange,
-    getRowId: (row) => row.id,
-  });
+  data: filteredProducts,
+  columns,
+  state: { sorting: tanstackSortingState },
+  onSortingChange: handleSortingChange,
+  getRowId: (row) => row.id,
+});
 
   const rowModel = table.getRowModel();
   const rows = rowModel.rows;

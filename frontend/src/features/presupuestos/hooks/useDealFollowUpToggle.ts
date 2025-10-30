@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { patchDealEditable } from '../api';
 import type { DealEditablePatch } from '../api';
-import type { DealDetail, DealSummary } from '../../types/deal';
+import type { DealDetail, DealSummary } from '../../../types/deal';
 import {
   DEALS_WITHOUT_SESSIONS_QUERY_KEY,
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
@@ -104,24 +104,29 @@ export function useDealFollowUpToggle(options: {
 
         const dealIdStr = String(dealId);
 
-        queryClient.setQueryData<DealDetail | undefined>(detailQueryKey, (current) =>
-          current ? { ...current, [field]: value } : current,
-        );
+        queryClient.setQueryData<DealDetail | undefined>(
+  detailQueryKey,
+  (current: DealDetail | undefined) =>
+    current ? { ...current, [field]: value } : current,
+);
 
         for (const { key } of previousSummaries) {
-          queryClient.setQueryData<DealSummary[] | undefined>(key, (current) => {
-            if (!Array.isArray(current)) return current;
-            let changed = false;
-            const next = current.map((item) => {
-              const summaryId = resolveSummaryDealId(item);
-              if (summaryId && summaryId === dealIdStr) {
-                changed = true;
-                return { ...item!, [field]: value };
-              }
-              return item;
-            });
-            return changed ? next : current;
-          });
+          queryClient.setQueryData<DealSummary[] | undefined>(
+  key,
+  (current: DealSummary[] | undefined) => {
+    if (!Array.isArray(current)) return current;
+    let changed = false;
+    const next = current.map((item) => {
+      const summaryId = resolveSummaryDealId(item);
+      if (summaryId && summaryId === dealIdStr) {
+        changed = true;
+        return { ...item!, [field]: value };
+      }
+      return item;
+    });
+    return changed ? next : current;
+  }
+);
         }
 
         return { previousDetail, previousSummaries } satisfies MutationContext;

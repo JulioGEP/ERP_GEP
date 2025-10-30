@@ -11,6 +11,8 @@ const CERTIFICATE_FONT_FILES = {
 
 let initializationPromise: Promise<typeof pdfMake> | undefined;
 
+// ---- helpers ---------------------------------------------------------------
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 0x8000;
@@ -21,24 +23,15 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode(...chunk);
   }
 
-  if (typeof btoa === 'function') {
-    return btoa(binary);
-  }
-
-  if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
-    return window.btoa(binary);
-  }
-
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(bytes).toString('base64');
-  }
+  if (typeof btoa === 'function') return btoa(binary);
+  if (typeof window !== 'undefined' && typeof window.btoa === 'function') return window.btoa(binary);
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
 
   throw new Error('No se puede convertir el buffer a base64 en este entorno.');
 }
 
 async function loadFontIntoVfs(fileName: string): Promise<void> {
   const response = await fetch(`${CERTIFICATE_ASSETS_BASE_PATH}${fileName}`);
-
   if (!response.ok) {
     throw new Error(`No se ha podido cargar la fuente ${fileName} (${response.status}).`);
   }
@@ -46,9 +39,15 @@ async function loadFontIntoVfs(fileName: string): Promise<void> {
   const base64 = arrayBufferToBase64(await response.arrayBuffer());
   pdfMake.vfs = {
     ...(pdfMake.vfs || {}),
-    [fileName]: base64
+    [fileName]: base64,
   };
 }
+
+// Este tipo evita castear a Window (que requiere props como "name").
+// Solo añadimos la propiedad opcional pdfMake al global actual.
+type GlobalWithPdfMake = typeof globalThis & { pdfMake?: typeof pdfMake };
+
+// ---- initializer -----------------------------------------------------------
 
 function initialisePdfMake(): Promise<typeof pdfMake> {
   if (!initializationPromise) {
@@ -58,12 +57,15 @@ function initialisePdfMake(): Promise<typeof pdfMake> {
         return pdfMake;
       }
 
-      const fontFiles = Object.values(CERTIFICATE_FONT_FILES);
+      // Ensanchamos a string[] para que .includes() acepte "string"
+      const fontFiles: string[] = Object.values(CERTIFICATE_FONT_FILES) as string[];
 
+      // Carga de las fuentes en VFS
       for (const file of fontFiles) {
         await loadFontIntoVfs(file);
       }
 
+      // Registro de familias
       pdfMake.fonts = {
         ...(pdfMake.fonts || {}),
         Poppins: {
@@ -74,13 +76,15 @@ function initialisePdfMake(): Promise<typeof pdfMake> {
         },
       };
 
-      const globalScope = typeof window !== 'undefined' ? window : (globalThis as Window);
+      // Uso de window si existe, si no globalThis; sin castear a Window
+      const globalScope: GlobalWithPdfMake =
+        (typeof window !== 'undefined' ? window : globalThis) as GlobalWithPdfMake;
+
       if (!('pdfMake' in globalScope)) {
-        (globalScope as typeof window & { pdfMake: typeof pdfMake }).pdfMake = pdfMake;
+        (globalScope as GlobalWithPdfMake).pdfMake = pdfMake;
       }
 
       const vfsKeys = Object.keys(pdfMake.vfs || {});
-
       console.info('pdfMake inicializado con fuentes:', {
         fuentes: fontFiles,
         vfs: vfsKeys.filter((key) => fontFiles.includes(key)),
@@ -99,5 +103,5 @@ export async function getPdfMakeInstance(): Promise<typeof pdfMake> {
   await pdfMakeReady;
   return pdfMake;
 }
- 
-export const CERTIFICATE_FONT_FILE_NAMES = Object.values(CERTIFICATE_FONT_FILES);
+
+export const CERTIFICATE_FONT_FILE_NAMES = Object.values(CERTIFICATE_FONT_FILES) as string[];

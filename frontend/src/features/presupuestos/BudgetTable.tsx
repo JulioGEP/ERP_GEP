@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   useReactTable,
   type ColumnDef,
@@ -600,9 +600,9 @@ export function BudgetTable({
         sorting: sortingState,
       }),
     enabled: shouldUseServerFiltering,
-    keepPreviousData: true,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+  placeholderData: keepPreviousData,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false,
   });
 
   const tableBudgets = shouldUseServerFiltering
@@ -673,8 +673,8 @@ export function BudgetTable({
     [onDelete, showDeleteAction]
   );
 
-  const columns = useMemo<ColumnDef<DealSummary>[]>(() => {
-    const baseColumns: ColumnDef<DealSummary>[] = [
+  const columns = useMemo<ColumnDef<DealSummary, unknown>[]>(() => {
+  const baseColumns: ColumnDef<DealSummary, unknown>[] = [
       {
         id: 'presupuesto',
         header: ({ column }) => {
@@ -866,13 +866,13 @@ export function BudgetTable({
     return baseColumns;
   }, [deletingId, handleDelete, showDeleteAction]);
 
-  const table = useReactTable({
-    data: tableBudgets,
-    columns,
-    state: { sorting: tanstackSortingState },
-    onSortingChange: handleSortingChange,
-    getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
-  });
+  const table = useReactTable<DealSummary>({
+  data: tableBudgets,
+  columns,
+  state: { sorting: tanstackSortingState },
+  onSortingChange: handleSortingChange,
+  getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
+});
 
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const rowModel = table.getRowModel();
@@ -1005,7 +1005,8 @@ export function BudgetTable({
                       className={alignRight ? 'text-end' : undefined}
                       scope="col"
                     >
-                      {header.isPlaceholder ? null : header.renderHeader()}
+                      {!header.isPlaceholder &&
+                      header.renderHeader()}
                     </th>
                   );
                 })}

@@ -42,9 +42,9 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const queryClient = useQueryClient();
 
-  const roomsQuery = useQuery({
+  const roomsQuery = useQuery<Room[], ApiError>({
     queryKey: ['rooms'],
-    queryFn: fetchRooms,
+    queryFn: () => fetchRooms(),
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -75,7 +75,7 @@ export function RoomsView({ onNotify }: RoomsViewProps) {
     },
   });
 
-  const rooms = roomsQuery.data ?? [];
+  const rooms: Room[] = roomsQuery.data ?? [];
   const isLoading = roomsQuery.isLoading;
   const isFetching = roomsQuery.isFetching && !roomsQuery.isLoading;
   const isSaving = createMutation.isPending || updateMutation.isPending;
