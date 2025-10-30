@@ -313,8 +313,11 @@ export default function AuthenticatedApp() {
 
   const userDisplayName = useMemo(() => {
     if (!user) return '';
-    const name = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
-    return name.length ? name : user.email;
+    const firstName = (user.firstName ?? '').trim();
+    if (firstName.length) return firstName;
+    const lastName = (user.lastName ?? '').trim();
+    if (lastName.length) return lastName;
+    return user.email;
   }, [user]);
 
   const handleLogout = useCallback(async () => {
