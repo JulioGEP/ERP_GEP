@@ -100,6 +100,11 @@ type SessionRecord = {
   unidades: SessionUnitLink[];
   sesion_unidades?: SessionUnitLink[];
   deal?: { sede_label: string | null; pipeline_id: string | null } | null;
+  deals?: { sede_label: string | null; pipeline_id: string | null } | null;
+  deal_product?: { name?: string | null; code?: string | null } | null;
+  deal_products?: { name?: string | null; code?: string | null } | null;
+  sala?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
+  salas?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
 };
 
 function normalizeSessionUnitLink(link: any): SessionUnitLink {
@@ -141,6 +146,9 @@ function ensureSessionRelations(row: any): SessionRecord {
     : Array.isArray(record.sesion_unidades)
       ? record.sesion_unidades.map((link) => normalizeSessionUnitLink(link))
       : [];
+  if (!record.deal && record.deals) record.deal = record.deals;
+  if (!record.deal_product && record.deal_products) record.deal_product = record.deal_products;
+  if (!record.sala && record.salas) record.sala = record.salas;
   return record;
 }
 
@@ -520,7 +528,7 @@ async function fetchSessionsByProduct(
       include: {
         sesion_trainers: { select: { trainer_id: true } },
         sesion_unidades: { select: { unidad_movil_id: true } },
-        deal: { select: { sede_label: true, pipeline_id: true } },
+        deals: { select: { sede_label: true, pipeline_id: true } },
       },
     }),
   ]);
@@ -741,7 +749,7 @@ export const handler = async (event: any) => {
           ],
         },
         include: {
-          deal: {
+          deals: {
             select: {
               deal_id: true,
               title: true,
@@ -754,8 +762,8 @@ export const handler = async (event: any) => {
               transporte: true,
             },
           },
-          deal_product: { select: { id: true, name: true, code: true } },
-          sala: { select: { sala_id: true, name: true, sede: true } },
+          deal_products: { select: { id: true, name: true, code: true } },
+          salas: { select: { sala_id: true, name: true, sede: true } },
           sesion_trainers: {
             select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
           },
@@ -774,8 +782,11 @@ export const handler = async (event: any) => {
         .filter((s: any) => s.fecha_inicio_utc && s.fecha_fin_utc)
         .map((s: any) => {
           const raw: any = rowsById.get(s.id);
-          const sala = raw?.sala
-            ? { sala_id: raw.sala.sala_id as string, name: raw.sala.name as string, sede: (raw.sala.sede as string) ?? null }
+          const rawDeal: any = raw?.deal ?? raw?.deals;
+          const rawProduct: any = raw?.deal_product ?? raw?.deal_products;
+          const rawSala: any = raw?.sala ?? raw?.salas;
+          const sala = rawSala
+            ? { sala_id: rawSala.sala_id as string, name: rawSala.name as string, sede: (rawSala.sede as string) ?? null }
             : null;
 
           const trainers = ((raw?.trainers ?? []) as any[])
@@ -807,22 +818,22 @@ export const handler = async (event: any) => {
           return {
             id: s.id as string,
             deal_id: s.deal_id as string,
-            deal_title: (raw?.deal?.title as string) ?? null,
-            deal_training_address: (raw?.deal?.training_address as string) ?? null,
-            deal_sede_label: (raw?.deal?.sede_label as string) ?? null,
+            deal_title: (rawDeal?.title as string) ?? null,
+            deal_training_address: (rawDeal?.training_address as string) ?? null,
+            deal_sede_label: (rawDeal?.sede_label as string) ?? null,
             deal_product_id: s.deal_product_id as string,
-            product_name: (raw?.deal_product?.name as string) ?? null,
-            product_code: (raw?.deal_product?.code as string) ?? null,
+            product_name: (rawProduct?.name as string) ?? null,
+            product_code: (rawProduct?.code as string) ?? null,
             nombre_cache: s.nombre_cache as string,
             fecha_inicio_utc: s.fecha_inicio_utc as string,
             fecha_fin_utc: s.fecha_fin_utc as string,
             direccion: s.direccion as string,
             estado: s.estado as SessionEstado,
-            deal_pipeline_id: (raw?.deal?.pipeline_id as string) ?? null,
-            deal_caes_label: (raw?.deal?.caes_label as string) ?? null,
-            deal_fundae_label: (raw?.deal?.fundae_label as string) ?? null,
-            deal_hotel_label: (raw?.deal?.hotel_label as string) ?? null,
-            deal_transporte: (raw?.deal?.transporte as string) ?? null,
+            deal_pipeline_id: (rawDeal?.pipeline_id as string) ?? null,
+            deal_caes_label: (rawDeal?.caes_label as string) ?? null,
+            deal_fundae_label: (rawDeal?.fundae_label as string) ?? null,
+            deal_hotel_label: (rawDeal?.hotel_label as string) ?? null,
+            deal_transporte: (rawDeal?.transporte as string) ?? null,
             sala,
             trainers,
             unidades,
