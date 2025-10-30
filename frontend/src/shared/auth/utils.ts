@@ -34,9 +34,16 @@ export function hasPermission(path: string, permissions: PermissionList): boolea
 
 export function getPermissionsForRole(role: string | null | undefined): PermissionList {
   if (!role) return [];
-  const normalized = role.trim();
+  const normalized = role.trim().toLowerCase();
   if (!normalized.length) return [];
-  return ROLE_PERMISSIONS[normalized] ?? [];
+
+  for (const [roleName, permissions] of Object.entries(ROLE_PERMISSIONS)) {
+    if (roleName.trim().toLowerCase() === normalized) {
+      return permissions;
+    }
+  }
+
+  return [];
 }
 
 export function computeDefaultPath(permissions: PermissionList): string {
