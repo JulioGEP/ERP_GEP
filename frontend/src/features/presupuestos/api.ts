@@ -922,7 +922,6 @@ async function request(path: string, init?: RequestInit) {
       `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`,
       {
         ...init,
-        credentials: init?.credentials ?? "include",
         headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
       }
     );

@@ -78,40 +78,6 @@ type SessionTrainerLink = {
   trainer?: { trainer_id: string; name?: string | null; apellido?: string | null } | null;
 };
 
-function normalizeSessionTrainerLink(link: any): SessionTrainerLink {
-  if (!link || typeof link !== 'object') {
-    return { trainer_id: '' } as SessionTrainerLink;
-  }
-
-  const record = link as SessionTrainerLink & {
-    trainers?: SessionTrainerLink['trainer'];
-  };
-
-  const trainerId =
-    toTrimmed(record.trainer_id) ??
-    (record.trainer && toTrimmed(record.trainer.trainer_id)) ??
-    (record.trainers && toTrimmed(record.trainers.trainer_id)) ??
-    null;
-
-  if (trainerId) {
-    record.trainer_id = trainerId;
-  }
-
-  if (!record.trainer && record.trainers && typeof record.trainers === 'object') {
-    record.trainer = record.trainers;
-  }
-
-  if (record.trainer && trainerId && record.trainer.trainer_id == null) {
-    record.trainer.trainer_id = trainerId;
-  }
-
-  if ('trainers' in record) {
-    delete (record as Record<string, unknown>).trainers;
-  }
-
-  return record;
-}
-
 type SessionUnitLink = {
   unidad_id: string | null;
   unidad_movil_id?: string | null;
@@ -176,12 +142,11 @@ function ensureSessionRelations(row: any): SessionRecord {
   if ((record as any).sala == null && (record as any).salas !== undefined) {
     (record as any).sala = (record as any).salas;
   }
-  const trainerLinks = Array.isArray(record.trainers)
+  record.trainers = Array.isArray(record.trainers)
     ? record.trainers
     : Array.isArray(record.sesion_trainers)
       ? record.sesion_trainers
       : [];
-  record.trainers = trainerLinks.map((link) => normalizeSessionTrainerLink(link));
   record.unidades = Array.isArray(record.unidades)
     ? record.unidades.map((link) => normalizeSessionUnitLink(link))
     : Array.isArray(record.sesion_unidades)
@@ -192,16 +157,6 @@ function ensureSessionRelations(row: any): SessionRecord {
 
 function ensureSessionRelationsOrNull(row: any): SessionRecord | null {
   return row ? ensureSessionRelations(row) : null;
-}
-
-function getSalaIdentifier(rawSala: any): string | null {
-  if (!rawSala || typeof rawSala !== 'object') return null;
-  const candidates = [(rawSala as { sala_id?: unknown }).sala_id, (rawSala as { id?: unknown }).id];
-  for (const candidate of candidates) {
-    const value = toTrimmed(candidate);
-    if (value) return value;
-  }
-  return null;
 }
 
 function ensureSessionRelationsList(rows: any[]): SessionRecord[] {
@@ -576,7 +531,7 @@ async function fetchSessionsByProduct(
       include: {
         sesion_trainers: { select: { trainer_id: true } },
         sesion_unidades: { select: { unidad_movil_id: true } },
-        deal: { select: { sede_label: true, pipeline_id: true } },
+        deals: { select: { sede_label: true, pipeline_id: true } },
       },
     }),
   ]);
@@ -721,16 +676,14 @@ export const handler = async (event: any) => {
       const sessions = await prisma.sesiones.findMany({
         where: { deal_id: dealId },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
-        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, sala: true },
+        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, sala: { select: { sala_id: true, name: true } } },
       });
 
       const payload = (sessions as any[]).map((s: any) => ({
         id: s.id as string,
         fecha_inicio_utc: toIsoOrNull(s.fecha_inicio_utc),
         fecha_fin_utc: toIsoOrNull(s.fecha_fin_utc),
-        room: s.sala
-          ? { id: getSalaIdentifier(s.sala), name: (s.sala.name as string) ?? null }
-          : null,
+        room: s.sala ? { id: (s.sala.sala_id as string) ?? null, name: (s.sala.name as string) ?? null } : null,
       }));
 
       return successResponse({ sessions: payload });
@@ -799,7 +752,7 @@ export const handler = async (event: any) => {
           ],
         },
         include: {
-          deal: {
+          deals: {
             select: {
               deal_id: true,
               title: true,
@@ -812,13 +765,10 @@ export const handler = async (event: any) => {
               transporte: true,
             },
           },
-          deal_product: { select: { id: true, name: true, code: true } },
-          sala: true,
+          deal_products: { select: { id: true, name: true, code: true } },
+          salas: { select: { sala_id: true, name: true, sede: true } },
           sesion_trainers: {
-            select: {
-              trainer_id: true,
-              trainers: { select: { trainer_id: true, name: true, apellido: true } },
-            },
+            select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
           },
           sesion_unidades: {
             select: { unidad_movil_id: true, unidad: { select: { unidad_id: true, name: true, matricula: true } } },
@@ -836,11 +786,7 @@ export const handler = async (event: any) => {
         .map((s: any) => {
           const raw: any = rowsById.get(s.id);
           const sala = raw?.sala
-            ? {
-                sala_id: getSalaIdentifier(raw.sala),
-                name: (raw.sala.name as string) ?? null,
-                sede: (raw.sala.sede as string) ?? null,
-              }
+            ? { sala_id: raw.sala.sala_id as string, name: raw.sala.name as string, sede: (raw.sala.sede as string) ?? null }
             : null;
 
           const trainers = ((raw?.trainers ?? []) as any[])
@@ -1055,7 +1001,7 @@ export const handler = async (event: any) => {
         const storedRaw = await tx.sesiones.findUnique({
           where: { id: created.id },
           include: {
-            deal: { select: { sede_label: true, pipeline_id: true } },
+            deals: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
             sesion_unidades: { select: { unidad_movil_id: true } },
           },
@@ -1081,7 +1027,7 @@ export const handler = async (event: any) => {
       const storedRaw = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deal: { select: { sede_label: true, pipeline_id: true } },
+          deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
         },
@@ -1173,7 +1119,7 @@ export const handler = async (event: any) => {
       const refreshedRaw = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
         include: {
-          deal: { select: { sede_label: true, pipeline_id: true } },
+          deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
         },

@@ -30,16 +30,6 @@ function toTrimmed(value: unknown): string | null {
   return text.length ? text : null;
 }
 
-function getSalaIdentifier(record: any): string | null {
-  if (!record || typeof record !== 'object') return null;
-  const candidates = [(record as { sala_id?: unknown }).sala_id, (record as { id?: unknown }).id];
-  for (const candidate of candidates) {
-    const value = toTrimmed(candidate);
-    if (value) return value;
-  }
-  return null;
-}
-
 function extractTimeParts(value: Date | string | null | undefined): TimeParts | null {
   const formatted = formatTimeFromDb(value);
   if (!formatted) return null;
@@ -650,7 +640,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       sala_id: true,
       unidad_movil_id: true,
       trainers: { select: { trainer_id: true, name: true, apellido: true } },
-      salas: true,
+      salas: { select: { sala_id: true, name: true, sede: true } },
       unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
     };
   };
@@ -774,13 +764,9 @@ function normalizeVariant(record: VariantRecord) {
           apellido: record.trainers.apellido ?? null,
         }
       : null,
-    sala_id: record.sala_id ?? getSalaIdentifier(record.salas) ?? null,
+    sala_id: record.sala_id ?? null,
     sala: record.salas
-      ? {
-          sala_id: getSalaIdentifier(record.salas),
-          name: record.salas.name ?? null,
-          sede: record.salas.sede ?? null,
-        }
+      ? { sala_id: record.salas.sala_id, name: record.salas.name, sede: record.salas.sede ?? null }
       : null,
     unidad_movil_id: record.unidad_movil_id ?? null,
     unidad: record.unidades_moviles
@@ -933,7 +919,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     const nextDate      = Object.prototype.hasOwnProperty.call(updates, 'date') ? updates.date ?? null : existing.date ?? null;
 
     if (nextSede && nextSalaId && nextSede.trim().toLowerCase() === 'sabadell') {
-      const room = await prisma.salas.findUnique({ where: { sala_id: nextSalaId }, select: { sede: true } });
+      const room = await prisma.salas.findUnique({ where: { sala_id: nextSalaId }, select: { sala_id: true, sede: true } });
       if (!room) return errorResponse('VALIDATION_ERROR', 'La sala seleccionada no existe', 400);
       if ((room.sede ?? '').trim().toLowerCase() !== 'gep sabadell') {
         return errorResponse('VALIDATION_ERROR', 'La sala seleccionada no pertenece a GEP Sabadell.', 400);
@@ -1000,7 +986,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         sala_id: true,
         unidad_movil_id: true,
         trainers: { select: { trainer_id: true, name: true, apellido: true } },
-        salas: true,
+        salas: { select: { sala_id: true, name: true, sede: true } },
         unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
         created_at: true,
         updated_at: true,
