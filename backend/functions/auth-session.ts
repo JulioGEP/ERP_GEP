@@ -28,11 +28,13 @@ export const handler = createHttpHandler(async (request) => {
   try {
     const sessionId = extractSessionIdFromRequest(request);
 
-    // Sin cookie -> sesión no iniciada
+    // Sin cookie -> 401 (no hay sesión)
     if (!sessionId) {
+      const res = errorResponse('UNAUTHORIZED', 'No hay sesión', 401);
       return {
-        ...successResponse({ user: null, permissions: [] }),
+        ...res,
         headers: {
+          ...res.headers,
           'Cache-Control': 'no-store, no-cache, must-revalidate',
           Pragma: 'no-cache',
         },
@@ -41,11 +43,13 @@ export const handler = createHttpHandler(async (request) => {
 
     const auth = await findActiveSession(prisma, sessionId);
 
-    // Sesión inválida/expirada -> devolvemos user null y limpiamos cookie
+    // Sesión inválida/expirada -> 401 y limpiamos cookie
     if (!auth) {
+      const res = errorResponse('UNAUTHORIZED', 'Sesión inválida o expirada', 401);
       return {
-        ...successResponse({ user: null, permissions: [] }),
+        ...res,
         headers: {
+          ...res.headers,
           'Set-Cookie': buildClearSessionCookie(),
           'Cache-Control': 'no-store, no-cache, must-revalidate',
           Pragma: 'no-cache',
@@ -53,10 +57,16 @@ export const handler = createHttpHandler(async (request) => {
       };
     }
 
-    // OK
+    // OK -> devolvemos usuario y permisos
+    const ok = successResponse({
+      user: serializeUser(auth.user),
+      permissions: auth.permissions,
+    });
+
     return {
-      ...successResponse({ user: serializeUser(auth.user), permissions: auth.permissions }),
+      ...ok,
       headers: {
+        ...ok.headers,
         'Cache-Control': 'no-store, no-cache, must-revalidate',
         Pragma: 'no-cache',
       },
