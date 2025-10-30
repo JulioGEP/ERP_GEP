@@ -2,20 +2,19 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Container, Form, Spinner } from 'react-bootstrap';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ApiError, isApiError } from '../../api/client';
-import { useAuth } from '../../shared/auth/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
 type LocationState = {
   from?: string;
 };
 
 export default function LoginPage() {
-  const { login, status } = useAuth();
+  const { login, isLoading: authLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as LocationState | null)?.from || '/';
 
-  const isLoading = status === 'loading';
-  const isAuthenticated = status === 'authenticated';
+  const isLoading = authLoading;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

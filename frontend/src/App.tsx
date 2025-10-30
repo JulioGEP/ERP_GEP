@@ -1,8 +1,9 @@
 // src/App.tsx
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
-import { useAuth } from './shared/auth/AuthContext';
+import { useAuth } from './context/AuthContext';
+import { computeDefaultPath } from './shared/auth/utils';
 
 const AuthenticatedApp = lazy(() => import('./app/AuthenticatedApp'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
@@ -30,14 +31,14 @@ export default function App() {
 
 function LoginRoute() {
   const location = useLocation();
-  const { status, hasPermission, getDefaultPath } = useAuth();
+  const { isLoading, isAuthenticated, permissions, hasPermission } = useAuth();
+  const preferredPath = useMemo(() => computeDefaultPath(permissions), [permissions]);
 
-  if (status === 'loading') {
+  if (isLoading) {
     return <FullPageLoader />;
   }
 
-  if (status === 'authenticated') {
-    const preferredPath = getDefaultPath();
+  if (isAuthenticated) {
     const target =
       preferredPath !== '/' && hasPermission(preferredPath)
         ? preferredPath
@@ -50,13 +51,13 @@ function LoginRoute() {
 
 function ProtectedApp() {
   const location = useLocation();
-  const { status } = useAuth();
+  const { isLoading, isAuthenticated } = useAuth();
 
-  if (status === 'loading') {
+  if (isLoading) {
     return <FullPageLoader />;
   }
 
-  if (status === 'unauthenticated') {
+  if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
