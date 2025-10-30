@@ -31,6 +31,59 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Formador: [],
 };
 
+const ROLE_LABEL_TO_STORAGE_ENTRIES = [
+  ['Admin', 'admin'],
+  ['Comercial', 'comercial'],
+  ['Administracion', 'administracion'],
+  ['Logistica', 'logistica'],
+  ['People', 'people'],
+  ['Formador', 'formador'],
+] as const;
+
+const ROLE_LABEL_TO_STORAGE = new Map<string, string>(ROLE_LABEL_TO_STORAGE_ENTRIES);
+const ROLE_STORAGE_TO_LABEL = new Map<string, string>(
+  ROLE_LABEL_TO_STORAGE_ENTRIES.map(([label, storage]) => [storage, label]),
+);
+
+export const ROLE_DISPLAY_NAMES: readonly string[] = ROLE_LABEL_TO_STORAGE_ENTRIES.map(
+  ([label]) => label,
+);
+
+export function getRoleStorageValue(role: string | null | undefined): string | null {
+  if (typeof role !== 'string') return null;
+  const trimmed = role.trim();
+  if (!trimmed.length) return null;
+  const normalized = trimmed.toLowerCase();
+
+  for (const [label, storage] of ROLE_LABEL_TO_STORAGE.entries()) {
+    if (label.toLowerCase() === normalized || storage === normalized) {
+      return storage;
+    }
+  }
+
+  return null;
+}
+
+export function getRoleDisplayValue(role: string | null | undefined): string | null {
+  if (typeof role !== 'string') return null;
+  const trimmed = role.trim();
+  if (!trimmed.length) return null;
+  const normalized = trimmed.toLowerCase();
+
+  const display = ROLE_STORAGE_TO_LABEL.get(normalized);
+  if (display) {
+    return display;
+  }
+
+  for (const [label] of ROLE_LABEL_TO_STORAGE.entries()) {
+    if (label.toLowerCase() === normalized) {
+      return label;
+    }
+  }
+
+  return null;
+}
+
 // Exportado para que el front o los guards puedan reutilizar el orden por defecto
 export const DEFAULT_ROUTE_ORDER = [
   '/presupuestos/sinplanificar',

@@ -5,6 +5,7 @@ import {
   buildClearSessionCookie,
   extractSessionIdFromRequest,
   findActiveSession,
+  getRoleDisplayValue,
 } from './_shared/auth';
 
 function serializeUser(user: any) {
@@ -13,7 +14,7 @@ function serializeUser(user: any) {
     firstName: user.first_name,
     lastName: user.last_name,
     email: user.email,
-    role: user.role,
+    role: getRoleDisplayValue(user.role) ?? user.role,
     active: user.active,
   };
 }

@@ -5,6 +5,7 @@ import { getPrisma } from './_shared/prisma';
 import {
   buildSessionCookie,
   getPermissionsForRole,
+  getRoleDisplayValue,
   getSessionExpirationDate,
   hashIp,
   normalizeEmail,
@@ -17,7 +18,7 @@ function serializeUser(user: any) {
     firstName: user.first_name,
     lastName: user.last_name,
     email: user.email,
-    role: user.role,
+    role: getRoleDisplayValue(user.role) ?? user.role,
     active: user.active,
   };
 }

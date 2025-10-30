@@ -33,10 +33,12 @@ backend/functions/**
 
 # ...y ahora re-incluimos SOLO lo necesario para construir/empacar
 !backend/functions/**/*.ts
+!backend/functions/**/*.d.ts
 !backend/functions/package.json
 !backend/functions/tsconfig.json
 !backend/functions/_shared/**
 !backend/functions/_lib/**
+!backend/functions/types/
 
 # Mantener fuera cualquier node_modules local dentro de functions
 backend/functions/node_modules/
