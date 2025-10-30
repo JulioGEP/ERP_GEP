@@ -4,6 +4,7 @@ import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
+import { getTokensDelegate, type TokensDelegate } from './_shared/token-delegate';
 
 const DEFAULT_TTL_HOURS = Number(process.env.PUBLIC_SESSION_LINK_TTL_HOURS ?? 24 * 30);
 const MAX_TOKEN_LENGTH = 128;
@@ -128,9 +129,10 @@ function computeExpiration(hours: number): Date {
   return now;
 }
 
-async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: string) {
+async function getActiveLink(tokens: TokensDelegate | null, sessionId: string) {
+  if (!tokens) return null;
   const now = new Date();
-  return prisma.tokens.findFirst({
+  return tokens.findFirst({
     where: {
       sesion_id: sessionId,
       active: true,
@@ -154,6 +156,7 @@ export const handler = async (event: any) => {
 
     const method = event.httpMethod ?? 'GET';
     const prisma = getPrisma();
+    const tokens = getTokensDelegate(prisma);
 
     if (method === 'GET') {
       const params = event.queryStringParameters || {};
@@ -183,7 +186,11 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
       }
 
-      const link = await getActiveLink(prisma, sessionId);
+      if (!tokens) {
+        return successResponse({ link: null });
+      }
+
+      const link = await getActiveLink(tokens, sessionId);
       if (!link) {
         return successResponse({ link: null });
       }
@@ -226,7 +233,11 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
       }
 
-      const activeLink = await getActiveLink(prisma, sessionId);
+      if (!tokens) {
+        return errorResponse('NOT_IMPLEMENTED', 'Enlaces públicos no disponibles', 501);
+      }
+
+      const activeLink = await getActiveLink(tokens, sessionId);
       if (activeLink && !forceRegenerate) {
         return successResponse({ link: mapLinkForResponse(activeLink, event) });
       }
@@ -235,7 +246,7 @@ export const handler = async (event: any) => {
       const ip = truncateValue(extractClientIp(event), 255);
       const userAgent = truncateValue(extractUserAgent(event), 1024);
 
-      await prisma.tokens.updateMany({
+      await tokens.updateMany({
         where: { sesion_id: sessionId, active: true },
         data: { active: false },
       });
@@ -243,7 +254,7 @@ export const handler = async (event: any) => {
       const token = generateToken();
       const expiresAt = computeExpiration(ttlHours);
 
-      const created = await prisma.tokens.create({
+      const created = await tokens.create({
         data: {
           sesion_id: sessionId,
           token,
@@ -300,7 +311,11 @@ export const handler = async (event: any) => {
         where.token = tokenValue;
       }
 
-      const existing = await prisma.tokens.findFirst({
+      if (!tokens) {
+        return successResponse({ deleted: false });
+      }
+
+      const existing = await tokens.findFirst({
         where: tokenId || tokenValue ? where : { ...where, active: true },
         orderBy: { created_at: 'desc' },
       });
@@ -311,7 +326,7 @@ export const handler = async (event: any) => {
 
       const now = nowInMadridDate();
 
-      const updated = await prisma.tokens.update({
+      const updated = await tokens.update({
         where: { id: existing.id },
         data: { active: false, expires_at: now },
       });

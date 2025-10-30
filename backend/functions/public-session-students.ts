@@ -3,6 +3,7 @@ import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
+import { getTokensDelegate, type TokensDelegate } from './_shared/token-delegate';
 
 const RATE_LIMIT_WINDOW_MS = Number(process.env.PUBLIC_SESSION_RATE_LIMIT_WINDOW_MS ?? 60_000);
 const RATE_LIMIT_MAX_REQUESTS = Number(process.env.PUBLIC_SESSION_RATE_LIMIT_MAX_REQUESTS ?? 120);
@@ -139,12 +140,9 @@ function mapSessionInfo(link: any) {
 }
 
 // Deja que TS infiera el tipo correcto (Promise<... | null>) sin usar tokensGetPayload (eliminado en Prisma v5)
-async function resolveLink(
-  prisma: ReturnType<typeof getPrisma>,
-  token: string,
-) {
-  if (!token.trim().length) return null;
-  return prisma.tokens.findUnique({
+async function resolveLink(tokens: TokensDelegate | null, token: string) {
+  if (!tokens || !token.trim().length) return null;
+  return tokens.findUnique({
     where: { token },
     include: {
       session: {
@@ -160,8 +158,8 @@ async function resolveLink(
   });
 }
 
-async function ensureValidLink(prisma: ReturnType<typeof getPrisma>, token: string) {
-  const link = await resolveLink(prisma, token);
+async function ensureValidLink(tokens: TokensDelegate | null, token: string) {
+  const link = await resolveLink(tokens, token);
   if (!link) {
     return { error: errorResponse('TOKEN_INVALID', 'Enlace inválido', 404) } as const;
   }
@@ -205,6 +203,7 @@ export const handler = async (event: any) => {
     const { studentId } = parsePath(event.path || '');
     const method = event.httpMethod ?? 'GET';
     const prisma = getPrisma();
+    const tokensDelegate = getTokensDelegate(prisma);
     const headers = event.headers || {};
 
     const tokenParam = event.queryStringParameters?.token ?? event.queryStringParameters?.Token;
@@ -229,7 +228,11 @@ export const handler = async (event: any) => {
       return errorResponse('RATE_LIMITED', 'Demasiadas peticiones, espera unos segundos', 429);
     }
 
-    const validation = await ensureValidLink(prisma, token);
+    if (!tokensDelegate) {
+      return errorResponse('TOKEN_INVALID', 'Enlace inválido', 404);
+    }
+
+    const validation = await ensureValidLink(tokensDelegate, token);
     if ('error' in validation) {
       logAudit(event, null, 'token_invalid', { token_suffix: token.slice(-6) });
       return validation.error;
