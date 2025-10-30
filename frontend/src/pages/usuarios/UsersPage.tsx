@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Alert,
@@ -22,7 +22,6 @@ import {
   type UpdateUserPayload,
   type UserSummary,
 } from '../../api/users';
-import { requestPasswordReset, type PasswordResetRequestResponse } from '../../api/auth';
 
 const PAGE_SIZE = 10;
 const ROLE_OPTIONS = ['Admin', 'Comercial', 'Administracion', 'Logistica', 'People', 'Formador'] as const;
@@ -59,9 +58,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
-  const [resettingId, setResettingId] = useState<string | null>(null);
-  const [resetLinkData, setResetLinkData] = useState<{ url: string; expiresAt?: string } | null>(null);
-  const resetLinkInputRef = useRef<HTMLInputElement | null>(null);
 
   const usersQuery = useQuery<UsersListResponse>({
   queryKey: ['users', page, searchTerm],
@@ -120,27 +116,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
     },
   });
 
-  const resetMutation = useMutation({
-    mutationFn: (email: string) => requestPasswordReset(email),
-    onSuccess: (response: PasswordResetRequestResponse) => {
-      if (response.resetUrl) {
-        setResetLinkData({ url: response.resetUrl, expiresAt: response.expiresAt });
-        notify('success', 'Enlace de acceso generado correctamente.');
-      } else {
-        const message = response.message || 'Se ha enviado el enlace de restablecimiento si el usuario existe.';
-        notify('info', message);
-      }
-    },
-    onError: (error: unknown) => {
-      const apiError = error instanceof ApiError ? error : null;
-      const message = apiError?.message ?? 'No se pudo solicitar el restablecimiento de contraseña.';
-      notify('danger', message);
-    },
-    onSettled: () => {
-      setResettingId(null);
-    },
-  });
-
   const handleModalSubmit = useCallback(
     async (values: UserFormValues) => {
       if (editingUser) {
@@ -154,48 +129,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
     },
     [createMutation, editingUser, updateMutation],
   );
-
-  const handleResetPassword = useCallback(
-    (user: UserSummary) => {
-      setResettingId(user.id);
-      resetMutation.mutate(user.email);
-    },
-    [resetMutation],
-  );
-
-  const handleCloseResetLinkModal = useCallback(() => {
-    setResetLinkData(null);
-  }, []);
-
-  const handleCopyResetLink = useCallback(async () => {
-    if (!resetLinkData?.url) return;
-    try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(resetLinkData.url);
-        notify('success', 'Enlace copiado al portapapeles.');
-        return;
-      }
-      throw new Error('Clipboard API not available');
-    } catch (_error) {
-      resetLinkInputRef.current?.focus();
-      resetLinkInputRef.current?.select();
-      notify('danger', 'No se pudo copiar el enlace automáticamente. Copia el enlace manualmente.');
-    }
-  }, [notify, resetLinkData]);
-
-  const resetLinkExpirationText = useMemo(() => {
-    if (!resetLinkData?.expiresAt) return null;
-    const date = new Date(resetLinkData.expiresAt);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleString();
-  }, [resetLinkData]);
-
-  useEffect(() => {
-    if (resetLinkData && resetLinkInputRef.current) {
-      resetLinkInputRef.current.focus();
-      resetLinkInputRef.current.select();
-    }
-  }, [resetLinkData]);
 
   const totalUsers = usersQuery.data?.total ?? 0;
   const users = usersQuery.data?.users ?? ([] as UserSummary[]);
@@ -247,6 +180,11 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
             </div>
           </div>
 
+          <Alert variant="info">
+            Los usuarios nuevos acceden con la contraseña por defecto <strong>123456</strong>. Pueden
+            actualizarla desde la sección "Mi perfil".
+          </Alert>
+
           {usersQuery.error && (
             <Alert variant="danger">
               {usersQuery.error instanceof ApiError
@@ -296,18 +234,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
                             <Button variant="outline-secondary" size="sm" onClick={() => openEditModal(user)}>
                               Editar
                             </Button>
-                            <Button
-                              variant="outline-primary"
-                              size="sm"
-                              disabled={resetMutation.isPending && resettingId === user.id}
-                              onClick={() => handleResetPassword(user)}
-                            >
-                              {resetMutation.isPending && resettingId === user.id ? (
-                                <Spinner animation="border" size="sm" role="status" />
-                              ) : (
-                                'Generar enlace'
-                              )}
-                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -346,40 +272,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
         isSubmitting={createMutation.isPending || updateMutation.isPending}
         initialValue={editingUser}
       />
-
-      <Modal show={Boolean(resetLinkData)} onHide={handleCloseResetLinkModal} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Enlace de acceso</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="d-grid gap-3">
-          <div>
-            <p className="mb-2">
-              Comparte este enlace con el usuario para que establezca su contraseña y pueda acceder al ERP.
-            </p>
-            {resetLinkExpirationText ? (
-              <p className="text-muted small mb-0">Enlace válido hasta {resetLinkExpirationText}.</p>
-            ) : null}
-          </div>
-          <Form.Group controlId="generatedResetLink">
-            <Form.Label>Enlace de restablecimiento</Form.Label>
-            <Form.Control
-              type="text"
-              value={resetLinkData?.url ?? ''}
-              readOnly
-              ref={resetLinkInputRef}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-          </Form.Group>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="outline-secondary" onClick={handleCloseResetLinkModal}>
-            Cerrar
-          </Button>
-          <Button onClick={handleCopyResetLink} disabled={!resetLinkData?.url}>
-            Copiar enlace
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </div>
   );
 }

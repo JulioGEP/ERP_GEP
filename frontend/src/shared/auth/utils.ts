@@ -55,5 +55,8 @@ export function computeDefaultPath(permissions: PermissionList): string {
       return route;
     }
   }
+  if (hasPermission('/perfil', permissions)) {
+    return '/perfil';
+  }
   return '/';
 }
