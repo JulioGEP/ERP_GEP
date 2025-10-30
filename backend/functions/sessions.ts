@@ -439,7 +439,7 @@ async function ensureResourcesAvailable(
   }
   const filteredUnidadIds = (unidadIds ?? []).filter((id) => (id ? !ALWAYS_AVAILABLE_UNIT_IDS.has(id) : false));
   if (filteredUnidadIds.length) {
-    resourceConditions.push({ unidades: { some: { unidad_id: { in: filteredUnidadIds } } } });
+    resourceConditions.push({ sesion_unidades: { some: { unidad_id: { in: filteredUnidadIds } } } });
   }
   if (salaId) {
     resourceConditions.push({ sala_id: salaId });
@@ -454,7 +454,7 @@ async function ensureResourcesAvailable(
       fecha_fin_utc: true,
       sala_id: true,
       sesion_trainers: { select: { trainer_id: true } },
-      unidades: { select: { unidad_id: true } },
+      sesion_unidades: { select: { unidad_id: true } },
     },
   });
 
@@ -491,7 +491,7 @@ async function fetchSessionsByProduct(
       take: limit,
       include: {
         sesion_trainers: { select: { trainer_id: true } },
-        unidades: { select: { unidad_id: true } },
+        sesion_unidades: { select: { unidad_id: true } },
         deal: { select: { sede_label: true, pipeline_id: true } },
       },
     }),
@@ -549,7 +549,7 @@ export const handler = async (event: any) => {
       const sessionsRaw = await prisma.sesiones.findMany({
         where: {
           ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
-          OR: [{ sala_id: { not: null } }, { sesion_trainers: { some: {} } }, { unidades: { some: {} } }],
+          OR: [{ sala_id: { not: null } }, { sesion_trainers: { some: {} } }, { sesion_unidades: { some: {} } }],
         },
         select: {
           id: true,
@@ -557,7 +557,7 @@ export const handler = async (event: any) => {
           fecha_inicio_utc: true,
           fecha_fin_utc: true,
           sesion_trainers: { select: { trainer_id: true } },
-          unidades: { select: { unidad_id: true } },
+          sesion_unidades: { select: { unidad_id: true } },
         },
       });
 
@@ -693,7 +693,7 @@ export const handler = async (event: any) => {
           ...(productFilter ? { deal_product_id: productFilter } : {}),
           ...(salaFilter ? { sala_id: salaFilter } : {}),
           ...(trainerFilter ? { sesion_trainers: { some: { trainer_id: trainerFilter } } } : {}),
-          ...(unidadFilter ? { unidades: { some: { unidad_id: unidadFilter } } } : {}),
+          ...(unidadFilter ? { sesion_unidades: { some: { unidad_id: unidadFilter } } } : {}),
           ...(estadoFilters
             ? estadoFilters.length === 1
               ? { estado: estadoFilters[0] }
@@ -728,7 +728,9 @@ export const handler = async (event: any) => {
           sesion_trainers: {
             select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
           },
-          unidades: { select: { unidad_id: true, unidad: { select: { unidad_id: true, name: true, matricula: true } } } },
+          sesion_unidades: {
+            select: { unidad_id: true, unidad: { select: { unidad_id: true, name: true, matricula: true } } },
+          },
         },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { nombre_cache: 'asc' }],
       });
@@ -959,7 +961,7 @@ export const handler = async (event: any) => {
           include: {
             deal: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
-            unidades: { select: { unidad_id: true } },
+            sesion_unidades: { select: { unidad_id: true } },
           },
         });
 
@@ -985,7 +987,7 @@ export const handler = async (event: any) => {
         include: {
           deal: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
-          unidades: { select: { unidad_id: true } },
+          sesion_unidades: { select: { unidad_id: true } },
         },
       });
       const storedRecord = ensureSessionRelationsOrNull(storedRaw as any);
@@ -1077,7 +1079,7 @@ export const handler = async (event: any) => {
         include: {
           deal: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
-          unidades: { select: { unidad_id: true } },
+          sesion_unidades: { select: { unidad_id: true } },
         },
       });
       return successResponse({ session: normalizeSession(ensureSessionRelations(refreshedRaw as any)) });

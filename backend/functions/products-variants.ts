@@ -124,7 +124,7 @@ async function ensureVariantResourcesAvailable(
   const sessionConditions: any[] = [];
   if (normalizedTrainerId) sessionConditions.push({ sesion_trainers: { some: { trainer_id: normalizedTrainerId } } });
   if (normalizedSalaId) sessionConditions.push({ sala_id: normalizedSalaId });
-  if (normalizedUnidadId) sessionConditions.push({ unidades: { some: { unidad_id: normalizedUnidadId } } });
+  if (normalizedUnidadId) sessionConditions.push({ sesion_unidades: { some: { unidad_id: normalizedUnidadId } } });
 
   if (sessionConditions.length) {
     const sessions = await prisma.sesiones.findMany({
