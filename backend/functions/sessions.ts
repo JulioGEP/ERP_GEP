@@ -15,6 +15,7 @@ import {
   reindexSessionNames,
   toNonNegativeInt,
 } from './_shared/sessionGeneration';
+import { getTokensDelegate } from './_shared/token-delegate';
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 30;
@@ -754,12 +755,17 @@ export const handler = async (event: any) => {
       const existing = await prisma.sessions.findUnique({ where: { id: sessionIdFromPath }, select: { id: true } });
       if (!existing) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
-      const [comentarios, documentos, alumnos, tokens] = await prisma.$transaction([
+      const tokensDelegate = getTokensDelegate(prisma);
+      const countPromises: Array<Prisma.PrismaPromise<number>> = [
         prisma.sesiones_comentarios.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.session_files.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.alumnos.count({ where: { sesion_id: sessionIdFromPath } }),
-        prisma.tokens.count({ where: { sesion_id: sessionIdFromPath, active: true } }),
-      ]);
+      ];
+      if (tokensDelegate) {
+        countPromises.push(tokensDelegate.count({ where: { sesion_id: sessionIdFromPath, active: true } }));
+      }
+      const results = await prisma.$transaction(countPromises);
+      const [comentarios, documentos, alumnos, tokens = 0] = results;
       return successResponse({ comentarios, documentos, alumnos, tokens });
     }
 
@@ -1048,7 +1054,10 @@ export const handler = async (event: any) => {
         await tx.session_files.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.sesiones_comentarios.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.alumnos.deleteMany({ where: { sesion_id: sessionIdFromPath } });
-        await tx.tokens.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+        const tokensDelegate = getTokensDelegate(tx);
+        if (tokensDelegate) {
+          await tokensDelegate.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+        }
 
         await tx.sessions.delete({ where: { id: sessionIdFromPath } });
         const product = await tx.deal_products.findUnique({
