@@ -78,6 +78,40 @@ type SessionTrainerLink = {
   trainer?: { trainer_id: string; name?: string | null; apellido?: string | null } | null;
 };
 
+function normalizeSessionTrainerLink(link: any): SessionTrainerLink {
+  if (!link || typeof link !== 'object') {
+    return { trainer_id: '' } as SessionTrainerLink;
+  }
+
+  const record = link as SessionTrainerLink & {
+    trainers?: SessionTrainerLink['trainer'];
+  };
+
+  const trainerId =
+    toTrimmed(record.trainer_id) ??
+    (record.trainer && toTrimmed(record.trainer.trainer_id)) ??
+    (record.trainers && toTrimmed(record.trainers.trainer_id)) ??
+    null;
+
+  if (trainerId) {
+    record.trainer_id = trainerId;
+  }
+
+  if (!record.trainer && record.trainers && typeof record.trainers === 'object') {
+    record.trainer = record.trainers;
+  }
+
+  if (record.trainer && trainerId && record.trainer.trainer_id == null) {
+    record.trainer.trainer_id = trainerId;
+  }
+
+  if ('trainers' in record) {
+    delete (record as Record<string, unknown>).trainers;
+  }
+
+  return record;
+}
+
 type SessionUnitLink = {
   unidad_id: string | null;
   unidad_movil_id?: string | null;
@@ -142,11 +176,12 @@ function ensureSessionRelations(row: any): SessionRecord {
   if ((record as any).sala == null && (record as any).salas !== undefined) {
     (record as any).sala = (record as any).salas;
   }
-  record.trainers = Array.isArray(record.trainers)
+  const trainerLinks = Array.isArray(record.trainers)
     ? record.trainers
     : Array.isArray(record.sesion_trainers)
       ? record.sesion_trainers
       : [];
+  record.trainers = trainerLinks.map((link) => normalizeSessionTrainerLink(link));
   record.unidades = Array.isArray(record.unidades)
     ? record.unidades.map((link) => normalizeSessionUnitLink(link))
     : Array.isArray(record.sesion_unidades)
@@ -780,7 +815,10 @@ export const handler = async (event: any) => {
           deal_product: { select: { id: true, name: true, code: true } },
           sala: true,
           sesion_trainers: {
-            select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
+            select: {
+              trainer_id: true,
+              trainers: { select: { trainer_id: true, name: true, apellido: true } },
+            },
           },
           sesion_unidades: {
             select: { unidad_movil_id: true, unidad: { select: { unidad_id: true, name: true, matricula: true } } },
