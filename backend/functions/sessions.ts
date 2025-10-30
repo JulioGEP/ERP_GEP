@@ -79,8 +79,9 @@ type SessionTrainerLink = {
 };
 
 type SessionUnitLink = {
-  unidad_id: string;
-  unidad?: { unidad_id: string; name?: string | null; matricula?: string | null } | null;
+  unidad_id: string | null;
+  unidad_movil_id?: string | null;
+  unidad?: { unidad_id?: string | null; name?: string | null; matricula?: string | null } | null;
 };
 
 type SessionRecord = {
@@ -101,6 +102,29 @@ type SessionRecord = {
   deal?: { sede_label: string | null; pipeline_id: string | null } | null;
 };
 
+function normalizeSessionUnitLink(link: any): SessionUnitLink {
+  if (!link || typeof link !== 'object') {
+    return { unidad_id: null };
+  }
+
+  const record = link as SessionUnitLink & { unidad_movil_id?: string | null };
+  const directId = toTrimmed(record.unidad_id);
+  const movilId = toTrimmed(record.unidad_movil_id);
+  const relationId = record.unidad && typeof record.unidad === 'object'
+    ? toTrimmed((record.unidad as { unidad_id?: string | null }).unidad_id)
+    : null;
+
+  const resolvedId = directId ?? movilId ?? relationId ?? null;
+  record.unidad_id = resolvedId;
+  record.unidad_movil_id = resolvedId;
+
+  if (record.unidad && typeof record.unidad === 'object' && resolvedId && record.unidad.unidad_id == null) {
+    record.unidad.unidad_id = resolvedId;
+  }
+
+  return record;
+}
+
 function ensureSessionRelations(row: any): SessionRecord {
   if (!row || typeof row !== 'object') return row as SessionRecord;
   const record = row as SessionRecord & {
@@ -113,9 +137,9 @@ function ensureSessionRelations(row: any): SessionRecord {
       ? record.sesion_trainers
       : [];
   record.unidades = Array.isArray(record.unidades)
-    ? record.unidades
+    ? record.unidades.map((link) => normalizeSessionUnitLink(link))
     : Array.isArray(record.sesion_unidades)
-      ? record.sesion_unidades
+      ? record.sesion_unidades.map((link) => normalizeSessionUnitLink(link))
       : [];
   return record;
 }
@@ -202,8 +226,12 @@ function computeAutomaticSessionEstadoFromValues(args: {
 }
 function resolveAutomaticSessionEstado(row: SessionRecord): AutomaticSessionEstado {
   const normalized = ensureSessionRelations(row);
-  const trainerIds = normalized.trainers.map((t) => t.trainer_id).filter(Boolean);
-  const unidadIds = normalized.unidades.map((u) => u.unidad_id).filter(Boolean);
+  const trainerIds = normalized.trainers
+    .map((t) => t.trainer_id)
+    .filter((id): id is string => Boolean(id));
+  const unidadIds = normalized.unidades
+    .map((u) => u.unidad_id ?? null)
+    .filter((id): id is string => Boolean(id));
   return computeAutomaticSessionEstadoFromValues({
     fechaInicio: normalized.fecha_inicio_utc,
     fechaFin: normalized.fecha_fin_utc,
@@ -439,7 +467,7 @@ async function ensureResourcesAvailable(
   }
   const filteredUnidadIds = (unidadIds ?? []).filter((id) => (id ? !ALWAYS_AVAILABLE_UNIT_IDS.has(id) : false));
   if (filteredUnidadIds.length) {
-    resourceConditions.push({ sesion_unidades: { some: { unidad_id: { in: filteredUnidadIds } } } });
+    resourceConditions.push({ sesion_unidades: { some: { unidad_movil_id: { in: filteredUnidadIds } } } });
   }
   if (salaId) {
     resourceConditions.push({ sala_id: salaId });
@@ -454,7 +482,7 @@ async function ensureResourcesAvailable(
       fecha_fin_utc: true,
       sala_id: true,
       sesion_trainers: { select: { trainer_id: true } },
-      sesion_unidades: { select: { unidad_id: true } },
+      sesion_unidades: { select: { unidad_movil_id: true } },
     },
   });
 
@@ -464,7 +492,7 @@ async function ensureResourcesAvailable(
     const r = normalizeDateRange(s.fecha_inicio_utc, s.fecha_fin_utc);
     if (!r) return false;
     return r.start.getTime() <= range.end.getTime() && r.end.getTime() >= range.start.getTime();
-    });
+  });
   if (!conflicting.length) return;
 
   throw errorResponse('RESOURCE_UNAVAILABLE', 'Algunos recursos ya están asignados en las fechas seleccionadas.', 409);
@@ -491,7 +519,7 @@ async function fetchSessionsByProduct(
       take: limit,
       include: {
         sesion_trainers: { select: { trainer_id: true } },
-        sesion_unidades: { select: { unidad_id: true } },
+        sesion_unidades: { select: { unidad_movil_id: true } },
         deal: { select: { sede_label: true, pipeline_id: true } },
       },
     }),
@@ -557,7 +585,7 @@ export const handler = async (event: any) => {
           fecha_inicio_utc: true,
           fecha_fin_utc: true,
           sesion_trainers: { select: { trainer_id: true } },
-          sesion_unidades: { select: { unidad_id: true } },
+        sesion_unidades: { select: { unidad_movil_id: true } },
         },
       });
 
@@ -572,7 +600,10 @@ export const handler = async (event: any) => {
         if (!r) return;
         if (r.start.getTime() <= range.end.getTime() && r.end.getTime() >= range.start.getTime()) {
           (s.trainers as Array<{ trainer_id: string }>).forEach((t) => trainerLocks.add(t.trainer_id));
-          (s.unidades as Array<{ unidad_id: string }>).forEach((u) => unitLocks.add(u.unidad_id));
+          (s.unidades as Array<{ unidad_id: string | null; unidad_movil_id?: string | null }>).forEach((u) => {
+            const id = toTrimmed(u.unidad_id ?? u.unidad_movil_id);
+            if (id) unitLocks.add(id);
+          });
           if (s.sala_id) roomLocks.add(s.sala_id as string);
         }
       });
@@ -693,7 +724,7 @@ export const handler = async (event: any) => {
           ...(productFilter ? { deal_product_id: productFilter } : {}),
           ...(salaFilter ? { sala_id: salaFilter } : {}),
           ...(trainerFilter ? { sesion_trainers: { some: { trainer_id: trainerFilter } } } : {}),
-          ...(unidadFilter ? { sesion_unidades: { some: { unidad_id: unidadFilter } } } : {}),
+          ...(unidadFilter ? { sesion_unidades: { some: { unidad_movil_id: unidadFilter } } } : {}),
           ...(estadoFilters
             ? estadoFilters.length === 1
               ? { estado: estadoFilters[0] }
@@ -729,7 +760,7 @@ export const handler = async (event: any) => {
             select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
           },
           sesion_unidades: {
-            select: { unidad_id: true, unidad: { select: { unidad_id: true, name: true, matricula: true } } },
+            select: { unidad_movil_id: true, unidad: { select: { unidad_id: true, name: true, matricula: true } } },
           },
         },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { nombre_cache: 'asc' }],
@@ -940,7 +971,7 @@ export const handler = async (event: any) => {
         if ((trainerIdsResult as string[]).length) {
           await tx.sesion_trainers.createMany({
             data: (trainerIdsResult as string[]).map((trainerId: string) => ({
-              session_id: created.id,
+              sesion_id: created.id,
               trainer_id: trainerId,
             })),
           });
@@ -948,8 +979,8 @@ export const handler = async (event: any) => {
         if ((unidadIdsResult as string[]).length) {
           await tx.sesion_unidades.createMany({
             data: (unidadIdsResult as string[]).map((unidadId: string) => ({
-              session_id: created.id,
-              unidad_id: unidadId,
+              sesion_id: created.id,
+              unidad_movil_id: unidadId,
             })),
           });
         }
@@ -961,7 +992,7 @@ export const handler = async (event: any) => {
           include: {
             deal: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
-            sesion_unidades: { select: { unidad_id: true } },
+            sesion_unidades: { select: { unidad_movil_id: true } },
           },
         });
 
@@ -987,7 +1018,7 @@ export const handler = async (event: any) => {
         include: {
           deal: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
-          sesion_unidades: { select: { unidad_id: true } },
+          sesion_unidades: { select: { unidad_movil_id: true } },
         },
       });
       const storedRecord = ensureSessionRelationsOrNull(storedRaw as any);
@@ -1050,23 +1081,23 @@ export const handler = async (event: any) => {
         const patch = await tx.sesiones.update({ where: { id: sessionIdFromPath }, data });
 
         if (trainerIds !== undefined) {
-          await tx.sesion_trainers.deleteMany({ where: { session_id: sessionIdFromPath } });
+          await tx.sesion_trainers.deleteMany({ where: { sesion_id: sessionIdFromPath } });
           if ((trainerIds as string[]).length) {
             await tx.sesion_trainers.createMany({
               data: (trainerIds as string[]).map((trainerId: string) => ({
-                session_id: sessionIdFromPath,
+                sesion_id: sessionIdFromPath,
                 trainer_id: trainerId,
               })),
             });
           }
         }
         if (unidadIds !== undefined) {
-          await tx.sesion_unidades.deleteMany({ where: { session_id: sessionIdFromPath } });
+          await tx.sesion_unidades.deleteMany({ where: { sesion_id: sessionIdFromPath } });
           if ((unidadIds as string[]).length) {
             await tx.sesion_unidades.createMany({
               data: (unidadIds as string[]).map((unidadId: string) => ({
-                session_id: sessionIdFromPath,
-                unidad_id: unidadId,
+                sesion_id: sessionIdFromPath,
+                unidad_movil_id: unidadId,
               })),
             });
           }
@@ -1079,7 +1110,7 @@ export const handler = async (event: any) => {
         include: {
           deal: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
-          sesion_unidades: { select: { unidad_id: true } },
+          sesion_unidades: { select: { unidad_movil_id: true } },
         },
       });
       return successResponse({ session: normalizeSession(ensureSessionRelations(refreshedRaw as any)) });
@@ -1094,8 +1125,8 @@ export const handler = async (event: any) => {
       if (!existing) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
       await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        await tx.sesion_trainers.deleteMany({ where: { session_id: sessionIdFromPath } });
-        await tx.sesion_unidades.deleteMany({ where: { session_id: sessionIdFromPath } });
+        await tx.sesion_trainers.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+        await tx.sesion_unidades.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.sesion_files.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.sesiones_comentarios.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.alumnos.deleteMany({ where: { sesion_id: sessionIdFromPath } });
