@@ -891,7 +891,7 @@ export const handler = async (event: any) => {
         prisma.sesiones_comentarios.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.sesion_files.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.alumnos.count({ where: { sesion_id: sessionIdFromPath } }),
-        prisma.tokens.count({ where: { sesion_id: sessionIdFromPath, active: true } }),
+        prisma.tokens.count({ where: { session_id: sessionIdFromPath, active: true } }),
       ]);
       return successResponse({ comentarios, documentos, alumnos, tokens });
     }
@@ -1180,7 +1180,7 @@ export const handler = async (event: any) => {
         await tx.sesion_files.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.sesiones_comentarios.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.alumnos.deleteMany({ where: { sesion_id: sessionIdFromPath } });
-        await tx.tokens.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+        await tx.tokens.deleteMany({ where: { session_id: sessionIdFromPath } });
 
         await tx.sesiones.delete({ where: { id: sessionIdFromPath } });
         const product = await tx.deal_products.findUnique({

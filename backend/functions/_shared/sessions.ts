@@ -7,6 +7,48 @@ export function toStringOrNull(value: unknown): string | null {
   return str.length ? str : null;
 }
 
+function normalizeDealRecord(deal: any): any {
+  if (!deal || typeof deal !== 'object') return deal;
+  const record = deal as Record<string, any>;
+  if (record.organization == null && record.organizations !== undefined) {
+    record.organization = record.organizations;
+  }
+  return record;
+}
+
+export function normalizeSessionRecord<T extends Record<string, any>>(session: T): T {
+  if (!session || typeof session !== 'object') return session;
+  const record = session as Record<string, any>;
+  if (record.deal == null && record.deals !== undefined) {
+    record.deal = record.deals;
+  }
+  if (record.deal_product == null && record.deal_products !== undefined) {
+    record.deal_product = record.deal_products;
+  }
+  if (record.sala == null && record.salas !== undefined) {
+    record.sala = record.salas;
+  }
+  if (record.deal) {
+    normalizeDealRecord(record.deal);
+  }
+  return session;
+}
+
+export function normalizeTokenLinkRecord<T extends Record<string, any>>(link: T): T {
+  if (!link || typeof link !== 'object') return link;
+  const record = link as Record<string, any>;
+  if (record.sesion_id == null && record.session_id != null) {
+    record.sesion_id = record.session_id;
+  }
+  if (record.session == null && record.sesiones !== undefined) {
+    record.session = record.sesiones;
+  }
+  if (record.session && typeof record.session === 'object') {
+    normalizeSessionRecord(record.session as Record<string, any>);
+  }
+  return link;
+}
+
 type SessionLike = {
   id?: unknown;
   number?: unknown;
@@ -123,7 +165,7 @@ export async function ensureSessionContext(
   const session = await prisma.sesiones.findUnique({
     where: { id: sessionId },
     include: {
-      deal: {
+      deals: {
         include: { organizations: { select: { name: true } } },
       },
     },
@@ -133,14 +175,7 @@ export async function ensureSessionContext(
     return { error: errorResponse('NOT_FOUND', 'Sesión no encontrada', 404) };
   }
 
-  if (
-    session.deal &&
-    typeof session.deal === 'object' &&
-    !('organization' in session.deal) &&
-    'organizations' in (session.deal as Record<string, any>)
-  ) {
-    (session.deal as Record<string, any>).organization = (session.deal as Record<string, any>).organizations;
-  }
+  normalizeSessionRecord(session as Record<string, any>);
 
   if (session.deal_id !== dealId) {
     return {
@@ -161,14 +196,7 @@ export async function ensureSessionContext(
       return { error: errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404) };
     }
 
-    if (
-      typeof deal === 'object' &&
-      deal !== null &&
-      !('organization' in deal) &&
-      'organizations' in (deal as Record<string, any>)
-    ) {
-      (deal as Record<string, any>).organization = (deal as Record<string, any>).organizations;
-    }
+    normalizeDealRecord(deal as Record<string, any>);
     return { session: { ...session, deal } };
   }
 
