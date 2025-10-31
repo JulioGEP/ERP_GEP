@@ -15,7 +15,8 @@
     "netlify:build": "npm run -w backend generate && npm run -w backend prisma:prune && npm run build",
     "dev": "echo \"Dev local: usa 'npx netlify dev -p 8888' si tienes Netlify CLI disponible\"",
     "prisma:generate": "npm run -w backend generate",
-    "typecheck:functions": "npm run -w backend typecheck"
+    "typecheck:functions": "npm run -w backend typecheck",
+    "compress:service-account": "node scripts/compress-service-account.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
