@@ -3,6 +3,7 @@ import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
+import { normalizeTokenLinkRecord } from './_shared/sessions';
 
 const RATE_LIMIT_WINDOW_MS = Number(process.env.PUBLIC_SESSION_RATE_LIMIT_WINDOW_MS ?? 60_000);
 const RATE_LIMIT_MAX_REQUESTS = Number(process.env.PUBLIC_SESSION_RATE_LIMIT_MAX_REQUESTS ?? 120);
@@ -120,7 +121,8 @@ function mapStudent(student: any) {
 }
 
 function mapSessionInfo(link: any) {
-  const session = link?.session ?? {};
+  const normalizedLink = normalizeTokenLinkRecord(link);
+  const session = normalizedLink?.session ?? {};
   const deal = session?.deal ?? {};
   const dealId = normalizeId(session?.deal_id) ?? normalizeId(deal?.deal_id);
   const formation =
@@ -131,7 +133,7 @@ function mapSessionInfo(link: any) {
         : null;
   return {
     deal_id: dealId,
-    sesion_id: session?.id ?? null,
+    sesion_id: session?.id ?? normalizedLink?.sesion_id ?? null,
     session_name: session?.nombre_cache ?? null,
     formation_name: formation,
     title: deal?.title ?? null,
@@ -144,20 +146,21 @@ async function resolveLink(
   token: string,
 ) {
   if (!token.trim().length) return null;
-  return prisma.tokens.findUnique({
+  const link = await prisma.tokens.findUnique({
     where: { token },
     include: {
-      session: {
+      sesiones: {
         select: {
           id: true,
           deal_id: true,
           nombre_cache: true,
-          deal_product: { select: { id: true, name: true, code: true } },
-          deal: { select: { deal_id: true, title: true } },
+          deal_products: { select: { id: true, name: true, code: true } },
+          deals: { select: { deal_id: true, title: true } },
         },
       },
     },
   });
+  return link ? normalizeTokenLinkRecord(link) : null;
 }
 
 async function ensureValidLink(prisma: ReturnType<typeof getPrisma>, token: string) {

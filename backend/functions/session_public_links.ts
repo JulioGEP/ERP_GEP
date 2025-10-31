@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { normalizeTokenLinkRecord } from './_shared/sessions';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
 
 const DEFAULT_TTL_HOURS = Number(process.env.PUBLIC_SESSION_LINK_TTL_HOURS ?? 24 * 30);
@@ -94,26 +95,27 @@ function extractUserAgent(event: any): string | null {
 
 function mapLinkForResponse(link: any, event: any) {
   if (!link) return null;
-  const session = link.session ?? {};
-  const sesionId = session.id ?? link.sesion_id ?? null;
+  const normalized = normalizeTokenLinkRecord(link);
+  const session = normalized.session ?? {};
+  const sesionId = session.id ?? normalized.sesion_id ?? null;
   const dealId = session.deal_id ?? null;
   return {
-    id: String(link.id ?? ''),
+    id: String(normalized.id ?? ''),
     deal_id: dealId ? String(dealId) : '',
     sesion_id: sesionId ? String(sesionId) : '',
-    token: link.token,
-    public_path: buildPublicPath(link.token),
-    public_url: buildPublicUrl(event, link.token),
-    created_at: toMadridISOString(link.created_at),
+    token: normalized.token,
+    public_path: buildPublicPath(normalized.token),
+    public_url: buildPublicUrl(event, normalized.token),
+    created_at: toMadridISOString(normalized.created_at),
     updated_at: null,
-    expires_at: toMadridISOString(link.expires_at),
+    expires_at: toMadridISOString(normalized.expires_at),
     revoked_at: null,
     last_access_at: null,
     last_access_ip: null,
     last_access_ua: null,
-    active: Boolean(link.active),
-    ip_created: link.ip_created ?? null,
-    user_agent: link.user_agent ?? null,
+    active: Boolean(normalized.active),
+    ip_created: normalized.ip_created ?? null,
+    user_agent: normalized.user_agent ?? null,
   };
 }
 
@@ -130,9 +132,9 @@ function computeExpiration(hours: number): Date {
 
 async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: string) {
   const now = new Date();
-  return prisma.tokens.findFirst({
+  const link = await prisma.tokens.findFirst({
     where: {
-      sesion_id: sessionId,
+      session_id: sessionId,
       active: true,
       OR: [
         { expires_at: null },
@@ -141,9 +143,10 @@ async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: st
     },
     orderBy: { created_at: 'desc' },
     include: {
-      session: { select: { id: true, deal_id: true } },
+      sesiones: { select: { id: true, deal_id: true } },
     },
   });
+  return link ? normalizeTokenLinkRecord(link) : null;
 }
 
 export const handler = async (event: any) => {
@@ -236,7 +239,7 @@ export const handler = async (event: any) => {
       const userAgent = truncateValue(extractUserAgent(event), 1024);
 
       await prisma.tokens.updateMany({
-        where: { sesion_id: sessionId, active: true },
+        where: { session_id: sessionId, active: true },
         data: { active: false },
       });
 
@@ -245,7 +248,7 @@ export const handler = async (event: any) => {
 
       const created = await prisma.tokens.create({
         data: {
-          sesion_id: sessionId,
+          session_id: sessionId,
           token,
           created_at: now,
           expires_at: expiresAt,
@@ -253,9 +256,8 @@ export const handler = async (event: any) => {
           ip_created: ip,
           user_agent: userAgent,
         },
-        include: { session: { select: { id: true, deal_id: true } } },
+        include: { sesiones: { select: { id: true, deal_id: true } } },
       });
-
       return successResponse({ link: mapLinkForResponse(created, event) }, 201);
     }
 
@@ -292,7 +294,7 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
       }
 
-      const where: Record<string, any> = { sesion_id: sessionId };
+      const where: Record<string, any> = { session_id: sessionId };
       if (tokenId) {
         where.id = tokenId;
       }
