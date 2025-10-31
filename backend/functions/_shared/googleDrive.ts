@@ -5,7 +5,6 @@ import type { PrismaClient } from "@prisma/client";
 import { downloadFile as downloadPipedriveFile } from "./pipedrive";
 import { toMadridISOString } from "./timezone";
 import { getPrisma } from "./prisma";
-import { decodeServiceAccountCredentials } from "./privateKey";
 
 const DEFAULT_BASE_FOLDER_NAME = "Documentos ERP";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
@@ -168,54 +167,15 @@ function getServiceAccount(): { clientEmail: string; privateKey: string } | null
   const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL?.trim();
   const privateKeyRaw = process.env.GOOGLE_DRIVE_PRIVATE_KEY;
 
-  if (!clientEmail && !privateKeyRaw) {
+  if (!clientEmail || !privateKeyRaw) {
     console.warn("[google-drive-sync] Faltan credenciales de Google Drive (CLIENT_EMAIL o PRIVATE_KEY)");
     cachedServiceAccount = null;
     return null;
   }
 
-  if (!privateKeyRaw) {
-    console.warn("[google-drive-sync] Falta GOOGLE_DRIVE_PRIVATE_KEY");
-    cachedServiceAccount = null;
-    return null;
-  }
-
-  let decoded;
-  try {
-    decoded = decodeServiceAccountCredentials(privateKeyRaw);
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "SERVICE_ACCOUNT_PRIVATE_KEY_INVALID_JSON") {
-        console.warn("[google-drive-sync] GOOGLE_DRIVE_PRIVATE_KEY no es un JSON válido");
-        cachedServiceAccount = null;
-        return null;
-      }
-      if (error.message === "SERVICE_ACCOUNT_PRIVATE_KEY_INVALID_ENCODING") {
-        console.warn("[google-drive-sync] GOOGLE_DRIVE_PRIVATE_KEY tiene un formato no soportado");
-        cachedServiceAccount = null;
-        return null;
-      }
-    }
-    throw error;
-  }
-  const privateKey = decoded.privateKey.trim();
-  const resolvedClientEmail = (clientEmail || decoded.clientEmail || "").trim();
-
-  if (!privateKey.length) {
-    console.warn("[google-drive-sync] Credenciales de Google Drive sin clave privada");
-    cachedServiceAccount = null;
-    return null;
-  }
-
-  if (!resolvedClientEmail.length) {
-    console.warn("[google-drive-sync] Credenciales de Google Drive sin client_email");
-    cachedServiceAccount = null;
-    return null;
-  }
-
   cachedServiceAccount = {
-    clientEmail: resolvedClientEmail,
-    privateKey,
+    clientEmail,
+    privateKey: privateKeyRaw.replace(/\\n/g, "\n"),
   };
 
   return cachedServiceAccount;
