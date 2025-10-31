@@ -120,40 +120,39 @@ function mapStudent(student: any) {
 }
 
 function mapSessionInfo(link: any) {
-  const session = link?.session ?? {};
-  const deal = session?.deal ?? {};
-  const dealId = normalizeId(session?.deal_id) ?? normalizeId(deal?.deal_id);
+  const s = link?.sesiones ?? {};
+  const d = s?.deals ?? {};
+  const dealId = normalizeId(s?.deal_id) ?? normalizeId(d?.deal_id);
+
   const formation =
-    session?.deal_product?.name?.trim()?.length
-      ? session.deal_product.name
-      : session?.deal_product?.code?.trim()?.length
-        ? session.deal_product.code
+    s?.deal_products?.name?.trim()?.length
+      ? s.deal_products.name
+      : s?.deal_products?.code?.trim()?.length
+        ? s.deal_products.code
         : null;
+
   return {
     deal_id: dealId,
-    sesion_id: session?.id ?? null,
-    session_name: session?.nombre_cache ?? null,
+    sesion_id: s?.id ?? null,
+    session_name: s?.nombre_cache ?? null,
     formation_name: formation,
-    title: deal?.title ?? null,
+    title: d?.title ?? null,
   };
 }
 
 // Deja que TS infiera el tipo correcto (Promise<... | null>) sin usar tokensGetPayload (eliminado en Prisma v5)
-async function resolveLink(
-  prisma: ReturnType<typeof getPrisma>,
-  token: string,
-) {
+async function resolveLink(prisma: ReturnType<typeof getPrisma>, token: string) {
   if (!token.trim().length) return null;
   return prisma.tokens.findUnique({
     where: { token },
     include: {
-      session: {
+      sesiones: {
         select: {
           id: true,
           deal_id: true,
           nombre_cache: true,
-          deal_product: { select: { id: true, name: true, code: true } },
-          deal: { select: { deal_id: true, title: true } },
+          deal_products: { select: { id: true, name: true, code: true } },
+          deals: { select: { deal_id: true, title: true } },
         },
       },
     },
@@ -181,7 +180,7 @@ function logAudit(event: any, link: any, action: string, details: Record<string,
     action,
     link_id: link?.id ?? null,
     sesion_id: link?.sesion_id ?? link?.session?.id ?? null,
-    deal_id: link?.session?.deal_id ?? link?.session?.deal?.deal_id ?? null,
+    deal_id: link?.session?.deal_id ?? link?.session?.deals?.deal_id ?? null,
     token_suffix: typeof link?.token === 'string' ? link.token.slice(-6) : null,
     ip: extractClientIp(event),
     user_agent: extractUserAgent(event),
@@ -237,9 +236,11 @@ export const handler = async (event: any) => {
 
     const { link } = validation;
     const sessionDealId =
-      normalizeId(link.session?.deal_id) ?? normalizeId(link.session?.deal?.deal_id);
+    normalizeId(link.sesiones?.deal_id) ?? normalizeId(link.sesiones?.deals?.deal_id);
     const sessionIdForStudents =
-      normalizeUuid(link.sesion_id) ?? normalizeUuid(link.session?.id) ?? normalizeId(link.session?.id);
+  normalizeUuid(link.session_id) ??
+  normalizeUuid(link.sesiones?.id) ??
+  normalizeId(link.sesiones?.id);
 
     if (!sessionIdForStudents) {
       logAudit(event, link, 'session_missing');

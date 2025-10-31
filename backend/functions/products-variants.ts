@@ -127,12 +127,12 @@ async function ensureVariantResourcesAvailable(
   if (normalizedUnidadId) sessionConditions.push({ sesion_unidades: { some: { unidad_movil_id: normalizedUnidadId } } });
 
   if (sessionConditions.length) {
-    const sessions = await prisma.sesiones.findMany({
+    const sesiones = await prisma.sesiones.findMany({
       where: { OR: sessionConditions as any },
       select: { fecha_inicio_utc: true, fecha_fin_utc: true },
     });
 
-    const hasSessionConflict = sessions.some(
+    const hasSessionConflict = sesiones.some(
   (session: { fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null }) => {
     const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
     if (!sessionRange) return false;
@@ -571,17 +571,17 @@ type ProductRecord = {
   category: string | null;
   hora_inicio: Date | string | null;
   hora_fin: Date | string | null;
-  default_variant_start: Date | string | null;
-  default_variant_end: Date | string | null;
-  default_variant_stock_status: string | null;
-  default_variant_stock_quantity: number | null;
-  default_variant_price: Decimal | string | null;
+  variant_start: Date | string | null;
+  variant_end: Date | string | null;
+  variant_stock_status: string | null;
+  variant_stock_quantity: number | null;
+  variant_price: Decimal | string | null;
   variants: VariantRecord[];
 };
 
 type LegacyProductRecord = Omit<
   ProductRecord,
-  'default_variant_start' | 'default_variant_end' | 'default_variant_stock_status' | 'default_variant_stock_quantity' | 'default_variant_price'
+  'variant_start' | 'variant_end' | 'variant_stock_status' | 'variant_stock_quantity' | 'variant_price'
 >;
 
 let productsDefaultFieldsSupported: boolean | null = null;
@@ -655,11 +655,11 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
   const mapLegacyProducts = (products: LegacyProductRecord[]): ProductRecord[] =>
     products.map((p) => ({
       ...p,
-      default_variant_start: null,
-      default_variant_end: null,
-      default_variant_stock_status: null,
-      default_variant_stock_quantity: null,
-      default_variant_price: null,
+      variant_start: null,
+      variant_end: null,
+      variant_stock_status: null,
+      variant_stock_quantity: null,
+      variant_price: null,
     }));
 
   let includeDefaults = productsDefaultFieldsSupported !== false;
@@ -679,11 +679,11 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
           category: true,
           hora_inicio: true,
           hora_fin: true,
-          default_variant_start: true,
-          default_variant_end: true,
-          default_variant_stock_status: true,
-          default_variant_stock_quantity: true,
-          default_variant_price: true,
+          variant_start: true,
+          variant_end: true,
+          variant_stock_status: true,
+          variant_stock_quantity: true,
+          variant_price: true,
           variants: variantSelectionArgs,
         }
       : {
@@ -783,11 +783,11 @@ function normalizeVariant(record: VariantRecord) {
 
 function normalizeProduct(record: ProductRecord) {
   const defaultPrice =
-    record.default_variant_price == null
+    record.variant_price == null
       ? null
-      : typeof record.default_variant_price === 'string'
-        ? record.default_variant_price
-        : record.default_variant_price.toString();
+      : typeof record.variant_price === 'string'
+        ? record.variant_price
+        : record.variant_price.toString();
 
   return {
     id: record.id,
@@ -798,11 +798,11 @@ function normalizeProduct(record: ProductRecord) {
     category: record.category ?? null,
     hora_inicio: formatTimeFromDb(record.hora_inicio),
     hora_fin: formatTimeFromDb(record.hora_fin),
-    default_variant_start: toMadridISOString(record.default_variant_start),
-    default_variant_end: toMadridISOString(record.default_variant_end),
-    default_variant_stock_status: mapDbStockStatusToApiValue(record.default_variant_stock_status),
-    default_variant_stock_quantity: record.default_variant_stock_quantity ?? null,
-    default_variant_price: defaultPrice,
+    variant_start: toMadridISOString(record.variant_start),
+    variant_end: toMadridISOString(record.variant_end),
+    variant_stock_status: mapDbStockStatusToApiValue(record.variant_stock_status),
+    variant_stock_quantity: record.variant_stock_quantity ?? null,
+    variant_price: defaultPrice,
     variants: record.variants.map(normalizeVariant),
   } as const;
 }
@@ -993,7 +993,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       },
     });
 
-    return successResponse({ ok: true, variant: refreshed ? normalizeVariant(refreshed) : null });
+    return successResponse({ ok: true, variant: refreshed ? normalizeVariant(refreshed as any) : null });
   }
 
   if (method === 'DELETE') {

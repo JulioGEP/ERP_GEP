@@ -18,7 +18,7 @@ import {
   ensureSessionContext,
   resolveSessionNumber,
   toStringOrNull,
-} from './_shared/sessions';
+} from './_shared/sesiones';
 
 const ONE_MEGABYTE = 1024 * 1024;
 const MAX_SESSION_DOCUMENT_SIZE_BYTES = 4 * ONE_MEGABYTE;
@@ -207,7 +207,7 @@ export const handler = async (event: any) => {
       if (context.error) return context.error;
       const session = context.session!;
       let sessionDriveUrl = normalizeDriveUrl(session.drive_url ?? null);
-      const deal = session.deal;
+      const deal = session.deals;
       if (!deal) {
         return errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
       }
@@ -282,7 +282,7 @@ export const handler = async (event: any) => {
             deal,
             session,
             organizationName:
-              deal.organization?.name ?? (deal as any)?.organizations?.name ?? null,
+              deal.organizations?.name ?? (deal as any)?.organizations?.name ?? null,
             sessionNumber,
             sessionName,
             fileName: normalizedFileName,
@@ -418,7 +418,7 @@ export const handler = async (event: any) => {
       const context = await ensureSessionContext(prisma, dealId, sessionId);
       if (context.error) return context.error;
       const session = context.session!;
-      const deal = session.deal;
+      const deal = session.deals;
       if (!deal) {
         return errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
       }
@@ -439,7 +439,7 @@ export const handler = async (event: any) => {
           deal,
           session,
           organizationName:
-            deal.organization?.name ?? (deal as any)?.organizations?.name ?? null,
+            deal.organizations?.name ?? (deal as any)?.organizations?.name ?? null,
           sessionNumber,
           sessionName,
           driveFileName: existing.drive_file_name,

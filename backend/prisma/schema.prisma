@@ -79,7 +79,7 @@ model variants {
   sala_id          String?           @db.Uuid
   unidad_movil_id  String?
   products         products          @relation(fields: [id_padre], references: [id_woo], map: "variants_product_fk")
-  salas            salas?            @relation(fields: [sala_id], references: [id], onUpdate: NoAction, map: "variants_sala_fk")
+  salas            salas?            @relation(fields: [sala_id], references: [sala_id], onUpdate: NoAction, map: "variants_sala_fk")
   trainers         trainers?         @relation(fields: [trainer_id], references: [trainer_id], onUpdate: NoAction, map: "variants_trainer_fk")
   unidades_moviles unidades_moviles? @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction, map: "variants_unidad_fk")
 
@@ -241,17 +241,19 @@ model plantillas {
 }
 
 model salas {
-  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name       String
-  sede       String
+  sala_id   String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("id")
+  name      String
+  sede      String
   created_at DateTime   @default(now()) @db.Timestamptz(6)
   updated_at DateTime   @default(now()) @db.Timestamptz(6)
-  sesiones   sesiones[]
-  variants   variants[]
+
+  sesiones  sesiones[]
+  variants  variants[]
 
   @@unique([name, sede], map: "uq_salas_name_sede")
   @@index([name], map: "idx_salas_name")
   @@index([sede], map: "idx_salas_sede")
+  @@map("salas")
 }
 
 model sesion_files {
@@ -317,7 +319,7 @@ model sesiones {
   sesion_unidades      sesion_unidades[]
   deals                deals                  @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, onUpdate: NoAction)
   deal_products        deal_products          @relation(fields: [deal_product_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  salas                salas?                 @relation(fields: [sala_id], references: [id], onUpdate: NoAction)
+  salas                salas?                 @relation(fields: [sala_id], references: [sala_id], onUpdate: NoAction)
   sesiones_comentarios sesiones_comentarios[]
   tokens               tokens[]
 

@@ -292,11 +292,11 @@ export const handler = async (event: any) => {
           !("organization" in deal) &&
           "organizations" in (deal as Record<string, any>)
         ) {
-          (deal as Record<string, any>).organization = (deal as Record<string, any>).organizations;
+          (deal as Record<string, any>).organizations = (deal as Record<string, any>).organizations;
         }
 
         const organizationName =
-          deal.organization?.name ?? (deal as any)?.organizations?.name ?? null;
+          deal.organizations?.name ?? (deal as any)?.organizations?.name ?? null;
 
         let uploadResult: { driveFileName: string; driveWebViewLink: string | null };
         try {

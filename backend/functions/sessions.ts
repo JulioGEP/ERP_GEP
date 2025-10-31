@@ -1,4 +1,4 @@
-// backend/functions/sessions.ts
+// backend/functions/sesiones.ts
 import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
@@ -60,9 +60,10 @@ function toPositiveInt(value: unknown, fallback = 0): number {
 }
 function parseSessionIdFromPath(path: string): string | null {
   const value = String(path || '');
-  const match = value.match(/\/(?:\.netlify\/functions\/)?sessions\/([^/?#]+)/i);
+  const match = value.match(/\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/([^/?#]+)/i);
   return match ? decodeURIComponent(match[1]) : null;
 }
+
 function toIsoOrNull(date: Date | string | null | undefined): string | null {
   if (!date) return null;
   try {
@@ -75,13 +76,13 @@ function toIsoOrNull(date: Date | string | null | undefined): string | null {
 
 type SessionTrainerLink = {
   trainer_id: string;
-  trainer?: { trainer_id: string; name?: string | null; apellido?: string | null } | null;
+  trainers?: { trainer_id: string; name?: string | null; apellido?: string | null } | null;
 };
 
 type SessionUnitLink = {
   unidad_id: string | null;
   unidad_movil_id?: string | null;
-  unidad?: { unidad_id?: string | null; name?: string | null; matricula?: string | null } | null;
+  unidades_moviles?: { unidad_id?: string | null; name?: string | null; matricula?: string | null } | null;
 };
 
 type SessionRecord = {
@@ -101,7 +102,7 @@ type SessionRecord = {
   sesion_unidades?: SessionUnitLink[];
   deal?: { sede_label: string | null; pipeline_id: string | null } | null;
   deal_product?: { id?: string | null; name?: string | null; code?: string | null } | null;
-  sala?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
+  salas?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
 };
 
 function normalizeSessionUnitLink(link: any): SessionUnitLink {
@@ -112,16 +113,16 @@ function normalizeSessionUnitLink(link: any): SessionUnitLink {
   const record = link as SessionUnitLink & { unidad_movil_id?: string | null };
   const directId = toTrimmed(record.unidad_id);
   const movilId = toTrimmed(record.unidad_movil_id);
-  const relationId = record.unidad && typeof record.unidad === 'object'
-    ? toTrimmed((record.unidad as { unidad_id?: string | null }).unidad_id)
+  const relationId = record.unidades_moviles && typeof record.unidades_moviles === 'object'
+    ? toTrimmed((record.unidades_moviles as { unidad_id?: string | null }).unidad_id)
     : null;
 
   const resolvedId = directId ?? movilId ?? relationId ?? null;
   record.unidad_id = resolvedId;
   record.unidad_movil_id = resolvedId;
 
-  if (record.unidad && typeof record.unidad === 'object' && resolvedId && record.unidad.unidad_id == null) {
-    record.unidad.unidad_id = resolvedId;
+  if (record.unidades_moviles && typeof record.unidades_moviles === 'object' && resolvedId && record.unidades_moviles.unidad_id == null) {
+    record.unidades_moviles.unidad_id = resolvedId;
   }
 
   return record;
@@ -134,13 +135,13 @@ function ensureSessionRelations(row: any): SessionRecord {
     sesion_unidades?: SessionUnitLink[];
   };
   if (record.deal == null && (record as any).deals !== undefined) {
-    (record as any).deal = (record as any).deals;
+    (record as any).deals = (record as any).deals;
   }
   if ((record as any).deal_product == null && (record as any).deal_products !== undefined) {
     (record as any).deal_product = (record as any).deal_products;
   }
-  if ((record as any).sala == null && (record as any).salas !== undefined) {
-    (record as any).sala = (record as any).salas;
+  if ((record as any).salas == null && (record as any).salas !== undefined) {
+    (record as any).salas = (record as any).salas;
   }
   record.trainers = Array.isArray(record.trainers)
     ? record.trainers
@@ -166,7 +167,7 @@ function ensureSessionRelationsList(rows: any[]): SessionRecord[] {
 const SEDE_ALIASES: Record<string, string> = {
   'c/ moratín, 100, 08206 sabadell, barcelona': 'GEP Sabadell',
   'c/ primavera, 1, 28500, arganda del rey, madrid': 'GEP Arganda',
-  'in company - unidad móvil': 'In Company',
+  'in company - unidades_moviles móvil': 'In Company',
 };
 function normalizeSedeLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
@@ -259,10 +260,10 @@ function resolveSessionEstado(row: SessionRecord): SessionEstado {
 }
 async function applyAutomaticSessionState(
   tx: Prisma.TransactionClient,
-  sessions: SessionRecord[],
+  sesiones: SessionRecord[],
 ): Promise<void> {
   const updates: Promise<unknown>[] = [];
-  sessions.forEach((session: SessionRecord) => {
+  sesiones.forEach((session: SessionRecord) => {
     const normalized = ensureSessionRelations(session);
     if (isManualSessionEstado(normalized.estado)) return;
     const autoEstado = resolveAutomaticSessionEstado(normalized);
@@ -497,9 +498,9 @@ async function ensureResourcesAvailable(
     },
   });
 
-  const sessions = ensureSessionRelationsList(sessionsRaw as any[]);
+  const sesiones = ensureSessionRelationsList(sessionsRaw as any[]);
 
-  const conflicting = sessions.filter((s: any) => {
+  const conflicting = sesiones.filter((s: any) => {
     const r = normalizeDateRange(s.fecha_inicio_utc, s.fecha_fin_utc);
     if (!r) return false;
     return r.start.getTime() <= range.end.getTime() && r.end.getTime() >= range.start.getTime();
@@ -548,15 +549,24 @@ export const handler = async (event: any) => {
 
     const prisma = getPrisma();
     const method = event.httpMethod;
-    const path = event.path || '';
-    const isAvailabilityRequest = /\/(?:\.netlify\/functions\/)?sessions\/availability$/i.test(path);
-    const isRangeRequest = /\/(?:\.netlify\/functions\/)?sessions\/range$/i.test(path);
-    const isDealSessionsRequest = /\/(?:\.netlify\/functions\/)?sessions\/by-deal$/i.test(path);
-    const isCountsRequest = /\/(?:\.netlify\/functions\/)?sessions\/[^/]+\/counts$/i.test(path);
-    const sessionIdFromPath = isAvailabilityRequest || isDealSessionsRequest ? null : parseSessionIdFromPath(path);
+    // Usa path o rawUrl (en Netlify local a veces solo viene rawUrl)
+const pathOrUrl = String(event.path || event.rawUrl || '');
+
+// Acepta /sesiones y /sessions y tolera querystring
+const isAvailabilityRequest = /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/availability(?:\?|$)/i.test(pathOrUrl);
+const isRangeRequest        = /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/range(?:\?|$)/i.test(pathOrUrl);
+const isDealSessionsRequest = /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/by-deal(?:\?|$)/i.test(pathOrUrl);
+const isCountsRequest       = /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/[^/]+\/counts(?:\?|$)/i.test(pathOrUrl);
+
+// Para PATCH/DELETE lee el id desde pathOrUrl
+const sessionIdFromPath =
+  isAvailabilityRequest || isDealSessionsRequest ? null : parseSessionIdFromPath(pathOrUrl);
 
     // Generate from deal
-    if (method === 'POST' && /\/sessions\/generate-from-deal$/i.test(path)) {
+    if (
+  method === 'POST' &&
+  /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/generate-from-deal(?:\?|$)/i.test(pathOrUrl)
+) {
       const body = parseJson(event.body);
       const dealId = toTrimmed(body?.dealId);
       if (!dealId) return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
@@ -600,13 +610,13 @@ export const handler = async (event: any) => {
         },
       });
 
-      const sessions = ensureSessionRelationsList(sessionsRaw as any[]);
+      const sesiones = ensureSessionRelationsList(sessionsRaw as any[]);
 
       const trainerLocks = new Set<string>();
       const roomLocks = new Set<string>();
       const unitLocks = new Set<string>();
 
-      sessions.forEach((s: SessionRecord) => {
+      sesiones.forEach((s: SessionRecord) => {
         const r = normalizeDateRange(s.fecha_inicio_utc, s.fecha_fin_utc);
         if (!r) return;
         if (r.start.getTime() <= range.end.getTime() && r.end.getTime() >= range.start.getTime()) {
@@ -633,13 +643,13 @@ export const handler = async (event: any) => {
               trainer_id: true,
               sala_id: true,
               unidad_movil_id: true,
-              product: { select: { hora_inicio: true, hora_fin: true } },
+              products: { select: { hora_inicio: true, hora_fin: true } },
             },
           } as any);
           setVariantResourceColumnsSupport(true);
 
           (variants as any[]).forEach((v: any) => {
-            const vr = computeVariantRange(v.date, v.product ?? { hora_inicio: null, hora_fin: null });
+            const vr = computeVariantRange(v.date, v.products ?? { hora_inicio: null, hora_fin: null });
             if (!vr) return;
             if (vr.start.getTime() <= range.end.getTime() && vr.end.getTime() >= range.start.getTime()) {
               if (v.trainer_id) trainerLocks.add(v.trainer_id as string);
@@ -652,7 +662,7 @@ export const handler = async (event: any) => {
         } catch (error) {
           if (isVariantResourceColumnError(error)) {
             setVariantResourceColumnsSupport(false);
-            console.warn('[sessions] skipping variant resource check (missing resource columns)', { error });
+            console.warn('[sesiones] skipping variant resource check (missing resource columns)', { error });
           } else {
             throw error;
           }
@@ -673,20 +683,20 @@ export const handler = async (event: any) => {
       const dealId = toTrimmed(event.queryStringParameters?.dealId);
       if (!dealId) return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
 
-      const sessions = await prisma.sesiones.findMany({
+      const sesiones = await prisma.sesiones.findMany({
         where: { deal_id: dealId },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
-        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, sala: { select: { sala_id: true, name: true } } },
+        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, salas: { select: { id: true, name: true } } },
       });
 
-      const payload = (sessions as any[]).map((s: any) => ({
+      const payload = (sesiones as any[]).map((s: any) => ({
         id: s.id as string,
         fecha_inicio_utc: toIsoOrNull(s.fecha_inicio_utc),
         fecha_fin_utc: toIsoOrNull(s.fecha_fin_utc),
-        room: s.sala ? { id: (s.sala.sala_id as string) ?? null, name: (s.sala.name as string) ?? null } : null,
+        room: s.salas ? { id: (s.salas.id as string) ?? null, name: (s.salas.name as string) ?? null } : null,
       }));
 
-      return successResponse({ sessions: payload });
+      return successResponse({ sesiones: payload });
     }
 
     // Range query
@@ -727,7 +737,7 @@ export const handler = async (event: any) => {
         estadoFilters = values.length ? values : null;
       }
 
-      const sessions = await prisma.sesiones.findMany({
+      const sesiones = await prisma.sesiones.findMany({
         where: {
           fecha_inicio_utc: { not: null },
           fecha_fin_utc: { not: null },
@@ -766,18 +776,18 @@ export const handler = async (event: any) => {
             },
           },
           deal_products: { select: { id: true, name: true, code: true } },
-          salas: { select: { sala_id: true, name: true, sede: true } },
+          salas: { select: { id: true, name: true, sede: true } },
           sesion_trainers: {
-            select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
+            select: { trainer_id: true, trainers: { select: { trainer_id: true, name: true, apellido: true } } },
           },
           sesion_unidades: {
-            select: { unidad_movil_id: true, unidad: { select: { unidad_id: true, name: true, matricula: true } } },
+            select: { unidad_movil_id: true, unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } } },
           },
         },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { nombre_cache: 'asc' }],
       });
 
-      const rowsAny = ensureSessionRelationsList(sessions as any[]);
+      const rowsAny = ensureSessionRelationsList(sesiones as any[]);
       const rowsById = new Map<string, any>(rowsAny.map((row: any) => [row.id as string, row]));
 
       const payload = rowsAny
@@ -785,17 +795,17 @@ export const handler = async (event: any) => {
         .filter((s: any) => s.fecha_inicio_utc && s.fecha_fin_utc)
         .map((s: any) => {
           const raw: any = rowsById.get(s.id);
-          const sala = raw?.sala
-            ? { sala_id: raw.sala.sala_id as string, name: raw.sala.name as string, sede: (raw.sala.sede as string) ?? null }
-            : null;
+          const salas = raw?.salas
+  ? { sala_id: raw.salas.id as string, name: raw.salas.name as string, sede: (raw.salas.sede as string) ?? null }
+  : null;
 
           const trainers = ((raw?.trainers ?? []) as any[])
             .map((l: any) =>
-              l.trainer
+              l.trainers
                 ? {
-                    trainer_id: l.trainer.trainer_id as string,
-                    name: (l.trainer.name as string) ?? null,
-                    apellido: (l.trainer.apellido as string) ?? null,
+                    trainer_id: l.trainers.trainer_id as string,
+                    name: (l.trainers.name as string) ?? null,
+                    apellido: (l.trainers.apellido as string) ?? null,
                   }
                 : null,
             )
@@ -805,11 +815,11 @@ export const handler = async (event: any) => {
 
           const unidades = ((raw?.unidades ?? []) as any[])
             .map((l: any) =>
-              l.unidad
+              l.unidades_moviles
                 ? {
-                    unidad_id: l.unidad.unidad_id as string,
-                    name: (l.unidad.name as string) ?? null,
-                    matricula: (l.unidad.matricula as string) ?? null,
+                    unidad_id: l.unidades_moviles.unidad_id as string,
+                    name: (l.unidades_moviles.name as string) ?? null,
+                    matricula: (l.unidades_moviles.matricula as string) ?? null,
                   }
                 : null,
             )
@@ -818,9 +828,9 @@ export const handler = async (event: any) => {
           return {
             id: s.id as string,
             deal_id: s.deal_id as string,
-            deal_title: (raw?.deal?.title as string) ?? null,
-            deal_training_address: (raw?.deal?.training_address as string) ?? null,
-            deal_sede_label: (raw?.deal?.sede_label as string) ?? null,
+            deal_title: (raw?.deals?.title as string) ?? null,
+            deal_training_address: (raw?.deals?.training_address as string) ?? null,
+            deal_sede_label: (raw?.deals?.sede_label as string) ?? null,
             deal_product_id: s.deal_product_id as string,
             product_name: (raw?.deal_product?.name as string) ?? null,
             product_code: (raw?.deal_product?.code as string) ?? null,
@@ -829,18 +839,18 @@ export const handler = async (event: any) => {
             fecha_fin_utc: s.fecha_fin_utc as string,
             direccion: s.direccion as string,
             estado: s.estado as SessionEstado,
-            deal_pipeline_id: (raw?.deal?.pipeline_id as string) ?? null,
-            deal_caes_label: (raw?.deal?.caes_label as string) ?? null,
-            deal_fundae_label: (raw?.deal?.fundae_label as string) ?? null,
-            deal_hotel_label: (raw?.deal?.hotel_label as string) ?? null,
-            deal_transporte: (raw?.deal?.transporte as string) ?? null,
-            sala,
+            deal_pipeline_id: (raw?.deals?.pipeline_id as string) ?? null,
+            deal_caes_label: (raw?.deals?.caes_label as string) ?? null,
+            deal_fundae_label: (raw?.deals?.fundae_label as string) ?? null,
+            deal_hotel_label: (raw?.deals?.hotel_label as string) ?? null,
+            deal_transporte: (raw?.deals?.transporte as string) ?? null,
+            salas,
             trainers,
             unidades,
           };
         });
 
-      return successResponse({ range: { start: range.start.toISOString(), end: range.end.toISOString() }, sessions: payload });
+      return successResponse({ range: { start: range.start.toISOString(), end: range.end.toISOString() }, sesiones: payload });
     }
 
     // Counts for a single session
@@ -852,7 +862,7 @@ export const handler = async (event: any) => {
         prisma.sesiones_comentarios.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.sesion_files.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.alumnos.count({ where: { sesion_id: sessionIdFromPath } }),
-        prisma.tokens.count({ where: { sesion_id: sessionIdFromPath, active: true } }),
+        prisma.tokens.count({ where: { session_id: sessionIdFromPath, active: true } }),
       ]);
       return successResponse({ comentarios, documentos, alumnos, tokens });
     }
@@ -877,7 +887,7 @@ export const handler = async (event: any) => {
         if (!deal) throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
 
         const products = (deal.deal_products ?? []).filter(
-  (p: { id: string; code: string }) => hasApplicableCode(p.code));
+  (p: any) => hasApplicableCode(p?.code as any));
         const filteredProducts = productIdParam
   ? products.filter((p: { id: string }) => p.id === productIdParam)
   : products;
@@ -893,7 +903,7 @@ export const handler = async (event: any) => {
                 name: product.name as string,
                 quantity: toNonNegativeInt(product.quantity, 0),
               },
-              sessions: mapped,
+              sesiones: mapped,
               pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
             };
           }),
@@ -965,19 +975,28 @@ export const handler = async (event: any) => {
           dealPipeline: deal.pipeline_id ?? null,
         });
 
-        const created = await tx.sesiones.create({
-          data: {
-            id: randomUUID(),
-            deal_id: deal.deal_id,
-            deal_product_id: product.id,
-            nombre_cache: baseName,
-            direccion: direccion ?? deal.training_address ?? '',
-            sala_id: salaId ?? null,
-            fecha_inicio_utc: fechaInicioResult === undefined ? undefined : (fechaInicioDate as Date | null),
-            fecha_fin_utc: fechaFinResult === undefined ? undefined : (fechaFinDate as Date | null),
-            estado: autoEstado,
-          } as Record<string, any>,
-        });
+        // Construimos un unchecked create para evitar el XOR con relaciones anidadas
+const createData: Prisma.sesionesUncheckedCreateInput = {
+  id: randomUUID(),
+  deal_id: deal.deal_id,
+  deal_product_id: product.id,
+  nombre_cache: baseName,
+  direccion: direccion ?? deal.training_address ?? '',
+  sala_id: salaId ?? null,
+  estado: autoEstado,
+};
+
+// Solo añadimos las fechas si vienen definidas (no mandar undefined)
+if (fechaInicioResult !== undefined) {
+  createData.fecha_inicio_utc = fechaInicioDate as Date | null;
+}
+if (fechaFinResult !== undefined) {
+  createData.fecha_fin_utc = fechaFinDate as Date | null;
+}
+
+const created = await tx.sesiones.create({
+  data: createData,
+});
 
         if ((trainerIdsResult as string[]).length) {
           await tx.sesion_trainers.createMany({
@@ -1141,7 +1160,7 @@ export const handler = async (event: any) => {
         await tx.sesion_files.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.sesiones_comentarios.deleteMany({ where: { sesion_id: sessionIdFromPath } });
         await tx.alumnos.deleteMany({ where: { sesion_id: sessionIdFromPath } });
-        await tx.tokens.deleteMany({ where: { sesion_id: sessionIdFromPath } });
+        await tx.tokens.deleteMany({ where: { session_id: sessionIdFromPath } });
 
         await tx.sesiones.delete({ where: { id: sessionIdFromPath } });
         const product = await tx.deal_products.findUnique({

@@ -72,14 +72,14 @@ export function buildDealPayloadFromRecord(record: any) {
     (toNonNegativeIntOrNull(record.hours) != null ? String(toNonNegativeIntOrNull(record.hours)) : null);
 
   const organization =
-    record.organization ?? (record as Record<string, any>)?.organizations ?? null;
+    record.organizations ?? (record as Record<string, any>)?.organizations ?? null;
 
   if (
     organization &&
     !('organization' in (record as Record<string, any>)) &&
     'organizations' in (record as Record<string, any>)
   ) {
-    (record as Record<string, any>).organization = organization;
+    (record as Record<string, any>).organizations = organization;
   }
 
   const orgId =
@@ -176,10 +176,10 @@ export function buildDealPayloadFromRecord(record: any) {
     persons: participants.map((p: any) => ({
       person_id: toNullableString(p?.personId ?? p?.person_id),
       role: toNullableString(p?.role),
-      first_name: toNullableString(p?.person?.firstName ?? p?.first_name),
-      last_name: toNullableString(p?.person?.lastName ?? p?.last_name),
-      email: toNullableString(p?.person?.email ?? p?.email),
-      phone: toNullableString(p?.person?.phone ?? p?.phone),
+      first_name: toNullableString(p?.persons?.firstName ?? p?.first_name),
+      last_name: toNullableString(p?.persons?.lastName ?? p?.last_name),
+      email: toNullableString(p?.persons?.email ?? p?.email),
+      phone: toNullableString(p?.persons?.phone ?? p?.phone),
     })),
   };
 }

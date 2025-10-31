@@ -11,7 +11,7 @@ import {
   ensureSessionContext,
   resolveSessionNumber,
   toStringOrNull,
-} from './_shared/sessions';
+} from './_shared/sesiones';
 import { normalizeDriveUrl } from './_shared/drive';
 import { uploadSessionCertificateToGoogleDrive } from './_shared/googleDrive';
 import { nowInMadridDate } from './_shared/timezone';
@@ -188,7 +188,7 @@ export const handler = async (event: any) => {
     const { error, session } = await ensureSessionContext(prisma, dealId, sessionId);
     if (error) return error;
     const resolvedSession = session!;
-    const deal = resolvedSession.deal;
+    const deal = resolvedSession.deals;
     if (!deal) {
       return errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
     }
@@ -227,7 +227,7 @@ export const handler = async (event: any) => {
       uploadResult = await uploadSessionCertificateToGoogleDrive({
         deal,
         session: resolvedSession,
-        organizationName: deal.organization?.name ?? (deal as any)?.organizations?.name ?? null,
+        organizationName: deal.organizations?.name ?? (deal as any)?.organizations?.name ?? null,
         sessionNumber,
         sessionName,
         fileName: normalizedFileName,

@@ -79,7 +79,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       normalizeDealId(params.dealID);
     const sessionIdRaw =
       normalizeDealId(params.sesion_id) ||
-      normalizeDealId(params.session_id) ||
+      normalizeDealId(params.sesion_id) ||
       normalizeDealId(params.sessionId) ||
       normalizeDealId(params.sesionId);
 

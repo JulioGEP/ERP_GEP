@@ -2,7 +2,7 @@
 import { getPrisma } from './_shared/prisma'
 import { successResponse, errorResponse, preflightResponse } from './_shared/response'
 import { toMadridISOString } from './_shared/timezone'
-import { compareSessionsForOrder, formatSessionLabel, toStringOrNull } from './_shared/sessions'
+import { compareSessionsForOrder, formatSessionLabel, toStringOrNull } from './_shared/sesiones'
 
 const METHOD_NOT_ALLOWED = errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405)
 
@@ -76,7 +76,7 @@ export const handler = async (event: any) => {
       include: {
         organizations: { select: { name: true } },
         persons: { select: { first_name: true, last_name: true } },
-        sessions: {
+        sesiones: {
           select: {
             id: true,
             direccion: true,
@@ -98,7 +98,7 @@ export const handler = async (event: any) => {
       return errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404)
     }
 
-    const sessionsRaw: RawSession[] = Array.isArray(deal.sessions) ? deal.sessions : []
+    const sessionsRaw: RawSession[] = Array.isArray(deal.sesiones) ? deal.sesiones : []
     const sortedSessions = sessionsRaw.slice().sort(compareSessionsForOrder)
     const normalizedSessions: NormalizedSession[] = []
 
@@ -196,7 +196,7 @@ export const handler = async (event: any) => {
       !('organization' in deal) &&
       'organizations' in (deal as Record<string, any>)
     ) {
-      (deal as Record<string, any>).organization = (deal as Record<string, any>).organizations
+      (deal as Record<string, any>).organizations = (deal as Record<string, any>).organizations
     }
     if (
       typeof deal === 'object' &&
@@ -204,12 +204,12 @@ export const handler = async (event: any) => {
       !('person' in deal) &&
       'persons' in (deal as Record<string, any>)
     ) {
-      (deal as Record<string, any>).person = (deal as Record<string, any>).persons
+      (deal as Record<string, any>).persons = (deal as Record<string, any>).persons
     }
 
-    const organizationName = toStringOrNull(deal.organization?.name ?? (deal as any)?.organizations?.name)
-    const contactFirst = toStringOrNull(deal.person?.first_name ?? (deal as any)?.persons?.first_name)
-    const contactLast = toStringOrNull(deal.person?.last_name ?? (deal as any)?.persons?.last_name)
+    const organizationName = toStringOrNull(deal.organizations?.name ?? (deal as any)?.organizations?.name)
+    const contactFirst = toStringOrNull(deal.persons?.first_name ?? (deal as any)?.persons?.first_name)
+    const contactLast = toStringOrNull(deal.persons?.last_name ?? (deal as any)?.persons?.last_name)
     const contacto = [contactFirst, contactLast].filter(Boolean).join(' ').trim()
 
     return successResponse({
@@ -218,7 +218,7 @@ export const handler = async (event: any) => {
         cliente: organizationName || '',
         contacto: contacto || '',
         comercial: toStringOrNull(deal.comercial) || '',
-        sessions: normalizedSessions,
+        sesiones: normalizedSessions,
         products: mappedDealProducts,
       },
     })

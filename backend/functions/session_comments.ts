@@ -73,13 +73,13 @@ export const handler = async (event: any) => {
 
     const { sessionId, commentId } = parsePath(event.path || '');
     if (!sessionId) {
-      return errorResponse('VALIDATION_ERROR', 'session_id requerido en path', 400);
+      return errorResponse('VALIDATION_ERROR', 'sesion_id requerido en path', 400);
     }
 
     const prisma = getPrisma();
     const sessionIdStr = String(sessionId).trim();
     if (!sessionIdStr || !isUUID(sessionIdStr)) {
-      return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
+      return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
     }
 
     const method = event.httpMethod;

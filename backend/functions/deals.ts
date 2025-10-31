@@ -133,8 +133,8 @@ function toTimestamp(value: Date | string | null | undefined): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
-function pickDefaultSessionIdForStudents(sessions: readonly SessionForStudents[]): string | null {
-  const filtered = sessions
+function pickDefaultSessionIdForStudents(sesiones: readonly SessionForStudents[]): string | null {
+  const filtered = sesiones
     .map((session) => {
       const id = typeof session?.id === "string" ? session.id.trim() : "";
       if (!id.length) return null;
@@ -187,7 +187,7 @@ async function syncFormacionAbiertaSessionsAndStudents(
   prisma: PrismaClient,
   dealId: string,
 ): Promise<FormacionAbiertaSyncResult> {
-    return prisma.$transaction(async (tx: PrismaClient) => {
+    return prisma.$transaction(async (tx) => {
     const generationResult = await generateSessionsForDeal(tx, dealId);
 
     if ("error" in generationResult) {
@@ -200,7 +200,7 @@ async function syncFormacionAbiertaSessionsAndStudents(
       throw err;
     }
 
-    const sessions = await tx.sesiones.findMany({
+    const sesiones = await tx.sesiones.findMany({
       where: { deal_id: dealId },
       orderBy: [{ fecha_inicio_utc: "asc" }, { created_at: "asc" }, { id: "asc" }],
       select: {
@@ -220,7 +220,7 @@ async function syncFormacionAbiertaSessionsAndStudents(
 
     const parsedStudents = studentsFromNotes(notes);
     const primaryNoteId = parsedStudents[0]?.sourceNoteId ?? null;
-    const defaultSessionId = pickDefaultSessionIdForStudents(sessions);
+    const defaultSessionId = pickDefaultSessionIdForStudents(sesiones);
 
     if (!defaultSessionId) {
       if (parsedStudents.length) {
@@ -494,10 +494,10 @@ function normalizeDealRelations<T extends Record<string, any>>(deal: T | null): 
   const raw = deal as Record<string, any>;
 
   if (!("organization" in raw) && "organizations" in raw) {
-    raw.organization = raw.organizations;
+    raw.organizations = raw.organizations;
   }
   if (!("person" in raw) && "persons" in raw) {
-    raw.person = raw.persons;
+    raw.persons = raw.persons;
   }
 
   return deal;
@@ -554,8 +554,8 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
     out.a_fecha = toMadridISOString(out.a_fecha);
   }
 
-  if ("sessions" in out || "sesiones" in out) {
-    const rawSessions = "sessions" in out ? out.sessions : out.sesiones;
+  if ("sesiones" in out || "sesiones" in out) {
+    const rawSessions = "sesiones" in out ? out.sesiones : out.sesiones;
     const mappedSessions = Array.isArray(rawSessions)
       ? rawSessions.map((session: any) => {
           if (!session || typeof session !== "object") {
@@ -573,7 +573,7 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
       delete out.sesiones;
     }
 
-    out.sessions = mappedSessions;
+    out.sesiones = mappedSessions;
   }
 
   if ("alumnos" in out) {
@@ -982,7 +982,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
             await syncDealDocumentsToGoogleDrive({
               deal: dealRaw,
               documents: dealRaw.deal_files ?? [],
-              organizationName: dealRaw.organization?.name ?? null,
+              organizationName: dealRaw.organizations?.name ?? null,
             });
             const refreshed = await prisma.deals.findUnique({
               where: { deal_id: String(deal_id) },
@@ -1136,7 +1136,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
         transactionOperations.splice(
           3,
           0,
-          prisma.comments.deleteMany({ where: { deal_id: id } }),
+          
         );
       }
 
@@ -1145,7 +1145,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
       try {
         await deleteDealFolderFromGoogleDrive({
           deal: existing,
-          organizationName: existing.organization?.name ?? null,
+          organizationName: existing.organizations?.name ?? null,
         });
       } catch (driveError) {
         console.warn("[google-drive-sync] Error no bloqueante eliminando carpeta del deal", {
@@ -1164,9 +1164,9 @@ type DealsFindManyArgs = _DealsFindManyArg;
       const body = JSON.parse(event.body || "{}");
       const patch: Record<string, any> = {};
 
-      if (body.deal && typeof body.deal === "object") {
-        for (const k of Object.keys(body.deal)) {
-          if (EDITABLE_FIELDS.has(k)) patch[k] = body.deal[k];
+      if (body.deals && typeof body.deals === "object") {
+        for (const k of Object.keys(body.deals)) {
+          if (EDITABLE_FIELDS.has(k)) patch[k] = body.deals[k];
         }
       }
 
@@ -1532,7 +1532,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
 
     /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
     if (method === "GET" && event.queryStringParameters?.noSessions === "true") {
-      // listamos deals + organización/persona + productos (sin sessions)
+      // listamos deals + organización/persona + productos (sin sesiones)
       const rowsRaw = await prisma.deals.findMany({
         select: {
           deal_id: true,
