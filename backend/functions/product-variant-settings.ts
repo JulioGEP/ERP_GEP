@@ -13,11 +13,11 @@ const VARIANT_DATE_COLUMN_PATTERNS = [/default_variant_(start|end)/i, /variant_(
 
 type ProductDefaultsRecord = {
   id: string;
-  default_variant_start?: Date | string | null;
-  default_variant_end?: Date | string | null;
-  default_variant_stock_status?: string | null;
-  default_variant_stock_quantity?: number | null;
-  default_variant_price?: Decimal | string | null;
+  variant_start?: Date | string | null;
+  variant_end?: Date | string | null;
+  variant_stock_status?: string | null;
+  variant_stock_quantity?: number | null;
+  variant_price?: Decimal | string | null;
   hora_inicio?: Date | string | null;
   hora_fin?: Date | string | null;
 };
@@ -36,19 +36,19 @@ type ProductDefaultsPayload = {
 function normalizeDefaults(record: ProductDefaultsRecord) {
   return {
     id: record.id,
-    default_variant_start: toMadridISOString(record.default_variant_start ?? null),
-    default_variant_end: toMadridISOString(record.default_variant_end ?? null),
-    default_variant_stock_status: mapDbStockStatusToApiValue(record.default_variant_stock_status),
-    default_variant_stock_quantity:
-      record.default_variant_stock_quantity === undefined
+    variant_start: toMadridISOString(record.variant_start ?? null),
+    variant_end: toMadridISOString(record.variant_end ?? null),
+    variant_stock_status: mapDbStockStatusToApiValue(record.variant_stock_status),
+    variant_stock_quantity:
+      record.variant_stock_quantity === undefined
         ? null
-        : record.default_variant_stock_quantity ?? null,
-    default_variant_price:
-      record.default_variant_price == null
+        : record.variant_stock_quantity ?? null,
+    variant_price:
+      record.variant_price == null
         ? null
-        : typeof record.default_variant_price === 'string'
-          ? record.default_variant_price
-          : record.default_variant_price.toString(),
+        : typeof record.variant_price === 'string'
+          ? record.variant_price
+          : record.variant_price.toString(),
     hora_inicio: formatTimeFromDb(record.hora_inicio),
     hora_fin: formatTimeFromDb(record.hora_fin),
   } as const;
@@ -163,11 +163,11 @@ function buildProductSelect(includeVariantDates: boolean) /* : any */ {
   if (includeVariantDates) {
     return {
       id: true,
-      default_variant_start: true,
-      default_variant_end: true,
-      default_variant_stock_status: true,
-      default_variant_stock_quantity: true,
-      default_variant_price: true,
+      variant_start: true,
+      variant_end: true,
+      variant_stock_status: true,
+      variant_stock_quantity: true,
+      variant_price: true,
       hora_inicio: true,
       hora_fin: true,
     } as const;
@@ -175,9 +175,9 @@ function buildProductSelect(includeVariantDates: boolean) /* : any */ {
 
   return {
     id: true,
-    default_variant_stock_status: true,
-    default_variant_stock_quantity: true,
-    default_variant_price: true,
+    variant_stock_status: true,
+    variant_stock_quantity: true,
+    variant_price: true,
     hora_inicio: true,
     hora_fin: true,
   } as const;
@@ -187,7 +187,7 @@ async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: strin
   const includeVariantDates = variantDateColumnsSupported !== false;
 
   try {
-    const product = await prisma.product.findUnique({
+    const product = await prisma.products.findUnique({
       where: { id: productId },
       select: buildProductSelect(includeVariantDates) as any,
     });
@@ -205,7 +205,7 @@ async function getProduct(prisma: ReturnType<typeof getPrisma>, productId: strin
     variantDateColumnsSupported = false;
     console.warn('[product-variant-settings] Variant date columns not available, falling back', { error });
 
-    return prisma.product.findUnique({
+    return prisma.products.findUnique({
       where: { id: productId },
       select: buildProductSelect(false) as any,
     });
@@ -253,21 +253,21 @@ function buildUpdateData(params: {
 
   if (includeVariantDates) {
     if (hasStartDate) {
-      data.default_variant_start = startDate;
+      data.variant_start = startDate;
     }
     if (hasEndDate) {
-      data.default_variant_end = endDate;
+      data.variant_end = endDate;
     }
   }
 
   if (hasStockStatus) {
-    data.default_variant_stock_status = stockStatus;
+    data.variant_stock_status = stockStatus;
   }
   if (hasStockQuantity) {
-    data.default_variant_stock_quantity = stockQuantity;
+    data.variant_stock_quantity = stockQuantity;
   }
   if (hasPrice) {
-    data.default_variant_price = price;
+    data.variant_price = price;
   }
   if (hasHoraInicio) {
     data.hora_inicio = horaInicio ?? null;
@@ -411,7 +411,7 @@ export const handler = async (event: any) => {
     });
 
     try {
-      const updated = await prisma.product.update({
+      const updated = await prisma.products.update({
         where: { id: productId },
         data: data as any,
         select: buildProductSelect(includeVariantDates) as any,
@@ -449,7 +449,7 @@ export const handler = async (event: any) => {
         horaFin,
       });
 
-      const updated = await prisma.product.update({
+      const updated = await prisma.products.update({
         where: { id: productId },
         data: fallbackData as any,
         select: buildProductSelect(false) as any,

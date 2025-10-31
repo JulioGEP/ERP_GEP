@@ -229,7 +229,7 @@ export const handler = async (event: any) => {
         orderBy: [{ name: 'asc' }, { matricula: 'asc' }],
       });
       return successResponse({
-        mobileUnits: units.map((unit: MobileUnitRecord) => normalizeMobileUnit(unit)),
+        mobileUnits: units.map((unit: any) => normalizeMobileUnit(unit as any)),
       });
     }
 
@@ -251,8 +251,8 @@ export const handler = async (event: any) => {
       const result = buildCreateData(body);
       if ('error' in result) return result.error;
 
-      const created = await prisma.unidades_moviles.create({ data: result.data });
-      return successResponse({ mobileUnit: normalizeMobileUnit(created) }, 201);
+      const created = await prisma.unidades_moviles.create({ data: { ...result.data, created_at: new Date(), updated_at: new Date(), name: (result as any).data?.name ?? '' } });
+      return successResponse({ mobileUnit: normalizeMobileUnit(created as any) }, 201);
     }
 
     if (method === 'PATCH' && unidadIdFromPath) {
@@ -274,7 +274,7 @@ export const handler = async (event: any) => {
         data: result.data,
       });
 
-      return successResponse({ mobileUnit: normalizeMobileUnit(updated) });
+      return successResponse({ mobileUnit: normalizeMobileUnit(updated as any) });
     }
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);

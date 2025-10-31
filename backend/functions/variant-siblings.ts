@@ -1,3 +1,4 @@
+// backend/functions/variant-siblings.ts
 import type { Handler } from '@netlify/functions';
 
 import { getPrisma } from './_shared/prisma';
@@ -51,7 +52,7 @@ export const handler: Handler = async (event) => {
   if (rawVariantWooId) {
     try {
       variantWooIdBigInt = BigInt(rawVariantWooId);
-    } catch (error) {
+    } catch {
       return errorResponse('VALIDATION_ERROR', 'El identificador de la variante es inválido.', 400);
     }
   }
@@ -60,16 +61,17 @@ export const handler: Handler = async (event) => {
   if (rawParentWooId) {
     try {
       parentWooIdBigInt = BigInt(rawParentWooId);
-    } catch (error) {
+    } catch {
       return errorResponse('VALIDATION_ERROR', 'El identificador del producto padre es inválido.', 400);
     }
   }
 
   try {
-    const prisma = await getPrisma();
+    const prisma = getPrisma();
 
     let parentProduct: { id: string | null; wooId: string | null; name: string | null } | null = null;
 
+    // Si no llega el padre, lo inferimos desde la variante
     if (!parentWooIdBigInt) {
       if (!variantWooIdBigInt) {
         return errorResponse(
@@ -79,11 +81,11 @@ export const handler: Handler = async (event) => {
         );
       }
 
+      // ⬇️ Cambiado a include: { products: ... } (no select product)
       const variantRecord = await prisma.variants.findFirst({
         where: { id_woo: variantWooIdBigInt },
-        select: {
-          id_padre: true,
-          product: { select: { id: true, id_woo: true, name: true } },
+        include: {
+          products: { select: { id: true, id_woo: true, name: true } },
         },
       });
 
@@ -100,11 +102,11 @@ export const handler: Handler = async (event) => {
         );
       }
 
-      if (variantRecord.product) {
+      if (variantRecord.products) {
         parentProduct = {
-          id: variantRecord.product.id,
-          wooId: variantRecord.product.id_woo?.toString() ?? null,
-          name: variantRecord.product.name ?? null,
+          id: variantRecord.products.id,
+          wooId: variantRecord.products.id_woo?.toString() ?? null,
+          name: variantRecord.products.name ?? null,
         };
       }
     }
@@ -117,6 +119,7 @@ export const handler: Handler = async (event) => {
       );
     }
 
+    // Si aún no tenemos datos del padre, los buscamos por su id_woo
     if (!parentProduct) {
       const productRecord = await prisma.products.findFirst({
         where: { id_woo: parentWooIdBigInt },

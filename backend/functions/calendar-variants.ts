@@ -35,11 +35,11 @@ type CalendarVariantEvent = {
     category: string | null;
     hora_inicio: string | null;
     hora_fin: string | null;
-    default_variant_start: string | null;
-    default_variant_end: string | null;
-    default_variant_stock_status: string | null;
-    default_variant_stock_quantity: number | null;
-    default_variant_price: string | null;
+    variant_start: string | null;
+    variant_end: string | null;
+    variant_stock_status: string | null;
+    variant_stock_quantity: number | null;
+    variant_price: string | null;
   };
   variant: {
     id: string;
@@ -208,11 +208,11 @@ function normalizeProductRecord(record: {
   category: string | null;
   hora_inicio: Date | string | null;
   hora_fin: Date | string | null;
-  default_variant_start: Date | null;
-  default_variant_end: Date | null;
-  default_variant_stock_status: string | null;
-  default_variant_stock_quantity: number | null;
-  default_variant_price: string | number | null;
+  variant_start: Date | null;
+  variant_end: Date | null;
+  variant_stock_status: string | null;
+  variant_stock_quantity: number | null;
+  variant_price: string | number | null;
 }) {
   return {
     id: record.id,
@@ -222,16 +222,16 @@ function normalizeProductRecord(record: {
     category: record.category ?? null,
     hora_inicio: formatTimeFromDb(record.hora_inicio),
     hora_fin: formatTimeFromDb(record.hora_fin),
-    default_variant_start: toMadridISOString(record.default_variant_start),
-    default_variant_end: toMadridISOString(record.default_variant_end),
-    default_variant_stock_status: record.default_variant_stock_status ?? null,
-    default_variant_stock_quantity: record.default_variant_stock_quantity ?? null,
-    default_variant_price:
-      record.default_variant_price == null
+    variant_start: toMadridISOString(record.variant_start),
+    variant_end: toMadridISOString(record.variant_end),
+    variant_stock_status: record.variant_stock_status ?? null,
+    variant_stock_quantity: record.variant_stock_quantity ?? null,
+    variant_price:
+      record.variant_price == null
         ? null
-        : typeof record.default_variant_price === 'string'
-          ? record.default_variant_price
-          : record.default_variant_price.toString(),
+        : typeof record.variant_price === 'string'
+          ? record.variant_price
+          : record.variant_price.toString(),
   };
 }
 
@@ -353,11 +353,11 @@ const variantSelectionBase = {
       category: true,
       hora_inicio: true,
       hora_fin: true,
-      default_variant_start: true,
-      default_variant_end: true,
-      default_variant_stock_status: true,
-      default_variant_stock_quantity: true,
-      default_variant_price: true,
+      variant_start: true,
+      variant_end: true,
+      variant_stock_status: true,
+      variant_stock_quantity: true,
+      variant_price: true,
     },
   },
 };

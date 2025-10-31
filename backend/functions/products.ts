@@ -160,7 +160,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       });
 
     return successResponse({
-      products: products.map((product: ProductRecord) => normalizeProduct(product)),
+      products: products.map((product: any) => normalizeProduct(product as any)),
     });
   }
 

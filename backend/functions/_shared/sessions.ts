@@ -102,7 +102,7 @@ export async function resolveSessionNumber(
   if (persisted) return persisted;
 
   const siblings = await prisma.sesiones.findMany({
-    where: { deal_id: session.deal_id },
+    where: { deal_id: session.deals_id },
     select: { id: true, fecha_inicio_utc: true, created_at: true },
   });
 
@@ -121,25 +121,25 @@ export async function ensureSessionContext(
   sessionId: string,
 ): Promise<EnsureSessionContextResult> {
   const session = await prisma.sesiones.findUnique({
-    where: { id: sessionId },
-    include: {
-      deal: {
-        include: { organizations: { select: { name: true } } },
-      },
+  where: { id: sessionId },
+  include: {
+    deals: {
+      select: { organizations: { select: { name: true } } },
     },
-  });
+  },
+});
 
   if (!session) {
     return { error: errorResponse('NOT_FOUND', 'Sesión no encontrada', 404) };
   }
 
   if (
-    session.deal &&
-    typeof session.deal === 'object' &&
-    !('organization' in session.deal) &&
-    'organizations' in (session.deal as Record<string, any>)
+    (session as any).deals &&
+    typeof (session as any).deals === 'object' &&
+    !('organization' in (session as any).deals) &&
+    'organizations' in ((session as any).deals as Record<string, any>)
   ) {
-    (session.deal as Record<string, any>).organization = (session.deal as Record<string, any>).organizations;
+    ((session as any).deals as Record<string, any>).organizations = ((session as any).deals as Record<string, any>).organizations;
   }
 
   if (session.deal_id !== dealId) {
@@ -152,7 +152,7 @@ export async function ensureSessionContext(
     };
   }
 
-  if (!session.deal) {
+  if (!(session as any).deals) {
     const deal = await prisma.deals.findUnique({
       where: { deal_id: dealId },
       include: { organizations: { select: { name: true } } },
@@ -167,7 +167,7 @@ export async function ensureSessionContext(
       !('organization' in deal) &&
       'organizations' in (deal as Record<string, any>)
     ) {
-      (deal as Record<string, any>).organization = (deal as Record<string, any>).organizations;
+      (deal as Record<string, any>).organizations = (deal as Record<string, any>).organizations;
     }
     return { session: { ...session, deal } };
   }

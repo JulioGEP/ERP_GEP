@@ -43,10 +43,10 @@ function resolveDealOrganization(deal: any): any {
   }
 
   const raw = deal as Record<string, any>;
-  const organization = raw.organization ?? raw.organizations ?? null;
+  const organization = raw.organizations ?? raw.organizations ?? null;
 
   if (organization !== undefined && !("organization" in raw)) {
-    raw.organization = organization;
+    raw.organizations = organization;
   }
 
   return organization ?? null;

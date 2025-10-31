@@ -1,4 +1,6 @@
+// backend/functions/users.ts
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import type { $Enums } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
@@ -88,14 +90,9 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
     : undefined;
 
   const [total, users] = await Promise.all([
-    prisma.users.count({ where }),
+    prisma.users.count({ where: where as any }),
     prisma.users.findMany({
-      where,
-      orderBy: [
-        { last_name: 'asc' },
-        { first_name: 'asc' },
-        { email: 'asc' },
-      ],
+      orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }, { email: 'asc' }],
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
@@ -120,8 +117,8 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
     return errorResponse('INVALID_INPUT', 'Todos los campos son obligatorios', 400);
   }
 
-  const role = getRoleStorageValue(roleInput);
-  if (!role) {
+  const roleStorage = getRoleStorageValue(roleInput);
+  if (!roleStorage) {
     return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
   }
 
@@ -134,7 +131,7 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
         first_name: firstName,
         last_name: lastName,
         email,
-        role,
+        role: roleStorage as $Enums.erp_role, // ⬅️ cast al enum de Prisma
         active,
         password_hash: passwordHash,
         password_algo: 'bcrypt',
@@ -162,7 +159,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     first_name?: string;
     last_name?: string;
     email?: string;
-    role?: string;
+    role?: $Enums.erp_role; // ⬅️ enum correcto
     active?: boolean;
   };
 
@@ -194,13 +191,12 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
   }
 
   if ('role' in (request.body ?? {})) {
-    const roleInput =
-      typeof request.body?.role === 'string' ? request.body.role.trim() : '';
-    const role = getRoleStorageValue(roleInput);
-    if (!role) {
+    const roleInput = typeof request.body?.role === 'string' ? request.body.role.trim() : '';
+    const roleStorage = getRoleStorageValue(roleInput);
+    if (!roleStorage) {
       return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
     }
-    data.role = role;
+    data.role = roleStorage as $Enums.erp_role; // ⬅️ cast al enum de Prisma
   }
 
   if ('active' in (request.body ?? {})) {

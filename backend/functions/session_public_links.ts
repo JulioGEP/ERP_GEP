@@ -94,13 +94,13 @@ function extractUserAgent(event: any): string | null {
 
 function mapLinkForResponse(link: any, event: any) {
   if (!link) return null;
-  const session = link.session ?? {};
-  const sesionId = session.id ?? link.sesion_id ?? null;
-  const dealId = session.deal_id ?? null;
+  const sesiones = link.sesiones ?? {};
+  const sesionId = sesiones.id ?? link.session_id ?? null;
+  const dealId = sesiones.deal_id ?? null;
   return {
     id: String(link.id ?? ''),
     deal_id: dealId ? String(dealId) : '',
-    sesion_id: sesionId ? String(sesionId) : '',
+    session_id: sesionId ? String(sesionId) : '',
     token: link.token,
     public_path: buildPublicPath(link.token),
     public_url: buildPublicUrl(event, link.token),
@@ -132,7 +132,7 @@ async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: st
   const now = new Date();
   return prisma.tokens.findFirst({
     where: {
-      sesion_id: sessionId,
+      session_id: sessionId,
       active: true,
       OR: [
         { expires_at: null },
@@ -141,7 +141,7 @@ async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: st
     },
     orderBy: { created_at: 'desc' },
     include: {
-      session: { select: { id: true, deal_id: true } },
+      sesiones: { select: { id: true, deal_id: true } },
     },
   });
 }
@@ -162,7 +162,7 @@ export const handler = async (event: any) => {
         normalizeDealId(params.dealId) ||
         normalizeDealId(params.dealID);
       const sessionId =
-        normalizeDealId(params.sesion_id) ||
+        normalizeDealId(params.session_id) ||
         normalizeDealId(params.session_id) ||
         normalizeDealId(params.sessionId) ||
         normalizeDealId(params.sesionId);
@@ -171,15 +171,15 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
       }
       if (!sessionId || !isUUID(sessionId)) {
-        return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
+        return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
       }
 
-      const session = await prisma.sesiones.findUnique({
+      const sesiones = await prisma.sesiones.findUnique({
         where: { id: sessionId },
         select: { id: true, deal_id: true },
       });
 
-      if (!session || session.deal_id !== dealId) {
+      if (!sesiones || sesiones.deal_id !== dealId) {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
       }
 
@@ -203,7 +203,7 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'Body JSON inválido', 400);
       }
       const dealId = normalizeDealId(payload.deal_id);
-      const sessionId = normalizeDealId(payload.sesion_id);
+      const sessionId = normalizeDealId(payload.session_id);
       const forceRegenerate =
         normalizeBoolean(payload.regenerate) ||
         normalizeBoolean(payload.force) ||
@@ -214,15 +214,15 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
       }
       if (!sessionId || !isUUID(sessionId)) {
-        return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
+        return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
       }
 
-      const session = await prisma.sesiones.findUnique({
+      const sesiones = await prisma.sesiones.findUnique({
         where: { id: sessionId },
         select: { id: true, deal_id: true },
       });
 
-      if (!session || session.deal_id !== dealId) {
+      if (!sesiones || sesiones.deal_id !== dealId) {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
       }
 
@@ -236,7 +236,7 @@ export const handler = async (event: any) => {
       const userAgent = truncateValue(extractUserAgent(event), 1024);
 
       await prisma.tokens.updateMany({
-        where: { sesion_id: sessionId, active: true },
+        where: { session_id: sessionId, active: true },
         data: { active: false },
       });
 
@@ -245,7 +245,7 @@ export const handler = async (event: any) => {
 
       const created = await prisma.tokens.create({
         data: {
-          sesion_id: sessionId,
+          session_id: sessionId,
           token,
           created_at: now,
           expires_at: expiresAt,
@@ -253,7 +253,7 @@ export const handler = async (event: any) => {
           ip_created: ip,
           user_agent: userAgent,
         },
-        include: { session: { select: { id: true, deal_id: true } } },
+        include: { sesiones: { select: { id: true, deal_id: true } } },
       });
 
       return successResponse({ link: mapLinkForResponse(created, event) }, 201);
@@ -266,7 +266,7 @@ export const handler = async (event: any) => {
         normalizeDealId(params.dealId) ||
         normalizeDealId(params.dealID);
       const sessionId =
-        normalizeDealId(params.sesion_id) ||
+        normalizeDealId(params.session_id) ||
         normalizeDealId(params.session_id) ||
         normalizeDealId(params.sessionId) ||
         normalizeDealId(params.sesionId);
@@ -280,19 +280,19 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
       }
       if (!sessionId || !isUUID(sessionId)) {
-        return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
+        return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
       }
 
-      const session = await prisma.sesiones.findUnique({
+      const sesiones = await prisma.sesiones.findUnique({
         where: { id: sessionId },
         select: { id: true, deal_id: true },
       });
 
-      if (!session || session.deal_id !== dealId) {
+      if (!sesiones || sesiones.deal_id !== dealId) {
         return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
       }
 
-      const where: Record<string, any> = { sesion_id: sessionId };
+      const where: Record<string, any> = { session_id: sessionId };
       if (tokenId) {
         where.id = tokenId;
       }

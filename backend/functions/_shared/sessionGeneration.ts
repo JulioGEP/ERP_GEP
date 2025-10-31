@@ -39,14 +39,14 @@ export async function reindexSessionNames(
   baseName: string,
 ) {
   const base = baseName.trim().length ? baseName.trim() : 'Sesión';
-  const sessions: { id: string; nombre_cache: string | null }[] = await tx.sesiones.findMany({
+  const sesiones: { id: string; nombre_cache: string | null }[] = await tx.sesiones.findMany({
     where: { deal_product_id: dealProductId },
     orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
     select: { id: true, nombre_cache: true },
   });
 
   const updates: Array<ReturnType<typeof tx.sesiones.update>> = [];
-  sessions.forEach((session: { id: string; nombre_cache: string | null }, index: number) => {
+  sesiones.forEach((session: { id: string; nombre_cache: string | null }, index: number) => {
     const expected = `${base} #${index + 1}`;
     if (session.nombre_cache === expected) return;
     updates.push(
@@ -61,7 +61,7 @@ export async function reindexSessionNames(
     await Promise.all(updates);
   }
 
-  return sessions.length;
+  return sesiones.length;
 }
 
 function buildNombreBase(name: unknown, code: unknown): string {

@@ -4,7 +4,7 @@ import { createHttpHandler } from './_shared/http'
 import { getPrisma } from './_shared/prisma'
 import { successResponse, errorResponse } from './_shared/response'
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone'
-import { ensureSessionContext, resolveSessionNumber, toStringOrNull } from './_shared/sessions'
+import { ensureSessionContext, resolveSessionNumber, toStringOrNull } from './_shared/sesiones'
 import { normalizeDriveUrl } from './_shared/drive'
 import { uploadSessionDocumentToGoogleDrive } from './_shared/googleDrive'
 
@@ -59,7 +59,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       request.body && typeof request.body === 'object' ? (request.body as any) : {}
 
     const dealId = toStringOrNull(payload?.dealId ?? payload?.deal_id ?? payload?.id)
-    const sessionId = toStringOrNull(payload?.sessionId ?? payload?.sesion_id ?? payload?.session_id)
+    const sessionId = toStringOrNull(payload?.sessionId ?? payload?.sesion_id ?? payload?.sesion_id)
     if (!dealId || !sessionId) {
       return errorResponse('VALIDATION_ERROR', 'dealId y sessionId son requeridos', 400)
     }
@@ -86,10 +86,10 @@ export const handler = createHttpHandler<any>(async (request) => {
     let sessionDriveUrl = normalizeDriveUrl(session.drive_url ?? null)
 
     const uploadResult = await uploadSessionDocumentToGoogleDrive({
-      deal: session.deal,
+      deal: session.deals,
       session,
       organizationName:
-        session.deal?.organization?.name ?? (session.deal as any)?.organizations?.name ?? null,
+        session.deals?.organizations?.name ?? (session.deals as any)?.organizations?.name ?? null,
       sessionNumber,
       sessionName,
       fileName,
@@ -136,28 +136,35 @@ export const handler = createHttpHandler<any>(async (request) => {
       const errorCode = error?.code ?? (typeof error === 'object' ? (error as any)?.code : null)
       if (errorCode === 'P2002') {
         try {
-          record = await prisma.sesion_files.update({
-            where: {
-              sesion_id_drive_file_name: {
-                sesion_id: sessionId,
-                drive_file_name: uploadResult.driveFileName,
-              },
-            },
-            data: {
-              deal_id: dealId,
-              file_type: 'pdf',
-              compartir_formador: true,
-              added_at: now,
-              updated_at: now,
-              drive_file_name: uploadResult.driveFileName,
-              drive_web_view_link: uploadResult.driveWebViewLink,
-            },
-          })
-          console.warn('[reportUpload] Documento existente actualizado en session_files', {
-            sessionId,
-            dealId,
-            driveFileName: uploadResult.driveFileName,
-          })
+          const updateResult = await prisma.sesion_files.updateMany({
+  where: {
+    sesion_id: sessionId,
+    drive_file_name: uploadResult.driveFileName,
+  },
+  data: {
+    deal_id: dealId,
+    file_type: 'pdf',
+    compartir_formador: true,
+    added_at: now,
+    updated_at: now,
+    drive_file_name: uploadResult.driveFileName,
+    drive_web_view_link: uploadResult.driveWebViewLink,
+  },
+})
+
+if (updateResult.count > 0) {
+  // recuperamos el registro para devolverlo en la respuesta
+  record = await prisma.sesion_files.findFirst({
+    where: { sesion_id: sessionId, drive_file_name: uploadResult.driveFileName },
+  })
+}
+
+console.warn('[reportUpload] Documento existente actualizado en sesion_files', {
+  sessionId,
+  dealId,
+  driveFileName: uploadResult.driveFileName,
+  })
+
         } catch (updateError) {
           persistenceError = updateError
           console.error('[reportUpload] No se pudo actualizar el documento existente en session_files', {

@@ -49,7 +49,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         reset_token: token,
         reset_token_expires: expiresAt,
         reset_requested_at: new Date(),
-        reset_used_at: null,
+        
       },
     });
 

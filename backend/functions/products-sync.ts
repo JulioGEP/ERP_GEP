@@ -1,5 +1,4 @@
 // backend/functions/products-sync.ts
-import type { PrismaClient } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { extractProductCatalogAttributes, listAllProducts } from './_shared/pipedrive';
@@ -32,8 +31,6 @@ type ProductInput = {
   type: string | null;
   active: boolean;
 };
-
-type ExistingRow = { id: string; id_pipe: string; active: boolean };
 
 export const handler = async (event: any) => {
   try {
@@ -72,6 +69,7 @@ export const handler = async (event: any) => {
       });
     }
 
+    // Si no hay nada que importar, desactivamos todos los productos
     if (mappedProducts.length === 0) {
       await prisma.products.updateMany({
         data: { active: false, updated_at: new Date() },
@@ -91,11 +89,12 @@ export const handler = async (event: any) => {
 
     const now = new Date();
 
-    const result = await prisma.$transaction(async (tx: PrismaClient) => {
-      const existing: ExistingRow[] = await tx.products.findMany({
+    const result = await prisma.$transaction(async (tx) => {
+      // ⬇️ Tipos relajados: no imponemos boolean estricto en active
+      const existing = await tx.products.findMany({
         select: { id: true, id_pipe: true, active: true },
       });
-      const existingByPipe = new Map(existing.map((product) => [product.id_pipe, product]));
+      const existingByPipe = new Map(existing.map((product: any) => [product.id_pipe, product]));
 
       let created = 0;
       let updated = 0;
@@ -134,9 +133,10 @@ export const handler = async (event: any) => {
         processed.add(product.id_pipe);
       }
 
-      const missing = existing
-        .filter((product: ExistingRow) => !processed.has(product.id_pipe))
-        .map((product: ExistingRow) => product.id_pipe);
+      // ⬇️ También relajamos tipos aquí para evitar choques con active: boolean | null
+      const missing = (existing as any[])
+        .filter((product: any) => !processed.has(product.id_pipe))
+        .map((product: any) => product.id_pipe);
 
       let deactivated = 0;
       if (missing.length > 0) {

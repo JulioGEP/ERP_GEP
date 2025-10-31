@@ -531,11 +531,11 @@ export const handler = async (event: any) => {
       select: {
         id: true,
         id_woo: true,
-        default_variant_price: true,
-        default_variant_stock_status: true,
-        default_variant_stock_quantity: true,
-        default_variant_start: true,
-        default_variant_end: true,
+        variant_price: true,
+        variant_stock_status: true,
+        variant_stock_quantity: true,
+        variant_start: true,
+        variant_end: true,
       },
     });
 
@@ -547,12 +547,12 @@ export const handler = async (event: any) => {
       return errorResponse('VALIDATION_ERROR', 'El producto no tiene ID de WooCommerce configurado', 400);
     }
 
-    if (!product.default_variant_price) {
+    if (!product.variant_price) {
       return errorResponse('VALIDATION_ERROR', 'Configura un precio por defecto antes de crear variantes', 400);
     }
 
-    const stockStatus = getWooStockStatusFromDb(product.default_variant_stock_status);
-    const priceText = product.default_variant_price.toString();
+    const stockStatus = getWooStockStatusFromDb(product.variant_stock_status);
+    const priceText = product.variant_price.toString();
 
     ensureWooConfigured();
     const token = Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64');
@@ -613,14 +613,14 @@ export const handler = async (event: any) => {
       }
 
       const metaData: Array<{ key: string; value: string }> = [];
-      if (product.default_variant_start) {
-        const value = formatDateAttributeValue(product.default_variant_start);
+      if (product.variant_start) {
+        const value = formatDateAttributeValue(product.variant_start);
         if (value) {
           metaData.push({ key: 'start_date', value });
         }
       }
-      if (product.default_variant_end) {
-        const value = formatDateAttributeValue(product.default_variant_end);
+      if (product.variant_end) {
+        const value = formatDateAttributeValue(product.variant_end);
         if (value) {
           metaData.push({ key: 'end_date', value });
         }
@@ -634,9 +634,9 @@ export const handler = async (event: any) => {
         attributes: attributesPayload,
       };
 
-      if (product.default_variant_stock_quantity != null) {
+      if (product.variant_stock_quantity != null) {
         wooPayload.manage_stock = true;
-        wooPayload.stock_quantity = product.default_variant_stock_quantity;
+        wooPayload.stock_quantity = product.variant_stock_quantity;
       } else {
         wooPayload.manage_stock = false;
       }
@@ -660,8 +660,8 @@ export const handler = async (event: any) => {
           id_padre: product.id_woo,
           name: wooVariant.name ?? `${sedeOption} - ${dateOption}`,
           status: wooVariant.status ?? 'publish',
-          price: product.default_variant_price,
-          stock: product.default_variant_stock_quantity ?? null,
+          price: product.variant_price,
+          stock: product.variant_stock_quantity ?? null,
           stock_status: wooVariant.stock_status ?? stockStatus,
           sede: sedeOption,
           date: combo.date.value,
