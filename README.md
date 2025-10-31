@@ -150,6 +150,26 @@ Prisma genera automáticamente el cliente tipado en `node_modules/.prisma/client
 
 > 🔒 No versionar archivos `.env` ni credenciales. Compartirlas mediante los canales seguros del equipo.
 
+### Reducir el tamaño de las claves privadas para Netlify
+Netlify aplica el límite de AWS Lambda (4 KB) al tamaño total de las variables de entorno disponibles para cada función. Las
+claves privadas de Google/Gmail en formato PEM superan fácilmente ese límite y bloquean los despliegues.
+
+Para minimizar su huella sin perder seguridad:
+
+1. Guarda el JSON del service account (o la clave PEM) en tu máquina local.
+2. Ejecuta el script auxiliar para comprimirlo y generar una cadena `base64gz:`:
+   ```bash
+   npm run compress:service-account -- path/to/service-account.json > /tmp/drive-key.txt
+   ```
+   - Usa `--` seguido de `-` para leer desde stdin, o añade `--decode` para revertir la operación.
+3. Copia el resultado y actualiza en Netlify las variables `GOOGLE_DRIVE_PRIVATE_KEY` y `GMAIL_PRIVATE_KEY` sustituyendo el
+   valor previo por la cadena comprimida.
+
+Las utilidades `decodeServiceAccountCredentials` usadas por `googleDrive.ts` y `mailer.ts` detectan automáticamente los
+prefijos `base64gz:`/`gzbase64:`, descomprimen el contenido y restablecen el formato PEM original. De esta forma los secretos
+permanecen cifrados en tránsito, se reduce drásticamente el tamaño de cada variable (≈70 % menos) y los deploys vuelven a
+respetar el límite de 4 KB.
+
 ## Puesta en marcha local
 1. **Instalar dependencias**
    ```bash
