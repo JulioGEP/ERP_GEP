@@ -8,6 +8,7 @@ import {
   extractSessionIdFromRequest,
   findActiveSession,
 } from './_shared/auth';
+import { sendPasswordResetEmail } from './_shared/mailer';
 
 export const handler = createHttpHandler<any>(async (request) => {
   if (request.method !== 'POST') {
@@ -53,25 +54,37 @@ export const handler = createHttpHandler<any>(async (request) => {
       },
     });
 
-    // Stub "envío de email"
-    console.info('[auth] Password reset requested', {
-      userId: user.id,
-      email: user.email,
-      token, // En producción no logarías el token; aquí está a modo de stub.
-      expiresAt: expiresAt.toISOString(),
-    });
-
-    if (!canExposeLink) {
-      return genericOk();
-    }
-
     const resetUrl = buildResetUrl(request, token);
 
     if (!resetUrl) {
-      return successResponse({
-        message: 'Enlace generado, pero no se pudo construir la URL pública.',
+      console.error('[auth] Password reset URL could not be resolved');
+      return genericOk();
+    }
+
+    try {
+      await sendPasswordResetEmail({
+        to: user.email,
+        resetUrl,
+        expiresAt,
+        firstName: user.first_name,
+        lastName: user.last_name,
+      });
+      console.info('[auth] Password reset email sent', {
+        userId: user.id,
+        email: user.email,
         expiresAt: expiresAt.toISOString(),
       });
+    } catch (error) {
+      console.error('[auth] Password reset email delivery failed', error);
+      return errorResponse(
+        'EMAIL_DELIVERY_FAILED',
+        'No se pudo enviar el email de restablecimiento. Inténtalo de nuevo en unos minutos.',
+        500,
+      );
+    }
+
+    if (!canExposeLink) {
+      return genericOk();
     }
 
     return successResponse({
