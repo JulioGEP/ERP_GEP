@@ -4,7 +4,7 @@ import { createHttpHandler } from './_shared/http'
 import { getPrisma } from './_shared/prisma'
 import { successResponse, errorResponse } from './_shared/response'
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone'
-import { ensureSessionContext, resolveSessionNumber, toStringOrNull } from './_shared/sesiones'
+import { ensureSessionContext, resolveSessionNumber, toStringOrNull } from './_shared/sessions'
 import { normalizeDriveUrl } from './_shared/drive'
 import { uploadSessionDocumentToGoogleDrive } from './_shared/googleDrive'
 

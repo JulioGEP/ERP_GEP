@@ -2,7 +2,7 @@
 import { getPrisma } from './_shared/prisma'
 import { successResponse, errorResponse, preflightResponse } from './_shared/response'
 import { toMadridISOString } from './_shared/timezone'
-import { compareSessionsForOrder, formatSessionLabel, toStringOrNull } from './_shared/sesiones'
+import { compareSessionsForOrder, formatSessionLabel, toStringOrNull } from './_shared/sessions'
 
 const METHOD_NOT_ALLOWED = errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405)
 

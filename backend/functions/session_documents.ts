@@ -18,7 +18,7 @@ import {
   ensureSessionContext,
   resolveSessionNumber,
   toStringOrNull,
-} from './_shared/sesiones';
+} from './_shared/sessions';
 
 const ONE_MEGABYTE = 1024 * 1024;
 const MAX_SESSION_DOCUMENT_SIZE_BYTES = 4 * ONE_MEGABYTE;

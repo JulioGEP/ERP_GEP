@@ -11,7 +11,7 @@ import {
   ensureSessionContext,
   resolveSessionNumber,
   toStringOrNull,
-} from './_shared/sesiones';
+} from './_shared/sessions';
 import { normalizeDriveUrl } from './_shared/drive';
 import { uploadSessionCertificateToGoogleDrive } from './_shared/googleDrive';
 import { nowInMadridDate } from './_shared/timezone';
