@@ -149,8 +149,11 @@ function normalizeVariantRecord(
     sala_id?: string | null;
     unidad_movil_id?: string | null;
     trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
+    trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
     sala?: { sala_id: string; name: string; sede: string | null } | null;
+    salas?: { id: string; sala_id?: string; name: string; sede: string | null } | null;
     unidad?: { unidad_id: string; name: string; matricula: string | null } | null;
+    unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
     created_at: Date | null;
     updated_at: Date | null;
   },
@@ -158,6 +161,13 @@ function normalizeVariantRecord(
 ) {
   const normalizedStudentsTotal =
     typeof studentsTotal === 'number' && Number.isFinite(studentsTotal) ? studentsTotal : null;
+
+  const resolvedTrainer = record.trainer ?? record.trainers ?? null;
+  const resolvedSala = record.sala ?? record.salas ?? null;
+  if (resolvedSala && resolvedSala.sala_id == null && (resolvedSala as any).id != null) {
+    (resolvedSala as any).sala_id = (resolvedSala as any).id;
+  }
+  const resolvedUnidad = record.unidad ?? record.unidades_moviles ?? null;
 
   return {
     id: record.id,
@@ -175,24 +185,20 @@ function normalizeVariantRecord(
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
     trainer_id: record.trainer_id ?? null,
-    trainer: record.trainer
+    trainer: resolvedTrainer
       ? {
-          trainer_id: record.trainer.trainer_id,
-          name: record.trainer.name ?? null,
-          apellido: record.trainer.apellido ?? null,
+          trainer_id: resolvedTrainer.trainer_id,
+          name: resolvedTrainer.name ?? null,
+          apellido: resolvedTrainer.apellido ?? null,
         }
       : null,
     sala_id: record.sala_id ?? null,
-    sala: record.sala
-      ? { sala_id: record.sala.sala_id, name: record.sala.name, sede: record.sala.sede ?? null }
+    sala: resolvedSala
+      ? { sala_id: resolvedSala.sala_id ?? null, name: resolvedSala.name, sede: resolvedSala.sede ?? null }
       : null,
     unidad_movil_id: record.unidad_movil_id ?? null,
-    unidad: record.unidad
-      ? {
-          unidad_id: record.unidad.unidad_id,
-          name: record.unidad.name,
-          matricula: record.unidad.matricula ?? null,
-        }
+    unidad: resolvedUnidad
+      ? { unidad_id: resolvedUnidad.unidad_id, name: resolvedUnidad.name, matricula: resolvedUnidad.matricula ?? null }
       : null,
     students_total: normalizedStudentsTotal,
     created_at: toMadridISOString(record.created_at),
@@ -367,9 +373,9 @@ const variantSelectionWithResources = {
   trainer_id: true,
   sala_id: true,
   unidad_movil_id: true,
-  trainer: { select: { trainer_id: true, name: true, apellido: true } },
-  sala: { select: { sala_id: true, name: true, sede: true } },
-  unidad: { select: { unidad_id: true, name: true, matricula: true } },
+  trainers: { select: { trainer_id: true, name: true, apellido: true } },
+  salas: { select: { id: true, name: true, sede: true } },
+  unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
 };
 
 /** toMaybeString: convierte un valor con .toString() (ej. Decimal/BigInt wrapper) a string seguro */

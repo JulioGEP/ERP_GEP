@@ -8,7 +8,7 @@ import { toMadridISOString } from './_shared/timezone';
 const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
 
 type RoomRecord = {
-  sala_id: string;
+  id: string;
   name: string;
   sede: string | null;
   created_at: Date | string | null;
@@ -29,7 +29,7 @@ function toNullableString(value: unknown): string | null {
 
 function normalizeRoom(row: RoomRecord) {
   return {
-    sala_id: row.sala_id,
+    sala_id: row.id,
     name: row.name,
     sede: row.sede ?? null,
     created_at: toMadridISOString(row.created_at),
@@ -69,7 +69,7 @@ function buildCreateData(body: any) {
 
   return {
     data: {
-      sala_id: salaId,
+      id: salaId,
       name,
       sede: sedeResult.value,
     },
@@ -87,7 +87,7 @@ function buildUpdateData(body: any) {
   if (Object.prototype.hasOwnProperty.call(body, 'sala_id')) {
     const newId = toNullableString(body.sala_id);
     if (newId) {
-      data.sala_id = newId;
+      data.id = newId;
       hasChanges = true;
     }
   }
@@ -174,7 +174,7 @@ export const handler = async (event: any) => {
 
     if (method === 'GET' && roomIdFromPath) {
       const room = await prisma.salas.findUnique({
-        where: { sala_id: roomIdFromPath },
+        where: { id: roomIdFromPath },
       });
 
       if (!room) {
@@ -202,7 +202,7 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
       }
 
-      const existing = await prisma.salas.findUnique({ where: { sala_id: roomIdFromPath } });
+      const existing = await prisma.salas.findUnique({ where: { id: roomIdFromPath } });
       if (!existing) {
         return errorResponse('NOT_FOUND', 'Sala no encontrada', 404);
       }
@@ -212,7 +212,7 @@ export const handler = async (event: any) => {
       if ('error' in result) return result.error;
 
       const updated = await prisma.salas.update({
-        where: { sala_id: roomIdFromPath },
+        where: { id: roomIdFromPath },
         data: result.data,
       });
 

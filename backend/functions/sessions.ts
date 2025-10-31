@@ -101,7 +101,7 @@ type SessionRecord = {
   sesion_unidades?: SessionUnitLink[];
   deal?: { sede_label: string | null; pipeline_id: string | null } | null;
   deal_product?: { id?: string | null; name?: string | null; code?: string | null } | null;
-  sala?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
+  sala?: { id?: string | null; sala_id?: string | null; name?: string | null; sede?: string | null } | null;
 };
 
 function normalizeSessionUnitLink(link: any): SessionUnitLink {
@@ -141,6 +141,9 @@ function ensureSessionRelations(row: any): SessionRecord {
   }
   if ((record as any).sala == null && (record as any).salas !== undefined) {
     (record as any).sala = (record as any).salas;
+  }
+  if (record.sala && typeof record.sala === 'object' && record.sala.sala_id == null && (record.sala as any).id != null) {
+    (record.sala as any).sala_id = (record.sala as any).id;
   }
   record.trainers = Array.isArray(record.trainers)
     ? record.trainers
@@ -715,14 +718,24 @@ export const handler = async (event: any) => {
       const sessions = await prisma.sesiones.findMany({
         where: { deal_id: dealId },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
-        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, sala: { select: { sala_id: true, name: true } } },
+        select: {
+          id: true,
+          fecha_inicio_utc: true,
+          fecha_fin_utc: true,
+          sala: { select: { id: true, name: true } },
+        },
       });
 
       const payload = (sessions as any[]).map((s: any) => ({
         id: s.id as string,
         fecha_inicio_utc: toIsoOrNull(s.fecha_inicio_utc),
         fecha_fin_utc: toIsoOrNull(s.fecha_fin_utc),
-        room: s.sala ? { id: (s.sala.sala_id as string) ?? null, name: (s.sala.name as string) ?? null } : null,
+        room: s.sala
+          ? {
+              id: ((s.sala.id as string | null | undefined) ?? (s.sala.sala_id as string | null | undefined)) ?? null,
+              name: (s.sala.name as string) ?? null,
+            }
+          : null,
       }));
 
       return successResponse({ sessions: payload });
@@ -805,7 +818,7 @@ export const handler = async (event: any) => {
             },
           },
           deal_products: { select: { id: true, name: true, code: true } },
-          salas: { select: { sala_id: true, name: true, sede: true } },
+          salas: { select: { id: true, name: true, sede: true } },
           sesion_trainers: {
             select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
           },
@@ -825,7 +838,12 @@ export const handler = async (event: any) => {
         .map((s: any) => {
           const raw: any = rowsById.get(s.id);
           const sala = raw?.sala
-            ? { sala_id: raw.sala.sala_id as string, name: raw.sala.name as string, sede: (raw.sala.sede as string) ?? null }
+            ? {
+                sala_id:
+                  ((raw.sala.id as string | null | undefined) ?? (raw.sala.sala_id as string | null | undefined)) ?? null,
+                name: raw.sala.name as string,
+                sede: (raw.sala.sede as string) ?? null,
+              }
             : null;
 
           const trainers = ((raw?.trainers ?? []) as any[])
