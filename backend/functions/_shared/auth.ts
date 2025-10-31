@@ -5,7 +5,7 @@ import { errorResponse } from './response';
 
 export const SESSION_COOKIE_NAME = 'erp_session';
 const SESSION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 horas
-const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
+const RESET_TOKEN_DURATION_MS = 10 * 60 * 1000; // 10 minutos
 
 // Exportado por si otros módulos necesitan el mapping
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
