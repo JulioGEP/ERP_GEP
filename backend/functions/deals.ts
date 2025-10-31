@@ -494,10 +494,12 @@ function normalizeDealRelations<T extends Record<string, any>>(deal: T | null): 
   const raw = deal as Record<string, any>;
 
   if (!("organization" in raw) && "organizations" in raw) {
-    raw.organizations = raw.organizations;
+    const organization = raw.organizations;
+    raw.organization = organization ?? null;
   }
   if (!("person" in raw) && "persons" in raw) {
-    raw.persons = raw.persons;
+    const person = raw.persons;
+    raw.person = person ?? null;
   }
 
   return deal;

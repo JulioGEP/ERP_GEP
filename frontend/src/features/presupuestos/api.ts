@@ -730,6 +730,12 @@ function normalizeSessionGroup(raw: any): SessionGroupDTO {
   const productId = toStringValue(product?.id) ?? (product?.id != null ? String(product.id) : "");
   const quantity = toNumber(product?.quantity);
 
+  const sessionsSource = Array.isArray(raw?.sessions)
+    ? raw.sessions
+    : Array.isArray(raw?.sesiones)
+    ? raw.sesiones
+    : [];
+
   return {
     product: {
       id: productId,
@@ -737,7 +743,7 @@ function normalizeSessionGroup(raw: any): SessionGroupDTO {
       name: toStringValue(product?.name),
       quantity: quantity != null ? quantity : 0,
     },
-    sessions: Array.isArray(raw?.sessions) ? raw.sessions.map((row: any) => normalizeSession(row)) : [],
+    sessions: (sessionsSource as unknown[]).map((row) => normalizeSession(row)),
     pagination: {
       page: toNumber(raw?.pagination?.page) ?? 1,
       limit: toNumber(raw?.pagination?.limit) ?? 10,
