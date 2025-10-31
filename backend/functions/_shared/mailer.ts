@@ -1,5 +1,6 @@
 import { createSign, randomBytes } from 'crypto';
 import { requireEnv } from './env';
+import { decodeServiceAccountCredentials } from './privateKey';
 import { normalizeEmail } from './auth';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -144,28 +145,28 @@ function getGmailCredentials(): GmailCredentials {
   }
 
   const raw = requireEnv('GMAIL_PRIVATE_KEY');
-  const trimmed = raw.trim();
-  let privateKey = '';
-  let clientEmail = (process.env.GMAIL_CLIENT_EMAIL ?? '').trim();
+  let decoded;
 
-  if (trimmed.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (typeof parsed.private_key === 'string' && parsed.private_key.trim().length) {
-        privateKey = parsed.private_key;
+  try {
+    decoded = decodeServiceAccountCredentials(raw);
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === 'SERVICE_ACCOUNT_PRIVATE_KEY_INVALID_JSON') {
+        throw new Error('PASSWORD_RESET_EMAIL_INVALID_PRIVATE_KEY_JSON');
       }
-      if (typeof parsed.client_email === 'string' && parsed.client_email.trim().length) {
-        clientEmail = clientEmail || parsed.client_email.trim();
+      if (error.message === 'SERVICE_ACCOUNT_PRIVATE_KEY_INVALID_ENCODING') {
+        throw new Error('PASSWORD_RESET_EMAIL_INVALID_PRIVATE_KEY_JSON');
       }
-    } catch (error) {
-      throw new Error('PASSWORD_RESET_EMAIL_INVALID_PRIVATE_KEY_JSON');
     }
-  } else {
-    privateKey = trimmed;
+    throw error;
   }
 
-  privateKey = (privateKey || '').replace(/\\n/g, '\n').trim();
-  clientEmail = clientEmail.trim();
+  let privateKey = decoded.privateKey.trim();
+  let clientEmail = (process.env.GMAIL_CLIENT_EMAIL ?? '').trim();
+
+  if (!clientEmail && decoded.clientEmail) {
+    clientEmail = decoded.clientEmail.trim();
+  }
 
   if (!privateKey.length) {
     throw new Error('PASSWORD_RESET_EMAIL_PRIVATE_KEY_MISSING');
