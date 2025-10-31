@@ -556,7 +556,7 @@ type VariantRecord = {
   unidad_movil_id?: string | null;
   products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
-  salas?: { id: string; sala_id?: string; name: string; sede: string | null } | null;
+  salas?: { sala_id: string; name: string; sede: string | null } | null;
   unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
@@ -640,7 +640,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       sala_id: true,
       unidad_movil_id: true,
       trainers: { select: { trainer_id: true, name: true, apellido: true } },
-      salas: { select: { id: true, name: true, sede: true } },
+      salas: { select: { sala_id: true, name: true, sede: true } },
       unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
     };
   };
@@ -766,12 +766,7 @@ function normalizeVariant(record: VariantRecord) {
       : null,
     sala_id: record.sala_id ?? null,
     sala: record.salas
-      ? {
-          sala_id:
-            ((record.salas.id as string | null | undefined) ?? (record.salas.sala_id as string | null | undefined)) ?? null,
-          name: record.salas.name,
-          sede: record.salas.sede ?? null,
-        }
+      ? { sala_id: record.salas.sala_id, name: record.salas.name, sede: record.salas.sede ?? null }
       : null,
     unidad_movil_id: record.unidad_movil_id ?? null,
     unidad: record.unidades_moviles
@@ -924,7 +919,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     const nextDate      = Object.prototype.hasOwnProperty.call(updates, 'date') ? updates.date ?? null : existing.date ?? null;
 
     if (nextSede && nextSalaId && nextSede.trim().toLowerCase() === 'sabadell') {
-      const room = await prisma.salas.findUnique({ where: { id: nextSalaId }, select: { id: true, sede: true } });
+      const room = await prisma.salas.findUnique({ where: { sala_id: nextSalaId }, select: { sala_id: true, sede: true } });
       if (!room) return errorResponse('VALIDATION_ERROR', 'La sala seleccionada no existe', 400);
       if ((room.sede ?? '').trim().toLowerCase() !== 'gep sabadell') {
         return errorResponse('VALIDATION_ERROR', 'La sala seleccionada no pertenece a GEP Sabadell.', 400);
@@ -991,7 +986,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         sala_id: true,
         unidad_movil_id: true,
         trainers: { select: { trainer_id: true, name: true, apellido: true } },
-        salas: { select: { id: true, name: true, sede: true } },
+        salas: { select: { sala_id: true, name: true, sede: true } },
         unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
         created_at: true,
         updated_at: true,
