@@ -588,40 +588,10 @@ export const handler = async (event: any) => {
       const excludeSessionId = toTrimmed(event.queryStringParameters?.excludeSessionId);
       const excludeVariantId = toTrimmed(event.queryStringParameters?.excludeVariantId);
 
-      const overlapFilter = {
-        AND: [
-          { fecha_inicio_utc: { not: null } },
-          { fecha_fin_utc: { not: null } },
-          {
-            OR: [
-              {
-                AND: [
-                  { fecha_inicio_utc: { gte: range.start } },
-                  { fecha_inicio_utc: { lte: range.end } },
-                ],
-              },
-              {
-                AND: [
-                  { fecha_fin_utc: { gte: range.start } },
-                  { fecha_fin_utc: { lte: range.end } },
-                ],
-              },
-              {
-                AND: [
-                  { fecha_inicio_utc: { lte: range.start } },
-                  { fecha_fin_utc: { gte: range.end } },
-                ],
-              },
-            ],
-          },
-        ],
-      } as const;
-
       const sessionsRaw = await prisma.sesiones.findMany({
         where: {
           ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
           OR: [{ sala_id: { not: null } }, { sesion_trainers: { some: {} } }, { sesion_unidades: { some: {} } }],
-          AND: [overlapFilter],
         },
         select: {
           id: true,
@@ -653,20 +623,11 @@ export const handler = async (event: any) => {
       });
 
       if (getVariantResourceColumnsSupport() !== false) {
-        const variantStartDate = new Date(range.start.getTime());
-        variantStartDate.setUTCHours(0, 0, 0, 0);
-        const variantEndDate = new Date(range.end.getTime());
-        variantEndDate.setUTCHours(23, 59, 59, 999);
-
         try {
           const variants = await prisma.variants.findMany({
             where: {
               ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
-              date: {
-                not: null,
-                gte: variantStartDate,
-                lte: variantEndDate,
-              },
+              date: { not: null },
               OR: [{ trainer_id: { not: null } }, { sala_id: { not: null } }, { unidad_movil_id: { not: null } }],
             },
             select: {
