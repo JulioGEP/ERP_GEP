@@ -380,9 +380,11 @@ export function normalizeSessionGroup(raw: any): SessionGroupDTO {
       name: toStringValue(productRaw?.name) ?? null,
       quantity: toNumber(productRaw?.quantity) ?? 0,
     },
-    sessions: Array.isArray(raw?.sessions)
-      ? (raw.sessions as unknown[]).map((session) => normalizeSession(session))
-      : [],
+    sessions: ((Array.isArray(raw?.sessions)
+      ? raw.sessions
+      : Array.isArray(raw?.sesiones)
+      ? raw.sesiones
+      : []) as unknown[]).map((session) => normalizeSession(session)),
     pagination: {
       page: toNonNegativeInteger(raw?.pagination?.page),
       limit: toNonNegativeInteger(raw?.pagination?.limit) || 10,
