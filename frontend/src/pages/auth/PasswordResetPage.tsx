@@ -65,15 +65,12 @@ export default function PasswordResetPage() {
           <Card.Body className="p-4">
             <div className="mb-4">
               <h2 className="mb-1">Crear contraseña</h2>
-              <div className="text-muted">
-                Introduce una contraseña para acceder al ERP. El enlace caduca en 10 minutos.
-              </div>
+              <div className="text-muted">Introduce una contraseña para acceder al ERP.</div>
             </div>
 
             {!tokenValid && !successMessage ? (
               <Alert variant="danger">
-                El enlace de restablecimiento no es válido o está incompleto.{' '}
-                <Link to="/auth/password/forgot">Solicita uno nuevo.</Link>
+                El enlace de restablecimiento no es válido o está incompleto. Solicita uno nuevo a un administrador.
               </Alert>
             ) : null}
 

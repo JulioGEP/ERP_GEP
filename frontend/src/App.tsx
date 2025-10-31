@@ -7,7 +7,6 @@ import { computeDefaultPath } from './shared/auth/utils';
 
 const AuthenticatedApp = lazy(() => import('./app/AuthenticatedApp'));
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
-const PasswordResetRequestPage = lazy(() => import('./pages/auth/PasswordResetRequestPage'));
 const PasswordResetPage = lazy(() => import('./pages/auth/PasswordResetPage'));
 // El módulo no exporta por defecto; mapea el named export a default para React.lazy
 const PublicSessionStudentsPage = lazy(() =>
@@ -24,7 +23,6 @@ export default function App() {
           path="/public/sesiones/:sessionId/alumnos"
           element={<PublicSessionStudentsPage />}
         />
-        <Route path="/auth/password/forgot" element={<PasswordResetRequestPage />} />
         <Route path="/auth/password/reset" element={<PasswordResetPage />} />
         <Route path="/login" element={<LoginRoute />} />
         <Route path="/*" element={<ProtectedApp />} />
