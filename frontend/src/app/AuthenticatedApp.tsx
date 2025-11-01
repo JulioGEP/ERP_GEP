@@ -584,9 +584,17 @@ export default function AuthenticatedApp() {
       }
 
       const code = apiError?.code ?? 'UNKNOWN_ERROR';
-      const message =
+      const defaultMessage =
         apiError?.message ?? 'No se ha podido importar el presupuesto. Inténtalo de nuevo más tarde.';
-      const detailedMessage = `No se pudo importar. [${code}] ${message}`;
+      const friendlyNotFoundMessage = 'El presupuesto que indicas, no existe en Pipedrive';
+      const isPipedriveNotFoundError =
+        apiError?.code === 'IMPORT_ERROR' &&
+        typeof apiError?.message === 'string' &&
+        (/->\s*404/.test(apiError.message) || /deal not found/i.test(apiError.message));
+
+      const detailedMessage = isPipedriveNotFoundError
+        ? friendlyNotFoundMessage
+        : `No se pudo importar. [${code}] ${defaultMessage}`;
       setImportError(detailedMessage);
       setImportResultDealId(null);
       setImportResultWarnings(null);
