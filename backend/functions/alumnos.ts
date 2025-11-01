@@ -89,10 +89,11 @@ export const handler = createHttpHandler<any>(async (request) => {
 
     let sessionId: string | null = null;
     if (sessionIdRaw) {
-      if (!isUUID(sessionIdRaw)) {
-        return errorResponse('VALIDATION_ERROR', 'sesion_id inválido (UUID requerido)', 400);
-      }
       sessionId = sessionIdRaw;
+      if (!isUUID(sessionIdRaw)) {
+        // Sesiones antiguas pueden tener identificadores no UUID.
+        // Permitimos continuar sin lanzar error para poder leer esos alumnos.
+      }
     }
 
     const where: Record<string, unknown> = { deal_id: dealId };
