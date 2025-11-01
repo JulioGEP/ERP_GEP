@@ -569,7 +569,9 @@ export default function AuthenticatedApp() {
         setAutoRefreshBudgetId(null);
       }
 
-      pushToast({ variant: 'success', message: 'Presupuesto importado' });
+      if (!showImportModal) {
+        pushToast({ variant: 'success', message: 'Presupuesto importado' });
+      }
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
@@ -579,7 +581,9 @@ export default function AuthenticatedApp() {
         setImportResultDealId(null);
         setImportResultWarnings(null);
         setAutoRefreshBudgetId(null);
-        pushToast({ variant: 'danger', message });
+        if (!showImportModal) {
+          pushToast({ variant: 'danger', message });
+        }
         return;
       }
 
@@ -599,7 +603,9 @@ export default function AuthenticatedApp() {
       setImportResultDealId(null);
       setImportResultWarnings(null);
       setAutoRefreshBudgetId(null);
-      pushToast({ variant: 'danger', message: detailedMessage });
+      if (!showImportModal) {
+        pushToast({ variant: 'danger', message: detailedMessage });
+      }
     }
   });
 
