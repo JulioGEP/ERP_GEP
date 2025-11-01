@@ -24,7 +24,7 @@
   background-image: url('/GEP_favicon.png');
   background-repeat: no-repeat;
   background-size: contain;
-  transform: translate(-50%, -50%) rotate(45deg) scale(5);
+  transform: translate(-50%, -50%) rotate(45deg) scale(8);
   opacity: 0.1;
   pointer-events: none;
   z-index: 0;
