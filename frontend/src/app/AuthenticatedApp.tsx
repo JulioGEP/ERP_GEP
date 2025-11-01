@@ -989,7 +989,7 @@ export default function AuthenticatedApp() {
         onClose={handleCloseProductComment}
       />
 
-      <ToastContainer position="bottom-end" className="p-3">
+      <ToastContainer position="bottom-end" className="p-3 app-toast-container">
         {toasts.map((toast) => {
           const textClass = toast.variant === 'warning' ? 'text-dark' : 'text-white';
           return (
