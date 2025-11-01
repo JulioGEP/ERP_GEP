@@ -1,12 +1,25 @@
 // src/App.tsx
-import { lazy, Suspense, useMemo } from 'react';
+import { lazy, Suspense, useMemo, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
 import { useAuth } from './context/AuthContext';
 import { computeDefaultPath } from './shared/auth/utils';
 
 const AuthenticatedApp = lazy(() => import('./app/AuthenticatedApp'));
-const LoginPage = lazy(() => import('./pages/auth/LoginPage'));
+let loginPagePreloadPromise: Promise<typeof import('./pages/auth/LoginPage')> | null = null;
+
+function preloadLoginPage() {
+  if (!loginPagePreloadPromise) {
+    loginPagePreloadPromise = import('./pages/auth/LoginPage').catch((error) => {
+      loginPagePreloadPromise = null;
+      throw error;
+    });
+  }
+
+  return loginPagePreloadPromise;
+}
+
+const LoginPage = lazy(() => preloadLoginPage());
 const PasswordResetPage = lazy(() => import('./pages/auth/PasswordResetPage'));
 // El módulo no exporta por defecto; mapea el named export a default para React.lazy
 const PublicSessionStudentsPage = lazy(() =>
@@ -54,6 +67,12 @@ function LoginRoute() {
 function ProtectedApp() {
   const location = useLocation();
   const { isLoading, isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    preloadLoginPage().catch(() => {
+      // Silenciar errores de precarga; el lazy import los gestionará si ocurren durante la navegación real.
+    });
+  }, []);
 
   if (isLoading) {
     return <FullPageLoader />;
