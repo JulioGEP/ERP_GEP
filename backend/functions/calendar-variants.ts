@@ -99,11 +99,22 @@ function toTrimmed(value: unknown): string | null {
   return text.length ? text : null;
 }
 
-function parseDate(value: unknown): Date | null {
-  const text = toTrimmed(value);
+/** Lee el primer parámetro disponible entre varios nombres posibles */
+function getFirstParam(qs: Record<string, any> | undefined, names: string[]): string | null {
+  if (!qs) return null;
+  for (const n of names) {
+    if (qs[n] !== undefined && qs[n] !== null) return String(qs[n]);
+  }
+  return null;
+}
+
+/** Acepta ISO o YYYY-MM-DD; null si inválida */
+function parseDateFlex(raw: unknown): Date | null {
+  const text = toTrimmed(raw);
   if (!text) return null;
-  const date = new Date(text);
-  return Number.isNaN(date.getTime()) ? null : date;
+  // new Date(...) soporta ISO y YYYY-MM-DD (interpreta en UTC); validamos getTime()
+  const d = new Date(text);
+  return Number.isFinite(d.getTime()) ? d : null;
 }
 
 function ensureValidRange(start: Date | null, end: Date | null): DateRange | null {
@@ -398,9 +409,27 @@ export const handler = async (event: any) => {
 
     ensureMadridTimezone();
 
-    const { start: startParam, end: endParam } = event.queryStringParameters ?? {};
-    const range = ensureValidRange(parseDate(startParam), parseDate(endParam));
+    const qs = event.queryStringParameters ?? {};
+
+    // Acepta start/end, from_utc/to_utc, o from/to. Si solo viene inicio, usa mismo día como fin.
+    const startRaw =
+      getFirstParam(qs, ['start', 'from_utc', 'from']) ??
+      null;
+    const endRaw =
+      getFirstParam(qs, ['end', 'to_utc', 'to']) ??
+      startRaw; // fallback: mismo día
+
+    const startDate = parseDateFlex(startRaw);
+    const endDate = parseDateFlex(endRaw);
+
+    const range = ensureValidRange(startDate, endDate);
     if (!range) {
+      return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
+    }
+
+    // Límite máximo igual que en sessions: 120 días
+    const maxRangeMs = 120 * 24 * 60 * 60 * 1000;
+    if (range.end.getTime() - range.start.getTime() > maxRangeMs) {
       return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
     }
 
@@ -445,7 +474,7 @@ export const handler = async (event: any) => {
     const variantWooIds = Array.isArray(variants)
       ? Array.from(
           new Set(
-            variants
+            (variants as any[])
               .map((variant: any) => {
                 if (variant?.id_woo === null || variant?.id_woo === undefined) return null;
                 const rawId = variant.id_woo;
@@ -489,7 +518,7 @@ export const handler = async (event: any) => {
       });
 
       // === BLOQUE con tipos fuertes (DealRow) ===
-      dealsWithCounts.forEach((deal: DealRow) => {
+      (dealsWithCounts as DealRow[]).forEach((deal: DealRow) => {
         // normaliza la clave de variación
         let keyRaw: string | null = null;
         if (typeof deal.w_id_variation === 'string') {

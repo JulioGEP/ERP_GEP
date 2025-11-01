@@ -241,13 +241,14 @@ model plantillas {
 }
 
 model salas {
-  sala_id    String     @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
-  name       String
-  sede       String
+  sala_id   String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("id")
+  name      String
+  sede      String
   created_at DateTime   @default(now()) @db.Timestamptz(6)
   updated_at DateTime   @default(now()) @db.Timestamptz(6)
-  sesiones   sesiones[]
-  variants   variants[]
+
+  sesiones  sesiones[]
+  variants  variants[]
 
   @@unique([name, sede], map: "uq_salas_name_sede")
   @@index([name], map: "idx_salas_name")
@@ -378,21 +379,6 @@ model unidades_moviles {
   variants        variants[]
 }
 
-model auth_sessions {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String    @db.Uuid
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
-  expires_at DateTime  @db.Timestamptz(6)
-  revoked_at DateTime? @db.Timestamptz(6)
-  ip_hash    String?
-  user_agent String?
-  user       users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-  @@index([user_id])
-  @@index([expires_at])
-  @@map("auth_sessions")
-}
-
 enum DocumentOrigin {
   imported
   user_upload
@@ -432,4 +418,20 @@ enum session_status {
   Planificada
   Suspendido
   Cancelado
+}
+
+model auth_sessions {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  expires_at DateTime  @db.Timestamptz(6)
+  revoked_at DateTime? @db.Timestamptz(6)
+  ip_hash    String?
+  user_agent String?
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id], map: "auth_sessions_user_id_idx")
+  @@index([expires_at], map: "auth_sessions_expires_at_idx")
+  @@map("auth_sessions")
 }

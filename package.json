@@ -2,7 +2,10 @@
   "name": "erp_gep_monorepo",
   "private": true,
   "version": "1.0.9",
-  "workspaces": ["frontend", "backend"],
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=10.8.0"
@@ -27,6 +30,7 @@
     "@netlify/functions": "^4.2.7",
     "@types/node": "^20.19.19",
     "dotenv-cli": "^10.0.0",
+    "netlify-cli": "^17.38.1",
     "pino-pretty": "^13.1.1",
     "prisma": "^5.22.0",
     "ts-node": "^10.9.2",

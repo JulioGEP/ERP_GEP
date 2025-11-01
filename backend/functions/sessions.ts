@@ -318,6 +318,47 @@ function parseDateInput(value: unknown) {
   if (!Number.isFinite(parsed.getTime())) return { error: errorResponse('VALIDATION_ERROR', 'Fecha inválida', 400) };
   return parsed;
 }
+
+function parseDateInputFlexible(v: any): Date | null {
+  if (v === undefined || v === null || v === '') return null;
+  if (v instanceof Date) return Number.isFinite(v.getTime()) ? v : null;
+
+  const s = String(v).trim();
+  if (!s) return null;
+
+  // Acepta YYYY-MM-DD → forzamos medianoche UTC
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const d = new Date(s + 'T00:00:00.000Z');
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+function getCalendarFlag(q: Record<string, any> | null | undefined): boolean {
+  const raw = (q?.calendar ?? q?.scope ?? q?.view ?? '').toString().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'calendar';
+}
+
+function getCalendarRangeFromQuery(q: Record<string, any> | null | undefined): { from: Date; to: Date } | null {
+  if (!q) return null;
+  const rawFrom = q.from_utc ?? q.from ?? q.start;
+  const rawTo   = q.to_utc   ?? q.to   ?? q.end;
+
+  const from = parseDateInputFlexible(rawFrom);
+  const to   = parseDateInputFlexible(rawTo);
+
+  if (!from || !to) return null;
+  if (to.getTime() < from.getTime()) return null;
+
+  // Límite opcional de 120 días
+  const MAX_MS = 120 * 24 * 60 * 60 * 1000;
+  if (to.getTime() - from.getTime() > MAX_MS) return null;
+
+  return { from, to };
+}
+
 function ensureArrayOfStrings(
   value: unknown,
 ): string[] | { error: ReturnType<typeof errorResponse> } {
@@ -551,6 +592,8 @@ export const handler = async (event: any) => {
     const method = event.httpMethod;
     // Usa path o rawUrl (en Netlify local a veces solo viene rawUrl)
 const pathOrUrl = String(event.path || event.rawUrl || '');
+const query = event.queryStringParameters ?? {};
+const isCalendarMode = getCalendarFlag(query);
 
 // Acepta /sesiones y /sessions y tolera querystring
 const isAvailabilityRequest = /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/availability(?:\?|$)/i.test(pathOrUrl);
@@ -686,14 +729,15 @@ const sessionIdFromPath =
       const sesiones = await prisma.sesiones.findMany({
         where: { deal_id: dealId },
         orderBy: [{ fecha_inicio_utc: 'asc' }, { created_at: 'asc' }],
-        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true, salas: { select: { id: true, name: true } } },
+        select: { id: true, fecha_inicio_utc: true, fecha_fin_utc: true,
+  salas: { select: ({ sala_id: true, name: true, sede: true } as any) } },
       });
 
       const payload = (sesiones as any[]).map((s: any) => ({
         id: s.id as string,
         fecha_inicio_utc: toIsoOrNull(s.fecha_inicio_utc),
         fecha_fin_utc: toIsoOrNull(s.fecha_fin_utc),
-        room: s.salas ? { id: (s.salas.id as string) ?? null, name: (s.salas.name as string) ?? null } : null,
+        room: s.salas ? { id: (s.salas.sala_id as string) ?? null, name: (s.salas.name as string) ?? null } : null,
       }));
 
       return successResponse({ sesiones: payload });
@@ -776,7 +820,7 @@ const sessionIdFromPath =
             },
           },
           deal_products: { select: { id: true, name: true, code: true } },
-          salas: { select: { id: true, name: true, sede: true } },
+          salas: { select: ({ sala_id: true, name: true, sede: true } as any) },
           sesion_trainers: {
             select: { trainer_id: true, trainers: { select: { trainer_id: true, name: true, apellido: true } } },
           },
@@ -784,7 +828,7 @@ const sessionIdFromPath =
             select: { unidad_movil_id: true, unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } } },
           },
         },
-        orderBy: [{ fecha_inicio_utc: 'asc' }, { nombre_cache: 'asc' }],
+        orderBy: [{ fecha_inicio_utc: "asc" }],
       });
 
       const rowsAny = ensureSessionRelationsList(sesiones as any[]);
@@ -796,7 +840,7 @@ const sessionIdFromPath =
         .map((s: any) => {
           const raw: any = rowsById.get(s.id);
           const salas = raw?.salas
-  ? { sala_id: raw.salas.id as string, name: raw.salas.name as string, sede: (raw.salas.sede as string) ?? null }
+  ? { sala_id: raw.salas.sala_id as string, name: raw.salas.name as string, sede: (raw.salas.sede as string) ?? null }
   : null;
 
           const trainers = ((raw?.trainers ?? []) as any[])
@@ -868,51 +912,163 @@ const sessionIdFromPath =
     }
 
     // List by deal (grouped by product)
-    if (method === 'GET') {
-      const dealId = toTrimmed(event.queryStringParameters?.dealId);
-      if (!dealId) return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
+    // List by deal (grouped by product)  OR  Calendar mode sin dealId
+if (method === 'GET') {
+  // Si viene en “modo calendario”, devolvemos sesiones por rango SIN exigir dealId
+  if (isCalendarMode) {
+    const range = getCalendarRangeFromQuery(query);
+    if (!range) return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
 
-      const productIdParam = toTrimmed(event.queryStringParameters?.productId);
-      const page = Math.max(1, toPositiveInt(event.queryStringParameters?.page, 1));
-      const limit = parseLimit(event.queryStringParameters?.limit);
-
-      const response = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        const deal = await tx.deals.findUnique({
-          where: { deal_id: dealId },
+    const sesiones = await prisma.sesiones.findMany({
+      where: {
+        fecha_inicio_utc: { not: null },
+        fecha_fin_utc: { not: null },
+        AND: [
+          {
+            OR: [
+              { fecha_inicio_utc: { gte: range.from, lte: range.to } },
+              { fecha_fin_utc:    { gte: range.from, lte: range.to } },
+              { AND: [{ fecha_inicio_utc: { lte: range.from } }, { fecha_fin_utc: { gte: range.to } }] },
+            ],
+          },
+        ],
+      },
+      include: {
+        deals: {
           select: {
             deal_id: true,
-            deal_products: { select: { id: true, code: true, name: true, quantity: true }, orderBy: [{ created_at: 'asc' }] },
+            title: true,
+            training_address: true,
+            pipeline_id: true,
+            sede_label: true,
+            caes_label: true,
+            fundae_label: true,
+            hotel_label: true,
+            transporte: true,
           },
-        });
-        if (!deal) throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
+        },
+        deal_products: { select: { id: true, name: true, code: true } },
+        salas: { select: ({ sala_id: true, name: true, sede: true } as any) },
+        sesion_trainers: {
+          select: { trainer_id: true, trainers: { select: { trainer_id: true, name: true, apellido: true } } },
+        },
+        sesion_unidades: {
+          select: { unidad_movil_id: true, unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } } },
+        },
+      },
+      orderBy: [{ fecha_inicio_utc: "asc" }],
+    });
 
-        const products = (deal.deal_products ?? []).filter(
-  (p: any) => hasApplicableCode(p?.code as any));
-        const filteredProducts = productIdParam
-  ? products.filter((p: { id: string }) => p.id === productIdParam)
-  : products;
+    const rowsAny = ensureSessionRelationsList(sesiones as any[]);
+    const rowsById = new Map<string, any>(rowsAny.map((row: any) => [row.id as string, row]));
 
-        const payload = await Promise.all(
-          filteredProducts.map(async (product: any) => {
-            const { total, rows } = await fetchSessionsByProduct(tx, deal.deal_id, product.id, page, limit);
-            const mapped = (rows as any[]).map((r: any) => normalizeSession(r as unknown as SessionRecord));
-            return {
-              product: {
-                id: product.id as string,
-                code: product.code as string,
-                name: product.name as string,
-                quantity: toNonNegativeInt(product.quantity, 0),
-              },
-              sesiones: mapped,
-              pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
-            };
-          }),
-        );
-        return payload;
+    const payload = rowsAny
+      .map((s: any) => normalizeSession(s as unknown as SessionRecord))
+      .filter((s: any) => s.fecha_inicio_utc && s.fecha_fin_utc)
+      .map((s: any) => {
+        const raw: any = rowsById.get(s.id);
+        const salas = raw?.salas
+          ? { sala_id: raw.salas.sala_id as string, name: raw.salas.name as string, sede: (raw.salas.sede as string) ?? null }
+          : null;
+
+        const trainers = ((raw?.trainers ?? []) as any[])
+          .map((l: any) =>
+            l.trainers
+              ? {
+                  trainer_id: l.trainers.trainer_id as string,
+                  name: (l.trainers.name as string) ?? null,
+                  apellido: (l.trainers.apellido as string) ?? null,
+                }
+              : null,
+          )
+          .filter((v: any): v is { trainer_id: string; name: string | null; apellido: string | null } => !!v);
+
+        const unidades = ((raw?.unidades ?? []) as any[])
+          .map((l: any) =>
+            l.unidades_moviles
+              ? {
+                  unidad_id: l.unidades_moviles.unidad_id as string,
+                  name: (l.unidades_moviles.name as string) ?? null,
+                  matricula: (l.unidades_moviles.matricula as string) ?? null,
+                }
+              : null,
+          )
+          .filter((v: any): v is NonNullable<typeof v> => v != null);
+
+        return {
+          id: s.id as string,
+          deal_id: s.deal_id as string,
+          deal_title: (raw?.deals?.title as string) ?? null,
+          deal_training_address: (raw?.deals?.training_address as string) ?? null,
+          deal_sede_label: (raw?.deals?.sede_label as string) ?? null,
+          deal_product_id: s.deal_product_id as string,
+          product_name: (raw?.deal_product?.name as string) ?? null,
+          product_code: (raw?.deal_product?.code as string) ?? null,
+          nombre_cache: s.nombre_cache as string,
+          fecha_inicio_utc: s.fecha_inicio_utc as string,
+          fecha_fin_utc: s.fecha_fin_utc as string,
+          direccion: s.direccion as string,
+          estado: s.estado as SessionEstado,
+          deal_pipeline_id: (raw?.deals?.pipeline_id as string) ?? null,
+          deal_caes_label: (raw?.deals?.caes_label as string) ?? null,
+          deal_fundae_label: (raw?.deals?.fundae_label as string) ?? null,
+          deal_hotel_label: (raw?.deals?.hotel_label as string) ?? null,
+          deal_transporte: (raw?.deals?.transporte as string) ?? null,
+          salas,
+          trainers,
+          unidades,
+        };
       });
 
-      return successResponse({ groups: response });
-    }
+    return successResponse({
+      range: { start: range.from.toISOString(), end: range.to.toISOString() },
+      sesiones: payload,
+    });
+  }
+
+  // --- flujo original por dealId (no tocar) ---
+  const dealId = toTrimmed(event.queryStringParameters?.dealId);
+  if (!dealId) return errorResponse('VALIDATION_ERROR', 'dealId es obligatorio', 400);
+
+  const productIdParam = toTrimmed(event.queryStringParameters?.productId);
+  const page = Math.max(1, toPositiveInt(event.queryStringParameters?.page, 1));
+  const limit = parseLimit(event.queryStringParameters?.limit);
+
+  const response = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const deal = await tx.deals.findUnique({
+      where: { deal_id: dealId },
+      select: {
+        deal_id: true,
+        deal_products: { select: { id: true, code: true, name: true, quantity: true }, orderBy: [{ created_at: 'asc' }] },
+      },
+    });
+    if (!deal) throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
+
+    const products = (deal.deal_products ?? []).filter((p: any) => hasApplicableCode(p?.code as any));
+    const filteredProducts = productIdParam ? products.filter((p: { id: string }) => p.id === productIdParam) : products;
+
+    const payload = await Promise.all(
+      filteredProducts.map(async (product: any) => {
+        const { total, rows } = await fetchSessionsByProduct(tx, deal.deal_id, product.id, page, limit);
+        const mapped = (rows as any[]).map((r: any) => normalizeSession(r as unknown as SessionRecord));
+        return {
+          product: {
+            id: product.id as string,
+            code: product.code as string,
+            name: product.name as string,
+            quantity: toNonNegativeInt(product.quantity, 0),
+          },
+          sesiones: mapped,
+          pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+        };
+      }),
+    );
+
+    return payload;
+  });
+
+  return successResponse({ groups: response });
+}
 
     // Create
     if (method === 'POST' && !sessionIdFromPath) {
