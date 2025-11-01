@@ -340,6 +340,7 @@ export default function AuthenticatedApp() {
   const [importResultDealId, setImportResultDealId] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [autoRefreshBudgetId, setAutoRefreshBudgetId] = useState<string | null>(null);
+  const [isCheckingExistingDeal, setIsCheckingExistingDeal] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -628,6 +629,114 @@ export default function AuthenticatedApp() {
 
   const budgets = budgetsQuery.data ?? [];
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
+
+  const handleImportSubmit = useCallback(
+    async (rawDealId: string) => {
+      const normalizedDealId = normalizeDealId(rawDealId);
+      if (!normalizedDealId) {
+        return;
+      }
+
+      setImportError(null);
+      setIsCheckingExistingDeal(true);
+
+      const matchDealId = (value: unknown) => normalizeDealId(value) === normalizedDealId;
+      const findSummaryInList = (list: DealSummary[] | undefined | null): DealSummary | null => {
+        if (!Array.isArray(list)) return null;
+        const entry = list.find((item) => matchDealId(item?.dealId) || matchDealId(item?.deal_id));
+        return entry ?? null;
+      };
+
+      let shouldImport = false;
+      try {
+        let existingSummary: DealSummary | null = findSummaryInList(budgets);
+        if (!existingSummary) {
+          const cachedList = queryClient.getQueryData<DealSummary[]>(DEALS_WITHOUT_SESSIONS_QUERY_KEY);
+          if (cachedList) {
+            existingSummary = findSummaryInList(cachedList);
+          }
+        }
+        if (!existingSummary) {
+          const fallbackList = queryClient.getQueryData<DealSummary[]>(
+            DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
+          );
+          if (fallbackList) {
+            existingSummary = findSummaryInList(fallbackList);
+          }
+        }
+
+        let existingDetail: DealDetail | null = null;
+        if (existingSummary) {
+          if (!existingSummary.pipeline_label && !existingSummary.pipeline_id) {
+            existingDetail = queryClient.getQueryData<DealDetail>(['deal', normalizedDealId]) ?? null;
+          }
+        } else {
+          existingDetail = queryClient.getQueryData<DealDetail>(['deal', normalizedDealId]) ?? null;
+        }
+
+        if (!existingDetail) {
+          try {
+            existingDetail = await fetchDealDetail(normalizedDealId);
+            if (existingDetail) {
+              queryClient.setQueryData(['deal', normalizedDealId], existingDetail);
+            }
+          } catch (error) {
+            if (error instanceof ApiError && (error.status === 404 || error.code === 'HTTP_404')) {
+              existingDetail = null;
+            } else {
+              throw error;
+            }
+          }
+        }
+
+        const summaryCandidate = existingDetail
+          ? buildSummaryFromDeal(existingDetail)
+          : existingSummary
+          ? buildSummaryFromDeal(existingSummary)
+          : null;
+
+        if (summaryCandidate) {
+          pushToast({ variant: 'warning', message: 'El presupuesto que indicas, ya existe en el ERP' });
+          setImportResultWarnings(null);
+          setImportResultDealId(null);
+          setAutoRefreshBudgetId(null);
+          setShowImportModal(false);
+          setSelectedBudgetSummary(summaryCandidate);
+          setSelectedBudgetId(summaryCandidate.dealId ?? summaryCandidate.deal_id ?? normalizedDealId);
+          return;
+        }
+
+        shouldImport = true;
+      } catch (error) {
+        console.error('[App] No se pudo comprobar la existencia del presupuesto antes de importar', error);
+        const message = 'No se pudo comprobar si el presupuesto existe. Inténtalo de nuevo.';
+        setImportError(message);
+        pushToast({ variant: 'danger', message });
+        return;
+      } finally {
+        setIsCheckingExistingDeal(false);
+      }
+
+      if (shouldImport) {
+        importMutation.mutate(normalizedDealId);
+      }
+    },
+    [
+      budgets,
+      fetchDealDetail,
+      importMutation,
+      pushToast,
+      queryClient,
+      setAutoRefreshBudgetId,
+      setImportError,
+      setImportResultDealId,
+      setImportResultWarnings,
+      setIsCheckingExistingDeal,
+      setSelectedBudgetId,
+      setSelectedBudgetSummary,
+      setShowImportModal,
+    ],
+  );
 
   const deleteDealMutation = useMutation({
     mutationFn: (dealId: string) => deleteDeal(dealId),
@@ -972,12 +1081,14 @@ export default function AuthenticatedApp() {
 
       <BudgetImportModal
         show={showImportModal}
-        isLoading={importMutation.isPending}
+        isLoading={importMutation.isPending || isCheckingExistingDeal}
         resultWarnings={importResultWarnings ?? undefined}
         resultDealId={importResultDealId ?? undefined}
         error={importError}
         onClose={handleCloseImportModal}
-        onSubmit={(dealId) => importMutation.mutate(dealId)}
+        onSubmit={(dealId) => {
+          void handleImportSubmit(dealId);
+        }}
       />
 
       <BudgetModalComponent {...budgetModalProps} />
