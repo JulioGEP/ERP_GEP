@@ -67,8 +67,11 @@ export default function LoginPage() {
   );
 
   return (
-    <Container className="d-flex align-items-center justify-content-center" style={{ minHeight: '100vh' }}>
-      <div style={{ width: '100%', maxWidth: 420 }}>
+    <Container
+      className="login-page-wrapper d-flex align-items-center justify-content-center"
+      style={{ minHeight: '100vh' }}
+    >
+      <div className="login-page-card-wrapper" style={{ width: '100%', maxWidth: 420 }}>
         <Card className="shadow-sm">
           <Card.Body className="p-4">
             <div className="mb-4">
@@ -86,6 +89,8 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.currentTarget.value)}
                   required
                   autoFocus
+                  autoComplete="username"
+                  name="email"
                 />
               </Form.Group>
 
@@ -98,6 +103,8 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.currentTarget.value)}
                     required
+                    autoComplete="current-password"
+                    name="password"
                   />
                   <Button
                     variant="outline-secondary"
@@ -116,7 +123,7 @@ export default function LoginPage() {
               )}
 
               <div className="d-grid">
-                <Button type="submit" disabled={!formValid || submitting}>
+                <Button className="login-submit-button" type="submit" disabled={!formValid || submitting}>
                   {submitting ? (
                     <>
                       <Spinner animation="border" size="sm" className="me-2" /> Accediendo…
