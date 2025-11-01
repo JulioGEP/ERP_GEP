@@ -163,7 +163,7 @@ export const handler = async (event: any) => {
         normalizeDealId(params.dealID);
       const sessionId =
         normalizeDealId(params.session_id) ||
-        normalizeDealId(params.session_id) ||
+        normalizeDealId(params.sesion_id) ||
         normalizeDealId(params.sessionId) ||
         normalizeDealId(params.sesionId);
 
@@ -203,7 +203,11 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'Body JSON inválido', 400);
       }
       const dealId = normalizeDealId(payload.deal_id);
-      const sessionId = normalizeDealId(payload.session_id);
+      const sessionId =
+        normalizeDealId(payload.session_id) ||
+        normalizeDealId(payload.sesion_id) ||
+        normalizeDealId(payload.sessionId) ||
+        normalizeDealId(payload.sesionId);
       const forceRegenerate =
         normalizeBoolean(payload.regenerate) ||
         normalizeBoolean(payload.force) ||
@@ -267,7 +271,7 @@ export const handler = async (event: any) => {
         normalizeDealId(params.dealID);
       const sessionId =
         normalizeDealId(params.session_id) ||
-        normalizeDealId(params.session_id) ||
+        normalizeDealId(params.sesion_id) ||
         normalizeDealId(params.sessionId) ||
         normalizeDealId(params.sesionId);
       const tokenId =
