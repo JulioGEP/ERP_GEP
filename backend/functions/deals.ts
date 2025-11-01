@@ -1529,7 +1529,7 @@ type DealsFindManyArgs = _DealsFindManyArg;
       const rowsRaw = await prisma.deals.findMany(query);
 
       const deals = rowsRaw.map((row: any) => mapDealForApi(normalizeDealRelations(row)));
-      return successResponse(deals);
+      return successResponse({ deals });
     }
 
     /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
