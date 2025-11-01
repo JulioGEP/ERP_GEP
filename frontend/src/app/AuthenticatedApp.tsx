@@ -773,6 +773,22 @@ export default function AuthenticatedApp() {
     [pushToast, queryClient],
   );
 
+  const handleOpenCalendarDeal = useCallback(
+    ({ dealId, summary }: { dealId: string; summary: DealSummary }) => {
+      const normalizedId = typeof dealId === 'string' ? dealId.trim() : '';
+      if (!normalizedId.length) {
+        pushToast({ variant: 'danger', message: 'No se pudo determinar el identificador del presupuesto.' });
+        return;
+      }
+
+      const normalizedSummary = buildSummaryFromDeal(summary);
+      setSelectedBudgetSummary(normalizedSummary);
+      setSelectedBudgetId(normalizedId);
+      setAutoRefreshBudgetId(normalizedId);
+    },
+    [pushToast],
+  );
+
   const budgetsPageProps: BudgetsPageProps = {
     budgets,
     isLoading: budgetsQuery.isLoading,
@@ -789,16 +805,19 @@ export default function AuthenticatedApp() {
   const calendarSessionsPageProps: PorSesionesPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
+    onDealOpen: handleOpenCalendarDeal,
   };
 
   const calendarUnitsPageProps: PorUnidadMovilPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
+    onDealOpen: handleOpenCalendarDeal,
   };
 
   const calendarTrainersPageProps: PorFormadorPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
+    onDealOpen: handleOpenCalendarDeal,
   };
 
   const formadoresBomberosPageProps: FormadoresBomberosPageProps = {

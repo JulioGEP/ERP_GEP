@@ -15,6 +15,7 @@ import type { SessionEstado } from '../../api/sessions.types';
 import { ApiError } from '../../api/client';
 import { VariantModal } from '../formacion_abierta/ProductVariantsList';
 import type { ActiveVariant, ProductInfo, VariantInfo } from '../formacion_abierta/types';
+import type { DealSummary } from '../../types/deal';
 import { FilterToolbar, type FilterDefinition, type FilterOption } from '../../components/table/FilterToolbar';
 import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState } from '../../hooks/useTableFilterState';
@@ -116,6 +117,7 @@ type ToastParams = {
 type CalendarViewProps = {
   onNotify?: (toast: ToastParams) => void;
   onSessionOpen?: (session: CalendarSession) => void;
+  onDealOpen?: (payload: { dealId: string; summary: DealSummary }) => void;
   title?: string;
   mode?: CalendarMode;
   initialView?: CalendarViewType;
@@ -796,6 +798,7 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 export function CalendarView({
   onNotify,
   onSessionOpen,
+  onDealOpen,
   title = 'Calendario',
   mode = 'sessions',
   initialView = 'month',
@@ -2000,6 +2003,7 @@ export function CalendarView({
         active={activeVariant}
         onHide={handleVariantClose}
         onVariantUpdated={handleVariantUpdated}
+        onDealOpen={onDealOpen}
       />
     </section>
   );

@@ -655,10 +655,12 @@ export function VariantModal({
   active,
   onHide,
   onVariantUpdated,
+  onDealOpen,
 }: {
   active: ActiveVariant | null;
   onHide: () => void;
   onVariantUpdated: (variant: VariantInfo) => void;
+  onDealOpen?: (payload: { dealId: string; summary: DealSummary }) => void;
 }) {
   const variant = active?.variant;
   const product = active?.product;
@@ -1124,7 +1126,7 @@ export function VariantModal({
     const dealVariation = typeof deal.w_id_variation === 'string' ? deal.w_id_variation.trim() : '';
     const dealTrainingDate = typeof deal.a_fecha === 'string' ? deal.a_fecha.trim() : '';
 
-    setSelectedDealSummary({
+    const summary: DealSummary = {
       deal_id: rawId,
       dealId: rawId,
       title: deal.title?.trim().length ? deal.title : `Presupuesto ${rawId}`,
@@ -1137,7 +1139,15 @@ export function VariantModal({
       productNames: productNames.length ? productNames : undefined,
       w_id_variation: dealVariation.length ? dealVariation : variantWooId || null,
       a_fecha: dealTrainingDate.length ? dealTrainingDate : variantDate || null,
-    });
+    };
+
+    if (onDealOpen) {
+      onDealOpen({ dealId: rawId, summary });
+      onHide();
+      return;
+    }
+
+    setSelectedDealSummary(summary);
     setSelectedDealId(rawId);
   };
 
@@ -1585,12 +1595,14 @@ export function VariantModal({
       </Modal.Footer>
       </Modal>
 
-      <BudgetDetailModalAbierta
-        dealId={selectedDealId}
-        summary={selectedDealSummary}
-        onClose={handleCloseDealModal}
-        onNotify={emitToast}
-      />
+      {!onDealOpen ? (
+        <BudgetDetailModalAbierta
+          dealId={selectedDealId}
+          summary={selectedDealSummary}
+          onClose={handleCloseDealModal}
+          onNotify={emitToast}
+        />
+      ) : null}
     </>
   );
 }
