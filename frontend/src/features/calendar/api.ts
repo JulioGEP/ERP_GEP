@@ -414,7 +414,7 @@ export async function fetchCalendarSessions(
 
   const rangeStart = toTrimmed(payload?.range?.start);
   const rangeEnd = toTrimmed(payload?.range?.end);
-  const sessions = sanitizeSessionsPayload(payload?.sessions);
+  const sessions = sanitizeSessionsPayload(payload?.sessions ?? payload?.sesiones);
 
   return {
     range: {
