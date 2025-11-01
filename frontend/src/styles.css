@@ -199,7 +199,12 @@ body > .modal-backdrop.show:nth-of-type(2) {
 }
 
 .app-toast-container {
-  --bs-toast-zindex: 2000;
+  --bs-toast-zindex: 4000;
+  z-index: var(--bs-toast-zindex);
+}
+
+.app-toast-container .toast {
+  z-index: var(--bs-toast-zindex);
 }
 
 body > .modal-backdrop.show:nth-of-type(n + 3) {
