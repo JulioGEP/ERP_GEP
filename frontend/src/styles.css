@@ -9,6 +9,43 @@
   --font-family-base: 'Poppins', sans-serif;
 }
 
+.login-page-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-page-wrapper::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 200px;
+  height: 200px;
+  background-image: url('/GEP_favicon.png');
+  background-repeat: no-repeat;
+  background-size: contain;
+  transform: translate(-50%, -50%) rotate(45deg) scale(5);
+  opacity: 0.1;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-page-card-wrapper {
+  position: relative;
+  z-index: 1;
+}
+
+.btn.login-submit-button {
+  background-color: var(--color-red);
+  border-color: var(--color-red);
+}
+
+.btn.login-submit-button:hover,
+.btn.login-submit-button:focus {
+  background-color: #d93b41;
+  border-color: #d93b41;
+}
+
 body {
   margin: 0;
   font-family: var(--font-family-base);
