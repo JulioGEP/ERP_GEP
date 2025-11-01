@@ -714,20 +714,31 @@ function buildCertificateDocDefinition(
     paddingRight: () => TABLE_CELL_PADDING.right,
   };
 
+  const theoreticalMargin = [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] as [number, number, number, number];
   const theoreticalCellContent = theoreticalItems.length
-    ? { ul: theoreticalItems, style: 'tableList', margin: [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] }
-    : { text: '—', style: 'tableList', margin: [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] };
+    ? { ul: theoreticalItems, style: 'tableList', margin: theoreticalMargin }
+    : { text: '—', style: 'tableList', margin: theoreticalMargin };
 
   const practicalCellContent = practicalItems.length
     ? {
         ul: practicalItems,
         style: 'tableList',
-        margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0],
+        margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0] as [
+          number,
+          number,
+          number,
+          number,
+        ],
       }
     : {
         text: '—',
         style: 'tableList',
-        margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0],
+        margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0] as [
+          number,
+          number,
+          number,
+          number,
+        ],
       };
 
   stack.push({
@@ -736,11 +747,16 @@ function buildCertificateDocDefinition(
       widths: ['*', '*'],
       body: [
         [
-          { text: 'Contenido Teórico', style: 'tableHeader', margin: [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] },
+          { text: 'Contenido Teórico', style: 'tableHeader', margin: theoreticalMargin },
           {
             text: 'Contenido Práctico',
             style: 'tableHeader',
-            margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0],
+            margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0] as [
+              number,
+              number,
+              number,
+              number,
+            ],
           },
         ],
         [theoreticalCellContent, practicalCellContent],
@@ -751,8 +767,12 @@ function buildCertificateDocDefinition(
 
   content.push({
     absolutePosition: { x: boundedTextStartX, y: textStartY },
-    width: textWidth,
-    stack,
+    columns: [
+      {
+        width: textWidth,
+        stack,
+      },
+    ],
   });
 
   return {
@@ -868,7 +888,8 @@ export async function generateCertificatePDF(
 
   try {
     const pdfBytes = await renderCertificatePdfBytes(docDefinition);
-    return new Blob([pdfBytes], { type: 'application/pdf' });
+    const copy = new Uint8Array(pdfBytes);
+    return new Blob([copy.buffer], { type: 'application/pdf' });
   } catch (error) {
     if (error instanceof Error) {
       throw error;
