@@ -22,6 +22,29 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
 
+  useEffect(() => {
+    const hydrateFromBrowserStorage = () => {
+      const emailField = document.querySelector<HTMLInputElement>('input[name="email"]');
+      const passwordField = document.querySelector<HTMLInputElement>('input[name="password"]');
+
+      if (emailField?.value) {
+        setEmail((prev) => (prev ? prev : emailField.value));
+      }
+
+      if (passwordField?.value) {
+        setPassword((prev) => (prev ? prev : passwordField.value));
+      }
+    };
+
+    hydrateFromBrowserStorage();
+
+    const timeouts = [100, 300, 600].map((delay) => window.setTimeout(hydrateFromBrowserStorage, delay));
+
+    return () => {
+      timeouts.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    };
+  }, []);
+
   // Si ya hay sesión, redirige a home para evitar volver a loguear
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -87,6 +110,7 @@ export default function LoginPage() {
                   placeholder="tu@empresa.com"
                   value={email}
                   onChange={(e) => setEmail(e.currentTarget.value)}
+                  onInput={(e) => setEmail(e.currentTarget.value)}
                   required
                   autoFocus
                   autoComplete="username"
@@ -102,6 +126,7 @@ export default function LoginPage() {
                     placeholder="********"
                     value={password}
                     onChange={(e) => setPassword(e.currentTarget.value)}
+                    onInput={(e) => setPassword(e.currentTarget.value)}
                     required
                     autoComplete="current-password"
                     name="password"
