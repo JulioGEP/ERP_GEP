@@ -224,6 +224,8 @@ export function BudgetDetailModal({
     userName,
   });
 
+  const lastManualRefreshRef = useRef(false);
+
   const refreshMutation = useMutation({
     mutationFn: (dealId: string) => importDeal(dealId),
     onSuccess: (payload) => {
@@ -252,11 +254,17 @@ export function BudgetDetailModal({
         alert(`Presupuesto actualizado con avisos:\n\n${warnings.join('\n')}`);
       }
 
+      const message = lastManualRefreshRef.current
+        ? 'Presupuesto actualizado'
+        : 'Presupuesto importado';
+      lastManualRefreshRef.current = false;
+
       if (onNotify) {
-        onNotify({ variant: 'success', message: 'Presupuesto importado' });
+        onNotify({ variant: 'success', message });
       }
     },
     onError: (error: unknown) => {
+      lastManualRefreshRef.current = false;
       if (isApiError(error) && error.code === DEAL_NOT_WON_ERROR_CODE) {
         const message = DEAL_NOT_WON_ERROR_MESSAGE;
         if (onNotify) {
@@ -737,6 +745,7 @@ export function BudgetDetailModal({
 
   const handleRefresh = () => {
     if (!normalizedDealId || refreshMutation.isPending) return;
+    lastManualRefreshRef.current = true;
     refreshMutation.mutate(normalizedDealId);
   };
 
