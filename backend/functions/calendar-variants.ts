@@ -355,7 +355,7 @@ const variantSelectionBase = {
   date: true,
   created_at: true,
   updated_at: true,
-  product: {
+  products: {
     select: {
       id: true,
       id_woo: true,
@@ -557,9 +557,15 @@ export const handler = async (event: any) => {
 
     (Array.isArray(variants) ? variants : []).forEach((variant) => {
       const record = variant as any;
-      if (!record?.product) return;
+      const productRecord = (record as any)?.product ?? (record as any)?.products ?? null;
+      if (!productRecord) {
+        console.warn('[calendar-variants] skipping variant without product', {
+          variantId: record.id,
+        });
+        return;
+      }
 
-      const product = normalizeProductRecord(record.product);
+      const product = normalizeProductRecord(productRecord);
       const variantDate = toDate(record.date);
       const times = computeEventTimes(variantDate, product);
       if (!times) return;
