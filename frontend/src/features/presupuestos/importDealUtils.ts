@@ -11,11 +11,15 @@ type UnknownWithDeal = {
   warnings?: unknown;
 };
 
+const IGNORED_WARNINGS = new Set<string>([
+  'Este presupuesto ya existe en la base de datos.',
+]);
+
 function normalizeWarnings(warnings: unknown): string[] {
   if (!Array.isArray(warnings)) return [];
   return warnings
     .map((warning) => (typeof warning === 'string' ? warning.trim() : ''))
-    .filter((warning) => warning.length > 0);
+    .filter((warning) => warning.length > 0 && !IGNORED_WARNINGS.has(warning));
 }
 
 export function normalizeImportDealResult(payload: unknown): {
