@@ -85,6 +85,13 @@ type SessionUnitLink = {
   unidades_moviles?: { unidad_id?: string | null; name?: string | null; matricula?: string | null } | null;
 };
 
+type SessionStudentRecord = {
+  id?: string | null;
+  nombre?: string | null;
+  apellido?: string | null;
+  dni?: string | null;
+};
+
 type SessionRecord = {
   id: string;
   deal_id: string;
@@ -104,6 +111,14 @@ type SessionRecord = {
   deal_product?: { id?: string | null; name?: string | null; code?: string | null } | null;
   salas?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
   _count?: { alumnos?: number | null } | null;
+  alumnos?: SessionStudentRecord[] | null;
+};
+
+type SessionStudentResponse = {
+  id: string | null;
+  nombre: string | null;
+  apellido: string | null;
+  dni: string | null;
 };
 
 function normalizeSessionUnitLink(link: any): SessionUnitLink {
@@ -127,6 +142,30 @@ function normalizeSessionUnitLink(link: any): SessionUnitLink {
   }
 
   return record;
+}
+
+function mapSessionStudentForResponse(
+  student: SessionStudentRecord | null | undefined,
+): SessionStudentResponse | null {
+  if (!student || typeof student !== 'object') {
+    return null;
+  }
+
+  const id = toTrimmed(student.id);
+  const nombre = toTrimmed(student.nombre);
+  const apellido = toTrimmed(student.apellido);
+  const dni = toTrimmed(student.dni);
+
+  if (!id && !nombre && !apellido && !dni) {
+    return null;
+  }
+
+  return {
+    id,
+    nombre,
+    apellido,
+    dni,
+  };
 }
 
 function ensureSessionRelations(row: any): SessionRecord {
@@ -828,6 +867,7 @@ const sessionIdFromPath =
           sesion_unidades: {
             select: { unidad_movil_id: true, unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } } },
           },
+          alumnos: { select: { id: true, nombre: true, apellido: true, dni: true } },
           _count: { select: { alumnos: true } },
         },
         orderBy: [{ fecha_inicio_utc: "asc" }],
@@ -871,11 +911,20 @@ const sessionIdFromPath =
             )
             .filter((v: any): v is NonNullable<typeof v> => v != null);
 
+          const students = Array.isArray(raw?.alumnos)
+            ? (raw.alumnos as SessionStudentRecord[])
+                .map((student) => mapSessionStudentForResponse(student))
+                .filter((student): student is SessionStudentResponse => student !== null)
+            : [];
+
           const studentsCountRaw = raw?._count?.alumnos;
-          const studentsTotal =
+          let studentsTotal =
             typeof studentsCountRaw === 'number' && Number.isFinite(studentsCountRaw)
               ? studentsCountRaw
               : null;
+          if (studentsTotal === null && students.length) {
+            studentsTotal = students.length;
+          }
 
           return {
             id: s.id as string,
@@ -899,6 +948,7 @@ const sessionIdFromPath =
             salas,
             trainers,
             unidades,
+            students,
             students_total: studentsTotal,
           };
         });
@@ -964,6 +1014,7 @@ if (method === 'GET') {
         sesion_unidades: {
           select: { unidad_movil_id: true, unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } } },
         },
+        alumnos: { select: { id: true, nombre: true, apellido: true, dni: true } },
         _count: { select: { alumnos: true } },
       },
       orderBy: [{ fecha_inicio_utc: "asc" }],
@@ -1005,11 +1056,20 @@ if (method === 'GET') {
           )
           .filter((v: any): v is NonNullable<typeof v> => v != null);
 
+        const students = Array.isArray(raw?.alumnos)
+          ? (raw.alumnos as SessionStudentRecord[])
+              .map((student) => mapSessionStudentForResponse(student))
+              .filter((student): student is SessionStudentResponse => student !== null)
+          : [];
+
         const studentsCountRaw = raw?._count?.alumnos;
-        const studentsTotal =
+        let studentsTotal =
           typeof studentsCountRaw === 'number' && Number.isFinite(studentsCountRaw)
             ? studentsCountRaw
             : null;
+        if (studentsTotal === null && students.length) {
+          studentsTotal = students.length;
+        }
 
         return {
           id: s.id as string,
@@ -1033,6 +1093,7 @@ if (method === 'GET') {
           salas,
           trainers,
           unidades,
+          students,
           students_total: studentsTotal,
         };
       });

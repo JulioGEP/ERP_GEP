@@ -470,7 +470,18 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
   trainer: (session) => safeString(session.trainers.map((trainer) => formatResourceName(trainer)).join(' ')),
   unit: (session) => safeString(session.units.map((unit) => formatResourceName(unit)).join(' ')),
   room: (session) => (session.room ? safeString(formatResourceName(session.room)) : ''),
-  students_total: (session) => safeString(formatStudentsFilterValue(session.studentsTotal)),
+  students_total: (session) => {
+    const namePart = safeString(session.studentNames.join(' '));
+    const countPart = formatStudentsFilterValue(session.studentsTotal);
+    const parts = [] as string[];
+    if (namePart.length) {
+      parts.push(namePart);
+    }
+    if (countPart.length) {
+      parts.push(countPart);
+    }
+    return safeString(parts.join(' '));
+  },
   comentarios: (session) => safeString(session.comentarios ?? ''),
 };
 

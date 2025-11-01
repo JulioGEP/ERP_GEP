@@ -68,6 +68,13 @@ export type CalendarResource = {
 export type CalendarTrainer = CalendarResource;
 export type CalendarUnit = CalendarResource;
 
+export type CalendarSessionStudent = {
+  id: string | null;
+  nombre: string | null;
+  apellido: string | null;
+  dni: string | null;
+};
+
 export type CalendarSession = {
   id: string;
   dealId: string;
@@ -92,6 +99,8 @@ export type CalendarSession = {
   trainers: CalendarTrainer[];
   units: CalendarUnit[];
   studentsTotal: number | null;
+  students: CalendarSessionStudent[];
+  studentNames: string[];
 };
 
 export type CalendarSessionsParams = {
@@ -167,6 +176,39 @@ function ensureUniqueResources(resources: (CalendarResource | null)[]): Calendar
     output.push(resource);
   });
   return output;
+}
+
+function sanitizeSessionStudent(input: any): CalendarSessionStudent | null {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+
+  const id = toTrimmed(input?.id);
+  const nombre = toTrimmed(input?.nombre);
+  const apellido = toTrimmed(input?.apellido);
+  const dni = toTrimmed(input?.dni);
+
+  if (!id && !nombre && !apellido && !dni) {
+    return null;
+  }
+
+  return { id, nombre, apellido, dni } satisfies CalendarSessionStudent;
+}
+
+function buildStudentNames(students: CalendarSessionStudent[]): string[] {
+  return students
+    .map((student) => {
+      const combined = [student.nombre ?? '', student.apellido ?? '']
+        .map((part) => part.trim())
+        .filter((part) => part.length)
+        .join(' ')
+        .trim();
+      if (combined.length) {
+        return combined;
+      }
+      return student.dni ?? '';
+    })
+    .filter((value) => value.length);
 }
 
 function sanitizeVariantProduct(input: any): CalendarVariantProduct | null {
@@ -348,12 +390,26 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
           : [],
       );
 
-      const studentsTotal =
+      const students = Array.isArray(row?.students)
+        ? (row.students as unknown[])
+            .map((student: unknown) => sanitizeSessionStudent(student))
+            .filter(
+              (student: CalendarSessionStudent | null): student is CalendarSessionStudent =>
+                student !== null,
+            )
+        : [];
+
+      const studentNames = buildStudentNames(students);
+
+      let studentsTotal =
         typeof row?.students_total === 'number'
           ? row.students_total
           : row?.students_total != null && !Number.isNaN(Number(row.students_total))
             ? Number(row.students_total)
             : null;
+      if (studentsTotal === null && students.length) {
+        studentsTotal = students.length;
+      }
 
       return {
         id,
@@ -379,6 +435,8 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
         trainers,
         units,
         studentsTotal,
+        students,
+        studentNames,
       } satisfies CalendarSession;
     })
     .filter((session): session is CalendarSession => session !== null);
