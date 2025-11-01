@@ -2,30 +2,37 @@ export const SESSION_COOKIE_NAME = 'erp_session';
 
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
-  Comercial: ['/presupuestos/sinplanificar', '/calendario/*'],
+  Comercial: ['/presupuestos/sinplanificar', '/presupuestos/*', '/calendario/*', '/perfil'],
   Administracion: [
     '/presupuestos/sinplanificar',
+    '/presupuestos/*',
     '/calendario/*',
     '/certificados',
     '/certificados/*',
+    '/perfil',
   ],
   Logistica: [
     '/presupuestos/sinplanificar',
+    '/presupuestos/*',
     '/calendario/*',
     '/recursos/unidades_moviles',
     '/recursos/salas',
+    '/perfil',
   ],
   People: [
     '/presupuestos/sinplanificar',
+    '/presupuestos/*',
     '/calendario/*',
     '/recursos/formadores_bomberos',
+    '/perfil',
   ],
-  Formador: [],
+  Formador: ['/recursos/trainer', '/perfil'],
 };
 
 export const DEFAULT_ROUTE_ORDER = [
   '/presupuestos/sinplanificar',
   '/recursos/formadores_bomberos',
+  '/recursos/trainer',
   '/recursos/unidades_moviles',
   '/recursos/salas',
   '/certificados',

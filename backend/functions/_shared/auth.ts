@@ -10,11 +10,12 @@ const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
 // Exportado por si otros módulos necesitan el mapping
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
-  Comercial: ['/perfil', '/presupuestos/sinplanificar', '/presupuestos/*'],
+  Comercial: ['/perfil', '/presupuestos/sinplanificar', '/presupuestos/*', '/calendario/*'],
   Administracion: [
     '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
+    '/calendario/*',
     '/certificados',
     '/certificados/*',
   ],
@@ -22,6 +23,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
+    '/calendario/*',
     '/recursos/unidades_moviles',
     '/recursos/salas',
   ],
@@ -29,9 +31,10 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
+    '/calendario/*',
     '/recursos/formadores_bomberos',
   ],
-  Formador: ['/perfil'],
+  Formador: ['/perfil', '/recursos/trainer'],
 };
 
 function normalizeRoleKey(value: string | null | undefined): string | null {
@@ -107,6 +110,7 @@ export function getRoleDisplayValue(role: string | null | undefined): string | n
 export const DEFAULT_ROUTE_ORDER = [
   '/presupuestos/sinplanificar',
   '/recursos/formadores_bomberos',
+  '/recursos/trainer',
   '/recursos/unidades_moviles',
   '/recursos/salas',
   '/certificados',

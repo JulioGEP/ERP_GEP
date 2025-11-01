@@ -40,6 +40,7 @@ import type { TemplatesCertificadosPageProps } from '../pages/recursos/Templates
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
+import type { TrainerPageProps } from '../pages/recursos/TrainerPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
@@ -81,6 +82,7 @@ const NAVIGATION_ITEMS: NavItem[] = [
     label: 'Recursos',
     children: [
       { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores_bomberos' },
+      { key: 'Recursos/Trainer', label: 'Área Formador', path: '/recursos/trainer' },
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
@@ -842,6 +844,7 @@ export default function AuthenticatedApp() {
 
   const certificadosPageProps: CertificadosPageProps = {};
   const recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps = {};
+  const trainerPageProps: TrainerPageProps = {};
   const usersPageProps: UsersPageProps = { onNotify: pushToast };
 
   const pipelineLabelValue = normalizeOptionalString(selectedBudgetSummary?.pipeline_label);
@@ -938,6 +941,7 @@ export default function AuthenticatedApp() {
             productosPageProps={productosPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
+            trainerPageProps={trainerPageProps}
             usersPageProps={usersPageProps}
             defaultRedirectPath={homePath}
             knownPaths={allowedPaths}
