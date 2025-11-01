@@ -9,7 +9,7 @@ let variantResourceColumnsSupported: boolean | null = null;
 const VARIANT_RESOURCE_ERROR_PATTERNS = [
   /unknown (?:arg|field).*?(trainer_id|sala_id|unidad_movil_id)/i,
   /select\.(trainer_id|sala_id|unidad_movil_id)/i,
-  /column ["'`]*(trainer_id|sala_id|unidad_movil_id)["'`]* does not exist/i,
+  /column (?:["'`\w]+\.)*["'`]*(trainer_id|sala_id|unidad_movil_id)["'`]* does not exist/i,
   /no such column: (trainer_id|sala_id|unidad_movil_id)/i,
   /Unknown column ['`"]?(trainer_id|sala_id|unidad_movil_id)['`"]?/i,
 ];
