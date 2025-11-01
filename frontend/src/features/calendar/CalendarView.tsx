@@ -81,6 +81,7 @@ const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'trainer', label: 'Formador' },
   { key: 'unit', label: 'Unidad móvil' },
   { key: 'room', label: 'Sala' },
+  { key: 'students_total', label: 'Alumnos' },
   { key: 'comentarios', label: 'Comentarios' },
 ];
 
@@ -442,6 +443,17 @@ function normalizeText(value: string): string {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 }
 
+function formatStudentsFilterValue(count: number | null | undefined): string {
+  if (typeof count === 'number' && Number.isFinite(count)) {
+    if (count <= 0) {
+      return '0 sin alumnos';
+    }
+    const suffix = count === 1 ? ' alumno' : ' alumnos';
+    return `${count}${suffix}`;
+  }
+  return 'sin alumnos';
+}
+
 const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSession) => string> = {
   deal_id: (session) => safeString(session.dealId),
   deal_title: (session) => safeString(session.dealTitle ?? ''),
@@ -458,6 +470,7 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
   trainer: (session) => safeString(session.trainers.map((trainer) => formatResourceName(trainer)).join(' ')),
   unit: (session) => safeString(session.units.map((unit) => formatResourceName(unit)).join(' ')),
   room: (session) => (session.room ? safeString(formatResourceName(session.room)) : ''),
+  students_total: (session) => safeString(formatStudentsFilterValue(session.studentsTotal)),
   comentarios: (session) => safeString(session.comentarios ?? ''),
 };
 
@@ -508,6 +521,7 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
     const parts = [safeString(room.name ?? ''), safeString(room.sede ?? '')].filter(Boolean);
     return safeString(parts.join(' '));
   },
+  students_total: (variant) => safeString(formatStudentsFilterValue(variant.variant.students_total)),
   comentarios: (variant) => safeString(variant.variant.status ?? ''),
 };
 

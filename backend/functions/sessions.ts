@@ -103,6 +103,7 @@ type SessionRecord = {
   deal?: { sede_label: string | null; pipeline_id: string | null } | null;
   deal_product?: { id?: string | null; name?: string | null; code?: string | null } | null;
   salas?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
+  _count?: { alumnos?: number | null } | null;
 };
 
 function normalizeSessionUnitLink(link: any): SessionUnitLink {
@@ -827,6 +828,7 @@ const sessionIdFromPath =
           sesion_unidades: {
             select: { unidad_movil_id: true, unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } } },
           },
+          _count: { select: { alumnos: true } },
         },
         orderBy: [{ fecha_inicio_utc: "asc" }],
       });
@@ -869,6 +871,12 @@ const sessionIdFromPath =
             )
             .filter((v: any): v is NonNullable<typeof v> => v != null);
 
+          const studentsCountRaw = raw?._count?.alumnos;
+          const studentsTotal =
+            typeof studentsCountRaw === 'number' && Number.isFinite(studentsCountRaw)
+              ? studentsCountRaw
+              : null;
+
           return {
             id: s.id as string,
             deal_id: s.deal_id as string,
@@ -891,6 +899,7 @@ const sessionIdFromPath =
             salas,
             trainers,
             unidades,
+            students_total: studentsTotal,
           };
         });
 
@@ -955,6 +964,7 @@ if (method === 'GET') {
         sesion_unidades: {
           select: { unidad_movil_id: true, unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } } },
         },
+        _count: { select: { alumnos: true } },
       },
       orderBy: [{ fecha_inicio_utc: "asc" }],
     });
@@ -995,6 +1005,12 @@ if (method === 'GET') {
           )
           .filter((v: any): v is NonNullable<typeof v> => v != null);
 
+        const studentsCountRaw = raw?._count?.alumnos;
+        const studentsTotal =
+          typeof studentsCountRaw === 'number' && Number.isFinite(studentsCountRaw)
+            ? studentsCountRaw
+            : null;
+
         return {
           id: s.id as string,
           deal_id: s.deal_id as string,
@@ -1017,6 +1033,7 @@ if (method === 'GET') {
           salas,
           trainers,
           unidades,
+          students_total: studentsTotal,
         };
       });
 
