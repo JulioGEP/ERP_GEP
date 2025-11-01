@@ -91,6 +91,7 @@ export type CalendarSession = {
   room: CalendarResource | null;
   trainers: CalendarTrainer[];
   units: CalendarUnit[];
+  studentsTotal: number | null;
 };
 
 export type CalendarSessionsParams = {
@@ -347,6 +348,13 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
           : [],
       );
 
+      const studentsTotal =
+        typeof row?.students_total === 'number'
+          ? row.students_total
+          : row?.students_total != null && !Number.isNaN(Number(row.students_total))
+            ? Number(row.students_total)
+            : null;
+
       return {
         id,
         dealId: toTrimmed(row?.deal_id) ?? '',
@@ -370,6 +378,7 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
         room,
         trainers,
         units,
+        studentsTotal,
       } satisfies CalendarSession;
     })
     .filter((session): session is CalendarSession => session !== null);
