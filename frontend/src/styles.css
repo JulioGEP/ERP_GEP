@@ -198,15 +198,6 @@ body > .modal-backdrop.show:nth-of-type(2) {
   opacity: 0.65;
 }
 
-.app-toast-container {
-  --bs-toast-zindex: 4000;
-  z-index: var(--bs-toast-zindex);
-}
-
-.app-toast-container .toast {
-  z-index: var(--bs-toast-zindex);
-}
-
 body > .modal-backdrop.show:nth-of-type(n + 3) {
   opacity: 0.8;
 }
