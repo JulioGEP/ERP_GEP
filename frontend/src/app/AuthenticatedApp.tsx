@@ -784,7 +784,6 @@ export default function AuthenticatedApp() {
       const normalizedSummary = buildSummaryFromDeal(summary);
       setSelectedBudgetSummary(normalizedSummary);
       setSelectedBudgetId(normalizedId);
-      setAutoRefreshBudgetId(normalizedId);
     },
     [pushToast],
   );
