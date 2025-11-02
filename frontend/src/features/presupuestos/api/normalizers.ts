@@ -43,7 +43,21 @@ function isHttpUrl(value: unknown): boolean {
 }
 
 function toBoolean(value: unknown): boolean {
-  return value === true;
+  if (value === true) return true;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return false;
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase();
+    if (!normalized.length) return false;
+    return normalized === 'true' || normalized === '1' || normalized === 'si' || normalized === 'yes';
+  }
+  return false;
 }
 
 function toSiNoLabel(value: unknown): DealDetail['transporte'] {
