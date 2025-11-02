@@ -46,7 +46,7 @@ describe('BudgetTable fallback behaviour', () => {
     vi.restoreAllMocks();
   });
 
-  test('renders cached fallback data without performing new requests', () => {
+  test('renders cached fallback data without performing new requests', async () => {
     const client = createQueryClient();
     client.setQueryData(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY, [fallbackBudget]);
 
@@ -61,6 +61,7 @@ describe('BudgetTable fallback behaviour', () => {
           error={new Error('Fallo de red')}
           onRetry={vi.fn()}
           onSelect={vi.fn()}
+          showFilters={false}
         />
       </QueryClientProvider>,
     );
@@ -68,9 +69,19 @@ describe('BudgetTable fallback behaviour', () => {
     expect(
       screen.getByText('Mostrando datos guardados porque no se pudo actualizar la lista.'),
     ).toBeInTheDocument();
-    expect(screen.getByText('#1234')).toBeInTheDocument();
+    expect(await screen.findByText('#1234')).toBeInTheDocument();
     expect(screen.getByText('Acme Corp')).toBeInTheDocument();
     expect(screen.getByText('Formación Seguridad')).toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+});
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useSearchParams: () => {
+      const params = new URLSearchParams();
+      return [params, vi.fn()] as ReturnType<typeof actual.useSearchParams>;
+    },
+  };
 });
