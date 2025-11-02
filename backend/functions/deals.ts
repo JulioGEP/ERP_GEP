@@ -915,12 +915,11 @@ export const handler = async (event: any) => {
     if (event.httpMethod === "OPTIONS") {
       return { statusCode: 204, headers: COMMON_HEADERS, body: "" };
     }
-  const prisma = getPrisma();
-// Tipos derivados del método real, evitando indexar 'where' directamente
-type _DealsFindManyArg = Parameters<typeof prisma.deals.findMany>[0];
-type DealsWhere = _DealsFindManyArg extends { where?: infer W } ? NonNullable<W> : never;
-type DealsFindManyArgs = _DealsFindManyArg;
-
+    const prisma = getPrisma();
+    // Tipos derivados del método real, evitando indexar 'where' directamente
+    type _DealsFindManyArg = Parameters<typeof prisma.deals.findMany>[0];
+    type DealsWhere = _DealsFindManyArg extends { where?: infer W } ? NonNullable<W> : never;
+    type DealsFindManyArgs = _DealsFindManyArg;
 
     const method = event.httpMethod;
     const path = event.path || "";
@@ -1592,6 +1591,107 @@ type DealsFindManyArgs = _DealsFindManyArg;
       });
 
       const deals = rowsRaw.map((r: any) => mapDealForApi(normalizeDealRelations(r)));
+      return successResponse({ deals });
+    }
+
+    /* -------------- GET listado: /.netlify/functions/deals -------------- */
+    if (method === "GET") {
+      const rowsRaw = await prisma.deals.findMany({
+        select: {
+          deal_id: true,
+          title: true,
+          pipeline_id: true,
+          training_address: true,
+          sede_label: true,
+          caes_label: true,
+          caes_val: true,
+          fundae_label: true,
+          fundae_val: true,
+          hotel_label: true,
+          hotel_val: true,
+          transporte: true,
+          transporte_val: true,
+          po: true,
+          po_val: true,
+          tipo_servicio: true,
+          mail_invoice: true,
+          comercial: true,
+          a_fecha: true,
+          w_id_variation: true,
+          presu_holded: true,
+          modo_reserva: true,
+          org_id: true,
+          person_id: true,
+          created_at: true,
+          updated_at: true,
+          organizations: { select: { org_id: true, name: true } },
+          persons: {
+            select: {
+              person_id: true,
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
+            },
+          },
+          deal_products: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+              quantity: true,
+              price: true,
+              type: true,
+              hours: true,
+              product_comments: true,
+              created_at: true,
+              updated_at: true,
+            },
+            orderBy: { created_at: "asc" },
+          },
+          sesiones: {
+            select: {
+              id: true,
+              fecha_inicio_utc: true,
+              fecha_fin_utc: true,
+              created_at: true,
+              updated_at: true,
+              nombre_cache: true,
+              estado: true,
+            },
+            orderBy: { fecha_inicio_utc: "asc" },
+          },
+          alumnos: {
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              dni: true,
+              certificado: true,
+            },
+            orderBy: { created_at: "asc" },
+          },
+        },
+        orderBy: { created_at: "desc" },
+      });
+
+      const dealsRaw = await Promise.all(
+        rowsRaw.map(async (row: any) => {
+          const mapped = mapDealForApi(normalizeDealRelations(row));
+          if (!mapped) {
+            return null;
+          }
+
+          const withPipeline = await ensureDealPipelineLabel(mapped, {
+            pipelineId: row?.pipeline_id ?? null,
+            pipelineLabel: (row as any)?.pipeline_label ?? null,
+          });
+
+          return withPipeline;
+        }),
+      );
+
+      const deals = dealsRaw.filter((deal): deal is Record<string, any> => deal !== null);
       return successResponse({ deals });
     }
 
