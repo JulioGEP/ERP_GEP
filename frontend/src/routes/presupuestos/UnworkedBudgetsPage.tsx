@@ -6,7 +6,11 @@ export type UnworkedBudgetsPageProps = Omit<
   'title' | 'subtitle' | 'enableFallback' | 'tableVariant'
 >;
 
-export function UnworkedBudgetsPage({ tableLabels, ...rest }: UnworkedBudgetsPageProps) {
+export function UnworkedBudgetsPage({
+  tableLabels,
+  canImport: _unusedCanImport,
+  ...rest
+}: UnworkedBudgetsPageProps) {
   const mergedLabels = useMemo(
     () => ({
       emptyTitle: 'No hay presupuestos sin trabajar.',
@@ -25,6 +29,7 @@ export function UnworkedBudgetsPage({ tableLabels, ...rest }: UnworkedBudgetsPag
       enableFallback={false}
       tableLabels={mergedLabels}
       tableVariant="unworked"
+      canImport={false}
     />
   );
 }
