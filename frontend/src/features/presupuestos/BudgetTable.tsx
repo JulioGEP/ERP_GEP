@@ -27,7 +27,7 @@ import {
   type TableFiltersState,
   type TableSortingState,
 } from '../../hooks/useTableFilterState';
-import type { SessionEstado } from '../../api/sessions.types';
+import { SESSION_ESTADOS, type SessionEstado } from '../../api/sessions.types';
 import { DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY } from './queryKeys';
 import type { DealsListOptions } from './api/deals.api';
 import { fetchProducts } from '../recursos/products.api';
@@ -761,6 +761,10 @@ export function BudgetTable({
   const selectOptionsByKey = useMemo(() => {
     const accumulator = new Map<string, Set<string>>();
     BUDGET_SELECT_FILTER_KEYS.forEach((key) => {
+      if (key === 'session_state') {
+        accumulator.set(key, new Set<string>(SESSION_ESTADOS));
+        return;
+      }
       accumulator.set(key, new Set<string>());
     });
 
