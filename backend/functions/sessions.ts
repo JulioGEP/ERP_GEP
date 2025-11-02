@@ -175,7 +175,7 @@ function ensureSessionRelations(row: any): SessionRecord {
     sesion_unidades?: SessionUnitLink[];
   };
   if (record.deal == null && (record as any).deals !== undefined) {
-    (record as any).deals = (record as any).deals;
+    record.deal = (record as any).deals ?? null;
   }
   if ((record as any).deal_product == null && (record as any).deal_products !== undefined) {
     (record as any).deal_product = (record as any).deal_products;
@@ -625,6 +625,12 @@ async function fetchSessionsByProduct(
   await applyAutomaticSessionState(prisma, rows as unknown as SessionRecord[]);
   return { total, rows };
 }
+
+export const __test__ = {
+  ensureSessionRelations,
+  resolveSessionEstado,
+  resolveAutomaticSessionEstado,
+};
 
 export const handler = async (event: any) => {
   try {
