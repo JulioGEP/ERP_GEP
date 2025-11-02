@@ -130,7 +130,7 @@ const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
 
 const DEFAULT_REDIRECT_PATH = '/presupuestos/sinplanificar';
 
-const SIN_PLAN_EXCLUDED_PIPELINES = new Set(['formacion abierta', 'material']);
+const SIN_PLAN_EXCLUDED_PIPELINES = new Set(['formacion abierta']);
 
 function shouldIncludeBudgetInSinPlan(budget: DealSummary): boolean {
   if (isExcludedSinPlanPipeline(budget)) {

@@ -1534,8 +1534,19 @@ type DealsFindManyArgs = _DealsFindManyArg;
 
     /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
     if (method === "GET" && event.queryStringParameters?.noSessions === "true") {
-      // listamos deals + organización/persona + productos (sin sesiones)
+      // listamos deals filtrados por sesiones en borrador y excluyendo Formación abierta
       const rowsRaw = await prisma.deals.findMany({
+        where: {
+          sesiones: {
+            some: { estado: "BORRADOR" },
+          },
+          NOT: {
+            pipeline_id: {
+              equals: "Formación abierta",
+              mode: "insensitive",
+            },
+          },
+        },
         select: {
           deal_id: true,
           title: true,
@@ -1586,6 +1597,15 @@ type DealsFindManyArgs = _DealsFindManyArg;
           alumnos: {
             select: { id: true, nombre: true, apellido: true, dni: true },
             orderBy: { created_at: "asc" },
+          },
+          sesiones: {
+            select: {
+              id: true,
+              fecha_inicio_utc: true,
+              fecha_fin_utc: true,
+              estado: true,
+            },
+            orderBy: { fecha_inicio_utc: "asc" },
           },
         },
         orderBy: { created_at: "desc" },
