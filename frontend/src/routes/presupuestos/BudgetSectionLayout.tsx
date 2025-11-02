@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
+import type { TableFiltersState } from '../../hooks/useTableFilterState';
 import {
   BudgetTable,
   type BudgetServerQueryOptions,
@@ -24,6 +25,8 @@ export type BudgetSectionLayoutProps = {
   tableLabels?: Partial<BudgetTableLabels>;
   enableFallback?: boolean;
   showFilters?: boolean;
+  initialFilters?: TableFiltersState;
+  initialSearch?: string;
   serverQueryOptions?: BudgetServerQueryOptions;
   tableVariant?: BudgetTableVariant;
 };
@@ -44,6 +47,8 @@ export function BudgetSectionLayout({
   tableLabels,
   enableFallback = true,
   showFilters = true,
+  initialFilters,
+  initialSearch,
   serverQueryOptions,
   tableVariant = 'default',
 }: BudgetSectionLayoutProps) {
@@ -81,6 +86,8 @@ export function BudgetSectionLayout({
         enableFallback={enableFallback}
         filtersContainer={filtersContainer}
         showFilters={showFilters}
+        initialFilters={initialFilters}
+        initialSearch={initialSearch}
         serverQueryOptions={serverQueryOptions}
         variant={tableVariant}
       />

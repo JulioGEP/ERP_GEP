@@ -15,8 +15,17 @@ import {
   type FilterDefinition,
   type FilterOption,
 } from '../../components/table/FilterToolbar';
-import { splitFilterValue } from '../../components/table/filterUtils';
-import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
+import {
+  FILTER_MULTI_VALUE_SEPARATOR,
+  joinFilterValues,
+  splitFilterValue,
+} from '../../components/table/filterUtils';
+import {
+  useTableFilterState,
+  type TableFiltersState,
+  type TableSortingState,
+} from '../../hooks/useTableFilterState';
+import type { SessionEstado } from '../../api/sessions.types';
 import { DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY } from './queryKeys';
 import type { DealsListOptions } from './api/deals.api';
 import { fetchProducts } from '../recursos/products.api';
@@ -64,6 +73,14 @@ const DEFAULT_LABELS: BudgetTableLabels = {
   fallbackErrorRetry: 'Reintentar',
 };
 
+const SESSION_STATE_LABELS: Record<SessionEstado, string> = {
+  BORRADOR: 'Borrador',
+  PLANIFICADA: 'Planificada',
+  SUSPENDIDA: 'Suspendida',
+  CANCELADA: 'Cancelada',
+  FINALIZADA: 'Finalizada',
+};
+
 export type BudgetServerQueryOptions = {
   fetcher: (options: DealsListOptions) => Promise<DealSummary[]>;
   queryKey?: readonly unknown[];
@@ -83,6 +100,8 @@ interface BudgetTableProps {
   enableFallback?: boolean;
   filtersContainer?: HTMLElement | null;
   showFilters?: boolean;
+  initialFilters?: TableFiltersState;
+  initialSearch?: string;
   serverQueryOptions?: BudgetServerQueryOptions;
   variant?: BudgetTableVariant;
 }
@@ -403,6 +422,19 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   transporte: (budget) => safeTrim(budget.transporte ?? '') ?? '',
   tipo_servicio: (budget) => safeTrim(budget.tipo_servicio ?? '') ?? '',
   comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
+  session_state: (budget) => {
+    const sessions = Array.isArray(budget.sessions) ? budget.sessions : [];
+    if (!sessions.length) return '';
+    const states = new Set<string>();
+    sessions.forEach((session) => {
+      if (!session) return;
+      const rawEstado = typeof session.estado === 'string' ? session.estado.trim() : '';
+      if (!rawEstado.length) return;
+      states.add(rawEstado.toUpperCase());
+    });
+    if (!states.size) return '';
+    return joinFilterValues(states);
+  },
   product_names: (budget) => getProductNames(budget).join(' '),
   student_names: (budget) => (budget.studentNames ?? []).join(' '),
   training_date: (budget) => {
@@ -426,6 +458,7 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'transporte', label: 'Transporte' },
   { key: 'tipo_servicio', label: 'Tipo de servicio' },
   { key: 'comercial', label: 'Comercial' },
+  { key: 'session_state', label: 'Estado de sesión' },
   { key: 'product_names', label: 'Productos' },
   { key: 'student_names', label: 'Alumnos' },
   { key: 'training_date', label: 'Fecha de formación', type: 'date' },
@@ -446,6 +479,7 @@ const BUDGET_SELECT_FILTER_KEYS = new Set<string>([
   'transporte',
   'tipo_servicio',
   'comercial',
+  'session_state',
 ]);
 
 function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
@@ -454,7 +488,8 @@ function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
   for (const key of BUDGET_FILTER_KEYS) {
     const raw = BUDGET_FILTER_ACCESSORS[key]?.(budget) ?? '';
     values[key] = raw;
-    normalized[key] = normalizeText(raw);
+    const normalizedSource = raw.split(FILTER_MULTI_VALUE_SEPARATOR).join(' ');
+    normalized[key] = normalizeText(normalizedSource);
   }
   const search = BUDGET_FILTER_KEYS.map((key) => normalized[key]).join(' ');
   return { budget, values, normalized, search };
@@ -548,6 +583,8 @@ export function BudgetTable({
   enableFallback = true,
   filtersContainer,
   showFilters = true,
+  initialFilters,
+  initialSearch,
   serverQueryOptions,
   variant = 'default',
 }: BudgetTableProps) {
@@ -585,6 +622,58 @@ export function BudgetTable({
     setSorting: setSortingInUrl,
   } = useTableFilterState({ tableKey: 'budgets-table' });
 
+  const initialFiltersRef = useRef<TableFiltersState | null>(initialFilters ?? null);
+  const initialSearchRef = useRef<string | null>(
+    typeof initialSearch === 'string' && initialSearch.trim().length ? initialSearch.trim() : null,
+  );
+  const hasAppliedInitialStateRef = useRef(false);
+
+  useEffect(() => {
+    const normalized = initialFilters ?? null;
+    if (initialFiltersRef.current === normalized) return;
+    initialFiltersRef.current = normalized;
+    hasAppliedInitialStateRef.current = false;
+  }, [initialFilters]);
+
+  useEffect(() => {
+    const normalized =
+      typeof initialSearch === 'string' && initialSearch.trim().length
+        ? initialSearch.trim()
+        : null;
+    if (initialSearchRef.current === normalized) return;
+    initialSearchRef.current = normalized;
+    hasAppliedInitialStateRef.current = false;
+  }, [initialSearch]);
+
+  useEffect(() => {
+    if (hasAppliedInitialStateRef.current) {
+      return;
+    }
+
+    const hasInitialFilters = Boolean(
+      initialFiltersRef.current && Object.keys(initialFiltersRef.current).length > 0,
+    );
+    const hasInitialSearch = Boolean(initialSearchRef.current && initialSearchRef.current.length);
+
+    if (!hasInitialFilters && !hasInitialSearch) {
+      hasAppliedInitialStateRef.current = true;
+      return;
+    }
+
+    const hasActiveFilterValues = Object.entries(activeFilters).some(
+      ([key, value]) => BUDGET_FILTER_DEFINITION_KEYS.has(key) && value.trim().length > 0,
+    );
+    const hasActiveSearch = searchValue.trim().length > 0;
+
+    if (hasActiveFilterValues || hasActiveSearch) {
+      hasAppliedInitialStateRef.current = true;
+      return;
+    }
+
+    setFiltersAndSearch(initialFiltersRef.current ?? {}, initialSearchRef.current ?? undefined);
+    hasAppliedInitialStateRef.current = true;
+  }, [activeFilters, searchValue, setFiltersAndSearch]);
+
   const [sortingState, setSortingState] = useState<TableSortingState>(sortingFromUrl);
 
   useEffect(() => {
@@ -617,7 +706,18 @@ export function BudgetTable({
         const trimmed = raw.trim();
         if (!trimmed.length) return;
         const set = accumulator.get(key);
-        set?.add(trimmed);
+        if (!set) return;
+        if (key === 'session_state') {
+          const parts = splitFilterValue(trimmed);
+          if (!parts.length) return;
+          parts.forEach((part) => {
+            const normalized = part.trim().toUpperCase();
+            if (!normalized.length) return;
+            set.add(normalized);
+          });
+          return;
+        }
+        set.add(trimmed);
       });
     });
 
@@ -631,7 +731,14 @@ export function BudgetTable({
       const sorted = Array.from(values).sort((a, b) =>
         a.localeCompare(b, 'es', { sensitivity: 'base' }),
       );
-      result[key] = sorted.map((value) => ({ value, label: value }));
+      result[key] = sorted.map((value) => {
+        if (key === 'session_state') {
+          const normalized = value.toUpperCase() as SessionEstado;
+          const label = SESSION_STATE_LABELS[normalized] ?? value;
+          return { value: normalized, label };
+        }
+        return { value, label: value };
+      });
     });
 
     return result;

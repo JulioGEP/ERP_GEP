@@ -30,6 +30,8 @@ import {
 } from '../features/presupuestos/importDealUtils';
 import type { CalendarSession } from '../features/calendar/api';
 import type { DealDetail, DealSummary } from '../types/deal';
+import { joinFilterValues } from '../components/table/filterUtils';
+import type { TableFiltersState } from '../hooks/useTableFilterState';
 import logo from '../assets/gep-group-logo.png';
 import { AppRouter } from './router';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
@@ -51,6 +53,11 @@ import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
+
+const SIN_PLANIFICAR_INITIAL_FILTERS: TableFiltersState = {
+  pipeline: joinFilterValues(['GEP Services', 'Formación empresa']),
+  session_state: 'BORRADOR',
+};
 
 type NavChild = {
   key: string;
@@ -991,6 +998,7 @@ export default function AuthenticatedApp() {
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
     canImport: canImportBudgets,
+    initialFilters: SIN_PLANIFICAR_INITIAL_FILTERS,
     serverQueryOptions: {
       fetcher: fetchDealsWithoutSessions,
       queryKey: ['budget-table', 'noSessions'],
