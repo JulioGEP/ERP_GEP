@@ -4,7 +4,6 @@ import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   useReactTable,
-  getCoreRowModel,
   flexRender,
   type ColumnDef,
   type HeaderContext,
@@ -1163,7 +1162,6 @@ export function BudgetTable({
     state: { sorting: tanstackSortingState },
     onSortingChange: handleSortingChange,
     getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
-    getCoreRowModel: getCoreRowModel(),
   });
 
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
