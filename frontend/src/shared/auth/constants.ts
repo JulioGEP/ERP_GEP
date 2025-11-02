@@ -31,8 +31,6 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
 
 export const DEFAULT_ROUTE_ORDER = [
   '/presupuestos/sinplanificar',
-  '/presupuestos/todos',
-  '/presupuestos/sintrabajar',
   '/recursos/formadores_bomberos',
   '/usuarios/trainer',
   '/recursos/unidades_moviles',

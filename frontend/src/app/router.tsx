@@ -38,9 +38,7 @@ const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 
 type AppRouterProps = {
-  budgetsTodosPageProps: BudgetsPageProps;
-  budgetsSinPlanPageProps: BudgetsPageProps;
-  budgetsSinTrabajarPageProps: BudgetsPageProps;
+  budgetsPageProps: BudgetsPageProps;
   porSesionesPageProps: PorSesionesPageProps;
   porUnidadMovilPageProps: PorUnidadMovilPageProps;
   porFormadorPageProps: PorFormadorPageProps;
@@ -59,9 +57,7 @@ type AppRouterProps = {
 };
 
 export function AppRouter({
-  budgetsTodosPageProps,
-  budgetsSinPlanPageProps,
-  budgetsSinTrabajarPageProps,
+  budgetsPageProps,
   porSesionesPageProps,
   porUnidadMovilPageProps,
   porFormadorPageProps,
@@ -95,31 +91,11 @@ export function AppRouter({
         <Route path="/presupuestos" element={<Navigate to="/presupuestos/sinplanificar" replace />} />
 
         <Route
-          path="/presupuestos/todos"
-          element={
-            <GuardedRoute
-              path="/presupuestos/todos"
-              element={<BudgetsPage {...budgetsTodosPageProps} />}
-            />
-          }
-        />
-
-        <Route
           path="/presupuestos/sinplanificar"
           element={
             <GuardedRoute
               path="/presupuestos/sinplanificar"
-              element={<BudgetsPage {...budgetsSinPlanPageProps} />}
-            />
-          }
-        />
-
-        <Route
-          path="/presupuestos/sintrabajar"
-          element={
-            <GuardedRoute
-              path="/presupuestos/sintrabajar"
-              element={<BudgetsPage {...budgetsSinTrabajarPageProps} />}
+              element={<BudgetsPage {...budgetsPageProps} />}
             />
           }
         />
