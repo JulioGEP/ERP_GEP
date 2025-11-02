@@ -269,7 +269,9 @@ function computeAutomaticSessionEstadoFromValues(args: {
   const allowWithoutRoom = allowsAutomaticPlanificadaWithoutRoom(dealPipeline);
   const hasValidDates = Boolean(fechaInicio && fechaFin);
   const normalizedSede = normalizeSedeLabel(dealSede);
-  const requiresRoom = !allowWithoutRoom && normalizedSede !== 'In Company';
+  const normalizedSala = normalizeSedeLabel(salaId);
+  const isInCompanySession = normalizedSede === 'In Company' || normalizedSala === 'In Company';
+  const requiresRoom = !allowWithoutRoom && !isInCompanySession;
   if (requiresRoom && (!salaId || !String(salaId).trim().length)) return 'BORRADOR';
   if (!trainerIds || !trainerIds.length) return 'BORRADOR';
   if (!unidadIds || !unidadIds.length) return 'BORRADOR';
