@@ -27,6 +27,7 @@ import {
 } from '../features/presupuestos/importDealUtils';
 import type { CalendarSession } from '../features/calendar/api';
 import type { DealDetail, DealSummary } from '../types/deal';
+import { isAffirmativeLabel } from '../features/presupuestos/hooks/useDealFollowUpToggle';
 import logo from '../assets/gep-group-logo.png';
 import { AppRouter } from './router';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
@@ -66,6 +67,8 @@ const NAVIGATION_ITEMS: NavItem[] = [
     label: 'Presupuestos',
     children: [
       { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
+      { key: 'Presupuestos/Todos', label: 'Todos', path: '/presupuestos/todos' },
+      { key: 'Presupuestos/SinTrabajar', label: 'Sin trabajar', path: '/presupuestos/sintrabajar' },
     ],
   },
   {
@@ -126,6 +129,50 @@ const NAVIGATION_ITEMS: NavItem[] = [
 const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
 
 const DEFAULT_REDIRECT_PATH = '/presupuestos/sinplanificar';
+
+const SIN_PLAN_EXCLUDED_PIPELINES = new Set(['formacion abierta', 'material']);
+
+function shouldIncludeBudgetInSinPlan(budget: DealSummary): boolean {
+  if (isExcludedSinPlanPipeline(budget)) {
+    return false;
+  }
+
+  const sessions = Array.isArray(budget.sessions) ? budget.sessions : [];
+  if (!sessions.length) {
+    return false;
+  }
+
+  return sessions.some((session) => session?.estado === 'BORRADOR');
+}
+
+function isExcludedSinPlanPipeline(budget: DealSummary): boolean {
+  const candidates: Array<unknown> = [budget.pipeline_label, budget.pipeline_id];
+  return candidates.some((value) => SIN_PLAN_EXCLUDED_PIPELINES.has(normalizePipelineKey(value)));
+}
+
+function hasPendingFollowUpFields(budget: DealSummary): boolean {
+  const followUpEntries: Array<[string | null | undefined, boolean | undefined]> = [
+    [budget.fundae_label, budget.fundae_val],
+    [budget.caes_label, budget.caes_val],
+    [budget.hotel_label, budget.hotel_val],
+    [budget.transporte, budget.transporte_val],
+  ];
+
+  const hasAffirmativePending = followUpEntries.some(
+    ([label, flag]) => isAffirmativeLabel(label) && flag !== true,
+  );
+
+  if (hasAffirmativePending) {
+    return true;
+  }
+
+  const normalizedPo = normalizePipelineKey(budget.po ?? null);
+  if (!normalizedPo.length || normalizedPo === 'no') {
+    return false;
+  }
+
+  return budget.po_val !== true;
+}
 
 type BudgetModalProps = ComponentProps<typeof BudgetDetailModalEmpresas>;
 
@@ -628,6 +675,14 @@ export default function AuthenticatedApp() {
   }, [location.pathname]);
 
   const budgets = budgetsQuery.data ?? [];
+  const sinPlanBudgets = useMemo(
+    () => budgets.filter((budget) => shouldIncludeBudgetInSinPlan(budget)),
+    [budgets],
+  );
+  const sinTrabajarBudgets = useMemo(
+    () => budgets.filter((budget) => hasPendingFollowUpFields(budget)),
+    [budgets],
+  );
   const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
 
   const handleImportSubmit = useCallback(
@@ -913,8 +968,7 @@ export default function AuthenticatedApp() {
     [pushToast],
   );
 
-  const budgetsPageProps: BudgetsPageProps = {
-    budgets,
+  const commonBudgetProps = {
     isLoading: budgetsQuery.isLoading,
     isFetching: isRefreshing,
     error: budgetsQuery.error ?? null,
@@ -924,6 +978,43 @@ export default function AuthenticatedApp() {
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
     canImport: canImportBudgets,
+  } satisfies Omit<
+    BudgetsPageProps,
+    'budgets' | 'tableLabels' | 'headerTitle' | 'headerSubtitle' | 'showImportButton'
+  >;
+
+  const budgetsSinPlanPageProps: BudgetsPageProps = {
+    ...commonBudgetProps,
+    budgets: sinPlanBudgets,
+    tableLabels: {
+      emptyTitle: 'No hay presupuestos con sesiones en borrador.',
+      emptyDescription: 'Ajusta los filtros o revisa otras pestañas.',
+    },
+  };
+
+  const budgetsTodosPageProps: BudgetsPageProps = {
+    ...commonBudgetProps,
+    budgets,
+    headerTitle: 'Presupuestos · Todos',
+    headerSubtitle: null,
+    showImportButton: false,
+    tableLabels: {
+      emptyTitle: 'No hay presupuestos que mostrar.',
+      emptyDescription: 'Importa nuevos presupuestos o ajusta los filtros.',
+    },
+  };
+
+  const budgetsSinTrabajarPageProps: BudgetsPageProps = {
+    ...commonBudgetProps,
+    budgets: sinTrabajarBudgets,
+    headerTitle: 'Presupuestos · Sin trabajar',
+    headerSubtitle: 'Revisa los campos especiales pendientes de gestionar.',
+    showImportButton: false,
+    tableLabels: {
+      emptyTitle: 'No hay presupuestos con campos especiales pendientes.',
+      emptyDescription:
+        'Todos los presupuestos tienen FUNDAE, CAES, Hotel, Transporte o PO revisados.',
+    },
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {
@@ -1052,7 +1143,9 @@ export default function AuthenticatedApp() {
       <main className="flex-grow-1 py-5">
         <Container fluid="xl">
           <AppRouter
-            budgetsPageProps={budgetsPageProps}
+            budgetsTodosPageProps={budgetsTodosPageProps}
+            budgetsSinPlanPageProps={budgetsSinPlanPageProps}
+            budgetsSinTrabajarPageProps={budgetsSinTrabajarPageProps}
             porSesionesPageProps={calendarSessionsPageProps}
             porUnidadMovilPageProps={calendarUnitsPageProps}
             porFormadorPageProps={calendarTrainersPageProps}
