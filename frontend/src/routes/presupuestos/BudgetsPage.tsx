@@ -1,9 +1,10 @@
-import { useMemo, useState, type ComponentProps } from 'react';
+import { useMemo, useState, type ComponentType } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
-import { BudgetTable } from '../../features/presupuestos/BudgetTable';
+import { BudgetTable, type BudgetTableProps } from '../../features/presupuestos/BudgetTable';
 
-type BudgetTableLabelsProp = ComponentProps<typeof BudgetTable>['labels'];
+type BudgetTableLabelsProp = BudgetTableProps['labels'];
+type BudgetTableComponent = ComponentType<BudgetTableProps>;
 
 type BudgetsPageProps = {
   budgets: DealSummary[];
@@ -20,6 +21,7 @@ type BudgetsPageProps = {
   headerSubtitle?: string | null;
   showImportButton?: boolean;
   tableLabels?: BudgetTableLabelsProp;
+  TableComponent?: BudgetTableComponent;
 };
 
 export function BudgetsPage({
@@ -37,6 +39,7 @@ export function BudgetsPage({
   headerSubtitle,
   showImportButton = true,
   tableLabels,
+  TableComponent = BudgetTable,
 }: BudgetsPageProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
   const title = headerTitle ?? 'Presupuestos · Sin planificar';
@@ -72,7 +75,7 @@ export function BudgetsPage({
         </div>
       </section>
 
-      <BudgetTable
+      <TableComponent
         budgets={budgets}
         isLoading={isLoading}
         isFetching={isFetching}
