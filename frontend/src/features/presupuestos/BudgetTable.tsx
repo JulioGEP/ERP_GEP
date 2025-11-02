@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import {
   useReactTable,
   flexRender,
+  getCoreRowModel,
   type ColumnDef,
   type HeaderContext,
   type SortingState,
@@ -1161,6 +1162,7 @@ export function BudgetTable({
     columns,
     state: { sorting: tanstackSortingState },
     onSortingChange: handleSortingChange,
+    getCoreRowModel: getCoreRowModel(),
     getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
   });
 
