@@ -355,6 +355,7 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
       id: null,
       fecha_inicio_utc: date,
       fecha: date,
+      estado: null,
     };
   }
 
@@ -362,6 +363,8 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
   const id = toStringValue(session.id);
   const startDate = toStringValue(session.fecha_inicio_utc);
   const fallbackDate = toStringValue((session as any).fecha);
+  const hasEstado = Object.prototype.hasOwnProperty.call(session, 'estado');
+  const estado = hasEstado ? toSessionEstadoValue((session as any).estado) : null;
 
   if (!id && !startDate && !fallbackDate) {
     return null;
@@ -371,6 +374,7 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
     id: id ?? null,
     fecha_inicio_utc: startDate ?? fallbackDate ?? null,
     fecha: fallbackDate ?? (startDate ?? null),
+    estado,
   };
 }
 
