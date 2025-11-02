@@ -2595,7 +2595,7 @@ export function SessionsAccordionAbierta({
                         }
                       >
                         <div
-                          className="flex-grow-1 me-3"
+                          className="session-item-name flex-grow-1 me-3"
                           title={sessionName}
                         >
                           <div className="fw-semibold text-truncate">{sessionName}</div>
