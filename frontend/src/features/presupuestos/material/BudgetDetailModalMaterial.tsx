@@ -45,6 +45,7 @@ import {
   useDealFollowUpToggle,
   type FollowUpFieldKey,
 } from '../hooks/useDealFollowUpToggle';
+import { DEALS_QUERY_KEY } from '../queryKeys';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -241,7 +242,7 @@ export function BudgetDetailModalMaterial({
         );
       }
       qc.invalidateQueries({ queryKey: detailQueryKey });
-      qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+      qc.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
       qc.invalidateQueries({ queryKey: ['calendarSessions'] });
       qc.invalidateQueries({
         predicate: (query) => {
@@ -958,7 +959,7 @@ export function BudgetDetailModalMaterial({
         { products: productPatches }
       );
       await qc.invalidateQueries({ queryKey: detailQueryKey });
-      await qc.invalidateQueries({ queryKey: ['deals', 'noSessions'] });
+      await qc.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
       await qc.invalidateQueries({ queryKey: ['calendarSessions'] });
       setShowConfirm(false);
     } catch (e: any) {

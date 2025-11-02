@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
+import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
+import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
@@ -16,6 +18,8 @@ import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext';
 
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
+const AllBudgetsPage = lazy(() => import('../pages/presupuestos/AllBudgetsPage'));
+const UnworkedBudgetsPage = lazy(() => import('../pages/presupuestos/UnworkedBudgetsPage'));
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
 const PorUnidadMovilPage = lazy(() => import('../pages/calendario/PorUnidadMovilPage'));
 const PorFormadorPage = lazy(() => import('../pages/calendario/PorFormadorPage'));
@@ -39,6 +43,8 @@ const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
+  allBudgetsPageProps: AllBudgetsPageProps;
+  unworkedBudgetsPageProps: UnworkedBudgetsPageProps;
   porSesionesPageProps: PorSesionesPageProps;
   porUnidadMovilPageProps: PorUnidadMovilPageProps;
   porFormadorPageProps: PorFormadorPageProps;
@@ -58,6 +64,8 @@ type AppRouterProps = {
 
 export function AppRouter({
   budgetsPageProps,
+  allBudgetsPageProps,
+  unworkedBudgetsPageProps,
   porSesionesPageProps,
   porUnidadMovilPageProps,
   porFormadorPageProps,
@@ -88,7 +96,27 @@ export function AppRouter({
           }
         />
 
-        <Route path="/presupuestos" element={<Navigate to="/presupuestos/sinplanificar" replace />} />
+        <Route path="/presupuestos" element={<Navigate to="/presupuestos/todos" replace />} />
+
+        <Route
+          path="/presupuestos/todos"
+          element={
+            <GuardedRoute
+              path="/presupuestos/todos"
+              element={<AllBudgetsPage {...allBudgetsPageProps} />}
+            />
+          }
+        />
+
+        <Route
+          path="/presupuestos/sintrabajar"
+          element={
+            <GuardedRoute
+              path="/presupuestos/sintrabajar"
+              element={<UnworkedBudgetsPage {...unworkedBudgetsPageProps} />}
+            />
+          }
+        />
 
         <Route
           path="/presupuestos/sinplanificar"

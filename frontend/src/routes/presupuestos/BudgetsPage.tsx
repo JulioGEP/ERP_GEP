@@ -1,65 +1,13 @@
-import { useState } from 'react';
-import { Button, Spinner } from 'react-bootstrap';
-import type { DealSummary } from '../../types/deal';
-import { BudgetTable } from '../../features/presupuestos/BudgetTable';
+import { BudgetSectionLayout, type BudgetSectionLayoutProps } from './BudgetSectionLayout';
 
-type BudgetsPageProps = {
-  budgets: DealSummary[];
-  isLoading: boolean;
-  isFetching: boolean;
-  error: unknown;
-  onRetry: () => void;
-  onSelect: (budget: DealSummary) => void;
-  onDelete?: (budget: DealSummary) => Promise<void>;
-  onOpenImportModal: () => void;
-  isImporting: boolean;
-  canImport: boolean;
-};
+export type BudgetsPageProps = Omit<BudgetSectionLayoutProps, 'title' | 'subtitle'>;
 
-export function BudgetsPage({
-  budgets,
-  isLoading,
-  isFetching,
-  error,
-  onRetry,
-  onSelect,
-  onDelete,
-  onOpenImportModal,
-  isImporting,
-  canImport,
-}: BudgetsPageProps) {
-  const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
-
+export function BudgetsPage(props: BudgetsPageProps) {
   return (
-    <div className="d-grid gap-4">
-      <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
-        <div className="d-flex flex-column gap-2">
-          <div className="d-flex flex-wrap align-items-center gap-3">
-            <h1 className="h3 fw-bold mb-0">Presupuestos · Sin planificar</h1>
-            <div ref={setFiltersContainer} className="d-flex align-items-center gap-2 flex-wrap" />
-          </div>
-          <p className="text-muted mb-0">Sube tu presupuesto y planifica</p>
-        </div>
-        <div className="d-flex align-items-center gap-3">
-          {(isImporting || isFetching) && <Spinner animation="border" role="status" size="sm" />}
-          {canImport && (
-            <Button size="lg" onClick={onOpenImportModal} disabled={isImporting}>
-              Importar presupuesto
-            </Button>
-          )}
-        </div>
-      </section>
-
-      <BudgetTable
-        budgets={budgets}
-        isLoading={isLoading}
-        isFetching={isFetching}
-        error={error}
-        onRetry={onRetry}
-        onSelect={onSelect}
-        onDelete={onDelete}
-        filtersContainer={filtersContainer}
-      />
-    </div>
+    <BudgetSectionLayout
+      {...props}
+      title="Presupuestos · Sin planificar"
+      subtitle="Sube tu presupuesto y planifica"
+    />
   );
 }
