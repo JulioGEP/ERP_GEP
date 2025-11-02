@@ -11,7 +11,7 @@ import type { TemplatesCertificadosPageProps } from '../pages/recursos/Templates
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
-import type { TrainerPageProps } from '../pages/recursos/TrainerPage';
+import type { TrainerPageProps } from '../pages/usuarios/TrainerPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,7 +26,7 @@ const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/Templates
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
 const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/FormacionAbiertaPage'));
-const TrainerPage = lazy(() => import('../pages/recursos/TrainerPage'));
+const TrainerPage = lazy(() => import('../pages/usuarios/TrainerPage'));
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
 const InformesPreventivoPage = lazy(() => import('../pages/informes/PreventivoReportPage'));
 const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroReportPage'));
@@ -215,9 +215,10 @@ export function AppRouter({
           }
         />
         <Route
-          path="/recursos/trainer"
-          element={<GuardedRoute path="/recursos/trainer" element={<TrainerPage {...trainerPageProps} />} />}
+          path="/usuarios/trainer"
+          element={<GuardedRoute path="/usuarios/trainer" element={<TrainerPage {...trainerPageProps} />} />}
         />
+        <Route path="/recursos/trainer" element={<Navigate to="/usuarios/trainer" replace />} />
         <Route path="/formacion_abierta/cursos" element={<Navigate to="/recursos/formacion_abierta" replace />} />
 
         <Route

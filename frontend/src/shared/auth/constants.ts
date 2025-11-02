@@ -26,7 +26,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/recursos/formadores_bomberos',
     '/perfil',
   ],
-  Formador: ['/recursos/trainer', '/perfil'],
+  Formador: ['/usuarios/trainer', '/perfil'],
 };
 
 export const DEFAULT_ROUTE_ORDER = [
@@ -34,7 +34,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/presupuestos/todos',
   '/presupuestos/sintrabajar',
   '/recursos/formadores_bomberos',
-  '/recursos/trainer',
+  '/usuarios/trainer',
   '/recursos/unidades_moviles',
   '/recursos/salas',
   '/certificados',
