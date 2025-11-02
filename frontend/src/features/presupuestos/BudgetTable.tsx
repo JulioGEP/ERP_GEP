@@ -3,6 +3,9 @@ import { createPortal } from 'react-dom';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
   useReactTable,
   type ColumnDef,
   type HeaderContext,
@@ -408,6 +411,7 @@ type BudgetFilterRow = {
   values: Record<string, string>;
   normalized: Record<string, string>;
   search: string;
+  multiValueSets: Record<string, ReadonlySet<string>>;
 };
 
 const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> = {
@@ -484,17 +488,35 @@ const BUDGET_SELECT_FILTER_KEYS = new Set<string>([
   'session_state',
 ]);
 
+const MULTI_VALUE_FILTER_KEYS = new Set<string>(['session_state']);
+
 function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
   const values: Record<string, string> = {};
   const normalized: Record<string, string> = {};
+  const multiValueSets: Record<string, ReadonlySet<string>> = {};
   for (const key of BUDGET_FILTER_KEYS) {
     const raw = BUDGET_FILTER_ACCESSORS[key]?.(budget) ?? '';
     values[key] = raw;
+    if (MULTI_VALUE_FILTER_KEYS.has(key)) {
+      const parts = splitFilterValue(raw);
+      if (parts.length) {
+        const normalizedSet = new Set<string>();
+        parts.forEach((part) => {
+          const normalizedPart = normalizeText(part);
+          if (normalizedPart.length) {
+            normalizedSet.add(normalizedPart);
+          }
+        });
+        if (normalizedSet.size) {
+          multiValueSets[key] = normalizedSet;
+        }
+      }
+    }
     const normalizedSource = raw.split(FILTER_MULTI_VALUE_SEPARATOR).join(' ');
     normalized[key] = normalizeText(normalizedSource);
   }
   const search = BUDGET_FILTER_KEYS.map((key) => normalized[key]).join(' ');
-  return { budget, values, normalized, search };
+  return { budget, values, normalized, search, multiValueSets };
 }
 
 function subsequenceScore(text: string, token: string): number {
@@ -542,6 +564,19 @@ function applyBudgetFilters(
     filtered = filtered.filter((row) =>
       filterEntries.every(([key, value]) => {
         const parts = splitFilterValue(value);
+        if (key === 'session_state') {
+          const normalizedParts = (parts.length ? parts : [value])
+            .map((part) => normalizeText(part))
+            .filter((part) => part.length > 0);
+          if (!normalizedParts.length) {
+            return true;
+          }
+          const targetStates = row.multiValueSets[key];
+          if (!targetStates || targetStates.size === 0) {
+            return false;
+          }
+          return normalizedParts.some((normalizedPart) => targetStates.has(normalizedPart));
+        }
         if (parts.length > 1) {
           return parts.some((part) => {
             const normalizedPart = normalizeText(part);
@@ -1190,6 +1225,8 @@ export function BudgetTable({
     state: { sorting: tanstackSortingState },
     onSortingChange: handleSortingChange,
     getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   });
 
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
@@ -1210,6 +1247,14 @@ export function BudgetTable({
     virtualRows.length > 0
       ? rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
       : 0;
+
+  const shouldRenderAllRows = virtualRows.length === 0 && rows.length > 0;
+  const rowItems = shouldRenderAllRows
+    ? rows.map((row, index) => ({ row, key: row.id ?? `row-${index}` }))
+    : virtualRows.map((virtualRow) => ({
+        row: rows[virtualRow.index],
+        key: rows[virtualRow.index]?.id ?? `row-${virtualRow.index}`,
+      }));
 
   const columnsCount = table.getAllColumns().length;
   const isServerBusy = shouldUseServerFiltering && (serverQuery.isFetching || serverQuery.isLoading);
@@ -1324,7 +1369,7 @@ export function BudgetTable({
                       scope="col"
                     >
                       {!header.isPlaceholder &&
-                      header.renderHeader()}
+                        flexRender(header.column.columnDef.header, header.getContext())}
                     </th>
                   );
                 })}
@@ -1342,16 +1387,15 @@ export function BudgetTable({
               </tr>
             ) : (
               <>
-                {paddingTop > 0 && (
+                {!shouldRenderAllRows && paddingTop > 0 && (
                   <tr>
                     <td colSpan={columnsCount} style={{ height: `${paddingTop}px` }} />
                   </tr>
                 )}
-                {virtualRows.map((virtualRow) => {
-                  const row = rows[virtualRow.index];
+                {rowItems.map(({ row, key }) => {
                   const budget = row.original;
                   return (
-                    <tr key={row.id} role="button" onClick={() => onSelect(budget)}>
+                    <tr key={key} role="button" onClick={() => onSelect(budget)}>
                       {row.getVisibleCells().map((cell) => {
                         const meta = cell.column.columnDef.meta as { style?: React.CSSProperties } | undefined;
                         const style = meta?.style;
@@ -1362,14 +1406,14 @@ export function BudgetTable({
                             style={style}
                             className={alignRight ? 'text-end' : undefined}
                           >
-                            {cell.renderValue()}
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </td>
                         );
                       })}
                     </tr>
                   );
                 })}
-                {paddingBottom > 0 && (
+                {!shouldRenderAllRows && paddingBottom > 0 && (
                   <tr>
                     <td colSpan={columnsCount} style={{ height: `${paddingBottom}px` }} />
                   </tr>
