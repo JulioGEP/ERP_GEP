@@ -3,7 +3,7 @@ import { BudgetSectionLayout, type BudgetSectionLayoutProps } from './BudgetSect
 
 export type AllBudgetsPageProps = Omit<BudgetSectionLayoutProps, 'title' | 'subtitle' | 'enableFallback'>;
 
-export function AllBudgetsPage({ tableLabels, ...rest }: AllBudgetsPageProps) {
+export function AllBudgetsPage({ tableLabels, canImport: _unusedCanImport, ...rest }: AllBudgetsPageProps) {
   const mergedLabels = useMemo(
     () => ({
       emptyTitle: 'No hay presupuestos disponibles.',
@@ -20,6 +20,7 @@ export function AllBudgetsPage({ tableLabels, ...rest }: AllBudgetsPageProps) {
       subtitle="Consulta todos los presupuestos de los diferentes embudos"
       enableFallback={false}
       tableLabels={mergedLabels}
+      canImport={false}
     />
   );
 }
