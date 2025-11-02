@@ -68,13 +68,10 @@ export interface DealDocument {
  * ====================== */
 
 /** Fila para listados (tabla de presupuestos) */
-import type { SessionEstado } from '../api/sessions.types';
-
 export interface DealSummarySession {
   id: string | null;
   fecha_inicio_utc: string | null;
   fecha?: string | null;
-  estado?: SessionEstado | null;
 }
 
 export interface DealSummary {
