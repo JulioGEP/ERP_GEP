@@ -82,6 +82,8 @@ export type TableState = {
   sorting: SortingState;
 };
 
+export type CoreRowModelGetter<TData> = () => RowModel<TData>;
+
 export type Table<TData> = {
   options: UseReactTableOptions<TData>;
   getHeaderGroups: () => HeaderGroup<TData>[];
@@ -99,7 +101,12 @@ export type UseReactTableOptions<TData> = {
   state?: Partial<TableState>;
   onSortingChange?: (sorting: SortingState) => void;
   getRowId?: (row: TData, index: number) => string;
+  getCoreRowModel?: CoreRowModelGetter<TData>;
 };
+
+export function getCoreRowModel<TData>(): CoreRowModelGetter<TData> {
+  return () => ({ rows: [] });
+}
 
 function getByPath(source: unknown, path: string): unknown {
   if (!path.length) return undefined;
