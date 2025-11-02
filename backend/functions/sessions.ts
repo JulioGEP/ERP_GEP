@@ -223,11 +223,6 @@ const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_DATES = new Set([
   'formacion empresa',
 ]);
 const PIPELINES_ALLOW_PLANIFICADA_WITHOUT_ROOM = new Set(['gep services']);
-const PIPELINES_ALLOW_PLANIFICADA_WITH_INCOMPANY_ROOM = new Set([
-  'gep services',
-  'formacion empresas',
-  'formacion empresa',
-]);
 
 function normalizePipelineLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
@@ -264,27 +259,18 @@ function computeAutomaticSessionEstadoFromValues(args: {
   fechaInicio: Date | null | undefined;
   fechaFin: Date | null | undefined;
   salaId: string | null | undefined;
-  salaName?: string | null | undefined;
   trainerIds: string[];
   unidadIds: string[];
   dealSede?: string | null;
   dealPipeline?: string | null;
 }): AutomaticSessionEstado {
-  const { fechaInicio, fechaFin, salaId, salaName, trainerIds, unidadIds, dealSede, dealPipeline } = args;
+  const { fechaInicio, fechaFin, salaId, trainerIds, unidadIds, dealSede, dealPipeline } = args;
   const allowWithoutDates = allowsAutomaticPlanificadaWithoutDates(dealPipeline);
   const allowWithoutRoom = allowsAutomaticPlanificadaWithoutRoom(dealPipeline);
   const hasValidDates = Boolean(fechaInicio && fechaFin);
   const normalizedSede = normalizeSedeLabel(dealSede);
-  const normalizedPipeline = normalizePipelineLabel(dealPipeline);
-  const normalizedSalaName = normalizeSedeLabel(salaName);
-  const isInCompanyRoom = normalizedSalaName === 'In Company';
-  const pipelineAllowsInCompanyRoom =
-    normalizedPipeline != null && PIPELINES_ALLOW_PLANIFICADA_WITH_INCOMPANY_ROOM.has(normalizedPipeline);
-  const hasRoomAssigned = Boolean(salaId && String(salaId).trim().length);
-  const requiresRoom =
-    !allowWithoutRoom && normalizedSede !== 'In Company' && !(pipelineAllowsInCompanyRoom && isInCompanyRoom);
-  if (requiresRoom && !hasRoomAssigned) return 'BORRADOR';
-  if (pipelineAllowsInCompanyRoom && isInCompanyRoom && !hasValidDates) return 'BORRADOR';
+  const requiresRoom = !allowWithoutRoom && normalizedSede !== 'In Company';
+  if (requiresRoom && (!salaId || !String(salaId).trim().length)) return 'BORRADOR';
   if (!trainerIds || !trainerIds.length) return 'BORRADOR';
   if (!unidadIds || !unidadIds.length) return 'BORRADOR';
   if (hasValidDates || allowWithoutDates) return 'PLANIFICADA';
@@ -302,7 +288,6 @@ function resolveAutomaticSessionEstado(row: SessionRecord): AutomaticSessionEsta
     fechaInicio: normalized.fecha_inicio_utc,
     fechaFin: normalized.fecha_fin_utc,
     salaId: normalized.sala_id,
-    salaName: normalized.salas?.name ?? null,
     trainerIds,
     unidadIds,
     dealSede: normalized.deal?.sede_label ?? null,
@@ -1214,17 +1199,10 @@ if (method === 'GET') {
           end: fechaFinDate,
         });
 
-        let salaName: string | null = null;
-        if (salaId) {
-          const room = await tx.salas.findUnique({ where: { sala_id: salaId }, select: { name: true } });
-          salaName = room?.name ?? null;
-        }
-
         const autoEstado = computeAutomaticSessionEstadoFromValues({
           fechaInicio: fechaInicioDate,
           fechaFin: fechaFinDate,
           salaId: salaId ?? null,
-          salaName,
           trainerIds: trainerIdsResult as string[],
           unidadIds: unidadIdsResult as string[],
           dealSede: deal.sede_label ?? null,
@@ -1305,7 +1283,6 @@ const created = await tx.sesiones.create({
           deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
-          salas: { select: { sala_id: true, name: true, sede: true } },
         },
       });
       const storedRecord = ensureSessionRelationsOrNull(storedRaw as any);
@@ -1320,20 +1297,11 @@ const created = await tx.sesiones.create({
       const nextUnidadIds = unidadIds === undefined ? storedRecord.unidades.map((e) => e.unidad_id) : unidadIds;
 
       let nextSalaId = storedRecord.sala_id as string | null;
-      let nextSalaName = storedRecord.salas?.name ?? null;
       if (Object.prototype.hasOwnProperty.call(data, 'sala_id')) {
         const rawSala = (data as Record<string, any>).sala_id as any;
         nextSalaId = rawSala && typeof rawSala === 'object' && Object.prototype.hasOwnProperty.call(rawSala, 'set')
           ? ((rawSala.set as string | null | undefined) ?? null)
           : ((rawSala as string | null | undefined) ?? null);
-        if (nextSalaId === storedRecord.sala_id) {
-          nextSalaName = storedRecord.salas?.name ?? null;
-        } else if (nextSalaId) {
-          const room = await prisma.salas.findUnique({ where: { sala_id: nextSalaId }, select: { name: true } });
-          nextSalaName = room?.name ?? null;
-        } else {
-          nextSalaName = null;
-        }
       }
 
       const storedEstado = toSessionEstado(storedRecord.estado);
@@ -1342,7 +1310,6 @@ const created = await tx.sesiones.create({
         fechaInicio,
         fechaFin,
         salaId: nextSalaId,
-        salaName: nextSalaName,
         trainerIds: nextTrainerIds as string[],
         unidadIds: nextUnidadIds as string[],
         dealSede: storedRecord.deal?.sede_label ?? null,
