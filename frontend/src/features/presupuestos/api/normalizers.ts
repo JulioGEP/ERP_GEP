@@ -146,6 +146,7 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
     id: id ?? null,
     fecha_inicio_utc: startDate ?? fallbackDate ?? null,
     fecha: fallbackDate ?? (startDate ?? null),
+    estado: toSessionEstadoValue(session?.estado),
   };
 }
 
@@ -217,11 +218,15 @@ export function normalizeDealSummary(row: Json): DealSummary {
   const products = normalizeProducts(row?.products ?? row?.line_items ?? []);
   const pipelineLabel = toStringValue(row?.pipeline_label ?? row?.pipelineLabel);
 
-  const sessions = Array.isArray(row?.sessions)
-    ? (row.sessions as unknown[])
-        .map((session) => normalizeDealSummarySession(session))
-        .filter((session): session is DealSummarySession => session !== null)
+  const rawSessions = Array.isArray(row?.sessions)
+    ? row.sessions
+    : Array.isArray(row?.sesiones)
+    ? row.sesiones
     : [];
+
+  const sessions = (rawSessions as unknown[])
+    .map((session) => normalizeDealSummarySession(session))
+    .filter((session): session is DealSummarySession => session !== null);
 
   const studentNames = normalizeDealStudentNames(row?.students ?? null);
 
