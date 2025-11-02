@@ -9,6 +9,9 @@ import { BudgetDetailModalServices } from '../features/presupuestos/services/Bud
 import { BudgetDetailModalMaterial } from '../features/presupuestos/material/BudgetDetailModalMaterial';
 import { ProductCommentWindow } from '../features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from '../features/presupuestos/ProductCommentWindow';
+import { SinPlanificarBudgetTable } from '../features/presupuestos/tables/SinPlanificarBudgetTable';
+import { TodosBudgetTable } from '../features/presupuestos/tables/TodosBudgetTable';
+import { SinTrabajarBudgetTable } from '../features/presupuestos/tables/SinTrabajarBudgetTable';
 import { ApiError } from '../api/client';
 import {
   deleteDeal,
@@ -980,12 +983,13 @@ export default function AuthenticatedApp() {
     canImport: canImportBudgets,
   } satisfies Omit<
     BudgetsPageProps,
-    'budgets' | 'tableLabels' | 'headerTitle' | 'headerSubtitle' | 'showImportButton'
+    'budgets' | 'tableLabels' | 'headerTitle' | 'headerSubtitle' | 'showImportButton' | 'TableComponent'
   >;
 
   const budgetsSinPlanPageProps: BudgetsPageProps = {
     ...commonBudgetProps,
     budgets: sinPlanBudgets,
+    TableComponent: SinPlanificarBudgetTable,
     tableLabels: {
       emptyTitle: 'No hay presupuestos con sesiones en borrador.',
       emptyDescription: 'Ajusta los filtros o revisa otras pestañas.',
@@ -998,6 +1002,7 @@ export default function AuthenticatedApp() {
     headerTitle: 'Presupuestos · Todos',
     headerSubtitle: null,
     showImportButton: false,
+    TableComponent: TodosBudgetTable,
     tableLabels: {
       emptyTitle: 'No hay presupuestos que mostrar.',
       emptyDescription: 'Importa nuevos presupuestos o ajusta los filtros.',
@@ -1010,6 +1015,7 @@ export default function AuthenticatedApp() {
     headerTitle: 'Presupuestos · Sin trabajar',
     headerSubtitle: 'Revisa los campos especiales pendientes de gestionar.',
     showImportButton: false,
+    TableComponent: SinTrabajarBudgetTable,
     tableLabels: {
       emptyTitle: 'No hay presupuestos con campos especiales pendientes.',
       emptyDescription:
