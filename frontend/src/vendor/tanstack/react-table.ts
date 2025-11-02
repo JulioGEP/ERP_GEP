@@ -25,6 +25,16 @@ export type ColumnDef<TData, TValue> = {
   meta?: Record<string, unknown>;
 };
 
+export function flexRender<TProps>(
+  component: ReactNode | ((props: TProps) => ReactNode),
+  props: TProps,
+): ReactNode {
+  if (typeof component === 'function') {
+    return (component as (props: TProps) => ReactNode)(props);
+  }
+  return component;
+}
+
 export type ColumnInstance<TData, TValue> = {
   id: string;
   columnDef: ColumnDef<TData, TValue>;
