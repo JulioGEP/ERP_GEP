@@ -65,7 +65,7 @@ const DEFAULT_LABELS: BudgetTableLabels = {
   fallbackErrorRetry: 'Reintentar',
 };
 
-export interface BudgetTableProps {
+interface BudgetTableProps {
   budgets: DealSummary[];
   isLoading: boolean;
   isFetching: boolean;
