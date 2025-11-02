@@ -355,7 +355,6 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
       id: null,
       fecha_inicio_utc: date,
       fecha: date,
-      estado: null,
     };
   }
 
@@ -363,7 +362,6 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
   const id = toStringValue(session.id);
   const startDate = toStringValue(session.fecha_inicio_utc);
   const fallbackDate = toStringValue((session as any).fecha);
-  const estado = toSessionEstadoValue((session as any).estado);
 
   if (!id && !startDate && !fallbackDate) {
     return null;
@@ -373,7 +371,6 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
     id: id ?? null,
     fecha_inicio_utc: startDate ?? fallbackDate ?? null,
     fecha: fallbackDate ?? (startDate ?? null),
-    estado,
   };
 }
 
@@ -957,45 +954,12 @@ async function request(path: string, init?: RequestInit) {
  * Listado / Detalle / Import deal
  * =============================== */
 
-const ALLOWED_PIPELINE_KEYS = new Set(['formacion empresa', 'gep services']);
-
-function normalizePipelineKey(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  const trimmed = value.trim();
-  if (!trimmed.length) return '';
-  let normalized = trimmed;
-  try {
-    normalized = trimmed.normalize('NFD');
-  } catch {
-    normalized = trimmed;
-  }
-  return normalized.replace(/[\u0300-\u036f]/g, '').toLowerCase();
-}
-
-function matchesAllowedPipeline(deal: DealSummary): boolean {
-  const pipelineLabelKey = normalizePipelineKey(deal.pipeline_label ?? null);
-  if (pipelineLabelKey && ALLOWED_PIPELINE_KEYS.has(pipelineLabelKey)) {
-    return true;
-  }
-
-  const pipelineIdKey = normalizePipelineKey(deal.pipeline_id ?? null);
-  return pipelineIdKey ? ALLOWED_PIPELINE_KEYS.has(pipelineIdKey) : false;
-}
-
-function hasDraftSessions(deal: DealSummary): boolean {
-  const sessions = Array.isArray(deal.sessions) ? deal.sessions : [];
-  return sessions.some((session) => session?.estado === 'BORRADOR');
-}
-
-export type DealsListSort = { id: string; desc?: boolean };
-export type DealsListOptions = {
+export type DealsWithoutSessionsSort = { id: string; desc?: boolean };
+export type DealsWithoutSessionsOptions = {
   filters?: Record<string, string>;
   search?: string;
-  sorting?: DealsListSort[];
+  sorting?: DealsWithoutSessionsSort[];
 };
-
-export type DealsWithoutSessionsSort = DealsListSort;
-export type DealsWithoutSessionsOptions = DealsListOptions;
 
 export async function fetchDealsWithoutSessions(
   options?: DealsWithoutSessionsOptions,
@@ -1028,9 +992,7 @@ export async function fetchDealsWithoutSessions(
   const query = searchParams.toString();
   const data = await request(`/deals?${query}`);
   const rows: Json[] = Array.isArray(data?.deals) ? data.deals : [];
-  return rows
-    .map((row) => normalizeDealSummary(row))
-    .filter((deal) => matchesAllowedPipeline(deal) && hasDraftSessions(deal));
+  return rows.map((row) => normalizeDealSummary(row));
 }
 
 export async function fetchDealsWithPendingCertificates(): Promise<DealSummary[]> {
