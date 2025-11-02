@@ -428,6 +428,10 @@ option.session-option-unavailable {
   min-width: 80px;
 }
 
+.session-item-name {
+  min-width: 0;
+}
+
 .session-action-icon {
   display: inline-flex;
   align-items: center;
