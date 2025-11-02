@@ -4,6 +4,7 @@ import { patchDealEditable } from '../api';
 import type { DealEditablePatch } from '../api';
 import type { DealDetail, DealSummary } from '../../../types/deal';
 import {
+  DEALS_ALL_QUERY_KEY,
   DEALS_WITHOUT_SESSIONS_QUERY_KEY,
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
 } from '../queryKeys';
@@ -39,6 +40,7 @@ export const FOLLOW_UP_FIELDS: readonly FollowUpFieldConfig[] = [
 const DEAL_LIST_QUERY_KEYS: readonly DealListQueryKey[] = [
   DEALS_WITHOUT_SESSIONS_QUERY_KEY,
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
+  DEALS_ALL_QUERY_KEY,
   ['deals', 'pendingCertificates'],
 ] as const;
 

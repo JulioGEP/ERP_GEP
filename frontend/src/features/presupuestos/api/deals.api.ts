@@ -47,18 +47,29 @@ async function request<T = any>(path: string, init?: RequestInit) {
   return requestJson<T>(path, init);
 }
 
-export type DealsWithoutSessionsSort = { id: string; desc?: boolean };
-export type DealsWithoutSessionsOptions = {
+export type DealsListSort = { id: string; desc?: boolean };
+export type DealsListOptions = {
   filters?: Record<string, string>;
   search?: string;
-  sorting?: DealsWithoutSessionsSort[];
+  sorting?: DealsListSort[];
 };
 
-export async function fetchDealsWithoutSessions(
-  options?: DealsWithoutSessionsOptions,
-): Promise<DealSummary[]> {
+export type DealsWithoutSessionsSort = DealsListSort;
+export type DealsWithoutSessionsOptions = DealsListOptions;
+
+function buildDealsQuery(
+  options?: DealsListOptions,
+  extraParams?: Record<string, string>,
+): string {
   const searchParams = new URLSearchParams();
-  searchParams.set('noSessions', 'true');
+
+  if (extraParams) {
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        searchParams.set(key, value);
+      }
+    });
+  }
 
   if (options?.search && options.search.trim().length) {
     searchParams.set('search', options.search.trim());
@@ -87,9 +98,28 @@ export async function fetchDealsWithoutSessions(
   }
 
   const query = searchParams.toString();
-  const data = await request<{ deals?: unknown[] }>(`/deals?${query}`);
+  return query;
+}
+
+async function fetchDealsWithParams(
+  options?: DealsListOptions,
+  extraParams?: Record<string, string>,
+): Promise<DealSummary[]> {
+  const query = buildDealsQuery(options, extraParams);
+  const path = query.length ? `/deals?${query}` : '/deals';
+  const data = await request<{ deals?: unknown[] }>(path);
   const rows: unknown[] = Array.isArray(data?.deals) ? data.deals ?? [] : [];
   return rows.map((row) => normalizeDealSummary(row));
+}
+
+export async function fetchDeals(options?: DealsListOptions): Promise<DealSummary[]> {
+  return fetchDealsWithParams(options);
+}
+
+export async function fetchDealsWithoutSessions(
+  options?: DealsWithoutSessionsOptions,
+): Promise<DealSummary[]> {
+  return fetchDealsWithParams(options, { noSessions: 'true' });
 }
 
 export async function fetchDealsWithPendingCertificates(): Promise<DealSummary[]> {

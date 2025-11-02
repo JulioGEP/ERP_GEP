@@ -13,10 +13,13 @@ import { ApiError } from '../api/client';
 import {
   deleteDeal,
   fetchDealDetail,
+  fetchDeals,
   fetchDealsWithoutSessions,
   importDeal,
 } from '../features/presupuestos/api/deals.api';
 import {
+  DEALS_ALL_QUERY_KEY,
+  DEALS_QUERY_KEY,
   DEALS_WITHOUT_SESSIONS_QUERY_KEY,
   DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
 } from '../features/presupuestos/queryKeys';
@@ -30,6 +33,8 @@ import type { DealDetail, DealSummary } from '../types/deal';
 import logo from '../assets/gep-group-logo.png';
 import { AppRouter } from './router';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
+import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
+import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
@@ -65,6 +70,8 @@ const NAVIGATION_ITEMS: NavItem[] = [
     key: 'Presupuestos',
     label: 'Presupuestos',
     children: [
+      { key: 'Presupuestos/Todos', label: 'Todos', path: '/presupuestos/todos' },
+      { key: 'Presupuestos/SinTrabajar', label: 'Sin trabajar', path: '/presupuestos/sintrabajar' },
       { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
     ],
   },
@@ -128,7 +135,7 @@ const NAVIGATION_ITEMS: NavItem[] = [
 
 const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
 
-const DEFAULT_REDIRECT_PATH = '/presupuestos/sinplanificar';
+const DEFAULT_REDIRECT_PATH = '/presupuestos/todos';
 
 type BudgetModalProps = ComponentProps<typeof BudgetDetailModalEmpresas>;
 
@@ -156,6 +163,31 @@ function normalizeOptionalString(value: unknown): string | null {
 
 function normalizeDealId(value: unknown): string | null {
   return normalizeOptionalString(value);
+}
+
+function isAffirmativeLabel(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase() === 'si';
+}
+
+function isExplicitFalse(value: unknown): boolean {
+  return value === false;
+}
+
+function hasPendingExternalFollowUp(budget: DealSummary): boolean {
+  const pairs: Array<[unknown, unknown]> = [
+    [budget.fundae_label, budget.fundae_val],
+    [budget.caes_label, budget.caes_val],
+    [budget.hotel_label, budget.hotel_val],
+    [budget.transporte, budget.transporte_val],
+    [budget.po, budget.po_val],
+  ];
+
+  return pairs.some(([label, confirmation]) => isAffirmativeLabel(label) && isExplicitFalse(confirmation));
 }
 
 function buildSummaryFromDeal(deal: DealDetail | DealSummary): DealSummary {
@@ -333,6 +365,8 @@ export default function AuthenticatedApp() {
   }, [logout, navigate]);
 
   const isBudgetsRoute = location.pathname.startsWith('/presupuestos');
+  const isBudgetsTodosRoute = location.pathname.startsWith('/presupuestos/todos');
+  const isBudgetsSinTrabajarRoute = location.pathname.startsWith('/presupuestos/sintrabajar');
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
@@ -353,7 +387,7 @@ export default function AuthenticatedApp() {
     }
   }, [selectedBudgetId]);
 
-  const budgetsQuery = useQuery({
+  const budgetsWithoutSessionsQuery = useQuery({
     queryKey: DEALS_WITHOUT_SESSIONS_QUERY_KEY,
     queryFn: () => fetchDealsWithoutSessions(),
     refetchOnWindowFocus: false,
@@ -364,16 +398,27 @@ export default function AuthenticatedApp() {
     enabled: isBudgetsRoute,
   });
 
+  const allBudgetsQuery = useQuery({
+    queryKey: DEALS_ALL_QUERY_KEY,
+    queryFn: () => fetchDeals(),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
+    retry: 0,
+    staleTime: Infinity,
+    enabled: isBudgetsTodosRoute || isBudgetsSinTrabajarRoute,
+  });
+
   useEffect(() => {
-    if (!budgetsQuery.isSuccess) {
+    if (!budgetsWithoutSessionsQuery.isSuccess) {
       return;
     }
-    const data = budgetsQuery.data;
+    const data = budgetsWithoutSessionsQuery.data;
     if (!Array.isArray(data) || data.length === 0) {
       return;
     }
     queryClient.setQueryData(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY, data);
-  }, [budgetsQuery.data, budgetsQuery.isSuccess, queryClient]);
+  }, [budgetsWithoutSessionsQuery.data, budgetsWithoutSessionsQuery.isSuccess, queryClient]);
 
   const pushToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
     const id =
@@ -630,8 +675,17 @@ export default function AuthenticatedApp() {
     }
   }, [location.pathname]);
 
-  const budgets = budgetsQuery.data ?? [];
-  const isRefreshing = budgetsQuery.isFetching && !budgetsQuery.isLoading;
+  const budgetsWithoutSessions = budgetsWithoutSessionsQuery.data ?? [];
+  const isRefreshingWithoutSessions =
+    budgetsWithoutSessionsQuery.isFetching && !budgetsWithoutSessionsQuery.isLoading;
+
+  const allBudgets = allBudgetsQuery.data ?? [];
+  const isRefreshingAllBudgets = allBudgetsQuery.isFetching && !allBudgetsQuery.isLoading;
+
+  const unworkedBudgets = useMemo(
+    () => allBudgets.filter((budget) => hasPendingExternalFollowUp(budget)),
+    [allBudgets],
+  );
 
   const handleImportSubmit = useCallback(
     async (rawDealId: string) => {
@@ -652,11 +706,20 @@ export default function AuthenticatedApp() {
 
       let shouldImport = false;
       try {
-        let existingSummary: DealSummary | null = findSummaryInList(budgets);
+        let existingSummary: DealSummary | null = findSummaryInList(budgetsWithoutSessions);
+        if (!existingSummary) {
+          existingSummary = findSummaryInList(allBudgets);
+        }
         if (!existingSummary) {
           const cachedList = queryClient.getQueryData<DealSummary[]>(DEALS_WITHOUT_SESSIONS_QUERY_KEY);
           if (cachedList) {
             existingSummary = findSummaryInList(cachedList);
+          }
+        }
+        if (!existingSummary) {
+          const cachedAll = queryClient.getQueryData<DealSummary[]>(DEALS_ALL_QUERY_KEY);
+          if (cachedAll) {
+            existingSummary = findSummaryInList(cachedAll);
           }
         }
         if (!existingSummary) {
@@ -725,7 +788,8 @@ export default function AuthenticatedApp() {
       }
     },
     [
-      budgets,
+      allBudgets,
+      budgetsWithoutSessions,
       fetchDealDetail,
       importMutation,
       pushToast,
@@ -751,7 +815,7 @@ export default function AuthenticatedApp() {
         return currentId === dealId ? null : current;
       });
       pushToast({ variant: 'success', message: 'Presupuesto eliminado' });
-      queryClient.invalidateQueries({ queryKey: DEALS_WITHOUT_SESSIONS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: DEALS_QUERY_KEY });
     },
     onError: (error: unknown) => {
       const message =
@@ -917,11 +981,45 @@ export default function AuthenticatedApp() {
   );
 
   const budgetsPageProps: BudgetsPageProps = {
-    budgets,
-    isLoading: budgetsQuery.isLoading,
-    isFetching: isRefreshing,
-    error: budgetsQuery.error ?? null,
-    onRetry: () => budgetsQuery.refetch(),
+    budgets: budgetsWithoutSessions,
+    isLoading: budgetsWithoutSessionsQuery.isLoading,
+    isFetching: isRefreshingWithoutSessions,
+    error: budgetsWithoutSessionsQuery.error ?? null,
+    onRetry: () => budgetsWithoutSessionsQuery.refetch(),
+    onSelect: handleSelectBudget,
+    onDelete: handleDeleteBudget,
+    onOpenImportModal: handleOpenImportModal,
+    isImporting: importMutation.isPending,
+    canImport: canImportBudgets,
+    serverQueryOptions: {
+      fetcher: fetchDealsWithoutSessions,
+      queryKey: ['budget-table', 'noSessions'],
+    },
+  };
+
+  const allBudgetsPageProps: AllBudgetsPageProps = {
+    budgets: allBudgets,
+    isLoading: allBudgetsQuery.isLoading,
+    isFetching: isRefreshingAllBudgets,
+    error: allBudgetsQuery.error ?? null,
+    onRetry: () => allBudgetsQuery.refetch(),
+    onSelect: handleSelectBudget,
+    onDelete: handleDeleteBudget,
+    onOpenImportModal: handleOpenImportModal,
+    isImporting: importMutation.isPending,
+    canImport: canImportBudgets,
+    serverQueryOptions: {
+      fetcher: fetchDeals,
+      queryKey: ['budget-table', 'all'],
+    },
+  };
+
+  const unworkedBudgetsPageProps: UnworkedBudgetsPageProps = {
+    budgets: unworkedBudgets,
+    isLoading: allBudgetsQuery.isLoading,
+    isFetching: isRefreshingAllBudgets,
+    error: allBudgetsQuery.error ?? null,
+    onRetry: () => allBudgetsQuery.refetch(),
     onSelect: handleSelectBudget,
     onDelete: handleDeleteBudget,
     onOpenImportModal: handleOpenImportModal,
@@ -1056,6 +1154,8 @@ export default function AuthenticatedApp() {
         <Container fluid="xl">
           <AppRouter
             budgetsPageProps={budgetsPageProps}
+            allBudgetsPageProps={allBudgetsPageProps}
+            unworkedBudgetsPageProps={unworkedBudgetsPageProps}
             porSesionesPageProps={calendarSessionsPageProps}
             porUnidadMovilPageProps={calendarUnitsPageProps}
             porFormadorPageProps={calendarTrainersPageProps}

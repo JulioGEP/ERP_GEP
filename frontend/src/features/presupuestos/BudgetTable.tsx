@@ -16,10 +16,8 @@ import {
 } from '../../components/table/FilterToolbar';
 import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
-import {
-  DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY,
-} from './queryKeys';
-import { fetchDealsWithoutSessions as fetchDealsWithoutSessionsApi } from './api';
+import { DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY } from './queryKeys';
+import type { DealsListOptions } from './api';
 import { fetchProducts } from '../recursos/products.api';
 
 function TrashIcon({ size = 16 }: { size?: number }) {
@@ -39,7 +37,7 @@ function TrashIcon({ size = 16 }: { size?: number }) {
   );
 }
 
-type BudgetTableLabels = {
+export type BudgetTableLabels = {
   loading: string;
   updating: string;
   errorTitle: string;
@@ -65,6 +63,11 @@ const DEFAULT_LABELS: BudgetTableLabels = {
   fallbackErrorRetry: 'Reintentar',
 };
 
+export type BudgetServerQueryOptions = {
+  fetcher: (options: DealsListOptions) => Promise<DealSummary[]>;
+  queryKey?: readonly unknown[];
+};
+
 interface BudgetTableProps {
   budgets: DealSummary[];
   isLoading: boolean;
@@ -77,6 +80,7 @@ interface BudgetTableProps {
   enableFallback?: boolean;
   filtersContainer?: HTMLElement | null;
   showFilters?: boolean;
+  serverQueryOptions?: BudgetServerQueryOptions;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -425,6 +429,7 @@ export function BudgetTable({
   enableFallback = true,
   filtersContainer,
   showFilters = true,
+  serverQueryOptions,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -584,25 +589,32 @@ export function BudgetTable({
     [filteredRows],
   );
 
-  const shouldUseServerFiltering = effectiveBudgets.length > 100_000;
+  const shouldUseServerFiltering = Boolean(serverQueryOptions?.fetcher) && effectiveBudgets.length > 100_000;
 
-  const serverQuery = useQuery({
-    queryKey: [
-      'budget-table-filters',
+  const serverQueryKey = useMemo(
+    () => [
+      ...(serverQueryOptions?.queryKey ?? ['budget-table-filters']),
       activeFilters,
       searchValue,
       sortingState,
     ],
+    [serverQueryOptions?.queryKey, activeFilters, searchValue, sortingState],
+  );
+
+  const serverQuery = useQuery({
+    queryKey: serverQueryKey,
     queryFn: () =>
-      fetchDealsWithoutSessionsApi({
-        filters: activeFilters,
-        search: searchValue,
-        sorting: sortingState,
-      }),
+      serverQueryOptions?.fetcher
+        ? serverQueryOptions.fetcher({
+            filters: activeFilters,
+            search: searchValue,
+            sorting: sortingState,
+          })
+        : Promise.resolve<DealSummary[]>([]),
     enabled: shouldUseServerFiltering,
-  placeholderData: keepPreviousData,
-  refetchOnWindowFocus: false,
-  refetchOnReconnect: false,
+    placeholderData: keepPreviousData,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const tableBudgets = shouldUseServerFiltering
