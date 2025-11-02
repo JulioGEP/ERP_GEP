@@ -5,10 +5,11 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import {
   useReactTable,
   type ColumnDef,
+  type HeaderContext,
   type SortingState,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { DealSummary } from '../../types/deal';
+import type { DealSummary, DealSummarySession } from '../../types/deal';
 import {
   FilterToolbar,
   type FilterDefinition,
@@ -17,7 +18,7 @@ import {
 import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState, type TableSortingState } from '../../hooks/useTableFilterState';
 import { DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY } from './queryKeys';
-import type { DealsListOptions } from './api';
+import type { DealsListOptions } from './api/deals.api';
 import { fetchProducts } from '../recursos/products.api';
 
 function TrashIcon({ size = 16 }: { size?: number }) {
@@ -68,6 +69,8 @@ export type BudgetServerQueryOptions = {
   queryKey?: readonly unknown[];
 };
 
+export type BudgetTableVariant = 'default' | 'unworked';
+
 interface BudgetTableProps {
   budgets: DealSummary[];
   isLoading: boolean;
@@ -81,6 +84,7 @@ interface BudgetTableProps {
   filtersContainer?: HTMLElement | null;
   showFilters?: boolean;
   serverQueryOptions?: BudgetServerQueryOptions;
+  variant?: BudgetTableVariant;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -202,6 +206,121 @@ function formatDateLabel(timestamp: number | null): string {
   } catch {
     return '—';
   }
+}
+
+type FollowUpLabelKey = 'fundae_label' | 'caes_label' | 'hotel_label' | 'transporte' | 'po';
+type FollowUpValidationKey =
+  | 'fundae_val'
+  | 'caes_val'
+  | 'hotel_val'
+  | 'transporte_val'
+  | 'po_val';
+
+function createSortableHeader(label: string) {
+  return ({ column }: HeaderContext<DealSummary, unknown>) => {
+    const sorted = column.getIsSorted();
+    return (
+      <button
+        type="button"
+        className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
+        onClick={column.getToggleSortingHandler()}
+      >
+        {label}
+        {sorted && (
+          <span className="ms-1" aria-hidden="true">
+            {sorted === 'asc' ? '▲' : '▼'}
+          </span>
+        )}
+      </button>
+    );
+  };
+}
+
+function getFollowUpLabel(budget: DealSummary, key: FollowUpLabelKey): string {
+  const value = budget[key];
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.length) {
+      return trimmed;
+    }
+  }
+  return '—';
+}
+
+function getFollowUpValidationValue(
+  budget: DealSummary,
+  key: FollowUpValidationKey,
+): boolean | null {
+  const value = budget[key];
+  return typeof value === 'boolean' ? value : null;
+}
+
+function getFollowUpValidationSortValue(value: boolean | null): number {
+  if (value === true) return 2;
+  if (value === false) return 1;
+  return 0;
+}
+
+function getSessionTimestamp(session: DealSummarySession | null | undefined): number | null {
+  if (!session) {
+    return null;
+  }
+
+  return parseDateValue(session.fecha_inicio_utc ?? session.fecha ?? null);
+}
+
+function getNearestSessionStartDateInfo(budget: DealSummary): {
+  label: string;
+  sortValue: number | null;
+} {
+  const sessions = Array.isArray(budget.sessions) ? budget.sessions : [];
+  const timestamps = sessions
+    .map((session) => getSessionTimestamp(session))
+    .filter((value): value is number => value !== null);
+
+  if (!timestamps.length) {
+    return { label: '—', sortValue: null };
+  }
+
+  const now = Date.now();
+  let nearest = timestamps[0];
+  let smallestDiff = Math.abs(nearest - now);
+
+  for (let index = 1; index < timestamps.length; index += 1) {
+    const current = timestamps[index];
+    const diff = Math.abs(current - now);
+    if (diff < smallestDiff || (diff === smallestDiff && current < nearest)) {
+      nearest = current;
+      smallestDiff = diff;
+    }
+  }
+
+  return { label: formatDateLabel(nearest), sortValue: nearest };
+}
+
+function ValidationCheck({
+  value,
+  label,
+}: {
+  value: boolean | null;
+  label: string;
+}) {
+  if (value === null) {
+    return <span className="text-muted">—</span>;
+  }
+
+  return (
+    <div className="d-flex justify-content-center">
+      <input
+        type="checkbox"
+        className="form-check-input"
+        checked={value}
+        readOnly
+        disabled
+        aria-label={value ? `${label} validado` : `${label} no validado`}
+      />
+    </div>
+  );
 }
 
 function formatDateIso(timestamp: number | null): string {
@@ -430,6 +549,7 @@ export function BudgetTable({
   filtersContainer,
   showFilters = true,
   serverQueryOptions,
+  variant = 'default',
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -686,87 +806,197 @@ export function BudgetTable({
   );
 
   const columns = useMemo<ColumnDef<DealSummary, unknown>[]>(() => {
-  const baseColumns: ColumnDef<DealSummary, unknown>[] = [
-      {
-        id: 'presupuesto',
-        header: ({ column }) => {
-          const sorted = column.getIsSorted();
-          return (
-            <button
-              type="button"
-              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
-              onClick={column.getToggleSortingHandler()}
-            >
-              Presupuesto
-              {sorted && (
-                <span className="ms-1" aria-hidden="true">
-                  {sorted === 'asc' ? '▲' : '▼'}
-                </span>
-              )}
-            </button>
-          );
-        },
-        accessorFn: (budget) => {
-          const budgetId = getBudgetId(budget);
-          if (!budgetId) return '';
-          const numericId = Number(budgetId);
-          return Number.isFinite(numericId) ? numericId : budgetId;
-        },
+    const presupuestoColumn: ColumnDef<DealSummary, unknown> = {
+      id: 'presupuesto',
+      header: createSortableHeader('Presupuesto'),
+      accessorFn: (budget) => {
+        const budgetId = getBudgetId(budget);
+        if (!budgetId) return '';
+        const numericId = Number(budgetId);
+        return Number.isFinite(numericId) ? numericId : budgetId;
+      },
+      cell: ({ row }) => {
+        const budget = row.original;
+        const budgetId = getBudgetId(budget);
+        const presupuestoLabel = budgetId ? `#${budgetId}` : '—';
+        const title = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
+        return (
+          <span className="fw-semibold" title={title}>
+            {presupuestoLabel}
+          </span>
+        );
+      },
+      enableSorting: true,
+      meta: { style: { width: 160 } },
+    };
+
+    const empresaColumn: ColumnDef<DealSummary, unknown> = {
+      id: 'empresa',
+      header: createSortableHeader('Empresa'),
+      accessorFn: (budget) => getOrganizationLabel(budget),
+      cell: ({ row }) => getOrganizationLabel(row.original),
+    };
+
+    if (variant === 'unworked') {
+      const tituloColumn: ColumnDef<DealSummary, unknown> = {
+        id: 'titulo',
+        header: createSortableHeader('Título'),
+        accessorFn: (budget) =>
+          getNearestSessionStartDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER,
         cell: ({ row }) => {
           const budget = row.original;
-          const budgetId = getBudgetId(budget);
-          const presupuestoLabel = budgetId ? `#${budgetId}` : '—';
-          const title = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
-          return (
-            <span className="fw-semibold" title={title}>
-              {presupuestoLabel}
-            </span>
-          );
+          const info = getNearestSessionStartDateInfo(budget);
+          const title = safeTrim(budget.title ?? '') ?? undefined;
+          return <span title={title}>{info.label}</span>;
         },
-        enableSorting: true,
         meta: { style: { width: 160 } },
-      },
-      {
-        id: 'empresa',
-        header: ({ column }) => {
-          const sorted = column.getIsSorted();
-          return (
-            <button
-              type="button"
-              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
-              onClick={column.getToggleSortingHandler()}
-            >
-              Empresa
-              {sorted && (
-                <span className="ms-1" aria-hidden="true">
-                  {sorted === 'asc' ? '▲' : '▼'}
-                </span>
-              )}
-            </button>
-          );
+      };
+
+      const followUpLabelColumns: ColumnDef<DealSummary, unknown>[] = [
+        {
+          id: 'fundae_label',
+          header: createSortableHeader('FUNDAE'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'fundae_label'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'fundae_label'),
         },
-        accessorFn: (budget) => getOrganizationLabel(budget),
-        cell: ({ row }) => getOrganizationLabel(row.original),
-      },
+        {
+          id: 'caes_label',
+          header: createSortableHeader('CAES'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'caes_label'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'caes_label'),
+        },
+        {
+          id: 'hotel_label',
+          header: createSortableHeader('Hotel'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'hotel_label'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'hotel_label'),
+        },
+        {
+          id: 'transporte',
+          header: createSortableHeader('Transporte'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'transporte'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'transporte'),
+        },
+        {
+          id: 'po',
+          header: createSortableHeader('PO'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'po'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'po'),
+        },
+      ];
+
+      const followUpValidationColumns: ColumnDef<DealSummary, unknown>[] = [
+        {
+          id: 'fundae_val',
+          header: createSortableHeader('Validación FUNDAE'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'fundae_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'fundae_val')}
+              label="Validación FUNDAE"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+        {
+          id: 'caes_val',
+          header: createSortableHeader('Validación CAES'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'caes_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'caes_val')}
+              label="Validación CAES"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+        {
+          id: 'hotel_val',
+          header: createSortableHeader('Validación Hotel'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'hotel_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'hotel_val')}
+              label="Validación Hotel"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+        {
+          id: 'transporte_val',
+          header: createSortableHeader('Validación Transporte'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'transporte_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'transporte_val')}
+              label="Validación Transporte"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+        {
+          id: 'po_val',
+          header: createSortableHeader('Validación PO'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'po_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'po_val')}
+              label="Validación PO"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+      ];
+
+      const columnsList: ColumnDef<DealSummary, unknown>[] = [
+        presupuestoColumn,
+        empresaColumn,
+        tituloColumn,
+        ...followUpLabelColumns,
+        ...followUpValidationColumns,
+      ];
+
+      if (showDeleteAction) {
+        columnsList.push({
+          id: 'acciones',
+          header: () => <span className="visually-hidden">Acciones</span>,
+          cell: ({ row }) => {
+            const budget = row.original;
+            const budgetId = getBudgetId(budget);
+            const isDeleting = deletingId === budgetId;
+            return (
+              <div className="text-end">
+                <button
+                  type="button"
+                  className="btn btn-link text-danger p-0 border-0"
+                  onClick={(event) => handleDelete(event, budget)}
+                  disabled={isDeleting}
+                  aria-label="Eliminar presupuesto"
+                >
+                  {isDeleting ? <Spinner animation="border" size="sm" /> : <TrashIcon />}
+                </button>
+              </div>
+            );
+          },
+          enableSorting: false,
+          meta: { style: { width: 56 } },
+        });
+      }
+
+      return columnsList;
+    }
+
+    const baseColumns: ColumnDef<DealSummary, unknown>[] = [
+      presupuestoColumn,
+      empresaColumn,
       {
         id: 'titulo',
-        header: ({ column }) => {
-          const sorted = column.getIsSorted();
-          return (
-            <button
-              type="button"
-              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
-              onClick={column.getToggleSortingHandler()}
-            >
-              Título
-              {sorted && (
-                <span className="ms-1" aria-hidden="true">
-                  {sorted === 'asc' ? '▲' : '▼'}
-                </span>
-              )}
-            </button>
-          );
-        },
+        header: createSortableHeader('Título'),
         accessorFn: (budget) => getTitleLabel(budget),
         cell: ({ row }) => {
           const budget = row.original;
@@ -776,23 +1006,7 @@ export function BudgetTable({
       },
       {
         id: 'formacion',
-        header: ({ column }) => {
-          const sorted = column.getIsSorted();
-          return (
-            <button
-              type="button"
-              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
-              onClick={column.getToggleSortingHandler()}
-            >
-              Formación
-              {sorted && (
-                <span className="ms-1" aria-hidden="true">
-                  {sorted === 'asc' ? '▲' : '▼'}
-                </span>
-              )}
-            </button>
-          );
-        },
+        header: createSortableHeader('Formación'),
         accessorFn: (budget) => getProductNames(budget).join(', '),
         cell: ({ row }) => {
           const budget = row.original;
@@ -803,46 +1017,14 @@ export function BudgetTable({
       },
       {
         id: 'fecha_formacion',
-        header: ({ column }) => {
-          const sorted = column.getIsSorted();
-          return (
-            <button
-              type="button"
-              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
-              onClick={column.getToggleSortingHandler()}
-            >
-              Fecha formación
-              {sorted && (
-                <span className="ms-1" aria-hidden="true">
-                  {sorted === 'asc' ? '▲' : '▼'}
-                </span>
-              )}
-            </button>
-          );
-        },
+        header: createSortableHeader('Fecha formación'),
         accessorFn: (budget) => getTrainingDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER,
         cell: ({ row }) => getTrainingDateInfo(row.original).label,
         meta: { style: { width: 160 } },
       },
       {
         id: 'negocio',
-        header: ({ column }) => {
-          const sorted = column.getIsSorted();
-          return (
-            <button
-              type="button"
-              className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
-              onClick={column.getToggleSortingHandler()}
-            >
-              Negocio
-              {sorted && (
-                <span className="ms-1" aria-hidden="true">
-                  {sorted === 'asc' ? '▲' : '▼'}
-                </span>
-              )}
-            </button>
-          );
-        },
+        header: createSortableHeader('Negocio'),
         accessorFn: (budget) => getNegocioLabel(budget),
         cell: ({ row }) => getNegocioLabel(row.original),
       },
@@ -876,15 +1058,15 @@ export function BudgetTable({
     }
 
     return baseColumns;
-  }, [deletingId, handleDelete, showDeleteAction]);
+  }, [deletingId, handleDelete, showDeleteAction, variant]);
 
   const table = useReactTable<DealSummary>({
-  data: tableBudgets,
-  columns,
-  state: { sorting: tanstackSortingState },
-  onSortingChange: handleSortingChange,
-  getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
-});
+    data: tableBudgets,
+    columns,
+    state: { sorting: tanstackSortingState },
+    onSortingChange: handleSortingChange,
+    getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
+  });
 
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
   const rowModel = table.getRowModel();

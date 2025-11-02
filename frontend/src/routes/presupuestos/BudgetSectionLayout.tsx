@@ -5,6 +5,7 @@ import {
   BudgetTable,
   type BudgetServerQueryOptions,
   type BudgetTableLabels,
+  type BudgetTableVariant,
 } from '../../features/presupuestos/BudgetTable';
 
 export type BudgetSectionLayoutProps = {
@@ -24,6 +25,7 @@ export type BudgetSectionLayoutProps = {
   enableFallback?: boolean;
   showFilters?: boolean;
   serverQueryOptions?: BudgetServerQueryOptions;
+  tableVariant?: BudgetTableVariant;
 };
 
 export function BudgetSectionLayout({
@@ -43,6 +45,7 @@ export function BudgetSectionLayout({
   enableFallback = true,
   showFilters = true,
   serverQueryOptions,
+  tableVariant = 'default',
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
 
@@ -79,6 +82,7 @@ export function BudgetSectionLayout({
         filtersContainer={filtersContainer}
         showFilters={showFilters}
         serverQueryOptions={serverQueryOptions}
+        variant={tableVariant}
       />
     </div>
   );

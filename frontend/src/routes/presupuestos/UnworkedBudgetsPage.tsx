@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 import { BudgetSectionLayout, type BudgetSectionLayoutProps } from './BudgetSectionLayout';
 
-export type UnworkedBudgetsPageProps = Omit<BudgetSectionLayoutProps, 'title' | 'subtitle' | 'enableFallback'>;
+export type UnworkedBudgetsPageProps = Omit<
+  BudgetSectionLayoutProps,
+  'title' | 'subtitle' | 'enableFallback' | 'tableVariant'
+>;
 
 export function UnworkedBudgetsPage({ tableLabels, ...rest }: UnworkedBudgetsPageProps) {
   const mergedLabels = useMemo(
@@ -21,6 +24,7 @@ export function UnworkedBudgetsPage({ tableLabels, ...rest }: UnworkedBudgetsPag
       subtitle="Presupuestos con necesidades externas marcadas como “Sí” y pendientes de gestionar"
       enableFallback={false}
       tableLabels={mergedLabels}
+      tableVariant="unworked"
     />
   );
 }
