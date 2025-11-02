@@ -4,15 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 export type SortingState = { id: string; desc?: boolean }[];
 
 export type HeaderContext<TData, TValue> = {
+  header: Header<TData>;
   column: ColumnInstance<TData, TValue>;
   table: Table<TData>;
 };
 
 export type CellContext<TData, TValue> = {
+  cell: Cell<TData>;
   row: Row<TData>;
   column: ColumnInstance<TData, TValue>;
   table: Table<TData>;
   getValue: () => TValue;
+  renderValue: () => ReactNode;
 };
 
 export type ColumnDef<TData, TValue> = {
@@ -51,6 +54,7 @@ export type Cell<TData> = {
   row: Row<TData>;
   getValue: () => unknown;
   renderValue: () => ReactNode;
+  getContext: () => CellContext<TData, unknown>;
 };
 
 export type Row<TData> = {
@@ -67,6 +71,7 @@ export type Header<TData> = {
   isPlaceholder: boolean;
   columnDef: ColumnDef<TData, unknown>;
   renderHeader: () => ReactNode;
+  getContext: () => HeaderContext<TData, unknown>;
 };
 
 export type HeaderGroup<TData> = {
@@ -200,20 +205,30 @@ function createRow<TData>(
       return column ? column.accessor(raw.original) : undefined;
     },
     getVisibleCells: () =>
-      columns.map((column) => ({
-        id: `${raw.id}_${column.id}`,
-        column,
-        row,
-        getValue: () => column.accessor(raw.original),
-        renderValue: () => {
-          const cell = column.columnDef.cell;
-          const getter = () => column.accessor(raw.original);
-          if (typeof cell === 'function') {
-            return cell({ row, column, table, getValue: getter });
-          }
-          return getter() as ReactNode;
-        },
-      })),
+      columns.map((column) => {
+        const cell: Cell<TData> = {
+          id: `${raw.id}_${column.id}`,
+          column,
+          row,
+          getValue: () => column.accessor(raw.original),
+          renderValue: () => {
+            const cellRenderer = column.columnDef.cell;
+            if (typeof cellRenderer === 'function') {
+              return cellRenderer(cell.getContext());
+            }
+            return cell.getValue() as ReactNode;
+          },
+          getContext: () => ({
+            cell,
+            column,
+            row,
+            table,
+            getValue: cell.getValue,
+            renderValue: cell.renderValue,
+          }),
+        };
+        return cell;
+      }),
   };
   return row;
 }
@@ -225,21 +240,25 @@ function createHeaderGroups<TData>(
   return [
     {
       id: 'header',
-      headers: columns.map((column) => ({
-        id: column.id,
-        column,
-        colSpan: 1,
-        isPlaceholder: false,
-        columnDef: column.columnDef,
-        renderHeader: () => {
-          const header = column.columnDef.header;
-          if (typeof header === 'function') {
-            return header({ column, table });
-          }
-          if (header != null) return header;
-          return column.id;
-        },
-      })),
+      headers: columns.map((column) => {
+        const header: Header<TData> = {
+          id: column.id,
+          column,
+          colSpan: 1,
+          isPlaceholder: false,
+          columnDef: column.columnDef,
+          renderHeader: () => {
+            const headerRenderer = column.columnDef.header;
+            if (typeof headerRenderer === 'function') {
+              return headerRenderer(header.getContext());
+            }
+            if (headerRenderer != null) return headerRenderer;
+            return column.id;
+          },
+          getContext: () => ({ header, column, table }),
+        };
+        return header;
+      }),
     },
   ];
 }
