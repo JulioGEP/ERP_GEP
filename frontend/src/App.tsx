@@ -21,6 +21,7 @@ function preloadLoginPage() {
 
 const LoginPage = lazy(() => preloadLoginPage());
 const PasswordResetPage = lazy(() => import('./pages/auth/PasswordResetPage'));
+const PasswordResetRequestPage = lazy(() => import('./pages/auth/PasswordResetRequestPage'));
 // El módulo no exporta por defecto; mapea el named export a default para React.lazy
 const PublicSessionStudentsPage = lazy(() =>
   import('./public/PublicSessionStudentsPage').then((m) => ({
@@ -36,6 +37,7 @@ export default function App() {
           path="/public/sesiones/:sessionId/alumnos"
           element={<PublicSessionStudentsPage />}
         />
+        <Route path="/auth/password/forgot" element={<PasswordResetRequestPage />} />
         <Route path="/auth/password/reset" element={<PasswordResetPage />} />
         <Route path="/login" element={<LoginRoute />} />
         <Route path="/*" element={<ProtectedApp />} />

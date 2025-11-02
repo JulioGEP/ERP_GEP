@@ -8,6 +8,7 @@ import {
   extractSessionIdFromRequest,
   findActiveSession,
 } from './_shared/auth';
+import { sendPasswordResetEmail } from './_shared/mailer';
 
 export const handler = createHttpHandler<any>(async (request) => {
   if (request.method !== 'POST') {
@@ -49,23 +50,44 @@ export const handler = createHttpHandler<any>(async (request) => {
         reset_token: token,
         reset_token_expires: expiresAt,
         reset_requested_at: new Date(),
-        
+
       },
     });
 
-    // Stub "envío de email"
-    console.info('[auth] Password reset requested', {
-      userId: user.id,
-      email: user.email,
-      token, // En producción no logarías el token; aquí está a modo de stub.
-      expiresAt: expiresAt.toISOString(),
-    });
+    let resetUrl: string | null = null;
+
+    try {
+      resetUrl = buildResetUrl(request, token);
+    } catch (error) {
+      console.error('[auth] Failed to build password reset URL', error);
+    }
+
+    if (resetUrl) {
+      try {
+        const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || null;
+        await sendPasswordResetEmail({
+          toEmail: user.email,
+          toName: fullName,
+          resetUrl,
+          expiresAt,
+        });
+      } catch (error) {
+        console.error('[auth] Failed to send password reset email', {
+          userId: user.id,
+          email: user.email,
+          error,
+        });
+      }
+    } else {
+      console.warn('[auth] Password reset URL could not be determined for email delivery', {
+        userId: user.id,
+        email: user.email,
+      });
+    }
 
     if (!canExposeLink) {
       return genericOk();
     }
-
-    const resetUrl = buildResetUrl(request, token);
 
     if (!resetUrl) {
       return successResponse({
