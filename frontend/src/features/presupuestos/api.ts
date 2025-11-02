@@ -1103,7 +1103,7 @@ export async function patchDealEditable(
   if (!hasDealPatch && !sanitizedProductPatch.length) return;
 
   const body: Record<string, unknown> = {};
-  if (hasDealPatch && sanitizedDealPatch) body.deal = sanitizedDealPatch;
+  if (hasDealPatch && sanitizedDealPatch) body.deals = sanitizedDealPatch;
   if (sanitizedProductPatch.length) body.products = sanitizedProductPatch;
 
   await request(`/deals/${encodeURIComponent(String(dealId))}`, {
