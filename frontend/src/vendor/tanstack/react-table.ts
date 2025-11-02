@@ -25,6 +25,16 @@ export type ColumnDef<TData, TValue> = {
   meta?: Record<string, unknown>;
 };
 
+export function flexRender<TContext>(
+  component: ReactNode | ((context: TContext) => ReactNode),
+  context: TContext,
+): ReactNode {
+  if (typeof component === 'function') {
+    return (component as (context: TContext) => ReactNode)(context);
+  }
+  return component ?? null;
+}
+
 export type ColumnInstance<TData, TValue> = {
   id: string;
   columnDef: ColumnDef<TData, TValue>;
@@ -89,7 +99,17 @@ export type UseReactTableOptions<TData> = {
   state?: Partial<TableState>;
   onSortingChange?: (sorting: SortingState) => void;
   getRowId?: (row: TData, index: number) => string;
+  getCoreRowModel?: unknown;
+  getSortedRowModel?: unknown;
 };
+
+export function getCoreRowModel<TData>() {
+  return (table: Table<TData>): RowModel<TData> => table.getRowModel();
+}
+
+export function getSortedRowModel<TData>() {
+  return (table: Table<TData>): RowModel<TData> => table.getRowModel();
+}
 
 function getByPath(source: unknown, path: string): unknown {
   if (!path.length) return undefined;
