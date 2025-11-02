@@ -154,16 +154,19 @@ function isExcludedSinPlanPipeline(budget: DealSummary): boolean {
 }
 
 function hasPendingFollowUpFields(budget: DealSummary): boolean {
-  const followUpEntries: Array<[string | null | undefined, boolean | undefined]> = [
+  const followUpEntries: Array<[string | null | undefined, unknown]> = [
     [budget.fundae_label, budget.fundae_val],
     [budget.caes_label, budget.caes_val],
     [budget.hotel_label, budget.hotel_val],
     [budget.transporte, budget.transporte_val],
   ];
 
-  const hasAffirmativePending = followUpEntries.some(
-    ([label, flag]) => isAffirmativeLabel(label) && flag !== true,
-  );
+  const hasAffirmativePending = followUpEntries.some(([label, flag]) => {
+    if (!isAffirmativeLabel(label)) {
+      return false;
+    }
+    return normalizeFollowUpFlag(flag) !== true;
+  });
 
   if (hasAffirmativePending) {
     return true;
@@ -174,7 +177,7 @@ function hasPendingFollowUpFields(budget: DealSummary): boolean {
     return false;
   }
 
-  return budget.po_val !== true;
+  return normalizeFollowUpFlag(budget.po_val) !== true;
 }
 
 type BudgetModalProps = ComponentProps<typeof BudgetDetailModalEmpresas>;
@@ -187,6 +190,54 @@ function normalizePipelineKey(value: unknown): string {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
+}
+
+function normalizeFollowUpFlag(value: unknown): boolean | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    if (value === 1) {
+      return true;
+    }
+
+    if (value === 0) {
+      return false;
+    }
+
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .trim()
+      .toLowerCase();
+
+    if (!normalized.length) {
+      return null;
+    }
+
+    if (normalized === 'true' || normalized === '1' || normalized === 'si') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  return null;
 }
 
 function normalizeOptionalString(value: unknown): string | null {
