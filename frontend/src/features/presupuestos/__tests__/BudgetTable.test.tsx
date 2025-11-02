@@ -1,24 +1,9 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BudgetTable } from '../BudgetTable';
 import { DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY } from '../queryKeys';
 import type { DealSummary } from '../../../types/deal';
-
-vi.mock('@tanstack/react-virtual', () => ({
-  useVirtualizer: ({ count }: { count: number }) => ({
-    getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({
-        index,
-        key: index,
-        size: 64,
-        start: index * 64,
-        end: (index + 1) * 64,
-      })),
-    getTotalSize: () => count * 64,
-  }),
-}));
 
 function createQueryClient() {
   return new QueryClient({
@@ -68,19 +53,16 @@ describe('BudgetTable fallback behaviour', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
     render(
-      <MemoryRouter>
-        <QueryClientProvider client={client}>
-          <BudgetTable
-            budgets={[]}
-            isLoading={false}
-            isFetching={false}
-            error={new Error('Fallo de red')}
-            onRetry={vi.fn()}
-            onSelect={vi.fn()}
-            showFilters={false}
-          />
-        </QueryClientProvider>
-      </MemoryRouter>,
+      <QueryClientProvider client={client}>
+        <BudgetTable
+          budgets={[]}
+          isLoading={false}
+          isFetching={false}
+          error={new Error('Fallo de red')}
+          onRetry={vi.fn()}
+          onSelect={vi.fn()}
+        />
+      </QueryClientProvider>,
     );
 
     expect(
