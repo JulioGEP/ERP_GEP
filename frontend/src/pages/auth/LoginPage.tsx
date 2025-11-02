@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Container, Form, InputGroup, Spinner } from 'react-bootstrap';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { ApiError, isApiError } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
@@ -162,7 +162,8 @@ export default function LoginPage() {
 
             <div className="mt-3 text-center">
               <small className="text-muted">
-                ¿Has olvidado la contraseña? Contacta con un administrador para restablecerla.
+                ¿Has olvidado la contraseña?{' '}
+                <Link to="/auth/password/forgot">Recupérala aquí</Link>.
               </small>
             </div>
           </Card.Body>

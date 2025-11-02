@@ -53,9 +53,10 @@ export const handler = createHttpHandler<any>(async (request) => {
           password_hash: hash,
           password_algo: 'bcrypt',
           password_updated_at: now,
-          
+
           reset_token: null,
           reset_token_expires: null,
+          reset_used_at: now,
         },
       }),
       // Revocamos todas las sesiones activas del usuario
