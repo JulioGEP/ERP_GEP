@@ -18,6 +18,48 @@ import {
   normalizeDealSummary,
 } from './normalizers';
 
+const ALLOWED_PIPELINE_KEYS = new Set(['formacion empresa', 'gep services']);
+
+function normalizePipelineKey(value: string | null | undefined): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (!trimmed.length) {
+    return '';
+  }
+  let normalized = trimmed;
+  try {
+    normalized = trimmed.normalize('NFD');
+  } catch {
+    normalized = trimmed;
+  }
+  return normalized.replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function isDraftSession(session: { estado?: string | null } | null | undefined): boolean {
+  if (!session || typeof session !== 'object') {
+    return false;
+  }
+  const estado = typeof session.estado === 'string' ? session.estado.trim().toUpperCase() : '';
+  return estado === 'BORRADOR';
+}
+
+function matchesAllowedPipeline(deal: DealSummary): boolean {
+  const pipelineLabelKey = normalizePipelineKey(deal.pipeline_label ?? null);
+  if (pipelineLabelKey && ALLOWED_PIPELINE_KEYS.has(pipelineLabelKey)) {
+    return true;
+  }
+
+  const pipelineIdKey = normalizePipelineKey(deal.pipeline_id ?? null);
+  return pipelineIdKey ? ALLOWED_PIPELINE_KEYS.has(pipelineIdKey) : false;
+}
+
+function hasDraftSessions(deal: DealSummary): boolean {
+  const sessions = Array.isArray(deal.sessions) ? deal.sessions : [];
+  return sessions.some((session) => isDraftSession(session));
+}
+
 export type ImportDealResult = { warnings: string[]; deal: DealDetail };
 
 export type DealEditablePatch = {
@@ -119,7 +161,8 @@ export async function fetchDeals(options?: DealsListOptions): Promise<DealSummar
 export async function fetchDealsWithoutSessions(
   options?: DealsWithoutSessionsOptions,
 ): Promise<DealSummary[]> {
-  return fetchDealsWithParams(options, { noSessions: 'true' });
+  const deals = await fetchDealsWithParams(options, { noSessions: 'true' });
+  return deals.filter((deal) => matchesAllowedPipeline(deal) && hasDraftSessions(deal));
 }
 
 export async function fetchDealsWithPendingCertificates(): Promise<DealSummary[]> {

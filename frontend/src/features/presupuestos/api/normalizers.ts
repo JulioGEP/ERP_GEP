@@ -130,6 +130,7 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
       id: null,
       fecha_inicio_utc: date,
       fecha: date,
+      estado: null,
     };
   }
 
@@ -137,6 +138,7 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
   const id = toStringValue(session.id);
   const startDate = toStringValue(session.fecha_inicio_utc);
   const fallbackDate = toStringValue((session as any).fecha);
+  const estado = toSessionEstadoValue((session as any).estado);
 
   if (!id && !startDate && !fallbackDate) {
     return null;
@@ -146,6 +148,7 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
     id: id ?? null,
     fecha_inicio_utc: startDate ?? fallbackDate ?? null,
     fecha: fallbackDate ?? (startDate ?? null),
+    estado,
   };
 }
 
