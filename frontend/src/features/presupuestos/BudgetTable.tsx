@@ -4,8 +4,6 @@ import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   useReactTable,
-  flexRender,
-  getCoreRowModel,
   type ColumnDef,
   type HeaderContext,
   type SortingState,
@@ -237,46 +235,6 @@ type FollowUpValidationKey =
   | 'transporte_val'
   | 'po_val';
 
-type FollowUpColumnConfig = {
-  labelKey: FollowUpLabelKey;
-  headerLabel: string;
-  validationKey: FollowUpValidationKey;
-  validationLabel: string;
-};
-
-const FOLLOW_UP_COLUMNS_CONFIG: FollowUpColumnConfig[] = [
-  {
-    labelKey: 'fundae_label',
-    headerLabel: 'FUNDAE',
-    validationKey: 'fundae_val',
-    validationLabel: 'Validación FUNDAE',
-  },
-  {
-    labelKey: 'caes_label',
-    headerLabel: 'CAES',
-    validationKey: 'caes_val',
-    validationLabel: 'Validación CAES',
-  },
-  {
-    labelKey: 'hotel_label',
-    headerLabel: 'Hotel',
-    validationKey: 'hotel_val',
-    validationLabel: 'Validación Hotel',
-  },
-  {
-    labelKey: 'transporte',
-    headerLabel: 'Transporte',
-    validationKey: 'transporte_val',
-    validationLabel: 'Validación Transporte',
-  },
-  {
-    labelKey: 'po',
-    headerLabel: 'PO',
-    validationKey: 'po_val',
-    validationLabel: 'Validación PO',
-  },
-];
-
 function createSortableHeader(label: string) {
   return ({ column }: HeaderContext<DealSummary, unknown>) => {
     const sorted = column.getIsSorted();
@@ -287,28 +245,6 @@ function createSortableHeader(label: string) {
         onClick={column.getToggleSortingHandler()}
       >
         {label}
-        {sorted && (
-          <span className="ms-1" aria-hidden="true">
-            {sorted === 'asc' ? '▲' : '▼'}
-          </span>
-        )}
-      </button>
-    );
-  };
-}
-
-function createHiddenSortableHeader(label: string) {
-  return ({ column }: HeaderContext<DealSummary, unknown>) => {
-    const sorted = column.getIsSorted();
-    return (
-      <button
-        type="button"
-        className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
-        onClick={column.getToggleSortingHandler()}
-        aria-label={label}
-        title={label}
-      >
-        <span className="visually-hidden">{label}</span>
         {sorted && (
           <span className="ms-1" aria-hidden="true">
             {sorted === 'asc' ? '▲' : '▼'}
@@ -1013,9 +949,9 @@ export function BudgetTable({
     };
 
     if (variant === 'unworked') {
-      const fechaFormacionColumn: ColumnDef<DealSummary, unknown> = {
-        id: 'fecha_formacion',
-        header: createSortableHeader('Fecha formación'),
+      const tituloColumn: ColumnDef<DealSummary, unknown> = {
+        id: 'titulo',
+        header: createSortableHeader('Título'),
         accessorFn: (budget) =>
           getNearestSessionStartDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER,
         cell: ({ row }) => {
@@ -1027,35 +963,113 @@ export function BudgetTable({
         meta: { style: { width: 160 } },
       };
 
-      const followUpColumns: ColumnDef<DealSummary, unknown>[] = FOLLOW_UP_COLUMNS_CONFIG.flatMap(
-        ({ headerLabel, labelKey, validationKey, validationLabel }) => [
-          {
-            id: labelKey,
-            header: createSortableHeader(headerLabel),
-            accessorFn: (budget) => getFollowUpLabel(budget, labelKey),
-            cell: ({ row }) => getFollowUpLabel(row.original, labelKey),
-          },
-          {
-            id: validationKey,
-            header: createHiddenSortableHeader(validationLabel),
-            accessorFn: (budget) =>
-              getFollowUpValidationSortValue(getFollowUpValidationValue(budget, validationKey)),
-            cell: ({ row }) => (
-              <ValidationCheck
-                value={getFollowUpValidationValue(row.original, validationKey)}
-                label={validationLabel}
-              />
-            ),
-            meta: { style: { width: 160 } },
-          },
-        ],
-      );
+      const followUpLabelColumns: ColumnDef<DealSummary, unknown>[] = [
+        {
+          id: 'fundae_label',
+          header: createSortableHeader('FUNDAE'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'fundae_label'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'fundae_label'),
+        },
+        {
+          id: 'caes_label',
+          header: createSortableHeader('CAES'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'caes_label'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'caes_label'),
+        },
+        {
+          id: 'hotel_label',
+          header: createSortableHeader('Hotel'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'hotel_label'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'hotel_label'),
+        },
+        {
+          id: 'transporte',
+          header: createSortableHeader('Transporte'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'transporte'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'transporte'),
+        },
+        {
+          id: 'po',
+          header: createSortableHeader('PO'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'po'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'po'),
+        },
+      ];
+
+      const followUpValidationColumns: ColumnDef<DealSummary, unknown>[] = [
+        {
+          id: 'fundae_val',
+          header: createSortableHeader('Validación FUNDAE'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'fundae_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'fundae_val')}
+              label="Validación FUNDAE"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+        {
+          id: 'caes_val',
+          header: createSortableHeader('Validación CAES'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'caes_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'caes_val')}
+              label="Validación CAES"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+        {
+          id: 'hotel_val',
+          header: createSortableHeader('Validación Hotel'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'hotel_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'hotel_val')}
+              label="Validación Hotel"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+        {
+          id: 'transporte_val',
+          header: createSortableHeader('Validación Transporte'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'transporte_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'transporte_val')}
+              label="Validación Transporte"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+        {
+          id: 'po_val',
+          header: createSortableHeader('Validación PO'),
+          accessorFn: (budget) =>
+            getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'po_val')),
+          cell: ({ row }) => (
+            <ValidationCheck
+              value={getFollowUpValidationValue(row.original, 'po_val')}
+              label="Validación PO"
+            />
+          ),
+          meta: { style: { width: 160 } },
+        },
+      ];
 
       const columnsList: ColumnDef<DealSummary, unknown>[] = [
         presupuestoColumn,
         empresaColumn,
-        fechaFormacionColumn,
-        ...followUpColumns,
+        tituloColumn,
+        ...followUpLabelColumns,
+        ...followUpValidationColumns,
       ];
 
       if (showDeleteAction) {
@@ -1162,7 +1176,6 @@ export function BudgetTable({
     columns,
     state: { sorting: tanstackSortingState },
     onSortingChange: handleSortingChange,
-    getCoreRowModel: getCoreRowModel(),
     getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
   });
 
@@ -1298,7 +1311,7 @@ export function BudgetTable({
                       scope="col"
                     >
                       {!header.isPlaceholder &&
-                        flexRender(header.column.columnDef.header, header.getContext())}
+                      header.renderHeader()}
                     </th>
                   );
                 })}
@@ -1336,7 +1349,7 @@ export function BudgetTable({
                             style={style}
                             className={alignRight ? 'text-end' : undefined}
                           >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            {cell.renderValue()}
                           </td>
                         );
                       })}
