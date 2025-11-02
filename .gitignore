@@ -34,6 +34,8 @@ backend/functions/**
 # ...y ahora re-incluimos SOLO lo necesario para construir/empacar
 !backend/functions/**/*.ts
 !backend/functions/**/*.d.ts
+!backend/functions/__tests__/
+!backend/functions/__tests__/**
 !backend/functions/package.json
 !backend/functions/tsconfig.json
 !backend/functions/_shared/**
