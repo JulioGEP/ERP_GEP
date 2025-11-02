@@ -17,6 +17,7 @@ import {
   normalizeDealNote,
   normalizeDealSummary,
 } from './normalizers';
+import { SESSION_ESTADOS, type SessionEstado } from '../../../api/sessions.types';
 
 export type ImportDealResult = { warnings: string[]; deal: DealDetail };
 
@@ -82,7 +83,9 @@ function buildDealsQuery(
       parts.forEach((part) => {
         const normalizedValue = part.trim();
         if (!normalizedValue.length) return;
-        searchParams.append(`filter[${key}]`, normalizedValue);
+        const serverValue = normalizeFilterValueForRequest(key, normalizedValue);
+        if (!serverValue) return;
+        searchParams.append(`filter[${key}]`, serverValue);
       });
     });
   }
@@ -99,6 +102,24 @@ function buildDealsQuery(
 
   const query = searchParams.toString();
   return query;
+}
+
+function normalizeFilterValueForRequest(key: string, value: string): string | null {
+  if (key === 'session_state') {
+    return toSessionEstadoRequestValue(value);
+  }
+  return value.trim().length ? value : null;
+}
+
+function toSessionEstadoRequestValue(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed.length) return null;
+  const upper = trimmed.toUpperCase();
+  if (!SESSION_ESTADOS.includes(upper as SessionEstado)) {
+    return trimmed;
+  }
+  const lower = upper.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 async function fetchDealsWithParams(
