@@ -44,7 +44,7 @@ import type { TemplatesCertificadosPageProps } from '../pages/recursos/Templates
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
-import type { TrainerPageProps } from '../pages/recursos/TrainerPage';
+import type { TrainerPageProps } from '../pages/usuarios/TrainerPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
@@ -88,7 +88,6 @@ const NAVIGATION_ITEMS: NavItem[] = [
     label: 'Recursos',
     children: [
       { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores_bomberos' },
-      { key: 'Recursos/Trainer', label: 'Área Formador', path: '/recursos/trainer' },
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
@@ -126,6 +125,10 @@ const NAVIGATION_ITEMS: NavItem[] = [
     key: 'Usuarios',
     label: 'Usuarios',
     path: '/usuarios',
+    children: [
+      { key: 'Usuarios/Principal', label: 'Gestión de usuarios', path: '/usuarios' },
+      { key: 'Usuarios/Trainer', label: 'Área Formador', path: '/usuarios/trainer' },
+    ],
   },
 ];
 
