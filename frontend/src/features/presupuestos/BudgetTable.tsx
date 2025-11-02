@@ -235,7 +235,7 @@ type FollowUpValidationKey =
   | 'transporte_val'
   | 'po_val';
 
-function createSortableHeader(label: string) {
+function createSortableHeader(label: string, options?: { ariaLabel?: string; title?: string }) {
   return ({ column }: HeaderContext<DealSummary, unknown>) => {
     const sorted = column.getIsSorted();
     return (
@@ -243,6 +243,8 @@ function createSortableHeader(label: string) {
         type="button"
         className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
         onClick={column.getToggleSortingHandler()}
+        aria-label={options?.ariaLabel}
+        title={options?.title}
       >
         {label}
         {sorted && (
@@ -949,9 +951,9 @@ export function BudgetTable({
     };
 
     if (variant === 'unworked') {
-      const tituloColumn: ColumnDef<DealSummary, unknown> = {
-        id: 'titulo',
-        header: createSortableHeader('Título'),
+      const fechaFormacionColumn: ColumnDef<DealSummary, unknown> = {
+        id: 'fecha_formacion',
+        header: createSortableHeader('Fecha formación'),
         accessorFn: (budget) =>
           getNearestSessionStartDateInfo(budget).sortValue ?? Number.MAX_SAFE_INTEGER,
         cell: ({ row }) => {
@@ -963,7 +965,7 @@ export function BudgetTable({
         meta: { style: { width: 160 } },
       };
 
-      const followUpLabelColumns: ColumnDef<DealSummary, unknown>[] = [
+      const followUpColumns: ColumnDef<DealSummary, unknown>[] = [
         {
           id: 'fundae_label',
           header: createSortableHeader('FUNDAE'),
@@ -971,35 +973,11 @@ export function BudgetTable({
           cell: ({ row }) => getFollowUpLabel(row.original, 'fundae_label'),
         },
         {
-          id: 'caes_label',
-          header: createSortableHeader('CAES'),
-          accessorFn: (budget) => getFollowUpLabel(budget, 'caes_label'),
-          cell: ({ row }) => getFollowUpLabel(row.original, 'caes_label'),
-        },
-        {
-          id: 'hotel_label',
-          header: createSortableHeader('Hotel'),
-          accessorFn: (budget) => getFollowUpLabel(budget, 'hotel_label'),
-          cell: ({ row }) => getFollowUpLabel(row.original, 'hotel_label'),
-        },
-        {
-          id: 'transporte',
-          header: createSortableHeader('Transporte'),
-          accessorFn: (budget) => getFollowUpLabel(budget, 'transporte'),
-          cell: ({ row }) => getFollowUpLabel(row.original, 'transporte'),
-        },
-        {
-          id: 'po',
-          header: createSortableHeader('PO'),
-          accessorFn: (budget) => getFollowUpLabel(budget, 'po'),
-          cell: ({ row }) => getFollowUpLabel(row.original, 'po'),
-        },
-      ];
-
-      const followUpValidationColumns: ColumnDef<DealSummary, unknown>[] = [
-        {
           id: 'fundae_val',
-          header: createSortableHeader('Validación FUNDAE'),
+          header: createSortableHeader('Val', {
+            ariaLabel: 'Validación FUNDAE',
+            title: 'Validación FUNDAE',
+          }),
           accessorFn: (budget) =>
             getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'fundae_val')),
           cell: ({ row }) => (
@@ -1008,11 +986,20 @@ export function BudgetTable({
               label="Validación FUNDAE"
             />
           ),
-          meta: { style: { width: 160 } },
+          meta: { style: { width: 96 } },
+        },
+        {
+          id: 'caes_label',
+          header: createSortableHeader('CAES'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'caes_label'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'caes_label'),
         },
         {
           id: 'caes_val',
-          header: createSortableHeader('Validación CAES'),
+          header: createSortableHeader('Val', {
+            ariaLabel: 'Validación CAES',
+            title: 'Validación CAES',
+          }),
           accessorFn: (budget) =>
             getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'caes_val')),
           cell: ({ row }) => (
@@ -1021,11 +1008,20 @@ export function BudgetTable({
               label="Validación CAES"
             />
           ),
-          meta: { style: { width: 160 } },
+          meta: { style: { width: 96 } },
+        },
+        {
+          id: 'hotel_label',
+          header: createSortableHeader('Hotel'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'hotel_label'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'hotel_label'),
         },
         {
           id: 'hotel_val',
-          header: createSortableHeader('Validación Hotel'),
+          header: createSortableHeader('Val', {
+            ariaLabel: 'Validación Hotel',
+            title: 'Validación Hotel',
+          }),
           accessorFn: (budget) =>
             getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'hotel_val')),
           cell: ({ row }) => (
@@ -1034,11 +1030,20 @@ export function BudgetTable({
               label="Validación Hotel"
             />
           ),
-          meta: { style: { width: 160 } },
+          meta: { style: { width: 96 } },
+        },
+        {
+          id: 'transporte',
+          header: createSortableHeader('Transporte'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'transporte'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'transporte'),
         },
         {
           id: 'transporte_val',
-          header: createSortableHeader('Validación Transporte'),
+          header: createSortableHeader('Val', {
+            ariaLabel: 'Validación Transporte',
+            title: 'Validación Transporte',
+          }),
           accessorFn: (budget) =>
             getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'transporte_val')),
           cell: ({ row }) => (
@@ -1047,11 +1052,20 @@ export function BudgetTable({
               label="Validación Transporte"
             />
           ),
-          meta: { style: { width: 160 } },
+          meta: { style: { width: 96 } },
+        },
+        {
+          id: 'po',
+          header: createSortableHeader('PO'),
+          accessorFn: (budget) => getFollowUpLabel(budget, 'po'),
+          cell: ({ row }) => getFollowUpLabel(row.original, 'po'),
         },
         {
           id: 'po_val',
-          header: createSortableHeader('Validación PO'),
+          header: createSortableHeader('Val', {
+            ariaLabel: 'Validación PO',
+            title: 'Validación PO',
+          }),
           accessorFn: (budget) =>
             getFollowUpValidationSortValue(getFollowUpValidationValue(budget, 'po_val')),
           cell: ({ row }) => (
@@ -1060,16 +1074,15 @@ export function BudgetTable({
               label="Validación PO"
             />
           ),
-          meta: { style: { width: 160 } },
+          meta: { style: { width: 96 } },
         },
       ];
 
       const columnsList: ColumnDef<DealSummary, unknown>[] = [
         presupuestoColumn,
         empresaColumn,
-        tituloColumn,
-        ...followUpLabelColumns,
-        ...followUpValidationColumns,
+        fechaFormacionColumn,
+        ...followUpColumns,
       ];
 
       if (showDeleteAction) {
