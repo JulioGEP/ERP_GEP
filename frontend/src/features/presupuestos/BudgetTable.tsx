@@ -76,6 +76,15 @@ const DEFAULT_LABELS: BudgetTableLabels = {
   fallbackErrorRetry: 'Reintentar',
 };
 
+const FOLLOW_UP_COLUMN_STYLE: React.CSSProperties = {
+  backgroundColor: 'rgba(220, 53, 69, 0.08)',
+};
+
+const FOLLOW_UP_VALIDATION_COLUMN_STYLE: React.CSSProperties = {
+  ...FOLLOW_UP_COLUMN_STYLE,
+  width: 96,
+};
+
 const SESSION_STATE_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
   PLANIFICADA: 'Planificada',
@@ -1006,6 +1015,7 @@ export function BudgetTable({
           header: createSortableHeader('FUNDAE'),
           accessorFn: (budget) => getFollowUpLabel(budget, 'fundae_label'),
           cell: ({ row }) => getFollowUpLabel(row.original, 'fundae_label'),
+          meta: { style: FOLLOW_UP_COLUMN_STYLE },
         },
         {
           id: 'fundae_val',
@@ -1021,13 +1031,14 @@ export function BudgetTable({
               label="Validación FUNDAE"
             />
           ),
-          meta: { style: { width: 96 } },
+          meta: { style: FOLLOW_UP_VALIDATION_COLUMN_STYLE },
         },
         {
           id: 'caes_label',
           header: createSortableHeader('CAES'),
           accessorFn: (budget) => getFollowUpLabel(budget, 'caes_label'),
           cell: ({ row }) => getFollowUpLabel(row.original, 'caes_label'),
+          meta: { style: FOLLOW_UP_COLUMN_STYLE },
         },
         {
           id: 'caes_val',
@@ -1043,13 +1054,14 @@ export function BudgetTable({
               label="Validación CAES"
             />
           ),
-          meta: { style: { width: 96 } },
+          meta: { style: FOLLOW_UP_VALIDATION_COLUMN_STYLE },
         },
         {
           id: 'hotel_label',
           header: createSortableHeader('Hotel'),
           accessorFn: (budget) => getFollowUpLabel(budget, 'hotel_label'),
           cell: ({ row }) => getFollowUpLabel(row.original, 'hotel_label'),
+          meta: { style: FOLLOW_UP_COLUMN_STYLE },
         },
         {
           id: 'hotel_val',
@@ -1065,13 +1077,14 @@ export function BudgetTable({
               label="Validación Hotel"
             />
           ),
-          meta: { style: { width: 96 } },
+          meta: { style: FOLLOW_UP_VALIDATION_COLUMN_STYLE },
         },
         {
           id: 'transporte',
           header: createSortableHeader('Transporte'),
           accessorFn: (budget) => getFollowUpLabel(budget, 'transporte'),
           cell: ({ row }) => getFollowUpLabel(row.original, 'transporte'),
+          meta: { style: FOLLOW_UP_COLUMN_STYLE },
         },
         {
           id: 'transporte_val',
@@ -1087,13 +1100,14 @@ export function BudgetTable({
               label="Validación Transporte"
             />
           ),
-          meta: { style: { width: 96 } },
+          meta: { style: FOLLOW_UP_VALIDATION_COLUMN_STYLE },
         },
         {
           id: 'po',
           header: createSortableHeader('PO'),
           accessorFn: (budget) => getFollowUpLabel(budget, 'po'),
           cell: ({ row }) => getFollowUpLabel(row.original, 'po'),
+          meta: { style: FOLLOW_UP_COLUMN_STYLE },
         },
         {
           id: 'po_val',
@@ -1109,7 +1123,7 @@ export function BudgetTable({
               label="Validación PO"
             />
           ),
-          meta: { style: { width: 96 } },
+          meta: { style: FOLLOW_UP_VALIDATION_COLUMN_STYLE },
         },
       ];
 
