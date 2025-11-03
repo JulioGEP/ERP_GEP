@@ -10,7 +10,8 @@
   "scripts": {
     "generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:prune": "node ../scripts/prisma-prune-binaries.mjs || true",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "postinstall": "prisma generate --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
