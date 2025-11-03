@@ -1,5 +1,6 @@
 // backend/functions/_shared/mailer.ts
 import { createSign } from 'crypto';
+import { google } from 'googleapis';
 import { normalizeEmail } from './auth';
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
