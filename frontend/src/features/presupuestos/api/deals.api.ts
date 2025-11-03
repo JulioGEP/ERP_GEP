@@ -81,26 +81,13 @@ function hasDraftSessions(deal: DealSummary): boolean {
     return false;
   }
 
-  let hasDraft = false;
-
-  for (const session of sessions) {
+  return sessions.some((session) => {
     if (!session) {
-      continue;
-    }
-
-    const state = typeof session.estado === 'string' ? session.estado.trim().toUpperCase() : null;
-
-    if (state === 'BORRADOR') {
-      hasDraft = true;
-      continue;
-    }
-
-    if (state && state.length) {
       return false;
     }
-  }
-
-  return hasDraft;
+    const state = typeof session.estado === 'string' ? session.estado.trim().toUpperCase() : null;
+    return state === 'BORRADOR';
+  });
 }
 
 export function matchesPendingPlanningCriteria(deal: DealSummary): boolean {
