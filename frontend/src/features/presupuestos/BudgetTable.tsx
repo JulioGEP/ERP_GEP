@@ -598,28 +598,6 @@ function applyBudgetFilters(
     filtered = filtered.filter((row) =>
       filterEntries.every(([key, value]) => {
         const parts = splitFilterValue(value);
-        if (key === 'session_estado') {
-          const allowedStates = new Set(
-            (parts.length ? parts : [value])
-              .map((part) => part.trim().toUpperCase())
-              .filter((part) => part.length > 0),
-          );
-
-          if (!allowedStates.size) {
-            return true;
-          }
-
-          const sessionStates = splitFilterValue(row.values[key] ?? '')
-            .map((part) => part.trim().toUpperCase())
-            .filter((part) => part.length > 0);
-
-          if (!sessionStates.length) {
-            return false;
-          }
-
-          return sessionStates.every((state) => allowedStates.has(state));
-        }
-
         if (parts.length > 1) {
           return parts.some((part) => {
             const normalizedPart = normalizeText(part);
