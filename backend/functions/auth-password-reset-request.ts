@@ -1,3 +1,12 @@
+import { google } from 'googleapis';
+
+function _normalizeSaKey(k: string = ''): string {
+  const trimmed = (k || '').trim();
+  const hasLiteral = /\\n/.test(trimmed);
+  const materialized = hasLiteral ? trimmed.replace(/\\n/g, '\n') : trimmed;
+  return materialized.replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, '');
+}
+
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
