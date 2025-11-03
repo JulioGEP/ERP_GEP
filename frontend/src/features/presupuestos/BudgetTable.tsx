@@ -97,6 +97,8 @@ const SESSION_STATE_LABELS: Record<SessionEstado, string> = {
   FINALIZADA: 'Finalizada',
 };
 
+const SESSION_ESTADOS_SET = new Set<string>(SESSION_ESTADOS);
+
 export type BudgetServerQueryOptions = {
   fetcher: (options: DealsListOptions) => Promise<DealSummary[]>;
   queryKey?: readonly unknown[];
@@ -138,6 +140,49 @@ function getProductNames(budget: DealSummary): string[] {
       .filter((v): v is string => Boolean(v));
   }
   return [];
+}
+
+function getBudgetSessionStates(budget: DealSummary): string[] {
+  if (!Array.isArray(budget.sessions) || budget.sessions.length === 0) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  budget.sessions.forEach((session) => {
+    if (!session) return;
+    const raw = typeof session.estado === 'string' ? session.estado.trim() : '';
+    if (!raw.length) return;
+    const normalized = raw.toUpperCase();
+    seen.add(normalized);
+  });
+
+  const states = Array.from(seen);
+  states.sort((a, b) => {
+    const indexA = SESSION_ESTADOS.indexOf(a as SessionEstado);
+    const indexB = SESSION_ESTADOS.indexOf(b as SessionEstado);
+    if (indexA === -1 && indexB === -1) {
+      return a.localeCompare(b, 'es', { sensitivity: 'base' });
+    }
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
+
+  return states;
+}
+
+function getSessionEstadoLabel(value: string): string {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized.length) {
+    return value;
+  }
+
+  if (SESSION_ESTADOS_SET.has(normalized)) {
+    return SESSION_STATE_LABELS[normalized as SessionEstado];
+  }
+
+  const lower = normalized.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 function getProductLabel(budget: DealSummary): { label: string; title?: string } {
@@ -438,6 +483,17 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   transporte: (budget) => safeTrim(budget.transporte ?? '') ?? '',
   tipo_servicio: (budget) => safeTrim(budget.tipo_servicio ?? '') ?? '',
   comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
+  session_estado: (budget) => {
+    const states = getBudgetSessionStates(budget);
+    if (!states.length) {
+      return '';
+    }
+    const joined = joinFilterValues(states);
+    if (!joined.length) {
+      return '';
+    }
+    return joined;
+  },
   product_names: (budget) => getProductNames(budget).join(' '),
   student_names: (budget) => (budget.studentNames ?? []).join(' '),
   training_date: (budget) => {
@@ -461,6 +517,7 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'transporte', label: 'Transporte' },
   { key: 'tipo_servicio', label: 'Tipo de servicio' },
   { key: 'comercial', label: 'Comercial' },
+  { key: 'session_estado', label: 'Estado sesión', type: 'select' },
   { key: 'product_names', label: 'Productos' },
   { key: 'student_names', label: 'Alumnos' },
   { key: 'training_date', label: 'Fecha de formación', type: 'date' },
@@ -481,6 +538,7 @@ const BUDGET_SELECT_FILTER_KEYS = new Set<string>([
   'transporte',
   'tipo_servicio',
   'comercial',
+  'session_estado',
 ]);
 
 function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
@@ -656,7 +714,17 @@ export function BudgetTable({
         const trimmed = raw.trim();
         if (!trimmed.length) return;
         const set = accumulator.get(key);
-        set?.add(trimmed);
+        if (!set) return;
+        const parts = splitFilterValue(trimmed);
+        if (parts.length) {
+          parts.forEach((part) => {
+            const normalized = part.trim();
+            if (!normalized.length) return;
+            set.add(normalized);
+          });
+          return;
+        }
+        set.add(trimmed);
       });
     });
 
@@ -721,6 +789,34 @@ export function BudgetTable({
             type: 'select',
             options: productFilterOptions,
             placeholder: definition.placeholder ?? 'Selecciona productos',
+          } satisfies FilterDefinition;
+        }
+
+        if (definition.key === 'session_estado') {
+          const dynamic = selectOptionsByKey[definition.key] ?? [];
+          const merged = new Map<string, FilterOption>();
+
+          SESSION_ESTADOS.forEach((state) => {
+            merged.set(state, {
+              value: state,
+              label: SESSION_STATE_LABELS[state],
+            });
+          });
+
+          dynamic.forEach((option) => {
+            const label = getSessionEstadoLabel(option.value);
+            merged.set(option.value, { value: option.value, label });
+          });
+
+          const options = Array.from(merged.values()).sort((a, b) =>
+            a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }),
+          );
+
+          return {
+            ...definition,
+            type: 'select',
+            options,
+            placeholder: definition.placeholder ?? 'Selecciona estados',
           } satisfies FilterDefinition;
         }
 
