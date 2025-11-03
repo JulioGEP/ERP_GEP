@@ -43,3 +43,9 @@ test('in-company sessions become planificada without sala when trainers and unit
   const estado = __test__.resolveSessionEstado(normalized);
   assert.equal(estado, 'PLANIFICADA');
 });
+
+test('normalizeSedeLabel maps uppercase in company labels', () => {
+  assert.equal(__test__.normalizeSedeLabel('IN COMPANY'), 'In Company');
+  assert.equal(__test__.normalizeSedeLabel('In company'), 'In Company');
+  assert.equal(__test__.normalizeSedeLabel('in company - unidad movil'), 'In Company');
+});
