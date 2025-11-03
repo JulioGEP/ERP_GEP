@@ -155,9 +155,7 @@ async function getAccessToken(): Promise<string> {
     }),
   );
 
-  const signer = createSign('RSA-SHA256');
-  signer.update(`${header}.${payload}`);
-  const signature = signer.sign(privateKey, 'base64');
+  const signer = /* removed manual sign */
   const assertion = `${header}.${payload}.${base64UrlEncode(signature)}`;
 
   const body = new URLSearchParams({
