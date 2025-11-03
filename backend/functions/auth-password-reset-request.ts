@@ -122,11 +122,7 @@ async function canExposeResetLink(request: any, prisma: ReturnType<typeof getPri
 }
 
 function buildResetUrl(request: any, token: string): string | null {
-  const baseFromEnv = process.env.PASSWORD_RESET_BASE_URL;
-  const base =
-    (typeof baseFromEnv === 'string' && baseFromEnv.trim().length
-      ? baseFromEnv.trim()
-      : inferOriginFromRequest(request)) || null;
+  const base = resolveBaseUrl(request);
   if (!base) return null;
 
   try {
@@ -140,6 +136,37 @@ function buildResetUrl(request: any, token: string): string | null {
     console.error('[auth] Failed to construct reset URL', error);
     return null;
   }
+}
+
+function resolveBaseUrl(request: any): string | null {
+  const fromEnv = getBaseUrlFromEnv();
+  if (fromEnv) return fromEnv;
+
+  return inferOriginFromRequest(request);
+}
+
+function getBaseUrlFromEnv(): string | null {
+  const candidates = [
+    process.env.PASSWORD_RESET_BASE_URL,
+    process.env.PUBLIC_FRONTEND_BASE_URL,
+    process.env.URL,
+    process.env.DEPLOY_PRIME_URL,
+    process.env.DEPLOY_URL,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed.length) continue;
+    try {
+      const url = new URL(trimmed);
+      return `${url.protocol}//${url.host}`;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
 }
 
 function inferOriginFromRequest(request: any): string | null {
