@@ -4,6 +4,7 @@ import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   useReactTable,
+  getCoreRowModel,
   type ColumnDef,
   type HeaderContext,
   type SortingState,
@@ -65,8 +66,8 @@ const DEFAULT_LABELS: BudgetTableLabels = {
   updating: 'Actualizando listado…',
   errorTitle: 'Error al cargar presupuestos',
   errorRetry: 'Reintentar',
-  emptyTitle: 'No hay presupuestos sin sesiones pendientes.',
-  emptyDescription: 'Importa un presupuesto para comenzar a planificar la formación.',
+  emptyTitle: 'No hay presupuestos con sesiones en borrador.',
+  emptyDescription: 'Importa un presupuesto o planifica las sesiones pendientes para continuar.',
   emptyRetry: 'Reintentar',
   fallbackNotice: 'Mostrando los últimos datos disponibles.',
   fallbackNoticeError: 'Mostrando datos guardados porque no se pudo actualizar la lista.',
@@ -1120,6 +1121,7 @@ export function BudgetTable({
     state: { sorting: tanstackSortingState },
     onSortingChange: handleSortingChange,
     getRowId: (row, index) => getBudgetId(row) ?? row.deal_id ?? row.dealId ?? String(index),
+    getCoreRowModel: getCoreRowModel(),
   });
 
   const tableContainerRef = useRef<HTMLDivElement | null>(null);

@@ -1,5 +1,7 @@
 // frontend/src/types/deal.ts
 
+import type { SessionEstado } from '../api/sessions.types';
+
 /* ======================
  * Tipos base (DB / API)
  * ====================== */
@@ -68,10 +70,12 @@ export interface DealDocument {
  * ====================== */
 
 /** Fila para listados (tabla de presupuestos) */
+
 export interface DealSummarySession {
   id: string | null;
   fecha_inicio_utc: string | null;
   fecha?: string | null;
+  estado?: SessionEstado | null;
 }
 
 export interface DealSummary {

@@ -57,6 +57,51 @@ export type DealsListOptions = {
 export type DealsWithoutSessionsSort = DealsListSort;
 export type DealsWithoutSessionsOptions = DealsListOptions;
 
+function normalizePipelineKey(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+const PENDING_PLANNING_PIPELINE_KEYS = new Set<string>([
+  normalizePipelineKey('Formación Empresa'),
+  normalizePipelineKey('Formación Empresas'),
+  normalizePipelineKey('GEP Services'),
+]);
+
+function hasDraftSessions(deal: DealSummary): boolean {
+  const sessions = Array.isArray(deal.sessions) ? deal.sessions : [];
+  if (!sessions.length) {
+    return false;
+  }
+
+  return sessions.some((session) => {
+    if (!session) {
+      return false;
+    }
+    const state = typeof session.estado === 'string' ? session.estado.trim().toUpperCase() : null;
+    return state === 'BORRADOR';
+  });
+}
+
+export function matchesPendingPlanningCriteria(deal: DealSummary): boolean {
+  const pipelineKey = [deal.pipeline_label, deal.pipeline_id]
+    .map((value) => normalizePipelineKey(value))
+    .find((key) => key.length > 0);
+
+  if (!pipelineKey || !PENDING_PLANNING_PIPELINE_KEYS.has(pipelineKey)) {
+    return false;
+  }
+
+  return hasDraftSessions(deal);
+}
+
 function buildDealsQuery(
   options?: DealsListOptions,
   extraParams?: Record<string, string>,
@@ -119,7 +164,8 @@ export async function fetchDeals(options?: DealsListOptions): Promise<DealSummar
 export async function fetchDealsWithoutSessions(
   options?: DealsWithoutSessionsOptions,
 ): Promise<DealSummary[]> {
-  return fetchDealsWithParams(options, { noSessions: 'true' });
+  const deals = await fetchDealsWithParams(options);
+  return deals.filter((deal) => matchesPendingPlanningCriteria(deal));
 }
 
 export async function fetchDealsWithPendingCertificates(): Promise<DealSummary[]> {
