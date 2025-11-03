@@ -167,6 +167,37 @@ function getBudgetId(budget: DealSummary): string | null {
   return null;
 }
 
+function getSessionStateFilterInfo(
+  budget: DealSummary,
+): { filterValue: string; labelValue: string } {
+  const seen = new Set<SessionEstado>();
+
+  if (Array.isArray(budget.sessions)) {
+    budget.sessions.forEach((session) => {
+      const rawEstado = session?.estado;
+      if (typeof rawEstado !== 'string') {
+        return;
+      }
+      const normalized = rawEstado.toUpperCase();
+      if (SESSION_ESTADOS.includes(normalized as SessionEstado)) {
+        seen.add(normalized as SessionEstado);
+      }
+    });
+  }
+
+  if (seen.size === 0) {
+    return { filterValue: '', labelValue: '' };
+  }
+
+  const uniqueStates = Array.from(seen);
+  const filterValue = joinFilterValues(uniqueStates);
+  const labelValue = uniqueStates
+    .map((estado) => SESSION_STATE_LABELS[estado] ?? estado)
+    .join(' ');
+
+  return { filterValue, labelValue };
+}
+
 function getErrorMessage(error: unknown): string | null {
   if (!error) return null;
   if (error instanceof Error) {
@@ -439,6 +470,7 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
   product_names: (budget) => getProductNames(budget).join(' '),
   student_names: (budget) => (budget.studentNames ?? []).join(' '),
+  session_state: (budget) => getSessionStateFilterInfo(budget).filterValue,
   training_date: (budget) => {
     const timestamp = getTrainingDateTimestamp(budget);
     const iso = formatDateIso(timestamp);
@@ -459,6 +491,7 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'hotel_label', label: 'Hotel' },
   { key: 'transporte', label: 'Transporte' },
   { key: 'tipo_servicio', label: 'Tipo de servicio' },
+  { key: 'session_state', label: 'Estado sesión' },
   { key: 'comercial', label: 'Comercial' },
   { key: 'product_names', label: 'Productos' },
   { key: 'student_names', label: 'Alumnos' },
@@ -479,16 +512,28 @@ const BUDGET_SELECT_FILTER_KEYS = new Set<string>([
   'hotel_label',
   'transporte',
   'tipo_servicio',
+  'session_state',
   'comercial',
 ]);
 
 function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
   const values: Record<string, string> = {};
   const normalized: Record<string, string> = {};
+  const sessionStateInfo = getSessionStateFilterInfo(budget);
   for (const key of BUDGET_FILTER_KEYS) {
-    const raw = BUDGET_FILTER_ACCESSORS[key]?.(budget) ?? '';
+    let raw = '';
+    if (key === 'session_state') {
+      raw = sessionStateInfo.filterValue;
+    } else {
+      raw = BUDGET_FILTER_ACCESSORS[key]?.(budget) ?? '';
+    }
     values[key] = raw;
-    normalized[key] = normalizeText(raw);
+    if (key === 'session_state') {
+      const combined = [raw, sessionStateInfo.labelValue].filter(Boolean).join(' ');
+      normalized[key] = normalizeText(combined);
+    } else {
+      normalized[key] = normalizeText(raw);
+    }
   }
   const search = BUDGET_FILTER_KEYS.map((key) => normalized[key]).join(' ');
   return { budget, values, normalized, search };
@@ -655,7 +700,22 @@ export function BudgetTable({
         const trimmed = raw.trim();
         if (!trimmed.length) return;
         const set = accumulator.get(key);
-        set?.add(trimmed);
+        if (!set) return;
+        if (key === 'session_state') {
+          const parts = splitFilterValue(raw);
+          if (!parts.length) {
+            set.add(trimmed);
+            return;
+          }
+          parts.forEach((part) => {
+            const normalizedPart = part.trim();
+            if (normalizedPart.length) {
+              set.add(normalizedPart);
+            }
+          });
+          return;
+        }
+        set.add(trimmed);
       });
     });
 
@@ -666,9 +726,20 @@ export function BudgetTable({
         result[key] = [];
         return;
       }
-      const sorted = Array.from(values).sort((a, b) =>
-        a.localeCompare(b, 'es', { sensitivity: 'base' }),
-      );
+      const sorted = Array.from(values);
+      if (key === 'session_state') {
+        sorted.sort((a, b) => {
+          const labelA = SESSION_STATE_LABELS[a as SessionEstado] ?? a;
+          const labelB = SESSION_STATE_LABELS[b as SessionEstado] ?? b;
+          return labelA.localeCompare(labelB, 'es', { sensitivity: 'base' });
+        });
+        result[key] = sorted.map((value) => ({
+          value,
+          label: SESSION_STATE_LABELS[value as SessionEstado] ?? value,
+        }));
+        return;
+      }
+      sorted.sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
       result[key] = sorted.map((value) => ({ value, label: value }));
     });
 
