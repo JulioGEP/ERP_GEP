@@ -33,6 +33,7 @@ import type { CalendarSession } from '../features/calendar/api';
 import type { DealDetail, DealSummary } from '../types/deal';
 import logo from '../assets/gep-group-logo.png';
 import { AppRouter } from './router';
+import { hasPendingExternalFollowUp } from './utils/budgetFollowUp';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
@@ -164,31 +165,6 @@ function normalizeOptionalString(value: unknown): string | null {
 
 function normalizeDealId(value: unknown): string | null {
   return normalizeOptionalString(value);
-}
-
-function isAffirmativeLabel(value: unknown): boolean {
-  if (typeof value !== 'string') return false;
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase() === 'si';
-}
-
-function isExplicitFalse(value: unknown): boolean {
-  return value === false;
-}
-
-function hasPendingExternalFollowUp(budget: DealSummary): boolean {
-  const pairs: Array<[unknown, unknown]> = [
-    [budget.fundae_label, budget.fundae_val],
-    [budget.caes_label, budget.caes_val],
-    [budget.hotel_label, budget.hotel_val],
-    [budget.transporte, budget.transporte_val],
-    [budget.po, budget.po_val],
-  ];
-
-  return pairs.some(([label, confirmation]) => isAffirmativeLabel(label) && isExplicitFalse(confirmation));
 }
 
 function buildSummaryFromDeal(deal: DealDetail | DealSummary): DealSummary {
