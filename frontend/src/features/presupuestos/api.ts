@@ -355,6 +355,7 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
       id: null,
       fecha_inicio_utc: date,
       fecha: date,
+      estado: null,
     };
   }
 
@@ -362,6 +363,7 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
   const id = toStringValue(session.id);
   const startDate = toStringValue(session.fecha_inicio_utc);
   const fallbackDate = toStringValue((session as any).fecha);
+  const estado = toSessionEstadoValue((session as any).estado);
 
   if (!id && !startDate && !fallbackDate) {
     return null;
@@ -371,6 +373,7 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
     id: id ?? null,
     fecha_inicio_utc: startDate ?? fallbackDate ?? null,
     fecha: fallbackDate ?? (startDate ?? null),
+    estado,
   };
 }
 
@@ -917,6 +920,51 @@ function normalizeDriveUrlInput(value: unknown): string | null {
   return text.length ? text : null;
 }
 
+function normalizePipelineKey(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+const PENDING_PLANNING_PIPELINE_KEYS = new Set<string>([
+  normalizePipelineKey("Formación Empresa"),
+  normalizePipelineKey("Formación Empresas"),
+  normalizePipelineKey("GEP Services"),
+]);
+
+function hasDraftSessions(deal: DealSummary): boolean {
+  const sessions = Array.isArray(deal.sessions) ? deal.sessions : [];
+  if (!sessions.length) {
+    return false;
+  }
+
+  return sessions.some((session) => {
+    if (!session) {
+      return false;
+    }
+    const state = typeof session.estado === "string" ? session.estado.trim().toUpperCase() : null;
+    return state === "BORRADOR";
+  });
+}
+
+function matchesPendingPlanningCriteria(deal: DealSummary): boolean {
+  const pipelineKey = [deal.pipeline_label, deal.pipeline_id]
+    .map((value) => normalizePipelineKey(value))
+    .find((key) => key.length > 0);
+
+  if (!pipelineKey || !PENDING_PLANNING_PIPELINE_KEYS.has(pipelineKey)) {
+    return false;
+  }
+
+  return hasDraftSessions(deal);
+}
+
 /* =====================
  * Request helper (fetch)
  * ===================== */
@@ -965,7 +1013,6 @@ export async function fetchDealsWithoutSessions(
   options?: DealsWithoutSessionsOptions,
 ): Promise<DealSummary[]> {
   const searchParams = new URLSearchParams();
-  searchParams.set('noSessions', 'true');
 
   if (options?.search && options.search.trim().length) {
     searchParams.set('search', options.search.trim());
@@ -990,9 +1037,12 @@ export async function fetchDealsWithoutSessions(
   }
 
   const query = searchParams.toString();
-  const data = await request(`/deals?${query}`);
+  const path = query.length ? `/deals?${query}` : '/deals';
+  const data = await request(path);
   const rows: Json[] = Array.isArray(data?.deals) ? data.deals : [];
-  return rows.map((row) => normalizeDealSummary(row));
+  return rows
+    .map((row) => normalizeDealSummary(row))
+    .filter((deal) => matchesPendingPlanningCriteria(deal));
 }
 
 export async function fetchDealsWithPendingCertificates(): Promise<DealSummary[]> {

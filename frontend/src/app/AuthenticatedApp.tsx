@@ -15,6 +15,7 @@ import {
   fetchDealDetail,
   fetchDeals,
   fetchDealsWithoutSessions,
+  matchesPendingPlanningCriteria,
   importDeal,
 } from '../features/presupuestos/api/deals.api';
 import {
@@ -409,16 +410,23 @@ export default function AuthenticatedApp() {
     enabled: isBudgetsTodosRoute || isBudgetsSinTrabajarRoute,
   });
 
+  const pendingPlanningBudgets = useMemo(() => {
+    const source = budgetsWithoutSessionsQuery.data ?? [];
+    if (!Array.isArray(source) || source.length === 0) {
+      return [] as DealSummary[];
+    }
+    return source.filter((deal) => matchesPendingPlanningCriteria(deal));
+  }, [budgetsWithoutSessionsQuery.data]);
+
   useEffect(() => {
     if (!budgetsWithoutSessionsQuery.isSuccess) {
       return;
     }
-    const data = budgetsWithoutSessionsQuery.data;
-    if (!Array.isArray(data) || data.length === 0) {
+    if (!pendingPlanningBudgets.length) {
       return;
     }
-    queryClient.setQueryData(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY, data);
-  }, [budgetsWithoutSessionsQuery.data, budgetsWithoutSessionsQuery.isSuccess, queryClient]);
+    queryClient.setQueryData(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY, pendingPlanningBudgets);
+  }, [budgetsWithoutSessionsQuery.isSuccess, pendingPlanningBudgets, queryClient]);
 
   const pushToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
     const id =
@@ -675,7 +683,6 @@ export default function AuthenticatedApp() {
     }
   }, [location.pathname]);
 
-  const budgetsWithoutSessions = budgetsWithoutSessionsQuery.data ?? [];
   const isRefreshingWithoutSessions =
     budgetsWithoutSessionsQuery.isFetching && !budgetsWithoutSessionsQuery.isLoading;
 
@@ -706,7 +713,7 @@ export default function AuthenticatedApp() {
 
       let shouldImport = false;
       try {
-        let existingSummary: DealSummary | null = findSummaryInList(budgetsWithoutSessions);
+        let existingSummary: DealSummary | null = findSummaryInList(pendingPlanningBudgets);
         if (!existingSummary) {
           existingSummary = findSummaryInList(allBudgets);
         }
@@ -789,7 +796,7 @@ export default function AuthenticatedApp() {
     },
     [
       allBudgets,
-      budgetsWithoutSessions,
+      pendingPlanningBudgets,
       fetchDealDetail,
       importMutation,
       pushToast,
@@ -981,7 +988,7 @@ export default function AuthenticatedApp() {
   );
 
   const budgetsPageProps: BudgetsPageProps = {
-    budgets: budgetsWithoutSessions,
+    budgets: pendingPlanningBudgets,
     isLoading: budgetsWithoutSessionsQuery.isLoading,
     isFetching: isRefreshingWithoutSessions,
     error: budgetsWithoutSessionsQuery.error ?? null,
