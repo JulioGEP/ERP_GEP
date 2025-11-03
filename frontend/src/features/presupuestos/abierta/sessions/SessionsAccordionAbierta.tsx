@@ -89,6 +89,7 @@ const ENABLE_TRAINERS = false;
 const ENABLE_MOBILE_UNITS = false;
 const ENABLE_ROOMS = false;
 const ENABLE_ADDRESS = false;
+const IN_COMPANY_ROOM_VALUE = '__IN_COMPANY__';
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -2492,7 +2493,7 @@ export function SessionsAccordionAbierta({
     if (!allRooms.length) return allRooms;
     if (!normalizedDealSede) return allRooms;
     if (normalizedDealSede === 'In Company') {
-      return [];
+      return allRooms;
     }
     return allRooms.filter((room) => formatSedeLabel(room.sede) === normalizedDealSede);
   }, [allRooms, normalizedDealSede]);
@@ -2922,7 +2923,7 @@ function SessionEditor({
 
   const selectedRoomLabel = useMemo(() => {
     if (!ENABLE_ROOMS) return '';
-    if (isInCompany) return 'In Company';
+    if (isInCompany && !form.sala_id) return 'In Company';
     if (!form.sala_id) return '';
     const room = rooms.find((item) => item.sala_id === form.sala_id);
     if (!room) return '';
@@ -2930,6 +2931,10 @@ function SessionEditor({
     const blocked = blockedRooms.has(room.sala_id);
     return blocked ? `${baseLabel} · No disponible` : baseLabel;
   }, [blockedRooms, form.sala_id, isInCompany, rooms]);
+
+  const roomSelectValue = !ENABLE_ROOMS
+    ? ''
+    : form.sala_id ?? (isInCompany ? IN_COMPANY_ROOM_VALUE : '');
 
   const variationDisplay = useMemo(() => {
     const name = typeof dealVariationName === 'string' ? dealVariationName.trim() : '';
@@ -2997,17 +3002,6 @@ function SessionEditor({
 
   useEffect(() => {
     if (!ENABLE_ROOMS) return;
-    if (isInCompany) {
-      if (form.sala_id !== null) {
-        const hadDirtyFields = status.dirty;
-        onChange((current) => ({ ...current, sala_id: null }));
-        if (!hadDirtyFields && !status.saving) {
-          void Promise.resolve(onSave({ notifyOnSuccess: false })).catch(() => undefined);
-        }
-      }
-      return;
-    }
-    if (!ENABLE_ROOMS) return;
     if (!form.sala_id) return;
     if (rooms.some((room) => room.sala_id === form.sala_id)) return;
     const hadDirtyFields = status.dirty;
@@ -3015,7 +3009,7 @@ function SessionEditor({
     if (!hadDirtyFields && !status.saving) {
       void Promise.resolve(onSave({ notifyOnSuccess: false })).catch(() => undefined);
     }
-  }, [form.sala_id, isInCompany, onChange, onSave, rooms, status.dirty, status.saving]);
+  }, [form.sala_id, onChange, onSave, rooms, status.dirty, status.saving]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -3379,31 +3373,38 @@ function SessionEditor({
             <Form.Group controlId={`session-${form.id}-sala`}>
             <Form.Label>Sala</Form.Label>
             <Form.Select
-              value={form.sala_id ?? ''}
+              value={roomSelectValue}
               onChange={(event) =>
-                onChange((current) => ({ ...current, sala_id: event.target.value || null }))
+                onChange((current) => {
+                  const nextValue = event.target.value;
+                  return {
+                    ...current,
+                    sala_id: nextValue && nextValue !== IN_COMPANY_ROOM_VALUE ? nextValue : null,
+                  };
+                })
               }
               title={buildFieldTooltip(selectedRoomLabel)}
-              disabled={isInCompany}
             >
-              <option value="">{isInCompany ? 'In Company' : 'Sin sala asignada'}</option>
-              {!isInCompany &&
-                rooms.map((room) => {
-                  const label = room.sede ? `${room.name} (${room.sede})` : room.name;
-                  const blocked = blockedRooms.has(room.sala_id);
-                  const displayLabel = blocked ? `${label} · No disponible` : label;
-                  return (
-                    <option
-                      key={room.sala_id}
-                      value={room.sala_id}
-                      disabled={blocked && form.sala_id !== room.sala_id}
-                      className={blocked ? 'session-option-unavailable' : undefined}
-                      style={blocked ? { color: '#dc3545', fontWeight: 600 } : undefined}
-                    >
-                      {displayLabel}
-                    </option>
-                  );
-                })}
+              {isInCompany && (
+                <option value={IN_COMPANY_ROOM_VALUE}>In Company</option>
+              )}
+              <option value="">Sin sala asignada</option>
+              {rooms.map((room) => {
+                const label = room.sede ? `${room.name} (${room.sede})` : room.name;
+                const blocked = blockedRooms.has(room.sala_id);
+                const displayLabel = blocked ? `${label} · No disponible` : label;
+                return (
+                  <option
+                    key={room.sala_id}
+                    value={room.sala_id}
+                    disabled={blocked && form.sala_id !== room.sala_id}
+                    className={blocked ? 'session-option-unavailable' : undefined}
+                    style={blocked ? { color: '#dc3545', fontWeight: 600 } : undefined}
+                  >
+                    {displayLabel}
+                  </option>
+                );
+              })}
             </Form.Select>
           </Form.Group>
         </Col>
