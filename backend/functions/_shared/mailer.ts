@@ -1,6 +1,34 @@
 // backend/functions/_shared/mailer.ts
 import { createSign } from 'crypto';
+
+function normalizeSaKey(k: string = ''): string {
+  const trimmed = (k || '').trim();
+  // Si viene con \n literales (Netlify), convertirlos a saltos REALES.
+  const hasLiteral = /\n/.test(trimmed);
+  const materialized = hasLiteral ? trimmed.replace(/\n/g, '
+') : trimmed;
+  // Quitar comillas envolventes accidentales
+  return materialized.replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, '');
+}
+
 import { google } from 'googleapis';
+
+function normalizePrivateKey(k: string): string {
+  if (!k) return '';
+  let key = k.replace(/\\n/g, '\n');
+  key = key.replace(/-BEGIN PRIVATE KEY-\n?/, '-BEGIN PRIVATE KEY-\n');
+  key = key.replace(/\n?-END PRIVATE KEY-/, '\n-END PRIVATE KEY-');
+  return key;
+}
+
+function getPrivateKey(): string {
+  const b64 = process.env.GOOGLE_DRIVE_PRIVATE_KEY_B64 || '';
+  if (b64 && !b64.includes('BEGIN')) {
+    try { return Buffer.from(b64, 'base64').toString('utf8'); } catch {}
+  }
+  return normalizePrivateKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY || '');
+}
+
 import { normalizeEmail } from './auth';
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
