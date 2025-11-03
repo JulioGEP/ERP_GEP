@@ -2,7 +2,6 @@ import { getGmailAccessToken } from './_shared/googleJwt';
 import { google } from 'googleapis';
 
 async function getAccessToken(): Promise<string> { return getGmailAccessToken(); }
-
 function _normalizeSaKey(k: string = ''): string {
   const trimmed = (k || '').trim();
   const hasLiteral = /\\n/.test(trimmed);
