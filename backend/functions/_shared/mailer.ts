@@ -1,15 +1,14 @@
 // backend/functions/_shared/mailer.ts
 import { createSign } from 'crypto';
 
+
 function normalizeSaKey(k: string = ''): string {
   const trimmed = (k || '').trim();
-  // Si viene con \n literales (Netlify), convertirlos a saltos REALES.
-  const hasLiteral = /\n/.test(trimmed);
-  const materialized = hasLiteral ? trimmed.replace(/\n/g, '
-') : trimmed;
-  // Quitar comillas envolventes accidentales
+  const hasLiteral = /\\n/.test(trimmed); // busca \n literales
+  const materialized = hasLiteral ? trimmed.replace(/\\n/g, '\n') : trimmed;
   return materialized.replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, '');
 }
+
 
 import { google } from 'googleapis';
 
