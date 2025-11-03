@@ -363,7 +363,8 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
   const id = toStringValue(session.id);
   const startDate = toStringValue(session.fecha_inicio_utc);
   const fallbackDate = toStringValue((session as any).fecha);
-  const estado = toSessionEstadoValue((session as any).estado);
+  const estadoRaw = toStringValue((session as any).estado);
+  const estado = estadoRaw ? toSessionEstadoValue(estadoRaw) : null;
 
   if (!id && !startDate && !fallbackDate) {
     return null;
