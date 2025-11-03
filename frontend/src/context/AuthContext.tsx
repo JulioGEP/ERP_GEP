@@ -41,21 +41,6 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 
 // --- Helpers internos ---
 
-const SESSION_COOKIE_NAME = 'erp_session';
-
-function hasSessionCookie(): boolean {
-  if (typeof document === 'undefined') {
-    return false;
-  }
-
-  if (!document.cookie) {
-    return false;
-  }
-
-  const entries = document.cookie.split(';');
-  return entries.some((entry) => entry.trim().startsWith(`${SESSION_COOKIE_NAME}=`));
-}
-
 function normalizePath(path: string): string {
   if (!path) return '';
   if (path === '/') return '/';
@@ -87,24 +72,17 @@ function hasPermissionImpl(path: string, permissions: readonly string[]): boolea
 export function AuthProvider({ children }: PropsWithChildren<{}>) {
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<readonly string[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(() => hasSessionCookie());
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const loadSession = useCallback(async () => {
-    if (!hasSessionCookie()) {
-      setUser(null);
-      setPermissions([]);
-      setIsLoading(false);
-      return;
-    }
-
     setIsLoading(true);
     try {
       const data = await getJson<SessionPayload>('/auth-session');
       setUser(data.user);
       setPermissions(data.permissions || []);
     } catch (err) {
-      if (!isUnauthorized(err) && err instanceof ApiError && err.status && err.status >= 500) {
-        // Sólo logueamos errores 5xx inesperados
+      // Si el backend devolviese 500, mostramos estado no autenticado
+      if (err instanceof ApiError && err.status && err.status >= 500) {
         console.error('[auth-session] error', err);
       }
       setUser(null);
@@ -115,7 +93,7 @@ export function AuthProvider({ children }: PropsWithChildren<{}>) {
   }, []);
 
   useEffect(() => {
-    // Cargar sesión al montar sólo si hay cookie de sesión.
+    // Cargar sesión al montar
     loadSession();
   }, [loadSession]);
 
