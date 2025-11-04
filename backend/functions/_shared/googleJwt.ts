@@ -25,7 +25,7 @@ export async function getGmailAccessToken(): Promise<string> {
   const key = normalizeSaKey(rawKey);
 
   const jwt = new google.auth.JWT({ email: clientEmail,
-    key,
+
     scopes: ['https://www.googleapis.com/auth/gmail.send'],
     subject, // domain-wide delegation,
   key: normalizeSaKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY || '')
