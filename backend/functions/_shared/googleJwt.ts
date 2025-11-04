@@ -24,12 +24,12 @@ export async function getGmailAccessToken(): Promise<string> {
 
   const key = normalizeSaKey(rawKey);
 
-  const jwt = new google.auth.JWT({
-    email: clientEmail,
+  const jwt = new google.auth.JWT({ email: clientEmail,
     key,
     scopes: ['https://www.googleapis.com/auth/gmail.send'],
-    subject, // domain-wide delegation
-  });
+    subject, // domain-wide delegation,
+  key: normalizeSaKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY || '')
+   });
 
   const { token } = await jwt.authorize();
   if (!token) throw new Error('No se obtuvo access token de Gmail');
