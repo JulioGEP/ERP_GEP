@@ -50,14 +50,14 @@ export const handler = createHttpHandler<any>(async (request) => {
       prisma.users.update({
         where: { id: user.id },
         data: {
-          password_hash: hash,
-          password_algo: 'bcrypt',
-          password_updated_at: now,
+  password_hash: hash,
+  password_algo: 'bcrypt',
+  password_updated_at: now,
 
-          reset_token: null,
-          reset_token_expires: null,
-          reset_used_at: now,
-        },
+  reset_token: null,
+  reset_token_expires: null,
+  // Si quieres registrar uso del token, crea el campo en Prisma (p.ej. reset_token_used_at TIMESTAMP)
+},
       }),
       // Revocamos todas las sesiones activas del usuario
       prisma.auth_sessions.updateMany({

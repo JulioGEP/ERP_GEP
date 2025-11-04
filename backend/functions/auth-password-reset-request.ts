@@ -1,14 +1,3 @@
-import { getGmailAccessToken } from './_shared/googleJwt';
-import { google } from 'googleapis';
-
-async function getAccessToken(): Promise<string> { return getGmailAccessToken(); }
-function _normalizeSaKey(k: string = ''): string {
-  const trimmed = (k || '').trim();
-  const hasLiteral = /\\n/.test(trimmed);
-  const materialized = hasLiteral ? trimmed.replace(/\\n/g, '\n') : trimmed;
-  return materialized.replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, '');
-}
-
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
@@ -34,9 +23,10 @@ export const handler = createHttpHandler<any>(async (request) => {
     const canExposeLink = await canExposeResetLink(request, prisma);
 
     // Respuesta genérica para evitar enumeración de usuarios
-    const genericOk = () =>
+    const genericOk = (extra?: Record<string, unknown>) =>
       successResponse({
         message: 'Si el usuario existe, recibirá un email con instrucciones.',
+        ...(extra || {}),
       });
 
     if (!email) {
@@ -61,49 +51,60 @@ export const handler = createHttpHandler<any>(async (request) => {
         reset_token: token,
         reset_token_expires: expiresAt,
         reset_requested_at: new Date(),
-
       },
     });
 
     let resetUrl: string | null = null;
-
     try {
       resetUrl = buildResetUrl(request, token);
     } catch (error) {
-      console.error('[auth] Failed to build password reset URL', error);
+      console.error('[auth-reset] Failed to build password reset URL', error);
     }
+
+    let messageId: string | undefined;
 
     if (resetUrl) {
-      try {
-        const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || null;
-        await sendPasswordResetEmail({
-          toEmail: user.email,
-          toName: fullName,
-          resetUrl,
-          expiresAt,
-        });
-      } catch (error) {
-        console.error('[auth] Failed to send password reset email', {
-          userId: user.id,
-          email: user.email,
-          error,
-        });
-      }
-    } else {
-      console.warn('[auth] Password reset URL could not be determined for email delivery', {
-        userId: user.id,
-        email: user.email,
-      });
-    }
+  try {
+    const fullName =
+      [user.first_name, user.last_name].filter(Boolean).join(' ').trim() || null;
 
+    // mailer.ts espera 2 args: (toEmail: string, resetUrl: string)
+    await sendPasswordResetEmail(user.email, resetUrl);
+
+    console.info('[auth-reset] mail queued (mailer returned void)', {
+      userId: user.id,
+      to: user.email,
+      fullName,
+      resetUrl,
+      expiresAt,
+    });
+  } catch (error) {
+    const detail = (error as any)?.response?.data ?? (error as any)?.message ?? error;
+    console.error('[auth-reset] Failed to send password reset email', {
+      userId: user.id,
+      email: user.email,
+      detail,
+    });
+    // seguimos sin romper respuesta genérica
+  }
+} else {
+  console.warn('[auth-reset] Password reset URL could not be determined for email delivery', {
+    userId: user.id,
+    email: user.email,
+  });
+}
+
+    // Si no podemos exponer info sensible: respuesta genérica SIEMPRE
     if (!canExposeLink) {
       return genericOk();
     }
 
+    // Admin: devolvemos detalles útiles para diagnóstico
     if (!resetUrl) {
       return successResponse({
         message: 'Enlace generado, pero no se pudo construir la URL pública.',
         expiresAt: expiresAt.toISOString(),
+        messageId: messageId || null,
       });
     }
 
@@ -111,9 +112,11 @@ export const handler = createHttpHandler<any>(async (request) => {
       message: 'Enlace de restablecimiento generado correctamente.',
       resetUrl,
       expiresAt: expiresAt.toISOString(),
+      messageId: messageId || null,
     });
   } catch (_err) {
     // No exponemos detalles internos
+    console.error('[auth-reset] INTERNAL ERROR', _err);
     return errorResponse('INTERNAL', 'No se pudo procesar la solicitud', 500);
   }
 });
@@ -127,7 +130,7 @@ async function canExposeResetLink(request: any, prisma: ReturnType<typeof getPri
     const role = auth.user?.role?.trim().toLowerCase();
     return role === 'admin';
   } catch (error) {
-    console.error('[auth] Failed to resolve admin context for reset link', error);
+    console.error('[auth-reset] Failed to resolve admin context for reset link', error);
     return false;
   }
 }
@@ -144,7 +147,7 @@ function buildResetUrl(request: any, token: string): string | null {
     url.hash = '';
     return url.toString();
   } catch (error) {
-    console.error('[auth] Failed to construct reset URL', error);
+    console.error('[auth-reset] Failed to construct reset URL', error);
     return null;
   }
 }
@@ -152,7 +155,6 @@ function buildResetUrl(request: any, token: string): string | null {
 function resolveBaseUrl(request: any): string | null {
   const fromEnv = getBaseUrlFromEnv();
   if (fromEnv) return fromEnv;
-
   return inferOriginFromRequest(request);
 }
 
