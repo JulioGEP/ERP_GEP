@@ -5,18 +5,35 @@ type SaCreds = { client_email: string; private_key: string };
 
 function normalizeKey(k: string): string {
   if (!k) return k;
-  let key = k.trim();
-  // normaliza saltos
+
+  // 1) Limpieza básica
+  let key = k
+    .replace(/^\uFEFF/, "")          // BOM
+    .trim()
+    // si la UI de Netlify ha guardado la key envuelta en comillas simples o dobles:
+    .replace(/^"+|"+$/g, "")
+    .replace(/^'+|'+$/g, "");
+
+  // 2) Unificar saltos
   key = key.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  // si viene escapada con \\n -> \n real
+
+  // 3) Convertir \n literales a saltos reales (por si la pegaste "escaped")
   if (key.includes("\\n")) key = key.replace(/\\n/g, "\n");
-  // asegura BEGIN/END
-  if (!key.includes("-----BEGIN PRIVATE KEY-----")) {
-    key = "-----BEGIN PRIVATE KEY-----\n" + key;
+
+  // 4) Asegurar cabeceras PEM
+  const hasBegin = key.includes("-----BEGIN PRIVATE KEY-----");
+  const hasEnd = key.includes("-----END PRIVATE KEY-----");
+
+  if (!hasBegin && !hasEnd) {
+    // Si viene solo el cuerpo base64, lo envolvemos correctamente
+    key = `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----\n`;
+  } else {
+    // Asegura que haya salto tras BEGIN y antes de END
+    key = key
+      .replace(/-----BEGIN PRIVATE KEY-----\s*/g, "-----BEGIN PRIVATE KEY-----\n")
+      .replace(/\s*-----END PRIVATE KEY-----/g, "\n-----END PRIVATE KEY-----\n");
   }
-  if (!key.includes("-----END PRIVATE KEY-----")) {
-    key = key.trim() + "\n-----END PRIVATE KEY-----\n";
-  }
+
   return key;
 }
 
@@ -57,10 +74,11 @@ export async function getGmailClient() {
 }
 
 export async function getGmailAccessToken(): Promise<string> {
-  const { client_email, private_key } = loadCreds();
+  const { client_email, private_key: rawKey } = loadCreds();
+  const key = normalizeKey(rawKey);
   const jwt = new google.auth.JWT({
     email: client_email,
-    key: private_key,
+    key,
     scopes: getScopes(),
     subject: process.env.GMAIL_IMPERSONATE || "",
   });
