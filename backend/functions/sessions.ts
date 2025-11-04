@@ -1220,7 +1220,7 @@ if (method === 'GET') {
         });
 
         // Construimos un unchecked create para evitar el XOR con relaciones anidadas
-const createData: Prisma.sesionesUncheckedCreateInput = {
+const createData: any = {
   id: randomUUID(),
   deal_id: deal.deal_id,
   deal_product_id: product.id,

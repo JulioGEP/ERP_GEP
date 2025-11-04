@@ -6,6 +6,7 @@ import {
   buildSessionCookie,
   getPermissionsForRole,
   getRoleDisplayValue,
+  getRoleStorageValue,
   getSessionExpirationDate,
   hashIp,
   normalizeEmail,
@@ -44,31 +45,87 @@ export const handler = createHttpHandler<any>(async (request) => {
     typeof (request.body as any)?.password === 'string'
       ? (request.body as any).password
       : null;
+  const roleInputRaw = typeof (request.body as any)?.role === 'string' ? (request.body as any).role : null;
+  const roleInputNormalized = roleInputRaw ? roleInputRaw.trim() : '';
 
   if (!email || !password) {
     return errorResponse('INVALID_CREDENTIALS', 'Email o contraseña inválidos', 400);
   }
 
-  // Buscar usuario por email (normalizado a lower en DB)
-  const user = await prisma.users.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
+  const candidates = await prisma.users.findMany({
+    where: { email: { equals: email, mode: 'insensitive' } },
+    orderBy: { created_at: 'asc' },
+  });
 
-  // Mantenemos mensaje genérico para no filtrar existencia de usuarios
-  if (!user || !user.active || !user.password_hash) {
+  type Candidate = (typeof candidates)[number];
+  const matchingUsers: Candidate[] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate.active || !candidate.password_hash) continue;
+    if (!isSupportedHash(candidate.password_hash)) continue;
+    const match = await bcrypt.compare(password, candidate.password_hash);
+    if (match) {
+      matchingUsers.push(candidate);
+    }
+  }
+
+  if (matchingUsers.length === 0) {
     return errorResponse('INVALID_CREDENTIALS', 'Credenciales inválidas', 401);
   }
 
-  // Validar algoritmo soportado (bcrypt) y comparar
-  if (!isSupportedHash(user.password_hash)) {
-    // Si en el futuro añadimos otros algoritmos, aquí se enruta.
-    return errorResponse(
-      'INVALID_CREDENTIALS',
-      'Credenciales inválidas',
-      401
-    );
+  const roleOptionsMap = new Map<string, { value: string; label: string }>();
+  for (const user of matchingUsers) {
+    if (!roleOptionsMap.has(user.role)) {
+      roleOptionsMap.set(user.role, {
+        value: user.role,
+        label: getRoleDisplayValue(user.role) ?? user.role,
+      });
+    }
   }
 
-  const ok = await bcrypt.compare(password, user.password_hash);
-  if (!ok) {
+  const roleOptions = Array.from(roleOptionsMap.values());
+
+  const requestedRoleStorage = roleInputNormalized.length ? getRoleStorageValue(roleInputNormalized) : null;
+  const requestedRoleNormalized = roleInputNormalized.toLowerCase();
+
+  let user: Candidate = matchingUsers[0]!;
+
+  if (roleOptions.length > 1) {
+    if (roleInputNormalized.length) {
+      user =
+        matchingUsers.find((candidate) => candidate.role === requestedRoleStorage) ||
+        matchingUsers.find((candidate) => {
+          const display = getRoleDisplayValue(candidate.role);
+          return display?.toLowerCase() === requestedRoleNormalized;
+        }) ||
+        matchingUsers.find((candidate) => candidate.role.toLowerCase() === requestedRoleNormalized);
+
+      if (!user) {
+        return errorResponse('INVALID_ROLE_SELECTION', 'El rol seleccionado no es válido', 400, {
+          roles: roleOptions,
+        });
+      }
+    } else {
+      return errorResponse('MULTIPLE_ROLES', 'Selecciona un rol para continuar', 409, {
+        roles: roleOptions,
+      });
+    }
+  } else {
+    user = matchingUsers[0];
+    if (roleInputNormalized.length) {
+      const matchesRequested =
+        user.role === requestedRoleStorage ||
+        getRoleDisplayValue(user.role)?.toLowerCase() === requestedRoleNormalized ||
+        user.role.toLowerCase() === requestedRoleNormalized;
+      if (!matchesRequested) {
+        return errorResponse('INVALID_ROLE_SELECTION', 'El rol seleccionado no es válido', 400, {
+          roles: roleOptions,
+        });
+      }
+    }
+  }
+
+  if (!user || !user.active) {
     return errorResponse('INVALID_CREDENTIALS', 'Credenciales inválidas', 401);
   }
 

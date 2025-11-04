@@ -17,7 +17,7 @@ export type AuthContextValue = {
   status: AuthStatus;
   user: AuthUser | null;
   permissions: PermissionList;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, role?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
   hasPermission: (path: string) => boolean;
@@ -57,8 +57,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadSession]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const response = await loginRequest(email, password);
+    async (email: string, password: string, role?: string) => {
+      const response = await loginRequest(email, password, role);
       applySession(response.user, response.permissions ?? []);
     },
     [applySession],
