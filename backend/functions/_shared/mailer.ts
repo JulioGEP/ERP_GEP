@@ -44,15 +44,21 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
  * Export requerido por auth-password-reset-request.ts
  */
 export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
-  const subject = 'Instrucciones para restablecer tu contraseña';
-  const html = `
-    <p>Has solicitado restablecer tu contraseña.</p>
-    <p>Pulsa el siguiente botón para continuar:</p>
-    <p><a href="${resetUrl}" style="background:#0b5ed7;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;">Restablecer contraseña</a></p>
-    <p>Si no funciona el botón, copia y pega esta URL en tu navegador:</p>
-    <p><code>${resetUrl}</code></p>
-  `.trim();
-  const text = `Has solicitado restablecer tu contraseña.\nAbre esta URL: ${resetUrl}`;
+  const subject = 'Instrucciones para restablecer tu contrase\u00F1a';
+  const html = [
+    '<p>Hola,</p>',
+    '<p>Recibimos una solicitud para restablecer tu contrase\u00F1a. Sigue el enlace para crear una nueva:</p>',
+    `<p><a href="${resetUrl}" style="background:#0b5ed7;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;">Restablecer contrase\u00F1a</a></p>`,
+    '<p>Si el bot\u00F3n no funciona, copia y pega este enlace en tu navegador:</p>',
+    `<p><a href="${resetUrl}">${resetUrl}</a></p>`,
+    '<p>Si no solicitaste este cambio, puedes ignorar este correo.</p>',
+  ].join('');
+  const text = [
+    'Hola,',
+    'Recibimos una solicitud para restablecer tu contrase\u00F1a.',
+    `Abre este enlace para continuar: ${resetUrl}`,
+    'Si no solicitaste este cambio, ignora este correo.',
+  ].join('\n');
 
   await sendEmail({ to, subject, html, text });
 }
