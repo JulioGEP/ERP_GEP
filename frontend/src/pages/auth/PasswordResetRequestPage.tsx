@@ -39,7 +39,7 @@ export default function PasswordResetRequestPage() {
 
       try {
         const response = await mutation.mutateAsync({ email: emailTrimmed });
-        setInfoMessage(response.message || 'Has recibido un mail con instrucciones');
+        setInfoMessage(response.message || 'Si el usuario existe, recibirá un email con instrucciones.');
         setAdminResetLink(response.resetUrl ?? null);
         setAdminExpiresAt(response.resetUrl && response.expiresAt ? new Date(response.expiresAt) : null);
       } catch (error) {
