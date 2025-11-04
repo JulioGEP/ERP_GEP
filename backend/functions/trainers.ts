@@ -1,13 +1,14 @@
 // backend/functions/trainers.ts
 import { randomUUID } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
+import { ensureTrainerUser, ensureTrainerUsersForAll } from './_shared/trainer-user-sync';
 
 const OPTIONAL_STRING_FIELDS = [
   'apellido',
-  'email',
   'phone',
   'dni',
   'direccion',
@@ -118,12 +119,18 @@ function buildCreateData(body: any) {
     return { error: errorResponse('VALIDATION_ERROR', 'El campo name es obligatorio', 400) };
   }
 
+  const email = toNullableString(body?.email);
+  if (!email) {
+    return { error: errorResponse('VALIDATION_ERROR', 'El campo email es obligatorio', 400) };
+  }
+
   const trainerId = toNullableString(body?.trainer_id) ?? randomUUID();
 
   const data: any = {
     trainer_id: trainerId,
     name,
     activo: body?.activo === undefined || body?.activo === null ? true : Boolean(body.activo),
+    email,
   };
 
   for (const field of OPTIONAL_STRING_FIELDS) {
@@ -161,6 +168,15 @@ function buildUpdateData(body: any) {
       return { error: errorResponse('VALIDATION_ERROR', 'El campo name es obligatorio', 400) };
     }
     data.name = name;
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'email')) {
+    const email = toNullableString(body.email);
+    if (!email) {
+      return { error: errorResponse('VALIDATION_ERROR', 'El campo email es obligatorio', 400) };
+    }
+    data.email = email;
     hasChanges = true;
   }
 
@@ -220,6 +236,7 @@ export const handler = createHttpHandler<any>(async (request) => {
 
   try {
     if (method === 'GET' && !trainerIdFromPath) {
+      await ensureTrainerUsersForAll(prisma);
       const trainers = await prisma.trainers.findMany({
         orderBy: [{ name: 'asc' }, { apellido: 'asc' }],
       });
@@ -235,6 +252,13 @@ export const handler = createHttpHandler<any>(async (request) => {
       if (!trainer) {
         return errorResponse('NOT_FOUND', 'Formador/Bombero no encontrado', 404);
       }
+      if ((trainer as TrainerRecord).email) {
+        try {
+          await ensureTrainerUser(prisma, trainer as any);
+        } catch (syncError) {
+          console.error('[trainers] Failed to ensure trainer user', syncError);
+        }
+      }
       return successResponse({ trainer: normalizeTrainer(trainer as TrainerRecord) });
     }
 
@@ -247,8 +271,13 @@ export const handler = createHttpHandler<any>(async (request) => {
       const result = buildCreateData(body);
       if ('error' in result) return result.error;
 
-      const created = await prisma.trainers.create({ data: result.data });
-      return successResponse({ trainer: normalizeTrainer(created) }, 201);
+      const trainer = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const created = await tx.trainers.create({ data: result.data });
+        await ensureTrainerUser(tx, created as any);
+        return created;
+      });
+
+      return successResponse({ trainer: normalizeTrainer(trainer as TrainerRecord) }, 201);
     }
 
     if (method === 'PATCH' && trainerIdFromPath) {
@@ -266,12 +295,25 @@ export const handler = createHttpHandler<any>(async (request) => {
       const result = buildUpdateData(body);
       if ('error' in result) return result.error;
 
-      const updated = await prisma.trainers.update({
-        where: { trainer_id: trainerIdFromPath },
-        data: result.data,
+      const trainer = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const updated = await tx.trainers.update({
+          where: { trainer_id: trainerIdFromPath },
+          data: result.data,
+        });
+
+        const syncedUser = await ensureTrainerUser(tx, updated as any);
+
+        if (existing.activo && !updated.activo && syncedUser) {
+          await tx.auth_sessions.updateMany({
+            where: { user_id: syncedUser.id, revoked_at: null },
+            data: { revoked_at: new Date() },
+          });
+        }
+
+        return updated;
       });
 
-      return successResponse({ trainer: normalizeTrainer(updated) });
+      return successResponse({ trainer: normalizeTrainer(trainer as TrainerRecord) });
     }
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);

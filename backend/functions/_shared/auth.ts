@@ -34,7 +34,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/calendario/*',
     '/recursos/formadores_bomberos',
   ],
-  Formador: ['/perfil', '/recursos/trainer'],
+  Formador: ['/usuarios/trainer'],
 };
 
 function normalizeRoleKey(value: string | null | undefined): string | null {
@@ -110,7 +110,7 @@ export function getRoleDisplayValue(role: string | null | undefined): string | n
 export const DEFAULT_ROUTE_ORDER = [
   '/presupuestos/sinplanificar',
   '/recursos/formadores_bomberos',
-  '/recursos/trainer',
+  '/usuarios/trainer',
   '/recursos/unidades_moviles',
   '/recursos/salas',
   '/certificados',

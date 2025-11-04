@@ -27,6 +27,8 @@ model users {
   reset_token_expires DateTime?       @db.Timestamptz(6)
   reset_requested_at  DateTime?       @db.Timestamptz(6)
   auth_sessions       auth_sessions[]
+  trainer_id          String?         @unique @db.Text
+  trainer             trainers?       @relation("TrainerUser", fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
 }
 
 model tokens {
@@ -363,6 +365,7 @@ model trainers {
   sede            String[]          @default([])
   sesion_trainers sesion_trainers[]
   variants        variants[]
+  user            users?            @relation("TrainerUser")
 
   @@index([apellido])
   @@index([especialidad])
