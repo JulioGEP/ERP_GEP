@@ -6,18 +6,17 @@ type SaCreds = { client_email: string; private_key: string };
 function normalizeKey(k: string): string {
   if (!k) return k;
 
-  // 1) Limpieza básica
+  // 1) Limpieza básica (BOM, comillas envolventes, trim)
   let key = k
-    .replace(/^\uFEFF/, "")          // BOM
+    .replace(/^\uFEFF/, "")
     .trim()
-    // si la UI de Netlify ha guardado la key envuelta en comillas simples o dobles:
     .replace(/^"+|"+$/g, "")
     .replace(/^'+|'+$/g, "");
 
-  // 2) Unificar saltos
+  // 2) Unificar saltos de línea
   key = key.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-  // 3) Convertir \n literales a saltos reales (por si la pegaste "escaped")
+  // 3) Convertir "\n" literales a saltos reales si viniera escapada
   if (key.includes("\\n")) key = key.replace(/\\n/g, "\n");
 
   // 4) Asegurar cabeceras PEM
@@ -25,10 +24,8 @@ function normalizeKey(k: string): string {
   const hasEnd = key.includes("-----END PRIVATE KEY-----");
 
   if (!hasBegin && !hasEnd) {
-    // Si viene solo el cuerpo base64, lo envolvemos correctamente
     key = `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----\n`;
   } else {
-    // Asegura que haya salto tras BEGIN y antes de END
     key = key
       .replace(/-----BEGIN PRIVATE KEY-----\s*/g, "-----BEGIN PRIVATE KEY-----\n")
       .replace(/\s*-----END PRIVATE KEY-----/g, "\n-----END PRIVATE KEY-----\n");
@@ -56,21 +53,33 @@ function getScopes(): string[] {
 }
 
 export async function getGmailClient() {
-  const { client_email, private_key } = loadCreds();
+  const { client_email, private_key: rawKey } = loadCreds();
   const subject = process.env.GMAIL_IMPERSONATE;
   if (!subject) throw new Error("GMAIL_IMPERSONATE no está definido");
 
+  const key = normalizeKey(rawKey); // ⬅️ normaliza SIEMPRE antes del JWT
+
   const jwt = new google.auth.JWT({
     email: client_email,
-    key: private_key,
+    key,
     scopes: getScopes(),
     subject, // Domain-wide delegation
   });
 
   console.info("[gmail] using client_email:", client_email, "subject:", subject);
-  await jwt.authorize(); // fallará aquí si firma/DWD/scope no están bien
+  await jwt.authorize(); // si DWD/scope/clave fallan, peta aquí
 
-  return google.gmail({ version: "v1", auth: jwt });
+  // Log de verificación: a quién estamos suplantando
+  const gmail = google.gmail({ version: "v1", auth: jwt });
+  try {
+    const profile = await gmail.users.getProfile({ userId: "me" });
+    console.info("[gmail] impersonating:", profile.data.emailAddress);
+  } catch (e) {
+    // No es crítico para enviar, pero ayuda a diagnosticar
+    console.warn("[gmail] getProfile failed (no bloqueante):", (e as any)?.message || e);
+  }
+
+  return gmail;
 }
 
 export async function getGmailAccessToken(): Promise<string> {
