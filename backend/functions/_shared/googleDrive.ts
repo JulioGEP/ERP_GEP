@@ -159,10 +159,36 @@ function resolveDriveSharedId(): string | null {
   return String(raw).trim();
 }
 
-function getServiceAccount(): { clientEmail: string; privateKey: string } | null {
-  if (cachedServiceAccount !== undefined) {
-    return cachedServiceAccount;
+function normalizeKey(k: string): string {
+  if (!k) return k;
+
+  // quitar BOM y comillas envolventes
+  let key = k.replace(/^\uFEFF/, "")
+    .trim()
+    .replace(/^"+|"+$/g, "")
+    .replace(/^'+|'+$/g, "");
+
+  // normalizar saltos
+  key = key.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  // convertir \\n literales a saltos reales
+  if (key.includes("\\n")) key = key.replace(/\\n/g, "\n");
+
+  // asegurar cabeceras PEM
+  const hasBegin = key.includes("-----BEGIN PRIVATE KEY-----");
+  const hasEnd   = key.includes("-----END PRIVATE KEY-----");
+  if (!hasBegin && !hasEnd) {
+    key = `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----\n`;
+  } else {
+    key = key
+      .replace(/-----BEGIN PRIVATE KEY-----\s*/g, "-----BEGIN PRIVATE KEY-----\n")
+      .replace(/\s*-----END PRIVATE KEY-----/g, "\n-----END PRIVATE KEY-----\n");
   }
+  return key;
+}
+
+function getServiceAccount(): { clientEmail: string; privateKey: string } | null {
+  if (cachedServiceAccount !== undefined) return cachedServiceAccount;
 
   const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL?.trim();
   const privateKeyRaw = process.env.GOOGLE_DRIVE_PRIVATE_KEY;
@@ -175,9 +201,8 @@ function getServiceAccount(): { clientEmail: string; privateKey: string } | null
 
   cachedServiceAccount = {
     clientEmail,
-    privateKey: privateKeyRaw.replace(/\\n/g, "\n"),
+    privateKey: normalizeKey(privateKeyRaw),
   };
-
   return cachedServiceAccount;
 }
 
@@ -199,13 +224,18 @@ async function getAccessToken(): Promise<string> {
 
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
-  const payload = {
-    iss: serviceAccount.clientEmail,
-    scope: DRIVE_SCOPE,
-    aud: TOKEN_AUDIENCE,
-    exp: now + 3600,
-    iat: now,
-  };
+const subject = (process.env.DRIVE_IMPERSONATE || process.env.GMAIL_IMPERSONATE || "").trim();
+if (!subject) {
+  console.warn("[google-drive-sync] Falta DRIVE_IMPERSONATE o GMAIL_IMPERSONATE para DWD; se usa el SA sin 'sub'");
+}
+const payload: Record<string, any> = {
+  iss: serviceAccount.clientEmail,
+  scope: DRIVE_SCOPE,
+  aud: TOKEN_AUDIENCE,
+  exp: now + 3600,
+  iat: now,
+};
+if (subject) payload.sub = subject;
 
   const unsigned = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(payload))}`;
   const signer = createSign("RSA-SHA256");
