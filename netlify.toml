@@ -53,10 +53,12 @@
   to = "/.netlify/functions/auth-logout"
   status = 200
 
+# 🔧 Password reset (con force=true)
 [[redirects]]
   from = "/auth/password/reset/request"
   to = "/.netlify/functions/auth-password-reset-request"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/auth/password/reset/confirm"
@@ -69,7 +71,7 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# SPA fallback
+# SPA fallback (debe ir el último)
 [[redirects]]
   from = "/*"
   to = "/index.html"

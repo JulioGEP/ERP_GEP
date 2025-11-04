@@ -1,37 +1,63 @@
 import { google } from 'googleapis';
 
-function normalizeSaKey(k: string = ''): string {
-  const trimmed = (k || '').trim();
-  const withRealNewlines = /\\n/.test(trimmed) ? trimmed.replace(/\\n/g, '\n') : trimmed;
-  return withRealNewlines.replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, '');
+type SaCreds = { client_email: string; private_key: string };
+
+function normalizeKey(k: string): string {
+  if (!k) return k;
+  // Quitar comillas sobrantes y normalizar saltos
+  let key = k.trim();
+  // Si viene con \r\n o \r -> a \n
+  key = key.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // Si viene “escaped” como \\n -> \n real
+  if (key.includes('\\n')) key = key.replace(/\\n/g, '\n');
+  // Asegurar cabeceras
+  if (!key.includes('-----BEGIN PRIVATE KEY-----')) {
+    key = '-----BEGIN PRIVATE KEY-----\n' + key;
+  }
+  if (!key.includes('-----END PRIVATE KEY-----')) {
+    key = key.trim() + '\n-----END PRIVATE KEY-----\n';
+  }
+  return key;
 }
 
 /**
- * Access token para Gmail (scope gmail.send) impersonando GMAIL_IMPERSONATE.
- * Requiere:
- * - GOOGLE_DRIVE_CLIENT_EMAIL  (service account email)
- * - GOOGLE_DRIVE_PRIVATE_KEY   (PEM con \n literales en Netlify)
- * - GMAIL_IMPERSONATE          (usuario real: erp@gepgroup.es)
+ * Carga credenciales con prioridad:
+ * 1) GOOGLE_SERVICE_ACCOUNT_JSON (JSON completo)
+ * 2) GOOGLE_DRIVE_CLIENT_EMAIL + GOOGLE_DRIVE_PRIVATE_KEY
  */
+function loadCreds(): SaCreds {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (raw && raw.trim().length > 0) {
+    const parsed = JSON.parse(raw) as any;
+    return {
+      client_email: parsed.client_email,
+      private_key: normalizeKey(parsed.private_key),
+    };
+  }
+  const client_email = process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '';
+  const private_key = normalizeKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY || '');
+  if (!client_email || !private_key) {
+    throw new Error(
+      'Missing SA creds. Provide GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_DRIVE_CLIENT_EMAIL + GOOGLE_DRIVE_PRIVATE_KEY'
+    );
+  }
+  return { client_email, private_key };
+}
+
 export async function getGmailAccessToken(): Promise<string> {
-  const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '';
-  const rawKey = process.env.GOOGLE_DRIVE_PRIVATE_KEY || '';
-  const subject = process.env.GMAIL_IMPERSONATE || '';
+  const { client_email, private_key } = loadCreds();
 
-  if (!clientEmail) throw new Error('Falta GOOGLE_DRIVE_CLIENT_EMAIL');
-  if (!rawKey) throw new Error('Falta GOOGLE_DRIVE_PRIVATE_KEY');
-  if (!subject) throw new Error('Falta GMAIL_IMPERSONATE');
+  const subject = process.env.GMAIL_IMPERSONATE || ''; // ej: erp@gepgroup.es
+  const scopes = ['https://www.googleapis.com/auth/gmail.send'];
 
-  const key = normalizeSaKey(rawKey);
+  const jwt = new google.auth.JWT({
+    email: client_email,
+    key: private_key,
+    scopes,
+    subject, // Domain-wide delegation
+  });
 
-  const jwt = new google.auth.JWT({ email: clientEmail,
-
-    scopes: ['https://www.googleapis.com/auth/gmail.send'],
-    subject, // domain-wide delegation,
-  key: normalizeSaKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY || '')
-   });
-
-  const { token } = await jwt.authorize();
-  if (!token) throw new Error('No se obtuvo access token de Gmail');
-  return token;
+  const { access_token } = await jwt.authorize();
+  if (!access_token) throw new Error('No access_token from Google JWT');
+  return access_token;
 }
