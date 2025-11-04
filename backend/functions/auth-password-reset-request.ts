@@ -25,7 +25,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     // Respuesta genérica para evitar enumeración de usuarios
     const genericOk = (extra?: Record<string, unknown>) =>
       successResponse({
-        message: 'Si el usuario existe, recibirá un email con instrucciones.',
+        message: 'Recibirás un mail con instrucciones, si tarda más de un minuto, revisa SPAM',
         ...(extra || {}),
       });
 
