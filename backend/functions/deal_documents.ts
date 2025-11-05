@@ -6,7 +6,7 @@ import { getPrisma } from "./_shared/prisma";
 import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { downloadFile as downloadPipedriveFile } from "./_shared/pipedrive";
-import { uploadDealDocumentToGoogleDrive } from "./_shared/googleDrive";
+import { deleteDealDocumentFromGoogleDrive, uploadDealDocumentToGoogleDrive } from "./_shared/googleDrive";
 
 const BUCKET = process.env.S3_BUCKET!;
 const REGION = process.env.S3_REGION!;
@@ -534,10 +534,43 @@ export const handler = async (event: any) => {
     if (method === "DELETE" && docId) {
       const doc = await prisma.deal_files.findUnique({
         where: { id: String(docId) },
-        select: { id: true, deal_id: true, file_url: true },
+        select: {
+          id: true,
+          deal_id: true,
+          file_url: true,
+          drive_file_name: true,
+          drive_web_view_link: true,
+        },
       });
       if (!doc || doc.deal_id !== dealIdStr) {
         return errorResponse("NOT_FOUND", "Documento no encontrado", 404);
+      }
+
+      if (doc.drive_file_name || doc.drive_web_view_link) {
+        const deal = await prisma.deals.findUnique({
+          where: { deal_id: dealIdStr },
+          include: { organizations: { select: { name: true } } },
+        });
+
+        if (!deal) {
+          return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
+        }
+
+        const organizationName =
+          deal.organizations?.name ?? (deal as any)?.organizations?.name ?? null;
+
+        try {
+          await deleteDealDocumentFromGoogleDrive({
+            deal,
+            organizationName,
+            driveFileName: doc.drive_file_name ?? undefined,
+            driveWebViewLink: doc.drive_web_view_link ?? undefined,
+          });
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : String(err ?? "No se pudo eliminar el archivo de Drive");
+          return errorResponse("UPLOAD_ERROR", message, 502);
+        }
       }
 
       if (doc.file_url && !isHttpUrl(doc.file_url)) {

@@ -1635,6 +1635,108 @@ function extractDriveFileId(link?: string | null): string | null {
   return null;
 }
 
+export async function deleteDealDocumentFromGoogleDrive(params: {
+  deal: any;
+  organizationName?: string | null;
+  driveFileName?: string | null;
+  driveWebViewLink?: string | null;
+}): Promise<{ fileDeleted: boolean }> {
+  const driveId = resolveDriveSharedId();
+  if (!driveId) {
+    throw new Error(
+      "Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)",
+    );
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error("Credenciales de Google Drive no configuradas");
+  }
+
+  const baseFolderId = await findFolder({
+    name: resolveDriveBaseFolderName(),
+    parentId: driveId,
+    driveId,
+  });
+
+  if (!baseFolderId) {
+    console.warn(
+      "[google-drive-sync] Carpeta base no encontrada al eliminar documento del deal",
+    );
+    return { fileDeleted: false };
+  }
+
+  const organizationFolder = await ensureOrganizationFolder({
+    driveId,
+    baseFolderId,
+    deal: params.deal,
+    organizationName: params.organizationName,
+    createIfMissing: false,
+  });
+
+  if (!organizationFolder) {
+    console.warn(
+      "[google-drive-sync] Carpeta de organización no encontrada al eliminar documento del deal",
+      { organizationName: params.organizationName },
+    );
+    return { fileDeleted: false };
+  }
+
+  const dealFolder = await ensureDealFolder({
+    driveId,
+    organizationFolderId: organizationFolder.folderId,
+    deal: params.deal,
+    createIfMissing: false,
+  });
+
+  if (!dealFolder) {
+    console.warn(
+      "[google-drive-sync] Carpeta del deal no encontrada al eliminar documento en Drive",
+      { dealId: resolveDealId(params.deal) },
+    );
+    return { fileDeleted: false };
+  }
+
+  let fileDeleted = false;
+  let fileId = extractDriveFileId(params.driveWebViewLink);
+  if (!fileId) {
+    try {
+      fileId = await findFileIdInFolder({
+        folderId: dealFolder.folderId,
+        driveId,
+        name: params.driveFileName,
+      });
+    } catch (err) {
+      console.warn("[google-drive-sync] Error buscando documento del deal por nombre", {
+        dealId: resolveDealId(params.deal),
+        dealFolderId: dealFolder.folderId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  if (fileId) {
+    try {
+      await driveDelete(fileId);
+      fileDeleted = true;
+    } catch (err) {
+      console.error("[google-drive-sync] Error eliminando documento del deal en Drive", {
+        dealId: resolveDealId(params.deal),
+        fileId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw err;
+    }
+  } else {
+    console.warn("[google-drive-sync] No se encontró el documento del deal a eliminar en Drive", {
+      dealId: resolveDealId(params.deal),
+      driveFileName: params.driveFileName,
+      driveWebViewLink: params.driveWebViewLink,
+    });
+  }
+
+  return { fileDeleted };
+}
+
 async function findFileIdInFolder(params: {
   folderId: string;
   driveId: string;
