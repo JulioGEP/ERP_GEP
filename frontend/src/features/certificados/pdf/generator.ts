@@ -614,7 +614,7 @@ function buildCertificateDocDefinition(
       lineHeight: 1.1,
       characterSpacing: 0.5,
     },
-    courseName: { fontSize: 24, bold: true, margin: [0, 0, 0, 10], color: '#e4032d' },
+    courseName: { fontSize: 23, bold: true, margin: [0, 0, 0, 10], color: '#e4032d' },
     tableHeader: { fontSize: 9, bold: true, margin: [0, 0, 0, 8] },
     tableList: { fontSize: 7.5, lineHeight: 1.125 },
   };
@@ -652,59 +652,50 @@ function buildCertificateDocDefinition(
   const stack: Content[] = [];
 
   stack.push({
-    text: 'Sr. Lluís Vicent Pérez,\nDirector de la escuela GEPCO Formación\nexpide el presente:',
+    text: 'Sr. Lluís Vicent Pérez,\nDirector de la escuela GEPCO Formación expide el presente:',
     style: 'bodyText',
     margin: [0, 0, 0, 12],
   });
 
   stack.push({ text: 'CERTIFICADO', style: 'certificateTitle', margin: [0, -5, 0, 16] });
 
-  stack.push({
-    text: [
-      'A nombre del alumno/a ',
-      { text: studentName, bold: true },
-    ],
-    style: 'studentInfoText',
-    margin: [0, -5, 0, 6],
-  });
-
-  const dateTextSegments: Content = {
+  const studentInfoSegments: Content = {
     text: usesDualDate
       ? [
-          'con DNI/NIE ',
+          'A nombre del alumno/a ',
+          { text: studentName, bold: true },
+          ' con DNI/NIE ',
           { text: dni, bold: true },
-          ', quien en las fechas ',
+          ',\nquien en las fechas ',
           { text: formattedDate, bold: true },
           ' / ',
           { text: formattedSecondDate, bold: true },
           ' y en ',
           { text: location, bold: true },
+          ' ha superado, con una duración total de ',
+          { text: courseHours, bold: true },
+          ' horas, la formación de:',
         ]
       : [
-          'con DNI/NIE ',
+          'A nombre del alumno/a ',
+          { text: studentName, bold: true },
+          ' con DNI/NIE ',
           { text: dni, bold: true },
-          ', quien en fecha ',
+          ',\nquien en fecha ',
           { text: formattedDate, bold: true },
           ' y en ',
           { text: location, bold: true },
+          ' ha superado, con una duración total de ',
+          { text: courseHours, bold: true },
+          ' horas, la formación de:',
         ],
     style: 'studentInfoText',
-    margin: [0, -5, 0, 6],
+    margin: [0, -5, 0, 12],
   };
 
-  stack.push(dateTextSegments);
+  stack.push(studentInfoSegments);
 
-  stack.push({
-    text: [
-      'ha superado, con una duración total de ',
-      { text: courseHours, bold: true },
-      ' horas, la formación de:',
-    ],
-    style: 'studentInfoText',
-    margin: [0, -5, 0, 12],
-  });
-
-  stack.push({ text: courseName, style: 'courseName' });
+  stack.push({ text: courseName, style: 'courseName', noWrap: true });
 
   const tableLayout = {
     hLineWidth: () => 0,
