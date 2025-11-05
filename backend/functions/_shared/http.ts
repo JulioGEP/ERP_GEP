@@ -15,6 +15,8 @@ export type NetlifyHandlerEvent = HandlerEvent & {
 
 export type NetlifyHandlerContext = HandlerContext & Record<string, unknown>;
 
+const REFRESH_SESSION_COOKIE_CONTEXT_KEY = '__erpSessionRefreshCookie__';
+
 export type HttpHandlerResult =
   | ReturnType<typeof successResponse>
   | ReturnType<typeof errorResponse>
@@ -43,6 +45,27 @@ export interface HttpRequest<TBody = unknown> {
 export type HttpHandler<TBody = unknown> = (
   request: HttpRequest<TBody>,
 ) => Promise<HttpHandlerResult> | HttpHandlerResult;
+
+export function setRefreshSessionCookie<TBody = unknown>(
+  request: HttpRequest<TBody>,
+  cookie: string | null | undefined,
+): void {
+  if (typeof cookie !== 'string' || !cookie.length) {
+    return;
+  }
+  (request.context as any)[REFRESH_SESSION_COOKIE_CONTEXT_KEY] = cookie;
+}
+
+function consumeRefreshSessionCookie(
+  context: NetlifyHandlerContext,
+): string | null {
+  const stored = (context as any)[REFRESH_SESSION_COOKIE_CONTEXT_KEY];
+  if (typeof stored !== 'string' || !stored.length) {
+    return null;
+  }
+  delete (context as any)[REFRESH_SESSION_COOKIE_CONTEXT_KEY];
+  return stored;
+}
 
 function safeStringify(payload: unknown): string {
   return JSON.stringify(payload, (_key, value) =>
@@ -205,7 +228,14 @@ export function createHttpHandler<TBody = unknown>(handler: HttpHandler<TBody>) 
 
     try {
       const result = await handler(request);
-      return normalizeHandlerResult(result);
+      const refreshCookie = consumeRefreshSessionCookie(request.context);
+      const normalized = normalizeHandlerResult(result);
+
+      if (refreshCookie && !normalized.headers?.['Set-Cookie']) {
+        normalized.headers = { ...(normalized.headers ?? {}), 'Set-Cookie': refreshCookie };
+      }
+
+      return normalized;
     } catch (error) {
       console.error(
         `[http] Unexpected error processing ${method} ${request.path}`,

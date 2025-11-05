@@ -1,4 +1,4 @@
-import { createHttpHandler } from './_shared/http';
+import { createHttpHandler, setRefreshSessionCookie, type HttpRequest } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import {
@@ -121,12 +121,18 @@ export const handler = createHttpHandler<any>(async (request) => {
   }
 });
 
-async function canExposeResetLink(request: any, prisma: ReturnType<typeof getPrisma>): Promise<boolean> {
+async function canExposeResetLink(
+  request: HttpRequest<any>,
+  prisma: ReturnType<typeof getPrisma>,
+): Promise<boolean> {
   try {
     const sessionId = extractSessionIdFromRequest(request);
     if (!sessionId) return false;
     const auth = await findActiveSession(prisma, sessionId);
     if (!auth) return false;
+    if (auth.refreshedCookie) {
+      setRefreshSessionCookie(request, auth.refreshedCookie);
+    }
     const role = auth.user?.role?.trim().toLowerCase();
     return role === 'admin';
   } catch (error) {
