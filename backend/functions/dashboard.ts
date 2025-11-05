@@ -156,8 +156,8 @@ export const handler = createHttpHandler(async (request) => {
         FROM variants v
         JOIN products p ON p.id_woo = v.id_padre
         WHERE v.date IS NOT NULL
-          AND v.date >= ${rangeStart}
-          AND v.date < ${rangeEnd}
+          AND v.date >= (${rangeStart} AT TIME ZONE 'Europe/Madrid')
+          AND v.date < (${rangeEnd} AT TIME ZONE 'Europe/Madrid')
           AND p.category ILIKE 'Formación Abierta'
         GROUP BY day
       `,
