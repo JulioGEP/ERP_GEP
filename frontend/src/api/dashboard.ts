@@ -43,7 +43,7 @@ function sanitizeIsoDate(value: unknown): string | null {
 
 export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
   const response = await getJson<RawDashboardMetricsResponse & { ok?: boolean }>(
-    '/api/dashboard',
+    '/dashboard',
   );
 
   return {
