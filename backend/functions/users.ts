@@ -1,6 +1,5 @@
 // backend/functions/users.ts
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import type { $Enums } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
@@ -18,14 +17,39 @@ const MAX_PAGE_SIZE = 50;
 const DEFAULT_PASSWORD = '123456';
 const BCRYPT_SALT_ROUNDS = 10;
 
+type RoleStorageValue = 'comercial' | 'administracion' | 'logistica' | 'admin' | 'people' | 'formador';
+
+function splitFullName(value: unknown): { firstName: string | null; lastName: string | null } {
+  if (typeof value !== 'string') {
+    return { firstName: null, lastName: null };
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.length) {
+    return { firstName: null, lastName: null };
+  }
+
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return { firstName: null, lastName: null };
+  }
+
+  const [first, ...rest] = parts;
+  return { firstName: first ?? null, lastName: rest.length ? rest.join(' ') : null };
+}
+
 function serializeUser(user: any) {
+  const derived = splitFullName(user?.name);
+  const firstName = sanitizeName(user?.first_name) ?? sanitizeName(derived.firstName);
+  const lastName = sanitizeName(user?.last_name) ?? sanitizeName(derived.lastName);
+
   return {
     id: user.id,
-    firstName: user.first_name,
-    lastName: user.last_name,
+    firstName: firstName ?? '',
+    lastName: lastName ?? '',
     email: user.email,
     role: getRoleDisplayValue(user.role) ?? user.role,
-    active: user.active,
+    active: Boolean(user.active),
     createdAt: user.created_at,
     updatedAt: user.updated_at,
   };
@@ -70,7 +94,7 @@ async function syncTrainerForFormador(
     first_name: string;
     last_name: string;
     email: string;
-    role: $Enums.erp_role;
+    role: RoleStorageValue;
     active: boolean;
   }
 ) {
@@ -144,7 +168,7 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
   const pageSize = parsePageParam(request.query.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
   const search = typeof request.query.search === 'string' ? request.query.search.trim() : '';
 
-  const where = search
+  const prismaWhere = search
     ? {
         OR: [
           { first_name: { contains: search, mode: 'insensitive' } },
@@ -154,21 +178,88 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
       }
     : undefined;
 
-  const [total, users] = await Promise.all([
-    prisma.users.count({ where: where as any }),
-    prisma.users.findMany({
-      orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }, { email: 'asc' }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-  ]);
+  const likeValue = search
+    ? `%${search
+        .replace(/[\\%_]/g, (char: string) => `\\${char}`)
+        .replace(/'/g, "''")
+        .replace(/\\/g, '\\\\')}%`
+    : null;
 
-  return successResponse({
-    users: users.map(serializeUser),
-    total,
-    page,
-    pageSize,
-  });
+  const searchConditions: string[] = [];
+  if (likeValue) {
+    const likeComparisons = [
+      `COALESCE(to_jsonb(u)->>'first_name', to_jsonb(u)->>'name', '') ILIKE '${likeValue}' ESCAPE '\\'`,
+      `COALESCE(to_jsonb(u)->>'last_name', to_jsonb(u)->>'name', '') ILIKE '${likeValue}' ESCAPE '\\'`,
+      `COALESCE(to_jsonb(u)->>'name', '') ILIKE '${likeValue}' ESCAPE '\\'`,
+      `COALESCE(to_jsonb(u)->>'email', '') ILIKE '${likeValue}' ESCAPE '\\'`,
+    ];
+    searchConditions.push(`(${likeComparisons.join(' OR ')})`);
+  }
+
+  const whereClause = searchConditions.length ? `WHERE ${searchConditions.join(' AND ')}` : '';
+
+  const offset = Math.max(0, (page - 1) * pageSize);
+  const limit = Math.max(1, pageSize);
+
+  const countSql = `
+    SELECT COUNT(*) AS count
+    FROM users u
+    ${whereClause}
+  `;
+
+  const dataSql = `
+    SELECT to_jsonb(u) AS data
+    FROM users u
+    ${whereClause}
+    ORDER BY
+      lower(COALESCE(to_jsonb(u)->>'last_name', to_jsonb(u)->>'name', '')),
+      lower(COALESCE(to_jsonb(u)->>'first_name', to_jsonb(u)->>'name', '')),
+      lower(COALESCE(to_jsonb(u)->>'email', ''))
+    OFFSET ${offset}
+    LIMIT ${limit}
+  `;
+
+  try {
+    const [countRows, rows] = await Promise.all([
+      prisma.$queryRawUnsafe<Array<{ count: bigint | number }>>(countSql),
+      prisma.$queryRawUnsafe<Array<{ data: any }>>(dataSql),
+    ]);
+
+    const total = countRows.length ? Number(countRows[0]?.count ?? 0) : 0;
+    const users = rows.map((row: { data: any }) => serializeUser(row?.data ?? {}));
+
+    return successResponse({
+      users,
+      total: Number.isFinite(total) ? total : 0,
+      page,
+      pageSize,
+    });
+  } catch (error) {
+    console.error('[users] Raw listing query failed, falling back to Prisma client', error);
+  }
+
+  try {
+    const [total, result] = await Promise.all([
+      prisma.users.count({ where: prismaWhere as any }),
+      prisma.users.findMany({
+        where: prismaWhere as any,
+        orderBy: [
+          { last_name: 'asc' },
+          { first_name: 'asc' },
+          { email: 'asc' },
+        ],
+        skip: offset,
+        take: limit,
+      }),
+    ]);
+
+    const users = result.map((user: any) => serializeUser(user));
+
+    return successResponse({ users, total, page, pageSize });
+  } catch (error) {
+    console.error('[users] Fallback Prisma listing failed', error);
+    return errorResponse('LIST_FAILED', 'No se pudieron obtener los usuarios', 500);
+  }
 }
 
 async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) {
@@ -191,13 +282,13 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
     const now = new Date();
     const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: ReturnType<typeof getPrisma>) => {
       const user = await tx.users.create({
         data: {
           first_name: firstName,
           last_name: lastName,
           email,
-          role: roleStorage as $Enums.erp_role,
+          role: roleStorage as RoleStorageValue,
           active,
           password_hash: passwordHash,
           password_algo: 'bcrypt',
@@ -211,7 +302,7 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
-        role: user.role,
+        role: user.role as RoleStorageValue,
         active: user.active,
       });
 
@@ -238,7 +329,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     first_name?: string;
     last_name?: string;
     email?: string;
-    role?: $Enums.erp_role;
+    role?: RoleStorageValue;
     active?: boolean;
   };
 
@@ -275,7 +366,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     if (!roleStorage) {
       return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
     }
-    data.role = roleStorage as $Enums.erp_role;
+    data.role = roleStorage as RoleStorageValue;
   }
 
   if ('active' in (request.body ?? {})) {
@@ -290,7 +381,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
   const now = new Date();
 
   try {
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: ReturnType<typeof getPrisma>) => {
       const user = await tx.users.update({
         where: { id: userId },
         data,
@@ -309,7 +400,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
-        role: user.role,
+        role: user.role as RoleStorageValue,
         active: user.active,
       });
 
