@@ -61,7 +61,8 @@ const BACKGROUND_LEFT_SHIFT = 10;
 const LEFT_SIDEBAR_SIZE_REDUCTION = 0.9;
 const LEFT_SIDEBAR_RIGHT_SHIFT = 5;
 const FOOTER_SIZE_REDUCTION = 0.9;
-const PRACTICAL_COLUMN_LEFT_SHIFT = 100;
+const PRACTICAL_COLUMN_GAP = 100;
+const PRACTICAL_COLUMN_LEFT_INDENT = 40;
 const PRACTICAL_COLUMN_RIGHT_MARGIN = 200;
 const MAX_TEXT_BLOCK_WIDTH = 900;
 const TABLE_CELL_PADDING = {
@@ -714,7 +715,7 @@ function buildCertificateDocDefinition(
     paddingRight: () => TABLE_CELL_PADDING.right,
   };
 
-  const theoreticalMargin = [0, 0, PRACTICAL_COLUMN_LEFT_SHIFT, 0] as [number, number, number, number];
+  const theoreticalMargin = [0, 0, PRACTICAL_COLUMN_GAP, 0] as [number, number, number, number];
   const theoreticalCellContent = theoreticalItems.length
     ? { ul: theoreticalItems, style: 'tableList', margin: theoreticalMargin }
     : { text: '—', style: 'tableList', margin: theoreticalMargin };
@@ -723,7 +724,7 @@ function buildCertificateDocDefinition(
     ? {
         ul: practicalItems,
         style: 'tableList',
-        margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0] as [
+        margin: [PRACTICAL_COLUMN_LEFT_INDENT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0] as [
           number,
           number,
           number,
@@ -733,7 +734,7 @@ function buildCertificateDocDefinition(
     : {
         text: '—',
         style: 'tableList',
-        margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0] as [
+        margin: [PRACTICAL_COLUMN_LEFT_INDENT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0] as [
           number,
           number,
           number,
@@ -751,7 +752,7 @@ function buildCertificateDocDefinition(
           {
             text: 'Contenido Práctico',
             style: 'tableHeader',
-            margin: [-PRACTICAL_COLUMN_LEFT_SHIFT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0] as [
+            margin: [PRACTICAL_COLUMN_LEFT_INDENT, 0, PRACTICAL_COLUMN_RIGHT_MARGIN, 0] as [
               number,
               number,
               number,
