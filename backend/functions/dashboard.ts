@@ -44,6 +44,35 @@ export const handler = createHttpHandler(async (request) => {
     return date;
   };
 
+  const normalizeProductIdentifier = (value: string | null | undefined): string | null => {
+    if (!value) return null;
+    const normalized = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '')
+      .toLowerCase();
+    return normalized.length ? normalized : null;
+  };
+
+  const TWO_DAY_VERTICAL_PRODUCT_KEYS = new Set(['atrabajosverticales', 'trabajosverticales']);
+
+  const isTwoDayVerticalProduct = (
+    product:
+      | {
+          name: string | null;
+          code: string | null;
+          category: string | null;
+        }
+      | null
+      | undefined,
+  ): boolean => {
+    if (!product) return false;
+    const identifiers = [product.name, product.code, product.category]
+      .map((value) => normalizeProductIdentifier(value))
+      .filter((value): value is string => Boolean(value));
+    return identifiers.some((identifier) => TWO_DAY_VERTICAL_PRODUCT_KEYS.has(identifier));
+  };
+
   const normalizePipelineLabel = (value: unknown): string => {
     if (typeof value !== 'string') return '';
     return value
@@ -77,6 +106,7 @@ export const handler = createHttpHandler(async (request) => {
       poPending,
       transportPending,
       sessionsInTimeline,
+      variantsInTimeline,
     ] = await Promise.all([
       prisma.sesiones.count({ where: { estado: 'BORRADOR' } }),
       prisma.sesiones.count({ where: { estado: 'SUSPENDIDA' } }),
@@ -132,6 +162,25 @@ export const handler = createHttpHandler(async (request) => {
           },
         },
       }),
+      prisma.variants.findMany({
+        where: {
+          date: {
+            not: null,
+            gte: timelineStart,
+            lt: timelineEndExclusive,
+          },
+        },
+        select: {
+          date: true,
+          products: {
+            select: {
+              name: true,
+              code: true,
+              category: true,
+            },
+          },
+        },
+      }),
     ]);
 
     const timelineMap = new Map<
@@ -164,6 +213,36 @@ export const handler = createHttpHandler(async (request) => {
       const pipelineLabel = normalizePipelineLabel(session.deals?.pipeline_id ?? null);
       if (pipelineLabel === 'formacion abierta') {
         entry.formacionAbiertaSessions += 1;
+      }
+    }
+
+    for (const variant of variantsInTimeline) {
+      const variantDateValue = variant.date;
+      const variantDate =
+        variantDateValue instanceof Date
+          ? variantDateValue
+          : variantDateValue
+            ? new Date(variantDateValue)
+            : null;
+      if (!variantDate || Number.isNaN(variantDate.getTime())) {
+        continue;
+      }
+
+      const dateKey = toDateKey(variantDate);
+      const entry = timelineMap.get(dateKey);
+      if (entry) {
+        entry.totalSessions += 1;
+        entry.formacionAbiertaSessions += 1;
+      }
+
+      if (isTwoDayVerticalProduct(variant.products ?? null)) {
+        const nextDayDate = addDays(variantDate, 1);
+        const nextDateKey = toDateKey(nextDayDate);
+        const nextEntry = timelineMap.get(nextDateKey);
+        if (nextEntry) {
+          nextEntry.totalSessions += 1;
+          nextEntry.formacionAbiertaSessions += 1;
+        }
       }
     }
 
