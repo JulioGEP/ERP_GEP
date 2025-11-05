@@ -10,8 +10,9 @@ const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
 // Exportado por si otros módulos necesitan el mapping
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
-  Comercial: ['/perfil', '/presupuestos/sinplanificar', '/presupuestos/*', '/calendario/*'],
+  Comercial: ['/dashboard', '/perfil', '/presupuestos/sinplanificar', '/presupuestos/*', '/calendario/*'],
   Administracion: [
+    '/dashboard',
     '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
@@ -20,6 +21,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/certificados/*',
   ],
   Logistica: [
+    '/dashboard',
     '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
@@ -28,13 +30,14 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/recursos/salas',
   ],
   People: [
+    '/dashboard',
     '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/calendario/*',
     '/recursos/formadores_bomberos',
   ],
-  Formador: ['/perfil', '/recursos/trainer'],
+  Formador: ['/dashboard', '/perfil', '/recursos/trainer'],
 };
 
 function normalizeRoleKey(value: string | null | undefined): string | null {
@@ -108,6 +111,7 @@ export function getRoleDisplayValue(role: string | null | undefined): string | n
 
 // Exportado para que el front o los guards puedan reutilizar el orden por defecto
 export const DEFAULT_ROUTE_ORDER = [
+  '/dashboard',
   '/presupuestos/sinplanificar',
   '/recursos/formadores_bomberos',
   '/recursos/trainer',

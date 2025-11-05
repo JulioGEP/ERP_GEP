@@ -17,6 +17,7 @@ import type { TrainerPageProps } from '../pages/usuarios/TrainerPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext';
 
+const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const AllBudgetsPage = lazy(() => import('../pages/presupuestos/AllBudgetsPage'));
 const UnworkedBudgetsPage = lazy(() => import('../pages/presupuestos/UnworkedBudgetsPage'));
@@ -85,6 +86,11 @@ export function AppRouter({
   return (
     <Suspense fallback={null}>
       <Routes>
+        <Route
+          path="/dashboard"
+          element={<GuardedRoute path="/dashboard" element={<DashboardPage />} />}
+        />
+
         <Route
           path="/"
           element={

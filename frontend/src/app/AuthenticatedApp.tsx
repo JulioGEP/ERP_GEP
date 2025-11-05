@@ -69,6 +69,11 @@ type NavItem = {
 
 const NAVIGATION_ITEMS: NavItem[] = [
   {
+    key: 'Dashboard',
+    label: 'Dashboard',
+    path: '/dashboard',
+  },
+  {
     key: 'Presupuestos',
     label: 'Presupuestos',
     children: [
@@ -137,7 +142,7 @@ const NAVIGATION_ITEMS: NavItem[] = [
 
 const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
 
-const DEFAULT_REDIRECT_PATH = '/presupuestos/todos';
+const DEFAULT_REDIRECT_PATH = '/dashboard';
 
 type BudgetModalProps = ComponentProps<typeof BudgetDetailModalEmpresas>;
 
