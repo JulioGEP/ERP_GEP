@@ -19,11 +19,33 @@ const EMPTY_METRICS: DashboardMetrics = {
   generatedAt: null,
 };
 
+const NETLIFY_BASE_URL = 'https://erpgep.netlify.app';
+
+const SESSION_CALENDAR_PATH = `${NETLIFY_BASE_URL}/calendario/por_sesiones`;
+const UNWORKED_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sintrabajar`;
+
+const SESSION_DRAFTS_URL = `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__estado=BORRADOR`;
+const SESSION_SUSPENDED_URL = `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__estado=SUSPENDIDA`;
+const SESSION_PENDING_COMPLETION_URL =
+  `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__por_finalizar=S%C3%AD&calendar-sessions__filter__estado=PLANIFICADA`;
+
+const BUDGETS_PENDING_CAES_URL =
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__caes_label=S%C3%AD&budgets-table__filter__caes_val=Pendiente`;
+const BUDGETS_PENDING_FUNDAE_URL =
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__fundae_label=S%C3%AD&budgets-table__filter__fundae_val=Pendiente`;
+const BUDGETS_PENDING_HOTEL_URL =
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__hotel_label=S%C3%AD&budgets-table__filter__hotel_val=Pendiente`;
+const BUDGETS_PENDING_PO_URL =
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__po=S%C3%AD&budgets-table__filter__po_val=Pendiente`;
+const BUDGETS_PENDING_TRANSPORT_URL =
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__transporte=S%C3%AD&budgets-table__filter__transporte_val=Pendiente`;
+
 type MetricCardProps = {
   title: string;
   value: number;
   accent?: 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'secondary';
   description?: string;
+  href?: string;
 };
 
 function formatNumber(value: number): string {
@@ -44,8 +66,8 @@ function formatUpdatedAt(value: string | null): string | null {
   }
 }
 
-function MetricCard({ title, value, accent = 'primary', description }: MetricCardProps) {
-  return (
+function MetricCard({ title, value, accent = 'primary', description, href }: MetricCardProps) {
+  const card = (
     <Card className="h-100 border-0 shadow-sm">
       <Card.Body className="d-flex flex-column gap-2">
         <span className="text-uppercase text-muted fw-semibold small">{title}</span>
@@ -53,6 +75,16 @@ function MetricCard({ title, value, accent = 'primary', description }: MetricCar
         {description ? <span className="text-muted small">{description}</span> : null}
       </Card.Body>
     </Card>
+  );
+
+  if (!href) {
+    return card;
+  }
+
+  return (
+    <a className="text-decoration-none text-reset d-block h-100" href={href}>
+      {card}
+    </a>
   );
 }
 
@@ -138,6 +170,7 @@ export default function DashboardPage() {
                   value={metrics.sessions.borrador}
                   accent="primary"
                   description="Sesiones aún pendientes de confirmar y planificar."
+                  href={SESSION_DRAFTS_URL}
                 />
               </Col>
               <Col>
@@ -146,6 +179,7 @@ export default function DashboardPage() {
                   value={metrics.sessions.suspendida}
                   accent="warning"
                   description="Sesiones pausadas que requieren revisar la replanificación."
+                  href={SESSION_SUSPENDED_URL}
                 />
               </Col>
               <Col>
@@ -154,6 +188,7 @@ export default function DashboardPage() {
                   value={metrics.sessions.porFinalizar}
                   accent="danger"
                   description="Sesiones realizadas que todavía no se han marcado como finalizadas."
+                  href={SESSION_PENDING_COMPLETION_URL}
                 />
               </Col>
             </Row>
@@ -168,6 +203,7 @@ export default function DashboardPage() {
                   value={metrics.followUp.caesPorTrabajar}
                   accent="info"
                   description="Presupuestos con CAES pendiente de validar."
+                  href={BUDGETS_PENDING_CAES_URL}
                 />
               </Col>
               <Col>
@@ -176,6 +212,7 @@ export default function DashboardPage() {
                   value={metrics.followUp.fundaePorTrabajar}
                   accent="primary"
                   description="Presupuestos con FUNDAE pendiente de validar."
+                  href={BUDGETS_PENDING_FUNDAE_URL}
                 />
               </Col>
               <Col>
@@ -184,6 +221,7 @@ export default function DashboardPage() {
                   value={metrics.followUp.hotelPorTrabajar}
                   accent="secondary"
                   description="Reservas de hotel que aún deben gestionarse."
+                  href={BUDGETS_PENDING_HOTEL_URL}
                 />
               </Col>
               <Col>
@@ -192,6 +230,7 @@ export default function DashboardPage() {
                   value={metrics.followUp.poPorTrabajar}
                   accent="warning"
                   description="Pedidos de compra (PO) pendientes de validación."
+                  href={BUDGETS_PENDING_PO_URL}
                 />
               </Col>
               <Col>
@@ -200,6 +239,7 @@ export default function DashboardPage() {
                   value={metrics.followUp.transportePorTrabajar}
                   accent="danger"
                   description="Logística de transporte pendiente de confirmar."
+                  href={BUDGETS_PENDING_TRANSPORT_URL}
                 />
               </Col>
             </Row>

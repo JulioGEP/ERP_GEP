@@ -286,6 +286,16 @@ function formatDateLabel(timestamp: number | null): string {
   }
 }
 
+function formatValidationFilterValue(value: boolean | null | undefined): string {
+  if (value === true) {
+    return 'Validado';
+  }
+  if (value === false) {
+    return 'Pendiente';
+  }
+  return 'Sin dato';
+}
+
 type FollowUpLabelKey = 'fundae_label' | 'caes_label' | 'hotel_label' | 'transporte' | 'po';
 type FollowUpValidationKey =
   | 'fundae_val'
@@ -478,9 +488,15 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   training_address: (budget) => safeTrim(budget.training_address ?? '') ?? '',
   sede_label: (budget) => safeTrim(budget.sede_label ?? '') ?? '',
   caes_label: (budget) => safeTrim(budget.caes_label ?? '') ?? '',
+  caes_val: (budget) => formatValidationFilterValue(budget.caes_val),
   fundae_label: (budget) => safeTrim(budget.fundae_label ?? '') ?? '',
+  fundae_val: (budget) => formatValidationFilterValue(budget.fundae_val),
   hotel_label: (budget) => safeTrim(budget.hotel_label ?? '') ?? '',
+  hotel_val: (budget) => formatValidationFilterValue(budget.hotel_val),
   transporte: (budget) => safeTrim(budget.transporte ?? '') ?? '',
+  transporte_val: (budget) => formatValidationFilterValue(budget.transporte_val),
+  po: (budget) => safeTrim(budget.po ?? '') ?? '',
+  po_val: (budget) => formatValidationFilterValue(budget.po_val),
   tipo_servicio: (budget) => safeTrim(budget.tipo_servicio ?? '') ?? '',
   comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
   session_estado: (budget) => {
@@ -512,9 +528,15 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'training_address', label: 'Dirección de formación' },
   { key: 'sede_label', label: 'Sede' },
   { key: 'caes_label', label: 'CAES' },
+  { key: 'caes_val', label: 'Validación CAES', type: 'select' },
   { key: 'fundae_label', label: 'FUNDAE' },
+  { key: 'fundae_val', label: 'Validación FUNDAE', type: 'select' },
   { key: 'hotel_label', label: 'Hotel' },
+  { key: 'hotel_val', label: 'Validación Hotel', type: 'select' },
   { key: 'transporte', label: 'Transporte' },
+  { key: 'transporte_val', label: 'Validación Transporte', type: 'select' },
+  { key: 'po', label: 'PO', type: 'select' },
+  { key: 'po_val', label: 'Validación PO', type: 'select' },
   { key: 'tipo_servicio', label: 'Tipo de servicio' },
   { key: 'comercial', label: 'Comercial' },
   { key: 'session_estado', label: 'Estado sesión', type: 'select' },
@@ -533,9 +555,15 @@ const BUDGET_SELECT_FILTER_KEYS = new Set<string>([
   'pipeline',
   'sede_label',
   'caes_label',
+  'caes_val',
   'fundae_label',
+  'fundae_val',
   'hotel_label',
+  'hotel_val',
   'transporte',
+  'transporte_val',
+  'po',
+  'po_val',
   'tipo_servicio',
   'comercial',
   'session_estado',
