@@ -100,23 +100,27 @@ export async function getGmailAccessToken(): Promise<string> {
 export async function sendGmail(params: {
   to: string;
   subject: string;
-  html: string;
+  body: string;
+  contentType: string;
+  transferEncoding?: 'base64' | 'quoted-printable' | '8bit' | '7bit';
   from?: string;
   replyTo?: string;
 }) {
   const gmail = await getGmailClient();
   const fromAddr = params.from || process.env.GMAIL_IMPERSONATE!;
+  const subjectHeader = encodeMimeHeader(params.subject);
   const headers = [
     `From: ${fromAddr}`,
     `To: ${params.to}`,
-    `Subject: ${params.subject}`,
+    `Subject: ${subjectHeader}`,
     params.replyTo ? `Reply-To: ${params.replyTo}` : null,
     `MIME-Version: 1.0`,
-    `Content-Type: text/html; charset=UTF-8`,
+    `Content-Type: ${params.contentType}`,
+    params.transferEncoding ? `Content-Transfer-Encoding: ${params.transferEncoding}` : null,
     ``,
   ].filter(Boolean) as string[];
 
-  const raw = Buffer.from([...headers, params.html].join("\r\n"))
+  const raw = Buffer.from([...headers, params.body].join("\r\n"))
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -134,4 +138,14 @@ export async function sendGmail(params: {
     console.error("[gmail] send error:", JSON.stringify(data));
     throw e;
   }
+}
+
+function encodeMimeHeader(value: string): string {
+  if (!value) return value;
+  const needsEncoding = /[^\x20-\x7E]/.test(value);
+  if (!needsEncoding) {
+    return value;
+  }
+  const base64 = Buffer.from(value, "utf8").toString("base64");
+  return `=?UTF-8?B?${base64}?=`;
 }

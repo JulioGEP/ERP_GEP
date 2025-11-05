@@ -18,19 +18,51 @@ type SendEmailParams = {
  * Sin nodemailer/OAuth2: menos superficie y sin problemas de OpenSSL.
  */
 export async function sendEmail({ to, subject, html, text }: SendEmailParams): Promise<void> {
+  const plainText = text ?? (html ? stripHtml(html) : "");
   const htmlBody =
     html ??
-    (text
-      ? `<pre style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace; white-space:pre-wrap;">${escapeHtml(
-          text
+    (plainText
+      ? `<pre style="font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace; white-space: pre-wrap;">${escapeHtml(
+          plainText
         )}</pre>`
       : "<div></div>");
+
+  const hasText = Boolean(plainText);
+  const boundary = `mime_boundary_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+  if (hasText) {
+    const bodyParts = [
+      `--${boundary}`,
+      `Content-Type: text/plain; charset=UTF-8`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      chunkBase64(Buffer.from(plainText, "utf8").toString("base64")),
+      `--${boundary}`,
+      `Content-Type: text/html; charset=UTF-8`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      chunkBase64(Buffer.from(htmlBody, "utf8").toString("base64")),
+      `--${boundary}--`,
+      ``,
+    ].join("\r\n");
+
+    await sendGmail({
+      to,
+      subject,
+      body: bodyParts,
+      contentType: `multipart/alternative; boundary="${boundary}"`,
+      from: FROM,
+    });
+    return;
+  }
 
   await sendGmail({
     to,
     subject,
-    html: htmlBody,
-    from: FROM, // From = usuario impersonado
+    body: chunkBase64(Buffer.from(htmlBody, "utf8").toString("base64")),
+    contentType: "text/html; charset=UTF-8",
+    transferEncoding: "base64",
+    from: FROM,
   });
 }
 
@@ -66,4 +98,13 @@ function escapeHtml(s: string) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function stripHtml(source: string): string {
+  return source.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function chunkBase64(input: string): string {
+  const chunked = input.replace(/.{1,76}(?=.)/g, "$&\r\n");
+  return chunked.endsWith("\r\n") ? chunked : `${chunked}\r\n`;
 }
