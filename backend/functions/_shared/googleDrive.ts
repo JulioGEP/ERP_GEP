@@ -963,27 +963,81 @@ function resolveSessionFolderNames(params: {
   return { sessionNumberLabel, baseSessionName, folderName };
 }
 
+function formatSessionStartDate(session: any): string | null {
+  if (!session) return null;
+
+  const candidates: any[] = [
+    session.fecha_inicio_utc,
+    session.fecha_inicio,
+    session.start_date,
+  ];
+
+  for (const raw of candidates) {
+    if (!raw) continue;
+    let iso: string | null = null;
+    if (typeof raw === "string" || raw instanceof Date) {
+      iso = toMadridISOString(raw);
+    } else if (typeof raw === "number") {
+      iso = toMadridISOString(new Date(raw));
+    }
+    if (!iso) continue;
+    const datePart = iso.slice(0, 10);
+    const [year, month, day] = datePart.split("-");
+    if (year && month && day) {
+      return `${day}-${month}-${year}`;
+    }
+    if (datePart) {
+      return datePart;
+    }
+  }
+
+  return null;
+}
+
 function buildSessionFolderNameOptions(params: {
   deal: any;
   sessionNumber: string;
   sessionName?: string | null;
   session?: any;
 }): { preferredName: string; legacyNames: string[]; legacyFolderName: string } {
-  const { folderName: baseName } = resolveSessionFolderNames({
+  const { folderName: baseName, baseSessionName } = resolveSessionFolderNames({
     sessionNumber: params.sessionNumber,
     sessionName: params.sessionName,
     session: params.session,
   });
 
-  const preferredName = baseName;
-  const legacyNames: string[] = [];
   const dealId = resolveDealId(params.deal);
-  if (dealId) {
-    const prefixed = sanitizeName(`${dealId} - ${baseName}`);
-    if (prefixed && prefixed !== preferredName) {
-      legacyNames.push(prefixed);
-    }
-  }
+  const sessionTitle =
+    sanitizeName(
+      params.sessionName ||
+        params.session?.nombre_cache ||
+        params.session?.name ||
+        baseSessionName,
+    ) || baseSessionName;
+  const sessionDate = formatSessionStartDate(params.session);
+
+  const preferredParts = [dealId, sessionTitle, sessionDate].filter(
+    (value): value is string => Boolean(value),
+  );
+  const preferredCandidate =
+    preferredParts.length >= 2
+      ? sanitizeName(preferredParts.join(" - "))
+      : null;
+  const preferredName = preferredCandidate || baseName;
+
+  const legacyCandidates = [
+    baseName,
+    sessionTitle !== baseName ? sessionTitle : null,
+    sessionDate ? `${baseName} - ${sessionDate}` : null,
+    sessionDate ? `${sessionTitle} - ${sessionDate}` : null,
+    dealId ? `${dealId} - ${baseName}` : null,
+    dealId ? `${dealId} - ${sessionTitle}` : null,
+    dealId && sessionDate ? `${dealId} - ${sessionTitle} - ${sessionDate}` : null,
+  ];
+
+  const legacyNames = uniqueSanitizedNames(legacyCandidates).filter(
+    (name) => name !== preferredName,
+  );
 
   return { preferredName, legacyNames, legacyFolderName: legacyNames[0] ?? preferredName };
 }
