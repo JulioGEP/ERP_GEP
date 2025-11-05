@@ -154,10 +154,37 @@ export const handler = createHttpHandler(async (request) => {
           },
         },
         select: {
+          id: true,
           fecha_inicio_utc: true,
+          nombre_cache: true,
           deals: {
             select: {
+              deal_id: true,
               pipeline_id: true,
+              title: true,
+              organizations: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+          sesion_trainers: {
+            select: {
+              trainers: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
+          sesion_unidades: {
+            select: {
+              unidades_moviles: {
+                select: {
+                  name: true,
+                },
+              },
             },
           },
         },
@@ -183,9 +210,36 @@ export const handler = createHttpHandler(async (request) => {
       }),
     ]);
 
+    type SessionTimelineEntry = {
+      id: string;
+      fecha_inicio_utc: Date | null;
+      nombre_cache: string | null;
+      deals: {
+        deal_id: string | null;
+        pipeline_id: string | null;
+        title: string | null;
+        organizations: { name: string | null } | null;
+      } | null;
+      sesion_trainers: Array<{ trainers: { name: string | null } | null }> | null;
+      sesion_unidades: Array<{ unidades_moviles: { name: string | null } | null }> | null;
+    };
+
+    const timelineSessions = sessionsInTimeline as SessionTimelineEntry[];
+
     const timelineMap = new Map<
       string,
-      { totalSessions: number; formacionAbiertaSessions: number }
+      {
+        totalSessions: number;
+        formacionAbiertaSessions: number;
+        budgets: Array<{
+          id: string;
+          dealId: string | null;
+          sessionTitle: string | null;
+          companyName: string | null;
+          trainers: string[];
+          mobileUnits: string[];
+        }>;
+      }
     >();
 
     for (
@@ -196,10 +250,11 @@ export const handler = createHttpHandler(async (request) => {
       timelineMap.set(toDateKey(cursor), {
         totalSessions: 0,
         formacionAbiertaSessions: 0,
+        budgets: [],
       });
     }
 
-    for (const session of sessionsInTimeline) {
+    for (const session of timelineSessions) {
       const sessionDateIso = toMadridISOString(session.fecha_inicio_utc ?? null);
       if (!sessionDateIso || sessionDateIso.length < 10) {
         continue;
@@ -214,6 +269,27 @@ export const handler = createHttpHandler(async (request) => {
       if (pipelineLabel === 'formacion abierta') {
         entry.formacionAbiertaSessions += 1;
       }
+
+      const trainers = Array.isArray(session.sesion_trainers)
+        ? session.sesion_trainers
+            .map((entry) => entry.trainers?.name?.trim())
+            .filter((value): value is string => Boolean(value))
+        : [];
+
+      const mobileUnits = Array.isArray(session.sesion_unidades)
+        ? session.sesion_unidades
+            .map((entry) => entry.unidades_moviles?.name?.trim())
+            .filter((value): value is string => Boolean(value))
+        : [];
+
+      entry.budgets.push({
+        id: session.id,
+        dealId: session.deals?.deal_id ?? null,
+        sessionTitle: session.nombre_cache ?? session.deals?.title ?? null,
+        companyName: session.deals?.organizations?.name ?? null,
+        trainers,
+        mobileUnits,
+      });
     }
 
     for (const variant of variantsInTimeline) {
@@ -251,6 +327,7 @@ export const handler = createHttpHandler(async (request) => {
         date,
         totalSessions: values.totalSessions,
         formacionAbiertaSessions: values.formacionAbiertaSessions,
+        budgets: values.budgets,
       }),
     );
 
