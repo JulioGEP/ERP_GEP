@@ -1,11 +1,10 @@
 // backend/functions/users.ts
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import type { Prisma } from '@prisma/client';
+import type { $Enums } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
-import { updateTrainerFromUser } from './_shared/trainer-user-sync';
 import {
   getRoleDisplayValue,
   getRoleStorageValue,
@@ -125,40 +124,18 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
 
   try {
     const now = new Date();
-    const existingUsers = await prisma.users.findMany({
-      where: { email: { equals: email, mode: 'insensitive' } },
-      orderBy: { created_at: 'asc' },
-    });
-
-    let passwordHash: string | null = null;
-    let passwordAlgo = 'bcrypt';
-    let passwordUpdatedAt = now;
-
-    for (const candidate of existingUsers) {
-      if (candidate.password_hash) {
-        passwordHash = candidate.password_hash;
-        passwordAlgo = candidate.password_algo ?? 'bcrypt';
-        passwordUpdatedAt = candidate.password_updated_at ?? now;
-        break;
-      }
-    }
-
-    if (!passwordHash) {
-      passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
-      passwordAlgo = 'bcrypt';
-      passwordUpdatedAt = now;
-    }
+    const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
 
     const user = await prisma.users.create({
       data: {
         first_name: firstName,
         last_name: lastName,
         email,
-        role: roleStorage,
+        role: roleStorage as $Enums.erp_role, // ⬅️ cast al enum de Prisma
         active,
         password_hash: passwordHash,
-        password_algo: passwordAlgo,
-        password_updated_at: passwordUpdatedAt,
+        password_algo: 'bcrypt',
+        password_updated_at: now,
       },
     });
 
@@ -182,17 +159,12 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     first_name?: string;
     last_name?: string;
     email?: string;
-    role?: string;
+    role?: $Enums.erp_role; // ⬅️ enum correcto
     active?: boolean;
   };
 
   const data: UserUpdateData = {};
   let activeProvided = false;
-
-  const existingUser = await prisma.users.findUnique({ where: { id: userId } });
-  if (!existingUser) {
-    return errorResponse('NOT_FOUND', 'Usuario no encontrado', 404);
-  }
 
   if ('firstName' in (request.body ?? {})) {
     const firstName = sanitizeName(request.body?.firstName);
@@ -224,10 +196,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     if (!roleStorage) {
       return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
     }
-    if (existingUser.trainer_id && roleStorage !== 'formador') {
-      return errorResponse('INVALID_ROLE', 'Los formadores solo pueden tener rol Formador', 400);
-    }
-    data.role = roleStorage;
+    data.role = roleStorage as $Enums.erp_role; // ⬅️ cast al enum de Prisma
   }
 
   if ('active' in (request.body ?? {})) {
@@ -242,30 +211,17 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
   const now = new Date();
 
   try {
-    const user = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const updated = await tx.users.update({
-        where: { id: userId },
-        data,
-      });
-
-      if (updated.trainer_id) {
-        await updateTrainerFromUser(tx, updated, {
-          first_name: updated.first_name,
-          last_name: updated.last_name,
-          email: updated.email,
-          active: updated.active,
-        });
-      }
-
-      if (activeProvided && data.active === false && existingUser.active) {
-        await tx.auth_sessions.updateMany({
-          where: { user_id: userId, revoked_at: null },
-          data: { revoked_at: now },
-        });
-      }
-
-      return updated;
+    const user = await prisma.users.update({
+      where: { id: userId },
+      data,
     });
+
+    if (activeProvided && data.active === false) {
+      await prisma.auth_sessions.updateMany({
+        where: { user_id: userId, revoked_at: null },
+        data: { revoked_at: now },
+      });
+    }
 
     return successResponse({ user: serializeUser(user) });
   } catch (error) {

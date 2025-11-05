@@ -13,14 +13,12 @@ export const API_BASE =
 export class ApiError extends Error {
   code: string;
   status?: number;
-  details?: unknown;
 
-  constructor(code: string, message: string, status?: number, details?: unknown) {
+  constructor(code: string, message: string, status?: number) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.status = status;
-    this.details = details;
   }
 }
 
@@ -95,8 +93,7 @@ export async function requestJson<T = any>(
   if (!response.ok || (json && typeof json === 'object' && json.ok === false)) {
     const message = json?.message ?? options?.defaultErrorMessage ?? 'No se pudo completar la solicitud.';
     const code = json?.error_code ?? options?.defaultErrorCode ?? `HTTP_${response.status}`;
-    const details = json && typeof json === 'object' ? json : undefined;
-    throw new ApiError(code, message, response.status || undefined, details);
+    throw new ApiError(code, message, response.status || undefined);
   }
 
   return (json ?? {}) as T;
