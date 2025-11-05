@@ -492,9 +492,20 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
   product_name: (session) => safeString(session.productName ?? ''),
   estado: (session) =>
     safeString(`${session.estado} ${SESSION_ESTADO_LABELS[session.estado] ?? session.estado}`),
-  trainer: (session) => safeString(session.trainers.map((trainer) => formatResourceName(trainer)).join(' ')),
-  unit: (session) => safeString(session.units.map((unit) => formatResourceName(unit)).join(' ')),
-  room: (session) => (session.room ? safeString(formatResourceName(session.room)) : ''),
+  trainer: (session) => {
+    const names = safeString(session.trainers.map((trainer) => formatResourceName(trainer)).join(' '));
+    return names.length ? names : 'Sin formador';
+  },
+  unit: (session) => {
+    const names = safeString(session.units.map((unit) => formatResourceName(unit)).join(' '));
+    return names.length ? names : 'Sin unidad móvil';
+  },
+  room: (session) => {
+    if (session.room) {
+      return safeString(formatResourceName(session.room));
+    }
+    return 'Sin sala asignada';
+  },
   students_total: (session) => {
     const namePart = safeString(session.studentNames.join(' '));
     const countPart = formatStudentsFilterValue(session.studentsTotal);
@@ -514,7 +525,18 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
 const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVariantEvent) => string> = {
   deal_id: (variant) => joinVariantDealValues(variant, (deal) => deal.id),
   deal_title: (variant) => joinVariantDealValues(variant, (deal) => deal.title),
-  deal_pipeline_id: (variant) => joinVariantDealValues(variant, (deal) => deal.pipelineId),
+  deal_pipeline_id: (variant) => {
+    const fromDeals = joinVariantDealValues(variant, (deal) => deal.pipelineId);
+    const parts = [] as string[];
+    if (fromDeals.length) {
+      parts.push(fromDeals);
+    }
+    const category = safeString(variant.product.category ?? '');
+    if (category.length) {
+      parts.push(category);
+    }
+    return safeString(parts.join(' '));
+  },
   deal_training_address: (variant) => {
     const values = [safeString(variant.variant.sede ?? '')]
       .concat(collectVariantDealValues(variant, (deal) => deal.trainingAddress))
@@ -542,19 +564,19 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
   },
   trainer: (variant) => {
     const trainer = variant.variant.trainer;
-    if (!trainer) return '';
+    if (!trainer) return 'Sin formador';
     const parts = [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')].filter(Boolean);
     return safeString(parts.join(' '));
   },
   unit: (variant) => {
     const unit = variant.variant.unidad;
-    if (!unit) return '';
+    if (!unit) return 'Sin unidad móvil';
     const parts = [safeString(unit.name ?? ''), safeString(unit.matricula ?? '')].filter(Boolean);
     return safeString(parts.join(' '));
   },
   room: (variant) => {
     const room = variant.variant.sala;
-    if (!room) return '';
+    if (!room) return 'Sin sala asignada';
     const parts = [safeString(room.name ?? ''), safeString(room.sede ?? '')].filter(Boolean);
     return safeString(parts.join(' '));
   },
@@ -969,9 +991,17 @@ export function CalendarView({
       addValue('deal_hotel_label', session.dealHotelLabel);
       addValue('deal_transporte', session.dealTransporte);
       session.trainers.forEach((trainer) => addValue('trainer', formatResourceName(trainer)));
+      if (!session.trainers.length) {
+        addValue('trainer', 'Sin formador');
+      }
       session.units.forEach((unit) => addValue('unit', formatResourceName(unit)));
+      if (!session.units.length) {
+        addValue('unit', 'Sin unidad móvil');
+      }
       if (session.room) {
         addValue('room', formatResourceName(session.room));
+      } else {
+        addValue('room', 'Sin sala asignada');
       }
     });
 
@@ -979,6 +1009,7 @@ export function CalendarView({
       variants.forEach((variant) => {
         addValue('deal_training_address', variant.variant.sede ?? '');
         addValue('deal_sede_label', variant.variant.sede ?? '');
+        addValue('deal_pipeline_id', variant.product.category);
 
         variant.deals.forEach((deal) => {
           addValue('deal_pipeline_id', deal.pipelineId);
@@ -994,18 +1025,24 @@ export function CalendarView({
         if (trainer) {
           const parts = [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')].filter(Boolean);
           addValue('trainer', parts.join(' '));
+        } else {
+          addValue('trainer', 'Sin formador');
         }
 
         const unit = variant.variant.unidad;
         if (unit) {
           const parts = [safeString(unit.name ?? ''), safeString(unit.matricula ?? '')].filter(Boolean);
           addValue('unit', parts.join(' '));
+        } else {
+          addValue('unit', 'Sin unidad móvil');
         }
 
         const room = variant.variant.sala;
         if (room) {
           const parts = [safeString(room.name ?? ''), safeString(room.sede ?? '')].filter(Boolean);
           addValue('room', parts.join(' '));
+        } else {
+          addValue('room', 'Sin sala asignada');
         }
       });
     }
