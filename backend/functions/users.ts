@@ -2,6 +2,7 @@
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import type { $Enums } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
@@ -52,6 +53,70 @@ function parsePageParam(value: string | undefined, fallback: number, max: number
   const normalized = Math.floor(parsed);
   if (normalized <= 0) return fallback;
   return Math.min(normalized, max);
+}
+
+/**
+ * Sincroniza el usuario (rol formador) con su espejo en trainers.
+ * Estrategia:
+ * 1) Busca trainer por user_id.
+ * 2) Si no existe, busca por email (único).
+ * 3) Actualiza el encontrado; si no existe y role === 'formador', crea uno nuevo.
+ * 4) Asegura el enlace trainers.user_id = users.id.
+ */
+async function syncTrainerForFormador(
+  tx: ReturnType<typeof getPrisma>,
+  user: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string;
+    role: $Enums.erp_role;
+    active: boolean;
+  }
+) {
+  if (user.role !== 'formador') return; // sólo sincronizamos para formadores
+  if (!user.email) return; // necesitamos email para la duplicidad funcional
+
+  // 1) por user_id
+  let trainer = await tx.trainers.findUnique({
+    where: { user_id: user.id },
+  });
+
+  // 2) si no, por email
+  if (!trainer) {
+    trainer = await tx.trainers.findUnique({
+      where: { email: user.email },
+    });
+  }
+
+  const trainerData = {
+    name: user.first_name,
+    apellido: user.last_name ?? null,
+    email: user.email,
+    activo: user.active,
+    user_id: user.id,
+  };
+
+  if (trainer) {
+    await tx.trainers.update({
+      where: { trainer_id: trainer.trainer_id },
+      data: trainerData,
+    });
+  } else {
+    await tx.trainers.create({
+      data: {
+        trainer_id: randomUUID(),
+        ...trainerData,
+        // valores neutros para campos opcionales
+        phone: null,
+        dni: null,
+        direccion: null,
+        especialidad: null,
+        titulacion: null,
+        sede: [],
+      },
+    });
+  }
 }
 
 export const handler = createHttpHandler<any>(async (request) => {
@@ -126,20 +191,34 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
     const now = new Date();
     const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
 
-    const user = await prisma.users.create({
-      data: {
-        first_name: firstName,
-        last_name: lastName,
-        email,
-        role: roleStorage as $Enums.erp_role, // ⬅️ cast al enum de Prisma
-        active,
-        password_hash: passwordHash,
-        password_algo: 'bcrypt',
-        password_updated_at: now,
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.users.create({
+        data: {
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          role: roleStorage as $Enums.erp_role,
+          active,
+          password_hash: passwordHash,
+          password_algo: 'bcrypt',
+          password_updated_at: now,
+        },
+      });
+
+      // Sincroniza trainer si corresponde
+      await syncTrainerForFormador(tx as any, {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        role: user.role,
+        active: user.active,
+      });
+
+      return user;
     });
 
-    return successResponse({ user: serializeUser(user) }, 201);
+    return successResponse({ user: serializeUser(result) }, 201);
   } catch (error) {
     if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
       return errorResponse('EMAIL_EXISTS', 'El email ya está registrado', 409);
@@ -159,7 +238,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     first_name?: string;
     last_name?: string;
     email?: string;
-    role?: $Enums.erp_role; // ⬅️ enum correcto
+    role?: $Enums.erp_role;
     active?: boolean;
   };
 
@@ -196,7 +275,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     if (!roleStorage) {
       return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
     }
-    data.role = roleStorage as $Enums.erp_role; // ⬅️ cast al enum de Prisma
+    data.role = roleStorage as $Enums.erp_role;
   }
 
   if ('active' in (request.body ?? {})) {
@@ -211,19 +290,33 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
   const now = new Date();
 
   try {
-    const user = await prisma.users.update({
-      where: { id: userId },
-      data,
+    const updated = await prisma.$transaction(async (tx) => {
+      const user = await tx.users.update({
+        where: { id: userId },
+        data,
+      });
+
+      if (activeProvided && data.active === false) {
+        await tx.auth_sessions.updateMany({
+          where: { user_id: userId, revoked_at: null },
+          data: { revoked_at: now },
+        });
+      }
+
+      // Sincroniza trainer si corresponde (rol formador)
+      await syncTrainerForFormador(tx as any, {
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        role: user.role,
+        active: user.active,
+      });
+
+      return user;
     });
 
-    if (activeProvided && data.active === false) {
-      await prisma.auth_sessions.updateMany({
-        where: { user_id: userId, revoked_at: null },
-        data: { revoked_at: now },
-      });
-    }
-
-    return successResponse({ user: serializeUser(user) });
+    return successResponse({ user: serializeUser(updated) });
   } catch (error) {
     if (error instanceof PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
