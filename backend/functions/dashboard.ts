@@ -4,7 +4,7 @@ import { createHttpHandler } from './_shared/http';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
-import { nowInMadridDate, nowInMadridISO } from './_shared/timezone';
+import { nowInMadridDate, nowInMadridISO, toMadridISOString } from './_shared/timezone';
 
 const YES_VALUES = ['Si', 'Sí'] as const;
 
@@ -32,6 +32,40 @@ export const handler = createHttpHandler(async (request) => {
 
   const now = nowInMadridDate();
 
+  const startOfDay = (value: Date): Date => {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+
+  const addDays = (value: Date, amount: number): Date => {
+    const date = new Date(value);
+    date.setDate(date.getDate() + amount);
+    return date;
+  };
+
+  const normalizePipelineLabel = (value: unknown): string => {
+    if (typeof value !== 'string') return '';
+    return value
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .trim()
+      .toLowerCase();
+  };
+
+  const toDateKey = (value: Date): string => {
+    const iso = toMadridISOString(value);
+    if (iso && iso.length >= 10) {
+      return iso.slice(0, 10);
+    }
+    return value.toISOString().slice(0, 10);
+  };
+
+  const todayStart = startOfDay(now);
+  const timelineStart = startOfDay(addDays(todayStart, -14));
+  const timelineEnd = startOfDay(addDays(todayStart, 21));
+  const timelineEndExclusive = addDays(timelineEnd, 1);
+
   try {
     const [
       draftSessions,
@@ -42,6 +76,7 @@ export const handler = createHttpHandler(async (request) => {
       hotelPending,
       poPending,
       transportPending,
+      sessionsInTimeline,
     ] = await Promise.all([
       prisma.sesiones.count({ where: { estado: 'BORRADOR' } }),
       prisma.sesiones.count({ where: { estado: 'SUSPENDIDA' } }),
@@ -81,7 +116,64 @@ export const handler = createHttpHandler(async (request) => {
           transporte_val: false,
         },
       }),
+      prisma.sesiones.findMany({
+        where: {
+          fecha_inicio_utc: {
+            gte: timelineStart,
+            lt: timelineEndExclusive,
+          },
+        },
+        select: {
+          fecha_inicio_utc: true,
+          deals: {
+            select: {
+              pipeline_id: true,
+            },
+          },
+        },
+      }),
     ]);
+
+    const timelineMap = new Map<
+      string,
+      { totalSessions: number; formacionAbiertaSessions: number }
+    >();
+
+    for (
+      let cursor = new Date(timelineStart);
+      cursor <= timelineEnd;
+      cursor = addDays(cursor, 1)
+    ) {
+      timelineMap.set(toDateKey(cursor), {
+        totalSessions: 0,
+        formacionAbiertaSessions: 0,
+      });
+    }
+
+    for (const session of sessionsInTimeline) {
+      const sessionDateIso = toMadridISOString(session.fecha_inicio_utc ?? null);
+      if (!sessionDateIso || sessionDateIso.length < 10) {
+        continue;
+      }
+      const dateKey = sessionDateIso.slice(0, 10);
+      const entry = timelineMap.get(dateKey);
+      if (!entry) {
+        continue;
+      }
+      entry.totalSessions += 1;
+      const pipelineLabel = normalizePipelineLabel(session.deals?.pipeline_id ?? null);
+      if (pipelineLabel === 'formacion abierta') {
+        entry.formacionAbiertaSessions += 1;
+      }
+    }
+
+    const timelinePoints = Array.from(timelineMap.entries()).map(
+      ([date, values]) => ({
+        date,
+        totalSessions: values.totalSessions,
+        formacionAbiertaSessions: values.formacionAbiertaSessions,
+      }),
+    );
 
     return successResponse({
       sessions: {
@@ -97,6 +189,11 @@ export const handler = createHttpHandler(async (request) => {
         transportePorTrabajar: transportPending,
       },
       generatedAt: nowInMadridISO(),
+      sessionsTimeline: {
+        startDate: toDateKey(timelineStart),
+        endDate: toDateKey(timelineEnd),
+        points: timelinePoints,
+      },
     });
   } catch (error) {
     console.error('[dashboard] Failed to compute metrics', error);
