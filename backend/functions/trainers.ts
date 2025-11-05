@@ -31,6 +31,7 @@ type TrainerRecord = {
   sede?: string[] | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
+  user_id: string | null;
 };
 
 function parseTrainerIdFromPath(path: string): string | null {
@@ -66,6 +67,7 @@ function normalizeTrainer(row: TrainerRecord) {
     sede: normalizedSede,
     created_at: toMadridISOString(row.created_at),
     updated_at: toMadridISOString(row.updated_at),
+    user_id: row.user_id,
   };
 }
 
