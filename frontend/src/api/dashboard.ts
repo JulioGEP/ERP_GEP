@@ -15,6 +15,11 @@ type RawDashboardMetricsResponse = {
     transportePorTrabajar?: unknown;
   } | null;
   generatedAt?: unknown;
+  sessionsTimeline?: {
+    startDate?: unknown;
+    endDate?: unknown;
+    points?: unknown;
+  } | null;
 };
 
 export type DashboardMetrics = {
@@ -31,6 +36,15 @@ export type DashboardMetrics = {
     transportePorTrabajar: number;
   };
   generatedAt: string | null;
+  sessionsTimeline: {
+    startDate: string | null;
+    endDate: string | null;
+    points: Array<{
+      date: string;
+      totalSessions: number;
+      formacionAbiertaSessions: number;
+    }>;
+  };
 };
 
 function sanitizeIsoDate(value: unknown): string | null {
@@ -39,6 +53,50 @@ function sanitizeIsoDate(value: unknown): string | null {
   if (!trimmed.length) return null;
   const date = new Date(trimmed);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function sanitizeDateOnly(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  const date = new Date(`${trimmed}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : trimmed;
+}
+
+type RawTimelinePoint = {
+  date?: unknown;
+  totalSessions?: unknown;
+  formacionAbiertaSessions?: unknown;
+};
+
+function sanitizeTimelinePoint(value: unknown) {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as RawTimelinePoint;
+  const date = sanitizeDateOnly(raw.date);
+  if (!date) return null;
+  return {
+    date,
+    totalSessions: toNonNegativeInteger(raw.totalSessions),
+    formacionAbiertaSessions: toNonNegativeInteger(raw.formacionAbiertaSessions),
+  };
+}
+
+function sanitizeTimeline(
+  value: RawDashboardMetricsResponse['sessionsTimeline'],
+): DashboardMetrics['sessionsTimeline'] {
+  if (!value || typeof value !== 'object') {
+    return { startDate: null, endDate: null, points: [] };
+  }
+  const startDate = sanitizeDateOnly(value.startDate) ?? null;
+  const endDate = sanitizeDateOnly(value.endDate) ?? null;
+  const points: DashboardMetrics['sessionsTimeline']['points'] = Array.isArray(
+    value.points,
+  )
+    ? (value.points
+        .map(sanitizeTimelinePoint)
+        .filter(Boolean) as DashboardMetrics['sessionsTimeline']['points'])
+    : [];
+  return { startDate, endDate, points };
 }
 
 export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
@@ -60,6 +118,7 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
       transportePorTrabajar: toNonNegativeInteger(response.followUp?.transportePorTrabajar),
     },
     generatedAt: sanitizeIsoDate(response.generatedAt),
+    sessionsTimeline: sanitizeTimeline(response.sessionsTimeline),
   };
 }
 
