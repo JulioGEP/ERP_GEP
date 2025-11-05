@@ -92,9 +92,9 @@ export const handler = createHttpHandler(async (request) => {
       sessionCounts,
       variantCounts,
     ] = await Promise.all([
-      prisma.sesiones.count({ where: { estado: 'BORRADOR' } }),
-      prisma.sesiones.count({ where: { estado: 'SUSPENDIDA' } }),
-      prisma.sesiones.count({
+      prisma.sessions.count({ where: { estado: 'BORRADOR' } }),
+      prisma.sessions.count({ where: { estado: 'SUSPENDIDA' } }),
+      prisma.sessions.count({
         where: {
           estado: { not: 'FINALIZADA' },
           fecha_fin_utc: { not: null, lt: now },
