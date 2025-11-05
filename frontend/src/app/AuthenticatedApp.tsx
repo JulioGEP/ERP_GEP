@@ -1088,19 +1088,13 @@ export default function AuthenticatedApp() {
         <Container fluid="xl" className="d-flex align-items-center gap-4">
           <Navbar.Brand
             href="#"
-            className="d-flex align-items-center gap-3"
+            className="d-flex align-items-center"
             onClick={(event) => {
               event.preventDefault();
               navigate(homePath);
             }}
           >
             <img src={logo} height={64} alt="GEP Group" />
-            <div>
-              <span className="d-block fw-semibold text-uppercase small text-muted">GEP Group</span>
-              <span className="d-block fw-bold" style={{ color: 'var(--color-red)' }}>
-                Planificador
-              </span>
-            </div>
           </Navbar.Brand>
           <Nav className="ms-auto gap-3 align-items-center">
             {filteredNavItems.map((item) =>
