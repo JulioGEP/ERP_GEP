@@ -65,6 +65,10 @@ const PRACTICAL_COLUMN_GAP = 10;
 const PRACTICAL_COLUMN_LEFT_INDENT = 30;
 const PRACTICAL_COLUMN_RIGHT_MARGIN = 10;
 const MAX_TEXT_BLOCK_WIDTH = 900;
+// Coordenada X más a la izquierda del triángulo rojo del fondo
+// obtenida a partir de la máscara alfa del recurso PDF original.
+const RED_TRIANGLE_LEFTMOST_X = 613.21;
+const COURSE_NAME_RIGHT_PADDING = 12;
 const TABLE_CELL_PADDING = {
   left: 0,
   right: 6,
@@ -640,11 +644,15 @@ function buildCertificateDocDefinition(
     textWidthBase + (textBlockAdjustments.widthDelta ?? 0),
   );
   const maxAvailableWidth = Math.max(MIN_TEXT_BLOCK_WIDTH, PAGE_WIDTH - boundedTextStartX);
-  const textWidth = Math.min(
-  adjustedTextWidth,
-  maxAvailableWidth,
-  MAX_TEXT_BLOCK_WIDTH, // ← tope duro
-);
+  const defaultTextWidth = Math.max(
+    MIN_TEXT_BLOCK_WIDTH,
+    Math.min(adjustedTextWidth, maxAvailableWidth, MAX_TEXT_BLOCK_WIDTH),
+  );
+
+  const triangleSafeWidthLimit = RED_TRIANGLE_LEFTMOST_X - COURSE_NAME_RIGHT_PADDING - boundedTextStartX;
+  const textWidth = triangleSafeWidthLimit > 0
+    ? Math.min(defaultTextWidth, triangleSafeWidthLimit)
+    : defaultTextWidth;
 
   const adjustedTextStartY = textStartYBase + (textBlockAdjustments.offsetY ?? 0);
   const textStartY = Math.max(0, Math.min(PAGE_HEIGHT, adjustedTextStartY));
@@ -695,7 +703,7 @@ function buildCertificateDocDefinition(
 
   stack.push(studentInfoSegments);
 
-  stack.push({ text: courseName, style: 'courseName', noWrap: true });
+  stack.push({ text: courseName, style: 'courseName' });
 
   const tableLayout = {
     hLineWidth: () => 0,
