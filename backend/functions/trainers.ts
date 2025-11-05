@@ -214,6 +214,73 @@ function handleKnownPrismaError(error: unknown) {
   return null;
 }
 
+/**
+ * Upsert del usuario a partir de un trainer y enlace de trainers.user_id
+ * - Si no hay email, no crea usuario (permite trainers sin login).
+ * - Si existe user_id, actualiza ese user; si no existe, upsert por email.
+ * - role: 'formador' (enum erp_role).
+ */
+async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer: TrainerRecord) {
+  // Si no hay email, no podemos upsertear user por constraint unique de users.email
+  if (!trainer.email) return null;
+
+  const userPayload = {
+    first_name: trainer.name,
+    last_name: trainer.apellido ?? '',
+    email: trainer.email,
+    role: 'formador' as any, // erp_role enum (minúsculas)
+    active: Boolean(trainer.activo),
+    updated_at: new Date(),
+  };
+
+  let userId: string | null = trainer.user_id ?? null;
+
+  // Si ya hay un user_id, intentamos actualizar ese usuario.
+  if (userId) {
+    try {
+      const updatedUser = await prisma.users.update({
+        where: { id: userId },
+        data: userPayload,
+        select: { id: true },
+      });
+      userId = updatedUser.id;
+    } catch (e: any) {
+      // Si no existe (P2025), caemos a upsert por email
+      userId = null;
+    }
+  }
+
+  // Si no hay user_id válido, hacemos upsert por email
+  if (!userId) {
+    const upserted = await prisma.users.upsert({
+      where: { email: trainer.email! },
+      update: userPayload,
+      create: {
+        id: randomUUID(),
+        first_name: trainer.name,
+        last_name: trainer.apellido ?? '',
+        email: trainer.email!,
+        role: 'formador' as any,
+        active: Boolean(trainer.activo),
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+      select: { id: true },
+    });
+    userId = upserted.id;
+  }
+
+  // Enlazamos el trainer con el user si hiciera falta
+  if (!trainer.user_id || trainer.user_id !== userId) {
+    await prisma.trainers.update({
+      where: { trainer_id: trainer.trainer_id },
+      data: { user_id: userId },
+    });
+  }
+
+  return userId;
+}
+
 export const handler = createHttpHandler<any>(async (request) => {
   const prisma = getPrisma();
   const method = request.method;
@@ -249,8 +316,14 @@ export const handler = createHttpHandler<any>(async (request) => {
       const result = buildCreateData(body);
       if ('error' in result) return result.error;
 
-      const created = await prisma.trainers.create({ data: result.data });
-      return successResponse({ trainer: normalizeTrainer(created) }, 201);
+      // Transacción: crear trainer → sincronizar user → devolver trainer normalizado
+      const created = await prisma.$transaction(async (tx) => {
+        const newTrainer = await tx.trainers.create({ data: result.data });
+        await syncUserForTrainer(tx as any, newTrainer as any);
+        return tx.trainers.findUnique({ where: { trainer_id: newTrainer.trainer_id } });
+      });
+
+      return successResponse({ trainer: normalizeTrainer(created as any) }, 201);
     }
 
     if (method === 'PATCH' && trainerIdFromPath) {
@@ -268,12 +341,18 @@ export const handler = createHttpHandler<any>(async (request) => {
       const result = buildUpdateData(body);
       if ('error' in result) return result.error;
 
-      const updated = await prisma.trainers.update({
-        where: { trainer_id: trainerIdFromPath },
-        data: result.data,
+      const updated = await prisma.$transaction(async (tx) => {
+        const tr = await tx.trainers.update({
+          where: { trainer_id: trainerIdFromPath },
+          data: result.data,
+        });
+
+        await syncUserForTrainer(tx as any, tr as any);
+
+        return tx.trainers.findUnique({ where: { trainer_id: tr.trainer_id } });
       });
 
-      return successResponse({ trainer: normalizeTrainer(updated) });
+      return successResponse({ trainer: normalizeTrainer(updated as any) });
     }
 
     return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
