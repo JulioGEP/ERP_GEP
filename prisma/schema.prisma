@@ -229,12 +229,16 @@ model trainers {
   direccion    String?
   especialidad String?
   titulacion   String?
+  user_id      String?  @db.Uuid
+
+  user         users?  @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   session_trainers session_trainers[]
   variants         variants[]         @relation("TrainerVariants")
 
   @@index([apellido])
   @@index([especialidad])
+  @@unique([user_id])
 }
 
 model salas {
@@ -447,6 +451,7 @@ model users {
   updated_at          DateTime  @updatedAt @db.Timestamptz(6)
 
   auth_sessions auth_sessions[]
+  trainer       trainers?
 
   @@map("users")
 }
