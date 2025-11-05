@@ -229,10 +229,9 @@ model trainers {
   direccion    String?
   especialidad String?
   titulacion   String?
+  user_id      String?  @db.Uuid
 
-  // FK al usuario vinculado (1:1)
-  user_id String? @db.Uuid
-  user    users?  @relation("UserTrainer", fields: [user_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  user         users?  @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   session_trainers session_trainers[]
   variants         variants[]         @relation("TrainerVariants")
@@ -451,10 +450,8 @@ model users {
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
   updated_at          DateTime  @updatedAt @db.Timestamptz(6)
 
-  // relación recíproca 1:1 (FK vive en trainers.user_id)
-  trainer       trainers? @relation("UserTrainer")
-
   auth_sessions auth_sessions[]
+  trainer       trainers?
 
   @@map("users")
 }
