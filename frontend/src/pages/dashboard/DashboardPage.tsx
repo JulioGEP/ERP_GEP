@@ -108,6 +108,9 @@ type SessionsTimelineChartProps = {
   data: DashboardMetrics['sessionsTimeline']['points'];
 };
 
+type TimelinePoint = SessionsTimelineChartProps['data'][number];
+type TimelineBudget = TimelinePoint['budgets'][number];
+
 function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
   const width = 860;
   const height = 260;
@@ -119,7 +122,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
   const [hoverInfo, setHoverInfo] = useState<
     { index: number; clientX: number; clientY: number } | null
   >(null);
-  const companySessionsForPoint = (point: (typeof data)[number]) =>
+  const companySessionsForPoint = (point: TimelinePoint) =>
     Math.max(0, point.totalSessions - point.formacionAbiertaSessions);
 
   const values = data.flatMap((point) => [
@@ -127,7 +130,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
     point.formacionAbiertaSessions,
   ]);
   const maxValue = Math.max(1, ...values);
-  const buildCoords = (selector: (point: typeof data[number]) => number) =>
+  const buildCoords = (selector: (point: TimelinePoint) => number) =>
     data.map((point, index) => {
       const xStep = data.length > 1 ? index / (data.length - 1) : 0.5;
       const value = selector(point);
@@ -247,6 +250,33 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
   };
 
   const formatList = (values: string[]) => (values.length ? values.join(', ') : '—');
+
+  const budgetGroups = useMemo(() => {
+    if (!hoveredPoint) return [];
+    const grouped: Record<'company' | 'formacionAbierta', TimelineBudget[]> = {
+      company: [],
+      formacionAbierta: [],
+    };
+    hoveredPoint.budgets.forEach((budget) => {
+      const type = budget.type === 'formacionAbierta' ? 'formacionAbierta' : 'company';
+      grouped[type].push(budget);
+    });
+    const definitions = [
+      {
+        type: 'company' as const,
+        label: 'Formaciones Empresa y GEP Services',
+        color: '#0d6efd',
+      },
+      {
+        type: 'formacionAbierta' as const,
+        label: 'Formación Abierta',
+        color: '#6610f2',
+      },
+    ];
+    return definitions
+      .map((definition) => ({ ...definition, budgets: grouped[definition.type] }))
+      .filter((definition) => definition.budgets.length > 0);
+  }, [hoveredPoint]);
 
   return (
     <Card className="border-0 shadow-sm">
@@ -446,32 +476,71 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
                     new Date(`${hoveredPoint.date}T00:00:00`),
                   )}
                 </div>
-                {hoveredPoint.budgets.length > 0 ? (
-                  <ul className="list-unstyled mb-0 small">
-                    {hoveredPoint.budgets.map((budget, budgetIndex) => (
-                      <li
-                        key={budget.id}
-                        className={budgetIndex === 0 ? undefined : 'pt-2 mt-2 border-top'}
+                {budgetGroups.length > 0 ? (
+                  <div className="d-flex flex-column gap-3">
+                    {budgetGroups.map((group, groupIndex) => (
+                      <div
+                        key={group.type}
+                        className={groupIndex === 0 ? undefined : 'pt-2 border-top'}
                       >
-                        <div>
-                          <span className="text-muted">Empresa:</span>{' '}
-                          {budget.companyName ?? '—'}
+                        <div className="d-flex align-items-center gap-2 mb-2">
+                          <span
+                            className="rounded"
+                            style={{
+                              display: 'inline-block',
+                              width: '12px',
+                              height: '4px',
+                              backgroundColor: group.color,
+                            }}
+                            aria-hidden="true"
+                          />
+                          <span className="text-uppercase small fw-semibold" style={{ color: group.color }}>
+                            {group.label}
+                          </span>
                         </div>
-                        <div>
-                          <span className="text-muted">Título de la sesión:</span>{' '}
-                          {budget.sessionTitle ?? '—'}
-                        </div>
-                        <div>
-                          <span className="text-muted">Formador o Bombero:</span>{' '}
-                          {formatList(budget.trainers)}
-                        </div>
-                        <div>
-                          <span className="text-muted">Unidad móvil:</span>{' '}
-                          {formatList(budget.mobileUnits)}
-                        </div>
-                      </li>
+                        <ul className="list-unstyled mb-0 small">
+                          {group.budgets.map((budget, budgetIndex) => {
+                            const itemClassName = budgetIndex === 0 ? undefined : 'pt-2 mt-2 border-top';
+                            if (group.type === 'formacionAbierta') {
+                              return (
+                                <li key={budget.id} className={itemClassName}>
+                                  <div>
+                                    <span className="text-muted">Organización:</span>{' '}
+                                    {budget.companyName ?? '—'}
+                                  </div>
+                                  <div>
+                                    <span className="text-muted">Total de alumnos:</span>{' '}
+                                    {formatNumber(budget.studentsCount ?? 0)}
+                                  </div>
+                                </li>
+                              );
+                            }
+
+                            return (
+                              <li key={budget.id} className={itemClassName}>
+                                <div>
+                                  <span className="text-muted">Empresa:</span>{' '}
+                                  {budget.companyName ?? '—'}
+                                </div>
+                                <div>
+                                  <span className="text-muted">Título de la sesión:</span>{' '}
+                                  {budget.sessionTitle ?? '—'}
+                                </div>
+                                <div>
+                                  <span className="text-muted">Formador o Bombero:</span>{' '}
+                                  {formatList(budget.trainers)}
+                                </div>
+                                <div>
+                                  <span className="text-muted">Unidad móvil:</span>{' '}
+                                  {formatList(budget.mobileUnits)}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 ) : (
                   <p className="text-muted small mb-0">
                     Sin presupuestos registrados para este día.
