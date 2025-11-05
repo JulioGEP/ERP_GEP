@@ -8,7 +8,7 @@ import type { ApiError } from '../../api/client';
 const QUERY_KEY = ['dashboard', 'metrics'] as const;
 
 const EMPTY_METRICS: DashboardMetrics = {
-  sessions: { borrador: 0, suspendida: 0, porFinalizar: 0, formacionAbiertaSinAsignar: 0 },
+  sessions: { borrador: 0, suspendida: 0, porFinalizar: 0 },
   followUp: {
     caesPorTrabajar: 0,
     fundaePorTrabajar: 0,
@@ -17,9 +17,6 @@ const EMPTY_METRICS: DashboardMetrics = {
     transportePorTrabajar: 0,
   },
   generatedAt: null,
-  tendencias: {
-    sesionesVsVariantes: [],
-  },
 };
 
 const NETLIFY_BASE_URL = 'https://erpgep.netlify.app';
@@ -31,13 +28,6 @@ const SESSION_DRAFTS_URL = `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__
 const SESSION_SUSPENDED_URL = `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__estado=SUSPENDIDA`;
 const SESSION_PENDING_COMPLETION_URL =
   `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__por_finalizar=S%C3%AD&calendar-sessions__filter__estado=PLANIFICADA`;
-const OPEN_TRAINING_UNASSIGNED_VARIANTS_URL = (() => {
-  const params = new URLSearchParams();
-  params.set('calendar-sessions__filter__deal_pipeline_id', 'Formación Abierta');
-  params.set('calendar-sessions__filter__trainer', 'Sin formador');
-  params.set('calendar-sessions__filter__room', 'Sin sala asignada');
-  return `${SESSION_CALENDAR_PATH}?${params.toString()}`;
-})();
 
 const BUDGETS_PENDING_CAES_URL =
   `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__caes_label=S%C3%AD&budgets-table__filter__caes_val=Pendiente`;
@@ -95,221 +85,6 @@ function MetricCard({ title, value, accent = 'primary', description, href }: Met
     <a className="text-decoration-none text-reset d-block h-100" href={href}>
       {card}
     </a>
-  );
-}
-
-type SessionsVariantsChartProps = {
-  data: DashboardMetrics['tendencias']['sesionesVsVariantes'];
-};
-
-function SessionsVariantsChart({ data }: SessionsVariantsChartProps) {
-  const chartHeight = 60;
-  const chartWidth = 100;
-  const padding = { top: 10, right: 4, bottom: 16, left: 10 } as const;
-  const contentWidth = chartWidth - padding.left - padding.right;
-  const contentHeight = chartHeight - padding.top - padding.bottom;
-  const hasMultiplePoints = data.length > 1;
-  const maxValue = data.reduce((max, point) => {
-    return Math.max(max, point.totalSesiones, point.totalVariantesFormacionAbierta);
-  }, 0);
-  const safeMax = maxValue > 0 ? maxValue : 1;
-
-  const getX = (index: number) => {
-    if (!hasMultiplePoints) {
-      return padding.left + contentWidth / 2;
-    }
-    const ratio = index / (data.length - 1);
-    return padding.left + ratio * contentWidth;
-  };
-
-  const getY = (value: number) => {
-    const ratio = value / safeMax;
-    return padding.top + (1 - ratio) * contentHeight;
-  };
-
-  const buildPoints = (accessor: (point: SessionsVariantsChartProps['data'][number]) => number) =>
-    data
-      .map((point, index) => `${getX(index).toFixed(2)},${getY(accessor(point)).toFixed(2)}`)
-      .join(' ');
-
-  const sessionsPoints = buildPoints((point) => point.totalSesiones);
-  const variantsPoints = buildPoints((point) => point.totalVariantesFormacionAbierta);
-
-  const yTicks: number[] = [];
-  if (maxValue <= 5) {
-    for (let value = 0; value <= maxValue; value += 1) {
-      yTicks.push(value);
-    }
-  } else {
-    const divisions = 4;
-    for (let step = 0; step <= divisions; step += 1) {
-      const value = Math.round((maxValue / divisions) * step);
-      if (!yTicks.includes(value)) {
-        yTicks.push(value);
-      }
-    }
-    if (!yTicks.includes(maxValue)) {
-      yTicks.push(maxValue);
-    }
-  }
-  yTicks.sort((a, b) => a - b);
-
-  const seenXLabels = new Set<number>();
-  const dateFormatter = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
-  const xTickIndexes = (() => {
-    const indexes = new Set<number>();
-    if (data.length) {
-      indexes.add(0);
-      indexes.add(data.length - 1);
-    }
-    data.forEach((point, index) => {
-      const date = new Date(`${point.fecha}T00:00:00`);
-      if (date.getDay() === 1) {
-        indexes.add(index);
-      }
-    });
-    const sorted = Array.from(indexes).sort((a, b) => a - b);
-    if (sorted.length <= 6) return sorted;
-    const step = Math.ceil(sorted.length / 6);
-    return sorted.filter((_, idx) => idx % step === 0 || idx === sorted.length - 1);
-  })();
-
-  const legendItems = [
-    { label: 'Total sesiones', color: 'var(--bs-primary)' },
-    { label: 'Variantes Formación Abierta', color: 'var(--bs-success)' },
-  ];
-
-  if (!data.length) {
-    return <p className="text-muted mb-0">No hay datos disponibles para el periodo seleccionado.</p>;
-  }
-
-  return (
-    <div className="d-flex flex-column gap-3">
-      <div className="d-flex flex-wrap gap-3 align-items-center">
-        {legendItems.map((item) => (
-          <div key={item.label} className="d-flex align-items-center gap-2 small text-muted">
-            <span
-              aria-hidden="true"
-              style={{
-                width: '12px',
-                height: '12px',
-                borderRadius: '999px',
-                backgroundColor: item.color,
-                display: 'inline-block',
-              }}
-            />
-            <span>{item.label}</span>
-          </div>
-        ))}
-      </div>
-      <div className="w-100" style={{ minHeight: '220px' }}>
-        <svg
-          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-          role="img"
-          aria-label="Tendencia diaria de sesiones y variantes de Formación Abierta"
-          className="w-100 h-100"
-        >
-          <line
-            x1={padding.left}
-            y1={padding.top + contentHeight}
-            x2={padding.left + contentWidth}
-            y2={padding.top + contentHeight}
-            stroke="var(--bs-border-color)"
-            strokeWidth={0.5}
-          />
-          <line
-            x1={padding.left}
-            y1={padding.top}
-            x2={padding.left}
-            y2={padding.top + contentHeight}
-            stroke="var(--bs-border-color)"
-            strokeWidth={0.5}
-          />
-          {yTicks.map((value) => {
-            const y = getY(value);
-            return (
-              <g key={value}>
-                <line
-                  x1={padding.left}
-                  y1={y}
-                  x2={padding.left + contentWidth}
-                  y2={y}
-                  stroke="var(--bs-border-color)"
-                  strokeWidth={0.2}
-                  strokeDasharray="1.5 2"
-                />
-                <text
-                  x={padding.left - 1}
-                  y={y + 2.5}
-                  textAnchor="end"
-                  fontSize={3.2}
-                  fill="var(--bs-secondary-color)"
-                >
-                  {formatNumber(value)}
-                </text>
-              </g>
-            );
-          })}
-          {hasMultiplePoints ? (
-            <polyline
-              points={sessionsPoints}
-              fill="none"
-              stroke="var(--bs-primary)"
-              strokeWidth={1.4}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          ) : null}
-          {hasMultiplePoints ? (
-            <polyline
-              points={variantsPoints}
-              fill="none"
-              stroke="var(--bs-success)"
-              strokeWidth={1.4}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          ) : null}
-          {data.map((point, index) => (
-            <g key={point.fecha}>
-              <circle
-                cx={getX(index)}
-                cy={getY(point.totalSesiones)}
-                r={1.6}
-                fill="var(--bs-primary)"
-              />
-              <circle
-                cx={getX(index)}
-                cy={getY(point.totalVariantesFormacionAbierta)}
-                r={1.6}
-                fill="var(--bs-success)"
-              />
-            </g>
-          ))}
-          {xTickIndexes.map((index) => {
-            const x = getX(index);
-            if (seenXLabels.has(index)) {
-              return null;
-            }
-            seenXLabels.add(index);
-            const date = new Date(`${data[index].fecha}T00:00:00`);
-            const label = dateFormatter.format(date);
-            return (
-              <text
-                key={`x-${index}`}
-                x={x}
-                y={chartHeight - 2}
-                textAnchor="middle"
-                fontSize={3.2}
-                fill="var(--bs-secondary-color)"
-              >
-                {label}
-              </text>
-            );
-          })}
-        </svg>
-      </div>
-    </div>
   );
 }
 
@@ -388,7 +163,7 @@ export default function DashboardPage() {
         <Stack gap={5}>
           <section>
             <h2 className="h5 mb-3">Sesiones</h2>
-            <Row xs={1} md={2} xl={4} className="g-4">
+            <Row xs={1} md={3} className="g-4">
               <Col>
                 <MetricCard
                   title="En borrador"
@@ -416,29 +191,7 @@ export default function DashboardPage() {
                   href={SESSION_PENDING_COMPLETION_URL}
                 />
               </Col>
-              <Col>
-                <MetricCard
-                  title="Variantes sin recursos"
-                  value={metrics.sessions.formacionAbiertaSinAsignar}
-                  accent="info"
-                  description="Formación Abierta sin formador ni sala asignada."
-                  href={OPEN_TRAINING_UNASSIGNED_VARIANTS_URL}
-                />
-              </Col>
             </Row>
-          </section>
-
-          <section>
-            <h2 className="h5 mb-3">Tendencia de sesiones y Formación Abierta</h2>
-            <Card className="border-0 shadow-sm">
-              <Card.Body className="d-flex flex-column gap-3">
-                <p className="text-muted small mb-0">
-                  Evolución diaria de las sesiones planificadas y de las variantes de Formación Abierta
-                  en un periodo de dos semanas atrás y tres semanas hacia adelante.
-                </p>
-                <SessionsVariantsChart data={metrics.tendencias.sesionesVsVariantes} />
-              </Card.Body>
-            </Card>
           </section>
 
           <section>
