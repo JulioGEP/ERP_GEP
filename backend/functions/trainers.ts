@@ -1,4 +1,5 @@
 // backend/functions/trainers.ts
+import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
@@ -16,6 +17,9 @@ const OPTIONAL_STRING_FIELDS = [
 ] as const;
 
 const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
+
+const DEFAULT_PASSWORD = '123456';
+const BCRYPT_SALT_ROUNDS = 10;
 
 type TrainerRecord = {
   trainer_id: string;
@@ -252,6 +256,8 @@ async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer:
 
   // Si no hay user_id válido, hacemos upsert por email
   if (!userId) {
+    const now = new Date();
+    const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
     const upserted = await prisma.users.upsert({
       where: { email: trainer.email! },
       update: userPayload,
@@ -262,8 +268,11 @@ async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer:
         email: trainer.email!,
         role: 'formador' as any,
         active: Boolean(trainer.activo),
-        created_at: new Date(),
-        updated_at: new Date(),
+        password_hash: passwordHash,
+        password_algo: 'bcrypt',
+        password_updated_at: now,
+        created_at: now,
+        updated_at: now,
       },
       select: { id: true },
     });
