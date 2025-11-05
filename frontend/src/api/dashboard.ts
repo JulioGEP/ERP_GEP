@@ -43,6 +43,14 @@ export type DashboardMetrics = {
       date: string;
       totalSessions: number;
       formacionAbiertaSessions: number;
+      budgets: Array<{
+        id: string;
+        dealId: string | null;
+        sessionTitle: string | null;
+        companyName: string | null;
+        trainers: string[];
+        mobileUnits: string[];
+      }>;
     }>;
   };
 };
@@ -63,10 +71,50 @@ function sanitizeDateOnly(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : trimmed;
 }
 
+type RawTimelineBudget = {
+  id?: unknown;
+  dealId?: unknown;
+  sessionTitle?: unknown;
+  companyName?: unknown;
+  trainers?: unknown;
+  mobileUnits?: unknown;
+};
+
+function sanitizeStringOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function sanitizeTimelineBudget(value: unknown): DashboardMetrics['sessionsTimeline']['points'][number]['budgets'][number] | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as RawTimelineBudget;
+  if (typeof raw.id !== 'string' || !raw.id.trim().length) {
+    return null;
+  }
+
+  const toStringArray = (input: unknown): string[] => {
+    if (!Array.isArray(input)) return [];
+    return input
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : null))
+      .filter((entry): entry is string => Boolean(entry && entry.length));
+  };
+
+  return {
+    id: raw.id.trim(),
+    dealId: sanitizeStringOrNull(raw.dealId),
+    sessionTitle: sanitizeStringOrNull(raw.sessionTitle),
+    companyName: sanitizeStringOrNull(raw.companyName),
+    trainers: toStringArray(raw.trainers),
+    mobileUnits: toStringArray(raw.mobileUnits),
+  };
+}
+
 type RawTimelinePoint = {
   date?: unknown;
   totalSessions?: unknown;
   formacionAbiertaSessions?: unknown;
+  budgets?: unknown;
 };
 
 function sanitizeTimelinePoint(value: unknown) {
@@ -78,6 +126,11 @@ function sanitizeTimelinePoint(value: unknown) {
     date,
     totalSessions: toNonNegativeInteger(raw.totalSessions),
     formacionAbiertaSessions: toNonNegativeInteger(raw.formacionAbiertaSessions),
+    budgets: Array.isArray(raw.budgets)
+      ? (raw.budgets
+          .map(sanitizeTimelineBudget)
+          .filter(Boolean) as DashboardMetrics['sessionsTimeline']['points'][number]['budgets'])
+      : [],
   };
 }
 

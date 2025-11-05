@@ -1,5 +1,5 @@
 // frontend/src/pages/dashboard/DashboardPage.tsx
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Col, Row, Spinner, Stack } from 'react-bootstrap';
 import { fetchDashboardMetrics, type DashboardMetrics } from '../../api/dashboard';
@@ -93,6 +93,16 @@ const DATE_LABEL_FORMATTER = new Intl.DateTimeFormat('es-ES', {
   day: '2-digit',
   month: 'short',
 });
+const MADRID_DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Madrid',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+const TOOLTIP_DATE_FORMATTER = new Intl.DateTimeFormat('es-ES', {
+  dateStyle: 'full',
+  timeZone: 'Europe/Madrid',
+});
 
 type SessionsTimelineChartProps = {
   data: DashboardMetrics['sessionsTimeline']['points'];
@@ -105,6 +115,10 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
   const paddingY = 32;
   const chartWidth = width - paddingX * 2;
   const chartHeight = height - paddingY * 2;
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [hoverInfo, setHoverInfo] = useState<
+    { index: number; clientX: number; clientY: number } | null
+  >(null);
   const values = data.flatMap((point) => [
     point.totalSessions,
     point.formacionAbiertaSessions,
@@ -147,6 +161,64 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
     ({ index }) => index === 0 || index === data.length - 1 || index % 7 === 0,
   );
 
+  const getBandBounds = (index: number) => {
+    const current = totalCoords[index];
+    if (!current) {
+      return { x: paddingX, width: 0 };
+    }
+    const previous = index > 0 ? totalCoords[index - 1] : undefined;
+    const next = index < totalCoords.length - 1 ? totalCoords[index + 1] : undefined;
+    const left = previous ? (previous.x + current.x) / 2 : paddingX;
+    const right = next ? (next.x + current.x) / 2 : paddingX + chartWidth;
+    return { x: left, width: Math.max(0, right - left) };
+  };
+
+  const todayKey = useMemo(() => MADRID_DAY_FORMATTER.format(new Date()), []);
+  const todayIndex = useMemo(
+    () => data.findIndex((point) => point.date === todayKey),
+    [data, todayKey],
+  );
+  const hoveredIndex = hoverInfo?.index ?? null;
+  const hoveredPoint = hoveredIndex != null ? data[hoveredIndex] : null;
+  const todayBand = todayIndex >= 0 ? getBandBounds(todayIndex) : null;
+  const hoveredBand = hoveredIndex != null ? getBandBounds(hoveredIndex) : null;
+
+  const tooltipPosition = (() => {
+    if (!hoverInfo || !containerRef.current) return null;
+    const rect = containerRef.current.getBoundingClientRect();
+    const relativeX = hoverInfo.clientX - rect.left;
+    const relativeY = hoverInfo.clientY - rect.top;
+    const maxWidth = Math.min(320, Math.max(rect.width - 24, 200));
+    const left = Math.min(
+      Math.max(relativeX + 16, 0),
+      Math.max(rect.width - maxWidth, 0),
+    );
+    const top = Math.max(relativeY - 24, 0);
+    return { left, top, maxWidth };
+  })();
+
+  const handleMouseMove = (event: React.MouseEvent<SVGSVGElement>) => {
+    if (!data.length) return;
+    const svgRect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - svgRect.left;
+    const ratio = (x - paddingX) / (chartWidth === 0 ? 1 : chartWidth);
+    if (ratio < 0 || ratio > 1) {
+      setHoverInfo(null);
+      return;
+    }
+    const index = Math.min(
+      data.length - 1,
+      Math.max(0, Math.round(ratio * (data.length - 1))),
+    );
+    setHoverInfo({ index, clientX: event.clientX, clientY: event.clientY });
+  };
+
+  const handleMouseLeave = () => {
+    setHoverInfo(null);
+  };
+
+  const formatList = (values: string[]) => (values.length ? values.join(', ') : '—');
+
   return (
     <Card className="border-0 shadow-sm">
       <Card.Body>
@@ -166,7 +238,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
                 style={{ display: 'inline-block', width: '12px', height: '4px', backgroundColor: '#0d6efd' }}
                 aria-hidden="true"
               />
-              Total de sesiones
+              Formaciones Empresa y GEP Services
             </span>
             <span className="d-flex align-items-center gap-2">
               <span
@@ -179,111 +251,195 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
           </div>
         </div>
         <div className="w-100" style={{ overflowX: 'auto' }}>
-          <svg
-            role="img"
-            aria-labelledby="sessions-trend-title sessions-trend-desc"
-            viewBox={`0 0 ${width} ${height}`}
-            style={{ width: '100%', minWidth: '720px', height: '100%' }}
+          <div
+            ref={containerRef}
+            className="position-relative"
+            style={{ minWidth: `${width}px` }}
           >
-            <title id="sessions-trend-title">Evolución de sesiones</title>
-            <desc id="sessions-trend-desc">
-              Línea azul total de sesiones, línea violeta Formación Abierta por día.
-            </desc>
-            <rect
-              x={paddingX}
-              y={paddingY}
-              width={chartWidth}
-              height={chartHeight}
-              fill="none"
-              stroke="var(--bs-border-color)"
-            />
-            {yTickValues.map((tick, index) => {
-              const y = paddingY + chartHeight - (tick / (maxValue || 1)) * chartHeight;
-              return (
-                <g key={`y-${tick}`}>
-                  <line
-                    x1={paddingX}
-                    x2={paddingX + chartWidth}
-                    y1={y}
-                    y2={y}
-                    stroke="var(--bs-border-color)"
-                    strokeDasharray="4 4"
-                    opacity={index === 0 ? 1 : 0.4}
-                  />
-                  <text
-                    x={paddingX - 8}
-                    y={y + 4}
-                    textAnchor="end"
-                    fontSize={12}
-                    fill="var(--bs-secondary-color)"
-                  >
-                    {tick}
-                  </text>
-                </g>
-              );
-            })}
-            {xTicks.map(({ point, index }) => {
-              const coord = totalCoords[index];
-              if (!coord) return null;
-              const labelDate = new Date(`${point.date}T00:00:00`);
-              return (
-                <g key={`x-${point.date}`}>
-                  <line
-                    x1={coord.x}
-                    x2={coord.x}
-                    y1={paddingY}
-                    y2={paddingY + chartHeight}
-                    stroke="var(--bs-border-color)"
-                    strokeDasharray="4 4"
-                    opacity={0.3}
-                  />
-                  <text
-                    x={coord.x}
-                    y={paddingY + chartHeight + 20}
-                    textAnchor="middle"
-                    fontSize={12}
-                    fill="var(--bs-secondary-color)"
-                  >
-                    {DATE_LABEL_FORMATTER.format(labelDate)}
-                  </text>
-                </g>
-              );
-            })}
-            <path
-              d={totalPath}
-              fill="none"
-              stroke="#0d6efd"
-              strokeWidth={2.5}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-            <path
-              d={abiertaPath}
-              fill="none"
-              stroke="#6610f2"
-              strokeWidth={2.5}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-            {totalCoords.map((coord, index) => (
-              <circle
-                key={`total-point-${data[index]?.date ?? index}`}
-                cx={coord.x}
-                cy={coord.y}
-                r={3.5}
-                fill="#0d6efd"
+            <svg
+              role="img"
+              aria-labelledby="sessions-trend-title sessions-trend-desc"
+              viewBox={`0 0 ${width} ${height}`}
+              style={{ width: '100%', height: '100%', display: 'block' }}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            >
+              <title id="sessions-trend-title">Evolución de sesiones</title>
+              <desc id="sessions-trend-desc">
+                Línea azul Formaciones Empresa y GEP Services, línea violeta Formación Abierta por día.
+              </desc>
+              <rect
+                x={paddingX}
+                y={paddingY}
+                width={chartWidth}
+                height={chartHeight}
+                fill="none"
+                stroke="var(--bs-border-color)"
               />
-            ))}
-            {abiertaCoords.map((coord, index) => (
-              <circle
-                key={`abierta-point-${data[index]?.date ?? index}`}
-                cx={coord.x}
-                cy={coord.y}
-                r={3}
-                fill="#6610f2"
+              {todayBand ? (
+                <rect
+                  x={todayBand.x}
+                  y={paddingY}
+                  width={todayBand.width}
+                  height={chartHeight}
+                  fill="rgba(255, 193, 7, 0.18)"
+                  pointerEvents="none"
+                />
+              ) : null}
+              {hoveredBand ? (
+                <rect
+                  x={hoveredBand.x}
+                  y={paddingY}
+                  width={hoveredBand.width}
+                  height={chartHeight}
+                  fill="rgba(13, 110, 253, 0.18)"
+                  pointerEvents="none"
+                />
+              ) : null}
+              {yTickValues.map((tick, index) => {
+                const y = paddingY + chartHeight - (tick / (maxValue || 1)) * chartHeight;
+                return (
+                  <g key={`y-${tick}`}>
+                    <line
+                      x1={paddingX}
+                      x2={paddingX + chartWidth}
+                      y1={y}
+                      y2={y}
+                      stroke="var(--bs-border-color)"
+                      strokeDasharray="4 4"
+                      opacity={index === 0 ? 1 : 0.4}
+                    />
+                    <text
+                      x={paddingX - 8}
+                      y={y + 4}
+                      textAnchor="end"
+                      fontSize={12}
+                      fill="var(--bs-secondary-color)"
+                    >
+                      {tick}
+                    </text>
+                  </g>
+                );
+              })}
+              {xTicks.map(({ point, index }) => {
+                const coord = totalCoords[index];
+                if (!coord) return null;
+                const labelDate = new Date(`${point.date}T00:00:00`);
+                return (
+                  <g key={`x-${point.date}`}>
+                    <line
+                      x1={coord.x}
+                      x2={coord.x}
+                      y1={paddingY}
+                      y2={paddingY + chartHeight}
+                      stroke="var(--bs-border-color)"
+                      strokeDasharray="4 4"
+                      opacity={0.3}
+                    />
+                    <text
+                      x={coord.x}
+                      y={paddingY + chartHeight + 20}
+                      textAnchor="middle"
+                      fontSize={12}
+                      fill="var(--bs-secondary-color)"
+                    >
+                      {DATE_LABEL_FORMATTER.format(labelDate)}
+                    </text>
+                  </g>
+                );
+              })}
+              <path
+                d={totalPath}
+                fill="none"
+                stroke="#0d6efd"
+                strokeWidth={2.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
               />
-            ))}
-          </svg>
+              <path
+                d={abiertaPath}
+                fill="none"
+                stroke="#6610f2"
+                strokeWidth={2.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {totalCoords.map((coord, index) => {
+                const isHovered = hoveredIndex === index;
+                return (
+                  <circle
+                    key={`total-point-${data[index]?.date ?? index}`}
+                    cx={coord.x}
+                    cy={coord.y}
+                    r={isHovered ? 5 : 3.5}
+                    fill="#0d6efd"
+                    opacity={isHovered ? 1 : 0.85}
+                  />
+                );
+              })}
+              {abiertaCoords.map((coord, index) => (
+                <circle
+                  key={`abierta-point-${data[index]?.date ?? index}`}
+                  cx={coord.x}
+                  cy={coord.y}
+                  r={3}
+                  fill="#6610f2"
+                  opacity={hoveredIndex === index ? 1 : 0.85}
+                />
+              ))}
+            </svg>
+            {hoveredPoint && tooltipPosition ? (
+              <div
+                className="position-absolute bg-white border rounded shadow-sm p-3"
+                style={{
+                  left: tooltipPosition.left,
+                  top: tooltipPosition.top,
+                  maxWidth: tooltipPosition.maxWidth,
+                  pointerEvents: 'none',
+                }}
+              >
+                <div className="text-uppercase text-muted small fw-semibold">
+                  Presupuestos del día
+                </div>
+                <div className="fw-semibold mb-2">
+                  {TOOLTIP_DATE_FORMATTER.format(
+                    new Date(`${hoveredPoint.date}T00:00:00`),
+                  )}
+                </div>
+                {hoveredPoint.budgets.length > 0 ? (
+                  <ul className="list-unstyled mb-0 small">
+                    {hoveredPoint.budgets.map((budget, budgetIndex) => (
+                      <li
+                        key={budget.id}
+                        className={budgetIndex === 0 ? undefined : 'pt-2 mt-2 border-top'}
+                      >
+                        <div>
+                          <span className="text-muted">Empresa:</span>{' '}
+                          {budget.companyName ?? '—'}
+                        </div>
+                        <div>
+                          <span className="text-muted">Título de la sesión:</span>{' '}
+                          {budget.sessionTitle ?? '—'}
+                        </div>
+                        <div>
+                          <span className="text-muted">Formador o Bombero:</span>{' '}
+                          {formatList(budget.trainers)}
+                        </div>
+                        <div>
+                          <span className="text-muted">Unidad móvil:</span>{' '}
+                          {formatList(budget.mobileUnits)}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted small mb-0">
+                    Sin presupuestos registrados para este día.
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
       </Card.Body>
     </Card>
