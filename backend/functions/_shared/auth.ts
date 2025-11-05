@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from 'crypto';
 import type { PrismaClient } from '@prisma/client';
-import type { HttpRequest } from './http';
+import { setRefreshSessionCookie, type HttpRequest } from './http';
 import { errorResponse } from './response';
 
 export const SESSION_COOKIE_NAME = 'erp_session';
-const SESSION_DURATION_MS = 12 * 60 * 60 * 1000; // 12 horas
+const SESSION_DURATION_MS = 3 * 60 * 60 * 1000; // 3 horas
 const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
 
 // Exportado por si otros módulos necesitan el mapping
@@ -156,6 +156,7 @@ export type AuthenticatedContext = {
   session: AuthSessionRecord;
   user: UserRecord;
   permissions: readonly string[];
+  refreshedCookie?: string | null;
 };
 
 export type RequireAuthOptions = {
@@ -276,8 +277,25 @@ export async function findActiveSession(
     return null;
   }
 
+  let refreshedCookie: string | null = null;
+  const newExpiresAt = getSessionExpirationDate();
+
+  try {
+    await (prisma as any)['auth_sessions'].update({
+      where: { id: session.id },
+      data: { expires_at: newExpiresAt },
+    });
+    session.expires_at = newExpiresAt;
+    refreshedCookie = buildSessionCookie(session.id, newExpiresAt);
+  } catch (error) {
+    console.error('[auth] Failed to refresh session expiration', {
+      sessionId,
+      error,
+    });
+  }
+
   const permissions = getPermissionsForRole(session.user.role);
-  return { session, user: session.user, permissions };
+  return { session, user: session.user, permissions, refreshedCookie };
 }
 
 
@@ -294,6 +312,10 @@ export async function requireAuth(
   const result = await findActiveSession(prisma, sessionId);
   if (!result) {
     return { error: errorResponse('UNAUTHORIZED', 'Sesión no válida o expirada', 401) };
+  }
+
+  if (result.refreshedCookie) {
+    setRefreshSessionCookie(request, result.refreshedCookie);
   }
 
   if (options?.requireRoles && options.requireRoles.length) {

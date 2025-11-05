@@ -1,4 +1,4 @@
-import { createHttpHandler } from './_shared/http';
+import { createHttpHandler, setRefreshSessionCookie } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import {
@@ -56,6 +56,10 @@ export const handler = createHttpHandler(async (request) => {
           Pragma: 'no-cache',
         },
       };
+    }
+
+    if (auth.refreshedCookie) {
+      setRefreshSessionCookie(request, auth.refreshedCookie);
     }
 
     // OK -> devolvemos usuario y permisos
