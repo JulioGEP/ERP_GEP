@@ -10,12 +10,34 @@ const YES_VALUES = ['Si', 'Sí'] as const;
 
 type YesLabelField = 'caes_label' | 'fundae_label' | 'hotel_label' | 'po' | 'transporte';
 
+const FORMACION_ABIERTA_PATTERNS = ['formación abierta', 'formacion abierta'] as const;
+const FORMACION_ABIERTA_TEMPLATE_VALUES = ['formacion_abierta', 'formacion-abierta'] as const;
+
 function buildYesLabelFilter(field: YesLabelField): Prisma.dealsWhereInput {
   return {
     OR: YES_VALUES.map((value) => ({
       [field]: { equals: value, mode: 'insensitive' },
     })),
   } as Prisma.dealsWhereInput;
+}
+
+function buildFormacionAbiertaProductFilter(): Prisma.productsWhereInput {
+  const patternFilters: Prisma.productsWhereInput[] = FORMACION_ABIERTA_PATTERNS.flatMap(
+    (pattern) => [
+      { category: { contains: pattern, mode: 'insensitive' } },
+      { type: { contains: pattern, mode: 'insensitive' } },
+      { template: { contains: pattern, mode: 'insensitive' } },
+      { name: { contains: pattern, mode: 'insensitive' } },
+    ],
+  );
+
+  const templateFilters: Prisma.productsWhereInput[] = FORMACION_ABIERTA_TEMPLATE_VALUES.map(
+    (value) => ({ template: { equals: value, mode: 'insensitive' } }),
+  );
+
+  return {
+    OR: patternFilters.concat(templateFilters),
+  } satisfies Prisma.productsWhereInput;
 }
 
 export const handler = createHttpHandler(async (request) => {
@@ -42,6 +64,7 @@ export const handler = createHttpHandler(async (request) => {
       hotelPending,
       poPending,
       transportPending,
+      openTrainingVariantsWithoutResources,
     ] = await Promise.all([
       prisma.sesiones.count({ where: { estado: 'BORRADOR' } }),
       prisma.sesiones.count({ where: { estado: 'SUSPENDIDA' } }),
@@ -81,6 +104,15 @@ export const handler = createHttpHandler(async (request) => {
           transporte_val: false,
         },
       }),
+      prisma.variants.count({
+        where: {
+          AND: [
+            { OR: [{ trainer_id: null }, { trainer_id: { equals: '' } }] },
+            { OR: [{ sala_id: null }, { sala_id: { equals: '' } }] },
+            { product: buildFormacionAbiertaProductFilter() },
+          ],
+        },
+      }),
     ]);
 
     return successResponse({
@@ -88,6 +120,7 @@ export const handler = createHttpHandler(async (request) => {
         borrador: draftSessions,
         suspendida: suspendedSessions,
         porFinalizar: pendingCompletionSessions,
+        formacionAbiertaSinRecursos: openTrainingVariantsWithoutResources,
       },
       followUp: {
         caesPorTrabajar: caesPending,
