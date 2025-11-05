@@ -119,8 +119,11 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
   const [hoverInfo, setHoverInfo] = useState<
     { index: number; clientX: number; clientY: number } | null
   >(null);
+  const companySessionsForPoint = (point: (typeof data)[number]) =>
+    Math.max(0, point.totalSessions - point.formacionAbiertaSessions);
+
   const values = data.flatMap((point) => [
-    point.totalSessions,
+    companySessionsForPoint(point),
     point.formacionAbiertaSessions,
   ]);
   const maxValue = Math.max(1, ...values);
@@ -136,7 +139,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
       };
     });
 
-  const totalCoords = buildCoords((point) => point.totalSessions);
+  const companyCoords = buildCoords(companySessionsForPoint);
   const abiertaCoords = buildCoords((point) => point.formacionAbiertaSessions);
 
   const buildPath = (coords: Array<{ x: number; y: number }>) => {
@@ -148,7 +151,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
     );
   };
 
-  const totalPath = buildPath(totalCoords);
+  const companyPath = buildPath(companyCoords);
   const abiertaPath = buildPath(abiertaCoords);
 
   const yTicks = 4;
@@ -162,16 +165,36 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
   );
 
   const getBandBounds = (index: number) => {
-    const current = totalCoords[index];
+    const current = companyCoords[index];
     if (!current) {
       return { x: paddingX, width: 0 };
     }
-    const previous = index > 0 ? totalCoords[index - 1] : undefined;
-    const next = index < totalCoords.length - 1 ? totalCoords[index + 1] : undefined;
+    const previous = index > 0 ? companyCoords[index - 1] : undefined;
+    const next = index < companyCoords.length - 1 ? companyCoords[index + 1] : undefined;
     const left = previous ? (previous.x + current.x) / 2 : paddingX;
     const right = next ? (next.x + current.x) / 2 : paddingX + chartWidth;
     return { x: left, width: Math.max(0, right - left) };
   };
+
+  const weekendBands = data
+    .map((point, index) => {
+      const [year, month, day] = point.date.split('-').map((value) => Number.parseInt(value, 10));
+      if (
+        !Number.isFinite(year) ||
+        !Number.isFinite(month) ||
+        !Number.isFinite(day)
+      ) {
+        return null;
+      }
+      const date = new Date(year, month - 1, day);
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        return null;
+      }
+      const bounds = getBandBounds(index);
+      return { ...bounds, date: point.date };
+    })
+    .filter((band): band is { x: number; width: number; date: string } => Boolean(band));
 
   const todayKey = useMemo(() => MADRID_DAY_FORMATTER.format(new Date()), []);
   const todayIndex = useMemo(
@@ -201,15 +224,16 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
     if (!data.length) return;
     const svgRect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - svgRect.left;
-    const ratio = (x - paddingX) / (chartWidth === 0 ? 1 : chartWidth);
-    if (ratio < 0 || ratio > 1) {
-      setHoverInfo(null);
-      return;
-    }
-    const index = Math.min(
-      data.length - 1,
-      Math.max(0, Math.round(ratio * (data.length - 1))),
-    );
+    const clampedX = Math.min(Math.max(x, paddingX), paddingX + chartWidth);
+    let index = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+    companyCoords.forEach((coord, coordIndex) => {
+      const distance = Math.abs(coord.x - clampedX);
+      if (distance < minDistance) {
+        minDistance = distance;
+        index = coordIndex;
+      }
+    });
     setHoverInfo({ index, clientX: event.clientX, clientY: event.clientY });
   };
 
@@ -276,6 +300,17 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
                 fill="none"
                 stroke="var(--bs-border-color)"
               />
+              {weekendBands.map((band) => (
+                <rect
+                  key={`weekend-${band.date}`}
+                  x={band.x}
+                  y={paddingY}
+                  width={band.width}
+                  height={chartHeight}
+                  fill="rgba(220, 53, 69, 0.12)"
+                  pointerEvents="none"
+                />
+              ))}
               {todayBand ? (
                 <rect
                   x={todayBand.x}
@@ -322,7 +357,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
                 );
               })}
               {xTicks.map(({ point, index }) => {
-                const coord = totalCoords[index];
+                const coord = companyCoords[index];
                 if (!coord) return null;
                 const labelDate = new Date(`${point.date}T00:00:00`);
                 return (
@@ -349,7 +384,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
                 );
               })}
               <path
-                d={totalPath}
+                d={companyPath}
                 fill="none"
                 stroke="#0d6efd"
                 strokeWidth={2.5}
@@ -364,7 +399,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
-              {totalCoords.map((coord, index) => {
+              {companyCoords.map((coord, index) => {
                 const isHovered = hoveredIndex === index;
                 return (
                   <circle
