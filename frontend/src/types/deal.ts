@@ -91,15 +91,15 @@ export interface DealSummary {
 
   sede_label?: string | null;
   caes_label?: string | null;
-  caes_val?: boolean;
+  caes_val?: boolean | null;
   fundae_label?: string | null;
-  fundae_val?: boolean;
+  fundae_val?: boolean | null;
   hotel_label?: string | null;
-  hotel_val?: boolean;
+  hotel_val?: boolean | null;
   transporte?: string | null;
-  transporte_val?: boolean;
+  transporte_val?: boolean | null;
   po?: string | null;
-  po_val?: boolean;
+  po_val?: boolean | null;
   tipo_servicio?: string | null;
   mail_invoice?: string | null;
 
@@ -132,15 +132,15 @@ export interface DealDetail {
 
   sede_label?: string | null;
   caes_label?: string | null;
-  caes_val?: boolean;
+  caes_val?: boolean | null;
   fundae_label?: string | null;
-  fundae_val?: boolean;
+  fundae_val?: boolean | null;
   hotel_label?: string | null;
-  hotel_val?: boolean;
+  hotel_val?: boolean | null;
   transporte?: "Si" | "Sí" | "No" | null;
-  transporte_val?: boolean;
+  transporte_val?: boolean | null;
   po?: string | null;
-  po_val?: boolean;
+  po_val?: boolean | null;
   tipo_servicio?: string | null;
   mail_invoice?: string | null;
 
