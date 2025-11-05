@@ -224,7 +224,12 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
     if (!data.length) return;
     const svgRect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - svgRect.left;
-    const clampedX = Math.min(Math.max(x, paddingX), paddingX + chartWidth);
+    const normalizedX =
+      svgRect.width > 0 ? (x / svgRect.width) * width : x;
+    const clampedX = Math.min(
+      Math.max(normalizedX, paddingX),
+      paddingX + chartWidth,
+    );
     let index = 0;
     let minDistance = Number.POSITIVE_INFINITY;
     companyCoords.forEach((coord, coordIndex) => {
@@ -282,13 +287,13 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
           >
             <svg
               role="img"
-              aria-labelledby="sessions-trend-title sessions-trend-desc"
+              aria-label="Evolución de sesiones"
+              aria-describedby="sessions-trend-desc"
               viewBox={`0 0 ${width} ${height}`}
               style={{ width: '100%', height: '100%', display: 'block' }}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
             >
-              <title id="sessions-trend-title">Evolución de sesiones</title>
               <desc id="sessions-trend-desc">
                 Línea azul Formaciones Empresa y GEP Services, línea violeta Formación Abierta por día.
               </desc>
