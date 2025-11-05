@@ -50,6 +50,8 @@ export type DashboardMetrics = {
         companyName: string | null;
         trainers: string[];
         mobileUnits: string[];
+        type: 'company' | 'formacionAbierta';
+        studentsCount: number;
       }>;
     }>;
   };
@@ -78,6 +80,8 @@ type RawTimelineBudget = {
   companyName?: unknown;
   trainers?: unknown;
   mobileUnits?: unknown;
+  type?: unknown;
+  studentsCount?: unknown;
 };
 
 function sanitizeStringOrNull(value: unknown): string | null {
@@ -86,7 +90,9 @@ function sanitizeStringOrNull(value: unknown): string | null {
   return trimmed.length ? trimmed : null;
 }
 
-function sanitizeTimelineBudget(value: unknown): DashboardMetrics['sessionsTimeline']['points'][number]['budgets'][number] | null {
+function sanitizeTimelineBudget(
+  value: unknown,
+): DashboardMetrics['sessionsTimeline']['points'][number]['budgets'][number] | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as RawTimelineBudget;
   if (typeof raw.id !== 'string' || !raw.id.trim().length) {
@@ -100,6 +106,8 @@ function sanitizeTimelineBudget(value: unknown): DashboardMetrics['sessionsTimel
       .filter((entry): entry is string => Boolean(entry && entry.length));
   };
 
+  const type = sanitizeStringOrNull(raw.type) === 'formacionAbierta' ? 'formacionAbierta' : 'company';
+
   return {
     id: raw.id.trim(),
     dealId: sanitizeStringOrNull(raw.dealId),
@@ -107,6 +115,8 @@ function sanitizeTimelineBudget(value: unknown): DashboardMetrics['sessionsTimel
     companyName: sanitizeStringOrNull(raw.companyName),
     trainers: toStringArray(raw.trainers),
     mobileUnits: toStringArray(raw.mobileUnits),
+    type,
+    studentsCount: toNonNegativeInteger(raw.studentsCount),
   };
 }
 

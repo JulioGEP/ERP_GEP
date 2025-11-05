@@ -187,6 +187,11 @@ export const handler = createHttpHandler(async (request) => {
               },
             },
           },
+          _count: {
+            select: {
+              alumnos: true,
+            },
+          },
         },
       }),
       prisma.variants.findMany({
@@ -222,6 +227,7 @@ export const handler = createHttpHandler(async (request) => {
       } | null;
       sesion_trainers: Array<{ trainers: { name: string | null } | null }> | null;
       sesion_unidades: Array<{ unidades_moviles: { name: string | null } | null }> | null;
+      _count: { alumnos: number } | null;
     };
 
     const timelineSessions = sessionsInTimeline as SessionTimelineEntry[];
@@ -238,6 +244,8 @@ export const handler = createHttpHandler(async (request) => {
           companyName: string | null;
           trainers: string[];
           mobileUnits: string[];
+          type: 'company' | 'formacionAbierta';
+          studentsCount: number;
         }>;
       }
     >();
@@ -282,6 +290,11 @@ export const handler = createHttpHandler(async (request) => {
             .filter((value): value is string => Boolean(value))
         : [];
 
+      const totalStudents = Number.isFinite(session._count?.alumnos)
+        ? session._count?.alumnos ?? 0
+        : 0;
+      const budgetType = pipelineLabel === 'formacion abierta' ? 'formacionAbierta' : 'company';
+
       entry.budgets.push({
         id: session.id,
         dealId: session.deals?.deal_id ?? null,
@@ -289,6 +302,8 @@ export const handler = createHttpHandler(async (request) => {
         companyName: session.deals?.organizations?.name ?? null,
         trainers,
         mobileUnits,
+        type: budgetType,
+        studentsCount: totalStudents,
       });
     }
 
