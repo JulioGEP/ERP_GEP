@@ -30,7 +30,7 @@ type AuthState = {
   isLoading: boolean;
   // acciones
   refresh: () => Promise<void>;
-  login: (email: string, password: string, role?: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   // utilidades
   isAuthenticated: boolean;
@@ -97,19 +97,15 @@ export function AuthProvider({ children }: PropsWithChildren<{}>) {
     loadSession();
   }, [loadSession]);
 
-  const login = useCallback(
-    async (email: string, password: string, role?: string) => {
-      // POST login; el backend setea cookie HttpOnly
-      await postJson<{ user: User; permissions: readonly string[] }>('/auth-login', {
-        email,
-        password,
-        ...(role ? { role } : {}),
-      });
-      // Tras login, refrescamos sesión
-      await loadSession();
-    },
-    [loadSession],
-  );
+  const login = useCallback(async (email: string, password: string) => {
+    // POST login; el backend setea cookie HttpOnly
+    await postJson<{ user: User; permissions: readonly string[] }>('/auth-login', {
+      email,
+      password,
+    });
+    // Tras login, refrescamos sesión
+    await loadSession();
+  }, [loadSession]);
 
   const logout = useCallback(async () => {
     try {

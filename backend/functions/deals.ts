@@ -1,6 +1,6 @@
 // backend/functions/deals.ts
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { getPrisma } from "./_shared/prisma";
 import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/timezone";
 import {
@@ -187,7 +187,7 @@ async function syncFormacionAbiertaSessionsAndStudents(
   prisma: PrismaClient,
   dealId: string,
 ): Promise<FormacionAbiertaSyncResult> {
-    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    return prisma.$transaction(async (tx) => {
     const generationResult = await generateSessionsForDeal(tx, dealId);
 
     if ("error" in generationResult) {

@@ -1,5 +1,4 @@
 // backend/functions/products-sync.ts
-import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { extractProductCatalogAttributes, listAllProducts } from './_shared/pipedrive';
@@ -90,7 +89,7 @@ export const handler = async (event: any) => {
 
     const now = new Date();
 
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const result = await prisma.$transaction(async (tx) => {
       // ⬇️ Tipos relajados: no imponemos boolean estricto en active
       const existing = await tx.products.findMany({
         select: { id: true, id_pipe: true, active: true },

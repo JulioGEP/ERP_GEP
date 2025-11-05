@@ -34,27 +34,17 @@ export function successResponse(body: any = {}, statusCode = 200) {
 export function errorResponse(
   code: string,
   message: string,
-  statusCode = 400,
-  extra?: Record<string, unknown>,
+  statusCode = 400
 ) {
-  const payload: Record<string, unknown> = {
-    ok: false,
-    error_code: code,
-    message,
-    requestId: randomUUID(),
-  };
-
-  if (extra && typeof extra === 'object') {
-    for (const [key, value] of Object.entries(extra)) {
-      if (key === 'ok' || key === 'error_code' || key === 'message' || key === 'requestId') continue;
-      payload[key] = value;
-    }
-  }
-
   return {
     statusCode,
     headers: COMMON_HEADERS,
-    body: safeStringify(payload),
+    body: safeStringify({
+      ok: false,
+      error_code: code,
+      message,
+      requestId: randomUUID(),
+    }),
   };
 }
 

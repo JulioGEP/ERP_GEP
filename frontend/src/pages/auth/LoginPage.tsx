@@ -8,11 +8,6 @@ type LocationState = {
   from?: string;
 };
 
-type RoleOption = {
-  value: string;
-  label: string;
-};
-
 export default function LoginPage() {
   const { login, isLoading: authLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -26,8 +21,6 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
-  const [availableRoles, setAvailableRoles] = useState<RoleOption[]>([]);
-  const [selectedRole, setSelectedRole] = useState('');
 
   useEffect(() => {
     const hydrateFromBrowserStorage = () => {
@@ -59,17 +52,11 @@ export default function LoginPage() {
     }
   }, [from, isAuthenticated, isLoading, navigate]);
 
-  useEffect(() => {
-    setAvailableRoles([]);
-    setSelectedRole('');
-  }, [email]);
-
   const formValid = useMemo(() => {
     const e = email.trim();
     const p = password.trim();
-    const roleReady = availableRoles.length === 0 || selectedRole.trim().length > 0;
-    return e.length > 0 && p.length > 0 && roleReady;
-  }, [email, password, availableRoles, selectedRole]);
+    return e.length > 0 && p.length > 0;
+  }, [email, password]);
 
   const handleSubmit = useCallback(
     async (event: FormEvent) => {
@@ -80,61 +67,26 @@ export default function LoginPage() {
       setSubmitting(true);
 
       try {
-        await login(email.trim(), password, selectedRole.trim() || undefined);
+        await login(email.trim(), password);
         // Si todo va bien, volvemos a donde veníamos o al home
         navigate(from, { replace: true });
       } catch (err) {
         if (isApiError(err)) {
-          if (err.code === 'MULTIPLE_ROLES' || err.code === 'INVALID_ROLE_SELECTION') {
-            const rolesRaw = Array.isArray((err.details as any)?.roles) ? (err.details as any).roles : [];
-            const roles: RoleOption[] = rolesRaw
-              .map((role: any) => {
-                const value = typeof role?.value === 'string' ? role.value : typeof role?.role === 'string' ? role.role : '';
-                const label = typeof role?.label === 'string'
-                  ? role.label
-                  : typeof role?.role === 'string'
-                  ? role.role
-                  : typeof role?.value === 'string'
-                  ? role.value
-                  : '';
-                if (!value.trim()) return null;
-                return { value, label: label || value } as RoleOption;
-              })
-              .filter((option): option is RoleOption => Boolean(option));
-
-            if (roles.length > 0) {
-              setAvailableRoles(roles);
-              if (err.code === 'MULTIPLE_ROLES') {
-                setSelectedRole('');
-              } else if (!roles.some((option) => option.value === selectedRole)) {
-                setSelectedRole('');
-              }
-            }
-
-            setErrorText(err.message || 'Selecciona un rol para continuar.');
-          } else if ((err as ApiError).status === 401) {
-            setAvailableRoles([]);
-            setSelectedRole('');
+          if ((err as ApiError).status === 401) {
             setErrorText('Email o contraseña incorrectos.');
           } else {
-            setAvailableRoles([]);
-            setSelectedRole('');
             setErrorText(err.message || 'No se pudo iniciar sesión.');
           }
         } else if (err instanceof Error) {
-          setAvailableRoles([]);
-          setSelectedRole('');
           setErrorText(err.message);
         } else {
-          setAvailableRoles([]);
-          setSelectedRole('');
           setErrorText('No se pudo iniciar sesión.');
         }
       } finally {
         setSubmitting(false);
       }
     },
-    [email, password, selectedRole, formValid, submitting, login, navigate, from],
+    [email, password, formValid, submitting, login, navigate, from],
   );
 
   return (
@@ -188,25 +140,6 @@ export default function LoginPage() {
                   </Button>
                 </InputGroup>
               </Form.Group>
-
-              {availableRoles.length > 0 && (
-                <Form.Group className="mb-3" controlId="loginRole">
-                  <Form.Label>Selecciona un rol</Form.Label>
-                  <Form.Select
-                    value={selectedRole}
-                    onChange={(e) => setSelectedRole(e.currentTarget.value)}
-                    disabled={submitting}
-                    required
-                  >
-                    <option value="">Elige un rol…</option>
-                    {availableRoles.map((role) => (
-                      <option key={role.value} value={role.value}>
-                        {role.label}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Form.Group>
-              )}
 
               {errorText && (
                 <div className="alert alert-danger py-2" role="alert">

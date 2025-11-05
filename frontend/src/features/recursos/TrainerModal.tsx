@@ -148,19 +148,13 @@ export function TrainerModal({
       return;
     }
 
-    const trimmedEmail = formValues.email.trim();
-    if (!trimmedEmail.length) {
-      setError("El email es obligatorio");
-      return;
-    }
-
     setError(null);
 
     const payload: TrainerFormValues = {
       ...formValues,
       name: trimmedName,
       apellido: formValues.apellido.trim(),
-      email: trimmedEmail,
+      email: formValues.email.trim(),
       phone: formValues.phone.trim(),
       dni: formValues.dni.trim(),
       direccion: formValues.direccion.trim(),
@@ -266,13 +260,12 @@ export function TrainerModal({
             </Col>
             <Col md={6}>
               <Form.Group controlId="trainerEmail">
-                <Form.Label>Email *</Form.Label>
+                <Form.Label>Email</Form.Label>
                 <Form.Control
                   type="email"
                   value={formValues.email}
                   onChange={handleChange("email")}
                   disabled={isSaving}
-                  required
                 />
               </Form.Group>
             </Col>
