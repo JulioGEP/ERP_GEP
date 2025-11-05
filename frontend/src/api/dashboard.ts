@@ -6,7 +6,6 @@ type RawDashboardMetricsResponse = {
     borrador?: unknown;
     suspendida?: unknown;
     porFinalizar?: unknown;
-    formacionAbiertaSinRecursos?: unknown;
   } | null;
   followUp?: {
     caesPorTrabajar?: unknown;
@@ -23,7 +22,6 @@ export type DashboardMetrics = {
     borrador: number;
     suspendida: number;
     porFinalizar: number;
-    formacionAbiertaSinRecursos: number;
   };
   followUp: {
     caesPorTrabajar: number;
@@ -53,9 +51,6 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
       borrador: toNonNegativeInteger(response.sessions?.borrador),
       suspendida: toNonNegativeInteger(response.sessions?.suspendida),
       porFinalizar: toNonNegativeInteger(response.sessions?.porFinalizar),
-      formacionAbiertaSinRecursos: toNonNegativeInteger(
-        response.sessions?.formacionAbiertaSinRecursos,
-      ),
     },
     followUp: {
       caesPorTrabajar: toNonNegativeInteger(response.followUp?.caesPorTrabajar),

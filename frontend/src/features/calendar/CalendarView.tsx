@@ -90,16 +90,6 @@ const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'trainer', label: 'Formador' },
   { key: 'unit', label: 'Unidad móvil' },
   { key: 'room', label: 'Sala' },
-  {
-    key: 'resource_status',
-    label: 'Recursos',
-    type: 'select',
-    options: [
-      { value: 'missing_trainer', label: 'Sin formador' },
-      { value: 'missing_room', label: 'Sin sala' },
-      { value: 'missing_trainer_room', label: 'Sin formador y sala' },
-    ],
-  },
   { key: 'students_total', label: 'Alumnos' },
   { key: 'comentarios', label: 'Comentarios' },
 ];
@@ -473,20 +463,6 @@ function formatStudentsFilterValue(count: number | null | undefined): string {
   return 'sin alumnos';
 }
 
-function buildResourceStatusValue(hasTrainer: boolean, hasRoom: boolean): string {
-  const statuses: string[] = [];
-  if (!hasTrainer) {
-    statuses.push('missing_trainer');
-  }
-  if (!hasRoom) {
-    statuses.push('missing_room');
-  }
-  if (!hasTrainer && !hasRoom) {
-    statuses.push('missing_trainer_room');
-  }
-  return statuses.join(' ');
-}
-
 function isSessionPendingCompletion(session: CalendarSession): boolean {
   if (session.estado === 'FINALIZADA') {
     return false;
@@ -519,8 +495,6 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
   trainer: (session) => safeString(session.trainers.map((trainer) => formatResourceName(trainer)).join(' ')),
   unit: (session) => safeString(session.units.map((unit) => formatResourceName(unit)).join(' ')),
   room: (session) => (session.room ? safeString(formatResourceName(session.room)) : ''),
-  resource_status: (session) =>
-    buildResourceStatusValue(session.trainers.length > 0, Boolean(session.room)),
   students_total: (session) => {
     const namePart = safeString(session.studentNames.join(' '));
     const countPart = formatStudentsFilterValue(session.studentsTotal);
@@ -584,8 +558,6 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
     const parts = [safeString(room.name ?? ''), safeString(room.sede ?? '')].filter(Boolean);
     return safeString(parts.join(' '));
   },
-  resource_status: (variant) =>
-    buildResourceStatusValue(Boolean(variant.variant.trainer), Boolean(variant.variant.sala)),
   students_total: (variant) => safeString(formatStudentsFilterValue(variant.variant.students_total)),
   comentarios: (variant) => safeString(variant.variant.status ?? ''),
   por_finalizar: () => '',

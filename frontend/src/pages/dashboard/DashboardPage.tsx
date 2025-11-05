@@ -8,7 +8,7 @@ import type { ApiError } from '../../api/client';
 const QUERY_KEY = ['dashboard', 'metrics'] as const;
 
 const EMPTY_METRICS: DashboardMetrics = {
-  sessions: { borrador: 0, suspendida: 0, porFinalizar: 0, formacionAbiertaSinRecursos: 0 },
+  sessions: { borrador: 0, suspendida: 0, porFinalizar: 0 },
   followUp: {
     caesPorTrabajar: 0,
     fundaePorTrabajar: 0,
@@ -28,10 +28,6 @@ const SESSION_DRAFTS_URL = `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__
 const SESSION_SUSPENDED_URL = `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__estado=SUSPENDIDA`;
 const SESSION_PENDING_COMPLETION_URL =
   `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__por_finalizar=S%C3%AD&calendar-sessions__filter__estado=PLANIFICADA`;
-const OPEN_TRAINING_VARIANTS_MISSING_RESOURCES_URL =
-  `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__resource_status=missing_trainer_room&calendar-sessions__search=${encodeURIComponent(
-    'Formación Abierta',
-  )}`;
 
 const BUDGETS_PENDING_CAES_URL =
   `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__caes_label=S%C3%AD&budgets-table__filter__caes_val=Pendiente`;
@@ -167,7 +163,7 @@ export default function DashboardPage() {
         <Stack gap={5}>
           <section>
             <h2 className="h5 mb-3">Sesiones</h2>
-            <Row xs={1} md={2} xl={4} className="g-4">
+            <Row xs={1} md={3} className="g-4">
               <Col>
                 <MetricCard
                   title="En borrador"
@@ -193,15 +189,6 @@ export default function DashboardPage() {
                   accent="danger"
                   description="Sesiones realizadas que todavía no se han marcado como finalizadas."
                   href={SESSION_PENDING_COMPLETION_URL}
-                />
-              </Col>
-              <Col>
-                <MetricCard
-                  title="FA sin recursos"
-                  value={metrics.sessions.formacionAbiertaSinRecursos}
-                  accent="info"
-                  description="Variantes de Formación Abierta sin formador ni sala asignada."
-                  href={OPEN_TRAINING_VARIANTS_MISSING_RESOURCES_URL}
                 />
               </Col>
             </Row>
