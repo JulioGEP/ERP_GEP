@@ -109,7 +109,7 @@ export const handler = createHttpHandler(async (request) => {
           AND: [
             { OR: [{ trainer_id: null }, { trainer_id: { equals: '' } }] },
             { OR: [{ sala_id: null }, { sala_id: { equals: '' } }] },
-            { product: buildFormacionAbiertaProductFilter() },
+            { products: buildFormacionAbiertaProductFilter() },
           ],
         },
       }),
