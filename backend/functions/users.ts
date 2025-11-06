@@ -56,6 +56,15 @@ function parsePageParam(value: string | undefined, fallback: number, max: number
   return Math.min(normalized, max);
 }
 
+function parseBooleanParam(value: unknown, fallback: boolean): boolean {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized.length) return fallback;
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
 /**
  * Sincroniza el usuario (rol formador) con su espejo en trainers.
  * 1) Busca trainer por user_id.
@@ -149,15 +158,37 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
     const search =
       typeof request.query?.search === 'string' ? request.query.search.trim() : '';
 
-    const where = search
-      ? {
-          OR: [
-            { first_name: { contains: search, mode: 'insensitive' } },
-            { last_name: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-          ],
-        }
-      : undefined;
+    const statusInput =
+      typeof request.query?.status === 'string' ? request.query.status.trim().toLowerCase() : '';
+    const statusFilter = statusInput === 'active' || statusInput === 'inactive' ? statusInput : null;
+    const includeTrainers = parseBooleanParam(request.query?.includeTrainers, false);
+
+    const whereFilters: Array<Record<string, any>> = [];
+
+    if (search.length) {
+      whereFilters.push({
+        OR: [
+          { first_name: { contains: search, mode: 'insensitive' } },
+          { last_name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (statusFilter === 'active') {
+      whereFilters.push({ active: true });
+    } else if (statusFilter === 'inactive') {
+      whereFilters.push({ active: false });
+    }
+
+    if (!includeTrainers) {
+      const formadorRole = getRoleStorageValue('Formador');
+      if (formadorRole) {
+        whereFilters.push({ NOT: { role: formadorRole } });
+      }
+    }
+
+    const where = whereFilters.length > 0 ? { AND: whereFilters } : undefined;
 
     const [total, users] = await Promise.all([
       prisma.users.count({ where: where as any }),
