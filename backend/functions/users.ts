@@ -21,13 +21,13 @@ const BCRYPT_SALT_ROUNDS = 10;
 function serializeUser(user: any) {
   return {
     id: user.id,
-    firstName: user.first_name ?? '',
-    lastName: user.last_name ?? '',
-    email: user.email ?? '',
-    role: getRoleDisplayValue(user.role) ?? user.role ?? '',
-    active: Boolean(user.active),
-    createdAt: user.created_at ?? null,
-    updatedAt: user.updated_at ?? null,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    email: user.email,
+    role: getRoleDisplayValue(user.role) ?? user.role,
+    active: user.active,
+    createdAt: user.created_at,
+    updatedAt: user.updated_at,
   };
 }
 
@@ -57,11 +57,10 @@ function parsePageParam(value: string | undefined, fallback: number, max: number
 
 /**
  * Sincroniza el usuario (rol formador) con su espejo en trainers.
- * Estrategia:
  * 1) Busca trainer por user_id.
- * 2) Si no existe, busca por email (único).
- * 3) Actualiza el encontrado; si no existe y role === 'formador', crea uno nuevo.
- * 4) Asegura el enlace trainers.user_id = users.id.
+ * 2) Si no existe, busca por email.
+ * 3) Actualiza el encontrado o crea uno nuevo.
+ * 4) Enlaza siempre trainers.user_id = users.id.
  */
 async function syncTrainerForFormador(
   tx: ReturnType<typeof getPrisma>,
@@ -72,17 +71,17 @@ async function syncTrainerForFormador(
     email: string;
     role: $Enums.erp_role;
     active: boolean;
-  }
+  },
 ) {
-  if (user.role !== 'formador') return; // sólo sincronizamos para formadores
-  if (!user.email) return; // necesitamos email para la duplicidad funcional
+  if (user.role !== 'formador') return;
+  if (!user.email) return;
 
   // 1) por user_id
   let trainer = await tx.trainers.findUnique({
     where: { user_id: user.id },
   });
 
-  // 2) si no, por email
+  // 2) si no, por email (único)
   if (!trainer) {
     trainer = await tx.trainers.findUnique({
       where: { email: user.email },
@@ -107,7 +106,6 @@ async function syncTrainerForFormador(
       data: {
         trainer_id: randomUUID(),
         ...trainerData,
-        // valores neutros para campos opcionales
         phone: null,
         dni: null,
         direccion: null,
@@ -140,38 +138,33 @@ export const handler = createHttpHandler<any>(async (request) => {
 });
 
 async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
-  const page = parsePageParam(request.query.page, 1, 1_000_000);
-  const pageSize = parsePageParam(request.query.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-  const search = typeof request.query.search === 'string' ? request.query.search.trim() : '';
-
-  const where = search
-    ? {
-        OR: [
-          { first_name: { contains: search, mode: 'insensitive' } },
-          { last_name: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-        ],
-      }
-    : undefined;
-
   try {
+    const page = parsePageParam(request.query?.page, 1, 1_000_000);
+    const pageSize = parsePageParam(
+      request.query?.pageSize,
+      DEFAULT_PAGE_SIZE,
+      MAX_PAGE_SIZE,
+    );
+    const search =
+      typeof request.query?.search === 'string' ? request.query.search.trim() : '';
+
+    const where = search
+      ? {
+          OR: [
+            { first_name: { contains: search, mode: 'insensitive' } },
+            { last_name: { contains: search, mode: 'insensitive' } },
+            { email: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : undefined;
+
     const [total, users] = await Promise.all([
       prisma.users.count({ where: where as any }),
       prisma.users.findMany({
-        where: where as any,
         orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }, { email: 'asc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
-        select: {
-          id: true,
-          first_name: true,
-          last_name: true,
-          email: true,
-          role: true,
-          active: true,
-          created_at: true,
-          updated_at: true,
-        },
+        where: where as any,
       }),
     ]);
 
@@ -182,8 +175,13 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
       pageSize,
     });
   } catch (error) {
+    // Esto evita el 500 "ciego" y te devuelve un mensaje concreto
     console.error('[users] Error listing users', error);
-    return errorResponse('LIST_FAILED', 'No se pudieron cargar los usuarios', 500);
+    return errorResponse(
+      'LIST_FAILED',
+      'No se pudieron listar los usuarios (revisa logs de Netlify para el detalle exacto).',
+      500,
+    );
   }
 }
 
@@ -221,7 +219,6 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
         },
       });
 
-      // Sincroniza trainer si corresponde
       await syncTrainerForFormador(tx as any, {
         id: user.id,
         first_name: user.first_name,
@@ -319,7 +316,6 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
         });
       }
 
-      // Sincroniza trainer si corresponde (rol formador)
       await syncTrainerForFormador(tx as any, {
         id: user.id,
         first_name: user.first_name,
