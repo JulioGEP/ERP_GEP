@@ -1,7 +1,6 @@
 // backend/functions/products-variants.ts
 
-import { Prisma } from '@prisma/client';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import {
   PrismaClientKnownRequestError,
   PrismaClientUnknownRequestError,
@@ -21,6 +20,375 @@ import {
 import { mapDbStockStatusToApiValue } from './_shared/variant-defaults';
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
+
+const VARIANT_TRAINER_TABLE = 'variant_trainer_links';
+const VARIANT_UNIT_TABLE = 'variant_unit_links';
+
+let variantTrainerLinksSupported: boolean | null = null;
+let variantUnitLinksSupported: boolean | null = null;
+
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  if (error instanceof PrismaClientKnownRequestError) {
+    if (error.code === 'P2021' || error.code === 'P2022') {
+      const message = typeof error.meta?.cause === 'string' ? error.meta.cause : error.message;
+      return new RegExp(`(?:relation|table).*${relation}`, 'i').test(message);
+    }
+  }
+  if (error instanceof PrismaClientUnknownRequestError) {
+    return new RegExp(`(?:relation|table).*${relation}`, 'i').test(error.message);
+  }
+  if (error instanceof Error) {
+    return new RegExp(`(?:relation|table).*${relation}`, 'i').test(error.message);
+  }
+  return false;
+}
+
+type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
+
+async function ensureVariantTrainerLinksTable(prisma: PrismaClientOrTx): Promise<boolean> {
+  if (variantTrainerLinksSupported === false) return false;
+  if (variantTrainerLinksSupported === true) return true;
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE IF NOT EXISTS ${VARIANT_TRAINER_TABLE} (
+        variant_id UUID NOT NULL,
+        trainer_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (variant_id, trainer_id),
+        CONSTRAINT ${VARIANT_TRAINER_TABLE}_variant_fk FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE,
+        CONSTRAINT ${VARIANT_TRAINER_TABLE}_trainer_fk FOREIGN KEY (trainer_id) REFERENCES trainers(trainer_id) ON DELETE CASCADE
+      );`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_${VARIANT_TRAINER_TABLE}_variant ON ${VARIANT_TRAINER_TABLE}(variant_id);`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_${VARIANT_TRAINER_TABLE}_trainer ON ${VARIANT_TRAINER_TABLE}(trainer_id);`,
+    );
+    variantTrainerLinksSupported = true;
+  } catch (error) {
+    variantTrainerLinksSupported = false;
+    console.warn('[products-variants] variant trainer links unsupported', { error });
+  }
+
+  return variantTrainerLinksSupported === true;
+}
+
+async function ensureVariantUnitLinksTable(prisma: PrismaClientOrTx): Promise<boolean> {
+  if (variantUnitLinksSupported === false) return false;
+  if (variantUnitLinksSupported === true) return true;
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `CREATE TABLE IF NOT EXISTS ${VARIANT_UNIT_TABLE} (
+        variant_id UUID NOT NULL,
+        unidad_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (variant_id, unidad_id),
+        CONSTRAINT ${VARIANT_UNIT_TABLE}_variant_fk FOREIGN KEY (variant_id) REFERENCES variants(id) ON DELETE CASCADE,
+        CONSTRAINT ${VARIANT_UNIT_TABLE}_unidad_fk FOREIGN KEY (unidad_id) REFERENCES unidades_moviles(unidad_id) ON DELETE CASCADE
+      );`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_${VARIANT_UNIT_TABLE}_variant ON ${VARIANT_UNIT_TABLE}(variant_id);`,
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS idx_${VARIANT_UNIT_TABLE}_unidad ON ${VARIANT_UNIT_TABLE}(unidad_id);`,
+    );
+    variantUnitLinksSupported = true;
+  } catch (error) {
+    variantUnitLinksSupported = false;
+    console.warn('[products-variants] variant unit links unsupported', { error });
+  }
+
+  return variantUnitLinksSupported === true;
+}
+
+type VariantTrainerLink = {
+  trainer_id: string;
+  name: string | null;
+  apellido: string | null;
+  position: number;
+};
+
+type VariantUnitLink = {
+  unidad_id: string;
+  name: string | null;
+  matricula: string | null;
+  position: number;
+};
+
+function sanitizeIdArray(value: unknown): string[] | null {
+  if (value === null) return [];
+  if (value === undefined) return [];
+  const values = Array.isArray(value) ? value : typeof value === 'string' || typeof value === 'number' ? [value] : null;
+  if (!values) return null;
+
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of values) {
+    const trimmed = toTrimmed(entry);
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+async function fetchVariantTrainerAssignments(
+  prisma: PrismaClientOrTx,
+  variantIds: string[],
+): Promise<Map<string, VariantTrainerLink[]>> {
+  const map = new Map<string, VariantTrainerLink[]>();
+  if (!variantIds.length) return map;
+
+  if (!(await ensureVariantTrainerLinksTable(prisma))) return map;
+
+  try {
+    const tableName = VARIANT_TRAINER_TABLE;
+    const rows = (await prisma.$queryRaw(
+      `SELECT vtl.variant_id::text AS variant_id,
+              vtl.trainer_id,
+              t.name,
+              t.apellido,
+              vtl.position
+       FROM ${tableName} vtl
+       LEFT JOIN trainers t ON t.trainer_id = vtl.trainer_id
+       WHERE vtl.variant_id = ANY($1::uuid[])
+       ORDER BY vtl.variant_id, vtl.position ASC`,
+      variantIds,
+    )) as Array<{ variant_id: string; trainer_id: string; name: string | null; apellido: string | null; position: number }>;
+
+    for (const row of rows) {
+      const list = map.get(row.variant_id) ?? [];
+      list.push({
+        trainer_id: row.trainer_id,
+        name: row.name ?? null,
+        apellido: row.apellido ?? null,
+        position: row.position,
+      });
+      map.set(row.variant_id, list);
+    }
+  } catch (error) {
+    if (isMissingRelationError(error, VARIANT_TRAINER_TABLE)) {
+      variantTrainerLinksSupported = false;
+      console.warn('[products-variants] variant trainer links query disabled (missing relation)', { error });
+      return new Map();
+    }
+    throw error;
+  }
+
+  return map;
+}
+
+async function fetchVariantUnitAssignments(
+  prisma: PrismaClientOrTx,
+  variantIds: string[],
+): Promise<Map<string, VariantUnitLink[]>> {
+  const map = new Map<string, VariantUnitLink[]>();
+  if (!variantIds.length) return map;
+
+  if (!(await ensureVariantUnitLinksTable(prisma))) return map;
+
+  try {
+    const tableName = VARIANT_UNIT_TABLE;
+    const rows = (await prisma.$queryRaw(
+      `SELECT vul.variant_id::text AS variant_id,
+              vul.unidad_id,
+              u.name,
+              u.matricula,
+              vul.position
+       FROM ${tableName} vul
+       LEFT JOIN unidades_moviles u ON u.unidad_id = vul.unidad_id
+       WHERE vul.variant_id = ANY($1::uuid[])
+       ORDER BY vul.variant_id, vul.position ASC`,
+      variantIds,
+    )) as Array<{ variant_id: string; unidad_id: string; name: string | null; matricula: string | null; position: number }>;
+
+    for (const row of rows) {
+      const list = map.get(row.variant_id) ?? [];
+      list.push({
+        unidad_id: row.unidad_id,
+        name: row.name ?? null,
+        matricula: row.matricula ?? null,
+        position: row.position,
+      });
+      map.set(row.variant_id, list);
+    }
+  } catch (error) {
+    if (isMissingRelationError(error, VARIANT_UNIT_TABLE)) {
+      variantUnitLinksSupported = false;
+      console.warn('[products-variants] variant unit links query disabled (missing relation)', { error });
+      return new Map();
+    }
+    throw error;
+  }
+
+  return map;
+}
+
+async function syncVariantTrainerAssignments(
+  prisma: PrismaClientOrTx,
+  variantId: string,
+  trainerIds: string[],
+): Promise<void> {
+  if (!(await ensureVariantTrainerLinksTable(prisma))) return;
+
+  const ids = trainerIds.filter((id) => toTrimmed(id));
+
+  try {
+    const tableName = VARIANT_TRAINER_TABLE;
+    await prisma.$executeRaw(
+      `DELETE FROM ${tableName} WHERE variant_id = $1::uuid`,
+      variantId,
+    );
+
+    if (!ids.length) {
+      return;
+    }
+
+    const values: any[] = [];
+    const placeholders = ids
+      .map((id, index) => {
+        const baseIndex = index * 3;
+        values.push(variantId, id, index);
+        return `($${baseIndex + 1}::uuid, $${baseIndex + 2}, $${baseIndex + 3})`;
+      })
+      .join(', ');
+
+    await prisma.$executeRaw(
+      `INSERT INTO ${tableName} (variant_id, trainer_id, position)
+       VALUES ${placeholders}
+       ON CONFLICT (variant_id, trainer_id)
+       DO UPDATE SET position = EXCLUDED.position, updated_at = NOW()`,
+      ...values,
+    );
+  } catch (error) {
+    if (isMissingRelationError(error, VARIANT_TRAINER_TABLE)) {
+      variantTrainerLinksSupported = false;
+      console.warn('[products-variants] variant trainer links sync disabled (missing relation)', { error });
+      return;
+    }
+    throw error;
+  }
+}
+
+async function syncVariantUnitAssignments(
+  prisma: PrismaClientOrTx,
+  variantId: string,
+  unitIds: string[],
+): Promise<void> {
+  if (!(await ensureVariantUnitLinksTable(prisma))) return;
+
+  const ids = unitIds.filter((id) => toTrimmed(id));
+
+  try {
+    const tableName = VARIANT_UNIT_TABLE;
+    await prisma.$executeRaw(
+      `DELETE FROM ${tableName} WHERE variant_id = $1::uuid`,
+      variantId,
+    );
+
+    if (!ids.length) {
+      return;
+    }
+
+    const values: any[] = [];
+    const placeholders = ids
+      .map((id, index) => {
+        const baseIndex = index * 3;
+        values.push(variantId, id, index);
+        return `($${baseIndex + 1}::uuid, $${baseIndex + 2}, $${baseIndex + 3})`;
+      })
+      .join(', ');
+
+    await prisma.$executeRaw(
+      `INSERT INTO ${tableName} (variant_id, unidad_id, position)
+       VALUES ${placeholders}
+       ON CONFLICT (variant_id, unidad_id)
+       DO UPDATE SET position = EXCLUDED.position, updated_at = NOW()`,
+      ...values,
+    );
+  } catch (error) {
+    if (isMissingRelationError(error, VARIANT_UNIT_TABLE)) {
+      variantUnitLinksSupported = false;
+      console.warn('[products-variants] variant unit links sync disabled (missing relation)', { error });
+      return;
+    }
+    throw error;
+  }
+}
+
+async function findVariantIdsByTrainerAssignments(
+  prisma: PrismaClientOrTx,
+  trainerIds: string[],
+  excludeVariantId?: string,
+): Promise<string[]> {
+  if (!trainerIds.length) return [];
+  if (!(await ensureVariantTrainerLinksTable(prisma))) return [];
+
+  try {
+    const tableName = VARIANT_TRAINER_TABLE;
+    const params: any[] = [trainerIds];
+    let query = `SELECT DISTINCT variant_id::text AS variant_id
+                 FROM ${tableName}
+                 WHERE trainer_id = ANY($1::text[])`;
+
+    if (excludeVariantId) {
+      query += ' AND variant_id <> $2::uuid';
+      params.push(excludeVariantId);
+    }
+
+    const rows = (await prisma.$queryRaw(query, ...params)) as Array<{ variant_id: string }>;
+
+    return rows.map((row) => row.variant_id);
+  } catch (error) {
+    if (isMissingRelationError(error, VARIANT_TRAINER_TABLE)) {
+      variantTrainerLinksSupported = false;
+      console.warn('[products-variants] variant trainer lookup disabled (missing relation)', { error });
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function findVariantIdsByUnitAssignments(
+  prisma: PrismaClientOrTx,
+  unitIds: string[],
+  excludeVariantId?: string,
+): Promise<string[]> {
+  if (!unitIds.length) return [];
+  if (!(await ensureVariantUnitLinksTable(prisma))) return [];
+
+  try {
+    const tableName = VARIANT_UNIT_TABLE;
+    const params: any[] = [unitIds];
+    let query = `SELECT DISTINCT variant_id::text AS variant_id
+                 FROM ${tableName}
+                 WHERE unidad_id = ANY($1::text[])`;
+
+    if (excludeVariantId) {
+      query += ' AND variant_id <> $2::uuid';
+      params.push(excludeVariantId);
+    }
+
+    const rows = (await prisma.$queryRaw(query, ...params)) as Array<{ variant_id: string }>;
+
+    return rows.map((row) => row.variant_id);
+  } catch (error) {
+    if (isMissingRelationError(error, VARIANT_UNIT_TABLE)) {
+      variantUnitLinksSupported = false;
+      console.warn('[products-variants] variant unit lookup disabled (missing relation)', { error });
+      return [];
+    }
+    throw error;
+  }
+}
 
 type TimeParts = { hour: number; minute: number };
 
@@ -98,33 +466,47 @@ async function ensureVariantResourcesAvailable(
   prisma: PrismaClient,
   {
     excludeVariantId,
-    trainerId,
+    trainerIds,
     salaId,
-    unidadId,
+    unidadIds,
     range,
   }: {
     excludeVariantId?: string;
-    trainerId: string | null;
+    trainerIds: string[];
     salaId: string | null;
-    unidadId: string | null;
+    unidadIds: string[];
     range: DateRange | null;
   },
 ): Promise<ReturnType<typeof errorResponse> | null> {
   if (!range) return null;
 
-  const normalizedTrainerId = trainerId ?? null;
+  const normalizedTrainerIds = Array.from(
+    new Set(
+      trainerIds
+        .map((value) => toTrimmed(value))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
   const normalizedSalaId = salaId ?? null;
-  const normalizedUnidadId =
-    unidadId && !ALWAYS_AVAILABLE_UNIT_IDS.has(unidadId) ? unidadId : null;
+  const normalizedUnidadIds = Array.from(
+    new Set(
+      unidadIds
+        .map((value) => toTrimmed(value))
+        .filter((value): value is string => Boolean(value))
+        .filter((value) => !ALWAYS_AVAILABLE_UNIT_IDS.has(value)),
+    ),
+  );
 
-  if (!normalizedTrainerId && !normalizedSalaId && !normalizedUnidadId) return null;
+  if (!normalizedTrainerIds.length && !normalizedSalaId && !normalizedUnidadIds.length) return null;
   if (getVariantResourceColumnsSupport() === false) return null;
 
   // Tipos generados pueden variar; usamos `any` para compatibilidad con Prisma v5
   const sessionConditions: any[] = [];
-  if (normalizedTrainerId) sessionConditions.push({ sesion_trainers: { some: { trainer_id: normalizedTrainerId } } });
+  if (normalizedTrainerIds.length)
+    sessionConditions.push({ sesion_trainers: { some: { trainer_id: { in: normalizedTrainerIds } } } });
   if (normalizedSalaId) sessionConditions.push({ sala_id: normalizedSalaId });
-  if (normalizedUnidadId) sessionConditions.push({ sesion_unidades: { some: { unidad_movil_id: normalizedUnidadId } } });
+  if (normalizedUnidadIds.length)
+    sessionConditions.push({ sesion_unidades: { some: { unidad_movil_id: { in: normalizedUnidadIds } } } });
 
   if (sessionConditions.length) {
     const sesiones = await prisma.sesiones.findMany({
@@ -154,43 +536,52 @@ async function ensureVariantResourcesAvailable(
   }
 
   const variantConditions: any[] = [];
-  if (normalizedTrainerId) variantConditions.push({ trainer_id: normalizedTrainerId });
+  if (normalizedTrainerIds.length) variantConditions.push({ trainer_id: { in: normalizedTrainerIds } });
   if (normalizedSalaId) variantConditions.push({ sala_id: normalizedSalaId });
-  if (normalizedUnidadId) variantConditions.push({ unidad_movil_id: normalizedUnidadId });
+  if (normalizedUnidadIds.length) variantConditions.push({ unidad_movil_id: { in: normalizedUnidadIds } });
 
-  if (!variantConditions.length) return null;
+  let variantRecords: Array<{
+    id: string;
+    date: Date | string | null;
+    trainer_id: string | null;
+    sala_id: string | null;
+    unidad_movil_id: string | null;
+    products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
+  }> = [];
 
-  let variants;
-  try {
-    variants = await prisma.variants.findMany({
-      where: {
-        ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
-        date: { not: null },
-        OR: variantConditions as any,
-      },
-      select: {
-        id: true,
-        date: true,
-        trainer_id: true,
-        sala_id: true,
-        unidad_movil_id: true,
-        products: { select: { hora_inicio: true, hora_fin: true } },
-      },
-    });
-    setVariantResourceColumnsSupport(true);
-  } catch (error) {
-    if (isVariantResourceColumnError(error)) {
-      setVariantResourceColumnsSupport(false);
-      console.warn(
-        '[products-variants] skipping variant resource availability check (missing resource columns)',
-        { error },
-      );
-      return null;
+  if (variantConditions.length) {
+    try {
+      const variants = await prisma.variants.findMany({
+        where: {
+          ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
+          date: { not: null },
+          OR: variantConditions as any,
+        },
+        select: {
+          id: true,
+          date: true,
+          trainer_id: true,
+          sala_id: true,
+          unidad_movil_id: true,
+          products: { select: { hora_inicio: true, hora_fin: true } },
+        },
+      });
+      setVariantResourceColumnsSupport(true);
+      variantRecords = variants as any;
+    } catch (error) {
+      if (isVariantResourceColumnError(error)) {
+        setVariantResourceColumnsSupport(false);
+        console.warn(
+          '[products-variants] skipping variant resource availability check (missing resource columns)',
+          { error },
+        );
+      } else {
+        throw error;
+      }
     }
-    throw error;
   }
 
-  const hasVariantConflict = variants.some(
+  const hasVariantConflict = variantRecords.some(
   (variant: {
     date: Date | string | null;
     trainer_id: string | null;
@@ -209,9 +600,13 @@ async function ensureVariantResourcesAvailable(
       otherRange.end.getTime() >= range.start.getTime();
     if (!overlaps) return false;
 
-    const trainerConflict = normalizedTrainerId && variant.trainer_id === normalizedTrainerId;
+    const trainerConflict =
+      normalizedTrainerIds.length &&
+      normalizedTrainerIds.includes(variant.trainer_id ?? '');
     const salaConflict = normalizedSalaId && variant.sala_id === normalizedSalaId;
-    const unidadConflict = normalizedUnidadId && variant.unidad_movil_id === normalizedUnidadId;
+    const unidadConflict =
+      normalizedUnidadIds.length &&
+      normalizedUnidadIds.includes(variant.unidad_movil_id ?? '');
 
     return Boolean(trainerConflict || salaConflict || unidadConflict);
   },
@@ -223,6 +618,91 @@ async function ensureVariantResourcesAvailable(
       'Algunos recursos ya están asignados en las fechas seleccionadas.',
       409,
     );
+  }
+
+  if (normalizedTrainerIds.length || normalizedUnidadIds.length) {
+    const [trainerVariantIds, unitVariantIds] = await Promise.all([
+      findVariantIdsByTrainerAssignments(prisma, normalizedTrainerIds, excludeVariantId),
+      findVariantIdsByUnitAssignments(prisma, normalizedUnidadIds, excludeVariantId),
+    ]);
+
+    const extraIds = Array.from(new Set([...trainerVariantIds, ...unitVariantIds]));
+    const variantSelect = {
+      id: true,
+      date: true,
+      trainer_id: true,
+      sala_id: true,
+      unidad_movil_id: true,
+      products: { select: { hora_inicio: true, hora_fin: true } },
+    } as const;
+
+    const existingIds = new Set(variantRecords.map((item) => item.id));
+    const missingIds = extraIds.filter((id) => !existingIds.has(id));
+
+    if (missingIds.length) {
+      const extraVariants = await prisma.variants.findMany({
+        where: { id: { in: missingIds } },
+        select: variantSelect,
+      });
+      variantRecords = variantRecords.concat(extraVariants as any);
+    }
+
+    const variantIdsForAssignments = variantRecords.map((variant) => variant.id);
+    const [trainerAssignments, unitAssignments] = await Promise.all([
+      fetchVariantTrainerAssignments(prisma, variantIdsForAssignments),
+      fetchVariantUnitAssignments(prisma, variantIdsForAssignments),
+    ]);
+
+    const normalizedTrainerSet = new Set(normalizedTrainerIds);
+    const normalizedUnidadSet = new Set(normalizedUnidadIds);
+
+    const hasExtendedConflict = variantRecords.some((variant) => {
+      if (excludeVariantId && variant.id === excludeVariantId) return false;
+      const otherRange = computeVariantRange(
+        variant.date,
+        variant.products ?? { hora_inicio: null, hora_fin: null },
+      );
+      if (!otherRange) return false;
+
+      const overlaps =
+        otherRange.start.getTime() <= range.end.getTime() &&
+        otherRange.end.getTime() >= range.start.getTime();
+      if (!overlaps) return false;
+
+      const trainerMatches = (() => {
+        if (!normalizedTrainerIds.length) return false;
+        const assigned = new Set<string>();
+        const assignments = trainerAssignments.get(variant.id) ?? [];
+        assignments.forEach((item) => {
+          if (item.trainer_id) assigned.add(item.trainer_id);
+        });
+        if (variant.trainer_id) assigned.add(variant.trainer_id);
+        return Array.from(assigned).some((id) => normalizedTrainerSet.has(id));
+      })();
+
+      const unidadMatches = (() => {
+        if (!normalizedUnidadIds.length) return false;
+        const assigned = new Set<string>();
+        const assignments = unitAssignments.get(variant.id) ?? [];
+        assignments.forEach((item) => {
+          if (item.unidad_id) assigned.add(item.unidad_id);
+        });
+        if (variant.unidad_movil_id) assigned.add(variant.unidad_movil_id);
+        return Array.from(assigned).some((id) => normalizedUnidadSet.has(id));
+      })();
+
+      const salaConflict = normalizedSalaId && variant.sala_id === normalizedSalaId;
+
+      return trainerMatches || unidadMatches || salaConflict;
+    });
+
+    if (hasExtendedConflict) {
+      return errorResponse(
+        'RESOURCE_UNAVAILABLE',
+        'Algunos recursos ya están asignados en las fechas seleccionadas.',
+        409,
+      );
+    }
   }
 
   return null;
@@ -556,8 +1036,10 @@ type VariantRecord = {
   unidad_movil_id?: string | null;
   products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  trainer_links?: VariantTrainerLink[];
   salas?: { sala_id: string; name: string; sede: string | null } | null;
   unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
+  unidad_links?: VariantUnitLink[];
   created_at: Date | string | null;
   updated_at: Date | string | null;
 };
@@ -705,6 +1187,32 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
         orderBy: orderByName as any,
       });
 
+      if (includeVariantResources) {
+        const variantIds: string[] = [];
+        for (const product of products as any[]) {
+          if (!product?.variants) continue;
+          for (const variant of product.variants as any[]) {
+            if (variant?.id) variantIds.push(String(variant.id));
+          }
+        }
+
+        if (variantIds.length) {
+          const [trainerAssignments, unitAssignments] = await Promise.all([
+            fetchVariantTrainerAssignments(prisma, variantIds),
+            fetchVariantUnitAssignments(prisma, variantIds),
+          ]);
+
+          for (const product of products as any[]) {
+            if (!product?.variants) continue;
+            for (const variant of product.variants as any[]) {
+              const variantId = String(variant.id);
+              variant.trainer_links = trainerAssignments.get(variantId) ?? [];
+              variant.unidad_links = unitAssignments.get(variantId) ?? [];
+            }
+          }
+        }
+      }
+
       if (!includeDefaults) {
         if (includeVariantResources) setVariantResourceColumnsSupport(true);
         const legacy = products as unknown as LegacyProductRecord[];
@@ -745,6 +1253,114 @@ function normalizeVariant(record: VariantRecord) {
   const price =
     record.price == null ? null : typeof record.price === 'string' ? record.price : record.price.toString();
 
+  const trainerLinks = Array.isArray(record.trainer_links) ? record.trainer_links : [];
+  const trainerIdsFromLinks = trainerLinks
+    .map((link) => toTrimmed(link.trainer_id))
+    .filter((value): value is string => Boolean(value));
+  const trainerRecordsFromLinks = trainerLinks
+    .map((link) => {
+      const trainerId = toTrimmed(link.trainer_id);
+      if (!trainerId) return null;
+      return {
+        trainer_id: trainerId,
+        name: link.name ?? null,
+        apellido: link.apellido ?? null,
+      } as const;
+    })
+    .filter((value): value is { trainer_id: string; name: string | null; apellido: string | null } => Boolean(value));
+
+  const trainerRecordsMap = new Map(trainerRecordsFromLinks.map((item) => [item.trainer_id, item] as const));
+
+  if (record.trainers?.trainer_id) {
+    const trainerId = toTrimmed(record.trainers.trainer_id);
+    if (trainerId) {
+      if (!trainerRecordsMap.has(trainerId)) {
+        trainerRecordsMap.set(trainerId, {
+          trainer_id: trainerId,
+          name: record.trainers.name ?? null,
+          apellido: record.trainers.apellido ?? null,
+        });
+      }
+    }
+  }
+
+  if (record.trainer_id) {
+    const trainerId = toTrimmed(record.trainer_id);
+    if (trainerId && !trainerRecordsMap.has(trainerId)) {
+      trainerRecordsMap.set(trainerId, {
+        trainer_id: trainerId,
+        name: null,
+        apellido: null,
+      });
+    }
+  }
+
+  const uniqueTrainerIds = Array.from(new Set([...trainerIdsFromLinks]));
+  const trimmedTrainerId = toTrimmed(record.trainer_id);
+  if (trimmedTrainerId && !uniqueTrainerIds.includes(trimmedTrainerId)) {
+    uniqueTrainerIds.unshift(trimmedTrainerId);
+  }
+
+  const trainerRecords = Array.from(trainerRecordsMap.values());
+  const primaryTrainerId = uniqueTrainerIds[0] ?? trimmedTrainerId ?? null;
+  const trainerDetail = primaryTrainerId
+    ? trainerRecords.find((item) => item.trainer_id === primaryTrainerId) ?? null
+    : null;
+
+  const unitLinks = Array.isArray(record.unidad_links) ? record.unidad_links : [];
+  const unitIdsFromLinks = unitLinks
+    .map((link) => toTrimmed(link.unidad_id))
+    .filter((value): value is string => Boolean(value));
+  const unitRecordsFromLinks = unitLinks
+    .map((link) => {
+      const unidadId = toTrimmed(link.unidad_id);
+      if (!unidadId) return null;
+      return {
+        unidad_id: unidadId,
+        name: link.name ?? '',
+        matricula: link.matricula ?? null,
+      } as const;
+    })
+    .filter((value): value is { unidad_id: string; name: string; matricula: string | null } => Boolean(value));
+
+  const unitRecordsMap = new Map(unitRecordsFromLinks.map((item) => [item.unidad_id, item] as const));
+
+  if (record.unidades_moviles?.unidad_id) {
+    const unidadId = toTrimmed(record.unidades_moviles.unidad_id);
+    if (unidadId) {
+      if (!unitRecordsMap.has(unidadId)) {
+        unitRecordsMap.set(unidadId, {
+          unidad_id: unidadId,
+          name: record.unidades_moviles.name,
+          matricula: record.unidades_moviles.matricula ?? null,
+        });
+      }
+    }
+  }
+
+  if (record.unidad_movil_id) {
+    const unidadId = toTrimmed(record.unidad_movil_id);
+    if (unidadId && !unitRecordsMap.has(unidadId)) {
+      unitRecordsMap.set(unidadId, {
+        unidad_id: unidadId,
+        name: '',
+        matricula: null,
+      });
+    }
+  }
+
+  const uniqueUnitIds = Array.from(new Set([...unitIdsFromLinks]));
+  const trimmedUnitId = toTrimmed(record.unidad_movil_id);
+  if (trimmedUnitId && !uniqueUnitIds.includes(trimmedUnitId)) {
+    uniqueUnitIds.unshift(trimmedUnitId);
+  }
+
+  const unitRecords = Array.from(unitRecordsMap.values());
+  const primaryUnitId = uniqueUnitIds[0] ?? trimmedUnitId ?? null;
+  const unitDetail = primaryUnitId
+    ? unitRecords.find((item) => item.unidad_id === primaryUnitId) ?? null
+    : null;
+
   return {
     id: record.id,
     id_woo: record.id_woo?.toString(),
@@ -756,26 +1372,18 @@ function normalizeVariant(record: VariantRecord) {
     stock_status: record.stock_status ?? null,
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
-    trainer_id: record.trainer_id ?? null,
-    trainer: record.trainers
-      ? {
-          trainer_id: record.trainers.trainer_id,
-          name: record.trainers.name ?? null,
-          apellido: record.trainers.apellido ?? null,
-        }
-      : null,
+    trainer_id: primaryTrainerId,
+    trainer: trainerDetail,
+    trainer_ids: uniqueTrainerIds,
+    trainers: trainerRecords,
     sala_id: record.sala_id ?? null,
     sala: record.salas
       ? { sala_id: record.salas.sala_id, name: record.salas.name, sede: record.salas.sede ?? null }
       : null,
-    unidad_movil_id: record.unidad_movil_id ?? null,
-    unidad: record.unidades_moviles
-      ? {
-          unidad_id: record.unidades_moviles.unidad_id,
-          name: record.unidades_moviles.name,
-          matricula: record.unidades_moviles.matricula ?? null,
-        }
-      : null,
+    unidad_movil_id: primaryUnitId,
+    unidad: unitDetail,
+    unidad_movil_ids: uniqueUnitIds,
+    unidades: unitRecords,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
   } as const;
@@ -889,7 +1497,24 @@ export const handler = createHttpHandler<any>(async (request) => {
     if (Object.prototype.hasOwnProperty.call(payload, 'unidad_movil_id'))
       updates.unidad_movil_id = toTrimmed(payload.unidad_movil_id);
 
-    if (!Object.keys(updates).length) return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
+    let trainerIdsUpdate: string[] | undefined;
+    if (Object.prototype.hasOwnProperty.call(payload, 'trainer_ids')) {
+      const parsed = sanitizeIdArray(payload.trainer_ids);
+      if (parsed === null) return errorResponse('VALIDATION_ERROR', 'Lista de formadores inválida', 400);
+      trainerIdsUpdate = parsed;
+    }
+
+    let unidadIdsUpdate: string[] | undefined;
+    if (Object.prototype.hasOwnProperty.call(payload, 'unidad_movil_ids')) {
+      const parsed = sanitizeIdArray(payload.unidad_movil_ids);
+      if (parsed === null) return errorResponse('VALIDATION_ERROR', 'Lista de unidades móviles inválida', 400);
+      unidadIdsUpdate = parsed;
+    }
+
+    const hasResourceArrayUpdates = trainerIdsUpdate !== undefined || unidadIdsUpdate !== undefined;
+
+    if (!Object.keys(updates).length && !hasResourceArrayUpdates)
+      return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
 
     const existing = await prisma.variants.findUnique({
       where: { id: variantId },
@@ -912,9 +1537,51 @@ export const handler = createHttpHandler<any>(async (request) => {
     });
     if (!existing) return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
 
-    const nextTrainerId = Object.prototype.hasOwnProperty.call(updates, 'trainer_id') ? updates.trainer_id ?? null : existing.trainer_id ?? null;
+    const [existingTrainerAssignments, existingUnitAssignments] = await Promise.all([
+      fetchVariantTrainerAssignments(prisma, [variantId]),
+      fetchVariantUnitAssignments(prisma, [variantId]),
+    ]);
+
+    const normalizedExistingTrainerIds = Array.from(
+      new Set(
+        (existingTrainerAssignments.get(variantId)?.map((item) => item.trainer_id) ?? [])
+          .map((value) => toTrimmed(value))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    const trimmedExistingTrainerId = toTrimmed(existing.trainer_id);
+    if (trimmedExistingTrainerId && !normalizedExistingTrainerIds.includes(trimmedExistingTrainerId)) {
+      normalizedExistingTrainerIds.unshift(trimmedExistingTrainerId);
+    }
+
+    const normalizedExistingUnitIds = Array.from(
+      new Set(
+        (existingUnitAssignments.get(variantId)?.map((item) => item.unidad_id) ?? [])
+          .map((value) => toTrimmed(value))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    const trimmedExistingUnidadId = toTrimmed(existing.unidad_movil_id);
+    if (trimmedExistingUnidadId && !normalizedExistingUnitIds.includes(trimmedExistingUnidadId)) {
+      normalizedExistingUnitIds.unshift(trimmedExistingUnidadId);
+    }
+
+    const nextTrainerIds = trainerIdsUpdate !== undefined ? trainerIdsUpdate : normalizedExistingTrainerIds;
+    const nextUnidadIds = unidadIdsUpdate !== undefined ? unidadIdsUpdate : normalizedExistingUnitIds;
+
+    const nextTrainerId =
+      trainerIdsUpdate !== undefined
+        ? nextTrainerIds[0] ?? null
+        : Object.prototype.hasOwnProperty.call(updates, 'trainer_id')
+          ? updates.trainer_id ?? null
+          : trimmedExistingTrainerId ?? null;
     const nextSalaId    = Object.prototype.hasOwnProperty.call(updates, 'sala_id')    ? updates.sala_id ?? null    : existing.sala_id ?? null;
-    const nextUnidadId  = Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id') ? updates.unidad_movil_id ?? null : existing.unidad_movil_id ?? null;
+    const nextUnidadId =
+      unidadIdsUpdate !== undefined
+        ? nextUnidadIds[0] ?? null
+        : Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id')
+          ? updates.unidad_movil_id ?? null
+          : trimmedExistingUnidadId ?? null;
     const nextSede      = Object.prototype.hasOwnProperty.call(updates, 'sede') ? updates.sede ?? null : existing.sede ?? null;
     const nextDate      = Object.prototype.hasOwnProperty.call(updates, 'date') ? updates.date ?? null : existing.date ?? null;
 
@@ -931,12 +1598,15 @@ export const handler = createHttpHandler<any>(async (request) => {
 
     const availabilityError = await ensureVariantResourcesAvailable(prisma, {
       excludeVariantId: existing.id,
-      trainerId: nextTrainerId,
+      trainerIds: nextTrainerIds,
       salaId: nextSalaId,
-      unidadId: nextUnidadId,
+      unidadIds: nextUnidadIds,
       range: variantRange,
     });
     if (availabilityError) return availabilityError;
+
+    if (trainerIdsUpdate !== undefined) updates.trainer_id = nextTrainerId;
+    if (unidadIdsUpdate !== undefined) updates.unidad_movil_id = nextUnidadId;
 
     const wooUpdates: VariantWooUpdateInput = {};
     if ('price' in updates) wooUpdates.price = updates.price ?? null;
@@ -967,7 +1637,15 @@ export const handler = createHttpHandler<any>(async (request) => {
     if ('sala_id' in updates) data.sala_id = updates.sala_id ?? null;
     if ('unidad_movil_id' in updates) data.unidad_movil_id = updates.unidad_movil_id ?? null;
 
-    await prisma.variants.update({ where: { id: variantId }, data });
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.variants.update({ where: { id: variantId }, data });
+      if (trainerIdsUpdate !== undefined) {
+        await syncVariantTrainerAssignments(tx, variantId, nextTrainerIds);
+      }
+      if (unidadIdsUpdate !== undefined) {
+        await syncVariantUnitAssignments(tx, variantId, nextUnidadIds);
+      }
+    });
 
     const refreshed = await prisma.variants.findUnique({
       where: { id: variantId },
@@ -993,7 +1671,20 @@ export const handler = createHttpHandler<any>(async (request) => {
       },
     });
 
-    return successResponse({ ok: true, variant: refreshed ? normalizeVariant(refreshed as any) : null });
+    const [refreshedTrainerAssignments, refreshedUnitAssignments] = await Promise.all([
+      fetchVariantTrainerAssignments(prisma, [variantId]),
+      fetchVariantUnitAssignments(prisma, [variantId]),
+    ]);
+
+    const enrichedRefreshed =
+      refreshed &&
+      ({
+        ...(refreshed as any),
+        trainer_links: refreshedTrainerAssignments.get(variantId) ?? [],
+        unidad_links: refreshedUnitAssignments.get(variantId) ?? [],
+      } as VariantRecord);
+
+    return successResponse({ ok: true, variant: enrichedRefreshed ? normalizeVariant(enrichedRefreshed) : null });
   }
 
   if (method === 'DELETE') {
