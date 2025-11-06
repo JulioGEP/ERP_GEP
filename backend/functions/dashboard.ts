@@ -82,6 +82,24 @@ export const handler = createHttpHandler(async (request) => {
       .toLowerCase();
   };
 
+  const normalizeVariantWooId = (value: unknown): string | null => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? String(value) : null;
+    }
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+    if (value && typeof value === 'object' && 'toString' in value) {
+      const serialized = String(value).trim();
+      return serialized.length ? serialized : null;
+    }
+    return null;
+  };
+
   const toDateKey = (value: Date): string => {
     const iso = toMadridISOString(value);
     if (iso && iso.length >= 10) {
@@ -203,6 +221,7 @@ export const handler = createHttpHandler(async (request) => {
           },
         },
         select: {
+          id_woo: true,
           date: true,
           products: {
             select: {
@@ -232,21 +251,23 @@ export const handler = createHttpHandler(async (request) => {
 
     const timelineSessions = sessionsInTimeline as SessionTimelineEntry[];
 
+    type TimelineBudgetEntry = {
+      id: string;
+      dealId: string | null;
+      sessionTitle: string | null;
+      companyName: string | null;
+      trainers: string[];
+      mobileUnits: string[];
+      type: 'company' | 'formacionAbierta';
+      studentsCount: number;
+    };
+
     const timelineMap = new Map<
       string,
       {
         totalSessions: number;
         formacionAbiertaSessions: number;
-        budgets: Array<{
-          id: string;
-          dealId: string | null;
-          sessionTitle: string | null;
-          companyName: string | null;
-          trainers: string[];
-          mobileUnits: string[];
-          type: 'company' | 'formacionAbierta';
-          studentsCount: number;
-        }>;
+        budgets: TimelineBudgetEntry[];
       }
     >();
 
@@ -307,7 +328,95 @@ export const handler = createHttpHandler(async (request) => {
       });
     }
 
-    for (const variant of variantsInTimeline) {
+    type VariantTimelineEntry = {
+      id_woo: bigint | number | string | null;
+      date: Date | string | null;
+      products:
+        | {
+            name: string | null;
+            code: string | null;
+            category: string | null;
+          }
+        | null;
+    };
+
+    const variantEntries = variantsInTimeline as VariantTimelineEntry[];
+    const variantWooIds = Array.from(
+      new Set(
+        variantEntries
+          .map((variant) => normalizeVariantWooId(variant?.id_woo ?? null))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    const dealsByVariantWooId = new Map<string, TimelineBudgetEntry[]>();
+
+    if (variantWooIds.length) {
+      type VariantDealRow = {
+        deal_id: string | null;
+        title: string | null;
+        organizations: { name: string | null } | null;
+        _count: { alumnos: number } | null;
+        w_id_variation: string | number | bigint | null;
+      };
+
+      const dealsForVariants = await prisma.deals.findMany({
+        where: { w_id_variation: { in: variantWooIds } },
+        select: {
+          deal_id: true,
+          title: true,
+          organizations: {
+            select: {
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              alumnos: true,
+            },
+          },
+          w_id_variation: true,
+        },
+      });
+
+      (dealsForVariants as VariantDealRow[]).forEach((deal) => {
+        const variantKey = normalizeVariantWooId(deal?.w_id_variation ?? null);
+        if (!variantKey) return;
+
+        const trimmedDealId = typeof deal.deal_id === 'string' ? deal.deal_id.trim() : '';
+        const uniqueId = trimmedDealId.length ? `deal-${trimmedDealId}` : `deal-${variantKey}`;
+        const studentsCount =
+          typeof deal._count?.alumnos === 'number' && Number.isFinite(deal._count.alumnos)
+            ? deal._count.alumnos
+            : 0;
+        const sessionTitle =
+          typeof deal.title === 'string' && deal.title.trim().length ? deal.title.trim() : null;
+        const companyName =
+          typeof deal.organizations?.name === 'string' && deal.organizations.name.trim().length
+            ? deal.organizations.name.trim()
+            : null;
+
+        const entry: TimelineBudgetEntry = {
+          id: uniqueId,
+          dealId: trimmedDealId.length ? trimmedDealId : null,
+          sessionTitle,
+          companyName,
+          trainers: [],
+          mobileUnits: [],
+          type: 'formacionAbierta',
+          studentsCount,
+        };
+
+        const existing = dealsByVariantWooId.get(variantKey);
+        if (existing) {
+          existing.push(entry);
+        } else {
+          dealsByVariantWooId.set(variantKey, [entry]);
+        }
+      });
+    }
+
+    for (const variant of variantEntries) {
       const variantDateValue = variant.date;
       const variantDate =
         variantDateValue instanceof Date
@@ -324,6 +433,13 @@ export const handler = createHttpHandler(async (request) => {
       if (entry) {
         entry.totalSessions += 1;
         entry.formacionAbiertaSessions += 1;
+        const variantWooId = normalizeVariantWooId(variant.id_woo ?? null);
+        if (variantWooId) {
+          const dealsForVariant = dealsByVariantWooId.get(variantWooId);
+          if (dealsForVariant && dealsForVariant.length) {
+            entry.budgets.push(...dealsForVariant.map((deal) => ({ ...deal })));
+          }
+        }
       }
 
       if (isTwoDayVerticalProduct(variant.products ?? null)) {

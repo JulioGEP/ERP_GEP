@@ -504,6 +504,12 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
                             if (group.type === 'formacionAbierta') {
                               return (
                                 <li key={budget.id} className={itemClassName}>
+                                  {budget.sessionTitle ? (
+                                    <div>
+                                      <span className="text-muted">Presupuesto:</span>{' '}
+                                      {budget.sessionTitle}
+                                    </div>
+                                  ) : null}
                                   <div>
                                     <span className="text-muted">Organización:</span>{' '}
                                     {budget.companyName ?? '—'}
