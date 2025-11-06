@@ -928,8 +928,31 @@ export function CalendarView({
     staleTime: 5 * 60 * 1000,
   });
 
-  const sessions = sessionsQuery.data?.sessions ?? [];
-  const variants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
+  const rawSessions = sessionsQuery.data?.sessions ?? [];
+  const rawVariants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
+
+  const sessions = useMemo(() => {
+    if (!normalizedTrainerId) {
+      return rawSessions;
+    }
+    return rawSessions.filter((session) =>
+      session.trainers.some((trainer) => safeString(trainer.id) === normalizedTrainerId),
+    );
+  }, [rawSessions, normalizedTrainerId]);
+
+  const variants = useMemo(() => {
+    if (!includeVariants) {
+      return [];
+    }
+    if (!normalizedTrainerId) {
+      return rawVariants;
+    }
+    return rawVariants.filter((variant) => {
+      const primaryTrainerId = safeString(variant.variant.trainer_id);
+      const relatedTrainerId = safeString(variant.variant.trainer?.trainer_id);
+      return primaryTrainerId === normalizedTrainerId || relatedTrainerId === normalizedTrainerId;
+    });
+  }, [rawVariants, normalizedTrainerId, includeVariants]);
 
   const productOptionsQuery = useQuery({
     queryKey: ['calendar-filter-products'],
