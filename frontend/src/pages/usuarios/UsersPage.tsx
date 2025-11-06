@@ -4,6 +4,7 @@ import {
   Alert,
   Badge,
   Button,
+  ButtonGroup,
   Card,
   Col,
   Form,
@@ -58,12 +59,15 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
+  const [includeTrainers, setIncludeTrainers] = useState(false);
+  const [tableFilter, setTableFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   const usersQuery = useQuery<UsersListResponse>({
-  queryKey: ['users', page, searchTerm],
-  queryFn: () => fetchUsers({ page, pageSize: PAGE_SIZE, search: searchTerm || undefined }),
-  placeholderData: keepPreviousData,
-});
+    queryKey: ['users', page, searchTerm],
+    queryFn: () => fetchUsers({ page, pageSize: PAGE_SIZE, search: searchTerm || undefined }),
+    placeholderData: keepPreviousData,
+  });
 
   useEffect(() => {
     if (!usersQuery.data) return;
@@ -135,6 +139,33 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const currentPage = usersQuery.data?.page ?? page;
   const totalPages = usersQuery.data ? Math.max(1, Math.ceil(usersQuery.data.total / usersQuery.data.pageSize)) : 1;
 
+  const filteredUsers = useMemo(() => {
+    const normalizedFilter = tableFilter.trim().toLowerCase();
+
+    return users.filter((user) => {
+      if (!includeTrainers && user.role === 'Formador') {
+        return false;
+      }
+
+      if (statusFilter === 'active' && !user.active) {
+        return false;
+      }
+
+      if (statusFilter === 'inactive' && user.active) {
+        return false;
+      }
+
+      if (normalizedFilter.length > 0) {
+        const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+        if (!fullName.includes(normalizedFilter)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [includeTrainers, statusFilter, tableFilter, users]);
+
   const paginationItems = useMemo(() => {
     const items: JSX.Element[] = [];
     for (let i = 1; i <= totalPages; i += 1) {
@@ -201,52 +232,94 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
             )}
 
             {!isLoading && (
-              <Table hover responsive className="mb-0">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Email</th>
-                    <th>Rol</th>
-                    <th>Estado</th>
-                    <th className="text-end">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.length === 0 ? (
+              <div className="d-grid gap-3">
+                <div className="d-flex flex-column flex-lg-row gap-2 justify-content-between align-items-lg-center">
+                  <div className="d-flex gap-2 flex-wrap">
+                    <Button
+                      variant={includeTrainers ? 'outline-secondary' : 'outline-primary'}
+                      onClick={() => setIncludeTrainers((prev) => !prev)}
+                    >
+                      {includeTrainers ? 'Ocultar formadores' : 'Mostrar todos los roles'}
+                    </Button>
+                    <ButtonGroup>
+                      <Button
+                        variant={statusFilter === 'all' ? 'primary' : 'outline-secondary'}
+                        onClick={() => setStatusFilter('all')}
+                      >
+                        Todos
+                      </Button>
+                      <Button
+                        variant={statusFilter === 'active' ? 'primary' : 'outline-secondary'}
+                        onClick={() => setStatusFilter('active')}
+                      >
+                        Activos
+                      </Button>
+                      <Button
+                        variant={statusFilter === 'inactive' ? 'primary' : 'outline-secondary'}
+                        onClick={() => setStatusFilter('inactive')}
+                      >
+                        Inactivos
+                      </Button>
+                    </ButtonGroup>
+                  </div>
+                  <Form.Control
+                    size="sm"
+                    type="search"
+                    placeholder="Filtrar por nombre o apellido"
+                    value={tableFilter}
+                    onChange={(event) => setTableFilter(event.target.value)}
+                    style={{ maxWidth: '280px' }}
+                  />
+                </div>
+                <Table hover responsive className="mb-0">
+                  <thead>
                     <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">
-                        No hay usuarios para mostrar.
-                      </td>
+                      <th>Nombre</th>
+                      <th>Email</th>
+                      <th>Rol</th>
+                      <th>Estado</th>
+                      <th className="text-end">Acciones</th>
                     </tr>
-                  ) : (
-                    users.map((user: UserSummary) => (
-                      <tr key={user.id}>
-                        <td>{`${user.firstName} ${user.lastName}`}</td>
-                        <td>{user.email}</td>
-                        <td>{user.role}</td>
-                        <td>
-                          <Badge bg={user.active ? 'success' : 'secondary'}>
-                            {user.active ? 'Activo' : 'Inactivo'}
-                          </Badge>
-                        </td>
-                        <td>
-                          <div className="d-flex justify-content-end gap-2">
-                            <Button variant="outline-secondary" size="sm" onClick={() => openEditModal(user)}>
-                              Editar
-                            </Button>
-                          </div>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center text-muted py-4">
+                          No hay usuarios para mostrar.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </Table>
+                    ) : (
+                      filteredUsers.map((user: UserSummary) => (
+                        <tr key={user.id}>
+                          <td>{`${user.firstName} ${user.lastName}`}</td>
+                          <td>{user.email}</td>
+                          <td>{user.role}</td>
+                          <td>
+                            <Badge bg={user.active ? 'success' : 'secondary'}>
+                              {user.active ? 'Activo' : 'Inactivo'}
+                            </Badge>
+                          </td>
+                          <td>
+                            <div className="d-flex justify-content-end gap-2">
+                              <Button variant="outline-secondary" size="sm" onClick={() => openEditModal(user)}>
+                                Editar
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </Table>
+              </div>
             )}
           </div>
 
           <Row className="align-items-center g-3">
             <Col className="text-muted small">
-              {isRefetching ? 'Actualizando…' : `Mostrando ${users.length} de ${totalUsers} usuarios`}
+              {isRefetching
+                ? 'Actualizando…'
+                : `Mostrando ${filteredUsers.length} de ${totalUsers} usuarios`}
             </Col>
             <Col className="d-flex justify-content-end">
               <Pagination className="mb-0">
