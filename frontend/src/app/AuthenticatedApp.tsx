@@ -47,7 +47,6 @@ import type { TemplatesCertificadosPageProps } from '../pages/recursos/Templates
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
-import type { TrainerPageProps } from '../pages/usuarios/TrainerPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
@@ -135,7 +134,6 @@ const NAVIGATION_ITEMS: NavItem[] = [
     path: '/usuarios',
     children: [
       { key: 'Usuarios/Principal', label: 'Gestión de usuarios', path: '/usuarios' },
-      { key: 'Usuarios/Trainer', label: 'Área Formador', path: '/usuarios/trainer' },
     ],
   },
 ];
@@ -1055,7 +1053,6 @@ export default function AuthenticatedApp() {
 
   const certificadosPageProps: CertificadosPageProps = {};
   const recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps = {};
-  const trainerPageProps: TrainerPageProps = {};
   const usersPageProps: UsersPageProps = { onNotify: pushToast };
 
   const pipelineLabelValue = normalizeOptionalString(selectedBudgetSummary?.pipeline_label);
@@ -1148,7 +1145,6 @@ export default function AuthenticatedApp() {
             productosPageProps={productosPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
-            trainerPageProps={trainerPageProps}
             usersPageProps={usersPageProps}
             defaultRedirectPath={homePath}
             knownPaths={allowedPaths}

@@ -13,7 +13,6 @@ import type { TemplatesCertificadosPageProps } from '../pages/recursos/Templates
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
-import type { TrainerPageProps } from '../pages/usuarios/TrainerPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext';
 
@@ -31,7 +30,6 @@ const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/Templates
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
 const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/FormacionAbiertaPage'));
-const TrainerPage = lazy(() => import('../pages/usuarios/TrainerPage'));
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
 const InformesPreventivoPage = lazy(() => import('../pages/informes/PreventivoReportPage'));
 const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroReportPage'));
@@ -56,7 +54,6 @@ type AppRouterProps = {
   productosPageProps: ProductosPageProps;
   certificadosPageProps: CertificadosPageProps;
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
-  trainerPageProps: TrainerPageProps;
   usersPageProps: UsersPageProps;
   defaultRedirectPath: string;
   knownPaths: ReadonlySet<string>;
@@ -77,7 +74,6 @@ export function AppRouter({
   productosPageProps,
   certificadosPageProps,
   recursosFormacionAbiertaPageProps,
-  trainerPageProps,
   usersPageProps,
   defaultRedirectPath,
   knownPaths,
@@ -224,11 +220,7 @@ export function AppRouter({
             />
           }
         />
-        <Route
-          path="/usuarios/trainer"
-          element={<GuardedRoute path="/usuarios/trainer" element={<TrainerPage {...trainerPageProps} />} />}
-        />
-        <Route path="/recursos/trainer" element={<Navigate to="/usuarios/trainer" replace />} />
+        <Route path="/recursos/trainer" element={<Navigate to="/recursos/formadores_bomberos" replace />} />
         <Route path="/formacion_abierta/cursos" element={<Navigate to="/recursos/formacion_abierta" replace />} />
 
         <Route
