@@ -154,21 +154,24 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
       }
     : undefined;
 
-  const [total, users] = await Promise.all([
-    prisma.users.count({ where: where as any }),
-    prisma.users.findMany({
+  try {
+    const total = await prisma.users.count({ where: where as any });
+    const users = await prisma.users.findMany({
       orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }, { email: 'asc' }],
       skip: (page - 1) * pageSize,
       take: pageSize,
-    }),
-  ]);
+    });
 
-  return successResponse({
-    users: users.map(serializeUser),
-    total,
-    page,
-    pageSize,
-  });
+    return successResponse({
+      users: users.map(serializeUser),
+      total,
+      page,
+      pageSize,
+    });
+  } catch (error) {
+    console.error('[users] Error listing users', error);
+    return errorResponse('LIST_FAILED', 'No se pudieron cargar los usuarios', 500);
+  }
 }
 
 async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) {
