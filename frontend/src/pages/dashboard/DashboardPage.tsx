@@ -22,13 +22,16 @@ const EMPTY_METRICS: DashboardMetrics = {
 
 const NETLIFY_BASE_URL = 'https://erpgep.netlify.app';
 
-const SESSION_CALENDAR_PATH = `${NETLIFY_BASE_URL}/calendario/por_sesiones`;
+const ALL_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/todos`;
+const UNPLANNED_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sinplanificar`;
 const UNWORKED_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sintrabajar`;
 
-const SESSION_DRAFTS_URL = `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__estado=BORRADOR`;
-const SESSION_SUSPENDED_URL = `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__estado=SUSPENDIDA`;
-const SESSION_PENDING_COMPLETION_URL =
-  `${SESSION_CALENDAR_PATH}?calendar-sessions__filter__por_finalizar=S%C3%AD&calendar-sessions__filter__estado=PLANIFICADA`;
+const SESSION_DRAFTS_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__session_estado=BORRADOR`;
+const SESSION_SUSPENDED_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__session_estado=SUSPENDIDA`;
+const SESSION_PENDING_COMPLETION_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__session_estado=PLANIFICADA`;
+const SESSION_FORMACION_ABIERTA_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__pipeline=${encodeURIComponent(
+  'formacion abierta',
+)}`;
 
 const BUDGETS_PENDING_CAES_URL =
   `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__caes_label=S%C3%AD&budgets-table__filter__caes_val=Pendiente`;
@@ -648,10 +651,11 @@ export default function DashboardPage() {
               </Col>
               <Col>
                 <MetricCard
-                  title="Eventos sin formador"
+                  title="Formacion Abierta"
                   value={metrics.sessions.sinFormador}
                   accent="info"
                   description="Eventos de formación abierta con reservas sin formador asignado."
+                  href={SESSION_FORMACION_ABIERTA_URL}
                 />
               </Col>
               <Col>
