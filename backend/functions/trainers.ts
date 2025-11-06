@@ -256,27 +256,39 @@ async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer:
 
   // Si no hay user_id válido, hacemos upsert por email
   if (!userId) {
-    const now = new Date();
-    const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
-    const upserted = await prisma.users.upsert({
-      where: { email: trainer.email! },
-      update: userPayload,
-      create: {
-        id: randomUUID(),
-        first_name: trainer.name,
-        last_name: trainer.apellido ?? '',
-        email: trainer.email!,
-        role: 'formador' as any,
-        active: Boolean(trainer.activo),
-        password_hash: passwordHash,
-        password_algo: 'bcrypt',
-        password_updated_at: now,
-        created_at: now,
-        updated_at: now,
-      },
+    const existing = await prisma.users.findFirst({
+      where: { email: { equals: trainer.email!, mode: 'insensitive' } },
       select: { id: true },
     });
-    userId = upserted.id;
+
+    if (existing) {
+      const updated = await prisma.users.update({
+        where: { id: existing.id },
+        data: userPayload,
+        select: { id: true },
+      });
+      userId = updated.id;
+    } else {
+      const now = new Date();
+      const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
+      const created = await prisma.users.create({
+        data: {
+          id: randomUUID(),
+          first_name: trainer.name,
+          last_name: trainer.apellido ?? '',
+          email: trainer.email!,
+          role: 'formador' as any,
+          active: Boolean(trainer.activo),
+          password_hash: passwordHash,
+          password_algo: 'bcrypt',
+          password_updated_at: now,
+          created_at: now,
+          updated_at: now,
+        },
+        select: { id: true },
+      });
+      userId = created.id;
+    }
   }
 
   // Enlazamos el trainer con el user si hiciera falta
