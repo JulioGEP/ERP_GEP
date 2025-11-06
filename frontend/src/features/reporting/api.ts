@@ -17,5 +17,5 @@ export type TrainerHoursResponse = {
 };
 
 export async function fetchTrainerHours(): Promise<TrainerHoursResponse> {
-  return getJson<TrainerHoursResponse>('/direccion-horas-formadores');
+  return getJson<TrainerHoursResponse>('/reporting-horas-formadores');
 }

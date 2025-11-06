@@ -131,13 +131,13 @@ const DEFAULT_NAVIGATION_ITEMS: NavItem[] = [
     ],
   },
   {
-    key: 'Direccion',
-    label: 'Dirección',
+    key: 'Reporting',
+    label: 'Reporting',
     children: [
       {
-        key: 'Direccion/HorasFormadores',
+        key: 'Reporting/HorasFormadores',
         label: 'Horas Formadores',
-        path: '/direccion/horas_formadores',
+        path: '/reporting/horas_formadores',
       },
     ],
   },
