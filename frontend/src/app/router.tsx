@@ -44,6 +44,7 @@ const TrainerDashboardPage = lazy(() => import('../pages/usuarios/trainer/Traine
 const TrainerCalendarPage = lazy(() => import('../pages/usuarios/trainer/TrainerCalendarPage'));
 const TrainerAvailabilityPage = lazy(() => import('../pages/usuarios/trainer/TrainerAvailabilityPage'));
 const TrainerSessionsPage = lazy(() => import('../pages/usuarios/trainer/TrainerSessionsPage'));
+const HorasFormadoresPage = lazy(() => import('../pages/direccion/HorasFormadoresPage'));
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -307,6 +308,17 @@ export function AppRouter({
         <Route
           path="/usuarios"
           element={<GuardedRoute path="/usuarios" element={<UsersPage {...usersPageProps} />} />}
+        />
+
+        <Route
+          path="/direccion/horas_formadores"
+          element={
+            <GuardedRoute
+              path="/direccion/horas_formadores"
+              roles={['Admin']}
+              element={<HorasFormadoresPage />}
+            />
+          }
         />
 
         <Route path="/perfil" element={<GuardedRoute path="/perfil" element={<ProfilePage />} />} />
