@@ -7,6 +7,13 @@ import { errorResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, nowInMadridISO, toMadridISOString } from './_shared/timezone';
 
 const YES_VALUES = ['Si', 'Sí'] as const;
+const SESSION_PIPELINE_LABELS = [
+  'formacion empresa',
+  'formacion empresas',
+  'formación empresa',
+  'formación empresas',
+  'gep services',
+] as const;
 
 type YesLabelField = 'caes_label' | 'fundae_label' | 'hotel_label' | 'po' | 'transporte';
 
@@ -16,6 +23,14 @@ function buildYesLabelFilter(field: YesLabelField): Prisma.dealsWhereInput {
       [field]: { equals: value, mode: 'insensitive' },
     })),
   } as Prisma.dealsWhereInput;
+}
+
+function buildSessionPipelineFilter() {
+  const pipelineConditions = SESSION_PIPELINE_LABELS.map((label) => ({
+    pipeline_id: { equals: label, mode: 'insensitive' as const },
+  }));
+
+  return { is: { OR: pipelineConditions } };
 }
 
 export const handler = createHttpHandler(async (request) => {
@@ -125,8 +140,14 @@ export const handler = createHttpHandler(async (request) => {
       transportPending,
       sessionsInTimeline,
       variantsInTimeline,
+      variantsMissingTrainer,
     ] = await Promise.all([
-      prisma.sesiones.count({ where: { estado: 'BORRADOR' } }),
+      prisma.sesiones.count({
+        where: {
+          estado: 'BORRADOR',
+          deals: buildSessionPipelineFilter(),
+        },
+      }),
       prisma.sesiones.count({ where: { estado: 'SUSPENDIDA' } }),
       prisma.sesiones.count({
         where: {
@@ -232,6 +253,15 @@ export const handler = createHttpHandler(async (request) => {
           },
         },
       }),
+      prisma.variants.findMany({
+        where: {
+          trainer_id: null,
+          date: { not: null, gte: todayStart },
+        },
+        select: {
+          id_woo: true,
+        },
+      }),
     ]);
 
     type SessionTimelineEntry = {
@@ -250,6 +280,39 @@ export const handler = createHttpHandler(async (request) => {
     };
 
     const timelineSessions = sessionsInTimeline as SessionTimelineEntry[];
+
+    type VariantWithoutTrainerEntry = { id_woo: bigint | number | string | null };
+
+    const variantsWithoutTrainerList = variantsMissingTrainer as VariantWithoutTrainerEntry[];
+
+    let variantsWithoutTrainerWithDeals = 0;
+
+    if (variantsWithoutTrainerList.length) {
+      const variantIds = Array.from(
+        new Set(
+          variantsWithoutTrainerList
+            .map((variant) => normalizeVariantWooId(variant?.id_woo ?? null))
+            .filter((value): value is string => Boolean(value)),
+        ),
+      );
+
+      if (variantIds.length) {
+        type VariantDealIdRow = { w_id_variation: string | number | bigint | null };
+
+        const dealsForMissingTrainer = await prisma.deals.findMany({
+          where: { w_id_variation: { in: variantIds } },
+          select: { w_id_variation: true },
+        });
+
+        const dealsVariantIds = new Set(
+          (dealsForMissingTrainer as VariantDealIdRow[])
+            .map((deal) => normalizeVariantWooId(deal?.w_id_variation ?? null))
+            .filter((value): value is string => Boolean(value)),
+        );
+
+        variantsWithoutTrainerWithDeals = variantIds.filter((id) => dealsVariantIds.has(id)).length;
+      }
+    }
 
     type TimelineBudgetEntry = {
       id: string;
@@ -465,6 +528,7 @@ export const handler = createHttpHandler(async (request) => {
     return successResponse({
       sessions: {
         borrador: draftSessions,
+        sinFormador: variantsWithoutTrainerWithDeals,
         suspendida: suspendedSessions,
         porFinalizar: pendingCompletionSessions,
       },

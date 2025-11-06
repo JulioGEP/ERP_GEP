@@ -8,7 +8,7 @@ import type { ApiError } from '../../api/client';
 const QUERY_KEY = ['dashboard', 'metrics'] as const;
 
 const EMPTY_METRICS: DashboardMetrics = {
-  sessions: { borrador: 0, suspendida: 0, porFinalizar: 0 },
+  sessions: { borrador: 0, sinFormador: 0, suspendida: 0, porFinalizar: 0 },
   followUp: {
     caesPorTrabajar: 0,
     fundaePorTrabajar: 0,
@@ -636,7 +636,7 @@ export default function DashboardPage() {
         <Stack gap={5}>
           <section>
             <h2 className="h5 mb-3">Sesiones</h2>
-            <Row xs={1} md={3} className="g-4">
+            <Row xs={1} md={2} xl={4} className="g-4">
               <Col>
                 <MetricCard
                   title="En borrador"
@@ -644,6 +644,14 @@ export default function DashboardPage() {
                   accent="primary"
                   description="Sesiones aún pendientes de confirmar y planificar."
                   href={SESSION_DRAFTS_URL}
+                />
+              </Col>
+              <Col>
+                <MetricCard
+                  title="Eventos sin formador"
+                  value={metrics.sessions.sinFormador}
+                  accent="info"
+                  description="Eventos de formación abierta con reservas sin formador asignado."
                 />
               </Col>
               <Col>
