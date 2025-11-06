@@ -87,7 +87,7 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
   }, [budgets]);
 
   const variantRows = useMemo<VariantRow[]>(() => {
-    if (!products.length || !dealsByVariantId.size) {
+    if (!products.length) {
       return [];
     }
 
@@ -98,7 +98,11 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
         if (status !== 'publish') {
           return;
         }
-        const hasTrainer = Boolean((variant.trainer_id ?? '').trim().length);
+        const hasPrimaryTrainer = Boolean((variant.trainer_id ?? '').trim().length);
+        const hasExtraTrainers = Array.isArray(variant.trainer_ids)
+          ? variant.trainer_ids.some((id) => Boolean((id ?? '').toString().trim().length))
+          : false;
+        const hasTrainer = hasPrimaryTrainer || hasExtraTrainers;
         if (hasTrainer) {
           return;
         }
@@ -106,10 +110,7 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
         if (!variantId) {
           return;
         }
-        const dealsForVariant = dealsByVariantId.get(variantId);
-        if (!dealsForVariant || dealsForVariant.length === 0) {
-          return;
-        }
+        const dealsForVariant = dealsByVariantId.get(variantId) ?? [];
         const sortedDeals = [...dealsForVariant].sort((a, b) =>
           a.deal_id.localeCompare(b.deal_id, 'es', { sensitivity: 'base' }),
         );
@@ -195,7 +196,7 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
       <div className="text-center py-4 text-muted bg-white rounded-4 shadow-sm">
         <p className="mb-1 fw-semibold">No hay formación abierta pendiente.</p>
         <p className="mb-0 small">
-          No se encontraron variantes publicadas con presupuestos pendientes de asignar formador.
+          No se encontraron variantes publicadas sin formador asignado.
         </p>
       </div>
     );
@@ -233,22 +234,26 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
                     </td>
                     <td>{sedeLabel}</td>
                     <td>
-                      <div className="d-flex flex-wrap gap-2">
-                        {deals.map((deal) => {
-                          const dealId = deal.deal_id;
-                          const title = (deal.title ?? '').trim();
-                          return (
-                            <Badge
-                              key={dealId}
-                              bg="primary"
-                              className="text-uppercase"
-                              title={title.length ? title : undefined}
-                            >
-                              {dealId}
-                            </Badge>
-                          );
-                        })}
-                      </div>
+                      {deals.length ? (
+                        <div className="d-flex flex-wrap gap-2">
+                          {deals.map((deal) => {
+                            const dealId = deal.deal_id;
+                            const title = (deal.title ?? '').trim();
+                            return (
+                              <Badge
+                                key={dealId}
+                                bg="primary"
+                                className="text-uppercase"
+                                title={title.length ? title : undefined}
+                              >
+                                {dealId}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-muted small">Sin presupuestos asociados</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -266,7 +271,7 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
         <div>
           <h2 className="h5 fw-semibold mb-1">Formación abierta sin planificar</h2>
           <p className="text-muted small mb-0">
-            Variantes publicadas con presupuestos asociados pendientes de asignar formador.
+            Variantes publicadas sin formador asignado. Muestra los presupuestos asociados si existen.
           </p>
         </div>
         {isFetching ? (
