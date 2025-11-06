@@ -53,14 +53,144 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
   const trainerId = trainerIdRaw != null && String(trainerIdRaw).trim().length
     ? String(trainerIdRaw).trim()
     : null;
+  const trainerIdsRaw: unknown[] = Array.isArray(input?.trainer_ids) ? input.trainer_ids : [];
+  const trainerIdSet = new Set<string>();
+  if (trainerId) {
+    trainerIdSet.add(trainerId);
+  }
+  trainerIdsRaw.forEach((value) => {
+    const normalized = toTrimmedString(value);
+    if (normalized) {
+      trainerIdSet.add(normalized);
+    }
+  });
+
+  const trainerRecordsMap = new Map<string, { trainer_id: string; name: string | null; apellido: string | null }>();
+  let fallbackTrainerRecord: { trainer_id: string; name: string | null; apellido: string | null } | null = null;
+
+  const registerTrainerRecord = (record: {
+    trainer_id: string;
+    name: string | null;
+    apellido: string | null;
+  }) => {
+    if (record.trainer_id) {
+      if (!trainerRecordsMap.has(record.trainer_id)) {
+        trainerRecordsMap.set(record.trainer_id, record);
+      }
+    } else if (!fallbackTrainerRecord) {
+      fallbackTrainerRecord = record;
+    }
+  };
+
+  const trainersRaw: unknown[] = Array.isArray(input?.trainers) ? input.trainers : [];
+  trainersRaw.forEach((trainer) => {
+    if (!trainer || typeof trainer !== 'object') {
+      return;
+    }
+    const id = toTrimmedString((trainer as any).trainer_id ?? (trainer as any).id);
+    if (id) {
+      trainerIdSet.add(id);
+    }
+    registerTrainerRecord({
+      trainer_id: id ?? '',
+      name: toTrimmedString((trainer as any).name),
+      apellido: toTrimmedString((trainer as any).apellido),
+    });
+  });
+
+  if (input?.trainer && typeof input.trainer === 'object') {
+    const id = toTrimmedString(input.trainer.trainer_id) ?? trainerId ?? null;
+    if (id) {
+      trainerIdSet.add(id);
+    }
+    registerTrainerRecord({
+      trainer_id: id ?? '',
+      name: toTrimmedString(input.trainer.name),
+      apellido: toTrimmedString(input.trainer.apellido),
+    });
+  }
+
+  const trainerIds = Array.from(trainerIdSet);
+  const trainers = Array.from(trainerRecordsMap.values());
+  if (!trainers.length && fallbackTrainerRecord) {
+    trainers.push(fallbackTrainerRecord);
+  }
+
   const salaIdRaw = input?.sala_id;
   const salaId = salaIdRaw != null && String(salaIdRaw).trim().length
     ? String(salaIdRaw).trim()
     : null;
+
   const unidadIdRaw = input?.unidad_movil_id;
   const unidadId = unidadIdRaw != null && String(unidadIdRaw).trim().length
     ? String(unidadIdRaw).trim()
     : null;
+  const unidadIdsRaw: unknown[] = Array.isArray(input?.unidad_movil_ids) ? input.unidad_movil_ids : [];
+  const unidadIdSet = new Set<string>();
+  if (unidadId) {
+    unidadIdSet.add(unidadId);
+  }
+  unidadIdsRaw.forEach((value) => {
+    const normalized = toTrimmedString(value);
+    if (normalized) {
+      unidadIdSet.add(normalized);
+    }
+  });
+
+  const unidadRecordsMap = new Map<string, { unidad_id: string; name: string; matricula: string | null }>();
+  let fallbackUnidadRecord: { unidad_id: string; name: string; matricula: string | null } | null = null;
+
+  const registerUnidadRecord = (record: {
+    unidad_id: string;
+    name: string;
+    matricula: string | null;
+  }) => {
+    if (record.unidad_id) {
+      if (!unidadRecordsMap.has(record.unidad_id)) {
+        unidadRecordsMap.set(record.unidad_id, record);
+      }
+    } else if (!fallbackUnidadRecord) {
+      fallbackUnidadRecord = record;
+    }
+  };
+
+  const unidadesRaw: unknown[] = Array.isArray(input?.unidades)
+    ? input.unidades
+    : Array.isArray(input?.units)
+    ? input.units
+    : [];
+  unidadesRaw.forEach((unidad) => {
+    if (!unidad || typeof unidad !== 'object') {
+      return;
+    }
+    const id = toTrimmedString((unidad as any).unidad_id ?? (unidad as any).id);
+    if (id) {
+      unidadIdSet.add(id);
+    }
+    registerUnidadRecord({
+      unidad_id: id ?? '',
+      name: toTrimmedString((unidad as any).name) ?? '',
+      matricula: toTrimmedString((unidad as any).matricula),
+    });
+  });
+
+  if (input?.unidad && typeof input.unidad === 'object') {
+    const id = toTrimmedString(input.unidad.unidad_id) ?? unidadId ?? null;
+    if (id) {
+      unidadIdSet.add(id);
+    }
+    registerUnidadRecord({
+      unidad_id: id ?? '',
+      name: toTrimmedString(input.unidad.name) ?? '',
+      matricula: toTrimmedString(input.unidad.matricula),
+    });
+  }
+
+  const unidadIds = Array.from(unidadIdSet);
+  const unidades = Array.from(unidadRecordsMap.values());
+  if (!unidades.length && fallbackUnidadRecord) {
+    unidades.push(fallbackUnidadRecord);
+  }
 
   return {
     id: String(input?.id ?? fallbackId),
@@ -72,19 +202,10 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     stock_status: input?.stock_status ?? null,
     sede: input?.sede ?? null,
     date: input?.date ?? null,
-    trainer_id: trainerId,
-    trainer:
-  input?.trainer && typeof input.trainer === 'object'
-    ? {
-        // debe ser string siempre
-        trainer_id:
-          input.trainer.trainer_id != null && String(input.trainer.trainer_id).trim().length
-            ? String(input.trainer.trainer_id).trim()
-            : (trainerId ?? ''),
-        name: toTrimmedString(input.trainer.name),
-        apellido: toTrimmedString(input.trainer.apellido),
-      }
-    : null,
+    trainer_id: trainerIds[0] ?? trainerId ?? null,
+    trainer: trainers.find((item) => item.trainer_id === (trainerIds[0] ?? trainerId ?? '')) ?? null,
+    trainer_ids: trainerIds,
+    trainers,
     sala_id: salaId,
     sala:
   input?.sala && typeof input.sala === 'object'
@@ -98,19 +219,10 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
         sede: toTrimmedString(input.sala.sede),
       }
     : null,
-    unidad_movil_id: unidadId,
-    unidad:
-  input?.unidad && typeof input.unidad === 'object'
-    ? {
-        // debe ser string siempre
-        unidad_id:
-          input.unidad.unidad_id != null && String(input.unidad.unidad_id).trim().length
-            ? String(input.unidad.unidad_id).trim()
-            : (unidadId ?? ''),
-        name: toTrimmedString(input.unidad.name) ?? '',
-        matricula: toTrimmedString(input.unidad.matricula),
-      }
-    : null,
+    unidad_movil_id: unidadIds[0] ?? unidadId ?? null,
+    unidad: unidades.find((item) => item.unidad_id === (unidadIds[0] ?? unidadId ?? '')) ?? null,
+    unidad_movil_ids: unidadIds,
+    unidades,
     created_at: input?.created_at ?? null,
     updated_at: input?.updated_at ?? null,
   } satisfies VariantInfo;

@@ -22,11 +22,15 @@ const sampleVariant = (overrides: Partial<VariantInfo> = {}): VariantInfo => ({
   sede: 'Madrid',
   date: '2025-01-10',
   trainer_id: null,
+  trainer_ids: [],
   trainer: null,
+  trainers: [],
   sala_id: null,
   sala: null,
   unidad_movil_id: null,
+  unidad_movil_ids: [],
   unidad: null,
+  unidades: [],
   created_at: null,
   updated_at: null,
   ...overrides,
@@ -47,6 +51,7 @@ describe('normalizeVariantFromResponse', () => {
     expect(variant.id).toBe('fallback-id');
     expect(variant.stock).toBe(7);
     expect(variant.trainer_id).toBe('123');
+    expect(variant.trainer_ids).toEqual(['123']);
     expect(variant.sala?.sala_id).toBe('88');
     expect(variant.id_woo).toBe('55');
   });

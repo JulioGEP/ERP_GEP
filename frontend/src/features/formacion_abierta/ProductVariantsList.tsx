@@ -106,9 +106,9 @@ type VariantFormValues = {
   status: string;
   sede: string;
   date: string;
-  trainer_id: string;
+  trainer_ids: string[];
   sala_id: string;
-  unidad_movil_id: string;
+  unidad_movil_ids: string[];
 };
 
 const STOCK_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
@@ -153,10 +153,34 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
     status: variant.status ?? 'publish',
     sede: variant.sede ?? '',
     date: formatDateForInputValue(variant.date),
-    trainer_id: variant.trainer_id ?? '',
+    trainer_ids: Array.isArray(variant.trainer_ids) ? [...variant.trainer_ids] : [],
     sala_id: variant.sala_id ?? '',
-    unidad_movil_id: variant.unidad_movil_id ?? '',
+    unidad_movil_ids: Array.isArray(variant.unidad_movil_ids) ? [...variant.unidad_movil_ids] : [],
   };
+}
+
+function areStringArraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((value, index) => value === sortedB[index]);
+}
+
+function sanitizeStringArray(values: string[]): string[] {
+  const seen = new Set<string>();
+  const sanitized: string[] = [];
+  values.forEach((value) => {
+    const trimmed = value.trim();
+    if (!trimmed.length) {
+      return;
+    }
+    if (seen.has(trimmed)) {
+      return;
+    }
+    seen.add(trimmed);
+    sanitized.push(trimmed);
+  });
+  return sanitized;
 }
 
 type ProductDefaultsFormValues = {
@@ -673,9 +697,9 @@ export function VariantModal({
     status: 'publish',
     sede: '',
     date: '',
-    trainer_id: '',
+    trainer_ids: [],
     sala_id: '',
-    unidad_movil_id: '',
+    unidad_movil_ids: [],
   });
   const [initialValues, setInitialValues] = useState<VariantFormValues>({
     price: '',
@@ -684,9 +708,9 @@ export function VariantModal({
     status: 'publish',
     sede: '',
     date: '',
-    trainer_id: '',
+    trainer_ids: [],
     sala_id: '',
-    unidad_movil_id: '',
+    unidad_movil_ids: [],
   });
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -761,15 +785,21 @@ export function VariantModal({
 
   const trainerDisplay = useMemo(() => {
     if (!variant) return '—';
-    if (variant.trainer) {
-      const parts = [variant.trainer.name ?? '', variant.trainer.apellido ?? '']
-        .map((part) => part.trim())
-        .filter((part) => part.length);
-      if (parts.length) {
-        return parts.join(' ');
-      }
+    const trainers = Array.isArray(variant.trainers) && variant.trainers.length
+      ? variant.trainers
+      : variant.trainer
+      ? [variant.trainer]
+      : [];
+    const labels = trainers
+      .map((trainer) => `${trainer.name ?? ''}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim())
+      .filter((label) => label.length);
+    if (labels.length) {
+      return labels.join(', ');
     }
-    return variant.trainer_id ?? '—';
+    if (Array.isArray(variant.trainer_ids) && variant.trainer_ids.length) {
+      return variant.trainer_ids.join(', ');
+    }
+    return '—';
   }, [variant]);
 
   const roomDisplay = useMemo(() => {
@@ -785,13 +815,22 @@ export function VariantModal({
 
   const unitDisplay = useMemo(() => {
     if (!variant) return '—';
-    if (variant.unidad) {
-      const base = (variant.unidad.name ?? '').trim();
-      const matricula = variant.unidad.matricula ? ` (${variant.unidad.matricula})` : '';
-      const label = `${base}${matricula}`.trim();
-      if (label.length) return label;
+    const unidades = Array.isArray(variant.unidades) && variant.unidades.length
+      ? variant.unidades
+      : variant.unidad
+      ? [variant.unidad]
+      : [];
+    const labels = unidades
+      .map((unidad) => (unidad.matricula ? `${unidad.name} (${unidad.matricula})` : unidad.name))
+      .map((label) => label.trim())
+      .filter((label) => label.length);
+    if (labels.length) {
+      return labels.join(', ');
     }
-    return variant.unidad_movil_id ?? '—';
+    if (Array.isArray(variant.unidad_movil_ids) && variant.unidad_movil_ids.length) {
+      return variant.unidad_movil_ids.join(', ');
+    }
+    return '—';
   }, [variant]);
 
   const trainersQuery = useQuery({
@@ -912,9 +951,9 @@ export function VariantModal({
         status: 'publish',
         sede: '',
         date: '',
-        trainer_id: '',
+        trainer_ids: [],
         sala_id: '',
-        unidad_movil_id: '',
+        unidad_movil_ids: [],
       });
       setInitialValues({
         price: '',
@@ -923,9 +962,9 @@ export function VariantModal({
         status: 'publish',
         sede: '',
         date: '',
-        trainer_id: '',
+        trainer_ids: [],
         sala_id: '',
-        unidad_movil_id: '',
+        unidad_movil_ids: [],
       });
       setSaveError(null);
       setSaveSuccess(null);
@@ -1093,7 +1132,9 @@ export function VariantModal({
     return rows;
   }, [deals, dealStudents]);
 
-  const handleChange = (field: keyof VariantFormValues) =>
+  type VariantFormField = Exclude<keyof VariantFormValues, 'trainer_ids' | 'unidad_movil_ids'>;
+
+  const handleChange = (field: VariantFormField) =>
     (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       const value = event.target.value;
       setFormValues((prev) => ({ ...prev, [field]: value }));
@@ -1225,48 +1266,56 @@ export function VariantModal({
     });
   }, [normalizedUnitFilter, units]);
 
-  const trainerSummary = useMemo(() => {
-    if (!formValues.trainer_id) {
-      return '';
+  const selectedTrainers = useMemo(() => {
+    if (!formValues.trainer_ids.length) {
+      return [] as typeof trainers;
     }
-    const trainer = trainers.find((item) => item.trainer_id === formValues.trainer_id);
-    if (!trainer) {
-      return '';
-    }
-    const baseLabel = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
-    if (!baseLabel.length) {
-      return '';
-    }
-    return blockedTrainerIds.has(trainer.trainer_id) ? `${baseLabel} · No disponible` : baseLabel;
-  }, [blockedTrainerIds, formValues.trainer_id, trainers]);
+    const selected = new Set(formValues.trainer_ids);
+    return trainers.filter((trainer) => selected.has(trainer.trainer_id));
+  }, [formValues.trainer_ids, trainers]);
 
-  const unitSummary = useMemo(() => {
-    if (!formValues.unidad_movil_id) {
-      return '';
+  const selectedUnits = useMemo(() => {
+    if (!formValues.unidad_movil_ids.length) {
+      return [] as typeof units;
     }
-    const unit = units.find((item) => item.unidad_id === formValues.unidad_movil_id);
-    if (!unit) {
-      return '';
-    }
-    const baseLabel = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
-    if (!baseLabel.length) {
-      return '';
-    }
-    return blockedUnitIds.has(unit.unidad_id) ? `${baseLabel} · No disponible` : baseLabel;
-  }, [blockedUnitIds, formValues.unidad_movil_id, units]);
+    const selected = new Set(formValues.unidad_movil_ids);
+    return units.filter((unit) => selected.has(unit.unidad_id));
+  }, [formValues.unidad_movil_ids, units]);
 
-  const handleTrainerSelect = (trainerId: string | null) => {
-    setFormValues((prev) => ({ ...prev, trainer_id: trainerId ?? '' }));
+  const trainerSummary = selectedTrainers
+    .map((trainer) => `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim())
+    .filter((label) => label.length)
+    .join(', ');
+
+  const unitSummary = selectedUnits
+    .map((unit) => (unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name).trim())
+    .filter((label) => label.length)
+    .join(', ');
+
+  const handleTrainerToggle = (trainerId: string, checked: boolean) => {
+    setFormValues((prev) => {
+      const set = new Set(prev.trainer_ids);
+      if (checked) {
+        set.add(trainerId);
+      } else {
+        set.delete(trainerId);
+      }
+      return { ...prev, trainer_ids: Array.from(set) };
+    });
     setSaveSuccess(null);
-    setTrainerListOpen(false);
-    trainerPointerInteractingRef.current = false;
   };
 
-  const handleUnitSelect = (unitId: string | null) => {
-    setFormValues((prev) => ({ ...prev, unidad_movil_id: unitId ?? '' }));
+  const handleUnitToggle = (unitId: string, checked: boolean) => {
+    setFormValues((prev) => {
+      const set = new Set(prev.unidad_movil_ids);
+      if (checked) {
+        set.add(unitId);
+      } else {
+        set.delete(unitId);
+      }
+      return { ...prev, unidad_movil_ids: Array.from(set) };
+    });
     setSaveSuccess(null);
-    setUnitListOpen(false);
-    unitPointerInteractingRef.current = false;
   };
 
   const isDirty =
@@ -1276,9 +1325,9 @@ export function VariantModal({
     formValues.status !== initialValues.status ||
     formValues.sede !== initialValues.sede ||
     formValues.date !== initialValues.date ||
-    formValues.trainer_id !== initialValues.trainer_id ||
+    !areStringArraysEqual(formValues.trainer_ids, initialValues.trainer_ids) ||
     formValues.sala_id !== initialValues.sala_id ||
-    formValues.unidad_movil_id !== initialValues.unidad_movil_id;
+    !areStringArraysEqual(formValues.unidad_movil_ids, initialValues.unidad_movil_ids);
 
   const handleSave = async (closeAfter: boolean) => {
     if (!variant) return;
@@ -1311,17 +1360,15 @@ export function VariantModal({
     if (formValues.date !== initialValues.date) {
       payload.date = formValues.date || null;
     }
-    if (formValues.trainer_id !== initialValues.trainer_id) {
-      const trimmed = formValues.trainer_id.trim();
-      payload.trainer_id = trimmed.length ? trimmed : null;
+    if (!areStringArraysEqual(formValues.trainer_ids, initialValues.trainer_ids)) {
+      payload.trainer_ids = sanitizeStringArray(formValues.trainer_ids);
     }
     if (formValues.sala_id !== initialValues.sala_id) {
       const trimmed = formValues.sala_id.trim();
       payload.sala_id = trimmed.length ? trimmed : null;
     }
-    if (formValues.unidad_movil_id !== initialValues.unidad_movil_id) {
-      const trimmed = formValues.unidad_movil_id.trim();
-      payload.unidad_movil_id = trimmed.length ? trimmed : null;
+    if (!areStringArraysEqual(formValues.unidad_movil_ids, initialValues.unidad_movil_ids)) {
+      payload.unidad_movil_ids = sanitizeStringArray(formValues.unidad_movil_ids);
     }
 
     if (!Object.keys(payload).length) {
@@ -1426,12 +1473,12 @@ export function VariantModal({
               <Row className="g-3">
                 <Col md={4}>
                   <Form.Group controlId="variantTrainer" className="mb-0">
-                    <Form.Label>Formador</Form.Label>
+                    <Form.Label>Formadores</Form.Label>
                     <div ref={trainerFieldRef} className="session-multiselect">
                       <Form.Control
                         type="text"
                         readOnly
-                        placeholder="Selecciona formador"
+                        placeholder="Selecciona formadores"
                         value={trainerSummary}
                         aria-expanded={trainerListOpen}
                         aria-controls="variant-trainer-options"
@@ -1463,7 +1510,7 @@ export function VariantModal({
                             setTrainerListOpen(false);
                           }
                         }}
-                        title={trainerSummary || 'Sin formador'}
+                        title={trainerSummary || 'Sin formadores'}
                       />
                       <Collapse in={trainerListOpen && !isSaving && !trainersLoading && !availabilityLoading}>
                         <div id="variant-trainer-options" className="session-multiselect-panel mt-2">
@@ -1476,21 +1523,11 @@ export function VariantModal({
                           />
                           <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
                             <ListGroup variant="flush">
-                              {(!normalizedTrainerFilter.length || 'sin formador'.includes(normalizedTrainerFilter)) && (
-                                <ListGroup.Item className="py-1">
-                                  <Form.Check
-                                    type="radio"
-                                    id="variant-trainer-none"
-                                    label="Sin formador"
-                                    checked={!formValues.trainer_id}
-                                    onChange={() => handleTrainerSelect(null)}
-                                  />
-                                </ListGroup.Item>
-                              )}
                               {filteredTrainers.map((trainer) => {
                                 const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
-                                const blocked =
-                                  blockedTrainerIds.has(trainer.trainer_id) && trainer.trainer_id !== formValues.trainer_id;
+                                const checked = formValues.trainer_ids.includes(trainer.trainer_id);
+                                const blocked = blockedTrainerIds.has(trainer.trainer_id);
+                                const disabled = blocked && !checked;
                                 const displayLabel = blocked ? `${label} · No disponible` : label;
                                 return (
                                   <ListGroup.Item
@@ -1498,25 +1535,25 @@ export function VariantModal({
                                     className={`py-1${blocked ? ' session-option-unavailable' : ''}`}
                                   >
                                     <Form.Check
-                                      type="radio"
+                                      type="checkbox"
                                       id={`variant-trainer-${trainer.trainer_id}`}
                                       className={blocked ? 'session-option-unavailable' : undefined}
                                       label={displayLabel}
-                                      checked={formValues.trainer_id === trainer.trainer_id}
-                                      disabled={blocked}
-                                      onChange={() => {
-                                        if (!blocked) {
-                                          handleTrainerSelect(trainer.trainer_id);
+                                      checked={checked}
+                                      disabled={disabled}
+                                      onChange={(event) => {
+                                        if (disabled) {
+                                          return;
                                         }
+                                        handleTrainerToggle(trainer.trainer_id, event.target.checked);
                                       }}
                                     />
                                   </ListGroup.Item>
                                 );
                               })}
-                              {!filteredTrainers.length &&
-                                !(!normalizedTrainerFilter.length || 'sin formador'.includes(normalizedTrainerFilter)) && (
-                                  <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
-                                )}
+                              {!filteredTrainers.length ? (
+                                <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
+                              ) : null}
                             </ListGroup>
                           </div>
                         </div>
@@ -1556,12 +1593,12 @@ export function VariantModal({
                 </Col>
                 <Col md={4}>
                   <Form.Group controlId="variantUnit" className="mb-0">
-                    <Form.Label>Unidad móvil</Form.Label>
+                    <Form.Label>Unidades móviles</Form.Label>
                     <div ref={unitFieldRef} className="session-multiselect">
                       <Form.Control
                         type="text"
                         readOnly
-                        placeholder="Selecciona unidad móvil"
+                        placeholder="Selecciona unidades móviles"
                         value={unitSummary}
                         aria-expanded={unitListOpen}
                         aria-controls="variant-unit-options"
@@ -1593,7 +1630,7 @@ export function VariantModal({
                             setUnitListOpen(false);
                           }
                         }}
-                        title={unitSummary || 'Sin unidad móvil'}
+                        title={unitSummary || 'Sin unidades móviles'}
                       />
                       <Collapse in={unitListOpen && !isSaving && !unitsLoading && !availabilityLoading}>
                         <div id="variant-unit-options" className="session-multiselect-panel mt-2">
@@ -1606,21 +1643,11 @@ export function VariantModal({
                           />
                           <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
                             <ListGroup variant="flush">
-                              {(!normalizedUnitFilter.length || 'sin unidad móvil'.includes(normalizedUnitFilter)) && (
-                                <ListGroup.Item className="py-1">
-                                  <Form.Check
-                                    type="radio"
-                                    id="variant-unit-none"
-                                    label="Sin unidad móvil"
-                                    checked={!formValues.unidad_movil_id}
-                                    onChange={() => handleUnitSelect(null)}
-                                  />
-                                </ListGroup.Item>
-                              )}
                               {filteredUnits.map((unit) => {
                                 const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
-                                const blocked =
-                                  blockedUnitIds.has(unit.unidad_id) && unit.unidad_id !== formValues.unidad_movil_id;
+                                const checked = formValues.unidad_movil_ids.includes(unit.unidad_id);
+                                const blocked = blockedUnitIds.has(unit.unidad_id);
+                                const disabled = blocked && !checked;
                                 const displayLabel = blocked ? `${label} · No disponible` : label;
                                 return (
                                   <ListGroup.Item
@@ -1628,25 +1655,25 @@ export function VariantModal({
                                     className={`py-1${blocked ? ' session-option-unavailable' : ''}`}
                                   >
                                     <Form.Check
-                                      type="radio"
+                                      type="checkbox"
                                       id={`variant-unit-${unit.unidad_id}`}
                                       className={blocked ? 'session-option-unavailable' : undefined}
                                       label={displayLabel}
-                                      checked={formValues.unidad_movil_id === unit.unidad_id}
-                                      disabled={blocked}
-                                      onChange={() => {
-                                        if (!blocked) {
-                                          handleUnitSelect(unit.unidad_id);
+                                      checked={checked}
+                                      disabled={disabled}
+                                      onChange={(event) => {
+                                        if (disabled) {
+                                          return;
                                         }
+                                        handleUnitToggle(unit.unidad_id, event.target.checked);
                                       }}
                                     />
                                   </ListGroup.Item>
                                 );
                               })}
-                              {!filteredUnits.length &&
-                                !(!normalizedUnitFilter.length || 'sin unidad móvil'.includes(normalizedUnitFilter)) && (
-                                  <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
-                                )}
+                              {!filteredUnits.length ? (
+                                <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
+                              ) : null}
                             </ListGroup>
                           </div>
                         </div>

@@ -9,11 +9,15 @@ export type VariantInfo = {
   sede: string | null;
   date: string | null;
   trainer_id: string | null;
+  trainer_ids: string[];
   trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  trainers: Array<{ trainer_id: string; name: string | null; apellido: string | null }>;
   sala_id: string | null;
   sala: { sala_id: string; name: string; sede: string | null } | null;
   unidad_movil_id: string | null;
+  unidad_movil_ids: string[];
   unidad: { unidad_id: string; name: string; matricula: string | null } | null;
+  unidades: Array<{ unidad_id: string; name: string; matricula: string | null }>;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -57,9 +61,9 @@ export type VariantUpdatePayload = {
   status?: string | null;
   sede?: string | null;
   date?: string | null;
-  trainer_id?: string | null;
+  trainer_ids?: string[];
   sala_id?: string | null;
-  unidad_movil_id?: string | null;
+  unidad_movil_ids?: string[];
 };
 
 export type DealProductInfo = {
