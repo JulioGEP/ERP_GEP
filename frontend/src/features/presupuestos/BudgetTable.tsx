@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Alert, Button, Spinner, Table } from 'react-bootstrap';
+import { Alert, Button, Pagination, Spinner, Table } from 'react-bootstrap';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   useReactTable,
@@ -120,6 +120,7 @@ interface BudgetTableProps {
   showFilters?: boolean;
   serverQueryOptions?: BudgetServerQueryOptions;
   variant?: BudgetTableVariant;
+  pageSize?: number;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -671,6 +672,7 @@ export function BudgetTable({
   showFilters = true,
   serverQueryOptions,
   variant = 'default',
+  pageSize,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -707,6 +709,7 @@ export function BudgetTable({
   } = useTableFilterState({ tableKey: 'budgets-table' });
 
   const [sortingState, setSortingState] = useState<TableSortingState>(sortingFromUrl);
+  const [pageIndex, setPageIndex] = useState(0);
 
   useEffect(() => {
     setSortingState(sortingFromUrl);
@@ -905,6 +908,34 @@ export function BudgetTable({
     : clientFilteredBudgets;
 
   const resultCount = tableBudgets.length;
+
+  const effectivePageSize = typeof pageSize === 'number' && pageSize > 0 ? Math.floor(pageSize) : null;
+  const pageCount = effectivePageSize ? Math.max(1, Math.ceil(resultCount / effectivePageSize)) : 1;
+
+  useEffect(() => {
+    if (!effectivePageSize) {
+      return;
+    }
+    setPageIndex(0);
+  }, [effectivePageSize, tableBudgets]);
+
+  useEffect(() => {
+    if (!effectivePageSize) {
+      return;
+    }
+    setPageIndex((current) => {
+      const maxIndex = Math.max(0, pageCount - 1);
+      return current > maxIndex ? maxIndex : current;
+    });
+  }, [effectivePageSize, pageCount]);
+
+  const paginatedBudgets = useMemo(() => {
+    if (!effectivePageSize) {
+      return tableBudgets;
+    }
+    const start = pageIndex * effectivePageSize;
+    return tableBudgets.slice(start, start + effectivePageSize);
+  }, [effectivePageSize, pageIndex, tableBudgets]);
 
   const hasAppliedFilters = useMemo(() => {
     const hasFilterValues = Object.entries(activeFilters).some(
@@ -1240,7 +1271,7 @@ export function BudgetTable({
   }, [deletingId, handleDelete, showDeleteAction, variant]);
 
   const table = useReactTable<DealSummary>({
-    data: tableBudgets,
+    data: paginatedBudgets,
     columns,
     state: { sorting: tanstackSortingState },
     onSortingChange: handleSortingChange,
@@ -1249,6 +1280,19 @@ export function BudgetTable({
   });
 
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
+  const handlePageNavigation = useCallback(
+    (nextPage: number) => {
+      if (!effectivePageSize) {
+        return;
+      }
+      const clamped = Math.min(Math.max(nextPage, 0), pageCount - 1);
+      setPageIndex(clamped);
+      if (tableContainerRef.current) {
+        tableContainerRef.current.scrollTop = 0;
+      }
+    },
+    [effectivePageSize, pageCount],
+  );
   const rowModel = table.getRowModel();
   const rows = rowModel.rows;
   const noFilteredResults = hasAppliedFilters && rows.length === 0;
@@ -1269,6 +1313,33 @@ export function BudgetTable({
 
   const columnsCount = table.getAllColumns().length;
   const isServerBusy = shouldUseServerFiltering && (serverQuery.isFetching || serverQuery.isLoading);
+  const pageStart = effectivePageSize
+    ? resultCount === 0
+      ? 0
+      : pageIndex * effectivePageSize + 1
+    : resultCount === 0
+      ? 0
+      : 1;
+  const pageEnd = effectivePageSize
+    ? Math.min(resultCount, (pageIndex + 1) * effectivePageSize)
+    : resultCount;
+  const paginationItems = useMemo(() => {
+    if (!effectivePageSize) {
+      return [] as number[];
+    }
+    const maxButtons = 5;
+    if (pageCount <= maxButtons) {
+      return Array.from({ length: pageCount }, (_, index) => index);
+    }
+    const halfWindow = Math.floor(maxButtons / 2);
+    let start = Math.max(0, pageIndex - halfWindow);
+    let end = start + maxButtons;
+    if (end > pageCount) {
+      end = pageCount;
+      start = Math.max(0, end - maxButtons);
+    }
+    return Array.from({ length: end - start }, (_, index) => start + index);
+  }, [effectivePageSize, pageCount, pageIndex]);
 
   if (isLoading) {
     return (
@@ -1435,6 +1506,36 @@ export function BudgetTable({
           </tbody>
         </Table>
       </div>
+      {effectivePageSize && resultCount > 0 ? (
+        <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 px-3 py-2 border-top bg-light-subtle">
+          <span className="text-muted small">
+            {pageStart === 0
+              ? 'Sin presupuestos para mostrar.'
+              : `Mostrando ${pageStart.toLocaleString('es-ES')} - ${pageEnd.toLocaleString('es-ES')} de ${resultCount.toLocaleString('es-ES')} presupuestos`}
+          </span>
+          {pageCount > 1 ? (
+            <Pagination size="sm" className="mb-0">
+              <Pagination.Prev
+                disabled={pageIndex === 0}
+                onClick={() => handlePageNavigation(pageIndex - 1)}
+              />
+              {paginationItems.map((page) => (
+                <Pagination.Item
+                  key={page}
+                  active={page === pageIndex}
+                  onClick={() => handlePageNavigation(page)}
+                >
+                  {page + 1}
+                </Pagination.Item>
+              ))}
+              <Pagination.Next
+                disabled={pageIndex >= pageCount - 1}
+                onClick={() => handlePageNavigation(pageIndex + 1)}
+              />
+            </Pagination>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
