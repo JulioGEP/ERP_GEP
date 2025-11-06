@@ -5,11 +5,6 @@ import { fetchTrainerBudgets } from '../../api/trainer';
 import type { TrainerBudget } from '../../api/trainer';
 import { TRAINER_BUDGETS_QUERY_KEY } from './queryKeys';
 
-const DATE_FORMATTER = new Intl.DateTimeFormat('es-ES', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
-
 const DATE_ONLY_FORMATTER = new Intl.DateTimeFormat('es-ES', {
   dateStyle: 'medium',
 });
@@ -19,13 +14,6 @@ function formatDate(value: string | null): string | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return DATE_ONLY_FORMATTER.format(date);
-}
-
-function formatDateTime(value: string | null): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return DATE_FORMATTER.format(date);
 }
 
 export type BudgetSummary = TrainerBudget & {
@@ -92,40 +80,28 @@ export function TrainerSessionsPage() {
         <Table responsive hover className="shadow-sm">
           <thead>
             <tr>
-              <th>Presupuesto</th>
-              <th>Negocio</th>
-              <th>Próxima sesión</th>
-              <th className="text-center">Sesiones</th>
-              <th>Actualizado</th>
+              <th>PRESUPUESTO</th>
+              <th>EMPRESA</th>
+              <th>TÍTULO</th>
+              <th>FORMACIÓN</th>
+              <th>FECHA FORMACIÓN</th>
             </tr>
           </thead>
           <tbody>
             {budgets.map((budget) => {
-              const nextSessionDate = formatDateTime(budget.nextSession?.start ?? null);
+              const formationDate = formatDate(budget.nextSession?.start ?? null);
+              const organizationLabel = budget.organizationName ?? '—';
+              const formationTitle = budget.nextSession?.title ?? '—';
               return (
                 <tr key={budget.dealId}>
                   <td>
-                    <div className="fw-semibold">{budget.title ?? budget.dealId}</div>
-                    <div className="text-muted small">ID: {budget.dealId}</div>
+                    <div className="fw-semibold">{budget.dealId}</div>
+                    {budget.pipeline ? <div className="text-muted small">{budget.pipeline}</div> : null}
                   </td>
-                  <td>
-                    <div className="fw-semibold">{budget.pipeline ?? '—'}</div>
-                    <div className="text-muted small">{budget.sedeLabel ?? budget.trainingAddress ?? '—'}</div>
-                  </td>
-                  <td>
-                    {nextSessionDate ? (
-                      <div className="d-flex flex-column">
-                        <span className="fw-semibold">{nextSessionDate}</span>
-                        {budget.nextSession?.title ? (
-                          <span className="text-muted small">{budget.nextSession.title}</span>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <span className="text-muted">Sin fecha</span>
-                    )}
-                  </td>
-                  <td className="text-center fw-semibold">{budget.sessionCount}</td>
-                  <td>{formatDate(budget.updatedAt)}</td>
+                  <td>{organizationLabel}</td>
+                  <td>{budget.title ?? '—'}</td>
+                  <td>{formationTitle}</td>
+                  <td>{formationDate ?? '—'}</td>
                 </tr>
               );
             })}
@@ -135,38 +111,30 @@ export function TrainerSessionsPage() {
 
       <div className="d-grid gap-3 d-lg-none">
         {budgets.map((budget) => {
-          const nextSessionDate = formatDateTime(budget.nextSession?.start ?? null);
+          const formationDate = formatDate(budget.nextSession?.start ?? null);
+          const organizationLabel = budget.organizationName ?? '—';
+          const formationTitle = budget.nextSession?.title ?? '—';
           return (
             <Card key={budget.dealId} className="shadow-sm border-0">
-              <Card.Body className="d-flex flex-column gap-2">
+              <Card.Body className="d-flex flex-column gap-3">
                 <div>
                   <span className="text-uppercase text-muted small fw-semibold">Presupuesto</span>
-                  <h2 className="h5 fw-bold mb-0">{budget.title ?? budget.dealId}</h2>
-                  <span className="text-muted small">ID: {budget.dealId}</span>
+                  <h2 className="h5 fw-bold mb-0">{budget.dealId}</h2>
+                  {budget.pipeline ? <span className="text-muted small">{budget.pipeline}</span> : null}
                 </div>
-                <div className="d-flex flex-column gap-1">
+                <div className="d-flex flex-column gap-2">
                   <span className="text-muted">
-                    <strong>Negocio:</strong> {budget.pipeline ?? '—'}
+                    <strong>Empresa:</strong> {organizationLabel}
                   </span>
                   <span className="text-muted">
-                    <strong>Ubicación:</strong> {budget.sedeLabel ?? budget.trainingAddress ?? '—'}
-                  </span>
-                </div>
-                <div className="d-flex flex-column gap-1">
-                  <span className="text-muted">
-                    <strong>Sesiones:</strong> {budget.sessionCount}
+                    <strong>Título:</strong> {budget.title ?? '—'}
                   </span>
                   <span className="text-muted">
-                    <strong>Actualizado:</strong> {formatDate(budget.updatedAt) ?? '—'}
+                    <strong>Formación:</strong> {formationTitle}
                   </span>
-                </div>
-                <div className="d-flex flex-column gap-1">
                   <span className="text-muted">
-                    <strong>Próxima sesión:</strong> {nextSessionDate ?? 'Sin fecha'}
+                    <strong>Fecha formación:</strong> {formationDate ?? '—'}
                   </span>
-                  {budget.nextSession?.title ? (
-                    <span className="text-muted small">{budget.nextSession.title}</span>
-                  ) : null}
                 </div>
               </Card.Body>
             </Card>

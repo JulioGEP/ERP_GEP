@@ -25,6 +25,7 @@ type DealRecord = {
   created_at: Date | string | null;
   updated_at: Date | string | null;
   sesiones: SessionRecord[];
+  organization?: { name: string | null } | null;
 };
 
 type TrainerContext = {
@@ -83,6 +84,7 @@ function mapDeal(deal: DealRecord) {
     comercial: normalizeText(deal?.comercial),
     createdAt: toMadridISOString(deal?.created_at ?? null),
     updatedAt: toMadridISOString(deal?.updated_at ?? null),
+    organizationName: normalizeText(deal?.organization?.name ?? null),
     sessions,
   };
 }
@@ -186,6 +188,7 @@ export const handler = createHttpHandler(async (request) => {
         comercial: true,
         created_at: true,
         updated_at: true,
+        organization: { select: { name: true } },
         sesiones: {
           where: { sesion_trainers: { some: { trainer_id: trainerId } } },
           select: {
