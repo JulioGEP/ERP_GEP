@@ -148,6 +148,8 @@ model variants {
   trainer trainers?         @relation("TrainerVariants", fields: [trainer_id], references: [trainer_id])
   sala    salas?            @relation("SalaVariants", fields: [sala_id], references: [sala_id])
   unidad  unidades_moviles? @relation("UnidadVariants", fields: [unidad_movil_id], references: [unidad_id])
+  variant_trainers variant_trainers[]
+  variant_unidades variant_unidades[]
 
   @@index([id_padre], map: "idx_variants_id_padre")
   @@index([status], map: "idx_variants_status")
@@ -235,6 +237,7 @@ model trainers {
 
   session_trainers session_trainers[]
   variants         variants[]         @relation("TrainerVariants")
+  variant_trainers variant_trainers[]
 
   @@index([apellido])
   @@index([especialidad])
@@ -264,6 +267,7 @@ model unidades_moviles {
 
   session_unidades session_unidades[]
   variants         variants[]         @relation("UnidadVariants")
+  variant_unidades variant_unidades[]
 }
 
 model sessions {
@@ -409,6 +413,34 @@ model session_unidades {
   @@id([session_id, unidad_id])
   @@index([unidad_id], map: "idx_sesion_unidades_unidad_movil_id")
   @@map("sesion_unidades")
+}
+
+model variant_trainers {
+  variant_id String   @map("variant_id") @db.Uuid
+  trainer_id String   @map("trainer_id")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  variant variants @relation(fields: [variant_id], references: [id], onDelete: Cascade)
+  trainer trainers @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
+
+  @@id([variant_id, trainer_id])
+  @@index([trainer_id], map: "idx_variant_trainers_trainer_id")
+  @@map("variant_trainers")
+}
+
+model variant_unidades {
+  variant_id String   @map("variant_id") @db.Uuid
+  unidad_id  String   @map("unidad_movil_id")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @updatedAt @db.Timestamptz(6)
+
+  variant variants         @relation(fields: [variant_id], references: [id], onDelete: Cascade)
+  unidad  unidades_moviles @relation(fields: [unidad_id], references: [unidad_id], onDelete: Cascade)
+
+  @@id([variant_id, unidad_id])
+  @@index([unidad_id], map: "idx_variant_unidades_unidad_movil_id")
+  @@map("variant_unidades")
 }
 
 enum DocumentOrigin {
