@@ -63,9 +63,20 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const [tableFilter, setTableFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
+  useEffect(() => {
+    setPage(1);
+  }, [includeTrainers, statusFilter, tableFilter]);
+
   const usersQuery = useQuery<UsersListResponse>({
-    queryKey: ['users', page, searchTerm],
-    queryFn: () => fetchUsers({ page, pageSize: PAGE_SIZE, search: searchTerm || undefined }),
+    queryKey: ['users', page, searchTerm, includeTrainers, statusFilter],
+    queryFn: () =>
+      fetchUsers({
+        page,
+        pageSize: PAGE_SIZE,
+        search: searchTerm || undefined,
+        includeTrainers,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+      }),
     placeholderData: keepPreviousData,
   });
 

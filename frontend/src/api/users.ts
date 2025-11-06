@@ -32,11 +32,17 @@ export async function fetchUsers(params: {
   page?: number;
   pageSize?: number;
   search?: string;
+  status?: 'active' | 'inactive';
+  includeTrainers?: boolean;
 } = {}): Promise<UsersListResponse> {
   const searchParams = new URLSearchParams();
   if (params.page) searchParams.set('page', String(params.page));
   if (params.pageSize) searchParams.set('pageSize', String(params.pageSize));
   if (params.search) searchParams.set('search', params.search);
+  if (params.status) searchParams.set('status', params.status);
+  if (params.includeTrainers !== undefined) {
+    searchParams.set('includeTrainers', params.includeTrainers ? '1' : '0');
+  }
 
   const query = searchParams.toString();
   const url = query.length ? `/users?${query}` : '/users';
