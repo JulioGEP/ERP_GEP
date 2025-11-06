@@ -38,6 +38,7 @@ import { SessionsAccordion } from './sessions/SessionsAccordion';
 import type { DealEditablePatch, DealProductEditablePatch } from './api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../types/deal';
 import { buildFieldTooltip } from '../../utils/fieldTooltip';
+import { useCurrentUserIdentity } from './useCurrentUserIdentity';
 import {
   FOLLOW_UP_FIELDS,
   isAffirmativeLabel,
@@ -99,14 +100,6 @@ interface Props {
   onClose: () => void;
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
-}
-
-function useAuth() {
-  // Ajusta a tu sistema real de auth
-  const fallbackUser = 'erp_user';
-  const userId = localStorage.getItem('userId') || fallbackUser;
-  const userName = localStorage.getItem('userName') || fallbackUser;
-  return { userId, userName };
 }
 
 type EditableDealForm = {
@@ -194,7 +187,7 @@ export function BudgetDetailModal({
   onNotify,
 }: Props) {
   const qc = useQueryClient();
-  const { userId, userName } = useAuth();
+  const { userId, userName } = useCurrentUserIdentity();
 
   const normalizedDealId =
     typeof dealId === 'string' ? dealId.trim() : dealId != null ? String(dealId) : '';

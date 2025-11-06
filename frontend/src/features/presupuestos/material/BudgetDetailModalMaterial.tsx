@@ -46,6 +46,7 @@ import {
   type FollowUpFieldKey,
 } from '../hooks/useDealFollowUpToggle';
 import { DEALS_QUERY_KEY } from '../queryKeys';
+import { useCurrentUserIdentity } from '../useCurrentUserIdentity';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -102,14 +103,6 @@ interface Props {
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
   autoRefreshOnOpen?: boolean;
-}
-
-function useAuth() {
-  // Ajusta a tu sistema real de auth
-  const fallbackUser = 'erp_user';
-  const userId = localStorage.getItem('userId') || fallbackUser;
-  const userName = localStorage.getItem('userName') || fallbackUser;
-  return { userId, userName };
 }
 
 type BudgetFormValuesMaterial = {
@@ -199,7 +192,7 @@ export function BudgetDetailModalMaterial({
 }: Props) {
   void _autoRefreshOnOpen;
   const qc = useQueryClient();
-  const { userId, userName } = useAuth();
+  const { userId, userName } = useCurrentUserIdentity();
 
   const normalizedDealId =
     typeof dealId === 'string' ? dealId.trim() : dealId != null ? String(dealId) : '';

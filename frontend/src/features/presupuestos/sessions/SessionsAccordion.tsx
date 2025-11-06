@@ -76,6 +76,7 @@ import {
   SESSION_DOCUMENTS_EVENT,
   type SessionDocumentsEventDetail,
 } from '../../../utils/sessionDocumentsEvents';
+import { useCurrentUserIdentity } from '../useCurrentUserIdentity';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -3361,11 +3362,7 @@ function SessionCommentsSection({
   onNotify?: (toast: ToastParams) => void;
   driveUrl?: string | null;
 }) {
-  const fallbackUser = 'erp_user';
-  const userId =
-    typeof window !== 'undefined' ? localStorage.getItem('userId') || fallbackUser : fallbackUser;
-  const userName =
-    typeof window !== 'undefined' ? localStorage.getItem('userName') || fallbackUser : fallbackUser;
+  const { userId, userName } = useCurrentUserIdentity();
 
   const qc = useQueryClient();
 
