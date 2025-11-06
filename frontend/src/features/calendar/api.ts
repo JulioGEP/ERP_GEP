@@ -122,7 +122,6 @@ export type CalendarSessionsResponse = {
 export type CalendarVariantsParams = {
   start: string;
   end: string;
-  trainerId?: string | null;
 };
 
 export type CalendarVariantsResponse = {
@@ -499,9 +498,6 @@ export async function fetchCalendarVariants(
   const search = new URLSearchParams();
   search.set('start', params.start);
   search.set('end', params.end);
-  if (params.trainerId) {
-    search.set('trainerId', params.trainerId);
-  }
 
   let response: Response;
   try {
