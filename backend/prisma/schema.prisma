@@ -87,40 +87,12 @@ model variants {
   salas            salas?            @relation(fields: [sala_id], references: [sala_id], onUpdate: NoAction, map: "variants_sala_fk")
   trainers         trainers?         @relation(fields: [trainer_id], references: [trainer_id], onUpdate: NoAction, map: "variants_trainer_fk")
   unidades_moviles unidades_moviles? @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction, map: "variants_unidad_fk")
-  variant_trainers variant_trainers[]
-  variant_unidades variant_unidades[]
 
   @@index([id_padre], map: "idx_variants_id_padre")
   @@index([sala_id], map: "idx_variants_sala_id")
   @@index([status], map: "idx_variants_status")
   @@index([trainer_id], map: "idx_variants_trainer_id")
   @@index([unidad_movil_id], map: "idx_variants_unidad_id")
-}
-
-model variant_trainers {
-  variant_id String   @db.Uuid
-  trainer_id String
-  created_at DateTime @default(now()) @db.Timestamptz(6)
-  updated_at DateTime @default(now()) @db.Timestamptz(6)
-  variants   variants @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  trainers   trainers @relation(fields: [trainer_id], references: [trainer_id], onUpdate: NoAction)
-
-  @@id([variant_id, trainer_id])
-  @@index([trainer_id], map: "idx_variant_trainers_trainer_id")
-  @@map("variant_trainers")
-}
-
-model variant_unidades {
-  variant_id      String           @db.Uuid
-  unidad_movil_id String
-  created_at      DateTime         @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime         @default(now()) @db.Timestamptz(6)
-  variants        variants         @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  unidades_moviles unidades_moviles @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction)
-
-  @@id([variant_id, unidad_movil_id])
-  @@index([unidad_movil_id], map: "idx_variant_unidades_unidad")
-  @@map("variant_unidades")
 }
 
 model deals {
@@ -399,7 +371,6 @@ model trainers {
 
   sesion_trainers sesion_trainers[]
   variants        variants[]
-  variant_trainers variant_trainers[]
 
   @@index([apellido])
   @@index([especialidad])
@@ -416,7 +387,6 @@ model unidades_moviles {
   sede            String[]          @default([])
   sesion_unidades sesion_unidades[]
   variants        variants[]
-  variant_unidades variant_unidades[]
 }
 
 model auth_sessions {
