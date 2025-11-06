@@ -21,13 +21,13 @@ const BCRYPT_SALT_ROUNDS = 10;
 function serializeUser(user: any) {
   return {
     id: user.id,
-    firstName: user.first_name,
-    lastName: user.last_name,
-    email: user.email,
-    role: getRoleDisplayValue(user.role) ?? user.role,
-    active: user.active,
-    createdAt: user.created_at,
-    updatedAt: user.updated_at,
+    firstName: user.first_name ?? '',
+    lastName: user.last_name ?? '',
+    email: user.email ?? '',
+    role: getRoleDisplayValue(user.role) ?? user.role ?? '',
+    active: Boolean(user.active),
+    createdAt: user.created_at ?? null,
+    updatedAt: user.updated_at ?? null,
   };
 }
 
@@ -155,13 +155,25 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
     : undefined;
 
   try {
-    const total = await prisma.users.count({ where: where as any });
-    const users = await prisma.users.findMany({
-      where: where as any,
-      orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }, { email: 'asc' }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    });
+    const [total, users] = await Promise.all([
+      prisma.users.count({ where: where as any }),
+      prisma.users.findMany({
+        where: where as any,
+        orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }, { email: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          first_name: true,
+          last_name: true,
+          email: true,
+          role: true,
+          active: true,
+          created_at: true,
+          updated_at: true,
+        },
+      }),
+    ]);
 
     return successResponse({
       users: users.map(serializeUser),
