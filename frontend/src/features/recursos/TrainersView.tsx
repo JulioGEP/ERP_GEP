@@ -1,6 +1,6 @@
 // frontend/src/features/recursos/TrainersView.tsx
 import { useCallback, useMemo, useState } from "react";
-import { Alert, Button, Spinner, Table } from "react-bootstrap";
+import { Alert, Button, ButtonGroup, Form, Spinner, Table } from "react-bootstrap";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrainerModal, type TrainerFormValues } from "./TrainerModal";
 import { createTrainer, fetchTrainers, updateTrainer, type TrainerPayload } from "./api";
@@ -61,6 +61,8 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [selectedTrainer, setSelectedTrainer] = useState<Trainer | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
   const queryClient = useQueryClient();
 
@@ -108,6 +110,27 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
   const trainers = trainersQuery.data ?? [];
   const isLoading = trainersQuery.isLoading;
   const isFetching = trainersQuery.isFetching && !trainersQuery.isLoading;
+
+  const filteredTrainers = useMemo(() => {
+    const normalizedTerm = searchTerm.trim().toLowerCase();
+
+    return trainers.filter((trainer) => {
+      if (statusFilter === "active" && !trainer.activo) return false;
+      if (statusFilter === "inactive" && trainer.activo) return false;
+
+      if (!normalizedTerm) return true;
+
+      const name = trainer.name.toLowerCase();
+      const lastName = trainer.apellido?.toLowerCase() ?? "";
+
+      return name.includes(normalizedTerm) || lastName.includes(normalizedTerm);
+    });
+  }, [trainers, searchTerm, statusFilter]);
+
+  const hasFiltersApplied = useMemo(
+    () => searchTerm.trim().length > 0 || statusFilter !== "all",
+    [searchTerm, statusFilter]
+  );
 
   const handleAddTrainer = () => {
     setSelectedTrainer(null);
@@ -162,7 +185,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
     pageSize,
     requestSort,
     goToPage,
-  } = useDataTable(trainers, {
+  } = useDataTable(filteredTrainers, {
     getSortValue,
   });
 
@@ -195,6 +218,37 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
       )}
 
       <div className="bg-white rounded-4 shadow-sm">
+        <div className="p-3 border-bottom d-flex flex-column flex-md-row gap-3 align-items-md-center justify-content-between">
+          <Form.Control
+            type="search"
+            placeholder="Buscar por nombre o apellido"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+          <ButtonGroup>
+            <Button
+              variant={statusFilter === "all" ? "primary" : "outline-primary"}
+              onClick={() => setStatusFilter("all")}
+              active={statusFilter === "all"}
+            >
+              Todos
+            </Button>
+            <Button
+              variant={statusFilter === "active" ? "primary" : "outline-primary"}
+              onClick={() => setStatusFilter("active")}
+              active={statusFilter === "active"}
+            >
+              Activos
+            </Button>
+            <Button
+              variant={statusFilter === "inactive" ? "primary" : "outline-primary"}
+              onClick={() => setStatusFilter("inactive")}
+              active={statusFilter === "inactive"}
+            >
+              Inactivos
+            </Button>
+          </ButtonGroup>
+        </div>
         <div className="table-responsive">
           <Table hover className="mb-0 align-middle">
             <thead>
@@ -242,6 +296,14 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                     </tr>
                   );
                 })
+              ) : trainers.length ? (
+                <tr>
+                  <td colSpan={3} className="py-5 text-center text-muted">
+                    {hasFiltersApplied
+                      ? "No se encontraron formadores que coincidan con los filtros aplicados."
+                      : "No hay formadores registrados todavía."}
+                  </td>
+                </tr>
               ) : (
                 <tr>
                   <td colSpan={3} className="py-5 text-center text-muted">
