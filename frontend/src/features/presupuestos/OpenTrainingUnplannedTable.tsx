@@ -92,10 +92,18 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
     }
 
     const rows: VariantRow[] = [];
+    const now = new Date();
     products.forEach((product) => {
       product.variants.forEach((variant) => {
         const status = (variant.status ?? '').trim().toLowerCase();
         if (status !== 'publish') {
+          return;
+        }
+        const variantDateValue = variant.date ? new Date(variant.date) : null;
+        if (!variantDateValue || Number.isNaN(variantDateValue.getTime())) {
+          return;
+        }
+        if (variantDateValue.getTime() <= now.getTime()) {
           return;
         }
         const hasPrimaryTrainer = Boolean((variant.trainer_id ?? '').trim().length);
