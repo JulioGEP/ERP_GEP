@@ -26,6 +26,7 @@ export type TrainerBudget = {
   comercial: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  organizationName: string | null;
   sessions: TrainerSessionSummary[];
 };
 
@@ -86,6 +87,7 @@ function normalizeBudget(payload: any): TrainerBudget | null {
     comercial: normalizeString(payload?.comercial),
     createdAt: normalizeString(payload?.createdAt ?? payload?.created_at),
     updatedAt: normalizeString(payload?.updatedAt ?? payload?.updated_at),
+    organizationName: normalizeString(payload?.organizationName ?? payload?.organization?.name),
     sessions: normalizeSessions(payload?.sessions),
   };
 }

@@ -12,6 +12,7 @@ const BASE_BUDGET: TrainerBudget = {
   comercial: null,
   createdAt: null,
   updatedAt: null,
+  organizationName: null,
   sessions: [],
 };
 
