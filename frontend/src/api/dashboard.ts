@@ -4,6 +4,7 @@ import { getJson, toNonNegativeInteger } from './client';
 type RawDashboardMetricsResponse = {
   sessions?: {
     borrador?: unknown;
+    sinFormador?: unknown;
     suspendida?: unknown;
     porFinalizar?: unknown;
   } | null;
@@ -25,6 +26,7 @@ type RawDashboardMetricsResponse = {
 export type DashboardMetrics = {
   sessions: {
     borrador: number;
+    sinFormador: number;
     suspendida: number;
     porFinalizar: number;
   };
@@ -170,6 +172,7 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
   return {
     sessions: {
       borrador: toNonNegativeInteger(response.sessions?.borrador),
+      sinFormador: toNonNegativeInteger(response.sessions?.sinFormador),
       suspendida: toNonNegativeInteger(response.sessions?.suspendida),
       porFinalizar: toNonNegativeInteger(response.sessions?.porFinalizar),
     },
