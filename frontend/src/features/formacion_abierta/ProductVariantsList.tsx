@@ -1,4 +1,4 @@
-import { ChangeEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Accordion,
@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   Col,
+  Collapse,
   Form,
   ListGroup,
   Modal,
@@ -893,6 +894,15 @@ export function VariantModal({
   const unitsLoading = unitsQuery.isLoading;
   const availabilityLoading = availabilityQuery.isLoading;
 
+  const trainerFieldRef = useRef<HTMLDivElement | null>(null);
+  const trainerPointerInteractingRef = useRef(false);
+  const unitFieldRef = useRef<HTMLDivElement | null>(null);
+  const unitPointerInteractingRef = useRef(false);
+  const [trainerListOpen, setTrainerListOpen] = useState(false);
+  const [trainerFilter, setTrainerFilter] = useState('');
+  const [unitListOpen, setUnitListOpen] = useState(false);
+  const [unitFilter, setUnitFilter] = useState('');
+
   useEffect(() => {
     if (!variant) {
       setFormValues({
@@ -937,6 +947,15 @@ export function VariantModal({
     setSaveSuccess(null);
     setSelectedDealId(null);
     setSelectedDealSummary(null);
+  }, [variant?.id]);
+
+  useEffect(() => {
+    setTrainerListOpen(false);
+    setTrainerFilter('');
+    trainerPointerInteractingRef.current = false;
+    setUnitListOpen(false);
+    setUnitFilter('');
+    unitPointerInteractingRef.current = false;
   }, [variant?.id]);
 
   useEffect(() => {
@@ -1153,7 +1172,7 @@ export function VariantModal({
 
   const handleDealClick =
     (deal: DealTag) =>
-    (event: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+    (event: ReactMouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
       event.preventDefault();
       event.stopPropagation();
       handleOpenDealModal(deal);
@@ -1162,6 +1181,92 @@ export function VariantModal({
   const handleCloseDealModal = () => {
     setSelectedDealId(null);
     setSelectedDealSummary(null);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (trainerFieldRef.current && !trainerFieldRef.current.contains(target)) {
+        setTrainerListOpen(false);
+        trainerPointerInteractingRef.current = false;
+      }
+      if (unitFieldRef.current && !unitFieldRef.current.contains(target)) {
+        setUnitListOpen(false);
+        unitPointerInteractingRef.current = false;
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const normalizedTrainerFilter = trainerFilter.trim().toLowerCase();
+  const normalizedUnitFilter = unitFilter.trim().toLowerCase();
+
+  const filteredTrainers = useMemo(() => {
+    if (!normalizedTrainerFilter.length) {
+      return trainers;
+    }
+    return trainers.filter((trainer) => {
+      const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
+      return label.toLowerCase().includes(normalizedTrainerFilter);
+    });
+  }, [normalizedTrainerFilter, trainers]);
+
+  const filteredUnits = useMemo(() => {
+    if (!normalizedUnitFilter.length) {
+      return units;
+    }
+    return units.filter((unit) => {
+      const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
+      return label.toLowerCase().includes(normalizedUnitFilter);
+    });
+  }, [normalizedUnitFilter, units]);
+
+  const trainerSummary = useMemo(() => {
+    if (!formValues.trainer_id) {
+      return '';
+    }
+    const trainer = trainers.find((item) => item.trainer_id === formValues.trainer_id);
+    if (!trainer) {
+      return '';
+    }
+    const baseLabel = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
+    if (!baseLabel.length) {
+      return '';
+    }
+    return blockedTrainerIds.has(trainer.trainer_id) ? `${baseLabel} · No disponible` : baseLabel;
+  }, [blockedTrainerIds, formValues.trainer_id, trainers]);
+
+  const unitSummary = useMemo(() => {
+    if (!formValues.unidad_movil_id) {
+      return '';
+    }
+    const unit = units.find((item) => item.unidad_id === formValues.unidad_movil_id);
+    if (!unit) {
+      return '';
+    }
+    const baseLabel = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
+    if (!baseLabel.length) {
+      return '';
+    }
+    return blockedUnitIds.has(unit.unidad_id) ? `${baseLabel} · No disponible` : baseLabel;
+  }, [blockedUnitIds, formValues.unidad_movil_id, units]);
+
+  const handleTrainerSelect = (trainerId: string | null) => {
+    setFormValues((prev) => ({ ...prev, trainer_id: trainerId ?? '' }));
+    setSaveSuccess(null);
+    setTrainerListOpen(false);
+    trainerPointerInteractingRef.current = false;
+  };
+
+  const handleUnitSelect = (unitId: string | null) => {
+    setFormValues((prev) => ({ ...prev, unidad_movil_id: unitId ?? '' }));
+    setSaveSuccess(null);
+    setUnitListOpen(false);
+    unitPointerInteractingRef.current = false;
   };
 
   const isDirty =
@@ -1322,27 +1427,101 @@ export function VariantModal({
                 <Col md={4}>
                   <Form.Group controlId="variantTrainer" className="mb-0">
                     <Form.Label>Formador</Form.Label>
-                    <Form.Select
-                      value={formValues.trainer_id}
-                      onChange={handleChange('trainer_id')}
-                      disabled={isSaving || trainersLoading || availabilityLoading}
-                    >
-                      <option value="">Sin formador</option>
-                      {trainers.map((trainer) => {
-                        const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
-                        const blocked =
-                          blockedTrainerIds.has(trainer.trainer_id) && trainer.trainer_id !== formValues.trainer_id;
-                        return (
-                          <option
-                            key={trainer.trainer_id}
-                            value={trainer.trainer_id}
-                            disabled={blocked}
-                          >
-                            {blocked ? `${label} · No disponible` : label}
-                          </option>
-                        );
-                      })}
-                    </Form.Select>
+                    <div ref={trainerFieldRef} className="session-multiselect">
+                      <Form.Control
+                        type="text"
+                        readOnly
+                        placeholder="Selecciona formador"
+                        value={trainerSummary}
+                        aria-expanded={trainerListOpen}
+                        aria-controls="variant-trainer-options"
+                        className="session-multiselect-summary"
+                        disabled={isSaving || trainersLoading || availabilityLoading}
+                        onMouseDown={() => {
+                          trainerPointerInteractingRef.current = true;
+                        }}
+                        onClick={() => {
+                          if (isSaving || trainersLoading || availabilityLoading) return;
+                          setTrainerListOpen((open) => !open);
+                          trainerPointerInteractingRef.current = false;
+                        }}
+                        onFocus={() => {
+                          if (isSaving || trainersLoading || availabilityLoading) return;
+                          if (!trainerPointerInteractingRef.current) {
+                            setTrainerListOpen(true);
+                          }
+                        }}
+                        onBlur={() => {
+                          trainerPointerInteractingRef.current = false;
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            if (isSaving || trainersLoading || availabilityLoading) return;
+                            setTrainerListOpen((open) => !open);
+                          } else if (event.key === 'Escape') {
+                            setTrainerListOpen(false);
+                          }
+                        }}
+                        title={trainerSummary || 'Sin formador'}
+                      />
+                      <Collapse in={trainerListOpen && !isSaving && !trainersLoading && !availabilityLoading}>
+                        <div id="variant-trainer-options" className="session-multiselect-panel mt-2">
+                          <Form.Control
+                            type="search"
+                            placeholder="Buscar"
+                            value={trainerFilter}
+                            onChange={(event) => setTrainerFilter(event.target.value)}
+                            className="mb-2"
+                          />
+                          <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
+                            <ListGroup variant="flush">
+                              {(!normalizedTrainerFilter.length || 'sin formador'.includes(normalizedTrainerFilter)) && (
+                                <ListGroup.Item className="py-1">
+                                  <Form.Check
+                                    type="radio"
+                                    id="variant-trainer-none"
+                                    label="Sin formador"
+                                    checked={!formValues.trainer_id}
+                                    onChange={() => handleTrainerSelect(null)}
+                                  />
+                                </ListGroup.Item>
+                              )}
+                              {filteredTrainers.map((trainer) => {
+                                const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
+                                const blocked =
+                                  blockedTrainerIds.has(trainer.trainer_id) && trainer.trainer_id !== formValues.trainer_id;
+                                const displayLabel = blocked ? `${label} · No disponible` : label;
+                                return (
+                                  <ListGroup.Item
+                                    key={trainer.trainer_id}
+                                    className={`py-1${blocked ? ' session-option-unavailable' : ''}`}
+                                  >
+                                    <Form.Check
+                                      type="radio"
+                                      id={`variant-trainer-${trainer.trainer_id}`}
+                                      className={blocked ? 'session-option-unavailable' : undefined}
+                                      label={displayLabel}
+                                      checked={formValues.trainer_id === trainer.trainer_id}
+                                      disabled={blocked}
+                                      onChange={() => {
+                                        if (!blocked) {
+                                          handleTrainerSelect(trainer.trainer_id);
+                                        }
+                                      }}
+                                    />
+                                  </ListGroup.Item>
+                                );
+                              })}
+                              {!filteredTrainers.length &&
+                                !(!normalizedTrainerFilter.length || 'sin formador'.includes(normalizedTrainerFilter)) && (
+                                  <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
+                                )}
+                            </ListGroup>
+                          </div>
+                        </div>
+                      </Collapse>
+                    </div>
                   </Form.Group>
                 </Col>
                 <Col md={4}>
@@ -1378,23 +1557,101 @@ export function VariantModal({
                 <Col md={4}>
                   <Form.Group controlId="variantUnit" className="mb-0">
                     <Form.Label>Unidad móvil</Form.Label>
-                    <Form.Select
-                      value={formValues.unidad_movil_id}
-                      onChange={handleChange('unidad_movil_id')}
-                      disabled={isSaving || unitsLoading || availabilityLoading}
-                    >
-                      <option value="">Sin unidad móvil</option>
-                      {units.map((unit) => {
-                        const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
-                        const blocked =
-                          blockedUnitIds.has(unit.unidad_id) && unit.unidad_id !== formValues.unidad_movil_id;
-                        return (
-                          <option key={unit.unidad_id} value={unit.unidad_id} disabled={blocked}>
-                            {blocked ? `${label} · No disponible` : label}
-                          </option>
-                        );
-                      })}
-                    </Form.Select>
+                    <div ref={unitFieldRef} className="session-multiselect">
+                      <Form.Control
+                        type="text"
+                        readOnly
+                        placeholder="Selecciona unidad móvil"
+                        value={unitSummary}
+                        aria-expanded={unitListOpen}
+                        aria-controls="variant-unit-options"
+                        className="session-multiselect-summary"
+                        disabled={isSaving || unitsLoading || availabilityLoading}
+                        onMouseDown={() => {
+                          unitPointerInteractingRef.current = true;
+                        }}
+                        onClick={() => {
+                          if (isSaving || unitsLoading || availabilityLoading) return;
+                          setUnitListOpen((open) => !open);
+                          unitPointerInteractingRef.current = false;
+                        }}
+                        onFocus={() => {
+                          if (isSaving || unitsLoading || availabilityLoading) return;
+                          if (!unitPointerInteractingRef.current) {
+                            setUnitListOpen(true);
+                          }
+                        }}
+                        onBlur={() => {
+                          unitPointerInteractingRef.current = false;
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            if (isSaving || unitsLoading || availabilityLoading) return;
+                            setUnitListOpen((open) => !open);
+                          } else if (event.key === 'Escape') {
+                            setUnitListOpen(false);
+                          }
+                        }}
+                        title={unitSummary || 'Sin unidad móvil'}
+                      />
+                      <Collapse in={unitListOpen && !isSaving && !unitsLoading && !availabilityLoading}>
+                        <div id="variant-unit-options" className="session-multiselect-panel mt-2">
+                          <Form.Control
+                            type="search"
+                            placeholder="Buscar"
+                            value={unitFilter}
+                            onChange={(event) => setUnitFilter(event.target.value)}
+                            className="mb-2"
+                          />
+                          <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
+                            <ListGroup variant="flush">
+                              {(!normalizedUnitFilter.length || 'sin unidad móvil'.includes(normalizedUnitFilter)) && (
+                                <ListGroup.Item className="py-1">
+                                  <Form.Check
+                                    type="radio"
+                                    id="variant-unit-none"
+                                    label="Sin unidad móvil"
+                                    checked={!formValues.unidad_movil_id}
+                                    onChange={() => handleUnitSelect(null)}
+                                  />
+                                </ListGroup.Item>
+                              )}
+                              {filteredUnits.map((unit) => {
+                                const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
+                                const blocked =
+                                  blockedUnitIds.has(unit.unidad_id) && unit.unidad_id !== formValues.unidad_movil_id;
+                                const displayLabel = blocked ? `${label} · No disponible` : label;
+                                return (
+                                  <ListGroup.Item
+                                    key={unit.unidad_id}
+                                    className={`py-1${blocked ? ' session-option-unavailable' : ''}`}
+                                  >
+                                    <Form.Check
+                                      type="radio"
+                                      id={`variant-unit-${unit.unidad_id}`}
+                                      className={blocked ? 'session-option-unavailable' : undefined}
+                                      label={displayLabel}
+                                      checked={formValues.unidad_movil_id === unit.unidad_id}
+                                      disabled={blocked}
+                                      onChange={() => {
+                                        if (!blocked) {
+                                          handleUnitSelect(unit.unidad_id);
+                                        }
+                                      }}
+                                    />
+                                  </ListGroup.Item>
+                                );
+                              })}
+                              {!filteredUnits.length &&
+                                !(!normalizedUnitFilter.length || 'sin unidad móvil'.includes(normalizedUnitFilter)) && (
+                                  <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
+                                )}
+                            </ListGroup>
+                          </div>
+                        </div>
+                      </Collapse>
+                    </div>
                   </Form.Group>
                 </Col>
               </Row>
