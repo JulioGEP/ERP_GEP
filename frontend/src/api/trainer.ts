@@ -7,6 +7,8 @@ type TrainerSessionSummary = {
   estado: string | null;
   start: string | null;
   end: string | null;
+  address: string | null;
+  product: { id: string | null; name: string | null; code: string | null } | null;
   deal: { id: string | null; title: string | null } | null;
 };
 
@@ -48,6 +50,22 @@ function normalizeNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function normalizeProductRef(payload: any): TrainerSessionSummary['product'] {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const id = normalizeString((payload as { id?: unknown }).id);
+  const name = normalizeString((payload as { name?: unknown }).name);
+  const code = normalizeString((payload as { code?: unknown }).code);
+
+  if (!id && !name && !code) {
+    return null;
+  }
+
+  return { id, name, code };
+}
+
 function normalizeSessionSummary(payload: any): TrainerSessionSummary | null {
   const id = normalizeString(payload?.id);
   if (!id) return null;
@@ -61,6 +79,8 @@ function normalizeSessionSummary(payload: any): TrainerSessionSummary | null {
     estado: normalizeString(payload?.estado),
     start: normalizeString(payload?.start),
     end: normalizeString(payload?.end),
+    address: normalizeString(payload?.address ?? payload?.trainingAddress ?? payload?.direccion),
+    product: normalizeProductRef(payload?.product),
     deal: dealId || dealTitle ? { id: dealId ?? null, title: dealTitle ?? null } : null,
   };
 }
