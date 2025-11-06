@@ -14,6 +14,7 @@ import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
+import type { TrainerCalendarPageProps } from '../pages/usuarios/trainer/TrainerCalendarPage';
 import { useAuth } from '../context/AuthContext';
 
 const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
@@ -39,6 +40,10 @@ const InformesRecursoPreventivoEbroPage = lazy(
 const UsersPage = lazy(() => import('../pages/usuarios/UsersPage'));
 const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
+const TrainerDashboardPage = lazy(() => import('../pages/usuarios/trainer/TrainerDashboardPage'));
+const TrainerCalendarPage = lazy(() => import('../pages/usuarios/trainer/TrainerCalendarPage'));
+const TrainerAvailabilityPage = lazy(() => import('../pages/usuarios/trainer/TrainerAvailabilityPage'));
+const TrainerSessionsPage = lazy(() => import('../pages/usuarios/trainer/TrainerSessionsPage'));
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -55,6 +60,7 @@ type AppRouterProps = {
   certificadosPageProps: CertificadosPageProps;
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
   usersPageProps: UsersPageProps;
+  trainerCalendarPageProps?: TrainerCalendarPageProps;
   defaultRedirectPath: string;
   knownPaths: ReadonlySet<string>;
   activePathStorageKey: string;
@@ -75,6 +81,7 @@ export function AppRouter({
   certificadosPageProps,
   recursosFormacionAbiertaPageProps,
   usersPageProps,
+  trainerCalendarPageProps,
   defaultRedirectPath,
   knownPaths,
   activePathStorageKey,
@@ -82,6 +89,54 @@ export function AppRouter({
   return (
     <Suspense fallback={null}>
       <Routes>
+        <Route
+          path="/usuarios/trainer/dashboard"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/dashboard"
+              roles={['Formador']}
+              element={<TrainerDashboardPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/usuarios/trainer/calendario"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/calendario"
+              roles={['Formador']}
+              element={
+                <TrainerCalendarPage
+                  {...(trainerCalendarPageProps as TrainerCalendarPageProps | undefined)}
+                />
+              }
+            />
+          }
+        />
+
+        <Route
+          path="/usuarios/trainer/disponibilidad"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/disponibilidad"
+              roles={['Formador']}
+              element={<TrainerAvailabilityPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/usuarios/trainer/sesiones"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/sesiones"
+              roles={['Formador']}
+              element={<TrainerSessionsPage />}
+            />
+          }
+        />
+
         <Route
           path="/dashboard"
           element={<GuardedRoute path="/dashboard" element={<DashboardPage />} />}
@@ -271,13 +326,21 @@ type HomeRedirectProps = {
 type GuardedRouteProps = {
   path: string;
   element: JSX.Element;
+  roles?: readonly string[];
 };
 
-function GuardedRoute({ path, element }: GuardedRouteProps) {
-  const { isAuthenticated, hasPermission } = useAuth();
+function GuardedRoute({ path, element, roles }: GuardedRouteProps) {
+  const { isAuthenticated, hasPermission, user } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (roles && roles.length) {
+    const role = user?.role?.trim();
+    if (!role || !roles.includes(role)) {
+      return <ForbiddenPage />;
+    }
   }
 
   if (!hasPermission(path)) {

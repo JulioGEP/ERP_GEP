@@ -66,7 +66,9 @@ type NavItem = {
   children?: NavChild[];
 };
 
-const NAVIGATION_ITEMS: NavItem[] = [
+type NavItemWithChildren = NavItem & { children: NavChild[] };
+
+const DEFAULT_NAVIGATION_ITEMS: NavItem[] = [
   {
     key: 'Dashboard',
     label: 'Dashboard',
@@ -136,6 +138,13 @@ const NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Usuarios/Principal', label: 'Gestión de usuarios', path: '/usuarios' },
     ],
   },
+];
+
+const TRAINER_NAVIGATION_ITEMS: NavItem[] = [
+  { key: 'TrainerDashboard', label: 'Inicio', path: '/usuarios/trainer/dashboard' },
+  { key: 'TrainerCalendar', label: 'Calendario', path: '/usuarios/trainer/calendario' },
+  { key: 'TrainerAvailability', label: 'Disponibilidad', path: '/usuarios/trainer/disponibilidad' },
+  { key: 'TrainerSessions', label: 'Sesiones', path: '/usuarios/trainer/sesiones' },
 ];
 
 const LEGACY_APP_PATHS = ['/formacion_abierta/cursos'] as const;
@@ -264,6 +273,11 @@ export default function AuthenticatedApp() {
   const location = useLocation();
   const navigate = useNavigate();
   const canImportBudgets = user?.role !== 'Logistica';
+  const normalizedRole = (user?.role ?? '').toLowerCase();
+  const isTrainer = normalizedRole === 'formador';
+  const navigationItems: NavItem[] = isTrainer
+    ? TRAINER_NAVIGATION_ITEMS
+    : DEFAULT_NAVIGATION_ITEMS;
 
   // Redirección defensiva si por cualquier motivo se monta sin sesión
   useEffect(() => {
@@ -274,8 +288,8 @@ export default function AuthenticatedApp() {
 
   // Calcula path por defecto según permisos visibles en el menú
   const computeDefaultPath = useCallback((): string => {
-    // Prioriza hijos en el orden declarado en NAVIGATION_ITEMS
-    for (const item of NAVIGATION_ITEMS) {
+    // Prioriza hijos en el orden declarado en navigationItems
+    for (const item of navigationItems) {
       if (item.path && hasPermission(item.path)) return item.path;
       for (const child of item.children ?? []) {
         if (hasPermission(child.path)) return child.path;
@@ -286,27 +300,26 @@ export default function AuthenticatedApp() {
     if (hasPermission(DEFAULT_REDIRECT_PATH)) return DEFAULT_REDIRECT_PATH;
     // Último recurso: primer legacy conocido o raíz
     return LEGACY_APP_PATHS[0] ?? '/';
-  }, [hasPermission]);
+  }, [hasPermission, navigationItems]);
 
   const defaultRedirectPath = useMemo(() => computeDefaultPath(), [computeDefaultPath]);
 
-  const filteredNavItems = useMemo(() => {
-    return NAVIGATION_ITEMS.map((item) => {
-      const children = (item.children ?? []).filter((child) => hasPermission(child.path));
-      const hasDirect = item.path ? hasPermission(item.path) : false;
-      if (!hasDirect && children.length === 0) {
-        return null;
-      }
-      return { ...item, children };
-    }).filter(
-  (item): item is { children: NavChild[]; key: string; label: string; path?: string } =>
-    !!item && Array.isArray((item as any).children)
-);
-  }, [hasPermission, permissions]);
+  const filteredNavItems = useMemo<NavItemWithChildren[]>(() => {
+    return navigationItems
+      .map((item: NavItem) => {
+        const children = (item.children ?? []).filter((child: NavChild) => hasPermission(child.path));
+        const hasDirect = item.path ? hasPermission(item.path) : false;
+        if (!hasDirect && children.length === 0) {
+          return null;
+        }
+        return { ...item, children };
+      })
+      .filter((item): item is NavItemWithChildren => item !== null);
+  }, [hasPermission, navigationItems, permissions]);
 
   const allowedPaths = useMemo(() => {
     const paths = new Set<string>();
-    for (const item of NAVIGATION_ITEMS) {
+    for (const item of navigationItems) {
       if (item.path && hasPermission(item.path)) {
         paths.add(item.path);
       }
@@ -321,7 +334,7 @@ export default function AuthenticatedApp() {
     }
     paths.add('/perfil');
     return paths;
-  }, [hasPermission, permissions]);
+  }, [hasPermission, navigationItems, permissions]);
 
   const fallbackPath = useMemo(() => {
     const firstAllowed = allowedPaths.values().next().value as string | undefined;
@@ -1100,9 +1113,9 @@ export default function AuthenticatedApp() {
                   key={item.key}
                   title={<span className="text-uppercase">{item.label}</span>}
                   id={`nav-${item.key}`}
-                  active={item.children.some((child) => location.pathname.startsWith(child.path))}
+                  active={item.children.some((child: NavChild) => location.pathname.startsWith(child.path))}
                 >
-                  {item.children.map((child) => (
+                  {item.children.map((child: NavChild) => (
                     <NavDropdown.Item key={child.key} as={NavLink} to={child.path}>
                       {child.label}
                     </NavDropdown.Item>
@@ -1146,6 +1159,7 @@ export default function AuthenticatedApp() {
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
             usersPageProps={usersPageProps}
+            trainerCalendarPageProps={calendarSessionsPageProps}
             defaultRedirectPath={homePath}
             knownPaths={allowedPaths}
             activePathStorageKey={ACTIVE_PATH_STORAGE_KEY}
