@@ -292,32 +292,6 @@ type VariantWooUpdateInput = Pick<
   'price' | 'stock' | 'stock_status' | 'status' | 'sede' | 'date'
 >;
 
-function parseIdArrayInput(value: unknown): string[] | null {
-  if (value === null || value === undefined) {
-    return [];
-  }
-  if (!Array.isArray(value)) {
-    return null;
-  }
-
-  const seen = new Set<string>();
-  for (const item of value) {
-    const normalized = toTrimmed(item);
-    if (normalized) {
-      seen.add(normalized);
-    }
-  }
-
-  return Array.from(seen);
-}
-
-function areStringSetsEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const sortedA = [...a].sort();
-  const sortedB = [...b].sort();
-  return sortedA.every((value, index) => value === sortedB[index]);
-}
-
 async function fetchWooVariation(
   productWooId: bigint,
   variantWooId: bigint,
@@ -566,16 +540,6 @@ async function deleteVariantFromWooCommerce(
   return { success: true };
 }
 
-type VariantTrainerLink = {
-  trainer_id: string | null;
-  trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
-};
-
-type VariantUnidadLink = {
-  unidad_id: string | null;
-  unidad?: { unidad_id: string; name: string; matricula: string | null } | null;
-};
-
 type VariantRecord = {
   id: string;
   id_woo: bigint;
@@ -594,8 +558,6 @@ type VariantRecord = {
   trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
   salas?: { sala_id: string; name: string; sede: string | null } | null;
   unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
-  variant_trainers?: VariantTrainerLink[] | null;
-  variant_unidades?: VariantUnidadLink[] | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
 };
@@ -680,20 +642,6 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       trainers: { select: { trainer_id: true, name: true, apellido: true } },
       salas: { select: { sala_id: true, name: true, sede: true } },
       unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
-      variant_trainers: {
-        select: {
-          trainer_id: true,
-          trainer: { select: { trainer_id: true, name: true, apellido: true } },
-        },
-        orderBy: { created_at: 'asc' as const },
-      },
-      variant_unidades: {
-        select: {
-          unidad_id: true,
-          unidad: { select: { unidad_id: true, name: true, matricula: true } },
-        },
-        orderBy: { created_at: 'asc' as const },
-      },
     };
   };
 
@@ -797,164 +745,6 @@ function normalizeVariant(record: VariantRecord) {
   const price =
     record.price == null ? null : typeof record.price === 'string' ? record.price : record.price.toString();
 
-  const trainerLinks = Array.isArray(record.variant_trainers) ? record.variant_trainers : [];
-  const trainerIdSet = new Set<string>();
-  const trainerRecordsMap = new Map<
-    string,
-    { trainer_id: string; name: string | null; apellido: string | null }
-  >();
-  let fallbackTrainerRecord: { trainer_id: string; name: string | null; apellido: string | null } | null = null;
-
-  const registerTrainerRecord = (
-    trainerId: string | null,
-    payload: { trainer_id?: string | null; name?: string | null; apellido?: string | null } | null,
-  ) => {
-    if (!payload) return;
-    const resolvedId = trainerId ?? toTrimmed(payload.trainer_id);
-    const name = toTrimmed(payload.name);
-    const apellido = toTrimmed(payload.apellido);
-    if (resolvedId) {
-      if (!trainerRecordsMap.has(resolvedId)) {
-        trainerRecordsMap.set(resolvedId, {
-          trainer_id: resolvedId,
-          name: name ?? null,
-          apellido: apellido ?? null,
-        });
-      } else {
-        const existingRecord = trainerRecordsMap.get(resolvedId)!;
-        trainerRecordsMap.set(resolvedId, {
-          trainer_id: resolvedId,
-          name: name ?? existingRecord.name ?? null,
-          apellido: apellido ?? existingRecord.apellido ?? null,
-        });
-      }
-    } else if (!fallbackTrainerRecord) {
-      fallbackTrainerRecord = { trainer_id: '', name: name ?? null, apellido: apellido ?? null };
-    }
-  };
-
-  trainerLinks.forEach((link) => {
-    const linkId = toTrimmed(link?.trainer_id);
-    if (linkId) {
-      trainerIdSet.add(linkId);
-    }
-    if (link?.trainer && typeof link.trainer === 'object') {
-      registerTrainerRecord(linkId, link.trainer);
-    }
-  });
-
-  if (record.trainers) {
-    const trainerId = toTrimmed(record.trainers.trainer_id) ?? toTrimmed(record.trainer_id);
-    if (trainerId) {
-      trainerIdSet.add(trainerId);
-    }
-    registerTrainerRecord(trainerId ?? null, record.trainers);
-  }
-
-  const primaryTrainerId = toTrimmed(record.trainer_id);
-  if (primaryTrainerId) {
-    trainerIdSet.add(primaryTrainerId);
-    if (!trainerRecordsMap.has(primaryTrainerId)) {
-      trainerRecordsMap.set(primaryTrainerId, {
-        trainer_id: primaryTrainerId,
-        name: null,
-        apellido: null,
-      });
-    }
-  }
-
-  const trainerIds = Array.from(trainerIdSet);
-  const trainers = Array.from(trainerRecordsMap.values());
-  if (!trainers.length && fallbackTrainerRecord) {
-    trainers.push(fallbackTrainerRecord);
-  }
-
-  const trainer =
-    trainerIds.length && trainers.length
-      ? trainers.find((item) => item.trainer_id === trainerIds[0]) ?? trainers[0]
-      : trainers.length
-      ? trainers[0]
-      : null;
-
-  const unidadLinks = Array.isArray(record.variant_unidades) ? record.variant_unidades : [];
-  const unidadIdSet = new Set<string>();
-  const unidadRecordsMap = new Map<
-    string,
-    { unidad_id: string; name: string; matricula: string | null }
-  >();
-  let fallbackUnidadRecord: { unidad_id: string; name: string; matricula: string | null } | null = null;
-
-  const registerUnidadRecord = (
-    unidadId: string | null,
-    payload: { unidad_id?: string | null; name?: string | null; matricula?: string | null } | null,
-  ) => {
-    if (!payload) return;
-    const resolvedId = unidadId ?? toTrimmed(payload.unidad_id);
-    const name = toTrimmed(payload.name) ?? '';
-    const matricula = toTrimmed(payload.matricula);
-    if (resolvedId) {
-      if (!unidadRecordsMap.has(resolvedId)) {
-        unidadRecordsMap.set(resolvedId, {
-          unidad_id: resolvedId,
-          name,
-          matricula: matricula ?? null,
-        });
-      } else {
-        const existingRecord = unidadRecordsMap.get(resolvedId)!;
-        unidadRecordsMap.set(resolvedId, {
-          unidad_id: resolvedId,
-          name: name || existingRecord.name,
-          matricula: matricula ?? existingRecord.matricula ?? null,
-        });
-      }
-    } else if (!fallbackUnidadRecord) {
-      fallbackUnidadRecord = { unidad_id: '', name, matricula: matricula ?? null };
-    }
-  };
-
-  unidadLinks.forEach((link) => {
-    const linkId = toTrimmed(link?.unidad_id);
-    if (linkId) {
-      unidadIdSet.add(linkId);
-    }
-    if (link?.unidad && typeof link.unidad === 'object') {
-      registerUnidadRecord(linkId, link.unidad);
-    }
-  });
-
-  if (record.unidades_moviles) {
-    const unidadId = toTrimmed(record.unidades_moviles.unidad_id) ?? toTrimmed(record.unidad_movil_id);
-    if (unidadId) {
-      unidadIdSet.add(unidadId);
-    }
-    registerUnidadRecord(unidadId ?? null, record.unidades_moviles);
-  }
-
-  const primaryUnidadId = toTrimmed(record.unidad_movil_id);
-  if (primaryUnidadId) {
-    unidadIdSet.add(primaryUnidadId);
-    if (!unidadRecordsMap.has(primaryUnidadId)) {
-      unidadRecordsMap.set(primaryUnidadId, {
-        unidad_id: primaryUnidadId,
-        name: '',
-        matricula: null,
-      });
-    }
-  }
-
-  const unidadIds = Array.from(unidadIdSet);
-  const unidades = Array.from(unidadRecordsMap.values());
-  if (!unidades.length && fallbackUnidadRecord) {
-    unidades.push(fallbackUnidadRecord);
-  }
-
-  const unidad =
-    unidadIds.length && unidades.length
-      ? unidades.find((item) => item.unidad_id === unidadIds[0]) ?? unidades[0]
-      : unidades.length
-      ? unidades[0]
-      : null;
-
   return {
     id: record.id,
     id_woo: record.id_woo?.toString(),
@@ -966,18 +756,26 @@ function normalizeVariant(record: VariantRecord) {
     stock_status: record.stock_status ?? null,
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
-    trainer_id: trainerIds[0] ?? null,
-    trainer,
-    trainer_ids: trainerIds,
-    trainers,
+    trainer_id: record.trainer_id ?? null,
+    trainer: record.trainers
+      ? {
+          trainer_id: record.trainers.trainer_id,
+          name: record.trainers.name ?? null,
+          apellido: record.trainers.apellido ?? null,
+        }
+      : null,
     sala_id: record.sala_id ?? null,
     sala: record.salas
       ? { sala_id: record.salas.sala_id, name: record.salas.name, sede: record.salas.sede ?? null }
       : null,
-    unidad_movil_id: unidadIds[0] ?? null,
-    unidad,
-    unidad_movil_ids: unidadIds,
-    unidades,
+    unidad_movil_id: record.unidad_movil_id ?? null,
+    unidad: record.unidades_moviles
+      ? {
+          unidad_id: record.unidades_moviles.unidad_id,
+          name: record.unidades_moviles.name,
+          matricula: record.unidades_moviles.matricula ?? null,
+        }
+      : null,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
   } as const;
@@ -1086,42 +884,12 @@ export const handler = createHttpHandler<any>(async (request) => {
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(payload, 'trainer_id')) updates.trainer_id = toTrimmed(payload.trainer_id);
     if (Object.prototype.hasOwnProperty.call(payload, 'sala_id')) updates.sala_id = toTrimmed(payload.sala_id);
-    let trainerIdsProvided = false;
-    let trainerIdsPayload: string[] = [];
-    if (Object.prototype.hasOwnProperty.call(payload, 'trainer_ids')) {
-      const parsedTrainerIds = parseIdArrayInput(payload.trainer_ids);
-      if (parsedTrainerIds === null)
-        return errorResponse('VALIDATION_ERROR', 'trainer_ids debe ser un array de strings', 400);
-      trainerIdsProvided = true;
-      trainerIdsPayload = parsedTrainerIds;
-    } else if (Object.prototype.hasOwnProperty.call(payload, 'trainer_id')) {
-      trainerIdsProvided = true;
-      const singleTrainerId = toTrimmed(payload.trainer_id);
-      trainerIdsPayload = singleTrainerId ? [singleTrainerId] : [];
-    }
-    if (trainerIdsProvided) {
-      updates.trainer_id = trainerIdsPayload[0] ?? null;
-    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'unidad_movil_id'))
+      updates.unidad_movil_id = toTrimmed(payload.unidad_movil_id);
 
-    let unidadIdsProvided = false;
-    let unidadIdsPayload: string[] = [];
-    if (Object.prototype.hasOwnProperty.call(payload, 'unidad_movil_ids')) {
-      const parsedUnidadIds = parseIdArrayInput(payload.unidad_movil_ids);
-      if (parsedUnidadIds === null)
-        return errorResponse('VALIDATION_ERROR', 'unidad_movil_ids debe ser un array de strings', 400);
-      unidadIdsProvided = true;
-      unidadIdsPayload = parsedUnidadIds;
-    } else if (Object.prototype.hasOwnProperty.call(payload, 'unidad_movil_id')) {
-      unidadIdsProvided = true;
-      const singleUnidadId = toTrimmed(payload.unidad_movil_id);
-      unidadIdsPayload = singleUnidadId ? [singleUnidadId] : [];
-    }
-    if (unidadIdsProvided) {
-      updates.unidad_movil_id = unidadIdsPayload[0] ?? null;
-    }
-
-    const hasScalarUpdates = Object.keys(updates).length > 0;
+    if (!Object.keys(updates).length) return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
 
     const existing = await prisma.variants.findUnique({
       where: { id: variantId },
@@ -1139,52 +907,14 @@ export const handler = createHttpHandler<any>(async (request) => {
         trainer_id: true,
         sala_id: true,
         unidad_movil_id: true,
-        variant_trainers: { select: { trainer_id: true }, orderBy: { created_at: 'asc' } },
-        variant_unidades: { select: { unidad_id: true }, orderBy: { created_at: 'asc' } },
         products: { select: { hora_inicio: true, hora_fin: true } },
       },
     });
     if (!existing) return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
 
-    const existingTrainerLinks = Array.isArray(existing.variant_trainers)
-      ? (existing.variant_trainers as Array<{ trainer_id: string | null }>)
-      : [];
-    const existingTrainerIdsRaw: string[] = existingTrainerLinks
-      .map((item) => toTrimmed(item?.trainer_id))
-      .filter((id: string | null): id is string => Boolean(id));
-    if (existing.trainer_id) {
-      existingTrainerIdsRaw.push(existing.trainer_id);
-    }
-    const existingTrainerIds = Array.from(new Set<string>(existingTrainerIdsRaw));
-
-    const existingUnidadLinks = Array.isArray(existing.variant_unidades)
-      ? (existing.variant_unidades as Array<{ unidad_id: string | null }>)
-      : [];
-    const existingUnidadIdsRaw: string[] = existingUnidadLinks
-      .map((item) => toTrimmed(item?.unidad_id))
-      .filter((id: string | null): id is string => Boolean(id));
-    if (existing.unidad_movil_id) {
-      existingUnidadIdsRaw.push(existing.unidad_movil_id);
-    }
-    const existingUnidadIds = Array.from(new Set<string>(existingUnidadIdsRaw));
-
-    const trainerIdsEffective: string[] = trainerIdsProvided ? trainerIdsPayload : existingTrainerIds;
-    const unidadIdsEffective: string[] = unidadIdsProvided ? unidadIdsPayload : existingUnidadIds;
-
-    const shouldUpdateTrainerLinks = trainerIdsProvided
-      ? !areStringSetsEqual(trainerIdsPayload, existingTrainerIds)
-      : false;
-    const shouldUpdateUnidadLinks = unidadIdsProvided
-      ? !areStringSetsEqual(unidadIdsPayload, existingUnidadIds)
-      : false;
-
-    if (!hasScalarUpdates && !shouldUpdateTrainerLinks && !shouldUpdateUnidadLinks) {
-      return errorResponse('VALIDATION_ERROR', 'No se proporcionaron cambios', 400);
-    }
-
-    const nextTrainerId = trainerIdsProvided ? trainerIdsPayload[0] ?? null : existing.trainer_id ?? null;
+    const nextTrainerId = Object.prototype.hasOwnProperty.call(updates, 'trainer_id') ? updates.trainer_id ?? null : existing.trainer_id ?? null;
     const nextSalaId    = Object.prototype.hasOwnProperty.call(updates, 'sala_id')    ? updates.sala_id ?? null    : existing.sala_id ?? null;
-    const nextUnidadId  = unidadIdsProvided ? unidadIdsPayload[0] ?? null : existing.unidad_movil_id ?? null;
+    const nextUnidadId  = Object.prototype.hasOwnProperty.call(updates, 'unidad_movil_id') ? updates.unidad_movil_id ?? null : existing.unidad_movil_id ?? null;
     const nextSede      = Object.prototype.hasOwnProperty.call(updates, 'sede') ? updates.sede ?? null : existing.sede ?? null;
     const nextDate      = Object.prototype.hasOwnProperty.call(updates, 'date') ? updates.date ?? null : existing.date ?? null;
 
@@ -1199,38 +929,14 @@ export const handler = createHttpHandler<any>(async (request) => {
     const productTimes = existing.products ?? { hora_inicio: null, hora_fin: null };
     const variantRange = computeVariantRange(nextDate, productTimes);
 
-    const baseAvailabilityError = await ensureVariantResourcesAvailable(prisma, {
+    const availabilityError = await ensureVariantResourcesAvailable(prisma, {
       excludeVariantId: existing.id,
       trainerId: nextTrainerId,
       salaId: nextSalaId,
       unidadId: nextUnidadId,
       range: variantRange,
     });
-    if (baseAvailabilityError) return baseAvailabilityError;
-
-    for (const trainerId of trainerIdsEffective) {
-      if (!trainerId || trainerId === nextTrainerId) continue;
-      const trainerAvailabilityError = await ensureVariantResourcesAvailable(prisma, {
-        excludeVariantId: existing.id,
-        trainerId,
-        salaId: nextSalaId,
-        unidadId: null,
-        range: variantRange,
-      });
-      if (trainerAvailabilityError) return trainerAvailabilityError;
-    }
-
-    for (const unidadId of unidadIdsEffective) {
-      if (!unidadId || unidadId === nextUnidadId) continue;
-      const unidadAvailabilityError = await ensureVariantResourcesAvailable(prisma, {
-        excludeVariantId: existing.id,
-        trainerId: null,
-        salaId: nextSalaId,
-        unidadId,
-        range: variantRange,
-      });
-      if (unidadAvailabilityError) return unidadAvailabilityError;
-    }
+    if (availabilityError) return availabilityError;
 
     const wooUpdates: VariantWooUpdateInput = {};
     if ('price' in updates) wooUpdates.price = updates.price ?? null;
@@ -1261,39 +967,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     if ('sala_id' in updates) data.sala_id = updates.sala_id ?? null;
     if ('unidad_movil_id' in updates) data.unidad_movil_id = updates.unidad_movil_id ?? null;
 
-    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      if (hasScalarUpdates || shouldUpdateTrainerLinks || shouldUpdateUnidadLinks) {
-        await tx.variants.update({ where: { id: variantId }, data });
-      }
-
-      if (shouldUpdateTrainerLinks) {
-        await tx.variant_trainers.deleteMany({ where: { variant_id: variantId } });
-        if (trainerIdsPayload.length) {
-          await tx.variant_trainers.createMany({
-            data: trainerIdsPayload.map((trainerId) => ({
-              variant_id: variantId,
-              trainer_id: trainerId,
-              created_at: timestamp,
-              updated_at: timestamp,
-            })),
-          });
-        }
-      }
-
-      if (shouldUpdateUnidadLinks) {
-        await tx.variant_unidades.deleteMany({ where: { variant_id: variantId } });
-        if (unidadIdsPayload.length) {
-          await tx.variant_unidades.createMany({
-            data: unidadIdsPayload.map((unidadId) => ({
-              variant_id: variantId,
-              unidad_id: unidadId,
-              created_at: timestamp,
-              updated_at: timestamp,
-            })),
-          });
-        }
-      }
-    });
+    await prisma.variants.update({ where: { id: variantId }, data });
 
     const refreshed = await prisma.variants.findUnique({
       where: { id: variantId },
@@ -1314,14 +988,6 @@ export const handler = createHttpHandler<any>(async (request) => {
         trainers: { select: { trainer_id: true, name: true, apellido: true } },
         salas: { select: { sala_id: true, name: true, sede: true } },
         unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
-        variant_trainers: {
-          select: { trainer_id: true, trainer: { select: { trainer_id: true, name: true, apellido: true } } },
-          orderBy: { created_at: 'asc' },
-        },
-        variant_unidades: {
-          select: { unidad_id: true, unidad: { select: { unidad_id: true, name: true, matricula: true } } },
-          orderBy: { created_at: 'asc' },
-        },
         created_at: true,
         updated_at: true,
       },
