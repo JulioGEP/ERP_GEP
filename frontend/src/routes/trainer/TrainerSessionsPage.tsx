@@ -28,21 +28,22 @@ function formatDateTime(value: string | null): string | null {
   return DATE_FORMATTER.format(date);
 }
 
-type BudgetSummary = TrainerBudget & {
+export type BudgetSummary = TrainerBudget & {
   sessionCount: number;
   nextSession: { title: string | null; start: string | null } | null;
 };
 
-function enhanceBudgets(budgets: TrainerBudget[]): BudgetSummary[] {
+export function enhanceBudgets(budgets: TrainerBudget[]): BudgetSummary[] {
   const now = Date.now();
   return budgets.map((budget) => {
-    const sessionCount = budget.sessions.length;
+    const sessions = Array.isArray(budget.sessions) ? budget.sessions : [];
+    const sessionCount = sessions.length;
     const nextSession =
-      budget.sessions.find((session) => {
+      sessions.find((session) => {
         if (!session.start) return false;
         const time = new Date(session.start).getTime();
         return Number.isFinite(time) && time >= now;
-      }) ?? budget.sessions[0] ?? null;
+      }) ?? sessions[0] ?? null;
 
     const normalizedNextSession =
       nextSession && (nextSession.title || nextSession.start)
