@@ -157,6 +157,7 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
   try {
     const total = await prisma.users.count({ where: where as any });
     const users = await prisma.users.findMany({
+      where: where as any,
       orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }, { email: 'asc' }],
       skip: (page - 1) * pageSize,
       take: pageSize,
