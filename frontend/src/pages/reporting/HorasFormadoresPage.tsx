@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Card, Spinner, Table } from 'react-bootstrap';
-import { fetchTrainerHours, type TrainerHoursItem } from '../../features/direccion/api';
+import { fetchTrainerHours, type TrainerHoursItem } from '../../features/reporting/api';
 import { isApiError } from '../../api/client';
 
 function formatTrainerName(item: TrainerHoursItem): string {
@@ -16,7 +16,7 @@ function formatTrainerName(item: TrainerHoursItem): string {
 
 export default function HorasFormadoresPage() {
   const trainerHoursQuery = useQuery({
-    queryKey: ['direccion', 'horas-formadores'],
+    queryKey: ['reporting', 'horas-formadores'],
     queryFn: fetchTrainerHours,
     staleTime: 5 * 60 * 1000,
   });
