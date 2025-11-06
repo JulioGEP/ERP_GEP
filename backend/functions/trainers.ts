@@ -1,4 +1,5 @@
 // backend/functions/trainers.ts
+import type { $Enums } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
@@ -222,7 +223,7 @@ function handleKnownPrismaError(error: unknown) {
  * Upsert del usuario a partir de un trainer y enlace de trainers.user_id
  * - Si no hay email, no crea usuario (permite trainers sin login).
  * - Si existe user_id, actualiza ese user; si no existe, upsert por email.
- * - role: 'formador' (enum erp_role).
+ * - role: 'Formador' (enum erp_role).
  */
 async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer: TrainerRecord) {
   // Si no hay email, no podemos upsertear user por constraint unique de users.email
@@ -232,7 +233,7 @@ async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer:
     first_name: trainer.name,
     last_name: trainer.apellido ?? '',
     email: trainer.email,
-    role: 'formador' as any, // erp_role enum (minúsculas)
+    role: 'Formador' as $Enums.erp_role,
     active: Boolean(trainer.activo),
     updated_at: new Date(),
   };
@@ -277,7 +278,7 @@ async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer:
           first_name: trainer.name,
           last_name: trainer.apellido ?? '',
           email: trainer.email!,
-          role: 'formador' as any,
+          role: 'Formador' as $Enums.erp_role,
           active: Boolean(trainer.activo),
           password_hash: passwordHash,
           password_algo: 'bcrypt',

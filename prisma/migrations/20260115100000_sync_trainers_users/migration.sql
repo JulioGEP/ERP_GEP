@@ -44,20 +44,20 @@ BEGIN
 
         IF NOT FOUND THEN
             INSERT INTO users (first_name, last_name, email, role, active)
-            VALUES (trainer_record.name, desired_last_name, trainer_record.email, 'formador'::erp_role, desired_active)
+            VALUES (trainer_record.name, desired_last_name, trainer_record.email, 'Formador'::erp_role, desired_active)
             RETURNING id, first_name, last_name, email, role, active
             INTO matched_user_id, matched_first_name, matched_last_name, matched_email, matched_role, matched_active;
         ELSE
             IF matched_first_name IS DISTINCT FROM trainer_record.name
                OR matched_last_name IS DISTINCT FROM desired_last_name
                OR matched_email IS DISTINCT FROM trainer_record.email
-               OR matched_role IS DISTINCT FROM 'formador'::erp_role
+               OR matched_role IS DISTINCT FROM 'Formador'::erp_role
                OR matched_active IS DISTINCT FROM desired_active THEN
                 UPDATE users
                 SET first_name = trainer_record.name,
                     last_name = desired_last_name,
                     email = trainer_record.email,
-                    role = 'formador'::erp_role,
+                    role = 'Formador'::erp_role,
                     active = desired_active,
                     updated_at = now()
                 WHERE id = matched_user_id
@@ -119,20 +119,20 @@ BEGIN
 
     IF existing_user_id IS NULL THEN
         INSERT INTO users (first_name, last_name, email, role, active)
-        VALUES (NEW.name, desired_last_name, NEW.email, 'formador'::erp_role, desired_active)
+        VALUES (NEW.name, desired_last_name, NEW.email, 'Formador'::erp_role, desired_active)
         RETURNING id, first_name, last_name, email, role, active
         INTO existing_user_id, existing_first_name, existing_last_name, existing_email, existing_role, existing_active;
     ELSE
         IF existing_first_name IS DISTINCT FROM NEW.name
            OR existing_last_name IS DISTINCT FROM desired_last_name
            OR existing_email IS DISTINCT FROM NEW.email
-           OR existing_role IS DISTINCT FROM 'formador'::erp_role
+           OR existing_role IS DISTINCT FROM 'Formador'::erp_role
            OR existing_active IS DISTINCT FROM desired_active THEN
             UPDATE users
             SET first_name = NEW.name,
                 last_name = desired_last_name,
                 email = NEW.email,
-                role = 'formador'::erp_role,
+                role = 'Formador'::erp_role,
                 active = desired_active,
                 updated_at = now()
             WHERE id = existing_user_id
@@ -163,7 +163,7 @@ DECLARE
     existing_activo BOOLEAN;
     existing_user_id UUID;
 BEGIN
-    IF NEW.role <> 'formador'::erp_role THEN
+    IF NEW.role <> 'Formador'::erp_role THEN
         RETURN NEW;
     END IF;
 

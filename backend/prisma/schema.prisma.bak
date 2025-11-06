@@ -411,6 +411,7 @@ enum erp_role {
   admin
   people
   formador
+  Formador
 }
 
 enum session_status {

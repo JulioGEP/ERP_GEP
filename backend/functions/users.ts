@@ -10,6 +10,7 @@ import {
   getRoleDisplayValue,
   getRoleStorageValue,
   normalizeEmail,
+  normalizeRoleKey,
   requireAuth,
 } from './_shared/auth';
 
@@ -73,7 +74,7 @@ async function syncTrainerForFormador(
     active: boolean;
   },
 ) {
-  if (user.role !== 'formador') return;
+  if (normalizeRoleKey(user.role) !== 'formador') return;
   if (!user.email) return;
 
   // 1) por user_id

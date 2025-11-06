@@ -40,7 +40,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Formador: ['/dashboard', '/perfil', '/recursos/trainer'],
 };
 
-function normalizeRoleKey(value: string | null | undefined): string | null {
+export function normalizeRoleKey(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed.length) return null;
@@ -56,7 +56,7 @@ const ROLE_LABEL_TO_STORAGE_ENTRIES = [
   ['Administracion', 'administracion'],
   ['Logistica', 'logistica'],
   ['People', 'people'],
-  ['Formador', 'formador'],
+  ['Formador', 'Formador'],
 ] as const;
 
 const ROLE_LABEL_TO_STORAGE = new Map<string, string>(ROLE_LABEL_TO_STORAGE_ENTRIES);
