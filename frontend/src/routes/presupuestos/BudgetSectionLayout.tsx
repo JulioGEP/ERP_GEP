@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
 import {
@@ -26,6 +26,8 @@ export type BudgetSectionLayoutProps = {
   showFilters?: boolean;
   serverQueryOptions?: BudgetServerQueryOptions;
   tableVariant?: BudgetTableVariant;
+  pageSize?: number;
+  children?: ReactNode;
 };
 
 export function BudgetSectionLayout({
@@ -46,6 +48,8 @@ export function BudgetSectionLayout({
   showFilters = true,
   serverQueryOptions,
   tableVariant = 'default',
+  pageSize,
+  children,
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
 
@@ -83,7 +87,10 @@ export function BudgetSectionLayout({
         showFilters={showFilters}
         serverQueryOptions={serverQueryOptions}
         variant={tableVariant}
+        pageSize={pageSize}
       />
+
+      {children}
     </div>
   );
 }

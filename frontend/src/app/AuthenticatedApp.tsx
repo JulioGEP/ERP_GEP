@@ -1001,6 +1001,7 @@ export default function AuthenticatedApp() {
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
     canImport: canImportBudgets,
+    pageSize: 10,
     serverQueryOptions: {
       fetcher: fetchDealsWithoutSessions,
       queryKey: ['budget-table', 'noSessions'],
