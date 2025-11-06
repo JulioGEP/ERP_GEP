@@ -433,23 +433,34 @@ export const handler = async (event: any) => {
       return errorResponse('VALIDATION_ERROR', 'Rango de fechas inválido', 400);
     }
 
+    const trainerIdRaw = getFirstParam(qs, ['trainer_id', 'trainerId', 'trainer']);
+    const trainerId = toTrimmed(trainerIdRaw);
+
     const prisma = getPrisma();
     const shouldIncludeResources = getVariantResourceColumnsSupport() !== false;
 
-    const buildQuery = (includeResources: boolean) =>
-      prisma.variants.findMany({
-        where: {
-          date: {
-            not: null,
-            gte: range.start,
-            lte: range.end,
-          },
+    const buildQuery = (includeResources: boolean) => {
+      const where: Prisma.VariantsWhereInput = {
+        date: {
+          not: null,
+          gte: range.start,
+          lte: range.end,
         },
+      };
+
+      if (trainerId && includeResources) {
+        where.trainer_id = trainerId;
+      }
+
+      return prisma.variants.findMany({
+        where,
         orderBy: [{ date: 'asc' }, { name: 'asc' }],
         select: (includeResources ? variantSelectionWithResources : variantSelectionBase) as any,
       });
+    };
 
     let variants;
+    let resourcesIncluded = shouldIncludeResources;
     try {
       variants = await buildQuery(shouldIncludeResources);
       if (shouldIncludeResources) {
@@ -463,9 +474,16 @@ export const handler = async (event: any) => {
           { error },
         );
         variants = await buildQuery(false);
+        resourcesIncluded = false;
       } else {
         throw error;
       }
+    }
+
+    if (trainerId && !resourcesIncluded) {
+      console.warn(
+        '[calendar-variants] trainer filter skipped due to unsupported resource columns',
+      );
     }
 
     const events: CalendarVariantEvent[] = [];

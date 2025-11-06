@@ -922,8 +922,18 @@ export function CalendarView({
   });
 
   const variantsQuery = useQuery<CalendarVariantsResponse, ApiError>({
-    queryKey: ['calendarVariants', fetchRange?.start ?? null, fetchRange?.end ?? null],
-    queryFn: () => fetchCalendarVariants({ start: fetchRange!.start, end: fetchRange!.end }),
+    queryKey: [
+      'calendarVariants',
+      fetchRange?.start ?? null,
+      fetchRange?.end ?? null,
+      normalizedTrainerId,
+    ],
+    queryFn: () =>
+      fetchCalendarVariants({
+        start: fetchRange!.start,
+        end: fetchRange!.end,
+        trainerId: normalizedTrainerId,
+      }),
     enabled: includeVariants && !!fetchRange,
     staleTime: 5 * 60 * 1000,
   });
