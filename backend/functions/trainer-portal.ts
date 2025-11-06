@@ -11,8 +11,10 @@ type SessionRecord = {
   estado: string | null;
   fecha_inicio_utc: Date | string | null;
   fecha_fin_utc: Date | string | null;
+  direccion?: string | null;
   deal_id?: string | null;
   deals?: { deal_id: string; title: string | null } | null;
+  deal_product?: { id?: string | null; name?: string | null; code?: string | null } | null;
 };
 
 type DealRecord = {
@@ -50,6 +52,24 @@ function mapSession(session: SessionRecord) {
     estado: typeof session?.estado === 'string' ? session.estado : null,
     start: toMadridISOString(session?.fecha_inicio_utc ?? null),
     end: toMadridISOString(session?.fecha_fin_utc ?? null),
+    address: typeof session?.direccion === 'string' ? session.direccion?.trim() || null : null,
+    product:
+      session?.deal_product && typeof session.deal_product === 'object'
+        ? {
+            id:
+              typeof session.deal_product.id === 'string' && session.deal_product.id.trim().length
+                ? session.deal_product.id.trim()
+                : null,
+            name:
+              typeof session.deal_product.name === 'string' && session.deal_product.name.trim().length
+                ? session.deal_product.name.trim()
+                : null,
+            code:
+              typeof session.deal_product.code === 'string' && session.deal_product.code.trim().length
+                ? session.deal_product.code.trim()
+                : null,
+          }
+        : null,
     deal:
       session?.deals && typeof session.deals === 'object'
         ? {
@@ -197,7 +217,9 @@ export const handler = createHttpHandler(async (request) => {
             estado: true,
             fecha_inicio_utc: true,
             fecha_fin_utc: true,
+            direccion: true,
             deal_id: true,
+            deal_product: { select: { id: true, name: true, code: true } },
             deals: { select: { deal_id: true, title: true } },
           },
           orderBy: { fecha_inicio_utc: 'asc' },

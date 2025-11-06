@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TrainerBudget } from '../../api/trainer';
-import { enhanceBudgets } from './TrainerSessionsPage';
+import { buildTrainerSessionRows } from './TrainerSessionsPage';
 
 const BASE_BUDGET: TrainerBudget = {
   dealId: 'deal-1',
@@ -16,7 +16,7 @@ const BASE_BUDGET: TrainerBudget = {
   sessions: [],
 };
 
-describe('enhanceBudgets', () => {
+describe('buildTrainerSessionRows', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
@@ -26,7 +26,7 @@ describe('enhanceBudgets', () => {
     vi.useRealTimers();
   });
 
-  it('handles missing or invalid session lists safely', () => {
+  it('ignores invalid session lists', () => {
     const invalidSessionsBudget = {
       ...BASE_BUDGET,
       dealId: 'deal-2',
@@ -39,44 +39,100 @@ describe('enhanceBudgets', () => {
       sessions: { foo: 'bar' } as unknown as TrainerBudget['sessions'],
     } as TrainerBudget;
 
-    const [first, second] = enhanceBudgets([invalidSessionsBudget, nonArraySessionsBudget]);
+    const rows = buildTrainerSessionRows([invalidSessionsBudget, nonArraySessionsBudget]);
 
-    expect(first.sessionCount).toBe(0);
-    expect(first.nextSession).toBeNull();
-    expect(second.sessionCount).toBe(0);
-    expect(second.nextSession).toBeNull();
+    expect(rows).toEqual([]);
   });
 
-  it('returns the next upcoming session when available', () => {
+  it('flattens and sorts the sessions by start date', () => {
     const budgets: TrainerBudget[] = [
       {
         ...BASE_BUDGET,
+        trainingAddress: 'Dirección general',
         sessions: [
           {
-            id: 'past',
-            title: 'Sesión pasada',
+            id: 'b-session',
+            title: 'Sesión B',
             estado: null,
-            start: '2023-12-20T09:00:00Z',
-            end: null,
+            start: '2024-02-01T10:00:00Z',
+            end: '2024-02-01T12:00:00Z',
+            address: null,
+            product: { id: 'prod-2', name: 'Producto B', code: 'PB' },
             deal: null,
           },
           {
-            id: 'future',
-            title: 'Sesión futura',
+            id: 'a-session',
+            title: 'Sesión A',
             estado: null,
-            start: '2024-01-03T10:00:00Z',
-            end: null,
+            start: '2024-01-10T09:00:00Z',
+            end: '2024-01-10T11:00:00Z',
+            address: 'Dirección específica',
+            product: { id: 'prod-1', name: 'Producto A', code: 'PA' },
             deal: null,
           },
         ],
       },
     ];
 
-    const [summary] = enhanceBudgets(budgets);
+    const rows = buildTrainerSessionRows(budgets);
 
-    expect(summary.sessionCount).toBe(2);
-    expect(summary.nextSession?.title).toBe('Sesión futura');
-    expect(summary.nextSession?.start).toBe('2024-01-03T10:00:00Z');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      id: 'a-session',
+      address: 'Dirección específica',
+      product: 'Producto A',
+    });
+    expect(rows[1]).toMatchObject({
+      id: 'b-session',
+      address: 'Dirección general',
+      product: 'Producto B',
+    });
+  });
+
+  it('keeps the earliest duplicate session information', () => {
+    const budgets: TrainerBudget[] = [
+      {
+        ...BASE_BUDGET,
+        sessions: [
+          {
+            id: 'duplicate',
+            title: 'Sesión tardía',
+            estado: null,
+            start: '2024-03-01T10:00:00Z',
+            end: null,
+            address: null,
+            product: null,
+            deal: null,
+          },
+        ],
+      },
+      {
+        ...BASE_BUDGET,
+        dealId: 'deal-2',
+        sessions: [
+          {
+            id: 'duplicate',
+            title: 'Sesión temprana',
+            estado: null,
+            start: '2024-01-15T08:00:00Z',
+            end: null,
+            address: 'Dirección temprana',
+            product: { id: 'prod', name: 'Producto preferente', code: null },
+            deal: null,
+          },
+        ],
+      },
+    ];
+
+    const rows = buildTrainerSessionRows(budgets);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: 'duplicate',
+      title: 'Sesión temprana',
+      address: 'Dirección temprana',
+      product: 'Producto preferente',
+    });
   });
 });
 
