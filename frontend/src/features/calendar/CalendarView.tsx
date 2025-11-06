@@ -131,6 +131,8 @@ type CalendarViewProps = {
   title?: string;
   mode?: CalendarMode;
   initialView?: CalendarViewType;
+  trainerId?: string | null;
+  showFilters?: boolean;
 };
 
 type MadridDate = { year: number; month: number; day: number };
@@ -854,6 +856,8 @@ export function CalendarView({
   title = 'Calendario',
   mode = 'sessions',
   initialView = 'month',
+  trainerId,
+  showFilters = true,
 }: CalendarViewProps) {
   const storageKey = `${STORAGE_KEY_PREFIX}-${mode}`;
   const stored = useMemo(() => readStoredPreferences(storageKey, initialView), [storageKey, initialView]);
@@ -890,11 +894,29 @@ export function CalendarView({
     };
   }, [debouncedRange]);
 
+  const normalizedTrainerId = useMemo(() => {
+    if (typeof trainerId !== 'string') return null;
+    const trimmed = trainerId.trim();
+    return trimmed.length ? trimmed : null;
+  }, [trainerId]);
+
+  const filtersEnabled = showFilters !== false;
+
   const includeVariants = mode === 'sessions';
 
   const sessionsQuery = useQuery<CalendarSessionsResponse, ApiError>({
-    queryKey: ['calendarSessions', fetchRange?.start ?? null, fetchRange?.end ?? null],
-    queryFn: () => fetchCalendarSessions({ start: fetchRange!.start, end: fetchRange!.end }),
+    queryKey: [
+      'calendarSessions',
+      fetchRange?.start ?? null,
+      fetchRange?.end ?? null,
+      normalizedTrainerId,
+    ],
+    queryFn: () =>
+      fetchCalendarSessions({
+        start: fetchRange!.start,
+        end: fetchRange!.end,
+        ...(normalizedTrainerId ? { trainerId: normalizedTrainerId } : {}),
+      }),
     enabled: !!fetchRange,
     staleTime: 5 * 60 * 1000,
   });
@@ -1061,14 +1083,17 @@ export function CalendarView({
   );
 
   const {
-    filters: activeFilters,
-    searchValue,
+    filters: storedFilters,
+    searchValue: storedSearchValue,
     setSearchValue,
     setFiltersAndSearch,
     setFilterValue,
     clearFilter,
     clearAllFilters,
   } = useTableFilterState({ tableKey: `calendar-${mode}` });
+
+  const activeFilters = filtersEnabled ? storedFilters : {};
+  const searchValue = filtersEnabled ? storedSearchValue : '';
 
   const handleFilterChange = useCallback(
     (key: string, value: string) => {
@@ -1096,13 +1121,19 @@ export function CalendarView({
   );
 
   const filteredSessionRows = useMemo(
-    () => applyCalendarFilters(sessionFilterRows, activeFilters, searchValue),
-    [sessionFilterRows, activeFilters, searchValue],
+    () =>
+      filtersEnabled
+        ? applyCalendarFilters(sessionFilterRows, activeFilters, searchValue)
+        : sessionFilterRows,
+    [sessionFilterRows, activeFilters, searchValue, filtersEnabled],
   );
 
   const filteredVariantRows = useMemo(
-    () => applyCalendarFilters(variantFilterRows, activeFilters, searchValue),
-    [variantFilterRows, activeFilters, searchValue],
+    () =>
+      filtersEnabled
+        ? applyCalendarFilters(variantFilterRows, activeFilters, searchValue)
+        : variantFilterRows,
+    [variantFilterRows, activeFilters, searchValue, filtersEnabled],
   );
 
   const filteredSessionIds = useMemo(
@@ -1116,18 +1147,37 @@ export function CalendarView({
   );
 
   const filteredSessions = useMemo(
-    () => sessions.filter((session) => filteredSessionIds.has(session.id)),
-    [sessions, filteredSessionIds],
+    () =>
+      filtersEnabled
+        ? sessions.filter((session) => filteredSessionIds.has(session.id))
+        : sessions,
+    [sessions, filteredSessionIds, filtersEnabled],
   );
 
   const filteredVariants = useMemo(
-    () => (includeVariants ? variants.filter((variant) => filteredVariantIds.has(variant.id)) : []),
-    [variants, filteredVariantIds, includeVariants],
+    () =>
+      includeVariants
+        ? filtersEnabled
+          ? variants.filter((variant) => filteredVariantIds.has(variant.id))
+          : variants
+        : [],
+    [variants, filteredVariantIds, includeVariants, filtersEnabled],
   );
 
   const resultCount = filteredSessions.length;
 
   useEffect(() => {
+    if (!filtersEnabled) {
+      if (autoFocusSessionIdRef.current) {
+        autoFocusSessionIdRef.current = null;
+        const preferred = userPreferredViewRef.current;
+        if (view !== preferred) {
+          setView(preferred);
+        }
+      }
+      return;
+    }
+
     const hasFilter = Object.keys(activeFilters).length > 0;
     const hasSearch = searchValue.trim().length > 0;
     if ((hasFilter || hasSearch) && resultCount === 1) {
@@ -1155,7 +1205,7 @@ export function CalendarView({
         setView(preferred);
       }
     }
-  }, [activeFilters, filteredSessions, resultCount, searchValue, view]);
+  }, [activeFilters, filteredSessions, filtersEnabled, resultCount, searchValue, view]);
 
   const events: CalendarEventItem[] = useMemo(() => {
     const items: CalendarEventItem[] = filteredSessions.map((session) => ({
@@ -1662,23 +1712,25 @@ export function CalendarView({
           <div className="d-flex flex-column gap-2 flex-grow-1">
             <div className="d-flex flex-wrap align-items-center gap-3">
               <h1 className="h3 fw-bold mb-0">{title}</h1>
-              <div className="flex-grow-1" style={{ minWidth: '240px' }}>
-                <FilterToolbar
-                  filters={calendarFilterDefinitions}
-                  activeFilters={activeFilters}
-                  searchValue={searchValue}
-                  onSearchChange={handleSearchChange}
-                  onFilterChange={handleFilterChange}
-                  onRemoveFilter={clearFilter}
-                  onClearAll={clearAllFilters}
-                  resultCount={resultCount}
-                  isServerBusy={isFetching}
-                  viewStorageKey={`calendar-${mode}`}
-                  onApplyFilterState={({ filters, searchValue }) =>
-                    setFiltersAndSearch(filters, searchValue)
-                  }
-                />
-              </div>
+              {filtersEnabled ? (
+                <div className="flex-grow-1" style={{ minWidth: '240px' }}>
+                  <FilterToolbar
+                    filters={calendarFilterDefinitions}
+                    activeFilters={activeFilters}
+                    searchValue={searchValue}
+                    onSearchChange={handleSearchChange}
+                    onFilterChange={handleFilterChange}
+                    onRemoveFilter={clearFilter}
+                    onClearAll={clearAllFilters}
+                    resultCount={resultCount}
+                    isServerBusy={isFetching}
+                    viewStorageKey={`calendar-${mode}`}
+                    onApplyFilterState={({ filters, searchValue }) =>
+                      setFiltersAndSearch(filters, searchValue)
+                    }
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="d-flex flex-wrap align-items-center gap-2 justify-content-xl-end">
