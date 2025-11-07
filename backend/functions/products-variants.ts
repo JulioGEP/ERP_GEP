@@ -500,31 +500,39 @@ async function ensureVariantResourcesAvailable(
   if (!normalizedTrainerIds.length && !normalizedSalaId && !normalizedUnidadIds.length) return null;
   if (getVariantResourceColumnsSupport() === false) return null;
 
-  // Tipos generados pueden variar; usamos `any` para compatibilidad con Prisma v5
-  const sessionConditions: any[] = [];
-  if (normalizedTrainerIds.length)
-    sessionConditions.push({ sesion_trainers: { some: { trainer_id: { in: normalizedTrainerIds } } } });
-  if (normalizedSalaId) sessionConditions.push({ sala_id: normalizedSalaId });
-  if (normalizedUnidadIds.length)
-    sessionConditions.push({ sesion_unidades: { some: { unidad_movil_id: { in: normalizedUnidadIds } } } });
+  const sessionConditions: Array<Record<string, unknown>> = [];
+  if (normalizedTrainerIds.length) {
+    sessionConditions.push({
+      sesion_trainers: { some: { trainer_id: { in: normalizedTrainerIds } } },
+    });
+  }
+  if (normalizedSalaId) {
+    sessionConditions.push({ sala_id: normalizedSalaId });
+  }
+  if (normalizedUnidadIds.length) {
+    sessionConditions.push({
+      sesion_unidades: { some: { unidad_movil_id: { in: normalizedUnidadIds } } },
+    });
+  }
 
   if (sessionConditions.length) {
-    const sesiones = await prisma.sesiones.findMany({
+    const sesiones = (await prisma.sesiones.findMany({
       where: { OR: sessionConditions as any },
       select: { fecha_inicio_utc: true, fecha_fin_utc: true },
+    })) as Array<{ fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null }>;
+
+    const rangeStart = range.start.getTime();
+    const rangeEnd = range.end.getTime();
+
+    const hasSessionConflict = sesiones.some((session) => {
+      const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
+      if (!sessionRange) return false;
+
+      const sessionStart = sessionRange.start.getTime();
+      const sessionEnd = sessionRange.end.getTime();
+
+      return sessionStart <= rangeEnd && sessionEnd >= rangeStart;
     });
-
-    const hasSessionConflict = sesiones.some(
-  (session: { fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null }) => {
-    const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
-    if (!sessionRange) return false;
-    return (
-      sessionRange.start.getTime() <= range.end.getTime() &&
-      sessionRange.end.getTime() >= range.start.getTime()
-    );
-  },
-);
-
 
     if (hasSessionConflict) {
       return errorResponse(
