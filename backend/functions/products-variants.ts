@@ -1106,6 +1106,9 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       stock_status: true,
       sede: true,
       date: true,
+      trainer_id: true,
+      sala_id: true,
+      unidad_movil_id: true,
       created_at: true,
       updated_at: true,
     };
@@ -1114,9 +1117,6 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
 
     return {
       ...base,
-      trainer_id: true,
-      sala_id: true,
-      unidad_movil_id: true,
       trainers: { select: { trainer_id: true, name: true, apellido: true } },
       salas: { select: { sala_id: true, name: true, sede: true } },
       unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
@@ -1183,27 +1183,165 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
         orderBy: orderByName as any,
       });
 
-      if (includeVariantResources) {
-        const variantIds: string[] = [];
-        for (const product of products as any[]) {
-          if (!product?.variants) continue;
-          for (const variant of product.variants as any[]) {
-            if (variant?.id) variantIds.push(String(variant.id));
+      const variantIds: string[] = [];
+      for (const product of products as any[]) {
+        if (!product?.variants) continue;
+        for (const variant of product.variants as any[]) {
+          if (variant?.id) variantIds.push(String(variant.id));
+        }
+      }
+
+      let trainerAssignments = new Map<string, VariantTrainerLink[]>();
+      let unitAssignments = new Map<string, VariantUnitLink[]>();
+
+      if (variantIds.length) {
+        const assignmentResults = await Promise.all([
+          fetchVariantTrainerAssignments(prisma, variantIds),
+          fetchVariantUnitAssignments(prisma, variantIds),
+        ]);
+        trainerAssignments = assignmentResults[0];
+        unitAssignments = assignmentResults[1];
+      }
+
+      const trainerIdsToLookup = new Set<string>();
+      const unitIdsToLookup = new Set<string>();
+
+      for (const product of products as any[]) {
+        if (!product?.variants) continue;
+        for (const variant of product.variants as any[]) {
+          const variantId = String(variant.id);
+          const trainerLinks = trainerAssignments.get(variantId) ?? [];
+          const unitLinks = unitAssignments.get(variantId) ?? [];
+
+          variant.trainer_links = trainerLinks;
+          variant.unidad_links = unitLinks;
+
+          for (const link of trainerLinks) {
+            const trimmed = toTrimmed(link.trainer_id);
+            if (!trimmed) continue;
+            if (!link.name || !link.apellido) {
+              trainerIdsToLookup.add(trimmed);
+            }
+          }
+
+          for (const link of unitLinks) {
+            const trimmed = toTrimmed(link.unidad_id);
+            if (!trimmed) continue;
+            if (!link.name || !link.matricula) {
+              unitIdsToLookup.add(trimmed);
+            }
+          }
+
+          const trimmedTrainerId = toTrimmed(variant.trainer_id);
+          if (trimmedTrainerId) {
+            const hasTrainerDetails = Boolean(
+              (variant.trainers &&
+                toTrimmed((variant.trainers as any).trainer_id) === trimmedTrainerId &&
+                (toTrimmed((variant.trainers as any).name) || toTrimmed((variant.trainers as any).apellido))) ||
+                trainerLinks.some(
+                  (link) =>
+                    toTrimmed(link.trainer_id) === trimmedTrainerId &&
+                    (toTrimmed(link.name) || toTrimmed(link.apellido)),
+                ),
+            );
+            if (!hasTrainerDetails) {
+              trainerIdsToLookup.add(trimmedTrainerId);
+            }
+          }
+
+          const trimmedUnitId = toTrimmed(variant.unidad_movil_id);
+          if (trimmedUnitId) {
+            const hasUnitDetails = Boolean(
+              (variant.unidades_moviles &&
+                toTrimmed((variant.unidades_moviles as any).unidad_id) === trimmedUnitId &&
+                (toTrimmed((variant.unidades_moviles as any).name) ||
+                  toTrimmed((variant.unidades_moviles as any).matricula))) ||
+                unitLinks.some(
+                  (link) =>
+                    toTrimmed(link.unidad_id) === trimmedUnitId &&
+                    (toTrimmed(link.name) || toTrimmed(link.matricula)),
+                ),
+            );
+            if (!hasUnitDetails) {
+              unitIdsToLookup.add(trimmedUnitId);
+            }
           }
         }
+      }
 
-        if (variantIds.length) {
-          const [trainerAssignments, unitAssignments] = await Promise.all([
-            fetchVariantTrainerAssignments(prisma, variantIds),
-            fetchVariantUnitAssignments(prisma, variantIds),
-          ]);
+      const trainerLookups: Array<{ trainer_id: string; name: string | null; apellido: string | null }> =
+        trainerIdsToLookup.size
+          ? await prisma.trainers.findMany({
+              where: { trainer_id: { in: Array.from(trainerIdsToLookup) } },
+              select: { trainer_id: true, name: true, apellido: true },
+            })
+          : [];
+      const unitLookups: Array<{ unidad_id: string; name: string | null; matricula: string | null }> =
+        unitIdsToLookup.size
+          ? await prisma.unidades_moviles.findMany({
+              where: { unidad_id: { in: Array.from(unitIdsToLookup) } },
+              select: { unidad_id: true, name: true, matricula: true },
+            })
+          : [];
 
-          for (const product of products as any[]) {
-            if (!product?.variants) continue;
-            for (const variant of product.variants as any[]) {
-              const variantId = String(variant.id);
-              variant.trainer_links = trainerAssignments.get(variantId) ?? [];
-              variant.unidad_links = unitAssignments.get(variantId) ?? [];
+      const trainerLookupMap = new Map<string, { trainer_id: string; name: string | null; apellido: string | null }>(
+        trainerLookups.map((item) => [item.trainer_id, item] as const),
+      );
+      const unitLookupMap = new Map<string, { unidad_id: string; name: string | null; matricula: string | null }>(
+        unitLookups.map((item) => [item.unidad_id, item] as const),
+      );
+
+      for (const product of products as any[]) {
+        if (!product?.variants) continue;
+        for (const variant of product.variants as any[]) {
+          const variantId = String(variant.id);
+          const trainerLinks = (trainerAssignments.get(variantId) ?? []).map((link) => ({ ...link })) as VariantTrainerLink[];
+          const unitLinks = (unitAssignments.get(variantId) ?? []).map((link) => ({ ...link })) as VariantUnitLink[];
+
+          for (const link of trainerLinks) {
+            const trimmed = toTrimmed(link.trainer_id);
+            if (!trimmed) continue;
+            const record = trainerLookupMap.get(trimmed);
+            if (record) {
+              link.name = link.name ?? record.name ?? null;
+              link.apellido = link.apellido ?? record.apellido ?? null;
+            }
+          }
+
+          for (const link of unitLinks) {
+            const trimmed = toTrimmed(link.unidad_id);
+            if (!trimmed) continue;
+            const record = unitLookupMap.get(trimmed);
+            if (record) {
+              link.name = link.name ?? record.name ?? null;
+              link.matricula = link.matricula ?? record.matricula ?? null;
+            }
+          }
+
+          variant.trainer_links = trainerLinks;
+          variant.unidad_links = unitLinks;
+
+          const trimmedTrainerId = toTrimmed(variant.trainer_id);
+          if (trimmedTrainerId) {
+            const record = trainerLookupMap.get(trimmedTrainerId);
+            if (record) {
+              variant.trainers = {
+                trainer_id: trimmedTrainerId,
+                name: record.name ?? null,
+                apellido: record.apellido ?? null,
+              };
+            }
+          }
+
+          const trimmedUnitId = toTrimmed(variant.unidad_movil_id);
+          if (trimmedUnitId) {
+            const record = unitLookupMap.get(trimmedUnitId);
+            if (record) {
+              variant.unidades_moviles = {
+                unidad_id: trimmedUnitId,
+                name: record.name ?? null,
+                matricula: record.matricula ?? null,
+              };
             }
           }
         }
