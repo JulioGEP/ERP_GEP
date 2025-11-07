@@ -2,6 +2,9 @@
 
 import type { Prisma, PrismaClient } from '@prisma/client';
 import {
+  join,
+  sqltag as sql,
+  empty,
   PrismaClientKnownRequestError,
   PrismaClientUnknownRequestError,
   Decimal,
@@ -150,18 +153,19 @@ async function fetchVariantTrainerAssignments(
   if (!(await ensureVariantTrainerLinksTable(prisma))) return map;
 
   try {
-    const tableName = VARIANT_TRAINER_TABLE;
+    const variantIdList = join(variantIds.map((id) => sql`${id}::uuid`));
     const rows = (await prisma.$queryRaw(
-      `SELECT vtl.variant_id::text AS variant_id,
-              vtl.trainer_id,
-              t.name,
-              t.apellido,
-              vtl.position
-       FROM ${tableName} vtl
-       LEFT JOIN trainers t ON t.trainer_id = vtl.trainer_id
-       WHERE vtl.variant_id = ANY($1::uuid[])
-       ORDER BY vtl.variant_id, vtl.position ASC`,
-      variantIds,
+      sql`
+        SELECT vtl.variant_id::text AS variant_id,
+               vtl.trainer_id,
+               t.name,
+               t.apellido,
+               vtl.position
+        FROM variant_trainer_links vtl
+        LEFT JOIN trainers t ON t.trainer_id = vtl.trainer_id
+        WHERE vtl.variant_id IN (${variantIdList})
+        ORDER BY vtl.variant_id, vtl.position ASC
+      `,
     )) as Array<{ variant_id: string; trainer_id: string; name: string | null; apellido: string | null; position: number }>;
 
     for (const row of rows) {
@@ -196,18 +200,19 @@ async function fetchVariantUnitAssignments(
   if (!(await ensureVariantUnitLinksTable(prisma))) return map;
 
   try {
-    const tableName = VARIANT_UNIT_TABLE;
+    const variantIdList = join(variantIds.map((id) => sql`${id}::uuid`));
     const rows = (await prisma.$queryRaw(
-      `SELECT vul.variant_id::text AS variant_id,
-              vul.unidad_id,
-              u.name,
-              u.matricula,
-              vul.position
-       FROM ${tableName} vul
-       LEFT JOIN unidades_moviles u ON u.unidad_id = vul.unidad_id
-       WHERE vul.variant_id = ANY($1::uuid[])
-       ORDER BY vul.variant_id, vul.position ASC`,
-      variantIds,
+      sql`
+        SELECT vul.variant_id::text AS variant_id,
+               vul.unidad_id,
+               u.name,
+               u.matricula,
+               vul.position
+        FROM variant_unit_links vul
+        LEFT JOIN unidades_moviles u ON u.unidad_id = vul.unidad_id
+        WHERE vul.variant_id IN (${variantIdList})
+        ORDER BY vul.variant_id, vul.position ASC
+      `,
     )) as Array<{ variant_id: string; unidad_id: string; name: string | null; matricula: string | null; position: number }>;
 
     for (const row of rows) {
@@ -333,18 +338,17 @@ async function findVariantIdsByTrainerAssignments(
   if (!(await ensureVariantTrainerLinksTable(prisma))) return [];
 
   try {
-    const tableName = VARIANT_TRAINER_TABLE;
-    const params: any[] = [trainerIds];
-    let query = `SELECT DISTINCT variant_id::text AS variant_id
-                 FROM ${tableName}
-                 WHERE trainer_id = ANY($1::text[])`;
+    const trainerIdList = join(trainerIds.map((id) => sql`${id}`));
+    const exclusionClause = excludeVariantId ? sql`AND variant_id <> ${excludeVariantId}::uuid` : empty;
 
-    if (excludeVariantId) {
-      query += ' AND variant_id <> $2::uuid';
-      params.push(excludeVariantId);
-    }
-
-    const rows = (await prisma.$queryRaw(query, ...params)) as Array<{ variant_id: string }>;
+    const rows = (await prisma.$queryRaw(
+      sql`
+        SELECT DISTINCT variant_id::text AS variant_id
+        FROM variant_trainer_links
+        WHERE trainer_id IN (${trainerIdList})
+        ${exclusionClause}
+      `,
+    )) as Array<{ variant_id: string }>;
 
     return rows.map((row) => row.variant_id);
   } catch (error) {
@@ -366,18 +370,17 @@ async function findVariantIdsByUnitAssignments(
   if (!(await ensureVariantUnitLinksTable(prisma))) return [];
 
   try {
-    const tableName = VARIANT_UNIT_TABLE;
-    const params: any[] = [unitIds];
-    let query = `SELECT DISTINCT variant_id::text AS variant_id
-                 FROM ${tableName}
-                 WHERE unidad_id = ANY($1::text[])`;
+    const unitIdList = join(unitIds.map((id) => sql`${id}`));
+    const exclusionClause = excludeVariantId ? sql`AND variant_id <> ${excludeVariantId}::uuid` : empty;
 
-    if (excludeVariantId) {
-      query += ' AND variant_id <> $2::uuid';
-      params.push(excludeVariantId);
-    }
-
-    const rows = (await prisma.$queryRaw(query, ...params)) as Array<{ variant_id: string }>;
+    const rows = (await prisma.$queryRaw(
+      sql`
+        SELECT DISTINCT variant_id::text AS variant_id
+        FROM variant_unit_links
+        WHERE unidad_id IN (${unitIdList})
+        ${exclusionClause}
+      `,
+    )) as Array<{ variant_id: string }>;
 
     return rows.map((row) => row.variant_id);
   } catch (error) {
