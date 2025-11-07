@@ -1,7 +1,11 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Spinner, Table } from 'react-bootstrap';
-import { fetchTrainerHours, type TrainerHoursItem } from '../../features/reporting/api';
+import { useMemo, useState } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { Alert, Card, Form, Spinner, Table } from 'react-bootstrap';
+import {
+  fetchTrainerHours,
+  type TrainerHoursFilters,
+  type TrainerHoursItem,
+} from '../../features/reporting/api';
 import { isApiError } from '../../api/client';
 
 function formatTrainerName(item: TrainerHoursItem): string {
@@ -15,10 +19,34 @@ function formatTrainerName(item: TrainerHoursItem): string {
 }
 
 export default function HorasFormadoresPage() {
+  const [filters, setFilters] = useState<{ startDate: string; endDate: string }>({
+    startDate: '',
+    endDate: '',
+  });
+
+  const hasInvalidRange = Boolean(filters.startDate && filters.endDate && filters.startDate > filters.endDate);
+
+  const appliedFilters = useMemo<TrainerHoursFilters>(() => {
+    if (hasInvalidRange) {
+      return {};
+    }
+    return {
+      startDate: filters.startDate || undefined,
+      endDate: filters.endDate || undefined,
+    };
+  }, [filters.endDate, filters.startDate, hasInvalidRange]);
+
   const trainerHoursQuery = useQuery({
-    queryKey: ['reporting', 'horas-formadores'],
-    queryFn: fetchTrainerHours,
+    queryKey: [
+      'reporting',
+      'horas-formadores',
+      appliedFilters.startDate ?? null,
+      appliedFilters.endDate ?? null,
+    ],
+    queryFn: () => fetchTrainerHours(appliedFilters),
     staleTime: 5 * 60 * 1000,
+    enabled: !hasInvalidRange,
+    placeholderData: keepPreviousData,
   });
 
   const hoursFormatter = useMemo(
@@ -27,17 +55,25 @@ export default function HorasFormadoresPage() {
   );
   const integerFormatter = useMemo(() => new Intl.NumberFormat('es-ES'), []);
 
-  const items = trainerHoursQuery.data?.items ?? [];
-  const totalSessions = trainerHoursQuery.data?.summary.totalSessions ?? 0;
-  const totalHours = trainerHoursQuery.data?.summary.totalHours ?? 0;
-  const hasLoadedData = Boolean(trainerHoursQuery.data);
+  const data = hasInvalidRange ? null : trainerHoursQuery.data ?? null;
+  const items = data?.items ?? [];
+  const totalSessions = data?.summary.totalSessions ?? 0;
+  const totalHours = data?.summary.totalHours ?? 0;
+  const hasLoadedData = Boolean(data);
   const summaryTrainers = hasLoadedData ? integerFormatter.format(items.length) : '—';
   const summarySessions = hasLoadedData ? integerFormatter.format(totalSessions) : '—';
   const summaryHours = hasLoadedData ? hoursFormatter.format(totalHours) : '—';
 
   let content: JSX.Element;
 
-  if (trainerHoursQuery.isLoading) {
+  if (hasInvalidRange) {
+    content = (
+      <Alert variant="warning">
+        La fecha de inicio no puede ser posterior a la fecha de fin. Ajusta el rango para ver los
+        resultados.
+      </Alert>
+    );
+  } else if (trainerHoursQuery.isLoading) {
     content = (
       <div className="py-5 d-flex justify-content-center">
         <Spinner animation="border" role="status" />
@@ -107,6 +143,32 @@ export default function HorasFormadoresPage() {
             Informe agregado del total de horas impartidas por cada formador según las sesiones
             planificadas.
           </p>
+          <Form className="mb-3">
+            <div className="d-flex gap-3 flex-wrap align-items-end">
+              <Form.Group controlId="horas-formadores-start" className="mb-0">
+                <Form.Label>Fecha de inicio</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={filters.startDate}
+                  max={filters.endDate || undefined}
+                  onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, startDate: event.currentTarget.value }))
+                  }
+                />
+              </Form.Group>
+              <Form.Group controlId="horas-formadores-end" className="mb-0">
+                <Form.Label>Fecha de fin</Form.Label>
+                <Form.Control
+                  type="date"
+                  value={filters.endDate}
+                  min={filters.startDate || undefined}
+                  onChange={(event) =>
+                    setFilters((prev) => ({ ...prev, endDate: event.currentTarget.value }))
+                  }
+                />
+              </Form.Group>
+            </div>
+          </Form>
           <div className="d-flex gap-3 flex-wrap mb-3">
             <div>
               <span className="text-muted d-block small">Total de formadores</span>
