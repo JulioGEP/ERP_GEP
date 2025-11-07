@@ -13,9 +13,6 @@ import {
 } from './api';
 import type { SessionEstado } from '../../api/sessions.types';
 import { ApiError } from '../../api/client';
-import { VariantModal } from '../formacion_abierta/ProductVariantsList';
-import type { ActiveVariant, ProductInfo, VariantInfo } from '../formacion_abierta/types';
-import type { DealSummary } from '../../types/deal';
 import { FilterToolbar, type FilterDefinition, type FilterOption } from '../../components/table/FilterToolbar';
 import { splitFilterValue } from '../../components/table/filterUtils';
 import { useTableFilterState } from '../../hooks/useTableFilterState';
@@ -127,7 +124,6 @@ type ToastParams = {
 type CalendarViewProps = {
   onNotify?: (toast: ToastParams) => void;
   onSessionOpen?: (session: CalendarSession) => void;
-  onDealOpen?: (payload: { dealId: string; summary: DealSummary }) => void;
   title?: string;
   mode?: CalendarMode;
   initialView?: CalendarViewType;
@@ -874,7 +870,6 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 export function CalendarView({
   onNotify,
   onSessionOpen,
-  onDealOpen,
   title = 'Calendario',
   mode = 'sessions',
   initialView = 'month',
@@ -1309,8 +1304,6 @@ export function CalendarView({
     | null
   >(null);
 
-  const [activeVariant, setActiveVariant] = useState<ActiveVariant | null>(null);
-
   const tooltipStartLabel = tooltip
     ? madridTimeFormatter.format(
         new Date(tooltip.kind === 'session' ? tooltip.session.start : tooltip.variant.start),
@@ -1456,208 +1449,6 @@ export function CalendarView({
 
   const tooltipSecondaryText = renderTooltipLine(tooltipSecondaryLine);
   const tooltipTertiaryText = renderTooltipLine(tooltipTertiaryLine);
-
-  const handleVariantOpen = useCallback((event: CalendarVariantEvent) => {
-    const trainerIds = Array.isArray(event.variant.trainer_ids)
-      ? event.variant.trainer_ids
-          .map((value) => (typeof value === 'string' ? value.trim() : ''))
-          .filter((value) => value.length)
-      : [];
-    const trainerRecordsRaw = Array.isArray(event.variant.trainers)
-      ? event.variant.trainers
-          .map((record) => {
-            const id = typeof record?.trainer_id === 'string' ? record.trainer_id.trim() : '';
-            if (!id.length) {
-              return null;
-            }
-            return {
-              trainer_id: id,
-              name: record?.name ?? null,
-              apellido: record?.apellido ?? null,
-            };
-          })
-          .filter((record): record is { trainer_id: string; name: string | null; apellido: string | null } => record !== null)
-      : [];
-    const trainerRecordsMap = new Map(trainerRecordsRaw.map((record) => [record.trainer_id, record]));
-    const normalizedTrainerRecords: Array<{ trainer_id: string; name: string | null; apellido: string | null }> = [];
-    trainerIds.forEach((id) => {
-      const record = trainerRecordsMap.get(id);
-      if (record) {
-        normalizedTrainerRecords.push(record);
-      } else {
-        normalizedTrainerRecords.push({ trainer_id: id, name: null, apellido: null });
-      }
-    });
-    trainerRecordsMap.forEach((record, id) => {
-      if (!trainerIds.includes(id)) {
-        normalizedTrainerRecords.push(record);
-      }
-    });
-    if (!normalizedTrainerRecords.length && event.variant.trainer && typeof event.variant.trainer.trainer_id === 'string') {
-      const id = event.variant.trainer.trainer_id.trim();
-      if (id.length) {
-        normalizedTrainerRecords.push({
-          trainer_id: id,
-          name: event.variant.trainer.name ?? null,
-          apellido: event.variant.trainer.apellido ?? null,
-        });
-      }
-    }
-    const trainerSeen = new Set<string>();
-    const trainerRecordsOrdered: Array<{ trainer_id: string; name: string | null; apellido: string | null }> = [];
-    normalizedTrainerRecords.forEach((record) => {
-      const id = record.trainer_id;
-      if (!id || trainerSeen.has(id)) {
-        return;
-      }
-      trainerSeen.add(id);
-      trainerRecordsOrdered.push(record);
-    });
-    const trainer = trainerRecordsOrdered[0] ?? null;
-
-    const salaResource = event.variant.sala;
-    const sala =
-      salaResource && typeof salaResource.sala_id === 'string' && salaResource.sala_id.trim().length
-        ? salaResource.name
-          ? {
-              sala_id: salaResource.sala_id.trim(),
-              name: salaResource.name,
-              sede: salaResource.sede ?? null,
-            }
-          : null
-        : null;
-
-    const unitIds = Array.isArray(event.variant.unidad_movil_ids)
-      ? event.variant.unidad_movil_ids
-          .map((value) => (typeof value === 'string' ? value.trim() : ''))
-          .filter((value) => value.length)
-      : [];
-    const unitRecordsRaw = Array.isArray(event.variant.unidades)
-      ? event.variant.unidades
-          .map((record) => {
-            const id = typeof record?.unidad_id === 'string' ? record.unidad_id.trim() : '';
-            if (!id.length) {
-              return null;
-            }
-            return {
-              unidad_id: id,
-              name: record?.name ?? null,
-              matricula: record?.matricula ?? null,
-            };
-          })
-          .filter((record): record is { unidad_id: string; name: string | null; matricula: string | null } => record !== null)
-      : [];
-    const unitRecordsMap = new Map(unitRecordsRaw.map((record) => [record.unidad_id, record]));
-    const normalizedUnitRecords: Array<{ unidad_id: string; name: string | null; matricula: string | null }> = [];
-    unitIds.forEach((id) => {
-      const record = unitRecordsMap.get(id);
-      if (record) {
-        normalizedUnitRecords.push(record);
-      } else {
-        normalizedUnitRecords.push({ unidad_id: id, name: null, matricula: null });
-      }
-    });
-    unitRecordsMap.forEach((record, id) => {
-      if (!unitIds.includes(id)) {
-        normalizedUnitRecords.push(record);
-      }
-    });
-    if (!normalizedUnitRecords.length && event.variant.unidad && typeof event.variant.unidad.unidad_id === 'string') {
-      const id = event.variant.unidad.unidad_id.trim();
-      if (id.length) {
-        normalizedUnitRecords.push({
-          unidad_id: id,
-          name: event.variant.unidad.name ?? null,
-          matricula: event.variant.unidad.matricula ?? null,
-        });
-      }
-    }
-    const unitSeen = new Set<string>();
-    const unitRecordsOrdered: Array<{ unidad_id: string; name: string; matricula: string | null }> = [];
-    normalizedUnitRecords.forEach((record) => {
-      const id = record.unidad_id;
-      if (!id || unitSeen.has(id)) {
-        return;
-      }
-      unitSeen.add(id);
-      unitRecordsOrdered.push({
-        unidad_id: id,
-        name: record.name ?? '',
-        matricula: record.matricula ?? null,
-      });
-    });
-    const unidad = unitRecordsOrdered[0] ?? null;
-
-    const variant: VariantInfo = {
-      id: event.variant.id,
-      id_woo: event.variant.id_woo ?? '',
-      name: event.variant.name ?? null,
-      status: event.variant.status ?? null,
-      price: event.variant.price ?? null,
-      stock: toNumberOrNull(event.variant.stock),
-      stock_status: event.variant.stock_status ?? null,
-      sede: event.variant.sede ?? null,
-      date: event.variant.date ?? null,
-      trainer_id: trainer?.trainer_id ?? null,
-      trainer_ids: trainerRecordsOrdered.map((record) => record.trainer_id),
-      trainer,
-      trainers: trainerRecordsOrdered,
-      sala_id: sala?.sala_id ?? null,
-      sala,
-      unidad_movil_id: unidad?.unidad_id ?? null,
-      unidad_movil_ids: unitRecordsOrdered.map((record) => record.unidad_id),
-      unidad,
-      unidades: unitRecordsOrdered,
-      created_at: event.variant.created_at ?? null,
-      updated_at: event.variant.updated_at ?? null,
-    };
-
-    const product: ProductInfo = {
-      id: event.product.id,
-      id_woo: event.product.id_woo ?? null,
-      name: event.product.name ?? null,
-      code: event.product.code ?? null,
-      category: event.product.category ?? null,
-      hora_inicio: event.product.hora_inicio ?? null,
-      hora_fin: event.product.hora_fin ?? null,
-      default_variant_start: event.product.default_variant_start ?? null,
-      default_variant_end: event.product.default_variant_end ?? null,
-      default_variant_stock_status: event.product.default_variant_stock_status ?? null,
-      default_variant_stock_quantity: toNumberOrNull(event.product.default_variant_stock_quantity),
-      default_variant_price: event.product.default_variant_price ?? null,
-
-      variants: [variant],
-    };
-
-    setActiveVariant({ product, variant });
-  }, []);
-
-  const handleVariantClose = useCallback(() => {
-    setActiveVariant(null);
-  }, []);
-
-  const handleVariantUpdated = useCallback(
-    (updated: VariantInfo) => {
-      setActiveVariant((prev: ActiveVariant | null) => {
-        if (!prev || prev.variant.id !== updated.id) {
-          return prev;
-        }
-        return {
-          product: {
-            ...prev.product,
-            variants: prev.product.variants.map((item: VariantInfo) =>
-              item.id === updated.id ? { ...item, ...updated } : item,
-            ),
-          },
-          variant: { ...prev.variant, ...updated },
-        };
-      });
-      if (includeVariants) {
-        void variantsQuery.refetch();
-      }
-    },
-    [includeVariants, variantsQuery],
-  );
 
   const wrapperRect = wrapperRef.current?.getBoundingClientRect() ?? null;
   const tooltipStyle = tooltip
@@ -1993,16 +1784,7 @@ export function CalendarView({
                           <div
                             key={`variant-${variant.id}`}
                             className="erp-calendar-event erp-calendar-month-event erp-calendar-event-variant"
-                            role="button"
-                            tabIndex={0}
                             title={variantTitle}
-                            onClick={() => handleVariantOpen(variant)}
-                            onKeyDown={(keyboardEvent) => {
-                              if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
-                                keyboardEvent.preventDefault();
-                                handleVariantOpen(variant);
-                              }
-                            }}
                             onMouseEnter={(mouseEvent) => {
                               const target = mouseEvent.currentTarget;
                               if (!target) return;
@@ -2013,12 +1795,6 @@ export function CalendarView({
                               });
                             }}
                             onMouseLeave={() => setTooltip(null)}
-                            onFocus={(focusEvent) => {
-                              const target = focusEvent.currentTarget;
-                              if (!target) return;
-                              setTooltip({ kind: 'variant', variant, rect: target.getBoundingClientRect() });
-                            }}
-                            onBlur={() => setTooltip(null)}
                           >
                             <span className="erp-calendar-month-event-dot" aria-hidden="true" />
                             <span className="erp-calendar-month-event-text">{variantLabel}</span>
@@ -2128,20 +1904,11 @@ export function CalendarView({
                           <div
                             key={`variant-${event.variant.id}-${event.startMinutes}`}
                             className={className}
-                            role="button"
-                            tabIndex={0}
                             style={{
                               top: `${event.topPercent}%`,
                               height: `${event.heightPercent}%`,
                               left: `${(event.column / event.columns) * 100}%`,
                               width: `${100 / event.columns}%`,
-                            }}
-                            onClick={() => handleVariantOpen(event.variant)}
-                            onKeyDown={(keyboardEvent) => {
-                              if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
-                                keyboardEvent.preventDefault();
-                                handleVariantOpen(event.variant);
-                              }
                             }}
                             onMouseEnter={(evt) => {
                               const target = evt.currentTarget;
@@ -2168,16 +1935,6 @@ export function CalendarView({
                               );
                             }}
                             onMouseLeave={() => setTooltip(null)}
-                            onFocus={(evt) => {
-                              const target = evt.currentTarget;
-                              if (!target) return;
-                              setTooltip({
-                                kind: 'variant',
-                                variant: event.variant,
-                                rect: target.getBoundingClientRect(),
-                              });
-                            }}
-                            onBlur={() => setTooltip(null)}
                           >
                             <div className="erp-calendar-event-time">{event.displayStart} - {event.displayEnd}</div>
                             {renderEventContent(event)}
@@ -2213,12 +1970,6 @@ export function CalendarView({
           ) : null}
         </div>
       </div>
-      <VariantModal
-        active={activeVariant}
-        onHide={handleVariantClose}
-        onVariantUpdated={handleVariantUpdated}
-        onDealOpen={onDealOpen}
-      />
     </section>
   );
 }

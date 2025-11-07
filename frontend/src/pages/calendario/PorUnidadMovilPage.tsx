@@ -3,9 +3,9 @@ import { CalendarView } from '../../features/calendar/CalendarView';
 
 type CalendarViewProps = ComponentProps<typeof CalendarView>;
 
-export type PorUnidadMovilPageProps = Pick<CalendarViewProps, 'onNotify' | 'onSessionOpen' | 'onDealOpen'>;
+export type PorUnidadMovilPageProps = Pick<CalendarViewProps, 'onNotify' | 'onSessionOpen'>;
 
-export default function PorUnidadMovilPage({ onNotify, onSessionOpen, onDealOpen }: PorUnidadMovilPageProps) {
+export default function PorUnidadMovilPage({ onNotify, onSessionOpen }: PorUnidadMovilPageProps) {
   return (
     <CalendarView
       title="Calendario · Por unidad móvil"
@@ -13,7 +13,6 @@ export default function PorUnidadMovilPage({ onNotify, onSessionOpen, onDealOpen
       initialView="month"
       onNotify={onNotify}
       onSessionOpen={onSessionOpen}
-      onDealOpen={onDealOpen}
     />
   );
 }
