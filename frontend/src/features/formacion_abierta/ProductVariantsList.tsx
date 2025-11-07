@@ -1411,22 +1411,39 @@ export function VariantModal({
     );
   }, [formValues.unidad_movil_ids, unitLookup]);
 
-  const trainerSummary = selectedTrainers
-    .map((trainer) => {
-      const label = `${trainer.name ?? ''}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
-      return label.length ? label : trainer.trainer_id;
-    })
-    .filter((label) => label.length)
-    .join(', ');
+  const trainerSummary = useMemo(() => {
+    const labels = selectedTrainers
+      .map((trainer) => {
+        const label = `${trainer.name ?? ''}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
+        return label.length ? label : trainer.trainer_id;
+      })
+      .filter((label) => label.length);
 
-  const unitSummary = selectedUnits
-    .map((unit) => {
-      const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
-      const trimmed = label.trim();
-      return trimmed.length ? trimmed : unit.unidad_id;
-    })
-    .filter((label) => label.length)
-    .join(', ');
+    if (labels.length) {
+      return labels.join(', ');
+    }
+
+    return '';
+  }, [selectedTrainers]);
+
+  const unitSummary = useMemo(() => {
+    const labels = selectedUnits
+      .map((unit) => {
+        const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
+        const trimmed = label.trim();
+        return trimmed.length ? trimmed : unit.unidad_id;
+      })
+      .filter((label) => label.length);
+
+    if (labels.length) {
+      return labels.join(', ');
+    }
+
+    return '';
+  }, [selectedUnits]);
+
+  const trainerSummaryDisplay = trainerSummary || trainerDisplay;
+  const unitSummaryDisplay = unitSummary || unitDisplay;
 
   const handleTrainerToggle = (trainerId: string, checked: boolean) => {
     setFormValues((prev) => {
@@ -1683,6 +1700,27 @@ export function VariantModal({
               </div>
             </div>
 
+            <Row className="g-3">
+              <Col md={4}>
+                <div className="d-flex flex-column">
+                  <span className="text-uppercase text-muted small fw-semibold">Formadores asignados</span>
+                  <span>{trainerDisplay}</span>
+                </div>
+              </Col>
+              <Col md={4}>
+                <div className="d-flex flex-column">
+                  <span className="text-uppercase text-muted small fw-semibold">Sala asignada</span>
+                  <span>{roomDisplay}</span>
+                </div>
+              </Col>
+              <Col md={4}>
+                <div className="d-flex flex-column">
+                  <span className="text-uppercase text-muted small fw-semibold">Unidades móviles asignadas</span>
+                  <span>{unitDisplay}</span>
+                </div>
+              </Col>
+            </Row>
+
             {saveError && <Alert variant="danger" className="mb-0">{saveError}</Alert>}
             {saveSuccess && <Alert variant="success" className="mb-0">{saveSuccess}</Alert>}
 
@@ -1722,7 +1760,7 @@ export function VariantModal({
                         type="text"
                         readOnly
                         placeholder="Selecciona formadores"
-                        value={trainerSummary}
+                        value={trainerSummaryDisplay}
                         aria-expanded={trainerListOpen}
                         aria-controls="variant-trainer-options"
                         className="session-multiselect-summary"
@@ -1753,7 +1791,7 @@ export function VariantModal({
                             setTrainerListOpen(false);
                           }
                         }}
-                        title={trainerSummary || 'Sin formadores'}
+                        title={trainerSummaryDisplay || 'Sin formadores'}
                       />
                       <Collapse in={trainerListOpen && !isSaving && !trainersLoading && !availabilityLoading}>
                         <div id="variant-trainer-options" className="session-multiselect-panel mt-2">
@@ -1842,7 +1880,7 @@ export function VariantModal({
                         type="text"
                         readOnly
                         placeholder="Selecciona unidades móviles"
-                        value={unitSummary}
+                        value={unitSummaryDisplay}
                         aria-expanded={unitListOpen}
                         aria-controls="variant-unit-options"
                         className="session-multiselect-summary"
@@ -1873,7 +1911,7 @@ export function VariantModal({
                             setUnitListOpen(false);
                           }
                         }}
-                        title={unitSummary || 'Sin unidades móviles'}
+                        title={unitSummaryDisplay || 'Sin unidades móviles'}
                       />
                       <Collapse in={unitListOpen && !isSaving && !unitsLoading && !availabilityLoading}>
                         <div id="variant-unit-options" className="session-multiselect-panel mt-2">
