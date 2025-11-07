@@ -536,24 +536,7 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
     if (normalized === 'private') return 'private cancelada';
     return status;
   },
-  trainer: (variant) => {
-    const trainers =
-      variant.variant.trainers && variant.variant.trainers.length
-        ? variant.variant.trainers
-        : variant.variant.trainer
-        ? [variant.variant.trainer]
-        : [];
-    if (!trainers.length) return '';
-    const labels = trainers
-      .map((trainer) =>
-        [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')]
-          .filter(Boolean)
-          .join(' ')
-          .trim(),
-      )
-      .filter((label) => label.length);
-    return safeString(labels.join(' '));
-  },
+  trainer: (variant) => safeString(formatVariantTrainerNames(getVariantTrainerResources(variant))),
   unit: (variant) => {
     const units =
       variant.variant.unidades && variant.variant.unidades.length
@@ -582,6 +565,30 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
   comentarios: (variant) => safeString(variant.variant.status ?? ''),
   por_finalizar: () => '',
 };
+
+type VariantTrainer = CalendarVariantEvent['variant']['trainers'][number];
+
+function getVariantTrainerResources(variant: CalendarVariantEvent): VariantTrainer[] {
+  if (variant.variant.trainers && variant.variant.trainers.length) {
+    return variant.variant.trainers;
+  }
+  if (variant.variant.trainer) {
+    return [variant.variant.trainer];
+  }
+  return [];
+}
+
+function formatVariantTrainerNames(trainers: VariantTrainer[]): string {
+  return trainers
+    .map((trainer) =>
+      [trainer.name?.trim() ?? '', trainer.apellido?.trim() ?? '']
+        .filter((value) => value.length)
+        .join(' ') // combine nombre and apellido
+        .trim(),
+    )
+    .filter((value) => value.length)
+    .join(', ');
+}
 
 function subsequenceScore(text: string, token: string): number {
   if (!token.length) return Number.POSITIVE_INFINITY;
@@ -926,7 +933,17 @@ export function CalendarView({
   });
 
   const sessions = sessionsQuery.data?.sessions ?? [];
-  const variants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
+  const rawVariants = includeVariants ? variantsQuery.data?.variants ?? [] : [];
+
+  const variants = useMemo(() => {
+    if (!includeVariants) {
+      return [];
+    }
+    if (mode !== 'trainers') {
+      return rawVariants;
+    }
+    return rawVariants.filter((variant) => getVariantTrainerResources(variant).length > 0);
+  }, [includeVariants, mode, rawVariants]);
 
   const productOptionsQuery = useQuery({
     queryKey: ['calendar-filter-products'],
@@ -1009,15 +1026,9 @@ export function CalendarView({
           addValue('deal_transporte', deal.transporte);
         });
 
-        const trainers =
-          variant.variant.trainers && variant.variant.trainers.length
-            ? variant.variant.trainers
-            : variant.variant.trainer
-            ? [variant.variant.trainer]
-            : [];
+        const trainers = getVariantTrainerResources(variant);
         trainers.forEach((trainer) => {
-          const parts = [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')].filter(Boolean);
-          const label = parts.join(' ');
+          const label = formatVariantTrainerNames([trainer]);
           if (label.trim().length) {
             addValue('trainer', label);
           }
@@ -1384,22 +1395,9 @@ export function CalendarView({
       return { left: trainersLabel, right: unitsLabel, separator: ' - ' } satisfies TooltipLine;
     }
 
-    const trainers =
-      tooltip.variant.variant.trainers && tooltip.variant.variant.trainers.length
-        ? tooltip.variant.variant.trainers
-        : tooltip.variant.variant.trainer
-        ? [tooltip.variant.variant.trainer]
-        : [];
-    const trainerLabel = trainers.length
-      ? `Formador: ${trainers
-          .map((trainer) =>
-            [trainer.name?.trim() ?? '', trainer.apellido?.trim() ?? '']
-              .filter((value) => value.length)
-              .join(' '),
-          )
-          .filter((value) => value.length)
-          .join(', ')}`
-      : 'Formador: Sin asignar';
+    const trainers = getVariantTrainerResources(tooltip.variant);
+    const trainerNames = formatVariantTrainerNames(trainers);
+    const trainerLabel = trainerNames.length ? `Formador: ${trainerNames}` : 'Formador: Sin asignar';
 
     const units =
       tooltip.variant.variant.unidades && tooltip.variant.variant.unidades.length
@@ -1546,29 +1544,20 @@ export function CalendarView({
     if (variantEvent.variant.sede) {
       chips.push(`Sede: ${variantEvent.variant.sede}`);
     }
-    const trainerResources =
-      variantEvent.variant.trainers && variantEvent.variant.trainers.length
-        ? variantEvent.variant.trainers
-        : variantEvent.variant.trainer
-        ? [variantEvent.variant.trainer]
-        : [];
-    const trainerLabel = trainerResources.length
-      ? `Formador: ${trainerResources
-          .map((trainer) =>
-            [trainer.name?.trim() ?? '', trainer.apellido?.trim() ?? '']
-              .filter((value) => value.length)
-              .join(' '),
-          )
-          .filter((value) => value.length)
-          .join(', ')}`
-      : 'Formador: Sin asignar';
+    const trainerResources = getVariantTrainerResources(variantEvent);
+    const trainerNames = formatVariantTrainerNames(trainerResources);
+    const trainerLabel = trainerNames.length ? `Formador: ${trainerNames}` : 'Formador: Sin asignar';
     chips.push(trainerLabel);
     if (variantEvent.variant.stock != null) {
       chips.push(`Stock: ${variantEvent.variant.stock}`);
     }
 
     const eventTitle =
-      variantEvent.variant.name?.trim().length
+      mode === 'trainers'
+        ? trainerNames.length
+          ? trainerNames
+          : 'Sin formador'
+        : variantEvent.variant.name?.trim().length
         ? variantEvent.variant.name
         : variantEvent.product.name ?? 'Variante sin nombre';
 
