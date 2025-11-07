@@ -725,6 +725,186 @@ async function ensureFolder(params: { name: string; parentId: string; driveId: s
   return createdId;
 }
 
+type DriveFolderSummary = { id?: string | null; createdTime?: string | null };
+
+async function moveFolderChildrenToTarget(params: {
+  sourceFolderId: string;
+  targetFolderId: string;
+  driveId: string;
+  context?: Record<string, unknown>;
+}): Promise<void> {
+  let pageToken: string | undefined;
+  do {
+    const list = await driveFilesList({
+      corpora: "drive",
+      driveId: params.driveId,
+      includeItemsFromAllDrives: "true",
+      supportsAllDrives: "true",
+      q: `'${params.sourceFolderId}' in parents and trashed = false`,
+      fields: "nextPageToken, files(id)",
+      pageSize: "100",
+      pageToken,
+    });
+
+    const files = Array.isArray(list.files) ? list.files : [];
+    for (const file of files) {
+      if (!file?.id) continue;
+      try {
+        await moveFileToParent({
+          fileId: String(file.id),
+          newParentId: params.targetFolderId,
+          previousParentId: params.sourceFolderId,
+        });
+      } catch (err) {
+        console.warn("[google-drive-sync] No se pudo mover un archivo de la carpeta duplicada", {
+          ...(params.context ?? {}),
+          sourceFolderId: params.sourceFolderId,
+          fileId: file.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    pageToken = typeof list.nextPageToken === "string" ? list.nextPageToken : undefined;
+  } while (pageToken);
+}
+
+async function consolidateDuplicateNamedFolders(params: {
+  driveId: string;
+  parentId: string;
+  folderName: string;
+  keepFolderId: string;
+  context?: Record<string, unknown>;
+  existingFolders?: DriveFolderSummary[];
+}): Promise<void> {
+  const sanitizedName = sanitizeName(params.folderName || "carpeta") || "carpeta";
+
+  let folderEntries = params.existingFolders;
+  if (!folderEntries) {
+    const query = [
+      `'${params.parentId}' in parents`,
+      "mimeType = 'application/vnd.google-apps.folder'",
+      "trashed = false",
+      `name = '${sanitizedName.replace(/'/g, "\\'")}'`,
+    ].join(" and ");
+
+    const list = await driveFilesList({
+      corpora: "drive",
+      driveId: params.driveId,
+      includeItemsFromAllDrives: "true",
+      supportsAllDrives: "true",
+      q: query,
+      fields: "files(id, createdTime)",
+      orderBy: "createdTime asc",
+      pageSize: "100",
+    });
+
+    folderEntries = Array.isArray(list.files) ? list.files : [];
+  }
+
+  const duplicates = (folderEntries || [])
+    .map((entry) => (entry?.id ? String(entry.id) : null))
+    .filter((id): id is string => Boolean(id) && id !== params.keepFolderId);
+
+  if (!duplicates.length) {
+    return;
+  }
+
+  for (const duplicateId of duplicates) {
+    try {
+      await moveFolderChildrenToTarget({
+        sourceFolderId: duplicateId,
+        targetFolderId: params.keepFolderId,
+        driveId: params.driveId,
+        context: params.context,
+      });
+    } catch (err) {
+      console.warn("[google-drive-sync] No se pudieron mover todos los archivos de la carpeta duplicada", {
+        ...(params.context ?? {}),
+        parentId: params.parentId,
+        folderName: sanitizedName,
+        duplicateId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    try {
+      await driveDelete(duplicateId);
+      removeFolderFromCache(params.parentId, sanitizedName);
+    } catch (err) {
+      console.warn("[google-drive-sync] No se pudo eliminar carpeta duplicada", {
+        ...(params.context ?? {}),
+        parentId: params.parentId,
+        folderName: sanitizedName,
+        duplicateId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
+async function ensureUniqueSubfolder(params: {
+  driveId: string;
+  parentId: string;
+  folderName: string;
+  context?: Record<string, unknown>;
+}): Promise<string> {
+  const sanitizedName = sanitizeName(params.folderName || "carpeta") || "carpeta";
+  const key = cacheKey(params.parentId, sanitizedName);
+  if (driveFolderCache.has(key)) {
+    return driveFolderCache.get(key)!;
+  }
+
+  const query = [
+    `'${params.parentId}' in parents`,
+    "mimeType = 'application/vnd.google-apps.folder'",
+    "trashed = false",
+    `name = '${sanitizedName.replace(/'/g, "\\'")}'`,
+  ].join(" and ");
+
+  const list = await driveFilesList({
+    corpora: "drive",
+    driveId: params.driveId,
+    includeItemsFromAllDrives: "true",
+    supportsAllDrives: "true",
+    q: query,
+    fields: "files(id, createdTime)",
+    orderBy: "createdTime asc",
+    pageSize: "100",
+  });
+
+  const folders: DriveFolderSummary[] = Array.isArray(list.files) ? list.files : [];
+  if (folders.length > 0 && folders[0]?.id) {
+    const primaryId = String(folders[0].id);
+    driveFolderCache.set(key, primaryId);
+    await consolidateDuplicateNamedFolders({
+      driveId: params.driveId,
+      parentId: params.parentId,
+      folderName: sanitizedName,
+      keepFolderId: primaryId,
+      context: params.context,
+      existingFolders: folders,
+    });
+    return primaryId;
+  }
+
+  const createdId = await driveCreateFolder({
+    name: sanitizedName,
+    parents: [params.parentId],
+  });
+  driveFolderCache.set(key, createdId);
+
+  await consolidateDuplicateNamedFolders({
+    driveId: params.driveId,
+    parentId: params.parentId,
+    folderName: sanitizedName,
+    keepFolderId: createdId,
+    context: params.context,
+  });
+
+  return createdId;
+}
+
 async function clearFolder(folderId: string, driveId: string): Promise<void> {
   let pageToken: string | undefined;
   do {
@@ -1543,10 +1723,16 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
         ? params.targetSubfolderName
         : CERTIFICATES_FOLDER_NAME;
     const effectiveName = sanitizeName(fallbackName) || CERTIFICATES_FOLDER_NAME;
-    const subfolderId = await ensureFolder({
-      name: effectiveName,
-      parentId: parentFolderId,
+    const subfolderId = await ensureUniqueSubfolder({
       driveId,
+      parentId: parentFolderId,
+      folderName: effectiveName,
+      context: {
+        dealId: resolveDealId(params.deal),
+        sessionId: params.session?.id,
+        sessionNumber: params.sessionNumber,
+        targetSubfolderName: effectiveName,
+      },
     });
     parentFolderId = subfolderId;
   }
