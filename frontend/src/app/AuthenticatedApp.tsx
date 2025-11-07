@@ -9,6 +9,8 @@ import { BudgetDetailModalServices } from '../features/presupuestos/services/Bud
 import { BudgetDetailModalMaterial } from '../features/presupuestos/material/BudgetDetailModalMaterial';
 import { ProductCommentWindow } from '../features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from '../features/presupuestos/ProductCommentWindow';
+import { VariantModal } from '../features/formacion_abierta/ProductVariantsList';
+import type { ActiveVariant, ProductInfo, VariantInfo } from '../features/formacion_abierta/types';
 import { ApiError } from '../api/client';
 import {
   deleteDeal,
@@ -29,7 +31,7 @@ import {
   DEAL_NOT_WON_ERROR_MESSAGE,
   normalizeImportDealResult,
 } from '../features/presupuestos/importDealUtils';
-import type { CalendarSession } from '../features/calendar/api';
+import type { CalendarSession, CalendarVariantEvent } from '../features/calendar/api';
 import type { DealDetail, DealSummary } from '../types/deal';
 import logo from '../assets/gep-group-logo.png';
 import { AppRouter } from './router';
@@ -270,6 +272,190 @@ type ToastMessage = {
   message: string;
 };
 
+function sanitizeString(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
+function sanitizeNumber(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  const numeric = Number(String(value).trim());
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function sanitizeStringArray(values: unknown[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  values.forEach((value) => {
+    const normalized = sanitizeString(value);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    output.push(normalized);
+  });
+  return output;
+}
+
+type CalendarVariantTrainerRecord = CalendarVariantEvent['variant']['trainers'][number];
+type CalendarVariantUnitRecord =
+  | CalendarVariantEvent['variant']['unidades'][number]
+  | CalendarVariantEvent['variant']['unidad'];
+
+function mapCalendarVariantTrainer(
+  record: CalendarVariantTrainerRecord | CalendarVariantEvent['variant']['trainer'] | null | undefined,
+): VariantInfo['trainers'][number] | null {
+  if (!record) {
+    return null;
+  }
+  const trainerId = sanitizeString(record.trainer_id);
+  if (!trainerId) {
+    return null;
+  }
+  return {
+    trainer_id: trainerId,
+    name: record.name ?? null,
+    apellido: record.apellido ?? null,
+  };
+}
+
+function mapCalendarVariantUnit(
+  record: CalendarVariantUnitRecord | null | undefined,
+): VariantInfo['unidades'][number] | null {
+  if (!record) {
+    return null;
+  }
+  const unitId = sanitizeString(record.unidad_id);
+  if (!unitId) {
+    return null;
+  }
+  const name = sanitizeString(record.name) ?? unitId;
+  return {
+    unidad_id: unitId,
+    name,
+    matricula: record.matricula ?? null,
+  };
+}
+
+function resolveVariantSala(details: CalendarVariantEvent['variant']): VariantInfo['sala'] | null {
+  const fallbackId = sanitizeString(details.sala_id);
+  if (details.sala) {
+    const id = sanitizeString(details.sala.sala_id) ?? fallbackId;
+    if (id) {
+      const name = sanitizeString(details.sala.name) ?? id;
+      return { sala_id: id, name, sede: details.sala.sede ?? null };
+    }
+  }
+  if (fallbackId) {
+    const sede = details.sala?.sede ?? null;
+    return { sala_id: fallbackId, name: fallbackId, sede };
+  }
+  return null;
+}
+
+function resolveVariantUnits(details: CalendarVariantEvent['variant']): VariantInfo['unidades'] {
+  const units: VariantInfo['unidades'] = [];
+  const seen = new Set<string>();
+  const addUnit = (record: CalendarVariantUnitRecord | null | undefined) => {
+    const mapped = mapCalendarVariantUnit(record);
+    if (!mapped || seen.has(mapped.unidad_id)) {
+      return;
+    }
+    seen.add(mapped.unidad_id);
+    units.push(mapped);
+  };
+  (details.unidades ?? []).forEach(addUnit);
+  addUnit(details.unidad);
+  const fallbackId = sanitizeString(details.unidad_movil_id);
+  if (fallbackId && !seen.has(fallbackId)) {
+    units.push({ unidad_id: fallbackId, name: fallbackId, matricula: null });
+    seen.add(fallbackId);
+  }
+  return units;
+}
+
+function createActiveVariantFromCalendarEvent(event: CalendarVariantEvent): ActiveVariant {
+  const variantDetails = event.variant;
+  const trainerRecord = mapCalendarVariantTrainer(variantDetails.trainer);
+  const trainers = (variantDetails.trainers ?? [])
+    .map((record) => mapCalendarVariantTrainer(record))
+    .filter((record): record is VariantInfo['trainers'][number] => !!record);
+  const trainerIds = sanitizeStringArray(variantDetails.trainer_ids ?? []);
+  const resolvedTrainerId = sanitizeString(variantDetails.trainer_id);
+  if (resolvedTrainerId && !trainerIds.includes(resolvedTrainerId)) {
+    trainerIds.push(resolvedTrainerId);
+  }
+  if (trainerRecord && !trainerIds.includes(trainerRecord.trainer_id)) {
+    trainerIds.push(trainerRecord.trainer_id);
+  }
+  trainers.forEach((record) => {
+    if (!trainerIds.includes(record.trainer_id)) {
+      trainerIds.push(record.trainer_id);
+    }
+  });
+
+  const unidades = resolveVariantUnits(variantDetails);
+  const primaryUnit = unidades[0] ?? null;
+  const unidadMovilIds = sanitizeStringArray(variantDetails.unidad_movil_ids ?? []);
+  const resolvedUnidadMovilId = primaryUnit?.unidad_id ?? sanitizeString(variantDetails.unidad_movil_id);
+  if (resolvedUnidadMovilId && !unidadMovilIds.includes(resolvedUnidadMovilId)) {
+    unidadMovilIds.push(resolvedUnidadMovilId);
+  }
+
+  const resolvedSala = resolveVariantSala(variantDetails);
+  const stockValue = sanitizeNumber(variantDetails.stock);
+
+  const variantInfo: VariantInfo = {
+    id: variantDetails.id,
+    id_woo: sanitizeString(variantDetails.id_woo) ?? '',
+    name: variantDetails.name ?? null,
+    status: variantDetails.status ?? null,
+    price: variantDetails.price ?? null,
+    stock: stockValue,
+    stock_status: variantDetails.stock_status ?? null,
+    sede: variantDetails.sede ?? null,
+    date: variantDetails.date ?? null,
+    trainer_id: resolvedTrainerId,
+    trainer_ids: trainerIds,
+    trainer: trainerRecord,
+    trainers,
+    sala_id: resolvedSala?.sala_id ?? sanitizeString(variantDetails.sala_id),
+    sala: resolvedSala,
+    unidad_movil_id: resolvedUnidadMovilId,
+    unidad_movil_ids: unidadMovilIds,
+    unidad: primaryUnit,
+    unidades,
+    created_at: variantDetails.created_at ?? null,
+    updated_at: variantDetails.updated_at ?? null,
+  };
+
+  const productInfo: ProductInfo = {
+    id: event.product.id,
+    id_woo: sanitizeString(event.product.id_woo),
+    name: event.product.name ?? null,
+    code: event.product.code ?? null,
+    category: event.product.category ?? null,
+    variants: [variantInfo],
+    default_variant_start: event.product.default_variant_start,
+    default_variant_end: event.product.default_variant_end,
+    default_variant_stock_status: event.product.default_variant_stock_status,
+    default_variant_stock_quantity: sanitizeNumber(event.product.default_variant_stock_quantity),
+    default_variant_price: event.product.default_variant_price,
+    hora_inicio: event.product.hora_inicio ?? null,
+    hora_fin: event.product.hora_fin ?? null,
+  };
+
+  return { product: productInfo, variant: variantInfo };
+}
+
 export default function AuthenticatedApp() {
   const { user, logout, permissions, hasPermission } = useAuth(); // ⬅️ sin getDefaultPath
   const location = useLocation();
@@ -369,6 +555,7 @@ export default function AuthenticatedApp() {
   const [importError, setImportError] = useState<string | null>(null);
   const [autoRefreshBudgetId, setAutoRefreshBudgetId] = useState<string | null>(null);
   const [isCheckingExistingDeal, setIsCheckingExistingDeal] = useState(false);
+  const [activeCalendarVariant, setActiveCalendarVariant] = useState<ActiveVariant | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -859,6 +1046,30 @@ export default function AuthenticatedApp() {
     setProductComment(null);
   }, []);
 
+  const handleOpenCalendarVariant = useCallback((variantEvent: CalendarVariantEvent) => {
+    const active = createActiveVariantFromCalendarEvent(variantEvent);
+    setActiveCalendarVariant(active);
+  }, []);
+
+  const handleCloseCalendarVariant = useCallback(() => {
+    setActiveCalendarVariant(null);
+  }, []);
+
+  const handleCalendarVariantUpdated = useCallback((updatedVariant: VariantInfo) => {
+    setActiveCalendarVariant((current) => {
+      if (!current || current.variant.id !== updatedVariant.id) {
+        return current;
+      }
+      const nextVariants = current.product.variants.some((item) => item.id === updatedVariant.id)
+        ? current.product.variants.map((item) => (item.id === updatedVariant.id ? { ...item, ...updatedVariant } : item))
+        : current.product.variants;
+      return {
+        product: { ...current.product, variants: nextVariants },
+        variant: { ...current.variant, ...updatedVariant },
+      };
+    });
+  }, []);
+
   const handleOpenCalendarSession = useCallback(
     (session: CalendarSession) => {
       void (async () => {
@@ -1013,16 +1224,19 @@ export default function AuthenticatedApp() {
   const calendarSessionsPageProps: PorSesionesPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
+    onVariantOpen: handleOpenCalendarVariant,
   };
 
   const calendarUnitsPageProps: PorUnidadMovilPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
+    onVariantOpen: handleOpenCalendarVariant,
   };
 
   const calendarTrainersPageProps: PorFormadorPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
+    onVariantOpen: handleOpenCalendarVariant,
   };
 
   const formadoresBomberosPageProps: FormadoresBomberosPageProps = {
@@ -1164,6 +1378,12 @@ export default function AuthenticatedApp() {
         onSubmit={(dealId) => {
           void handleImportSubmit(dealId);
         }}
+      />
+
+      <VariantModal
+        active={activeCalendarVariant}
+        onHide={handleCloseCalendarVariant}
+        onVariantUpdated={handleCalendarVariantUpdated}
       />
 
       <BudgetModalComponent {...budgetModalProps} />

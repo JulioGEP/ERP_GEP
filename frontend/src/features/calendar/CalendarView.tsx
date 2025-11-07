@@ -124,6 +124,7 @@ type ToastParams = {
 type CalendarViewProps = {
   onNotify?: (toast: ToastParams) => void;
   onSessionOpen?: (session: CalendarSession) => void;
+  onVariantOpen?: (variant: CalendarVariantEvent) => void;
   title?: string;
   mode?: CalendarMode;
   initialView?: CalendarViewType;
@@ -877,6 +878,7 @@ function useDebouncedValue<T>(value: T, delay: number): T {
 export function CalendarView({
   onNotify,
   onSessionOpen,
+  onVariantOpen,
   title = 'Calendario',
   mode = 'sessions',
   initialView = 'month',
@@ -1774,6 +1776,19 @@ export function CalendarView({
                             key={`variant-${variant.id}`}
                             className="erp-calendar-event erp-calendar-month-event erp-calendar-event-variant"
                             title={variantTitle}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              setTooltip(null);
+                              onVariantOpen?.(variant);
+                            }}
+                            onKeyDown={(keyboardEvent) => {
+                              if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                                keyboardEvent.preventDefault();
+                                setTooltip(null);
+                                onVariantOpen?.(variant);
+                              }
+                            }}
                             onMouseEnter={(mouseEvent) => {
                               const target = mouseEvent.currentTarget;
                               if (!target) return;
@@ -1784,6 +1799,16 @@ export function CalendarView({
                               });
                             }}
                             onMouseLeave={() => setTooltip(null)}
+                            onFocus={(focusEvent) => {
+                              const target = focusEvent.currentTarget;
+                              if (!target) return;
+                              setTooltip({
+                                kind: 'variant',
+                                variant,
+                                rect: target.getBoundingClientRect(),
+                              });
+                            }}
+                            onBlur={() => setTooltip(null)}
                           >
                             <span className="erp-calendar-month-event-dot" aria-hidden="true" />
                             <span className="erp-calendar-month-event-text">{variantLabel}</span>
@@ -1899,6 +1924,19 @@ export function CalendarView({
                               left: `${(event.column / event.columns) * 100}%`,
                               width: `${100 / event.columns}%`,
                             }}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              setTooltip(null);
+                              onVariantOpen?.(event.variant);
+                            }}
+                            onKeyDown={(keyboardEvent) => {
+                              if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                                keyboardEvent.preventDefault();
+                                setTooltip(null);
+                                onVariantOpen?.(event.variant);
+                              }
+                            }}
                             onMouseEnter={(evt) => {
                               const target = evt.currentTarget;
                               if (!target) return;
@@ -1924,6 +1962,16 @@ export function CalendarView({
                               );
                             }}
                             onMouseLeave={() => setTooltip(null)}
+                            onFocus={(evt) => {
+                              const target = evt.currentTarget;
+                              if (!target) return;
+                              setTooltip({
+                                kind: 'variant',
+                                variant: event.variant,
+                                rect: target.getBoundingClientRect(),
+                              });
+                            }}
+                            onBlur={() => setTooltip(null)}
                           >
                             <div className="erp-calendar-event-time">{event.displayStart} - {event.displayEnd}</div>
                             {renderEventContent(event)}
