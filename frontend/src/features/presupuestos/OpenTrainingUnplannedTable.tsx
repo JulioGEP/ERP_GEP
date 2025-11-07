@@ -41,6 +41,35 @@ function formatVariantDate(value: string | null | undefined): string | null {
   }
 }
 
+function hasAssignedTrainerId(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => hasAssignedTrainerId(item));
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return false;
+    }
+    return value !== 0;
+  }
+
+  const trimmed = String(value).trim();
+  if (!trimmed.length) {
+    return false;
+  }
+
+  const normalized = trimmed.toLowerCase();
+  if (normalized === '0' || normalized === 'null' || normalized === 'undefined') {
+    return false;
+  }
+
+  return true;
+}
+
 type OpenTrainingUnplannedTableProps = {
   budgets: DealSummary[];
 };
@@ -106,11 +135,8 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
         if (variantDateValue.getTime() <= now.getTime()) {
           return;
         }
-        const hasPrimaryTrainer = Boolean((variant.trainer_id ?? '').trim().length);
-        const hasExtraTrainers = Array.isArray(variant.trainer_ids)
-          ? variant.trainer_ids.some((id) => Boolean((id ?? '').toString().trim().length))
-          : false;
-        const hasTrainer = hasPrimaryTrainer || hasExtraTrainers;
+        const hasTrainer =
+          hasAssignedTrainerId(variant.trainer_id) || hasAssignedTrainerId(variant.trainer_ids);
         if (hasTrainer) {
           return;
         }
