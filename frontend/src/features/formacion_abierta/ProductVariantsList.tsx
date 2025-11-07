@@ -149,6 +149,50 @@ function formatDateForInputValue(value: string | null): string {
 }
 
 function variantToFormValues(variant: VariantInfo): VariantFormValues {
+  const trainerIdSet = new Set<string>();
+  if (Array.isArray(variant.trainer_ids)) {
+    variant.trainer_ids.forEach((value) => {
+      if (value?.trim()) {
+        trainerIdSet.add(value.trim());
+      }
+    });
+  }
+  if (!trainerIdSet.size && typeof variant.trainer_id === 'string' && variant.trainer_id.trim()) {
+    trainerIdSet.add(variant.trainer_id.trim());
+  }
+  if (Array.isArray(variant.trainers)) {
+    variant.trainers.forEach((record) => {
+      if (record?.trainer_id?.trim()) {
+        trainerIdSet.add(record.trainer_id.trim());
+      }
+    });
+  }
+  if (variant.trainer?.trainer_id?.trim()) {
+    trainerIdSet.add(variant.trainer.trainer_id.trim());
+  }
+
+  const unitIdSet = new Set<string>();
+  if (Array.isArray(variant.unidad_movil_ids)) {
+    variant.unidad_movil_ids.forEach((value) => {
+      if (value?.trim()) {
+        unitIdSet.add(value.trim());
+      }
+    });
+  }
+  if (!unitIdSet.size && typeof variant.unidad_movil_id === 'string' && variant.unidad_movil_id.trim()) {
+    unitIdSet.add(variant.unidad_movil_id.trim());
+  }
+  if (Array.isArray(variant.unidades)) {
+    variant.unidades.forEach((record) => {
+      if (record?.unidad_id?.trim()) {
+        unitIdSet.add(record.unidad_id.trim());
+      }
+    });
+  }
+  if (variant.unidad?.unidad_id?.trim()) {
+    unitIdSet.add(variant.unidad.unidad_id.trim());
+  }
+
   return {
     price: variant.price ?? '',
     stock: variant.stock != null ? String(variant.stock) : '',
@@ -156,9 +200,9 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
     status: variant.status ?? 'publish',
     sede: variant.sede ?? '',
     date: formatDateForInputValue(variant.date),
-    trainer_ids: Array.isArray(variant.trainer_ids) ? [...variant.trainer_ids] : [],
+    trainer_ids: Array.from(trainerIdSet),
     sala_id: variant.sala_id ?? '',
-    unidad_movil_ids: Array.isArray(variant.unidad_movil_ids) ? [...variant.unidad_movil_ids] : [],
+    unidad_movil_ids: Array.from(unitIdSet),
   };
 }
 
