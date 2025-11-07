@@ -250,7 +250,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
                       variant={includeTrainers ? 'outline-secondary' : 'outline-primary'}
                       onClick={() => setIncludeTrainers((prev) => !prev)}
                     >
-                      {includeTrainers ? 'Ocultar formadores' : 'Mostrar todos los roles'}
+                      {includeTrainers ? 'Ocultar formadores' : 'Mostrar Formadores'}
                     </Button>
                     <ButtonGroup>
                       <Button
