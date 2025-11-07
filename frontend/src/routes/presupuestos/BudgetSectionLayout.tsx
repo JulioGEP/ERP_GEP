@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
+import type { TableFiltersState } from '../../hooks/useTableFilterState';
 import {
   BudgetTable,
   type BudgetServerQueryOptions,
@@ -27,6 +28,7 @@ export type BudgetSectionLayoutProps = {
   serverQueryOptions?: BudgetServerQueryOptions;
   tableVariant?: BudgetTableVariant;
   pageSize?: number;
+  defaultFilters?: TableFiltersState;
   children?: ReactNode;
 };
 
@@ -49,6 +51,7 @@ export function BudgetSectionLayout({
   serverQueryOptions,
   tableVariant = 'default',
   pageSize,
+  defaultFilters,
   children,
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
@@ -88,6 +91,7 @@ export function BudgetSectionLayout({
         serverQueryOptions={serverQueryOptions}
         variant={tableVariant}
         pageSize={pageSize}
+        defaultFilters={defaultFilters}
       />
 
       {children}
