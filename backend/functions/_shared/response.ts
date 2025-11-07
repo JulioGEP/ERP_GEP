@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 
 const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
 
-export const COMMON_HEADERS = {
+export const COMMON_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-User-Id, X-User-Name',
