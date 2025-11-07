@@ -1,6 +1,6 @@
 // backend/functions/products-variants.ts
 
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import {
   join,
   sqltag as sql,
@@ -248,30 +248,24 @@ async function syncVariantTrainerAssignments(
 
   try {
     const tableName = VARIANT_TRAINER_TABLE;
+    const table = Prisma.raw(tableName);
     await prisma.$executeRaw(
-      `DELETE FROM ${tableName} WHERE variant_id = $1::uuid`,
-      variantId,
+      sql`DELETE FROM ${table} WHERE variant_id = ${variantId}::uuid`,
     );
 
     if (!ids.length) {
       return;
     }
 
-    const values: any[] = [];
-    const placeholders = ids
-      .map((id, index) => {
-        const baseIndex = index * 3;
-        values.push(variantId, id, index);
-        return `($${baseIndex + 1}::uuid, $${baseIndex + 2}, $${baseIndex + 3})`;
-      })
-      .join(', ');
+    const values = join(
+      ids.map((id, index) => sql`(${variantId}::uuid, ${id}, ${index})`),
+    );
 
     await prisma.$executeRaw(
-      `INSERT INTO ${tableName} (variant_id, trainer_id, position)
-       VALUES ${placeholders}
-       ON CONFLICT (variant_id, trainer_id)
-       DO UPDATE SET position = EXCLUDED.position, updated_at = NOW()`,
-      ...values,
+      sql`INSERT INTO ${table} (variant_id, trainer_id, position)
+          VALUES ${values}
+          ON CONFLICT (variant_id, trainer_id)
+          DO UPDATE SET position = EXCLUDED.position, updated_at = NOW()`,
     );
   } catch (error) {
     if (isMissingRelationError(error, VARIANT_TRAINER_TABLE)) {
@@ -294,30 +288,24 @@ async function syncVariantUnitAssignments(
 
   try {
     const tableName = VARIANT_UNIT_TABLE;
+    const table = Prisma.raw(tableName);
     await prisma.$executeRaw(
-      `DELETE FROM ${tableName} WHERE variant_id = $1::uuid`,
-      variantId,
+      sql`DELETE FROM ${table} WHERE variant_id = ${variantId}::uuid`,
     );
 
     if (!ids.length) {
       return;
     }
 
-    const values: any[] = [];
-    const placeholders = ids
-      .map((id, index) => {
-        const baseIndex = index * 3;
-        values.push(variantId, id, index);
-        return `($${baseIndex + 1}::uuid, $${baseIndex + 2}, $${baseIndex + 3})`;
-      })
-      .join(', ');
+    const values = join(
+      ids.map((id, index) => sql`(${variantId}::uuid, ${id}, ${index})`),
+    );
 
     await prisma.$executeRaw(
-      `INSERT INTO ${tableName} (variant_id, unidad_id, position)
-       VALUES ${placeholders}
-       ON CONFLICT (variant_id, unidad_id)
-       DO UPDATE SET position = EXCLUDED.position, updated_at = NOW()`,
-      ...values,
+      sql`INSERT INTO ${table} (variant_id, unidad_id, position)
+          VALUES ${values}
+          ON CONFLICT (variant_id, unidad_id)
+          DO UPDATE SET position = EXCLUDED.position, updated_at = NOW()`,
     );
   } catch (error) {
     if (isMissingRelationError(error, VARIANT_UNIT_TABLE)) {
