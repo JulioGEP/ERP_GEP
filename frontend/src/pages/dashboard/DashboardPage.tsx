@@ -29,8 +29,11 @@ const UNWORKED_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sintrabajar`;
 const SESSION_DRAFTS_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__session_estado=BORRADOR`;
 const SESSION_SUSPENDED_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__session_estado=SUSPENDIDA`;
 const SESSION_PENDING_COMPLETION_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__session_estado=PLANIFICADA`;
-const SESSION_FORMACION_ABIERTA_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__pipeline=${encodeURIComponent(
-  'formacion abierta',
+const encodeBudgetsQueryValue = (value: string) =>
+  encodeURIComponent(value).replace(/%20/g, '+');
+
+const SESSION_FORMACION_ABIERTA_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__pipeline=${encodeBudgetsQueryValue(
+  'Formación Empresas||GEP Services',
 )}`;
 
 const BUDGETS_PENDING_CAES_URL =
