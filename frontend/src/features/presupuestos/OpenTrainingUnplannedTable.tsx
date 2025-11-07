@@ -119,6 +119,10 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
           return;
         }
         const dealsForVariant = dealsByVariantId.get(variantId) ?? [];
+        if (!dealsForVariant.length) {
+          return;
+        }
+
         const sortedDeals = [...dealsForVariant].sort((a, b) =>
           a.deal_id.localeCompare(b.deal_id, 'es', { sensitivity: 'base' }),
         );
