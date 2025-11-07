@@ -91,9 +91,33 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
   const [activeVariant, setActiveVariant] = useState<ActiveVariant | null>(null);
 
   useEffect(() => {
-    if (productsQuery.data) {
-      setProducts(productsQuery.data);
+    if (!productsQuery.data) {
+      return;
     }
+
+    setProducts(productsQuery.data);
+
+    setActiveVariant((previous) => {
+      if (!previous) {
+        return previous;
+      }
+
+      const nextProduct = productsQuery.data.find((product) =>
+        product.variants.some((variant) => variant.id === previous.variant.id),
+      );
+
+      if (!nextProduct) {
+        return null;
+      }
+
+      const nextVariant = nextProduct.variants.find((variant) => variant.id === previous.variant.id);
+
+      if (!nextVariant) {
+        return null;
+      }
+
+      return { product: nextProduct, variant: nextVariant };
+    });
   }, [productsQuery.data]);
 
   const dealsByVariantId = useMemo(() => {
@@ -181,12 +205,14 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
   }, [dealsByVariantId, products]);
 
   const handleVariantUpdated = (updatedVariant: VariantInfo) => {
-    setProducts((prev) =>
-      prev.map((product) => {
+    setProducts((previousProducts) =>
+      previousProducts.map((product) => {
         const hasVariant = product.variants.some((item) => item.id === updatedVariant.id);
+
         if (!hasVariant) {
           return product;
         }
+
         return {
           ...product,
           variants: product.variants.map((item) =>
@@ -195,6 +221,24 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
         };
       }),
     );
+
+    setActiveVariant((previous) => {
+      if (!previous || previous.variant.id !== updatedVariant.id) {
+        return previous;
+      }
+
+      const nextProduct = {
+        ...previous.product,
+        variants: previous.product.variants.map((item) =>
+          item.id === updatedVariant.id ? { ...item, ...updatedVariant } : item,
+        ),
+      };
+
+      return {
+        product: nextProduct,
+        variant: { ...previous.variant, ...updatedVariant },
+      };
+    });
   };
 
   const handleSelectVariant = (product: ProductInfo, variant: VariantInfo) => {
