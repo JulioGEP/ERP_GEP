@@ -955,6 +955,12 @@ function hasDraftSessions(deal: DealSummary): boolean {
 }
 
 function matchesPendingPlanningCriteria(deal: DealSummary): boolean {
+  const hasLinkedVariant = typeof deal.w_id_variation === 'string' && deal.w_id_variation.trim().length > 0;
+
+  if (hasLinkedVariant) {
+    return true;
+  }
+
   const pipelineKey = [deal.pipeline_label, deal.pipeline_id]
     .map((value) => normalizePipelineKey(value))
     .find((key) => key.length > 0);
