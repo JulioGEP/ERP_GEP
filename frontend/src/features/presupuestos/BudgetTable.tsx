@@ -121,6 +121,7 @@ interface BudgetTableProps {
   serverQueryOptions?: BudgetServerQueryOptions;
   variant?: BudgetTableVariant;
   pageSize?: number;
+  defaultFilters?: TableFiltersState;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -673,6 +674,7 @@ export function BudgetTable({
   serverQueryOptions,
   variant = 'default',
   pageSize,
+  defaultFilters,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -707,6 +709,53 @@ export function BudgetTable({
     clearAllFilters,
     setSorting: setSortingInUrl,
   } = useTableFilterState({ tableKey: 'budgets-table' });
+
+  const normalizedDefaultFilters = useMemo(() => {
+    if (!defaultFilters) {
+      return null;
+    }
+    const entries = Object.entries(defaultFilters)
+      .map(([key, value]) => [key.trim(), String(value ?? '').trim()] as const)
+      .filter(([key, value]) => key.length && value.length);
+    if (!entries.length) {
+      return null;
+    }
+    entries.sort(([a], [b]) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+    return entries;
+  }, [defaultFilters]);
+
+  const enforcedFilters = useMemo(() => {
+    if (!normalizedDefaultFilters || !normalizedDefaultFilters.length) {
+      return activeFilters;
+    }
+    const merged: TableFiltersState = { ...activeFilters };
+    normalizedDefaultFilters.forEach(([key, value]) => {
+      if (merged[key] !== value) {
+        merged[key] = value;
+      }
+    });
+    return merged;
+  }, [activeFilters, normalizedDefaultFilters]);
+
+  useEffect(() => {
+    if (!normalizedDefaultFilters || !normalizedDefaultFilters.length) {
+      return;
+    }
+
+    let shouldUpdate = false;
+    const nextFilters: TableFiltersState = { ...activeFilters };
+
+    normalizedDefaultFilters.forEach(([key, value]) => {
+      if (nextFilters[key] !== value) {
+        nextFilters[key] = value;
+        shouldUpdate = true;
+      }
+    });
+
+    if (shouldUpdate) {
+      setFiltersAndSearch(nextFilters, searchValue);
+    }
+  }, [activeFilters, normalizedDefaultFilters, searchValue, setFiltersAndSearch]);
 
   const [sortingState, setSortingState] = useState<TableSortingState>(sortingFromUrl);
   const [pageIndex, setPageIndex] = useState(0);
@@ -866,8 +915,8 @@ export function BudgetTable({
   );
 
   const filteredRows = useMemo(
-    () => applyBudgetFilters(preparedRows, activeFilters, searchValue),
-    [preparedRows, activeFilters, searchValue],
+    () => applyBudgetFilters(preparedRows, enforcedFilters, searchValue),
+    [preparedRows, enforcedFilters, searchValue],
   );
 
   const clientFilteredBudgets = useMemo(
@@ -880,11 +929,11 @@ export function BudgetTable({
   const serverQueryKey = useMemo(
     () => [
       ...(serverQueryOptions?.queryKey ?? ['budget-table-filters']),
-      activeFilters,
+      enforcedFilters,
       searchValue,
       sortingState,
     ],
-    [serverQueryOptions?.queryKey, activeFilters, searchValue, sortingState],
+    [serverQueryOptions?.queryKey, enforcedFilters, searchValue, sortingState],
   );
 
   const serverQuery = useQuery({
@@ -892,7 +941,7 @@ export function BudgetTable({
     queryFn: () =>
       serverQueryOptions?.fetcher
         ? serverQueryOptions.fetcher({
-            filters: activeFilters,
+            filters: enforcedFilters,
             search: searchValue,
             sorting: sortingState,
           })
@@ -938,11 +987,11 @@ export function BudgetTable({
   }, [effectivePageSize, pageIndex, tableBudgets]);
 
   const hasAppliedFilters = useMemo(() => {
-    const hasFilterValues = Object.entries(activeFilters).some(
+    const hasFilterValues = Object.entries(enforcedFilters).some(
       ([key, value]) => BUDGET_FILTER_DEFINITION_KEYS.has(key) && value.trim().length > 0,
     );
     return hasFilterValues || searchValue.trim().length > 0;
-  }, [activeFilters, searchValue]);
+  }, [enforcedFilters, searchValue]);
 
   const tanstackSortingState = useMemo<SortingState>(
     () => sortingState.map((item) => ({ id: item.id, desc: item.desc })),
