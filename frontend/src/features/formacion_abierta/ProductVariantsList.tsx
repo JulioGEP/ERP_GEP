@@ -986,10 +986,10 @@ export function VariantModal({
     setFormValues(nextValues);
     setInitialValues(nextValues);
     setSaveError(null);
-    setSaveSuccess(null);
-    setSelectedDealId(null);
-    setSelectedDealSummary(null);
-  }, [variant?.id]);
+      setSaveSuccess(null);
+      setSelectedDealId(null);
+      setSelectedDealSummary(null);
+  }, [variant]);
 
   useEffect(() => {
     setTrainerListOpen(false);
@@ -998,7 +998,7 @@ export function VariantModal({
     setUnitListOpen(false);
     setUnitFilter('');
     unitPointerInteractingRef.current = false;
-  }, [variant?.id]);
+  }, [variant]);
 
   useEffect(() => {
     let ignore = false;
