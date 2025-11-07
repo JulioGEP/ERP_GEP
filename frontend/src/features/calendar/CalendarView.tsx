@@ -541,16 +541,40 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
     return status;
   },
   trainer: (variant) => {
-    const trainer = variant.variant.trainer;
-    if (!trainer) return '';
-    const parts = [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')].filter(Boolean);
-    return safeString(parts.join(' '));
+    const trainers =
+      variant.variant.trainers && variant.variant.trainers.length
+        ? variant.variant.trainers
+        : variant.variant.trainer
+        ? [variant.variant.trainer]
+        : [];
+    if (!trainers.length) return '';
+    const labels = trainers
+      .map((trainer) =>
+        [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')]
+          .filter(Boolean)
+          .join(' ')
+          .trim(),
+      )
+      .filter((label) => label.length);
+    return safeString(labels.join(' '));
   },
   unit: (variant) => {
-    const unit = variant.variant.unidad;
-    if (!unit) return '';
-    const parts = [safeString(unit.name ?? ''), safeString(unit.matricula ?? '')].filter(Boolean);
-    return safeString(parts.join(' '));
+    const units =
+      variant.variant.unidades && variant.variant.unidades.length
+        ? variant.variant.unidades
+        : variant.variant.unidad
+        ? [variant.variant.unidad]
+        : [];
+    if (!units.length) return '';
+    const labels = units
+      .map((unit) =>
+        [safeString(unit.name ?? ''), safeString(unit.matricula ?? '')]
+          .filter(Boolean)
+          .join(' ')
+          .trim(),
+      )
+      .filter((label) => label.length);
+    return safeString(labels.join(' '));
   },
   room: (variant) => {
     const room = variant.variant.sala;
@@ -990,17 +1014,33 @@ export function CalendarView({
           addValue('deal_transporte', deal.transporte);
         });
 
-        const trainer = variant.variant.trainer;
-        if (trainer) {
+        const trainers =
+          variant.variant.trainers && variant.variant.trainers.length
+            ? variant.variant.trainers
+            : variant.variant.trainer
+            ? [variant.variant.trainer]
+            : [];
+        trainers.forEach((trainer) => {
           const parts = [safeString(trainer.name ?? ''), safeString(trainer.apellido ?? '')].filter(Boolean);
-          addValue('trainer', parts.join(' '));
-        }
+          const label = parts.join(' ');
+          if (label.trim().length) {
+            addValue('trainer', label);
+          }
+        });
 
-        const unit = variant.variant.unidad;
-        if (unit) {
+        const units =
+          variant.variant.unidades && variant.variant.unidades.length
+            ? variant.variant.unidades
+            : variant.variant.unidad
+            ? [variant.variant.unidad]
+            : [];
+        units.forEach((unit) => {
           const parts = [safeString(unit.name ?? ''), safeString(unit.matricula ?? '')].filter(Boolean);
-          addValue('unit', parts.join(' '));
-        }
+          const label = parts.join(' ');
+          if (label.trim().length) {
+            addValue('unit', label);
+          }
+        });
 
         const room = variant.variant.sala;
         if (room) {
@@ -1351,30 +1391,48 @@ export function CalendarView({
       return { left: trainersLabel, right: unitsLabel, separator: ' - ' } satisfies TooltipLine;
     }
 
-    const trainer = tooltip.variant.variant.trainer;
-    const trainerNameParts: string[] = [];
-    if (trainer?.name?.trim()) {
-      trainerNameParts.push(trainer.name.trim());
-    }
-    if (trainer?.apellido?.trim()) {
-      trainerNameParts.push(trainer.apellido.trim());
-    }
-    const trainerLabel = trainerNameParts.length
-      ? `Formador: ${trainerNameParts.join(' ')}`
+    const trainers =
+      tooltip.variant.variant.trainers && tooltip.variant.variant.trainers.length
+        ? tooltip.variant.variant.trainers
+        : tooltip.variant.variant.trainer
+        ? [tooltip.variant.variant.trainer]
+        : [];
+    const trainerLabel = trainers.length
+      ? `Formador: ${trainers
+          .map((trainer) =>
+            [trainer.name?.trim() ?? '', trainer.apellido?.trim() ?? '']
+              .filter((value) => value.length)
+              .join(' '),
+          )
+          .filter((value) => value.length)
+          .join(', ')}`
       : 'Formador: Sin asignar';
 
-    const unit = tooltip.variant.variant.unidad;
-    const unitName = unit?.name?.trim() ?? '';
-    const unitPlate = unit?.matricula?.trim() ?? '';
-    let unitDisplay = '';
-    if (unitName && unitPlate) {
-      unitDisplay = `${unitName} (${unitPlate})`;
-    } else if (unitName) {
-      unitDisplay = unitName;
-    } else if (unitPlate) {
-      unitDisplay = unitPlate;
-    }
-    const unitLabel = unitDisplay.length ? `Unidad móvil: ${unitDisplay}` : 'Unidad móvil: Sin asignar';
+    const units =
+      tooltip.variant.variant.unidades && tooltip.variant.variant.unidades.length
+        ? tooltip.variant.variant.unidades
+        : tooltip.variant.variant.unidad
+        ? [tooltip.variant.variant.unidad]
+        : [];
+    const unitLabel = units.length
+      ? `Unidad móvil: ${units
+          .map((unit) => {
+            const unitName = unit.name?.trim() ?? '';
+            const unitPlate = unit.matricula?.trim() ?? '';
+            if (unitName && unitPlate) {
+              return `${unitName} (${unitPlate})`;
+            }
+            if (unitName) {
+              return unitName;
+            }
+            if (unitPlate) {
+              return unitPlate;
+            }
+            return '';
+          })
+          .filter((value) => value.length)
+          .join(', ')}`
+      : 'Unidad móvil: Sin asignar';
 
     return { left: trainerLabel, right: unitLabel, separator: ' - ' } satisfies TooltipLine;
   })();
@@ -1400,15 +1458,62 @@ export function CalendarView({
   const tooltipTertiaryText = renderTooltipLine(tooltipTertiaryLine);
 
   const handleVariantOpen = useCallback((event: CalendarVariantEvent) => {
-    const trainerResource = event.variant.trainer;
-    const trainer =
-      trainerResource && typeof trainerResource.trainer_id === 'string' && trainerResource.trainer_id.trim().length
-        ? {
-            trainer_id: trainerResource.trainer_id.trim(),
-            name: trainerResource.name ?? null,
-            apellido: trainerResource.apellido ?? null,
-          }
-        : null;
+    const trainerIds = Array.isArray(event.variant.trainer_ids)
+      ? event.variant.trainer_ids
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter((value) => value.length)
+      : [];
+    const trainerRecordsRaw = Array.isArray(event.variant.trainers)
+      ? event.variant.trainers
+          .map((record) => {
+            const id = typeof record?.trainer_id === 'string' ? record.trainer_id.trim() : '';
+            if (!id.length) {
+              return null;
+            }
+            return {
+              trainer_id: id,
+              name: record?.name ?? null,
+              apellido: record?.apellido ?? null,
+            };
+          })
+          .filter((record): record is { trainer_id: string; name: string | null; apellido: string | null } => record !== null)
+      : [];
+    const trainerRecordsMap = new Map(trainerRecordsRaw.map((record) => [record.trainer_id, record]));
+    const normalizedTrainerRecords: Array<{ trainer_id: string; name: string | null; apellido: string | null }> = [];
+    trainerIds.forEach((id) => {
+      const record = trainerRecordsMap.get(id);
+      if (record) {
+        normalizedTrainerRecords.push(record);
+      } else {
+        normalizedTrainerRecords.push({ trainer_id: id, name: null, apellido: null });
+      }
+    });
+    trainerRecordsMap.forEach((record, id) => {
+      if (!trainerIds.includes(id)) {
+        normalizedTrainerRecords.push(record);
+      }
+    });
+    if (!normalizedTrainerRecords.length && event.variant.trainer && typeof event.variant.trainer.trainer_id === 'string') {
+      const id = event.variant.trainer.trainer_id.trim();
+      if (id.length) {
+        normalizedTrainerRecords.push({
+          trainer_id: id,
+          name: event.variant.trainer.name ?? null,
+          apellido: event.variant.trainer.apellido ?? null,
+        });
+      }
+    }
+    const trainerSeen = new Set<string>();
+    const trainerRecordsOrdered: Array<{ trainer_id: string; name: string | null; apellido: string | null }> = [];
+    normalizedTrainerRecords.forEach((record) => {
+      const id = record.trainer_id;
+      if (!id || trainerSeen.has(id)) {
+        return;
+      }
+      trainerSeen.add(id);
+      trainerRecordsOrdered.push(record);
+    });
+    const trainer = trainerRecordsOrdered[0] ?? null;
 
     const salaResource = event.variant.sala;
     const sala =
@@ -1422,17 +1527,66 @@ export function CalendarView({
           : null
         : null;
 
-    const unitResource = event.variant.unidad;
-    const unidad =
-      unitResource && typeof unitResource.unidad_id === 'string' && unitResource.unidad_id.trim().length
-        ? unitResource.name
-          ? {
-              unidad_id: unitResource.unidad_id.trim(),
-              name: unitResource.name,
-              matricula: unitResource.matricula ?? null,
+    const unitIds = Array.isArray(event.variant.unidad_movil_ids)
+      ? event.variant.unidad_movil_ids
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter((value) => value.length)
+      : [];
+    const unitRecordsRaw = Array.isArray(event.variant.unidades)
+      ? event.variant.unidades
+          .map((record) => {
+            const id = typeof record?.unidad_id === 'string' ? record.unidad_id.trim() : '';
+            if (!id.length) {
+              return null;
             }
-          : null
-        : null;
+            return {
+              unidad_id: id,
+              name: record?.name ?? null,
+              matricula: record?.matricula ?? null,
+            };
+          })
+          .filter((record): record is { unidad_id: string; name: string | null; matricula: string | null } => record !== null)
+      : [];
+    const unitRecordsMap = new Map(unitRecordsRaw.map((record) => [record.unidad_id, record]));
+    const normalizedUnitRecords: Array<{ unidad_id: string; name: string | null; matricula: string | null }> = [];
+    unitIds.forEach((id) => {
+      const record = unitRecordsMap.get(id);
+      if (record) {
+        normalizedUnitRecords.push(record);
+      } else {
+        normalizedUnitRecords.push({ unidad_id: id, name: null, matricula: null });
+      }
+    });
+    unitRecordsMap.forEach((record, id) => {
+      if (!unitIds.includes(id)) {
+        normalizedUnitRecords.push(record);
+      }
+    });
+    if (!normalizedUnitRecords.length && event.variant.unidad && typeof event.variant.unidad.unidad_id === 'string') {
+      const id = event.variant.unidad.unidad_id.trim();
+      if (id.length) {
+        normalizedUnitRecords.push({
+          unidad_id: id,
+          name: event.variant.unidad.name ?? null,
+          matricula: event.variant.unidad.matricula ?? null,
+        });
+      }
+    }
+    const unitSeen = new Set<string>();
+    const unitRecordsOrdered: Array<{ unidad_id: string; name: string; matricula: string | null }> = [];
+    normalizedUnitRecords.forEach((record) => {
+      const id = record.unidad_id;
+      if (!id || unitSeen.has(id)) {
+        return;
+      }
+      unitSeen.add(id);
+      unitRecordsOrdered.push({
+        unidad_id: id,
+        name: record.name ?? '',
+        matricula: record.matricula ?? null,
+      });
+    });
+    const unidad = unitRecordsOrdered[0] ?? null;
 
     const variant: VariantInfo = {
       id: event.variant.id,
@@ -1445,11 +1599,15 @@ export function CalendarView({
       sede: event.variant.sede ?? null,
       date: event.variant.date ?? null,
       trainer_id: trainer?.trainer_id ?? null,
+      trainer_ids: trainerRecordsOrdered.map((record) => record.trainer_id),
       trainer,
+      trainers: trainerRecordsOrdered,
       sala_id: sala?.sala_id ?? null,
       sala,
       unidad_movil_id: unidad?.unidad_id ?? null,
+      unidad_movil_ids: unitRecordsOrdered.map((record) => record.unidad_id),
       unidad,
+      unidades: unitRecordsOrdered,
       created_at: event.variant.created_at ?? null,
       updated_at: event.variant.updated_at ?? null,
     };
@@ -1597,19 +1755,23 @@ export function CalendarView({
     if (variantEvent.variant.sede) {
       chips.push(`Sede: ${variantEvent.variant.sede}`);
     }
-    const trainerResource = variantEvent.variant.trainer;
-    const trainerNameParts: string[] = [];
-    if (trainerResource?.name?.trim()) {
-      trainerNameParts.push(trainerResource.name.trim());
-    }
-    if (trainerResource?.apellido?.trim()) {
-      trainerNameParts.push(trainerResource.apellido.trim());
-    }
-    chips.push(
-      trainerNameParts.length
-        ? `Formador: ${trainerNameParts.join(' ')}`
-        : 'Formador: Sin asignar',
-    );
+    const trainerResources =
+      variantEvent.variant.trainers && variantEvent.variant.trainers.length
+        ? variantEvent.variant.trainers
+        : variantEvent.variant.trainer
+        ? [variantEvent.variant.trainer]
+        : [];
+    const trainerLabel = trainerResources.length
+      ? `Formador: ${trainerResources
+          .map((trainer) =>
+            [trainer.name?.trim() ?? '', trainer.apellido?.trim() ?? '']
+              .filter((value) => value.length)
+              .join(' '),
+          )
+          .filter((value) => value.length)
+          .join(', ')}`
+      : 'Formador: Sin asignar';
+    chips.push(trainerLabel);
     if (variantEvent.variant.stock != null) {
       chips.push(`Stock: ${variantEvent.variant.stock}`);
     }
