@@ -914,7 +914,7 @@ export function CalendarView({
     };
   }, [debouncedRange]);
 
-  const includeVariants = mode === 'sessions';
+  const includeVariants = mode === 'sessions' || mode === 'trainers' || mode === 'units';
 
   const sessionsQuery = useQuery<CalendarSessionsResponse, ApiError>({
     queryKey: ['calendarSessions', fetchRange?.start ?? null, fetchRange?.end ?? null],
@@ -1165,7 +1165,7 @@ export function CalendarView({
     [variants, filteredVariantIds, includeVariants],
   );
 
-  const resultCount = filteredSessions.length;
+  const resultCount = filteredSessions.length + (includeVariants ? filteredVariants.length : 0);
 
   useEffect(() => {
     const hasFilter = Object.keys(activeFilters).length > 0;
