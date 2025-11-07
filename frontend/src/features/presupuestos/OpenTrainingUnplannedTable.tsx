@@ -307,7 +307,7 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
       <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
         <div>
           <h2 className="h5 fw-semibold mb-1">Formación abierta sin planificar</h2>
-          <p className="text-muted small mb-0">Sesión formación abiertas publicadas sin formador asignado.</p>
+          <p className="text-muted small mb-0">Sesión formación abiertas publicadas sin formador asignado y con alumnos en la formación</p>
         </div>
         {isFetching ? (
           <div className="d-flex align-items-center gap-2 text-muted small">
