@@ -283,13 +283,21 @@ type HomeRedirectProps = {
 type GuardedRouteProps = {
   path: string;
   element: JSX.Element;
+  roles?: readonly string[];
 };
 
-function GuardedRoute({ path, element }: GuardedRouteProps) {
-  const { isAuthenticated, hasPermission } = useAuth();
+function GuardedRoute({ path, element, roles }: GuardedRouteProps) {
+  const { isAuthenticated, hasPermission, user } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (roles && roles.length > 0) {
+    const currentRole = user?.role?.trim();
+    if (!currentRole || !roles.includes(currentRole)) {
+      return <ForbiddenPage />;
+    }
   }
 
   if (!hasPermission(path)) {

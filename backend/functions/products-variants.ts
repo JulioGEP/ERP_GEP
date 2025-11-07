@@ -248,7 +248,7 @@ async function syncVariantTrainerAssignments(
 
   try {
     const tableName = VARIANT_TRAINER_TABLE;
-    const table = Prisma.raw(tableName);
+    const table = (Prisma as any).raw(tableName);
     await prisma.$executeRaw(
       sql`DELETE FROM ${table} WHERE variant_id = ${variantId}::uuid`,
     );
@@ -288,7 +288,7 @@ async function syncVariantUnitAssignments(
 
   try {
     const tableName = VARIANT_UNIT_TABLE;
-    const table = Prisma.raw(tableName);
+    const table = (Prisma as any).raw(tableName);
     await prisma.$executeRaw(
       sql`DELETE FROM ${table} WHERE variant_id = ${variantId}::uuid`,
     );

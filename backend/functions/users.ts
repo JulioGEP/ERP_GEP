@@ -1,6 +1,6 @@
 // backend/functions/users.ts
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import type { $Enums } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
@@ -73,13 +73,13 @@ function parseBooleanParam(value: unknown, fallback: boolean): boolean {
  * 4) Enlaza siempre trainers.user_id = users.id.
  */
 async function syncTrainerForFormador(
-  tx: ReturnType<typeof getPrisma>,
+  tx: Prisma.TransactionClient,
   user: {
     id: string;
     first_name: string;
     last_name: string;
     email: string;
-    role: $Enums.erp_role;
+    role: string;
     active: boolean;
   },
 ) {
@@ -237,13 +237,13 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
     const now = new Date();
     const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const user = await tx.users.create({
         data: {
           first_name: firstName,
           last_name: lastName,
           email,
-          role: roleStorage as $Enums.erp_role,
+          role: roleStorage,
           active,
           password_hash: passwordHash,
           password_algo: 'bcrypt',
@@ -251,7 +251,7 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
         },
       });
 
-      await syncTrainerForFormador(tx as any, {
+      await syncTrainerForFormador(tx, {
         id: user.id,
         first_name: user.first_name,
         last_name: user.last_name,
@@ -283,7 +283,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     first_name?: string;
     last_name?: string;
     email?: string;
-    role?: $Enums.erp_role;
+    role?: string;
     active?: boolean;
   };
 
@@ -320,7 +320,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     if (!roleStorage) {
       return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
     }
-    data.role = roleStorage as $Enums.erp_role;
+    data.role = roleStorage;
   }
 
   if ('active' in (request.body ?? {})) {
@@ -335,7 +335,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
   const now = new Date();
 
   try {
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const user = await tx.users.update({
         where: { id: userId },
         data,
@@ -348,7 +348,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
         });
       }
 
-      await syncTrainerForFormador(tx as any, {
+      await syncTrainerForFormador(tx, {
         id: user.id,
         first_name: user.first_name,
         last_name: user.last_name,

@@ -1220,27 +1220,27 @@ if (method === 'GET') {
         });
 
         // Construimos un unchecked create para evitar el XOR con relaciones anidadas
-const createData: Prisma.sesionesUncheckedCreateInput = {
-  id: randomUUID(),
-  deal_id: deal.deal_id,
-  deal_product_id: product.id,
-  nombre_cache: baseName,
-  direccion: direccion ?? deal.training_address ?? '',
-  sala_id: salaId ?? null,
-  estado: autoEstado,
-};
+        const createData: Record<string, unknown> = {
+          id: randomUUID(),
+          deal_id: deal.deal_id,
+          deal_product_id: product.id,
+          nombre_cache: baseName,
+          direccion: direccion ?? deal.training_address ?? '',
+          sala_id: salaId ?? null,
+          estado: autoEstado,
+        };
 
-// Solo añadimos las fechas si vienen definidas (no mandar undefined)
-if (fechaInicioResult !== undefined) {
-  createData.fecha_inicio_utc = fechaInicioDate as Date | null;
-}
-if (fechaFinResult !== undefined) {
-  createData.fecha_fin_utc = fechaFinDate as Date | null;
-}
+        // Solo añadimos las fechas si vienen definidas (no mandar undefined)
+        if (fechaInicioResult !== undefined) {
+          createData.fecha_inicio_utc = fechaInicioDate as Date | null;
+        }
+        if (fechaFinResult !== undefined) {
+          createData.fecha_fin_utc = fechaFinDate as Date | null;
+        }
 
-const created = await tx.sesiones.create({
-  data: createData,
-});
+        const created = await tx.sesiones.create({
+          data: createData,
+        });
 
         if ((trainerIdsResult as string[]).length) {
           await tx.sesion_trainers.createMany({

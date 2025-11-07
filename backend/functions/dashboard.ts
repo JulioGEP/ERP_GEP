@@ -1,5 +1,4 @@
 // backend/functions/dashboard.ts
-import type { Prisma } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
@@ -17,12 +16,14 @@ const SESSION_PIPELINE_LABELS = [
 
 type YesLabelField = 'caes_label' | 'fundae_label' | 'hotel_label' | 'po' | 'transporte';
 
-function buildYesLabelFilter(field: YesLabelField): Prisma.dealsWhereInput {
+type DealsWhereFilter = Record<string, unknown>;
+
+function buildYesLabelFilter(field: YesLabelField): DealsWhereFilter {
   return {
     OR: YES_VALUES.map((value) => ({
       [field]: { equals: value, mode: 'insensitive' },
     })),
-  } as Prisma.dealsWhereInput;
+  };
 }
 
 function buildSessionPipelineFilter() {

@@ -1,5 +1,5 @@
 // backend/functions/trainers.ts
-import type { $Enums } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
@@ -225,7 +225,9 @@ function handleKnownPrismaError(error: unknown) {
  * - Si existe user_id, actualiza ese user; si no existe, upsert por email.
  * - role: 'Formador' (enum erp_role).
  */
-async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer: TrainerRecord) {
+type PrismaClientLike = Prisma.TransactionClient | ReturnType<typeof getPrisma>;
+
+async function syncUserForTrainer(prisma: PrismaClientLike, trainer: TrainerRecord) {
   // Si no hay email, no podemos upsertear user por constraint unique de users.email
   if (!trainer.email) return null;
 
@@ -233,7 +235,7 @@ async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer:
     first_name: trainer.name,
     last_name: trainer.apellido ?? '',
     email: trainer.email,
-    role: 'Formador' as $Enums.erp_role,
+    role: 'Formador',
     active: Boolean(trainer.activo),
     updated_at: new Date(),
   };
@@ -272,22 +274,22 @@ async function syncUserForTrainer(prisma: ReturnType<typeof getPrisma>, trainer:
     } else {
       const now = new Date();
       const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
-      const created = await prisma.users.create({
-        data: {
-          id: randomUUID(),
-          first_name: trainer.name,
-          last_name: trainer.apellido ?? '',
-          email: trainer.email!,
-          role: 'Formador' as $Enums.erp_role,
-          active: Boolean(trainer.activo),
-          password_hash: passwordHash,
-          password_algo: 'bcrypt',
-          password_updated_at: now,
-          created_at: now,
-          updated_at: now,
-        },
-        select: { id: true },
-      });
+        const created = await prisma.users.create({
+          data: {
+            id: randomUUID(),
+            first_name: trainer.name,
+            last_name: trainer.apellido ?? '',
+            email: trainer.email!,
+            role: 'Formador',
+            active: Boolean(trainer.activo),
+            password_hash: passwordHash,
+            password_algo: 'bcrypt',
+            password_updated_at: now,
+            created_at: now,
+            updated_at: now,
+          },
+          select: { id: true },
+        });
       userId = created.id;
     }
   }
@@ -339,9 +341,9 @@ export const handler = createHttpHandler<any>(async (request) => {
       if ('error' in result) return result.error;
 
       // Transacción: crear trainer → sincronizar user → devolver trainer normalizado
-      const created = await prisma.$transaction(async (tx) => {
+      const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const newTrainer = await tx.trainers.create({ data: result.data });
-        await syncUserForTrainer(tx as any, newTrainer as any);
+        await syncUserForTrainer(tx, newTrainer as TrainerRecord);
         return tx.trainers.findUnique({ where: { trainer_id: newTrainer.trainer_id } });
       });
 
@@ -363,13 +365,13 @@ export const handler = createHttpHandler<any>(async (request) => {
       const result = buildUpdateData(body);
       if ('error' in result) return result.error;
 
-      const updated = await prisma.$transaction(async (tx) => {
+      const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const tr = await tx.trainers.update({
           where: { trainer_id: trainerIdFromPath },
           data: result.data,
         });
 
-        await syncUserForTrainer(tx as any, tr as any);
+        await syncUserForTrainer(tx, tr as TrainerRecord);
 
         return tx.trainers.findUnique({ where: { trainer_id: tr.trainer_id } });
       });
