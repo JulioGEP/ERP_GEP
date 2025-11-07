@@ -603,9 +603,9 @@ async function ensureVariantResourcesAvailable(
           '[products-variants] skipping variant resource availability check (missing resource columns)',
           { error },
         );
-      } else {
-        throw error;
+        return null;
       }
+      throw error;
     }
   }
 
@@ -626,12 +626,24 @@ async function ensureVariantResourcesAvailable(
   );
 
   if (missingIds.length) {
-    const extraVariants = await prisma.variants.findMany({
-      where: { id: { in: missingIds } },
-      select: variantSelect,
-    });
-    setVariantResourceColumnsSupport(true);
-    variantRecords = variantRecords.concat(extraVariants as any);
+    try {
+      const extraVariants = await prisma.variants.findMany({
+        where: { id: { in: missingIds } },
+        select: variantSelect,
+      });
+      setVariantResourceColumnsSupport(true);
+      variantRecords = variantRecords.concat(extraVariants as any);
+    } catch (error) {
+      if (isVariantResourceColumnError(error)) {
+        setVariantResourceColumnsSupport(false);
+        console.warn(
+          '[products-variants] skipping variant resource availability enrichment (missing resource columns)',
+          { error },
+        );
+        return null;
+      }
+      throw error;
+    }
   }
 
   const variantIdsForAssignments = variantRecords.map((variant) => variant.id);

@@ -237,15 +237,21 @@ export function createHttpHandler<TBody = unknown>(handler: HttpHandler<TBody>) 
 
       return normalized;
     } catch (error) {
+      const message = (() => {
+        if (error instanceof Error) {
+          return error.message || 'Se ha producido un error inesperado';
+        }
+        if (typeof error === 'string' && error.trim()) {
+          return error.trim();
+        }
+        return 'Se ha producido un error inesperado';
+      })();
+
       console.error(
         `[http] Unexpected error processing ${method} ${request.path}`,
         error,
       );
-      return errorResponse(
-        'UNEXPECTED_ERROR',
-        'Se ha producido un error inesperado',
-        500,
-      );
+      return errorResponse('UNEXPECTED_ERROR', message, 500);
     }
   };
 }
