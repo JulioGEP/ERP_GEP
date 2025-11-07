@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
-import { VALID_SEDES, normalizeTrainer, type TrainerRecord } from './_shared/trainers';
+import { toMadridISOString } from './_shared/timezone';
 
 const OPTIONAL_STRING_FIELDS = [
   'apellido',
@@ -17,8 +17,27 @@ const OPTIONAL_STRING_FIELDS = [
   'titulacion',
 ] as const;
 
+const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
+
 const DEFAULT_PASSWORD = '123456';
 const BCRYPT_SALT_ROUNDS = 10;
+
+type TrainerRecord = {
+  trainer_id: string;
+  name: string;
+  apellido: string | null;
+  email: string | null;
+  phone: string | null;
+  dni: string | null;
+  direccion: string | null;
+  especialidad: string | null;
+  titulacion: string | null;
+  activo: boolean;
+  sede?: string[] | null;
+  created_at: Date | string | null;
+  updated_at: Date | string | null;
+  user_id: string | null;
+};
 
 function parseTrainerIdFromPath(path: string): string | null {
   const value = String(path || '');
@@ -30,6 +49,31 @@ function toNullableString(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
   return text.length ? text : null;
+}
+
+function normalizeTrainer(row: TrainerRecord) {
+  const sedeValues = Array.isArray(row.sede) ? row.sede : [];
+  const normalizedSede = sedeValues.filter(
+    (value): value is string =>
+      typeof value === 'string' && VALID_SEDES.includes(value as (typeof VALID_SEDES)[number])
+  );
+
+  return {
+    trainer_id: row.trainer_id,
+    name: row.name,
+    apellido: row.apellido,
+    email: row.email,
+    phone: row.phone,
+    dni: row.dni,
+    direccion: row.direccion,
+    especialidad: row.especialidad,
+    titulacion: row.titulacion,
+    activo: Boolean(row.activo),
+    sede: normalizedSede,
+    created_at: toMadridISOString(row.created_at),
+    updated_at: toMadridISOString(row.updated_at),
+    user_id: row.user_id,
+  };
 }
 
 type ParseSedeResult =

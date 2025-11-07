@@ -37,7 +37,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/calendario/*',
     '/recursos/formadores_bomberos',
   ],
-  Formador: ['/usuarios/trainer/*', '/perfil'],
+  Formador: ['/dashboard', '/perfil', '/recursos/trainer'],
 };
 
 export function normalizeRoleKey(value: string | null | undefined): string | null {
@@ -112,10 +112,6 @@ export function getRoleDisplayValue(role: string | null | undefined): string | n
 // Exportado para que el front o los guards puedan reutilizar el orden por defecto
 export const DEFAULT_ROUTE_ORDER = [
   '/dashboard',
-  '/usuarios/trainer/dashboard',
-  '/usuarios/trainer/calendario',
-  '/usuarios/trainer/sesiones',
-  '/usuarios/trainer/disponibilidad',
   '/presupuestos/sinplanificar',
   '/recursos/formadores_bomberos',
   '/recursos/trainer',
