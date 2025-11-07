@@ -246,7 +246,6 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
             <thead>
               <tr>
                 <th scope="col">Formación</th>
-                <th scope="col" style={{ width: 160 }}>Fecha</th>
                 <th scope="col" style={{ width: 200 }}>Sede</th>
                 <th scope="col">Presupuestos</th>
               </tr>
@@ -266,9 +265,11 @@ export function OpenTrainingUnplannedTable({ budgets }: OpenTrainingUnplannedTab
                   >
                     <td>
                       <div className="fw-semibold">{productLabel}</div>
-                      <div className="text-muted small">{variantLabel}</div>
+                      <div className="text-muted small">
+                        {variantLabel}
+                        {formattedDate ? ` · ${formattedDate}` : ''}
+                      </div>
                     </td>
-                    <td>{formattedDate ?? '—'}</td>
                     <td>{sedeLabel}</td>
                     <td>
                       {deals.length ? (
