@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { requireAuth } from './_shared/auth';
@@ -95,6 +97,88 @@ function computeVariantHours(
   return diff / (60 * 60 * 1000);
 }
 
+type ParsedDateFilters =
+  | { startDate: Date | null; endDate: Date | null }
+  | { error: ReturnType<typeof errorResponse> };
+
+function parseDateParts(value: string): { year: number; month: number; day: number } | null {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number.parseInt(match[1], 10);
+  const month = Number.parseInt(match[2], 10);
+  const day = Number.parseInt(match[3], 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+
+  const reference = new Date(Date.UTC(year, month - 1, day));
+  if (
+    reference.getUTCFullYear() !== year ||
+    reference.getUTCMonth() !== month - 1 ||
+    reference.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return { year, month, day };
+}
+
+function parseDateFilters(query: Record<string, string | undefined>): ParsedDateFilters {
+  const startText = query.startDate?.trim() ?? '';
+  const endText = query.endDate?.trim() ?? '';
+
+  let startDate: Date | null = null;
+  let endDate: Date | null = null;
+
+  if (startText) {
+    const parts = parseDateParts(startText);
+    if (!parts) {
+      return {
+        error: errorResponse('INVALID_DATE', 'La fecha de inicio proporcionada no es válida.', 400),
+      };
+    }
+    startDate = buildMadridDateTime({
+      year: parts.year,
+      month: parts.month,
+      day: parts.day,
+      hour: 0,
+      minute: 0,
+    });
+  }
+
+  if (endText) {
+    const parts = parseDateParts(endText);
+    if (!parts) {
+      return {
+        error: errorResponse('INVALID_DATE', 'La fecha de fin proporcionada no es válida.', 400),
+      };
+    }
+    endDate = buildMadridDateTime({
+      year: parts.year,
+      month: parts.month,
+      day: parts.day,
+      hour: 23,
+      minute: 59,
+    });
+  }
+
+  if (startDate && endDate && endDate.getTime() < startDate.getTime()) {
+    return {
+      error: errorResponse(
+        'INVALID_DATE_RANGE',
+        'La fecha de inicio no puede ser posterior a la fecha de fin.',
+        400,
+      ),
+    };
+  }
+
+  return { startDate, endDate };
+}
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'GET') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -106,13 +190,40 @@ export const handler = createHttpHandler(async (request) => {
     return auth.error;
   }
 
-  const rows = (await prisma.sesion_trainers.findMany({
-    where: {
-      sesiones: {
-        fecha_inicio_utc: { not: null },
-        fecha_fin_utc: { not: null },
-      },
+  const parsedDates = parseDateFilters(request.query);
+  if ('error' in parsedDates) {
+    return parsedDates.error;
+  }
+
+  const { startDate, endDate } = parsedDates;
+
+  const sessionStartFilter: Prisma.DateTimeNullableFilter = { not: null };
+  if (startDate) {
+    sessionStartFilter.gte = startDate;
+  }
+  if (endDate) {
+    sessionStartFilter.lte = endDate;
+  }
+
+  const sessionEndFilter: Prisma.DateTimeNullableFilter = { not: null };
+
+  const sessionWhere: Prisma.sesion_trainersWhereInput = {
+    sesiones: {
+      fecha_inicio_utc: sessionStartFilter,
+      fecha_fin_utc: sessionEndFilter,
     },
+  };
+
+  const variantDateFilter: Prisma.DateTimeNullableFilter = { not: null };
+  if (startDate) {
+    variantDateFilter.gte = startDate;
+  }
+  if (endDate) {
+    variantDateFilter.lte = endDate;
+  }
+
+  const rows = (await prisma.sesion_trainers.findMany({
+    where: sessionWhere,
     select: {
       trainer_id: true,
       sesiones: {
@@ -134,7 +245,7 @@ export const handler = createHttpHandler(async (request) => {
   const variantRows = (await prisma.variants.findMany({
     where: {
       trainer_id: { not: null },
-      date: { not: null },
+      date: variantDateFilter,
     },
     select: {
       trainer_id: true,

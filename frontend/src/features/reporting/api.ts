@@ -16,6 +16,21 @@ export type TrainerHoursResponse = {
   };
 };
 
-export async function fetchTrainerHours(): Promise<TrainerHoursResponse> {
-  return getJson<TrainerHoursResponse>('/reporting-horas-formadores');
+export type TrainerHoursFilters = {
+  startDate?: string;
+  endDate?: string;
+};
+
+export async function fetchTrainerHours(filters: TrainerHoursFilters = {}): Promise<TrainerHoursResponse> {
+  const params = new URLSearchParams();
+  if (filters.startDate) {
+    params.set('startDate', filters.startDate);
+  }
+  if (filters.endDate) {
+    params.set('endDate', filters.endDate);
+  }
+
+  const query = params.toString();
+  const url = query.length ? `/reporting-horas-formadores?${query}` : '/reporting-horas-formadores';
+  return getJson<TrainerHoursResponse>(url);
 }
