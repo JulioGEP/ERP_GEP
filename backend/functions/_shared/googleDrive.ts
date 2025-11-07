@@ -653,40 +653,6 @@ async function ensureSessionFolderUnderOrganization(params: {
   };
 }
 
-async function ensureSessionFolderInsideCertificates(params: {
-  driveId: string;
-  certificatesFolderId: string;
-  deal: any;
-  session: any;
-  sessionNumber: string;
-  sessionName?: string | null;
-}): Promise<{ folderId: string; folderName: string } | null> {
-  const { preferredName, legacyNames } = buildSessionFolderNameOptions({
-    deal: params.deal,
-    sessionNumber: params.sessionNumber,
-    sessionName: params.sessionName,
-    session: params.session,
-  });
-
-  const result = await ensureFolderWithCandidates({
-    driveId: params.driveId,
-    parentId: params.certificatesFolderId,
-    preferredName,
-    legacyNames,
-    createIfMissing: true,
-    context: {
-      dealId: resolveDealId(params.deal),
-      sessionId: params.session?.id,
-    },
-  });
-
-  if (!result) {
-    return null;
-  }
-
-  return result;
-}
-
 async function findFolder(params: { name: string; parentId: string; driveId: string }): Promise<string | null> {
   const name = sanitizeName(params.name || "carpeta");
   const key = cacheKey(params.parentId, name);
@@ -1534,28 +1500,12 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
   if (params.placeInDealCertificatesFolder) {
     const certificatesFolderName =
       sanitizeName(params.targetSubfolderName || "Certificados") || "Certificados";
-    const certificatesFolderId = await ensureFolder({
+    parentFolderId = await ensureFolder({
       name: certificatesFolderName,
       parentId: dealFolder.folderId,
       driveId,
     });
     shouldCreateSubfolder = false;
-
-    const certificatesSessionFolder = await ensureSessionFolderInsideCertificates({
-      driveId,
-      certificatesFolderId,
-      deal: params.deal,
-      session: params.session,
-      sessionNumber: params.sessionNumber,
-      sessionName: params.sessionName,
-    });
-
-    if (!certificatesSessionFolder) {
-      throw new Error("No se pudo preparar la carpeta de certificados de la sesión en Drive");
-    }
-
-    parentFolderId = certificatesSessionFolder.folderId;
-
     try {
       sessionFolderLink = await ensureFilePublicWebViewLink(parentFolderId);
     } catch (permissionError) {
