@@ -503,46 +503,60 @@ async function ensureVariantResourcesAvailable(
   if (!normalizedTrainerIds.length && !normalizedSalaId && !normalizedUnidadIds.length) return null;
   if (getVariantResourceColumnsSupport() === false) return null;
 
-  const sessionConditions: Array<Record<string, unknown>> = [];
+  const sessionConditionsNew: Array<Record<string, unknown>> = [];
+  const sessionConditionsLegacy: Array<Record<string, unknown>> = [];
   if (normalizedTrainerIds.length) {
-    sessionConditions.push({
-      sesion_trainers: { some: { trainer_id: { in: normalizedTrainerIds } } },
-    });
+    sessionConditionsNew.push({ trainers: { some: { trainer_id: { in: normalizedTrainerIds } } } });
+    sessionConditionsLegacy.push({ sesion_trainers: { some: { trainer_id: { in: normalizedTrainerIds } } } });
   }
   if (normalizedSalaId) {
-    sessionConditions.push({ sala_id: normalizedSalaId });
+    sessionConditionsNew.push({ sala_id: normalizedSalaId });
+    sessionConditionsLegacy.push({ sala_id: normalizedSalaId });
   }
   if (normalizedUnidadIds.length) {
-    sessionConditions.push({
-      sesion_unidades: { some: { unidad_movil_id: { in: normalizedUnidadIds } } },
-    });
+    sessionConditionsNew.push({ unidades: { some: { unidad_movil_id: { in: normalizedUnidadIds } } } });
+    sessionConditionsLegacy.push({ sesion_unidades: { some: { unidad_movil_id: { in: normalizedUnidadIds } } } });
   }
 
-  if (sessionConditions.length) {
-    const sesiones = (await prisma.sesiones.findMany({
-      where: { OR: sessionConditions as any },
-      select: { fecha_inicio_utc: true, fecha_fin_utc: true },
-    })) as Array<{ fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null }>;
+  if (sessionConditionsNew.length) {
+    const sessionsClient = (prisma as unknown as { sessions?: { findMany: Function } }).sessions ?? null;
+    const legacySessionsClient = (prisma as unknown as { sesiones?: { findMany: Function } }).sesiones ?? null;
 
-    const rangeStart = range.start.getTime();
-    const rangeEnd = range.end.getTime();
+    let sesiones: Array<{ fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null }> = [];
 
-    const hasSessionConflict = sesiones.some((session) => {
-      const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
-      if (!sessionRange) return false;
+    if (sessionsClient?.findMany) {
+      sesiones = (await sessionsClient.findMany({
+        where: { OR: sessionConditionsNew as any },
+        select: { fecha_inicio_utc: true, fecha_fin_utc: true },
+      })) as Array<{ fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null }>;
+    } else if (legacySessionsClient?.findMany) {
+      sesiones = (await legacySessionsClient.findMany({
+        where: { OR: sessionConditionsLegacy as any },
+        select: { fecha_inicio_utc: true, fecha_fin_utc: true },
+      })) as Array<{ fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null }>;
+    }
 
-      const sessionStart = sessionRange.start.getTime();
-      const sessionEnd = sessionRange.end.getTime();
+    if (sesiones.length) {
+      const rangeStart = range.start.getTime();
+      const rangeEnd = range.end.getTime();
 
-      return sessionStart <= rangeEnd && sessionEnd >= rangeStart;
-    });
+      const hasSessionConflict = sesiones.some((session) => {
+        const sessionRange = normalizeDateRange(session.fecha_inicio_utc, session.fecha_fin_utc);
+        if (!sessionRange) return false;
 
-    if (hasSessionConflict) {
-      return errorResponse(
-        'RESOURCE_UNAVAILABLE',
-        'Algunos recursos ya están asignados en las fechas seleccionadas.',
-        409,
-      );
+        const sessionStart = sessionRange.start.getTime();
+        const sessionEnd = sessionRange.end.getTime();
+
+        return sessionStart <= rangeEnd && sessionEnd >= rangeStart;
+      });
+
+      if (hasSessionConflict) {
+        return errorResponse(
+          'RESOURCE_UNAVAILABLE',
+          'Algunos recursos ya están asignados en las fechas seleccionadas.',
+          409,
+        );
+      }
     }
   }
 
@@ -550,6 +564,20 @@ async function ensureVariantResourcesAvailable(
   if (normalizedTrainerIds.length) variantConditions.push({ trainer_id: { in: normalizedTrainerIds } });
   if (normalizedSalaId) variantConditions.push({ sala_id: normalizedSalaId });
   if (normalizedUnidadIds.length) variantConditions.push({ unidad_movil_id: { in: normalizedUnidadIds } });
+
+  const baseVariantWhere: Record<string, unknown> = {
+    ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
+    date: { not: null },
+  };
+
+  const variantSelect = {
+    id: true,
+    date: true,
+    trainer_id: true,
+    sala_id: true,
+    unidad_movil_id: true,
+    products: { select: { hora_inicio: true, hora_fin: true } },
+  } as const;
 
   let variantRecords: Array<{
     id: string;
@@ -563,19 +591,8 @@ async function ensureVariantResourcesAvailable(
   if (variantConditions.length) {
     try {
       const variants = await prisma.variants.findMany({
-        where: {
-          ...(excludeVariantId ? { id: { not: excludeVariantId } } : {}),
-          date: { not: null },
-          OR: variantConditions as any,
-        },
-        select: {
-          id: true,
-          date: true,
-          trainer_id: true,
-          sala_id: true,
-          unidad_movil_id: true,
-          products: { select: { hora_inicio: true, hora_fin: true } },
-        },
+        where: { ...baseVariantWhere, OR: variantConditions as any },
+        select: variantSelect,
       });
       setVariantResourceColumnsSupport(true);
       variantRecords = variants as any;
@@ -592,14 +609,50 @@ async function ensureVariantResourcesAvailable(
     }
   }
 
-  const hasVariantConflict = variantRecords.some(
-  (variant: {
-    date: Date | string | null;
-    trainer_id: string | null;
-    sala_id: string | null;
-    unidad_movil_id: string | null;
-    products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
-  }) => {
+  const trainerVariantIds = normalizedTrainerIds.length
+    ? await findVariantIdsByTrainerAssignments(prisma, normalizedTrainerIds, excludeVariantId)
+    : [];
+  const unitVariantIds = normalizedUnidadIds.length
+    ? await findVariantIdsByUnitAssignments(prisma, normalizedUnidadIds, excludeVariantId)
+    : [];
+
+  const candidateVariantIds = new Set<string>();
+  variantRecords.forEach((variant) => candidateVariantIds.add(variant.id));
+  trainerVariantIds.forEach((id) => candidateVariantIds.add(id));
+  unitVariantIds.forEach((id) => candidateVariantIds.add(id));
+
+  const missingIds = Array.from(candidateVariantIds).filter(
+    (id) => !variantRecords.some((variant) => variant.id === id),
+  );
+
+  if (missingIds.length) {
+    const extraVariants = await prisma.variants.findMany({
+      where: { id: { in: missingIds } },
+      select: variantSelect,
+    });
+    setVariantResourceColumnsSupport(true);
+    variantRecords = variantRecords.concat(extraVariants as any);
+  }
+
+  const variantIdsForAssignments = variantRecords.map((variant) => variant.id);
+  let trainerAssignments = new Map<string, VariantTrainerLink[]>();
+  let unitAssignments = new Map<string, VariantUnitLink[]>();
+
+  if (variantIdsForAssignments.length) {
+    const assignmentResults = await Promise.all([
+      fetchVariantTrainerAssignments(prisma, variantIdsForAssignments),
+      fetchVariantUnitAssignments(prisma, variantIdsForAssignments),
+    ]);
+    trainerAssignments = assignmentResults[0];
+    unitAssignments = assignmentResults[1];
+  }
+
+  const normalizedTrainerSet = new Set(normalizedTrainerIds);
+  const normalizedUnidadSet = new Set(normalizedUnidadIds);
+
+  const hasVariantConflict = variantRecords.some((variant) => {
+    if (excludeVariantId && variant.id === excludeVariantId) return false;
+
     const otherRange = computeVariantRange(
       variant.date,
       variant.products ?? { hora_inicio: null, hora_fin: null },
@@ -611,17 +664,34 @@ async function ensureVariantResourcesAvailable(
       otherRange.end.getTime() >= range.start.getTime();
     if (!overlaps) return false;
 
-    const trainerConflict =
-      normalizedTrainerIds.length &&
-      normalizedTrainerIds.includes(variant.trainer_id ?? '');
-    const salaConflict = normalizedSalaId && variant.sala_id === normalizedSalaId;
-    const unidadConflict =
-      normalizedUnidadIds.length &&
-      normalizedUnidadIds.includes(variant.unidad_movil_id ?? '');
+    const trainerMatches = (() => {
+      if (!normalizedTrainerIds.length) return false;
+      const assigned = new Set<string>();
+      const assignments = trainerAssignments.get(variant.id) ?? [];
+      assignments.forEach((item) => {
+        if (item.trainer_id) assigned.add(item.trainer_id);
+      });
+      const legacyTrainerId = toTrimmed(variant.trainer_id);
+      if (legacyTrainerId) assigned.add(legacyTrainerId);
+      return Array.from(assigned).some((id) => normalizedTrainerSet.has(id));
+    })();
 
-    return Boolean(trainerConflict || salaConflict || unidadConflict);
-  },
-);
+    const unidadMatches = (() => {
+      if (!normalizedUnidadIds.length) return false;
+      const assigned = new Set<string>();
+      const assignments = unitAssignments.get(variant.id) ?? [];
+      assignments.forEach((item) => {
+        if (item.unidad_id) assigned.add(item.unidad_id);
+      });
+      const legacyUnidadId = toTrimmed(variant.unidad_movil_id);
+      if (legacyUnidadId) assigned.add(legacyUnidadId);
+      return Array.from(assigned).some((id) => normalizedUnidadSet.has(id));
+    })();
+
+    const salaConflict = normalizedSalaId && variant.sala_id === normalizedSalaId;
+
+    return trainerMatches || unidadMatches || salaConflict;
+  });
 
   if (hasVariantConflict) {
     return errorResponse(
@@ -629,91 +699,6 @@ async function ensureVariantResourcesAvailable(
       'Algunos recursos ya están asignados en las fechas seleccionadas.',
       409,
     );
-  }
-
-  if (normalizedTrainerIds.length || normalizedUnidadIds.length) {
-    const [trainerVariantIds, unitVariantIds] = await Promise.all([
-      findVariantIdsByTrainerAssignments(prisma, normalizedTrainerIds, excludeVariantId),
-      findVariantIdsByUnitAssignments(prisma, normalizedUnidadIds, excludeVariantId),
-    ]);
-
-    const extraIds = Array.from(new Set([...trainerVariantIds, ...unitVariantIds]));
-    const variantSelect = {
-      id: true,
-      date: true,
-      trainer_id: true,
-      sala_id: true,
-      unidad_movil_id: true,
-      products: { select: { hora_inicio: true, hora_fin: true } },
-    } as const;
-
-    const existingIds = new Set(variantRecords.map((item) => item.id));
-    const missingIds = extraIds.filter((id) => !existingIds.has(id));
-
-    if (missingIds.length) {
-      const extraVariants = await prisma.variants.findMany({
-        where: { id: { in: missingIds } },
-        select: variantSelect,
-      });
-      variantRecords = variantRecords.concat(extraVariants as any);
-    }
-
-    const variantIdsForAssignments = variantRecords.map((variant) => variant.id);
-    const [trainerAssignments, unitAssignments] = await Promise.all([
-      fetchVariantTrainerAssignments(prisma, variantIdsForAssignments),
-      fetchVariantUnitAssignments(prisma, variantIdsForAssignments),
-    ]);
-
-    const normalizedTrainerSet = new Set(normalizedTrainerIds);
-    const normalizedUnidadSet = new Set(normalizedUnidadIds);
-
-    const hasExtendedConflict = variantRecords.some((variant) => {
-      if (excludeVariantId && variant.id === excludeVariantId) return false;
-      const otherRange = computeVariantRange(
-        variant.date,
-        variant.products ?? { hora_inicio: null, hora_fin: null },
-      );
-      if (!otherRange) return false;
-
-      const overlaps =
-        otherRange.start.getTime() <= range.end.getTime() &&
-        otherRange.end.getTime() >= range.start.getTime();
-      if (!overlaps) return false;
-
-      const trainerMatches = (() => {
-        if (!normalizedTrainerIds.length) return false;
-        const assigned = new Set<string>();
-        const assignments = trainerAssignments.get(variant.id) ?? [];
-        assignments.forEach((item) => {
-          if (item.trainer_id) assigned.add(item.trainer_id);
-        });
-        if (variant.trainer_id) assigned.add(variant.trainer_id);
-        return Array.from(assigned).some((id) => normalizedTrainerSet.has(id));
-      })();
-
-      const unidadMatches = (() => {
-        if (!normalizedUnidadIds.length) return false;
-        const assigned = new Set<string>();
-        const assignments = unitAssignments.get(variant.id) ?? [];
-        assignments.forEach((item) => {
-          if (item.unidad_id) assigned.add(item.unidad_id);
-        });
-        if (variant.unidad_movil_id) assigned.add(variant.unidad_movil_id);
-        return Array.from(assigned).some((id) => normalizedUnidadSet.has(id));
-      })();
-
-      const salaConflict = normalizedSalaId && variant.sala_id === normalizedSalaId;
-
-      return trainerMatches || unidadMatches || salaConflict;
-    });
-
-    if (hasExtendedConflict) {
-      return errorResponse(
-        'RESOURCE_UNAVAILABLE',
-        'Algunos recursos ya están asignados en las fechas seleccionadas.',
-        409,
-      );
-    }
   }
 
   return null;
