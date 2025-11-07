@@ -288,6 +288,7 @@ export const handler = async (event: any) => {
             fileName: normalizedFileName,
             mimeType,
             data: buffer,
+            targetSubfolderName: "Documentos del deal",
           });
         } catch (err: any) {
           const message = err?.message || 'No se pudo subir el archivo a Drive';

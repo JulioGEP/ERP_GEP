@@ -121,25 +121,25 @@ export async function ensureSessionContext(
   sessionId: string,
 ): Promise<EnsureSessionContextResult> {
   const session = await prisma.sesiones.findUnique({
-  where: { id: sessionId },
-  include: {
-    deals: {
-      select: { organizations: { select: { name: true } } },
+    where: { id: sessionId },
+    include: {
+      deals: {
+        include: {
+          organization: { select: { org_id: true, name: true } },
+        },
+      },
     },
-  },
-});
+  });
 
   if (!session) {
     return { error: errorResponse('NOT_FOUND', 'Sesión no encontrada', 404) };
   }
 
-  if (
-    (session as any).deals &&
-    typeof (session as any).deals === 'object' &&
-    !('organization' in (session as any).deals) &&
-    'organizations' in ((session as any).deals as Record<string, any>)
-  ) {
-    ((session as any).deals as Record<string, any>).organizations = ((session as any).deals as Record<string, any>).organizations;
+  if ((session as any).deals && typeof (session as any).deals === 'object') {
+    const dealRecord = (session as any).deals as Record<string, any>;
+    if (!('organizations' in dealRecord) && 'organization' in dealRecord) {
+      dealRecord.organizations = dealRecord.organization;
+    }
   }
 
   if (session.deal_id !== dealId) {
@@ -155,19 +155,17 @@ export async function ensureSessionContext(
   if (!(session as any).deals) {
     const deal = await prisma.deals.findUnique({
       where: { deal_id: dealId },
-      include: { organizations: { select: { name: true } } },
+      include: { organization: { select: { org_id: true, name: true } } },
     });
     if (!deal) {
       return { error: errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404) };
     }
 
-    if (
-      typeof deal === 'object' &&
-      deal !== null &&
-      !('organization' in deal) &&
-      'organizations' in (deal as Record<string, any>)
-    ) {
-      (deal as Record<string, any>).organizations = (deal as Record<string, any>).organizations;
+    if (typeof deal === 'object' && deal !== null) {
+      const dealRecord = deal as Record<string, any>;
+      if (!('organizations' in dealRecord) && 'organization' in dealRecord) {
+        dealRecord.organizations = dealRecord.organization;
+      }
     }
     return { session: { ...session, deal } };
   }
