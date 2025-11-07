@@ -125,7 +125,7 @@ export async function ensureSessionContext(
     include: {
       deals: {
         include: {
-          organization: { select: { org_id: true, name: true } },
+          organizations: { select: { org_id: true, name: true } },
         },
       },
     },
@@ -155,7 +155,7 @@ export async function ensureSessionContext(
   if (!(session as any).deals) {
     const deal = await prisma.deals.findUnique({
       where: { deal_id: dealId },
-      include: { organization: { select: { org_id: true, name: true } } },
+      include: { organizations: { select: { org_id: true, name: true } } },
     });
     if (!deal) {
       return { error: errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404) };
