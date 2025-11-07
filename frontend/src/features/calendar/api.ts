@@ -28,11 +28,15 @@ export type CalendarVariantDetails = {
   sede: string | null;
   date: string | null;
   trainer_id: string | null;
-  trainer: { trainer_id: string | null; name: string | null; apellido: string | null } | null;
+  trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  trainer_ids: string[];
+  trainers: Array<{ trainer_id: string; name: string | null; apellido: string | null }>;
   sala_id: string | null;
   sala: { sala_id: string | null; name: string | null; sede: string | null } | null;
   unidad_movil_id: string | null;
-  unidad: { unidad_id: string | null; name: string | null; matricula: string | null } | null;
+  unidad: { unidad_id: string; name: string | null; matricula: string | null } | null;
+  unidad_movil_ids: string[];
+  unidades: Array<{ unidad_id: string; name: string | null; matricula: string | null }>;
   students_total: number | null;
   created_at: string | null;
   updated_at: string | null;
@@ -238,9 +242,123 @@ function sanitizeVariantProduct(input: any): CalendarVariantProduct | null {
 function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
   const id = toTrimmed(input?.id);
   if (!id) return null;
-  const trainerId = toOptionalString(input?.trainer_id);
+
+  const trainerIdSet = new Set<string>();
+  const trainerRecordsMap = new Map<string, { trainer_id: string; name: string | null; apellido: string | null }>();
+
+  const registerTrainerId = (value: unknown) => {
+    const normalized = toTrimmed(value);
+    if (normalized) {
+      trainerIdSet.add(normalized);
+    }
+  };
+
+  const registerTrainerRecord = (record: any) => {
+    if (!record || typeof record !== 'object') {
+      return;
+    }
+    const trainerId = toTrimmed(record?.trainer_id ?? record?.id);
+    if (!trainerId) {
+      return;
+    }
+    if (!trainerRecordsMap.has(trainerId)) {
+      trainerRecordsMap.set(trainerId, {
+        trainer_id: trainerId,
+        name: toOptionalString(record?.name),
+        apellido: toOptionalString(record?.apellido),
+      });
+    }
+    trainerIdSet.add(trainerId);
+  };
+
+  registerTrainerId(input?.trainer_id);
+  const trainerIdsRaw: unknown[] = Array.isArray(input?.trainer_ids) ? input.trainer_ids : [];
+  trainerIdsRaw.forEach((value) => registerTrainerId(value));
+  const trainersRaw: unknown[] = Array.isArray(input?.trainers) ? input.trainers : [];
+  trainersRaw.forEach((trainer) => registerTrainerRecord(trainer));
+  if (input?.trainer && typeof input.trainer === 'object') {
+    registerTrainerRecord(input.trainer);
+  }
+
+  const orderedTrainerIds = Array.from(trainerIdSet);
+  const trainerRecords: Array<{ trainer_id: string; name: string | null; apellido: string | null }> = [];
+  orderedTrainerIds.forEach((value) => {
+    const record = trainerRecordsMap.get(value);
+    if (record) {
+      trainerRecords.push(record);
+    } else {
+      trainerRecords.push({ trainer_id: value, name: null, apellido: null });
+    }
+  });
+  trainerRecordsMap.forEach((record, key) => {
+    if (!orderedTrainerIds.includes(key)) {
+      trainerRecords.push(record);
+    }
+  });
+  const primaryTrainer = trainerRecords[0] ?? null;
+  const trainerId = primaryTrainer?.trainer_id ?? orderedTrainerIds[0] ?? null;
+
+  const unitIdSet = new Set<string>();
+  const unitRecordsMap = new Map<string, { unidad_id: string; name: string | null; matricula: string | null }>();
+
+  const registerUnitId = (value: unknown) => {
+    const normalized = toTrimmed(value);
+    if (normalized) {
+      unitIdSet.add(normalized);
+    }
+  };
+
+  const registerUnitRecord = (record: any) => {
+    if (!record || typeof record !== 'object') {
+      return;
+    }
+    const unidadId = toTrimmed(record?.unidad_id ?? record?.id);
+    if (!unidadId) {
+      return;
+    }
+    if (!unitRecordsMap.has(unidadId)) {
+      unitRecordsMap.set(unidadId, {
+        unidad_id: unidadId,
+        name: toOptionalString(record?.name),
+        matricula: toOptionalString(record?.matricula),
+      });
+    }
+    unitIdSet.add(unidadId);
+  };
+
+  registerUnitId(input?.unidad_movil_id);
+  const unidadIdsRaw: unknown[] = Array.isArray(input?.unidad_movil_ids) ? input.unidad_movil_ids : [];
+  unidadIdsRaw.forEach((value) => registerUnitId(value));
+  const unidadesRaw: unknown[] = Array.isArray(input?.unidades)
+    ? input.unidades
+    : Array.isArray(input?.units)
+    ? input.units
+    : [];
+  unidadesRaw.forEach((unit) => registerUnitRecord(unit));
+  if (input?.unidad && typeof input.unidad === 'object') {
+    registerUnitRecord(input.unidad);
+  }
+
+  const orderedUnitIds = Array.from(unitIdSet);
+  const unitRecords: Array<{ unidad_id: string; name: string | null; matricula: string | null }> = [];
+  orderedUnitIds.forEach((value) => {
+    const record = unitRecordsMap.get(value);
+    if (record) {
+      unitRecords.push(record);
+    } else {
+      unitRecords.push({ unidad_id: value, name: null, matricula: null });
+    }
+  });
+  unitRecordsMap.forEach((record, key) => {
+    if (!orderedUnitIds.includes(key)) {
+      unitRecords.push(record);
+    }
+  });
+  const primaryUnit = unitRecords[0] ?? null;
+  const unidadId = primaryUnit?.unidad_id ?? orderedUnitIds[0] ?? null;
+
   const salaId = toOptionalString(input?.sala_id);
-  const unidadId = toOptionalString(input?.unidad_movil_id);
+
   return {
     id,
     id_woo: toOptionalString(input?.id_woo),
@@ -257,14 +375,9 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
     sede: toOptionalString(input?.sede),
     date: toOptionalString(input?.date),
     trainer_id: trainerId,
-    trainer:
-      input?.trainer && typeof input.trainer === 'object'
-        ? {
-            trainer_id: toOptionalString(input.trainer?.trainer_id) ?? trainerId,
-            name: toOptionalString(input.trainer?.name),
-            apellido: toOptionalString(input.trainer?.apellido),
-          }
-        : null,
+    trainer: primaryTrainer,
+    trainer_ids: trainerRecords.map((record) => record.trainer_id),
+    trainers: trainerRecords,
     sala_id: salaId,
     sala:
       input?.sala && typeof input.sala === 'object'
@@ -275,14 +388,9 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
           }
         : null,
     unidad_movil_id: unidadId,
-    unidad:
-      input?.unidad && typeof input.unidad === 'object'
-        ? {
-            unidad_id: toOptionalString(input.unidad?.unidad_id) ?? unidadId,
-            name: toOptionalString(input.unidad?.name),
-            matricula: toOptionalString(input.unidad?.matricula),
-          }
-        : null,
+    unidad: primaryUnit,
+    unidad_movil_ids: unitRecords.map((record) => record.unidad_id),
+    unidades: unitRecords,
     students_total:
       typeof input?.students_total === 'number'
         ? input.students_total
