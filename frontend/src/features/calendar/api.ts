@@ -218,24 +218,33 @@ function buildStudentNames(students: CalendarSessionStudent[]): string[] {
 function sanitizeVariantProduct(input: any): CalendarVariantProduct | null {
   const id = toTrimmed(input?.id);
   if (!id) return null;
+
+  const resolveString = (value: unknown) => toOptionalString(value);
+
   return {
     id,
     id_woo: toOptionalString(input?.id_woo),
     name: toOptionalString(input?.name),
-    code: toOptionalString(input?.code),
-    category: toOptionalString(input?.category),
-    hora_inicio: toOptionalString(input?.hora_inicio),
-    hora_fin: toOptionalString(input?.hora_fin),
-    default_variant_start: toOptionalString(input?.default_variant_start),
-    default_variant_end: toOptionalString(input?.default_variant_end),
-    default_variant_stock_status: toOptionalString(input?.default_variant_stock_status),
+    code: toOptionalString(input?.code ?? input?.codigo),
+    category: toOptionalString(input?.category ?? input?.categoria),
+    hora_inicio: resolveString(input?.hora_inicio ?? input?.horaInicio),
+    hora_fin: resolveString(input?.hora_fin ?? input?.horaFin),
+    default_variant_start: resolveString(
+      input?.default_variant_start ?? input?.variant_start ?? input?.variantStart,
+    ),
+    default_variant_end: resolveString(
+      input?.default_variant_end ?? input?.variant_end ?? input?.variantEnd,
+    ),
+    default_variant_stock_status: resolveString(
+      input?.default_variant_stock_status ?? input?.variant_stock_status ?? input?.variantStockStatus,
+    ),
     default_variant_stock_quantity:
       typeof input?.default_variant_stock_quantity === 'number'
         ? input.default_variant_stock_quantity
         : input?.default_variant_stock_quantity != null && !Number.isNaN(Number(input.default_variant_stock_quantity))
           ? Number(input.default_variant_stock_quantity)
           : null,
-    default_variant_price: toOptionalString(input?.default_variant_price),
+    default_variant_price: toOptionalString(input?.default_variant_price ?? input?.variant_price ?? input?.variantPrice),
   } satisfies CalendarVariantProduct;
 }
 
@@ -245,6 +254,7 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
 
   const trainerIdSet = new Set<string>();
   const trainerRecordsMap = new Map<string, { trainer_id: string; name: string | null; apellido: string | null }>();
+  let fallbackTrainerRecord: { trainer_id: string; name: string | null; apellido: string | null } | null = null;
 
   const registerTrainerId = (value: unknown) => {
     const normalized = toTrimmed(value);
@@ -257,27 +267,47 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
     if (!record || typeof record !== 'object') {
       return;
     }
-    const trainerId = toTrimmed(record?.trainer_id ?? record?.id);
+    const trainerId = toTrimmed(
+      record?.trainer_id ?? record?.trainerId ?? record?.id ?? record?.trainer,
+    );
     if (!trainerId) {
+      if (!fallbackTrainerRecord) {
+        fallbackTrainerRecord = {
+          trainer_id: '',
+          name: toOptionalString(record?.name ?? record?.nombre),
+          apellido: toOptionalString(record?.apellido ?? record?.apellidos),
+        };
+      }
       return;
     }
     if (!trainerRecordsMap.has(trainerId)) {
       trainerRecordsMap.set(trainerId, {
         trainer_id: trainerId,
-        name: toOptionalString(record?.name),
-        apellido: toOptionalString(record?.apellido),
+        name: toOptionalString(record?.name ?? record?.nombre),
+        apellido: toOptionalString(record?.apellido ?? record?.apellidos),
       });
     }
     trainerIdSet.add(trainerId);
   };
 
-  registerTrainerId(input?.trainer_id);
-  const trainerIdsRaw: unknown[] = Array.isArray(input?.trainer_ids) ? input.trainer_ids : [];
+  registerTrainerId(input?.trainer_id ?? input?.trainerId);
+  const trainerIdsRaw: unknown[] = Array.isArray(input?.trainer_ids)
+    ? input.trainer_ids
+    : Array.isArray(input?.trainerIds)
+    ? input.trainerIds
+    : [];
   trainerIdsRaw.forEach((value) => registerTrainerId(value));
-  const trainersRaw: unknown[] = Array.isArray(input?.trainers) ? input.trainers : [];
+  const trainersRaw: unknown[] = Array.isArray(input?.trainers)
+    ? input.trainers
+    : Array.isArray(input?.trainer_records)
+    ? input.trainer_records
+    : [];
   trainersRaw.forEach((trainer) => registerTrainerRecord(trainer));
   if (input?.trainer && typeof input.trainer === 'object') {
     registerTrainerRecord(input.trainer);
+  }
+  if (input?.primary_trainer && typeof input.primary_trainer === 'object') {
+    registerTrainerRecord(input.primary_trainer);
   }
 
   const orderedTrainerIds = Array.from(trainerIdSet);
@@ -295,11 +325,15 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
       trainerRecords.push(record);
     }
   });
+  if (!trainerRecords.length && fallbackTrainerRecord) {
+    trainerRecords.push(fallbackTrainerRecord);
+  }
   const primaryTrainer = trainerRecords[0] ?? null;
   const trainerId = primaryTrainer?.trainer_id ?? orderedTrainerIds[0] ?? null;
 
   const unitIdSet = new Set<string>();
   const unitRecordsMap = new Map<string, { unidad_id: string; name: string | null; matricula: string | null }>();
+  let fallbackUnitRecord: { unidad_id: string; name: string | null; matricula: string | null } | null = null;
 
   const registerUnitId = (value: unknown) => {
     const normalized = toTrimmed(value);
@@ -312,22 +346,51 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
     if (!record || typeof record !== 'object') {
       return;
     }
-    const unidadId = toTrimmed(record?.unidad_id ?? record?.id);
+    const unidadId = toTrimmed(
+      record?.unidad_id ??
+        record?.unidadId ??
+        record?.id ??
+        record?.unit_id ??
+        record?.unitId ??
+        record?.unidad,
+    );
     if (!unidadId) {
+      if (!fallbackUnitRecord) {
+        fallbackUnitRecord = {
+          unidad_id: '',
+          name: toOptionalString(record?.name ?? record?.nombre),
+          matricula: toOptionalString(record?.matricula ?? record?.licensePlate),
+        };
+      }
       return;
     }
     if (!unitRecordsMap.has(unidadId)) {
       unitRecordsMap.set(unidadId, {
         unidad_id: unidadId,
-        name: toOptionalString(record?.name),
-        matricula: toOptionalString(record?.matricula),
+        name: toOptionalString(record?.name ?? record?.nombre),
+        matricula: toOptionalString(record?.matricula ?? record?.licensePlate),
       });
     }
     unitIdSet.add(unidadId);
   };
 
-  registerUnitId(input?.unidad_movil_id);
-  const unidadIdsRaw: unknown[] = Array.isArray(input?.unidad_movil_ids) ? input.unidad_movil_ids : [];
+  registerUnitId(
+    input?.unidad_movil_id ??
+      input?.unidadMovilId ??
+      input?.unit_id ??
+      input?.unitId ??
+      input?.unidad_id ??
+      input?.unidadId,
+  );
+  const unidadIdsRaw: unknown[] = Array.isArray(input?.unidad_movil_ids)
+    ? input.unidad_movil_ids
+    : Array.isArray(input?.unidadMovilIds)
+    ? input.unidadMovilIds
+    : Array.isArray(input?.unit_ids)
+    ? input.unit_ids
+    : Array.isArray(input?.unitIds)
+    ? input.unitIds
+    : [];
   unidadIdsRaw.forEach((value) => registerUnitId(value));
   const unidadesRaw: unknown[] = Array.isArray(input?.unidades)
     ? input.unidades
@@ -337,6 +400,12 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
   unidadesRaw.forEach((unit) => registerUnitRecord(unit));
   if (input?.unidad && typeof input.unidad === 'object') {
     registerUnitRecord(input.unidad);
+  }
+  if (input?.unidad_movil && typeof input.unidad_movil === 'object') {
+    registerUnitRecord(input.unidad_movil);
+  }
+  if (input?.unit && typeof input.unit === 'object') {
+    registerUnitRecord(input.unit);
   }
 
   const orderedUnitIds = Array.from(unitIdSet);
@@ -354,10 +423,19 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
       unitRecords.push(record);
     }
   });
+  if (!unitRecords.length && fallbackUnitRecord) {
+    unitRecords.push(fallbackUnitRecord);
+  }
   const primaryUnit = unitRecords[0] ?? null;
   const unidadId = primaryUnit?.unidad_id ?? orderedUnitIds[0] ?? null;
 
-  const salaId = toOptionalString(input?.sala_id);
+  const salaId = toOptionalString(input?.sala_id ?? input?.room_id ?? input?.salaId ?? input?.roomId);
+  const salaRecord =
+    input?.sala && typeof input.sala === 'object'
+      ? input.sala
+      : input?.room && typeof input.room === 'object'
+      ? input.room
+      : null;
 
   return {
     id,
@@ -371,7 +449,7 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
         : input?.stock != null && !Number.isNaN(Number(input.stock))
           ? Number(input.stock)
           : null,
-    stock_status: toOptionalString(input?.stock_status),
+    stock_status: toOptionalString(input?.stock_status ?? input?.stockStatus),
     sede: toOptionalString(input?.sede),
     date: toOptionalString(input?.date),
     trainer_id: trainerId,
@@ -380,11 +458,11 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
     trainers: trainerRecords,
     sala_id: salaId,
     sala:
-      input?.sala && typeof input.sala === 'object'
+      salaRecord && typeof salaRecord === 'object'
         ? {
-            sala_id: toOptionalString(input.sala?.sala_id) ?? salaId,
-            name: toOptionalString(input.sala?.name),
-            sede: toOptionalString(input.sala?.sede),
+            sala_id: toOptionalString(salaRecord?.sala_id ?? salaRecord?.id ?? salaId) ?? salaId,
+            name: toOptionalString(salaRecord?.name ?? salaRecord?.nombre),
+            sede: toOptionalString(salaRecord?.sede ?? salaRecord?.location),
           }
         : null,
     unidad_movil_id: unidadId,
