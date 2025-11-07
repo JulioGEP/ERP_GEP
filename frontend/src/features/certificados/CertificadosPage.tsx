@@ -1874,18 +1874,18 @@ export function CertificadosPage() {
                   <ul className="certificate-generation-results__list">
                     {generationResults.map((result) => (
                       <li key={result.id} className="certificate-generation-results__item">
-                        <span
-                          className={`certificate-generation-results__status ${
-                            result.status === 'success'
-                              ? 'certificate-generation-results__status--success'
-                              : 'certificate-generation-results__status--error'
-                          }`}
-                          aria-label={result.status === 'success' ? 'Correcto' : 'Error'}
-                        >
-                          {result.status === 'success' ? '✔️' : '❌'}
-                        </span>
                         <div>
-                          <div className="fw-semibold">
+                          <div className="fw-semibold certificate-generation-results__label">
+                            <span
+                              className={`certificate-generation-results__status ${
+                                result.status === 'success'
+                                  ? 'certificate-generation-results__status--success'
+                                  : 'certificate-generation-results__status--error'
+                              }`}
+                              aria-hidden="true"
+                            >
+                              -
+                            </span>
                             {result.status === 'success' && result.url ? (
                               <a
                                 href={result.url}
@@ -1900,11 +1900,17 @@ export function CertificadosPage() {
                             )}
                           </div>
                           <div
-                            className={`certificate-generation-results__message ${
+                            className={[
+                              'certificate-generation-results__message',
                               result.status === 'success'
                                 ? 'certificate-generation-results__message--success'
-                                : 'certificate-generation-results__message--error'
-                            }`}
+                                : 'certificate-generation-results__message--error',
+                              result.status === 'success'
+                                ? 'certificate-generation-results__message--no-select'
+                                : '',
+                            ]
+                              .filter((className): className is string => Boolean(className))
+                              .join(' ')}
                           >
                             {result.status === 'success'
                               ? 'Generado correctamente.'
