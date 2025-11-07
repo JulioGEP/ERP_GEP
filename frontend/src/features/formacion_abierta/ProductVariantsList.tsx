@@ -111,6 +111,9 @@ type VariantFormValues = {
   unidad_movil_ids: string[];
 };
 
+type VariantTrainerRecord = VariantInfo['trainers'][number];
+type VariantUnitRecord = VariantInfo['unidades'][number];
+
 const STOCK_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'instock', label: 'En stock' },
   { value: 'outofstock', label: 'Sin stock' },
@@ -1266,29 +1269,118 @@ export function VariantModal({
     });
   }, [normalizedUnitFilter, units]);
 
+  const trainerLookup = useMemo(() => {
+    const map = new Map<string, VariantTrainerRecord>();
+
+    trainers.forEach((trainer) => {
+      map.set(trainer.trainer_id, {
+        trainer_id: trainer.trainer_id,
+        name: trainer.name,
+        apellido: trainer.apellido ?? null,
+      });
+    });
+
+    if (variant) {
+      const records = Array.isArray(variant.trainers) && variant.trainers.length
+        ? variant.trainers
+        : variant.trainer
+        ? [variant.trainer]
+        : [];
+
+      records.forEach((record) => {
+        if (!record?.trainer_id) {
+          return;
+        }
+        if (!map.has(record.trainer_id)) {
+          map.set(record.trainer_id, {
+            trainer_id: record.trainer_id,
+            name: record.name ?? null,
+            apellido: record.apellido ?? null,
+          });
+        }
+      });
+    }
+
+    return map;
+  }, [trainers, variant]);
+
+  const unitLookup = useMemo(() => {
+    const map = new Map<string, VariantUnitRecord>();
+
+    units.forEach((unit) => {
+      map.set(unit.unidad_id, {
+        unidad_id: unit.unidad_id,
+        name: unit.name,
+        matricula: unit.matricula ?? null,
+      });
+    });
+
+    if (variant) {
+      const records = Array.isArray(variant.unidades) && variant.unidades.length
+        ? variant.unidades
+        : variant.unidad
+        ? [variant.unidad]
+        : [];
+
+      records.forEach((record) => {
+        if (!record?.unidad_id) {
+          return;
+        }
+        if (!map.has(record.unidad_id)) {
+          map.set(record.unidad_id, {
+            unidad_id: record.unidad_id,
+            name: record.name,
+            matricula: record.matricula ?? null,
+          });
+        }
+      });
+    }
+
+    return map;
+  }, [units, variant]);
+
   const selectedTrainers = useMemo(() => {
     if (!formValues.trainer_ids.length) {
-      return [] as typeof trainers;
+      return [] as VariantTrainerRecord[];
     }
-    const selected = new Set(formValues.trainer_ids);
-    return trainers.filter((trainer) => selected.has(trainer.trainer_id));
-  }, [formValues.trainer_ids, trainers]);
+
+    return formValues.trainer_ids.map((trainerId) =>
+      trainerLookup.get(trainerId) ?? {
+        trainer_id: trainerId,
+        name: trainerId,
+        apellido: null,
+      },
+    );
+  }, [formValues.trainer_ids, trainerLookup]);
 
   const selectedUnits = useMemo(() => {
     if (!formValues.unidad_movil_ids.length) {
-      return [] as typeof units;
+      return [] as VariantUnitRecord[];
     }
-    const selected = new Set(formValues.unidad_movil_ids);
-    return units.filter((unit) => selected.has(unit.unidad_id));
-  }, [formValues.unidad_movil_ids, units]);
+
+    return formValues.unidad_movil_ids.map((unitId) =>
+      unitLookup.get(unitId) ?? {
+        unidad_id: unitId,
+        name: unitId,
+        matricula: null,
+      },
+    );
+  }, [formValues.unidad_movil_ids, unitLookup]);
 
   const trainerSummary = selectedTrainers
-    .map((trainer) => `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim())
+    .map((trainer) => {
+      const label = `${trainer.name ?? ''}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
+      return label.length ? label : trainer.trainer_id;
+    })
     .filter((label) => label.length)
     .join(', ');
 
   const unitSummary = selectedUnits
-    .map((unit) => (unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name).trim())
+    .map((unit) => {
+      const label = unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name;
+      const trimmed = label.trim();
+      return trimmed.length ? trimmed : unit.unidad_id;
+    })
     .filter((label) => label.length)
     .join(', ');
 
@@ -1383,9 +1475,116 @@ export function VariantModal({
 
     try {
       const updated = await updateProductVariant(variant.id, payload);
-      onVariantUpdated(updated);
 
-      const nextValues = variantToFormValues(updated);
+      let enhancedVariant: VariantInfo = updated;
+
+      if (payload.trainer_ids) {
+        const sanitizedTrainerIds = sanitizeStringArray(payload.trainer_ids);
+        const trainerRecords = sanitizedTrainerIds.map((trainerId) => {
+          const catalogTrainer = trainers.find((item) => item.trainer_id === trainerId);
+          if (catalogTrainer) {
+            return {
+              trainer_id: catalogTrainer.trainer_id,
+              name: catalogTrainer.name,
+              apellido: catalogTrainer.apellido ?? null,
+            } satisfies VariantTrainerRecord;
+          }
+
+          const updatedRecord = updated.trainers.find((record) => record.trainer_id === trainerId);
+          if (updatedRecord) {
+            return updatedRecord;
+          }
+
+          const previousRecord = variant.trainers.find((record) => record.trainer_id === trainerId);
+          if (previousRecord) {
+            return previousRecord;
+          }
+
+          const updatedSingle =
+            updated.trainer && updated.trainer.trainer_id === trainerId ? updated.trainer : null;
+          if (updatedSingle) {
+            return updatedSingle;
+          }
+
+          const previousSingle =
+            variant.trainer && variant.trainer.trainer_id === trainerId ? variant.trainer : null;
+          if (previousSingle) {
+            return previousSingle;
+          }
+
+          return {
+            trainer_id: trainerId,
+            name: trainerId,
+            apellido: null,
+          } satisfies VariantTrainerRecord;
+        });
+
+        const primaryTrainer = trainerRecords[0] ?? null;
+
+        enhancedVariant = {
+          ...enhancedVariant,
+          trainer_ids: sanitizedTrainerIds,
+          trainer_id: primaryTrainer?.trainer_id ?? null,
+          trainer: primaryTrainer,
+          trainers: trainerRecords,
+        };
+      }
+
+      if (payload.unidad_movil_ids) {
+        const sanitizedUnitIds = sanitizeStringArray(payload.unidad_movil_ids);
+        const unitRecords = sanitizedUnitIds.map((unitId) => {
+          const catalogUnit = units.find((item) => item.unidad_id === unitId);
+          if (catalogUnit) {
+            return {
+              unidad_id: catalogUnit.unidad_id,
+              name: catalogUnit.name,
+              matricula: catalogUnit.matricula ?? null,
+            } satisfies VariantUnitRecord;
+          }
+
+          const updatedRecord = updated.unidades.find((record) => record.unidad_id === unitId);
+          if (updatedRecord) {
+            return updatedRecord;
+          }
+
+          const previousRecord = variant.unidades.find((record) => record.unidad_id === unitId);
+          if (previousRecord) {
+            return previousRecord;
+          }
+
+          const updatedSingle =
+            updated.unidad && updated.unidad.unidad_id === unitId ? updated.unidad : null;
+          if (updatedSingle) {
+            return updatedSingle;
+          }
+
+          const previousSingle =
+            variant.unidad && variant.unidad.unidad_id === unitId ? variant.unidad : null;
+          if (previousSingle) {
+            return previousSingle;
+          }
+
+          return {
+            unidad_id: unitId,
+            name: unitId,
+            matricula: null,
+          } satisfies VariantUnitRecord;
+        });
+
+        const primaryUnit = unitRecords[0] ?? null;
+
+        enhancedVariant = {
+          ...enhancedVariant,
+          unidad_movil_ids: sanitizedUnitIds,
+          unidad_movil_id: primaryUnit?.unidad_id ?? null,
+          unidad: primaryUnit,
+          unidades: unitRecords,
+        };
+      }
+
+      onVariantUpdated(enhancedVariant);
+
+      const nextValues = variantToFormValues(enhancedVariant);
       setFormValues(nextValues);
       setInitialValues(nextValues);
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
