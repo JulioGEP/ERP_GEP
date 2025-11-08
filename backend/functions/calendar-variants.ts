@@ -154,9 +154,9 @@ function normalizeVariantRecord(
     trainer_id?: string | null;
     sala_id?: string | null;
     unidad_movil_id?: string | null;
-    trainer?: { trainer_id: string; name: string | null; apellido: string | null } | null;
-    sala?: { sala_id: string; name: string; sede: string | null } | null;
-    unidad?: { unidad_id: string; name: string; matricula: string | null } | null;
+    trainers?: { trainer_id: string | null; name: string | null; apellido: string | null } | null;
+    salas?: { sala_id: string | null; name: string | null; sede: string | null } | null;
+    unidades_moviles?: { unidad_id: string | null; name: string | null; matricula: string | null } | null;
     created_at: Date | null;
     updated_at: Date | null;
   },
@@ -164,6 +164,10 @@ function normalizeVariantRecord(
 ) {
   const normalizedStudentsTotal =
     typeof studentsTotal === 'number' && Number.isFinite(studentsTotal) ? studentsTotal : null;
+
+  const trainerRecord = record.trainers ?? null;
+  const salaRecord = record.salas ?? null;
+  const unidadRecord = record.unidades_moviles ?? null;
 
   return {
     id: record.id,
@@ -181,23 +185,27 @@ function normalizeVariantRecord(
     sede: record.sede ?? null,
     date: toMadridISOString(record.date),
     trainer_id: record.trainer_id ?? null,
-    trainer: record.trainer
+    trainer: trainerRecord
       ? {
-          trainer_id: record.trainer.trainer_id,
-          name: record.trainer.name ?? null,
-          apellido: record.trainer.apellido ?? null,
+          trainer_id: trainerRecord.trainer_id ?? null,
+          name: trainerRecord.name ?? null,
+          apellido: trainerRecord.apellido ?? null,
         }
       : null,
     sala_id: record.sala_id ?? null,
-    sala: record.sala
-      ? { sala_id: record.sala.sala_id, name: record.sala.name, sede: record.sala.sede ?? null }
+    sala: salaRecord
+      ? {
+          sala_id: salaRecord.sala_id ?? null,
+          name: salaRecord.name ?? null,
+          sede: salaRecord.sede ?? null,
+        }
       : null,
     unidad_movil_id: record.unidad_movil_id ?? null,
-    unidad: record.unidad
+    unidad: unidadRecord
       ? {
-          unidad_id: record.unidad.unidad_id,
-          name: record.unidad.name,
-          matricula: record.unidad.matricula ?? null,
+          unidad_id: unidadRecord.unidad_id ?? null,
+          name: unidadRecord.name ?? null,
+          matricula: unidadRecord.matricula ?? null,
         }
       : null,
     students_total: normalizedStudentsTotal,
@@ -348,6 +356,9 @@ const variantSelectionBase = {
   stock_status: true,
   sede: true,
   date: true,
+  trainer_id: true,
+  sala_id: true,
+  unidad_movil_id: true,
   created_at: true,
   updated_at: true,
   products: {
@@ -370,12 +381,9 @@ const variantSelectionBase = {
 
 const variantSelectionWithResources = {
   ...variantSelectionBase,
-  trainer_id: true,
-  sala_id: true,
-  unidad_movil_id: true,
-  trainer: { select: { trainer_id: true, name: true, apellido: true } },
-  sala: { select: { sala_id: true, name: true, sede: true } },
-  unidad: { select: { unidad_id: true, name: true, matricula: true } },
+  trainers: { select: { trainer_id: true, name: true, apellido: true } },
+  salas: { select: { sala_id: true, name: true, sede: true } },
+  unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
 };
 
 /** toMaybeString: convierte un valor con .toString() (ej. Decimal/BigInt wrapper) a string seguro */
@@ -407,10 +415,8 @@ export const handler = async (event: any) => {
     const qs = event.queryStringParameters ?? {};
 
     // Acepta start/end, from_utc/to_utc, o from/to. Si solo viene inicio, usa mismo día como fin.
-    const startRaw =
-      getFirstParam(qs, ['start', 'from_utc', 'from']) ?? null;
-    const endRaw =
-      getFirstParam(qs, ['end', 'to_utc', 'to']) ?? startRaw; // fallback: mismo día
+    const startRaw = getFirstParam(qs, ['start', 'from_utc', 'from']) ?? null;
+    const endRaw = getFirstParam(qs, ['end', 'to_utc', 'to']) ?? startRaw; // fallback: mismo día
 
     const startDate = parseDateFlex(startRaw);
     const endDate = parseDateFlex(endRaw);
@@ -443,11 +449,12 @@ export const handler = async (event: any) => {
 
     let variants;
     try {
-      // Siempre intentamos primero cargar con recursos
+      // Intentamos siempre con recursos
       variants = await buildQuery(true);
       setVariantResourceColumnsSupport(true);
     } catch (error) {
       if (isVariantResourceColumnError(error)) {
+        // Fallback sin relaciones si en algún entorno faltan columnas
         setVariantResourceColumnsSupport(false);
         console.warn(
           '[calendar-variants] falling back to legacy variant query (missing resource columns)',
@@ -509,7 +516,6 @@ export const handler = async (event: any) => {
       });
 
       (dealsWithCounts as DealRow[]).forEach((deal: DealRow) => {
-        // normaliza la clave de variación
         let keyRaw: string | null = null;
         if (typeof deal.w_id_variation === 'string') {
           const trimmed = deal.w_id_variation.trim();
@@ -519,12 +525,10 @@ export const handler = async (event: any) => {
         }
         if (!keyRaw) return;
 
-        // suma alumnos
         const rawCount = deal?._count?.alumnos;
         const count = typeof rawCount === 'number' && Number.isFinite(rawCount) ? rawCount : 0;
         studentsCountByVariant.set(keyRaw, (studentsCountByVariant.get(keyRaw) ?? 0) + count);
 
-        // normaliza deal
         const normalizedDeal = sanitizeVariantDeal({
           deal_id: deal.deal_id ?? null,
           title: deal.title ?? null,
