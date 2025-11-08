@@ -34,11 +34,6 @@ function parseYearParam(value: string | undefined): number | null {
   return parsed;
 }
 
-function isWeekday(year: number, month: number, day: number): boolean {
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  return weekday >= 1 && weekday <= 5;
-}
-
 function toUtcDate(year: number, month: number, day: number): Date {
   return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 }
@@ -58,7 +53,9 @@ function parseDateInput(value: unknown): { year: number; month: number; day: num
 }
 
 function normalizeOverrides(rows: Array<{ date: Date; available: boolean }>) {
-  return rows.map((row) => ({ date: toMadridISO(row.date), available: Boolean(row.available) }));
+  return rows
+    .filter((row) => row.available === false)
+    .map((row) => ({ date: toMadridISO(row.date), available: false }));
 }
 
 function isMissingRelationError(error: unknown, relation: string): boolean {
@@ -249,7 +246,7 @@ export const handler = createHttpHandler(async (request) => {
 
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       for (const { available, year: y, month, day } of normalizedUpdates.values()) {
-        const defaultAvailable = isWeekday(y, month, day);
+        const defaultAvailable = true;
         const dateUtc = toUtcDate(y, month, day);
 
         if (available === defaultAvailable) {

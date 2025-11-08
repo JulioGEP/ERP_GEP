@@ -614,7 +614,7 @@ async function fetchScheduleAvailableTrainerIds(
   const available = new Set<string>(trainerIds);
 
   for (const day of days) {
-    const defaultAvailable = day.weekday >= 1 && day.weekday <= 5;
+    const defaultAvailable = true;
     const overridesForDay = overrideMap.get(day.iso);
 
     for (const trainerId of trainerIds) {
