@@ -42,6 +42,34 @@ function MobileUnitsList({ units }: { units: TrainerDashboardResponse['sessions'
   return <span>{formatted}</span>;
 }
 
+function formatVariantDate(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }).format(date);
+  } catch {
+    return null;
+  }
+}
+
+function VariantMobileUnit({
+  unit,
+}: {
+  unit: TrainerDashboardResponse['variants'][number]['mobileUnit'];
+}) {
+  if (!unit) {
+    return <span className="text-muted">—</span>;
+  }
+
+  const parts: string[] = [];
+  if (unit.name) parts.push(unit.name);
+  if (unit.plate) parts.push(unit.plate);
+  if (!parts.length) parts.push(unit.id);
+
+  return <span>{parts.join(' · ')}</span>;
+}
+
 export default function TrainerDashboardPage() {
   const query = useQuery({
     queryKey: QUERY_KEY,
@@ -139,6 +167,51 @@ export default function TrainerDashboardPage() {
               ) : (
                 <div className="px-3 px-md-4 py-5 text-center text-muted">
                   No tienes sesiones asignadas en este momento.
+                </div>
+              )}
+              <div className="px-3 px-md-4 py-3 border-top">
+                <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-2">
+                  <div>
+                    <span className="text-uppercase text-muted small fw-semibold">Formación abierta</span>
+                    <h2 className="h5 mb-0">Variantes asignadas</h2>
+                  </div>
+                  <div className="text-muted small">
+                    Total: {formatNumber(query.data.metrics.openTrainingVariants)}
+                  </div>
+                </div>
+              </div>
+              {query.data.variants.length ? (
+                <div className="table-responsive">
+                  <Table hover responsive className="mb-0">
+                    <thead className="text-uppercase small text-muted">
+                      <tr>
+                        <th className="fw-semibold">Formación</th>
+                        <th className="fw-semibold">Sede</th>
+                        <th className="fw-semibold">Fecha</th>
+                        <th className="fw-semibold">Unidad móvil</th>
+                        <th className="fw-semibold text-end">Alumnos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {query.data.variants.map((variant) => (
+                        <tr key={variant.variantId}>
+                          <td className="align-middle">{variant.productName ?? <span className="text-muted">—</span>}</td>
+                          <td className="align-middle">{variant.site ?? <span className="text-muted">—</span>}</td>
+                          <td className="align-middle">
+                            {formatVariantDate(variant.date) ?? <span className="text-muted">—</span>}
+                          </td>
+                          <td className="align-middle">
+                            <VariantMobileUnit unit={variant.mobileUnit} />
+                          </td>
+                          <td className="align-middle text-end">{formatNumber(variant.studentCount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="px-3 px-md-4 py-5 text-center text-muted">
+                  No tienes formaciones abiertas asignadas en este momento.
                 </div>
               )}
             </Card.Body>

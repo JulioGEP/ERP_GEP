@@ -17,9 +17,19 @@ export type TrainerDashboardSession = {
   mobileUnits: Array<{ id: string; name: string | null; plate: string | null }>;
 };
 
+export type TrainerDashboardVariant = {
+  variantId: string;
+  productName: string | null;
+  site: string | null;
+  date: string | null;
+  mobileUnit: { id: string; name: string | null; plate: string | null } | null;
+  studentCount: number;
+};
+
 export type TrainerDashboardResponse = {
   metrics: TrainerDashboardMetrics;
   sessions: TrainerDashboardSession[];
+  variants: TrainerDashboardVariant[];
   generatedAt: string | null;
 };
 
@@ -63,6 +73,36 @@ function sanitizeSession(value: unknown): TrainerDashboardSession | null {
   };
 }
 
+function sanitizeVariant(value: unknown): TrainerDashboardVariant | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Partial<TrainerDashboardVariant> & {
+    mobileUnit?: unknown;
+  };
+  const variantId = sanitizeString(raw.variantId);
+  if (!variantId) return null;
+  const mobileUnitRaw = raw.mobileUnit;
+  let mobileUnit: TrainerDashboardVariant['mobileUnit'] = null;
+  if (mobileUnitRaw && typeof mobileUnitRaw === 'object') {
+    const unit = mobileUnitRaw as { id?: unknown; name?: unknown; plate?: unknown };
+    const id = sanitizeString(unit.id);
+    if (id) {
+      mobileUnit = {
+        id,
+        name: sanitizeString(unit.name),
+        plate: sanitizeString(unit.plate),
+      };
+    }
+  }
+  return {
+    variantId,
+    productName: sanitizeString(raw.productName),
+    site: sanitizeString(raw.site),
+    date: sanitizeDate(raw.date),
+    mobileUnit,
+    studentCount: toNonNegativeInteger(raw.studentCount),
+  };
+}
+
 function sanitizeDate(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -79,6 +119,11 @@ export async function fetchTrainerDashboard(): Promise<TrainerDashboardResponse>
         .map(sanitizeSession)
         .filter(Boolean) as TrainerDashboardSession[])
     : [];
+  const variants = Array.isArray(response?.variants)
+    ? (response.variants
+        .map(sanitizeVariant)
+        .filter(Boolean) as TrainerDashboardVariant[])
+    : [];
 
   return {
     metrics: {
@@ -88,6 +133,7 @@ export async function fetchTrainerDashboard(): Promise<TrainerDashboardResponse>
       openTrainingVariants: toNonNegativeInteger(metrics.openTrainingVariants),
     },
     sessions,
+    variants,
     generatedAt: sanitizeDate(response?.generatedAt),
   };
 }
