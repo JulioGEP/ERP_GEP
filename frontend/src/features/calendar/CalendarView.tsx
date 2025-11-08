@@ -568,6 +568,7 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
 };
 
 type VariantTrainer = CalendarVariantEvent['variant']['trainers'][number];
+type VariantUnit = CalendarVariantEvent['variant']['unidades'][number];
 
 function getVariantTrainerResources(variant: CalendarVariantEvent): VariantTrainer[] {
   if (variant.variant.trainers && variant.variant.trainers.length) {
@@ -587,6 +588,36 @@ function formatVariantTrainerNames(trainers: VariantTrainer[]): string {
         .join(' ') // combine nombre and apellido
         .trim(),
     )
+    .filter((value) => value.length)
+    .join(', ');
+}
+
+function getVariantUnitResources(variant: CalendarVariantEvent): VariantUnit[] {
+  if (variant.variant.unidades && variant.variant.unidades.length) {
+    return variant.variant.unidades;
+  }
+  if (variant.variant.unidad) {
+    return [variant.variant.unidad];
+  }
+  return [];
+}
+
+function formatVariantUnitNames(units: VariantUnit[]): string {
+  return units
+    .map((unit) => {
+      const name = unit.name?.trim() ?? '';
+      const plate = unit.matricula?.trim() ?? '';
+      if (name && plate) {
+        return `${name} (${plate})`;
+      }
+      if (name) {
+        return name;
+      }
+      if (plate) {
+        return plate;
+      }
+      return '';
+    })
     .filter((value) => value.length)
     .join(', ');
 }
@@ -1548,6 +1579,8 @@ export function CalendarView({
     }
     const trainerResources = getVariantTrainerResources(variantEvent);
     const trainerNames = formatVariantTrainerNames(trainerResources);
+    const unitResources = getVariantUnitResources(variantEvent);
+    const unitNames = formatVariantUnitNames(unitResources);
     const trainerLabel = trainerNames.length ? `Formador: ${trainerNames}` : 'Formador: Sin asignar';
     chips.push(trainerLabel);
     if (variantEvent.variant.stock != null) {
@@ -1559,6 +1592,10 @@ export function CalendarView({
         ? trainerNames.length
           ? trainerNames
           : 'Sin formador'
+        : mode === 'units'
+        ? unitNames.length
+          ? unitNames
+          : 'Sin unidad móvil'
         : variantEvent.variant.name?.trim().length
         ? variantEvent.variant.name
         : variantEvent.product.name ?? 'Variante sin nombre';
@@ -1755,9 +1792,22 @@ export function CalendarView({
                         }
 
                         const variant = eventItem.variant;
-                        const variantLabel = variant.variant.name?.trim().length
-                          ? variant.variant.name
-                          : variant.product.name ?? 'Variante sin nombre';
+                        const trainerResources = getVariantTrainerResources(variant);
+                        const trainerNames = formatVariantTrainerNames(trainerResources);
+                        const unitResources = getVariantUnitResources(variant);
+                        const unitNames = formatVariantUnitNames(unitResources);
+                        const variantLabel =
+                          mode === 'trainers'
+                            ? trainerNames.length
+                              ? trainerNames
+                              : 'Sin formador'
+                            : mode === 'units'
+                            ? unitNames.length
+                              ? unitNames
+                              : 'Sin unidad móvil'
+                            : variant.variant.name?.trim().length
+                            ? variant.variant.name
+                            : variant.product.name ?? 'Variante sin nombre';
                         const variantTitleParts: string[] = [];
                         if (variant.product.name) {
                           variantTitleParts.push(variant.product.name);
