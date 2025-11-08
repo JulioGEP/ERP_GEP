@@ -9,6 +9,7 @@ export type TrainerAvailabilityOverride = {
 export type TrainerAvailabilityResponse = {
   year: number;
   overrides: TrainerAvailabilityOverride[];
+  assignedDates: string[];
 };
 
 function sanitizeDateString(value: unknown): string | null {
@@ -24,6 +25,17 @@ function sanitizeOverride(entry: unknown): TrainerAvailabilityOverride | null {
   const date = sanitizeDateString(raw.date);
   if (!date) return null;
   return { date, available: Boolean(raw.available) };
+}
+
+function sanitizeDateArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const normalized = sanitizeDateString(entry);
+    if (!normalized) continue;
+    seen.add(normalized);
+  }
+  return Array.from(seen).sort((a, b) => a.localeCompare(b));
 }
 
 function parseAvailabilityPayload(raw: any, fallbackYear: number | null): TrainerAvailabilityResponse {
@@ -43,7 +55,9 @@ function parseAvailabilityPayload(raw: any, fallbackYear: number | null): Traine
     .map(([date, available]) => ({ date, available }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  return { year, overrides };
+  const assignedDates = sanitizeDateArray(raw?.assignedDates);
+
+  return { year, overrides, assignedDates };
 }
 
 export async function fetchTrainerAvailability(params?: { year?: number }): Promise<TrainerAvailabilityResponse> {

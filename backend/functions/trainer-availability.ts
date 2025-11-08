@@ -1,5 +1,5 @@
 // backend/functions/trainer-availability.ts
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
@@ -61,6 +61,132 @@ function normalizeOverrides(rows: Array<{ date: Date; available: boolean }>) {
   return rows.map((row) => ({ date: toMadridISO(row.date), available: Boolean(row.available) }));
 }
 
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message || '';
+  const pattern = new RegExp(`\\b${relation}\\b`, 'i');
+  return pattern.test(message);
+}
+
+function addDateIfMatchesYear(target: Set<string>, date: Date | null | undefined, year: number) {
+  if (!date) return;
+  const iso = toMadridISO(date);
+  if (!iso.startsWith(`${year}-`)) return;
+  target.add(iso);
+}
+
+type PrismaClientLike = PrismaClient | Prisma.TransactionClient;
+
+async function computeAssignedDates(
+  client: PrismaClientLike,
+  trainerId: string,
+  year: number,
+  startOfYearUtc: Date,
+  startOfNextYearUtc: Date,
+): Promise<string[]> {
+  const assignments = new Set<string>();
+
+  const sessionRows = await client.sesiones.findMany({
+    where: {
+      sesion_trainers: { some: { trainer_id: trainerId } },
+      OR: [
+        { fecha_inicio_utc: { gte: startOfYearUtc, lt: startOfNextYearUtc } },
+        { fecha_fin_utc: { gte: startOfYearUtc, lt: startOfNextYearUtc } },
+      ],
+    },
+    select: { fecha_inicio_utc: true, fecha_fin_utc: true },
+  });
+
+  for (const session of sessionRows) {
+    addDateIfMatchesYear(assignments, session.fecha_inicio_utc, year);
+    addDateIfMatchesYear(assignments, session.fecha_fin_utc, year);
+  }
+
+  const processedVariantIds = new Set<string>();
+
+  const directVariantRows = await client.variants.findMany({
+    where: {
+      trainer_id: trainerId,
+      date: { gte: startOfYearUtc, lt: startOfNextYearUtc },
+    },
+    select: { id: true, date: true },
+  });
+
+  for (const variant of directVariantRows) {
+    processedVariantIds.add(variant.id);
+    addDateIfMatchesYear(assignments, variant.date, year);
+  }
+
+  const linkedVariantIds = new Set<string>();
+
+  try {
+    const rows = (await client.$queryRaw<{ variant_id: string }[]>`
+      SELECT variant_id::text AS variant_id
+      FROM variant_trainer_links
+      WHERE trainer_id = ${trainerId}
+    `) as Array<{ variant_id: string }>;
+
+    for (const row of rows) {
+      if (row.variant_id) {
+        linkedVariantIds.add(row.variant_id);
+      }
+    }
+  } catch (error) {
+    if (!isMissingRelationError(error, 'variant_trainer_links')) {
+      throw error;
+    }
+  }
+
+  const missingVariantIds = Array.from(linkedVariantIds).filter((id) => !processedVariantIds.has(id));
+
+  if (missingVariantIds.length > 0) {
+    const linkedVariants = await client.variants.findMany({
+      where: {
+        id: { in: missingVariantIds },
+        date: { gte: startOfYearUtc, lt: startOfNextYearUtc },
+      },
+      select: { id: true, date: true },
+    });
+
+    for (const variant of linkedVariants) {
+      processedVariantIds.add(variant.id);
+      addDateIfMatchesYear(assignments, variant.date, year);
+    }
+  }
+
+  return Array.from(assignments).sort((a, b) => a.localeCompare(b));
+}
+
+async function buildTrainerAvailability(
+  client: PrismaClientLike,
+  trainerId: string,
+  year: number,
+): Promise<{
+  year: number;
+  overrides: Array<{ date: string; available: boolean }>;
+  assignedDates: string[];
+}> {
+  const startOfYearUtc = toUtcDate(year, 1, 1);
+  const startOfNextYearUtc = toUtcDate(year + 1, 1, 1);
+
+  const overrideRows = await client.trainer_availability.findMany({
+    where: {
+      trainer_id: trainerId,
+      date: {
+        gte: startOfYearUtc,
+        lt: startOfNextYearUtc,
+      },
+    },
+    orderBy: { date: 'asc' },
+    select: { date: true, available: true },
+  });
+
+  const overrides = normalizeOverrides(overrideRows);
+  const assignedDates = await computeAssignedDates(client, trainerId, year, startOfYearUtc, startOfNextYearUtc);
+
+  return { year, overrides, assignedDates };
+}
+
 export const handler = createHttpHandler(async (request) => {
   const prisma = getPrisma();
 
@@ -84,24 +210,9 @@ export const handler = createHttpHandler(async (request) => {
       return errorResponse('VALIDATION_ERROR', 'El parámetro year es inválido', 400);
     }
 
-    const rows = await prisma.trainer_availability.findMany({
-      where: {
-        trainer_id: trainer.trainer_id,
-        date: {
-          gte: toUtcDate(requestedYear, 1, 1),
-          lte: toUtcDate(requestedYear, 12, 31),
-        },
-      },
-      orderBy: { date: 'asc' },
-      select: { date: true, available: true },
-    });
+    const availability = await buildTrainerAvailability(prisma, trainer.trainer_id, requestedYear);
 
-    return successResponse({
-      availability: {
-        year: requestedYear,
-        overrides: normalizeOverrides(rows),
-      },
-    });
+    return successResponse({ availability });
   }
 
   if (request.method === 'PUT') {
@@ -159,24 +270,9 @@ export const handler = createHttpHandler(async (request) => {
       }
     });
 
-    const rows = await prisma.trainer_availability.findMany({
-      where: {
-        trainer_id: trainer.trainer_id,
-        date: {
-          gte: toUtcDate(year, 1, 1),
-          lte: toUtcDate(year, 12, 31),
-        },
-      },
-      orderBy: { date: 'asc' },
-      select: { date: true, available: true },
-    });
+    const availability = await buildTrainerAvailability(prisma, trainer.trainer_id, year);
 
-    return successResponse({
-      availability: {
-        year,
-        overrides: normalizeOverrides(rows),
-      },
-    });
+    return successResponse({ availability });
   }
 
   if (request.method === 'OPTIONS') {
