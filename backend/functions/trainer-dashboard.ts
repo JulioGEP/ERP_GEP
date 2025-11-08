@@ -21,6 +21,15 @@ type TrainerDashboardSession = {
   mobileUnits: Array<{ id: string; name: string | null; plate: string | null }>;
 };
 
+type TrainerDashboardVariant = {
+  variantId: string;
+  productName: string | null;
+  site: string | null;
+  date: string | null;
+  mobileUnit: { id: string; name: string | null; plate: string | null } | null;
+  studentCount: number;
+};
+
 type SessionRecord = {
   id: string;
   nombre_cache: string | null;
@@ -35,6 +44,16 @@ type SessionRecord = {
 
 type VariantRecord = {
   id: string;
+};
+
+type VariantDetailRecord = {
+  id: string;
+  id_woo: unknown;
+  sede: string | null;
+  date: Date | null;
+  unidad_movil_id: string | null;
+  products: { name: string | null } | null;
+  unidades_moviles: { unidad_id: string | null; name: string | null; matricula: string | null } | null;
 };
 
 const PIPELINE_LABELS_COMPANY = [
@@ -63,6 +82,27 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
   return pattern.test(message);
 }
 
+function toMaybeString(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return String(value);
+  }
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (value && typeof value === 'object' && 'toString' in value && typeof (value as any).toString === 'function') {
+    const result = (value as { toString: () => unknown }).toString();
+    if (typeof result !== 'string') return null;
+    const trimmed = result.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  return null;
+}
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'GET') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -81,7 +121,12 @@ export const handler = createHttpHandler(async (request) => {
   });
 
   if (!trainer) {
-    const empty: { metrics: TrainerDashboardMetrics; sessions: TrainerDashboardSession[]; generatedAt: string } = {
+    const empty: {
+      metrics: TrainerDashboardMetrics;
+      sessions: TrainerDashboardSession[];
+      variants: TrainerDashboardVariant[];
+      generatedAt: string;
+    } = {
       metrics: {
         totalAssigned: 0,
         companySessions: 0,
@@ -89,6 +134,7 @@ export const handler = createHttpHandler(async (request) => {
         openTrainingVariants: 0,
       },
       sessions: [],
+      variants: [],
       generatedAt: nowInMadridISO(),
     };
     return successResponse(empty);
@@ -160,6 +206,87 @@ export const handler = createHttpHandler(async (request) => {
 
   const totalAssigned = companySessions + gepServicesSessions + openTrainingVariants;
 
+  const variantDetails: TrainerDashboardVariant[] = [];
+
+  if (variantIds.size) {
+    const variantRecords = (await prisma.variants.findMany({
+      where: { id: { in: Array.from(variantIds) } },
+      orderBy: [{ date: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        id_woo: true,
+        sede: true,
+        date: true,
+        unidad_movil_id: true,
+        products: { select: { name: true } },
+        unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
+      },
+    })) as VariantDetailRecord[];
+
+    const variantWooIds = Array.from(
+      new Set(
+        variantRecords
+          .map((record) => toMaybeString(record.id_woo))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    const studentsCountByVariant = new Map<string, number>();
+
+    if (variantWooIds.length) {
+      const dealsWithCounts = await prisma.deals.findMany({
+        where: { w_id_variation: { in: variantWooIds } },
+        select: {
+          w_id_variation: true,
+          _count: { select: { alumnos: true } },
+        },
+      });
+
+      for (const deal of dealsWithCounts as Array<{ w_id_variation: unknown; _count: { alumnos: number } }>) {
+        const key = toMaybeString(deal.w_id_variation);
+        if (!key) continue;
+        const previous = studentsCountByVariant.get(key) ?? 0;
+        const count = Number.isFinite(deal._count?.alumnos)
+          ? Math.max(0, Math.trunc(deal._count.alumnos))
+          : 0;
+        studentsCountByVariant.set(key, previous + count);
+      }
+    }
+
+    for (const record of variantRecords) {
+      const variantWooId = toMaybeString(record.id_woo);
+      const studentCount = variantWooId ? studentsCountByVariant.get(variantWooId) ?? 0 : 0;
+
+      let mobileUnit: TrainerDashboardVariant['mobileUnit'] = null;
+      if (record.unidades_moviles) {
+        const unit = record.unidades_moviles;
+        const id = toMaybeString(unit.unidad_id) ?? record.unidad_movil_id ?? null;
+        if (id) {
+          mobileUnit = {
+            id,
+            name: unit.name ?? null,
+            plate: unit.matricula ?? null,
+          };
+        }
+      } else if (record.unidad_movil_id) {
+        mobileUnit = {
+          id: record.unidad_movil_id,
+          name: null,
+          plate: null,
+        };
+      }
+
+      variantDetails.push({
+        variantId: record.id,
+        productName: record.products?.name ?? null,
+        site: record.sede ?? null,
+        date: record.date ? record.date.toISOString() : null,
+        mobileUnit,
+        studentCount,
+      });
+    }
+  }
+
   const sessionRows: TrainerDashboardSession[] = sessions.map((session) => {
     const mobileUnits: TrainerDashboardSession['mobileUnits'] = [];
     for (const link of session.sesion_unidades ?? []) {
@@ -186,6 +313,7 @@ export const handler = createHttpHandler(async (request) => {
       openTrainingVariants,
     },
     sessions: sessionRows,
+    variants: variantDetails,
     generatedAt: nowInMadridISO(),
   });
 });
