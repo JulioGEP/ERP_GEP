@@ -37,6 +37,7 @@ const InformesRecursoPreventivoEbroPage = lazy(
   () => import('../pages/informes/RecursoPreventivoEbroReportPage'),
 );
 const UsersPage = lazy(() => import('../pages/usuarios/UsersPage'));
+const TrainerDashboardPage = lazy(() => import('../pages/usuarios/trainer/TrainerDashboardPage'));
 const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 const HorasFormadoresPage = lazy(() => import('../pages/reporting/HorasFormadoresPage'));
@@ -250,6 +251,17 @@ export function AppRouter({
           path="/certificados"
           element={<GuardedRoute path="/certificados" element={<CertificadosPage {...(certificadosPageProps as CertificadosPageProps & Record<string, unknown>)} />} />}
         />
+        <Route
+          path="/usuarios/trainer/dashboard"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/dashboard"
+              roles={['Formador']}
+              element={<TrainerDashboardPage />}
+            />
+          }
+        />
+
         <Route
           path="/usuarios"
           element={<GuardedRoute path="/usuarios" element={<UsersPage {...usersPageProps} />} />}

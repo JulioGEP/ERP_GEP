@@ -1,0 +1,150 @@
+// frontend/src/pages/usuarios/trainer/TrainerDashboardPage.tsx
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Alert, Button, Card, Spinner, Stack, Table } from 'react-bootstrap';
+import { fetchTrainerDashboard } from '../../../api/trainer-dashboard';
+import type { TrainerDashboardResponse } from '../../../api/trainer-dashboard';
+
+const QUERY_KEY = ['trainer', 'dashboard'] as const;
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat('es-ES').format(value);
+}
+
+function formatUpdatedAt(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat('es-ES', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(date);
+  } catch {
+    return null;
+  }
+}
+
+function MobileUnitsList({ units }: { units: TrainerDashboardResponse['sessions'][number]['mobileUnits'] }) {
+  if (!units.length) {
+    return <span className="text-muted">—</span>;
+  }
+
+  const formatted = units
+    .map((unit) => {
+      const parts: string[] = [];
+      if (unit.name) parts.push(unit.name);
+      if (unit.plate) parts.push(unit.plate);
+      return parts.join(' · ') || unit.id;
+    })
+    .join(', ');
+
+  return <span>{formatted}</span>;
+}
+
+export default function TrainerDashboardPage() {
+  const query = useQuery({
+    queryKey: QUERY_KEY,
+    queryFn: () => fetchTrainerDashboard(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const updatedAt = useMemo(() => formatUpdatedAt(query.data?.generatedAt ?? null), [query.data?.generatedAt]);
+
+  return (
+    <Stack gap={4} className="trainer-dashboard">
+      <Stack gap={1}>
+        <span className="text-uppercase text-muted small fw-semibold">Panel</span>
+        <h1 className="h3 text-uppercase mb-0">Panel del formador</h1>
+        {updatedAt ? <span className="text-muted small">Última actualización: {updatedAt}</span> : null}
+      </Stack>
+
+      {query.isLoading ? (
+        <div className="d-flex justify-content-center py-5" aria-live="polite">
+          <Spinner animation="border" role="status">
+            <span className="visually-hidden">Cargando…</span>
+          </Spinner>
+        </div>
+      ) : query.isError ? (
+        <Alert variant="danger" className="d-flex flex-column flex-md-row align-items-md-center gap-3">
+          <div>
+            <div className="fw-semibold">No se pudieron cargar los datos del panel.</div>
+            <div className="small text-muted">Inténtalo de nuevo más tarde.</div>
+          </div>
+          <div className="ms-md-auto">
+            <Button variant="outline-danger" onClick={() => query.refetch()} disabled={query.isFetching}>
+              Reintentar
+            </Button>
+          </div>
+        </Alert>
+      ) : query.data ? (
+        <Stack gap={4}>
+          <Card className="shadow-sm border-0">
+            <Card.Body className="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
+              <div className="flex-grow-1">
+                <span className="text-uppercase text-muted small fw-semibold">Sesiones asignadas</span>
+                <div className="display-6 fw-bold text-primary">{formatNumber(query.data.metrics.totalAssigned)}</div>
+                <div className="text-muted small">
+                  Formaciones Empresa: {formatNumber(query.data.metrics.companySessions)} · GEP Services:{' '}
+                  {formatNumber(query.data.metrics.gepServicesSessions)} · Formación Abierta:
+                  {` ${formatNumber(query.data.metrics.openTrainingVariants)}`}
+                </div>
+              </div>
+              <Button variant="outline-primary" onClick={() => query.refetch()} disabled={query.isFetching}>
+                Actualizar
+              </Button>
+            </Card.Body>
+          </Card>
+
+          <Card className="shadow-sm border-0">
+            <Card.Body className="p-0">
+              <div className="d-flex justify-content-between align-items-center px-3 px-md-4 py-3 border-bottom">
+                <div>
+                  <span className="text-uppercase text-muted small fw-semibold">Sesiones</span>
+                  <h2 className="h5 mb-0">Planificación asignada</h2>
+                </div>
+                <div>
+                  <Button size="sm" variant="outline-secondary" onClick={() => query.refetch()} disabled={query.isFetching}>
+                    Refrescar
+                  </Button>
+                </div>
+              </div>
+              {query.data.sessions.length ? (
+                <div className="table-responsive">
+                  <Table hover responsive className="mb-0">
+                    <thead className="text-uppercase small text-muted">
+                      <tr>
+                        <th className="fw-semibold">Nº Presupuesto</th>
+                        <th className="fw-semibold">Título de la sesión</th>
+                        <th className="fw-semibold">Formación</th>
+                        <th className="fw-semibold">Dirección</th>
+                        <th className="fw-semibold">Unidad móvil</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {query.data.sessions.map((session) => (
+                        <tr key={session.sessionId}>
+                          <td className="align-middle text-nowrap">{session.budgetNumber ?? <span className="text-muted">—</span>}</td>
+                          <td className="align-middle">{session.sessionTitle ?? <span className="text-muted">—</span>}</td>
+                          <td className="align-middle">{session.productName ?? <span className="text-muted">—</span>}</td>
+                          <td className="align-middle">{session.address ?? <span className="text-muted">—</span>}</td>
+                          <td className="align-middle">
+                            <MobileUnitsList units={session.mobileUnits} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="px-3 px-md-4 py-5 text-center text-muted">
+                  No tienes sesiones asignadas en este momento.
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </Stack>
+      ) : null}
+    </Stack>
+  );
+}

@@ -29,10 +29,11 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/recursos/formadores_bomberos',
     '/perfil',
   ],
-  Formador: ['/dashboard', '/perfil'],
+  Formador: ['/usuarios/trainer/*', '/perfil'],
 };
 
 export const DEFAULT_ROUTE_ORDER = [
+  '/usuarios/trainer/dashboard',
   '/dashboard',
   '/presupuestos/todos',
   '/recursos/formadores_bomberos',
