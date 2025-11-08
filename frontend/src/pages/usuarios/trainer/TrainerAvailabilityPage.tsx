@@ -174,14 +174,6 @@ export default function TrainerAvailabilityPage() {
 
   return (
     <Stack gap={4} className="trainer-availability-page">
-      <Stack gap={1}>
-        <span className="text-uppercase text-muted small fw-semibold">Disponibilidad</span>
-        <h1 className="h3 text-uppercase mb-0">Mi disponibilidad</h1>
-        <span className="text-muted small">
-          Selecciona los días en los que estarás disponible para impartir formaciones.
-        </span>
-      </Stack>
-
       <Card className="shadow-sm border-0">
         <Card.Body className="d-flex flex-column flex-lg-row gap-3 align-items-lg-center justify-content-lg-between">
           <div>
