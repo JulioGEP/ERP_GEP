@@ -171,7 +171,6 @@ export default function TrainerDashboardPage() {
                 <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-2">
                   <div>
                     <span className="text-uppercase text-muted small fw-semibold">Formación abierta</span>
-                    <h2 className="h5 mb-0">Variantes asignadas</h2>
                   </div>
                   <div className="text-muted small">
                     Total: {formatNumber(query.data.metrics.openTrainingVariants)}
