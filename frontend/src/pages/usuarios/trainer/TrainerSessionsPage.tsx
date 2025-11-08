@@ -1,0 +1,735 @@
+// frontend/src/pages/usuarios/trainer/TrainerSessionsPage.tsx
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Col,
+  Form,
+  Row,
+  Spinner,
+  Stack,
+  Table,
+} from 'react-bootstrap';
+import {
+  fetchTrainerSessions,
+  type TrainerSessionDetail,
+  type TrainerSessionsDateEntry,
+} from '../../../api/trainer-sessions';
+import {
+  fetchSessionComments,
+  createSessionComment,
+} from '../../../features/presupuestos/api/sessions.api';
+import {
+  fetchSessionDocuments,
+  uploadSessionDocuments,
+} from '../../../features/presupuestos/api/documents.api';
+import {
+  fetchSessionStudents,
+  updateSessionStudent,
+  type UpdateSessionStudentInput,
+} from '../../../features/presupuestos/api/students.api';
+import type { SessionComment, SessionStudent } from '../../../api/sessions.types';
+import { useCurrentUserIdentity } from '../../../features/presupuestos/useCurrentUserIdentity';
+
+function formatDateLabel(date: string): string {
+  const parts = date.split('-').map((value) => Number.parseInt(value, 10));
+  if (parts.length !== 3 || parts.some((value) => Number.isNaN(value))) {
+    return date;
+  }
+  const [year, month, day] = parts;
+  const formatter = new Intl.DateTimeFormat('es-ES', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const label = formatter.format(new Date(Date.UTC(year, month - 1, day)));
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatDateTime(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const formatter = new Intl.DateTimeFormat('es-ES', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+  return formatter.format(parsed);
+}
+
+function renderBooleanField(field: { value: boolean | null; label: string | null }): string {
+  if (field.label && field.label.trim().length) {
+    return field.label.trim();
+  }
+  if (field.value === true) return 'Sí';
+  if (field.value === false) return 'No';
+  return '—';
+}
+
+type SessionDetailCardProps = {
+  session: TrainerSessionDetail;
+};
+
+function SessionDetailCard({ session }: SessionDetailCardProps) {
+  const queryClient = useQueryClient();
+  const { userId, userName } = useCurrentUserIdentity();
+
+  const commentsQuery = useQuery({
+    queryKey: ['trainer', 'session', session.sessionId, 'comments'],
+    queryFn: () => fetchSessionComments(session.sessionId),
+  });
+
+  const filteredComments = useMemo(() => {
+    return (commentsQuery.data ?? []).filter((comment) => comment.compartir_formador);
+  }, [commentsQuery.data]);
+
+  const [commentContent, setCommentContent] = useState('');
+  const [commentError, setCommentError] = useState<string | null>(null);
+
+  const commentMutation = useMutation({
+    mutationFn: async (content: string) =>
+      createSessionComment(
+        session.sessionId,
+        { content, compartir_formador: true },
+        { id: userId, name: userName },
+      ),
+    onSuccess: (created) => {
+      setCommentError(null);
+      setCommentContent('');
+      queryClient.setQueryData<SessionComment[] | undefined>(
+        ['trainer', 'session', session.sessionId, 'comments'],
+        (previous) => (previous ? [created, ...previous] : [created]),
+      );
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setCommentError(error.message);
+      } else {
+        setCommentError('No se pudo guardar el comentario.');
+      }
+    },
+  });
+
+  const documentsQuery = useQuery({
+    queryKey: ['trainer', 'session', session.sessionId, 'documents'],
+    queryFn: () => fetchSessionDocuments(session.dealId, session.sessionId),
+  });
+
+  const sharedDocuments = useMemo(() => {
+    return documentsQuery.data?.documents.filter((doc) => doc.compartir_formador) ?? [];
+  }, [documentsQuery.data]);
+
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
+
+  const documentMutation = useMutation({
+    mutationFn: async (files: File[]) =>
+      uploadSessionDocuments({
+        dealId: session.dealId,
+        sessionId: session.sessionId,
+        files,
+        shareWithTrainer: true,
+      }),
+    onSuccess: (payload) => {
+      setDocumentError(null);
+      if (documentInputRef.current) {
+        documentInputRef.current.value = '';
+      }
+      queryClient.setQueryData(
+        ['trainer', 'session', session.sessionId, 'documents'],
+        payload,
+      );
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setDocumentError(error.message);
+      } else {
+        setDocumentError('No se pudieron subir los documentos.');
+      }
+    },
+  });
+
+  const studentsQuery = useQuery({
+    queryKey: ['trainer', 'session', session.sessionId, 'students'],
+    queryFn: () => fetchSessionStudents(session.dealId, session.sessionId),
+  });
+
+  const [students, setStudents] = useState<SessionStudent[]>([]);
+  const studentsOriginalRef = useRef<Map<string, SessionStudent>>(new Map());
+  const [studentError, setStudentError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (studentsQuery.data) {
+      setStudents(studentsQuery.data);
+      const map = new Map<string, SessionStudent>();
+      studentsQuery.data.forEach((student) => {
+        map.set(student.id, student);
+      });
+      studentsOriginalRef.current = map;
+    } else if (!studentsQuery.isLoading && !studentsQuery.isError) {
+      setStudents([]);
+      studentsOriginalRef.current = new Map();
+    }
+  }, [studentsQuery.data, studentsQuery.isError, studentsQuery.isLoading]);
+
+  const updateStudentMutation = useMutation({
+    mutationFn: ({
+      studentId,
+      data,
+    }: {
+      studentId: string;
+      data: UpdateSessionStudentInput;
+    }) => updateSessionStudent(studentId, data),
+    onMutate: () => {
+      setStudentError(null);
+    },
+    onSuccess: (updated) => {
+      studentsOriginalRef.current.set(updated.id, updated);
+      setStudents((prev) =>
+        prev.map((student) => (student.id === updated.id ? updated : student)),
+      );
+    },
+    onError: (error: unknown, variables, context) => {
+      if (error instanceof Error) {
+        setStudentError(error.message);
+      } else {
+        setStudentError('No se pudo actualizar el alumno.');
+      }
+      const original = studentsOriginalRef.current.get(variables.studentId);
+      if (original) {
+        setStudents((prev) =>
+          prev.map((student) => (student.id === original.id ? original : student)),
+        );
+      }
+    },
+  });
+
+  const handleCommentSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmed = commentContent.trim();
+      if (!trimmed.length) return;
+      commentMutation.mutate(trimmed);
+    },
+    [commentContent, commentMutation],
+  );
+
+  const handleDocumentUpload = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const fileList = event.target.files;
+      if (!fileList || !fileList.length) return;
+      const files = Array.from(fileList);
+      documentMutation.mutate(files);
+    },
+    [documentMutation],
+  );
+
+  const handleStudentFieldChange = useCallback(
+    (studentId: string, field: 'nombre' | 'apellido' | 'dni', value: string) => {
+      setStudents((prev) =>
+        prev.map((student) =>
+          student.id === studentId ? { ...student, [field]: value } : student,
+        ),
+      );
+    },
+    [],
+  );
+
+  const handleStudentFieldBlur = useCallback(
+    (studentId: string, field: 'nombre' | 'apellido' | 'dni') => {
+      const current = students.find((student) => student.id === studentId);
+      const original = studentsOriginalRef.current.get(studentId);
+      if (!current || !original) return;
+      const currentValue = (current as Record<typeof field, string>)[field] ?? '';
+      const originalValue = (original as Record<typeof field, string>)[field] ?? '';
+      if (currentValue === originalValue) return;
+      const payload = { [field]: currentValue } as UpdateSessionStudentInput;
+      updateStudentMutation.mutate({ studentId, data: payload });
+    },
+    [students, updateStudentMutation],
+  );
+
+  const handleStudentAptoToggle = useCallback(
+    (studentId: string, checked: boolean) => {
+      setStudents((prev) =>
+        prev.map((student) =>
+          student.id === studentId ? { ...student, apto: checked } : student,
+        ),
+      );
+      const original = studentsOriginalRef.current.get(studentId);
+      if (original && original.apto === checked) {
+        return;
+      }
+      updateStudentMutation.mutate({ studentId, data: { apto: checked } });
+    },
+    [updateStudentMutation],
+  );
+
+  const startLabel = formatDateTime(session.startDate);
+  const endLabel = formatDateTime(session.endDate);
+
+  return (
+    <Card className="shadow-sm border-0">
+      <Card.Body>
+        <Stack gap={4}>
+          <Stack direction="horizontal" gap={3} className="flex-wrap">
+            <div>
+              <span className="text-uppercase text-muted small fw-semibold">
+                Organización
+              </span>
+              <div className="fs-5 fw-semibold">
+                {session.organizationName ?? '—'}
+              </div>
+            </div>
+            <div>
+              <span className="text-uppercase text-muted small fw-semibold">
+                Nº Presupuesto
+              </span>
+              <div className="fs-6 fw-semibold">
+                {session.budgetNumber ?? '—'}
+              </div>
+            </div>
+            <div>
+              <span className="text-uppercase text-muted small fw-semibold">
+                Formación
+              </span>
+              <div>{session.formationName ?? session.sessionTitle ?? '—'}</div>
+            </div>
+            {session.mobileUnits.length ? (
+              <div>
+                <span className="text-uppercase text-muted small fw-semibold">
+                  Unidades móviles
+                </span>
+                <div>
+                  {session.mobileUnits.map((unit) => (
+                    <Badge key={unit.id} bg="info" className="me-1">
+                      {unit.name ?? unit.id}
+                      {unit.plate ? ` · ${unit.plate}` : ''}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </Stack>
+
+          <Row xs={1} md={2} className="g-4">
+            <Col>
+              <Stack gap={2}>
+                <div>
+                  <span className="text-uppercase text-muted small fw-semibold">
+                    Dirección de la sesión
+                  </span>
+                  <div>{session.address ?? '—'}</div>
+                </div>
+                <div>
+                  <span className="text-uppercase text-muted small fw-semibold">
+                    Fechas
+                  </span>
+                  <div>
+                    {startLabel ? startLabel : '—'}
+                    {endLabel ? ` · ${endLabel}` : ''}
+                  </div>
+                </div>
+              </Stack>
+            </Col>
+            <Col>
+              <Stack gap={2}>
+                <div>
+                  <span className="text-uppercase text-muted small fw-semibold">CAES</span>
+                  <div>{renderBooleanField(session.caes)}</div>
+                </div>
+                <div>
+                  <span className="text-uppercase text-muted small fw-semibold">FUNDAE</span>
+                  <div>{renderBooleanField(session.fundae)}</div>
+                </div>
+              </Stack>
+            </Col>
+          </Row>
+
+          <Stack gap={3}>
+            <div>
+              <h5 className="fw-semibold mb-3">Comentarios</h5>
+              {commentError ? <Alert variant="danger">{commentError}</Alert> : null}
+              {commentsQuery.isError ? (
+                <Alert variant="danger">
+                  No se pudieron cargar los comentarios.
+                </Alert>
+              ) : null}
+              {commentsQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" />
+                  <span>Cargando comentarios…</span>
+                </div>
+              ) : (
+                <Stack gap={3} className="mb-3">
+                  {filteredComments.length ? (
+                    filteredComments.map((comment) => (
+                      <Card key={comment.id} className="border-0 bg-light">
+                        <Card.Body>
+                          <div className="text-muted small mb-2">
+                            {comment.author ?? '—'} ·{' '}
+                            {comment.created_at
+                              ? formatDateTime(comment.created_at)
+                              : '—'}
+                          </div>
+                          <div>{comment.content}</div>
+                        </Card.Body>
+                      </Card>
+                    ))
+                  ) : (
+                    <p className="text-muted mb-0">
+                      No hay comentarios compartidos.
+                    </p>
+                  )}
+                </Stack>
+              )}
+              <Form onSubmit={handleCommentSubmit} className="d-grid gap-3">
+                <Form.Group controlId={`trainer-session-${session.sessionId}-comment`}>
+                  <Form.Label>Nuevo comentario</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    value={commentContent}
+                    onChange={(event) => setCommentContent(event.target.value)}
+                    placeholder="Escribe un comentario para el equipo del ERP"
+                    disabled={commentMutation.isPending}
+                    required
+                  />
+                </Form.Group>
+                <div>
+                  <Button
+                    type="submit"
+                    disabled={commentMutation.isPending || !commentContent.trim().length}
+                  >
+                    {commentMutation.isPending ? 'Guardando…' : 'Añadir comentario'}
+                  </Button>
+                </div>
+              </Form>
+            </div>
+
+            <div>
+              <h5 className="fw-semibold mb-3">Documentos</h5>
+              {documentError ? <Alert variant="danger">{documentError}</Alert> : null}
+              {documentsQuery.isError ? (
+                <Alert variant="danger">
+                  No se pudieron cargar los documentos.
+                </Alert>
+              ) : null}
+              {documentsQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" />
+                  <span>Cargando documentos…</span>
+                </div>
+              ) : (
+                <Stack gap={2} className="mb-3">
+                  {sharedDocuments.length ? (
+                    sharedDocuments.map((doc) => (
+                      <div key={doc.id} className="d-flex flex-column flex-md-row gap-2">
+                        <span className="fw-semibold">{doc.drive_file_name ?? 'Documento'}</span>
+                        <span className="text-muted small">
+                          {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
+                        </span>
+                        {doc.drive_web_view_link ? (
+                          <Button
+                            as="a"
+                            href={doc.drive_web_view_link}
+                            target="_blank"
+                            rel="noreferrer"
+                            variant="outline-primary"
+                            size="sm"
+                          >
+                            Abrir en Drive
+                          </Button>
+                        ) : null}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-muted mb-0">No hay documentos compartidos.</p>
+                  )}
+                  {documentsQuery.data?.driveUrl ? (
+                    <div>
+                      <Button
+                        as="a"
+                        href={documentsQuery.data.driveUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        variant="outline-secondary"
+                        size="sm"
+                      >
+                        Abrir carpeta en Drive
+                      </Button>
+                    </div>
+                  ) : null}
+                </Stack>
+              )}
+              <Form.Group controlId={`trainer-session-${session.sessionId}-documents`} className="d-grid gap-2">
+                <Form.Label>Subir documentos</Form.Label>
+                <Form.Control
+                  type="file"
+                  multiple
+                  onChange={handleDocumentUpload}
+                  ref={documentInputRef}
+                  disabled={documentMutation.isPending}
+                />
+                <div className="text-muted small">
+                  Los documentos se compartirán automáticamente con el equipo del ERP.
+                </div>
+              </Form.Group>
+            </div>
+
+            <div>
+              <h5 className="fw-semibold mb-3">Alumnos</h5>
+              {studentError ? <Alert variant="danger">{studentError}</Alert> : null}
+              {studentsQuery.isError ? (
+                <Alert variant="danger">
+                  No se pudieron cargar los alumnos de la sesión.
+                </Alert>
+              ) : null}
+              {studentsQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" />
+                  <span>Cargando alumnos…</span>
+                </div>
+              ) : (
+                <Table responsive bordered hover size="sm">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Apellidos</th>
+                      <th>DNI</th>
+                      <th className="text-center">Apto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.length ? (
+                      students.map((student) => (
+                        <tr key={student.id}>
+                          <td>
+                            <Form.Control
+                              type="text"
+                              value={student.nombre}
+                              onChange={(event) =>
+                                handleStudentFieldChange(
+                                  student.id,
+                                  'nombre',
+                                  event.target.value,
+                                )
+                              }
+                              onBlur={() => handleStudentFieldBlur(student.id, 'nombre')}
+                              disabled={updateStudentMutation.isPending}
+                            />
+                          </td>
+                          <td>
+                            <Form.Control
+                              type="text"
+                              value={student.apellido}
+                              onChange={(event) =>
+                                handleStudentFieldChange(
+                                  student.id,
+                                  'apellido',
+                                  event.target.value,
+                                )
+                              }
+                              onBlur={() => handleStudentFieldBlur(student.id, 'apellido')}
+                              disabled={updateStudentMutation.isPending}
+                            />
+                          </td>
+                          <td>
+                            <Form.Control
+                              type="text"
+                              value={student.dni}
+                              onChange={(event) =>
+                                handleStudentFieldChange(
+                                  student.id,
+                                  'dni',
+                                  event.target.value,
+                                )
+                              }
+                              onBlur={() => handleStudentFieldBlur(student.id, 'dni')}
+                              disabled={updateStudentMutation.isPending}
+                            />
+                          </td>
+                          <td className="text-center">
+                            <Form.Check
+                              type="checkbox"
+                              checked={student.apto}
+                              onChange={(event) =>
+                                handleStudentAptoToggle(student.id, event.target.checked)
+                              }
+                              disabled={updateStudentMutation.isPending}
+                            />
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="text-center text-muted">
+                          No hay alumnos registrados para esta sesión.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              )}
+            </div>
+          </Stack>
+        </Stack>
+      </Card.Body>
+    </Card>
+  );
+}
+
+function selectDefaultDate(entries: TrainerSessionsDateEntry[]): string | null {
+  if (!entries.length) return null;
+  const today = new Date();
+  const todayKey = today.toISOString().slice(0, 10);
+  const upcoming = entries.find((entry) => entry.date >= todayKey);
+  return (upcoming ?? entries[0]).date;
+}
+
+export default function TrainerSessionsPage() {
+  const sessionsQuery = useQuery({
+    queryKey: ['trainer', 'sessions'],
+    queryFn: fetchTrainerSessions,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const dateEntries = sessionsQuery.data?.dates ?? [];
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!dateEntries.length) {
+      setSelectedDate(null);
+      return;
+    }
+    setSelectedDate((previous) => {
+      if (previous && dateEntries.some((entry) => entry.date === previous)) {
+        return previous;
+      }
+      return selectDefaultDate(dateEntries);
+    });
+  }, [dateEntries]);
+
+  const handleDateChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value;
+    setSelectedDate(value ? value : null);
+  }, []);
+
+  const selectedEntry = useMemo(() => {
+    if (!selectedDate) return null;
+    return dateEntries.find((entry) => entry.date === selectedDate) ?? null;
+  }, [dateEntries, selectedDate]);
+
+  const companySessions = useMemo(() => {
+    if (!selectedEntry) return [];
+    return selectedEntry.sessions.filter((session) => session.isCompanyTraining);
+  }, [selectedEntry]);
+
+  const variantCount = selectedEntry?.variants.length ?? 0;
+
+  return (
+    <Stack gap={4} className="trainer-sessions-page">
+      <Card className="shadow-sm border-0">
+        <Card.Body>
+          <Stack gap={3}>
+            <div>
+              <h1 className="h3 fw-bold mb-0">Mis sesiones asignadas</h1>
+              <p className="text-muted mb-0">
+                Consulta la información y comparte documentación con el equipo del ERP.
+              </p>
+            </div>
+            <Form>
+              <Form.Group as={Row} className="align-items-center g-2" controlId="trainer-sessions-date">
+                <Form.Label column sm={12} md={3} className="text-md-end fw-semibold">
+                  Selecciona una fecha
+                </Form.Label>
+                <Col sm={12} md={6} lg={5}>
+                  <Form.Select value={selectedDate ?? ''} onChange={handleDateChange} disabled={!dateEntries.length}>
+                    <option value="" disabled>
+                      {sessionsQuery.isLoading ? 'Cargando fechas…' : 'Selecciona una fecha con asignaciones'}
+                    </option>
+                    {dateEntries.map((entry) => {
+                      const sessionCount = entry.sessions.length;
+                      const variantCountEntry = entry.variants.length;
+                      const label = formatDateLabel(entry.date);
+                      const suffixParts = [] as string[];
+                      if (sessionCount) suffixParts.push(`${sessionCount} sesión${sessionCount === 1 ? '' : 'es'}`);
+                      if (variantCountEntry) {
+                        suffixParts.push(`${variantCountEntry} variante${variantCountEntry === 1 ? '' : 's'}`);
+                      }
+                      const suffix = suffixParts.length ? ` · ${suffixParts.join(' · ')}` : '';
+                      return (
+                        <option key={entry.date} value={entry.date}>
+                          {label}
+                          {suffix}
+                        </option>
+                      );
+                    })}
+                  </Form.Select>
+                </Col>
+                {selectedEntry ? (
+                  <Col sm={12} md={3} className="text-md-start text-muted small">
+                    {variantCount
+                      ? `También tienes ${variantCount} variante${variantCount === 1 ? '' : 's'} asignada${variantCount === 1 ? '' : 's'} en esta fecha.`
+                      : 'Solo hay sesiones asignadas en esta fecha.'}
+                  </Col>
+                ) : null}
+              </Form.Group>
+            </Form>
+          </Stack>
+        </Card.Body>
+      </Card>
+
+      {sessionsQuery.isLoading ? (
+        <Card className="shadow-sm border-0">
+          <Card.Body className="d-flex align-items-center gap-2">
+            <Spinner animation="border" role="status" />
+            <span>Cargando sesiones asignadas…</span>
+          </Card.Body>
+        </Card>
+      ) : null}
+
+      {sessionsQuery.isError ? (
+        <Alert variant="danger">
+          No se pudo cargar la información de tus sesiones. Inténtalo de nuevo más tarde.
+        </Alert>
+      ) : null}
+
+      {!sessionsQuery.isLoading && !sessionsQuery.isError && !dateEntries.length ? (
+        <Card className="shadow-sm border-0">
+          <Card.Body>
+            <p className="text-muted mb-0">
+              No tienes sesiones ni variantes asignadas en el calendario.
+            </p>
+          </Card.Body>
+        </Card>
+      ) : null}
+
+      {selectedEntry && !companySessions.length ? (
+        <Card className="shadow-sm border-0">
+          <Card.Body>
+            <p className="text-muted mb-0">
+              En esta fecha no tienes sesiones de formación empresa asignadas.
+            </p>
+          </Card.Body>
+        </Card>
+      ) : null}
+
+      {companySessions.map((session) => (
+        <SessionDetailCard key={session.sessionId} session={session} />
+      ))}
+    </Stack>
+  );
+}

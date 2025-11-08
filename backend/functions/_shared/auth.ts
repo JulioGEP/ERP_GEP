@@ -112,6 +112,7 @@ export function getRoleDisplayValue(role: string | null | undefined): string | n
 // Exportado para que el front o los guards puedan reutilizar el orden por defecto
 export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/trainer/dashboard',
+  '/usuarios/trainer/sesiones',
   '/usuarios/trainer/disponibilidad',
   '/dashboard',
   '/presupuestos/sinplanificar',

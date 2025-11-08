@@ -38,6 +38,7 @@ const InformesRecursoPreventivoEbroPage = lazy(
 );
 const UsersPage = lazy(() => import('../pages/usuarios/UsersPage'));
 const TrainerDashboardPage = lazy(() => import('../pages/usuarios/trainer/TrainerDashboardPage'));
+const TrainerSessionsPage = lazy(() => import('../pages/usuarios/trainer/TrainerSessionsPage'));
 const TrainerAvailabilityPage = lazy(() => import('../pages/usuarios/trainer/TrainerAvailabilityPage'));
 const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
@@ -259,6 +260,16 @@ export function AppRouter({
               path="/usuarios/trainer/dashboard"
               roles={['Formador']}
               element={<TrainerDashboardPage />}
+            />
+          }
+        />
+        <Route
+          path="/usuarios/trainer/sesiones"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/sesiones"
+              roles={['Formador']}
+              element={<TrainerSessionsPage />}
             />
           }
         />
