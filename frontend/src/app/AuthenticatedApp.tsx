@@ -68,7 +68,7 @@ type NavItem = {
   children?: NavChild[];
 };
 
-const NAVIGATION_ITEMS: NavItem[] = [
+const BASE_NAVIGATION_ITEMS: NavItem[] = [
   {
     key: 'Dashboard',
     label: 'Dashboard',
@@ -478,10 +478,20 @@ export default function AuthenticatedApp() {
     }
   }, [user, navigate]);
 
+  const normalizedRole = (user?.role ?? '').trim().toLowerCase();
+
+  const navigationCatalog = useMemo(() => {
+    const items: NavItem[] = [...BASE_NAVIGATION_ITEMS];
+    if (normalizedRole === 'formador') {
+      items.unshift({ key: 'Trainer/Dashboard', label: 'Mi panel', path: '/usuarios/trainer/dashboard' });
+    }
+    return items;
+  }, [normalizedRole]);
+
   // Calcula path por defecto según permisos visibles en el menú
   const computeDefaultPath = useCallback((): string => {
-    // Prioriza hijos en el orden declarado en NAVIGATION_ITEMS
-    for (const item of NAVIGATION_ITEMS) {
+    // Prioriza hijos en el orden declarado en navigationCatalog
+    for (const item of navigationCatalog) {
       if (item.path && hasPermission(item.path)) return item.path;
       for (const child of item.children ?? []) {
         if (hasPermission(child.path)) return child.path;
@@ -492,12 +502,12 @@ export default function AuthenticatedApp() {
     if (hasPermission(DEFAULT_REDIRECT_PATH)) return DEFAULT_REDIRECT_PATH;
     // Último recurso: primer legacy conocido o raíz
     return LEGACY_APP_PATHS[0] ?? '/';
-  }, [hasPermission]);
+  }, [hasPermission, navigationCatalog]);
 
   const defaultRedirectPath = useMemo(() => computeDefaultPath(), [computeDefaultPath]);
 
   const filteredNavItems = useMemo(() => {
-    return NAVIGATION_ITEMS.map((item) => {
+    return navigationCatalog.map((item) => {
       const children = (item.children ?? []).filter((child) => hasPermission(child.path));
       const hasDirect = item.path ? hasPermission(item.path) : false;
       if (!hasDirect && children.length === 0) {
@@ -508,11 +518,11 @@ export default function AuthenticatedApp() {
   (item): item is { children: NavChild[]; key: string; label: string; path?: string } =>
     !!item && Array.isArray((item as any).children)
 );
-  }, [hasPermission, permissions]);
+  }, [hasPermission, navigationCatalog, permissions]);
 
   const allowedPaths = useMemo(() => {
     const paths = new Set<string>();
-    for (const item of NAVIGATION_ITEMS) {
+    for (const item of navigationCatalog) {
       if (item.path && hasPermission(item.path)) {
         paths.add(item.path);
       }
@@ -527,7 +537,7 @@ export default function AuthenticatedApp() {
     }
     paths.add('/perfil');
     return paths;
-  }, [hasPermission, permissions]);
+  }, [hasPermission, navigationCatalog, permissions]);
 
   const fallbackPath = useMemo(() => {
     const firstAllowed = allowedPaths.values().next().value as string | undefined;
