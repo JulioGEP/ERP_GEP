@@ -4,11 +4,7 @@ import { getPrisma } from './_shared/prisma';
 import { ensureMadridTimezone, toMadridISOString } from './_shared/timezone';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
-import {
-  getVariantResourceColumnsSupport,
-  isVariantResourceColumnError,
-  setVariantResourceColumnsSupport,
-} from './_shared/variant-resources';
+import { isVariantResourceColumnError, setVariantResourceColumnsSupport } from './_shared/variant-resources';
 
 /** ====== Tipos de respuesta ====== */
 type CalendarVariantDeal = {
@@ -112,7 +108,6 @@ function getFirstParam(qs: Record<string, any> | undefined, names: string[]): st
 function parseDateFlex(raw: unknown): Date | null {
   const text = toTrimmed(raw);
   if (!text) return null;
-  // new Date(...) soporta ISO y YYYY-MM-DD (interpreta en UTC); validamos getTime()
   const d = new Date(text);
   return Number.isFinite(d.getTime()) ? d : null;
 }
@@ -413,11 +408,9 @@ export const handler = async (event: any) => {
 
     // Acepta start/end, from_utc/to_utc, o from/to. Si solo viene inicio, usa mismo día como fin.
     const startRaw =
-      getFirstParam(qs, ['start', 'from_utc', 'from']) ??
-      null;
+      getFirstParam(qs, ['start', 'from_utc', 'from']) ?? null;
     const endRaw =
-      getFirstParam(qs, ['end', 'to_utc', 'to']) ??
-      startRaw; // fallback: mismo día
+      getFirstParam(qs, ['end', 'to_utc', 'to']) ?? startRaw; // fallback: mismo día
 
     const startDate = parseDateFlex(startRaw);
     const endDate = parseDateFlex(endRaw);
@@ -434,7 +427,6 @@ export const handler = async (event: any) => {
     }
 
     const prisma = getPrisma();
-    const shouldIncludeResources = getVariantResourceColumnsSupport() !== false;
 
     const buildQuery = (includeResources: boolean) =>
       prisma.variants.findMany({
@@ -451,12 +443,11 @@ export const handler = async (event: any) => {
 
     let variants;
     try {
-      variants = await buildQuery(shouldIncludeResources);
-      if (shouldIncludeResources) {
-        setVariantResourceColumnsSupport(true);
-      }
+      // Siempre intentamos primero cargar con recursos
+      variants = await buildQuery(true);
+      setVariantResourceColumnsSupport(true);
     } catch (error) {
-      if (shouldIncludeResources && isVariantResourceColumnError(error)) {
+      if (isVariantResourceColumnError(error)) {
         setVariantResourceColumnsSupport(false);
         console.warn(
           '[calendar-variants] falling back to legacy variant query (missing resource columns)',
@@ -517,7 +508,6 @@ export const handler = async (event: any) => {
         },
       });
 
-      // === BLOQUE con tipos fuertes (DealRow) ===
       (dealsWithCounts as DealRow[]).forEach((deal: DealRow) => {
         // normaliza la clave de variación
         let keyRaw: string | null = null;
