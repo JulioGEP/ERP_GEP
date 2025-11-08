@@ -20,16 +20,8 @@ function buildIsoDate(year: number, month: number, day: number): string {
   return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-function isDefaultAvailable(dateIso: string): boolean {
-  const [yearText, monthText, dayText] = dateIso.split('-');
-  const year = Number.parseInt(yearText, 10);
-  const month = Number.parseInt(monthText, 10);
-  const day = Number.parseInt(dayText, 10);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    return false;
-  }
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  return weekday >= 1 && weekday <= 5;
+function isDefaultAvailable(_dateIso: string): boolean {
+  return true;
 }
 
 function useCalendar(year: number, data: TrainerAvailabilityResponse | undefined) {
@@ -83,7 +75,7 @@ function useCalendar(year: number, data: TrainerAvailabilityResponse | undefined
       for (let day = 1; day <= daysInMonth; day += 1) {
         const iso = buildIsoDate(year, month + 1, day);
         const weekday = new Date(Date.UTC(year, month, day)).getUTCDay();
-        const defaultAvailable = weekday >= 1 && weekday <= 5;
+        const defaultAvailable = true;
         const override = overrideMap.get(iso);
         const available = override !== undefined ? override : defaultAvailable;
         const hasAssignment = assignmentSet.has(iso);
