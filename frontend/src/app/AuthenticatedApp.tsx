@@ -316,7 +316,10 @@ function mapCalendarVariantTrainer(
   if (!record) {
     return null;
   }
-  const trainerId = sanitizeString(record.trainer_id);
+  const trainerId =
+    sanitizeString(record.trainer_id) ??
+    sanitizeString(record.name) ??
+    sanitizeString(record.apellido);
   if (!trainerId) {
     return null;
   }
@@ -333,7 +336,10 @@ function mapCalendarVariantUnit(
   if (!record) {
     return null;
   }
-  const unitId = sanitizeString(record.unidad_id);
+  const unitId =
+    sanitizeString(record.unidad_id) ??
+    sanitizeString(record.name) ??
+    sanitizeString(record.matricula);
   if (!unitId) {
     return null;
   }
@@ -346,7 +352,10 @@ function mapCalendarVariantUnit(
 }
 
 function resolveVariantSala(details: CalendarVariantEvent['variant']): VariantInfo['sala'] | null {
-  const fallbackId = sanitizeString(details.sala_id);
+  const fallbackId =
+    sanitizeString(details.sala_id) ??
+    sanitizeString(details.sala?.name) ??
+    sanitizeString(details.sala?.sede);
   if (details.sala) {
     const id = sanitizeString(details.sala.sala_id) ?? fallbackId;
     if (id) {
