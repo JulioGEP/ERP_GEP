@@ -81,11 +81,6 @@ export default function TrainerDashboardPage() {
 
   return (
     <Stack gap={4} className="trainer-dashboard">
-      <Stack gap={1}>
-        <span className="text-uppercase text-muted small fw-semibold">Panel</span>
-        <h1 className="h3 text-uppercase mb-0">Panel del formador</h1>
-        {updatedAt ? <span className="text-muted small">Última actualización: {updatedAt}</span> : null}
-      </Stack>
 
       {query.isLoading ? (
         <div className="d-flex justify-content-center py-5" aria-live="polite">
@@ -118,9 +113,12 @@ export default function TrainerDashboardPage() {
                   {` ${formatNumber(query.data.metrics.openTrainingVariants)}`}
                 </div>
               </div>
-              <Button variant="outline-primary" onClick={() => query.refetch()} disabled={query.isFetching}>
-                Actualizar
-              </Button>
+              <div className="d-flex flex-column align-items-start align-items-md-end gap-1">
+                <Button variant="outline-primary" onClick={() => query.refetch()} disabled={query.isFetching}>
+                  Actualizar
+                </Button>
+                {updatedAt ? <span className="text-muted small">Última actualización: {updatedAt}</span> : null}
+              </div>
             </Card.Body>
           </Card>
 
