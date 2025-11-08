@@ -197,7 +197,7 @@ export const handler = createHttpHandler(async (request) => {
 
   const { startDate, endDate } = parsedDates;
 
-  const sessionStartFilter: Prisma.DateTimeNullableFilter = { not: null };
+  const sessionStartFilter: { not: null; gte?: Date; lte?: Date } = { not: null };
   if (startDate) {
     sessionStartFilter.gte = startDate;
   }
@@ -205,16 +205,16 @@ export const handler = createHttpHandler(async (request) => {
     sessionStartFilter.lte = endDate;
   }
 
-  const sessionEndFilter: Prisma.DateTimeNullableFilter = { not: null };
+  const sessionEndFilter: { not: null; gte?: Date; lte?: Date } = { not: null };
 
-  const sessionWhere: Prisma.sesion_trainersWhereInput = {
+  const sessionWhere = {
     sesiones: {
       fecha_inicio_utc: sessionStartFilter,
       fecha_fin_utc: sessionEndFilter,
     },
   };
 
-  const variantDateFilter: Prisma.DateTimeNullableFilter = { not: null };
+  const variantDateFilter: { not: null; gte?: Date; lte?: Date } = { not: null };
   if (startDate) {
     variantDateFilter.gte = startDate;
   }

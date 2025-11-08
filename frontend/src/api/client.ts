@@ -117,6 +117,14 @@ export async function postJson<T = any>(path: string, body?: any, init?: Request
   });
 }
 
+export async function putJson<T = any>(path: string, body?: any, init?: RequestInit) {
+  return requestJson<T>(path, {
+    ...(init || {}),
+    method: 'PUT',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 export async function patchJson<T = any>(path: string, body?: any, init?: RequestInit) {
   return requestJson<T>(path, {
     ...(init || {}),

@@ -968,10 +968,38 @@ export function VariantModal({
   });
 
   const availability = availabilityQuery.data;
-  const blockedTrainerIds = useMemo(
-    () => new Set(availability?.trainers ?? []),
-    [availability?.trainers],
-  );
+
+  const availableTrainerSet = useMemo(() => {
+    const ids = availability?.availableTrainers ?? null;
+    if (!ids || !ids.length) return null;
+    return new Set(ids);
+  }, [availability?.availableTrainers]);
+
+  const trainersWithAvailability = useMemo(() => {
+    if (!availableTrainerSet) return trainers;
+    const selected = new Set(formValues.trainer_ids);
+    return trainers.filter(
+      (trainer) => availableTrainerSet.has(trainer.trainer_id) || selected.has(trainer.trainer_id),
+    );
+  }, [availableTrainerSet, formValues.trainer_ids, trainers]);
+
+  const scheduleBlockedTrainerIds = useMemo(() => {
+    if (!availableTrainerSet) return new Set<string>();
+    const blocked = new Set<string>();
+    trainers.forEach((trainer) => {
+      if (!availableTrainerSet.has(trainer.trainer_id)) {
+        blocked.add(trainer.trainer_id);
+      }
+    });
+    return blocked;
+  }, [availableTrainerSet, trainers]);
+
+  const blockedTrainerIds = useMemo(() => {
+    const set = new Set<string>();
+    (availability?.trainers ?? []).forEach((id) => set.add(id));
+    scheduleBlockedTrainerIds.forEach((id) => set.add(id));
+    return set;
+  }, [availability?.trainers, scheduleBlockedTrainerIds]);
   const blockedRoomIds = useMemo(() => new Set(availability?.rooms ?? []), [availability?.rooms]);
   const blockedUnitIds = useMemo(() => new Set(availability?.units ?? []), [availability?.units]);
 
@@ -1295,13 +1323,13 @@ export function VariantModal({
 
   const filteredTrainers = useMemo(() => {
     if (!normalizedTrainerFilter.length) {
-      return trainers;
+      return trainersWithAvailability;
     }
-    return trainers.filter((trainer) => {
+    return trainersWithAvailability.filter((trainer) => {
       const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
       return label.toLowerCase().includes(normalizedTrainerFilter);
     });
-  }, [normalizedTrainerFilter, trainers]);
+  }, [normalizedTrainerFilter, trainersWithAvailability]);
 
   const filteredUnits = useMemo(() => {
     if (!normalizedUnitFilter.length) {
