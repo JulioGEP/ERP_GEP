@@ -41,6 +41,10 @@ function useCalendar(year: number, data: TrainerAvailabilityResponse | undefined
     return map;
   }, [data?.overrides]);
 
+  const assignmentSet = useMemo(() => {
+    return new Set(data?.assignedDates ?? []);
+  }, [data?.assignedDates]);
+
   return useMemo(() => {
     const months = [] as Array<{
       monthIndex: number;
@@ -53,6 +57,7 @@ function useCalendar(year: number, data: TrainerAvailabilityResponse | undefined
         available: boolean;
         defaultAvailable: boolean;
         isOverride: boolean;
+        hasAssignment: boolean;
       }>;
     }>;
 
@@ -72,6 +77,7 @@ function useCalendar(year: number, data: TrainerAvailabilityResponse | undefined
         available: boolean;
         defaultAvailable: boolean;
         isOverride: boolean;
+        hasAssignment: boolean;
       }> = [];
 
       for (let day = 1; day <= daysInMonth; day += 1) {
@@ -80,6 +86,7 @@ function useCalendar(year: number, data: TrainerAvailabilityResponse | undefined
         const defaultAvailable = weekday >= 1 && weekday <= 5;
         const override = overrideMap.get(iso);
         const available = override !== undefined ? override : defaultAvailable;
+        const hasAssignment = assignmentSet.has(iso);
         days.push({
           iso,
           dayNumber: day,
@@ -87,6 +94,7 @@ function useCalendar(year: number, data: TrainerAvailabilityResponse | undefined
           available,
           defaultAvailable,
           isOverride: override !== undefined,
+          hasAssignment,
         });
       }
 
@@ -99,7 +107,7 @@ function useCalendar(year: number, data: TrainerAvailabilityResponse | undefined
     }
 
     return months;
-  }, [overrideMap, year]);
+  }, [assignmentSet, overrideMap, year]);
 }
 
 export default function TrainerAvailabilityPage() {
@@ -140,6 +148,7 @@ export default function TrainerAvailabilityPage() {
         overrides: Array.from(map.entries())
           .map(([date, available]) => ({ date, available }))
           .sort((a, b) => a.date.localeCompare(b.date)),
+        assignedDates: previous.assignedDates,
       };
 
       queryClient.setQueryData(queryKey, next);
@@ -239,7 +248,7 @@ export default function TrainerAvailabilityPage() {
               <span className="trainer-availability-legend trainer-availability-legend--unavailable" /> Sin disponibilidad
             </div>
             <div className="d-flex align-items-center gap-2">
-              <span className="trainer-availability-legend trainer-availability-legend--weekend" /> Fin de semana (no disponible por defecto)
+              <span className="trainer-availability-legend trainer-availability-legend--assigned" /> Sesión o variante asignada
             </div>
           </div>
 
@@ -263,13 +272,19 @@ export default function TrainerAvailabilityPage() {
                     ))}
                     {month.days.map((day) => {
                       const classes = ['trainer-availability-day'];
-                      if (day.available) {
+                      if (day.hasAssignment) {
+                        classes.push('trainer-availability-day--assigned');
+                      } else if (day.available) {
                         classes.push('trainer-availability-day--available');
-                      } else if (!day.defaultAvailable && !day.isOverride) {
-                        classes.push('trainer-availability-day--weekend');
                       } else {
                         classes.push('trainer-availability-day--unavailable');
                       }
+
+                      const title = day.hasAssignment
+                        ? 'Sesión o variante asignada'
+                        : day.available
+                          ? 'Disponible todo el día'
+                          : 'Sin disponibilidad';
 
                       return (
                         <button
@@ -278,7 +293,7 @@ export default function TrainerAvailabilityPage() {
                           className={classes.join(' ')}
                           onClick={() => handleToggleDay(day.iso, day.available)}
                           aria-pressed={day.available}
-                          title={day.available ? 'Disponible todo el día' : 'Sin disponibilidad'}
+                          title={title}
                         >
                           <span>{day.dayNumber}</span>
                         </button>

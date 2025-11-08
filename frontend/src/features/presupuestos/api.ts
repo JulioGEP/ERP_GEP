@@ -180,6 +180,7 @@ export type SessionAvailability = {
   trainers: string[];
   rooms: string[];
   units: string[];
+  availableTrainers: string[];
 };
 
 type Json = any;
