@@ -151,9 +151,10 @@ export default function HorasFormadoresPage() {
                   type="date"
                   value={filters.startDate}
                   max={filters.endDate || undefined}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, startDate: event.currentTarget.value }))
-                  }
+                  onChange={(event) => {
+                    const nextValue = event.currentTarget.value;
+                    setFilters((prev) => ({ ...prev, startDate: nextValue }));
+                  }}
                 />
               </Form.Group>
               <Form.Group controlId="horas-formadores-end" className="mb-0">
@@ -162,9 +163,10 @@ export default function HorasFormadoresPage() {
                   type="date"
                   value={filters.endDate}
                   min={filters.startDate || undefined}
-                  onChange={(event) =>
-                    setFilters((prev) => ({ ...prev, endDate: event.currentTarget.value }))
-                  }
+                  onChange={(event) => {
+                    const nextValue = event.currentTarget.value;
+                    setFilters((prev) => ({ ...prev, endDate: nextValue }));
+                  }}
                 />
               </Form.Group>
             </div>
