@@ -35,6 +35,21 @@ type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>
 // Unidades “comodín” que no bloquean disponibilidad
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 
+const MADRID_DATE_ONLY_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Madrid',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+function formatMadridDate(date: Date): string {
+  return MADRID_DATE_ONLY_FORMATTER.format(date);
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
 function toTrimmed(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -504,6 +519,120 @@ function normalizeDateRange(
 }
 
 type VariantTimeParts = { hour: number; minute: number };
+
+type MadridDayInfo = { iso: string; year: number; month: number; day: number; weekday: number };
+
+function getMadridDayInfo(date: Date): MadridDayInfo {
+  const iso = formatMadridDate(date);
+  const [yearText, monthText, dayText] = iso.split('-');
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+  const day = Number.parseInt(dayText, 10);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return { iso, year, month, day, weekday };
+}
+
+function enumerateMadridDays(range: DateRange): MadridDayInfo[] {
+  const startInfo = getMadridDayInfo(range.start);
+  const endInfo = getMadridDayInfo(range.end);
+  const days: MadridDayInfo[] = [];
+
+  let current = startInfo;
+  // Itera de forma inclusiva desde startInfo hasta endInfo
+  while (true) {
+    const weekday = new Date(Date.UTC(current.year, current.month - 1, current.day)).getUTCDay();
+    days.push({
+      iso: `${current.year}-${pad2(current.month)}-${pad2(current.day)}`,
+      year: current.year,
+      month: current.month,
+      day: current.day,
+      weekday,
+    });
+
+    if (
+      current.year === endInfo.year &&
+      current.month === endInfo.month &&
+      current.day === endInfo.day
+    ) {
+      break;
+    }
+
+    const nextDate = new Date(Date.UTC(current.year, current.month - 1, current.day) + 24 * 60 * 60 * 1000);
+    current = getMadridDayInfo(nextDate);
+  }
+
+  return days;
+}
+
+async function fetchScheduleAvailableTrainerIds(
+  prisma: Prisma.TransactionClient,
+  range: DateRange,
+): Promise<Set<string>> {
+  const trainerRows = await prisma.trainers.findMany({
+    where: { activo: true },
+    select: { trainer_id: true },
+  });
+
+  const trainerIds = trainerRows
+    .map((row: { trainer_id: string | null }) => row.trainer_id)
+    .filter((id: string | null): id is string => typeof id === 'string' && id.length > 0);
+
+  if (!trainerIds.length) {
+    return new Set<string>();
+  }
+
+  const days = enumerateMadridDays(range);
+  if (!days.length) {
+    return new Set<string>(trainerIds);
+  }
+
+  const firstDay = days[0];
+  const lastDay = days[days.length - 1];
+
+  const overrides = await prisma.trainer_availability.findMany({
+    where: {
+      trainer_id: { in: trainerIds },
+      date: {
+        gte: new Date(Date.UTC(firstDay.year, firstDay.month - 1, firstDay.day, 0, 0, 0, 0)),
+        lte: new Date(Date.UTC(lastDay.year, lastDay.month - 1, lastDay.day, 0, 0, 0, 0)),
+      },
+    },
+    select: { trainer_id: true, date: true, available: true },
+  });
+
+  const overrideMap = new Map<string, Map<string, boolean>>();
+  for (const entry of overrides) {
+    const iso = formatMadridDate(entry.date);
+    let map = overrideMap.get(iso);
+    if (!map) {
+      map = new Map<string, boolean>();
+      overrideMap.set(iso, map);
+    }
+    map.set(entry.trainer_id, Boolean(entry.available));
+  }
+
+  const available = new Set<string>(trainerIds);
+
+  for (const day of days) {
+    const defaultAvailable = day.weekday >= 1 && day.weekday <= 5;
+    const overridesForDay = overrideMap.get(day.iso);
+
+    for (const trainerId of trainerIds) {
+      if (!available.has(trainerId)) continue;
+      const override = overridesForDay?.get(trainerId);
+      const isAvailable = override !== undefined ? override : defaultAvailable;
+      if (!isAvailable) {
+        available.delete(trainerId);
+      }
+    }
+
+    if (!available.size) {
+      break;
+    }
+  }
+
+  return available;
+}
 function extractVariantTimeParts(value: Date | string | null | undefined): VariantTimeParts | null {
   const formatted = formatTimeFromDb(value);
   if (!formatted) return null;
@@ -688,6 +817,8 @@ const sessionIdFromPath =
       const excludeSessionId = toTrimmed(event.queryStringParameters?.excludeSessionId);
       const excludeVariantId = toTrimmed(event.queryStringParameters?.excludeVariantId);
 
+      const scheduleAvailableTrainerSet = await fetchScheduleAvailableTrainerIds(prisma, range);
+
       const sessionsRaw = await prisma.sesiones.findMany({
         where: {
           ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
@@ -767,6 +898,7 @@ const sessionIdFromPath =
           trainers: Array.from(trainerLocks),
           rooms: Array.from(roomLocks),
           units: Array.from(unitLocks),
+          availableTrainers: Array.from(scheduleAvailableTrainerSet),
         },
       });
     }

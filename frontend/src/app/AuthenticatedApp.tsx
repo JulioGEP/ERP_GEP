@@ -483,7 +483,10 @@ export default function AuthenticatedApp() {
   const navigationCatalog = useMemo(() => {
     const items: NavItem[] = [...BASE_NAVIGATION_ITEMS];
     if (normalizedRole === 'formador') {
-      items.unshift({ key: 'Trainer/Dashboard', label: 'Mi panel', path: '/usuarios/trainer/dashboard' });
+      items.unshift(
+        { key: 'Trainer/Dashboard', label: 'Mi panel', path: '/usuarios/trainer/dashboard' },
+        { key: 'Trainer/Availability', label: 'Mi disponibilidad', path: '/usuarios/trainer/disponibilidad' },
+      );
     }
     return items;
   }, [normalizedRole]);

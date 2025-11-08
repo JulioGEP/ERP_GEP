@@ -1738,6 +1738,7 @@ export async function fetchSessionAvailability(params: {
     trainers: toStringArray(availability.trainers),
     rooms: toStringArray(availability.rooms),
     units: toStringArray(availability.units),
+    availableTrainers: toStringArray((availability as any).availableTrainers),
   };
 }
 

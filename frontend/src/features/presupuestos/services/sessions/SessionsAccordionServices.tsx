@@ -2054,15 +2054,6 @@ function SessionEditor({
     void onSave();
   }, [onSave]);
 
-  const filteredTrainers = useMemo(() => {
-    const search = trainerFilter.trim().toLowerCase();
-    if (!search) return trainers;
-    return trainers.filter((trainer) => {
-      const label = `${trainer.name} ${trainer.apellido ?? ''}`.toLowerCase();
-      return label.includes(search);
-    });
-  }, [trainerFilter, trainers]);
-
   const filteredUnits = useMemo(() => {
     const search = unitFilter.trim().toLowerCase();
     if (!search) return units;
@@ -2141,12 +2132,48 @@ function SessionEditor({
 
   const availability = availabilityQuery.data;
 
+  const availableTrainerSet = useMemo(() => {
+    const ids = availability?.availableTrainers ?? null;
+    if (!ids || !ids.length) return null;
+    return new Set(ids);
+  }, [availability?.availableTrainers]);
+
+  const trainersWithAvailability = useMemo(() => {
+    if (!availableTrainerSet) return trainers;
+    const selected = new Set(form.trainer_ids);
+    return trainers.filter(
+      (trainer) => availableTrainerSet.has(trainer.trainer_id) || selected.has(trainer.trainer_id),
+    );
+  }, [availableTrainerSet, form.trainer_ids, trainers]);
+
+  const scheduleBlockedTrainers = useMemo(() => {
+    if (!availableTrainerSet) return new Set<string>();
+    const blocked = new Set<string>();
+    trainers.forEach((trainer) => {
+      if (!availableTrainerSet.has(trainer.trainer_id)) {
+        blocked.add(trainer.trainer_id);
+      }
+    });
+    return blocked;
+  }, [availableTrainerSet, trainers]);
+
+  const filteredTrainers = useMemo(() => {
+    const search = trainerFilter.trim().toLowerCase();
+    const source = trainersWithAvailability;
+    if (!search) return source;
+    return source.filter((trainer) => {
+      const label = `${trainer.name} ${trainer.apellido ?? ''}`.toLowerCase();
+      return label.includes(search);
+    });
+  }, [trainerFilter, trainersWithAvailability]);
+
   const blockedTrainers = useMemo(() => {
     const set = new Set<string>();
     localLocks.trainers.forEach((id) => set.add(id));
     availability?.trainers?.forEach((id) => set.add(id));
+    scheduleBlockedTrainers.forEach((id) => set.add(id));
     return set;
-  }, [availability, localLocks]);
+  }, [availability?.trainers, localLocks, scheduleBlockedTrainers]);
 
   const blockedRooms = useMemo(() => {
     const set = new Set<string>();
