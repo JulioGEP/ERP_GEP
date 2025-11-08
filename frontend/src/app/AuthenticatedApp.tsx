@@ -485,6 +485,7 @@ export default function AuthenticatedApp() {
     if (normalizedRole === 'formador') {
       items.unshift(
         { key: 'Trainer/Dashboard', label: 'Mi panel', path: '/usuarios/trainer/dashboard' },
+        { key: 'Trainer/Sessions', label: 'Mis sesiones', path: '/usuarios/trainer/sesiones' },
         { key: 'Trainer/Availability', label: 'Mi disponibilidad', path: '/usuarios/trainer/disponibilidad' },
       );
     }

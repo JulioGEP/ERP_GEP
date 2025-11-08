@@ -34,6 +34,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
 
 export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/trainer/dashboard',
+  '/usuarios/trainer/sesiones',
   '/dashboard',
   '/presupuestos/todos',
   '/recursos/formadores_bomberos',
