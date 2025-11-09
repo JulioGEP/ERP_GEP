@@ -8,6 +8,7 @@
     "npm": ">=10.8.0"
   },
   "scripts": {
+    "lint": "node scripts/lint.mjs",
     "dev": "vite",
     "start": "vite",
     "build": "vite build",
