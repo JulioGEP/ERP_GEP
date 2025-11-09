@@ -66,6 +66,7 @@ type SessionPayload = {
   clientEmail: string | null;
   sessionTitle: string | null;
   formationName: string | null;
+  formationTemplate: string | null;
   formationUrl: string | null;
   address: string | null;
   caes: { value: boolean | null; label: string | null };
@@ -213,6 +214,8 @@ export const handler = createHttpHandler(async (request) => {
 
   const productCodeMap = new Map<string, string | null>();
   const productNameMap = new Map<string, string | null>();
+  const productTemplateByCode = new Map<string, string | null>();
+  const productTemplateByName = new Map<string, string | null>();
 
   const productCodes = new Set<string>();
   const productNames = new Set<string>();
@@ -238,18 +241,21 @@ export const handler = createHttpHandler(async (request) => {
   if (productFilters.length) {
     const products = await prisma.products.findMany({
       where: { OR: productFilters },
-      select: { id_pipe: true, name: true, url_formacion: true },
+      select: { id_pipe: true, name: true, url_formacion: true, template: true },
     });
 
     for (const product of products) {
       const url = sanitizeString(product.url_formacion ?? null);
       const code = sanitizeString(product.id_pipe);
+      const template = sanitizeString(product.template ?? null);
       if (code) {
         productCodeMap.set(code, url);
+        productTemplateByCode.set(code, template);
       }
       const name = sanitizeString(product.name ?? null);
       if (name) {
         productNameMap.set(name, url);
+        productTemplateByName.set(name, template);
       }
     }
   }
@@ -269,6 +275,9 @@ export const handler = createHttpHandler(async (request) => {
       const formationUrl =
         (formationCode ? productCodeMap.get(formationCode) ?? null : null) ??
         (formationName ? productNameMap.get(formationName) ?? null : null);
+      const formationTemplate =
+        (formationCode ? productTemplateByCode.get(formationCode) ?? null : null) ??
+        (formationName ? productTemplateByName.get(formationName) ?? null : null);
       const sessionTitle = sanitizeString(session.nombre_cache);
       const address = sanitizeString(session.direccion ?? deal?.training_address ?? null);
       const caesValue = sanitizeBoolean(deal?.caes_val);
@@ -336,6 +345,7 @@ export const handler = createHttpHandler(async (request) => {
           clientEmail,
           sessionTitle,
           formationName,
+          formationTemplate,
           formationUrl,
           address,
           caes: { value: caesValue, label: caesLabel },
