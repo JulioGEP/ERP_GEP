@@ -7,6 +7,12 @@ export type TrainerSessionMobileUnit = {
   plate: string | null;
 };
 
+export type TrainerSessionTrainer = {
+  trainerId: string;
+  name: string | null;
+  lastName: string | null;
+};
+
 export type TrainerSessionDetail = {
   sessionId: string;
   dealId: string;
@@ -26,6 +32,7 @@ export type TrainerSessionDetail = {
   endDate: string | null;
   mobileUnits: TrainerSessionMobileUnit[];
   isCompanyTraining: boolean;
+  companionTrainers: TrainerSessionTrainer[];
 };
 
 export type TrainerVariantDetail = {
@@ -101,6 +108,7 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
     fundae?: unknown;
     mobileUnits?: unknown;
     isCompanyTraining?: unknown;
+    companionTrainers?: unknown;
   };
 
   const sessionId = sanitizeString(raw.sessionId);
@@ -126,6 +134,25 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
         }
       : { value: null, label: null };
 
+  const companionTrainers = Array.isArray(raw.companionTrainers)
+    ? (raw.companionTrainers
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null;
+          const trainer = entry as Partial<TrainerSessionTrainer> & {
+            trainerId?: unknown;
+          };
+          const trainerId = sanitizeString(trainer.trainerId);
+          if (!trainerId) return null;
+          return {
+            trainerId,
+            name: sanitizeString(trainer.name ?? null),
+            lastName: sanitizeString(trainer.lastName ?? null),
+          } satisfies TrainerSessionTrainer;
+        })
+        .filter((value): value is TrainerSessionTrainer => value !== null)
+      )
+    : [];
+
   return {
     sessionId,
     dealId,
@@ -145,6 +172,7 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
     endDate: sanitizeDate(raw.endDate),
     mobileUnits: sanitizeMobileUnits(raw.mobileUnits),
     isCompanyTraining: Boolean(raw.isCompanyTraining),
+    companionTrainers,
   } satisfies TrainerSessionDetail;
 }
 

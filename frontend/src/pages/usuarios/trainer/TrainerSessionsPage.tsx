@@ -27,6 +27,7 @@ import {
   fetchTrainerSessions,
   type TrainerSessionDetail,
   type TrainerSessionsDateEntry,
+  type TrainerSessionTrainer,
 } from '../../../api/trainer-sessions';
 import {
   fetchSessionComments,
@@ -82,6 +83,16 @@ function renderBooleanField(field: { value: boolean | null; label: string | null
   if (field.value === true) return 'Sí';
   if (field.value === false) return 'No';
   return '—';
+}
+
+function formatTrainerName(trainer: TrainerSessionTrainer): string {
+  const parts = [trainer.name ?? '', trainer.lastName ?? '']
+    .map((value) => value.trim())
+    .filter((value) => value.length);
+  if (parts.length) {
+    return parts.join(' ');
+  }
+  return trainer.trainerId;
 }
 
 type InfoFieldProps = {
@@ -638,11 +649,22 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                   '—'
                 )}
               </InfoField>
-              <InfoField className="col-12 col-md-3" label="CAES">
+              <InfoField className="col-12 col-md-2" label="CAES">
                 {renderBooleanField(session.caes)}
               </InfoField>
-              <InfoField className="col-12 col-md-3" label="FUNDAE">
+              <InfoField className="col-12 col-md-2" label="FUNDAE">
                 {renderBooleanField(session.fundae)}
+              </InfoField>
+              <InfoField className="col-12 col-md-2" label="Acompañantes">
+                {session.companionTrainers.length ? (
+                  <div className="d-flex flex-column gap-1">
+                    {session.companionTrainers.map((trainer) => (
+                      <span key={trainer.trainerId}>{formatTrainerName(trainer)}</span>
+                    ))}
+                  </div>
+                ) : (
+                  '—'
+                )}
               </InfoField>
             </div>
 
