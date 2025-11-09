@@ -85,6 +85,9 @@ type SessionDetailCardProps = {
 function SessionDetailCard({ session }: SessionDetailCardProps) {
   const queryClient = useQueryClient();
   const { userId, userName } = useCurrentUserIdentity();
+  const mapsUrl = session.address
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(session.address)}`
+    : null;
 
   const commentsQuery = useQuery({
     queryKey: ['trainer', 'session', session.sessionId, 'comments'],
@@ -307,6 +310,20 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
               </span>
               <div>{session.formationName ?? session.sessionTitle ?? '—'}</div>
             </div>
+            <div>
+              <span className="text-uppercase text-muted small fw-semibold">
+                Presentación
+              </span>
+              <div className="text-break">
+                {session.formationUrl ? (
+                  <a href={session.formationUrl} target="_blank" rel="noopener noreferrer">
+                    {session.formationUrl}
+                  </a>
+                ) : (
+                  '—'
+                )}
+              </div>
+            </div>
             {session.mobileUnits.length ? (
               <div>
                 <span className="text-uppercase text-muted small fw-semibold">
@@ -331,7 +348,25 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                   <span className="text-uppercase text-muted small fw-semibold">
                     Dirección de la sesión
                   </span>
-                  <div>{session.address ?? '—'}</div>
+                  {session.address ? (
+                    <div className="d-flex align-items-start gap-2 flex-wrap">
+                      <div>{session.address}</div>
+                      {mapsUrl ? (
+                        <Button
+                          as="a"
+                          variant="outline-primary"
+                          size="sm"
+                          href={mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Ver en Maps
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div>—</div>
+                  )}
                 </div>
                 <div>
                   <span className="text-uppercase text-muted small fw-semibold">

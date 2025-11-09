@@ -12,7 +12,7 @@ type SessionRecord = {
   direccion: string | null;
   fecha_inicio_utc: Date | string | null;
   fecha_fin_utc: Date | string | null;
-  deal_products: { name: string | null } | null;
+  deal_products: { name: string | null; code: string | null } | null;
   deals: {
     deal_id: string | null;
     pipeline_id: string | null;
@@ -130,7 +130,7 @@ export const handler = createHttpHandler(async (request) => {
       direccion: true,
       fecha_inicio_utc: true,
       fecha_fin_utc: true,
-      deal_products: { select: { name: true } },
+      deal_products: { select: { name: true, code: true } },
       deals: {
         select: {
           deal_id: true,
@@ -159,6 +159,29 @@ export const handler = createHttpHandler(async (request) => {
     orderBy: [{ fecha_inicio_utc: 'asc' }],
   })) as SessionRecord[];
 
+  const productCodeMap = new Map<string, string | null>();
+
+  const productCodes = new Set<string>();
+  for (const session of sessions) {
+    const code = sanitizeString(session.deal_products?.code ?? null);
+    if (code) {
+      productCodes.add(code);
+    }
+  }
+
+  if (productCodes.size) {
+    const products = await prisma.products.findMany({
+      where: { id_pipe: { in: Array.from(productCodes) } },
+      select: { id_pipe: true, url_formacion: true },
+    });
+
+    for (const product of products) {
+      const code = sanitizeString(product.id_pipe);
+      if (!code) continue;
+      productCodeMap.set(code, sanitizeString(product.url_formacion ?? null));
+    }
+  }
+
   const sessionEntries = sessions
     .map((session) => {
       const startDate = toMadridISOString(session.fecha_inicio_utc);
@@ -170,6 +193,8 @@ export const handler = createHttpHandler(async (request) => {
       const organizationName = sanitizeString(deal?.organizations?.name ?? null);
       const budgetNumber = sanitizeString(deal?.deal_id ?? null);
       const formationName = sanitizeString(session.deal_products?.name ?? null);
+      const formationCode = sanitizeString(session.deal_products?.code ?? null);
+      const formationUrl = formationCode ? productCodeMap.get(formationCode) ?? null : null;
       const sessionTitle = sanitizeString(session.nombre_cache);
       const address = sanitizeString(session.direccion ?? deal?.training_address ?? null);
       const caesValue = sanitizeBoolean(deal?.caes_val);
@@ -204,6 +229,7 @@ export const handler = createHttpHandler(async (request) => {
           organizationName,
           sessionTitle,
           formationName,
+          formationUrl,
           address,
           caes: { value: caesValue, label: caesLabel },
           fundae: { value: fundaeValue, label: fundaeLabel },
@@ -296,6 +322,7 @@ export const handler = createHttpHandler(async (request) => {
         organizationName: string | null;
         sessionTitle: string | null;
         formationName: string | null;
+        formationUrl: string | null;
         address: string | null;
         caes: { value: boolean | null; label: string | null };
         fundae: { value: boolean | null; label: string | null };
