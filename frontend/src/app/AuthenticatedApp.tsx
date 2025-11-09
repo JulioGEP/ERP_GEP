@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ComponentType } from 'react';
-import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown } from 'react-bootstrap';
+import { Container, Nav, Navbar, Toast, ToastContainer, NavDropdown, Offcanvas } from 'react-bootstrap';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetImportModal } from '../features/presupuestos/BudgetImportModal';
@@ -54,6 +54,8 @@ import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
+const NAVBAR_OFFCANVAS_ID = 'app-navbar-offcanvas';
+const NAVBAR_OFFCANVAS_LABEL_ID = 'app-navbar-offcanvas-label';
 
 type NavChild = {
   key: string;
@@ -1339,7 +1341,7 @@ export default function AuthenticatedApp() {
 
   return (
     <div className="min-vh-100 d-flex flex-column">
-      <Navbar bg="white" expand="lg" className="shadow-sm py-3">
+      <Navbar bg="white" expand="xl" className="shadow-sm py-3">
         <Container fluid="xl" className="d-flex align-items-center gap-4">
           <Navbar.Brand
             href="#"
@@ -1351,39 +1353,72 @@ export default function AuthenticatedApp() {
           >
             <img src={logo} height={64} alt="GEP Group" />
           </Navbar.Brand>
-          <Nav className="ms-auto gap-3 align-items-center">
-            {filteredNavItems.map((item) =>
-              item.children && item.children.length ? (
-                <NavDropdown
-                  key={item.key}
-                  title={<span className="text-uppercase">{item.label}</span>}
-                  id={`nav-${item.key}`}
-                  active={item.children.some((child) => location.pathname.startsWith(child.path))}
-                >
-                  {item.children.map((child) => (
-                    <NavDropdown.Item key={child.key} as={NavLink} to={child.path}>
-                      {child.label}
+          <Navbar.Toggle aria-controls={NAVBAR_OFFCANVAS_ID} />
+          <Navbar.Offcanvas
+            id={NAVBAR_OFFCANVAS_ID}
+            aria-labelledby={NAVBAR_OFFCANVAS_LABEL_ID}
+            placement="start"
+          >
+            <Offcanvas.Header closeButton closeVariant="white" className="border-bottom">
+              <Offcanvas.Title id={NAVBAR_OFFCANVAS_LABEL_ID} className="text-uppercase fw-semibold">
+                Menú
+              </Offcanvas.Title>
+            </Offcanvas.Header>
+            <Offcanvas.Body className="p-4 p-xl-0">
+              <Nav className="ms-xl-auto gap-3 flex-column flex-xl-row align-items-start align-items-xl-center w-100">
+                {filteredNavItems.map((item) =>
+                  item.children && item.children.length ? (
+                    <NavDropdown
+                      key={item.key}
+                      title={
+                        <span className="text-uppercase d-block w-100 w-xl-auto text-start text-xl-center">
+                          {item.label}
+                        </span>
+                      }
+                      id={`nav-${item.key}`}
+                      active={item.children.some((child) => location.pathname.startsWith(child.path))}
+                      className="w-100 w-xl-auto"
+                      menuVariant="light"
+                    >
+                      {item.children.map((child) => (
+                        <NavDropdown.Item key={child.key} as={NavLink} to={child.path}>
+                          {child.label}
+                        </NavDropdown.Item>
+                      ))}
+                    </NavDropdown>
+                  ) : item.path ? (
+                    <Nav.Item key={item.key} className="w-100 w-xl-auto">
+                      <Nav.Link
+                        as={NavLink}
+                        to={item.path}
+                        className="text-uppercase w-100 w-xl-auto text-start text-xl-center"
+                      >
+                        {item.label}
+                      </Nav.Link>
+                    </Nav.Item>
+                  ) : null,
+                )}
+                {user && (
+                  <NavDropdown
+                    align="end"
+                    title={
+                      <span className="d-block w-100 w-xl-auto text-start text-xl-center">
+                        {userDisplayName || 'Cuenta'}
+                      </span>
+                    }
+                    id="nav-user"
+                    className="w-100 w-xl-auto"
+                  >
+                    <NavDropdown.Item as={NavLink} to="/perfil">
+                      Mi perfil
                     </NavDropdown.Item>
-                  ))}
-                </NavDropdown>
-              ) : item.path ? (
-                <Nav.Item key={item.key}>
-                  <Nav.Link as={NavLink} to={item.path} className="text-uppercase">
-                    {item.label}
-                  </Nav.Link>
-                </Nav.Item>
-              ) : null,
-            )}
-            {user && (
-              <NavDropdown align="end" title={<span>{userDisplayName || 'Cuenta'}</span>} id="nav-user">
-                <NavDropdown.Item as={NavLink} to="/perfil">
-                  Mi perfil
-                </NavDropdown.Item>
-                <NavDropdown.Divider />
-                <NavDropdown.Item onClick={handleLogout}>Cerrar sesión</NavDropdown.Item>
-              </NavDropdown>
-            )}
-          </Nav>
+                    <NavDropdown.Divider />
+                    <NavDropdown.Item onClick={handleLogout}>Cerrar sesión</NavDropdown.Item>
+                  </NavDropdown>
+                )}
+              </Nav>
+            </Offcanvas.Body>
+          </Navbar.Offcanvas>
         </Container>
       </Navbar>
 
