@@ -21,7 +21,14 @@ type SessionRecord = {
     caes_label: string | null;
     fundae_val: boolean | null;
     fundae_label: string | null;
+    comercial: string | null;
     organizations: { name: string | null } | null;
+    persons: {
+      first_name: string | null;
+      last_name: string | null;
+      email: string | null;
+      phone: string | null;
+    } | null;
   } | null;
   sesion_unidades: Array<{
     unidad_movil_id: string | null;
@@ -38,6 +45,27 @@ type VariantRecord = {
   date: Date | string | null;
   sede: string | null;
   products: { name: string | null } | null;
+};
+
+type SessionPayload = {
+  sessionId: string;
+  dealId: string;
+  budgetNumber: string | null;
+  organizationName: string | null;
+  commercialName: string | null;
+  clientName: string | null;
+  clientPhone: string | null;
+  clientEmail: string | null;
+  sessionTitle: string | null;
+  formationName: string | null;
+  formationUrl: string | null;
+  address: string | null;
+  caes: { value: boolean | null; label: string | null };
+  fundae: { value: boolean | null; label: string | null };
+  startDate: string | null;
+  endDate: string | null;
+  mobileUnits: Array<{ id: string; name: string | null; plate: string | null }>;
+  isCompanyTraining: boolean;
 };
 
 const PIPELINE_LABELS_COMPANY = [
@@ -140,7 +168,16 @@ export const handler = createHttpHandler(async (request) => {
           caes_label: true,
           fundae_val: true,
           fundae_label: true,
+          comercial: true,
           organizations: { select: { name: true } },
+          persons: {
+            select: {
+              first_name: true,
+              last_name: true,
+              email: true,
+              phone: true,
+            },
+          },
         },
       },
       sesion_unidades: {
@@ -223,6 +260,15 @@ export const handler = createHttpHandler(async (request) => {
       const caesLabel = sanitizeString(deal?.caes_label ?? null);
       const fundaeValue = sanitizeBoolean(deal?.fundae_val);
       const fundaeLabel = sanitizeString(deal?.fundae_label ?? null);
+      const commercialName = sanitizeString(deal?.comercial ?? null);
+
+      const contactFirstName = sanitizeString(deal?.persons?.first_name ?? null);
+      const contactLastName = sanitizeString(deal?.persons?.last_name ?? null);
+      const clientName = sanitizeString(
+        [contactFirstName, contactLastName].filter(Boolean).join(' '),
+      );
+      const clientPhone = sanitizeString(deal?.persons?.phone ?? null);
+      const clientEmail = sanitizeString(deal?.persons?.email ?? null);
 
       const mobileUnits = Array.isArray(session.sesion_unidades)
         ? session.sesion_unidades
@@ -249,6 +295,10 @@ export const handler = createHttpHandler(async (request) => {
           dealId: session.deal_id,
           budgetNumber,
           organizationName,
+          commercialName,
+          clientName,
+          clientPhone,
+          clientEmail,
           sessionTitle,
           formationName,
           formationUrl,
@@ -337,22 +387,7 @@ export const handler = createHttpHandler(async (request) => {
   const map = new Map<
     string,
     {
-      sessions: Array<{
-        sessionId: string;
-        dealId: string;
-        budgetNumber: string | null;
-        organizationName: string | null;
-        sessionTitle: string | null;
-        formationName: string | null;
-        formationUrl: string | null;
-        address: string | null;
-        caes: { value: boolean | null; label: string | null };
-        fundae: { value: boolean | null; label: string | null };
-        startDate: string | null;
-        endDate: string | null;
-        mobileUnits: Array<{ id: string; name: string | null; plate: string | null }>;
-        isCompanyTraining: boolean;
-      }>;
+      sessions: SessionPayload[];
       variants: Array<{ variantId: string; productName: string | null; site: string | null; date: string | null }>;
     }
   >();
