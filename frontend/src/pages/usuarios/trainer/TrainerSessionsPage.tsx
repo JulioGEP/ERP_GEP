@@ -514,8 +514,13 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     if (dateValue) datos.fecha = dateValue;
     if (alumnosValue) datos.alumnos = alumnosValue;
     if (durationValue) datos.duracion = durationValue;
+    const templateValue = session.formationTemplate?.trim();
     const formationTitle = session.formationName ?? session.sessionTitle;
-    if (formationTitle) datos.formacionTitulo = formationTitle;
+    if (templateValue) {
+      datos.formacionTitulo = templateValue;
+    } else if (formationTitle) {
+      datos.formacionTitulo = formationTitle;
+    }
 
     const sessionInfo: ReportSessionInfo | null = session.sessionId
       ? {
