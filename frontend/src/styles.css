@@ -141,6 +141,22 @@ body {
   border-radius: 999px;
   padding: 0.5rem 1rem;
   transition: background-color 0.2s ease, color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem;
+}
+
+@media (min-width: 1200px) {
+  .navbar .nav-link {
+    justify-content: center;
+  }
+}
+
+.navbar .dropdown-toggle::after {
+  margin-left: 0.25rem;
+  align-self: center;
+  transform: none;
 }
 
 .navbar .dropdown-item {
