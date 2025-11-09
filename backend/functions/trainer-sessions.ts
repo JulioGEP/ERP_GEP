@@ -160,25 +160,45 @@ export const handler = createHttpHandler(async (request) => {
   })) as SessionRecord[];
 
   const productCodeMap = new Map<string, string | null>();
+  const productNameMap = new Map<string, string | null>();
 
   const productCodes = new Set<string>();
+  const productNames = new Set<string>();
   for (const session of sessions) {
     const code = sanitizeString(session.deal_products?.code ?? null);
     if (code) {
       productCodes.add(code);
     }
+    const name = sanitizeString(session.deal_products?.name ?? null);
+    if (name) {
+      productNames.add(name);
+    }
   }
 
+  const productFilters: Array<{ id_pipe?: { in: string[] }; name?: { in: string[] } }> = [];
   if (productCodes.size) {
+    productFilters.push({ id_pipe: { in: Array.from(productCodes) } });
+  }
+  if (productNames.size) {
+    productFilters.push({ name: { in: Array.from(productNames) } });
+  }
+
+  if (productFilters.length) {
     const products = await prisma.products.findMany({
-      where: { id_pipe: { in: Array.from(productCodes) } },
-      select: { id_pipe: true, url_formacion: true },
+      where: { OR: productFilters },
+      select: { id_pipe: true, name: true, url_formacion: true },
     });
 
     for (const product of products) {
+      const url = sanitizeString(product.url_formacion ?? null);
       const code = sanitizeString(product.id_pipe);
-      if (!code) continue;
-      productCodeMap.set(code, sanitizeString(product.url_formacion ?? null));
+      if (code) {
+        productCodeMap.set(code, url);
+      }
+      const name = sanitizeString(product.name ?? null);
+      if (name) {
+        productNameMap.set(name, url);
+      }
     }
   }
 
@@ -194,7 +214,9 @@ export const handler = createHttpHandler(async (request) => {
       const budgetNumber = sanitizeString(deal?.deal_id ?? null);
       const formationName = sanitizeString(session.deal_products?.name ?? null);
       const formationCode = sanitizeString(session.deal_products?.code ?? null);
-      const formationUrl = formationCode ? productCodeMap.get(formationCode) ?? null : null;
+      const formationUrl =
+        (formationCode ? productCodeMap.get(formationCode) ?? null : null) ??
+        (formationName ? productNameMap.get(formationName) ?? null : null);
       const sessionTitle = sanitizeString(session.nombre_cache);
       const address = sanitizeString(session.direccion ?? deal?.training_address ?? null);
       const caesValue = sanitizeBoolean(deal?.caes_val);
@@ -244,10 +266,10 @@ export const handler = createHttpHandler(async (request) => {
 
   const variantIds = new Set<string>();
 
-  const primaryVariants = await prisma.variants.findMany({
+  const primaryVariants = (await prisma.variants.findMany({
     where: { trainer_id: trainer.trainer_id },
     select: { id: true },
-  });
+  })) as Array<{ id: unknown }>;
 
   primaryVariants.forEach((variant) => {
     if (variant.id) {
