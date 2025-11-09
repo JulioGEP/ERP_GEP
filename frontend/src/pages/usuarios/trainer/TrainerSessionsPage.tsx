@@ -9,6 +9,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -1004,6 +1005,19 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                     Los documentos se compartirán automáticamente con el equipo del ERP.
                   </div>
                 </Form.Group>
+                {session.isCompanyTraining ? (
+                  <div className="mt-4">
+                    <h5 className="fw-semibold mb-2">Haz un informe sobre la formación</h5>
+                    <p className="mb-0">
+                      <Link
+                        to="/usuarios/trainer/informes/formacion"
+                        className="text-decoration-none"
+                      >
+                        https://erpgep.netlify.app/usuarios/trainer/informes/formacion
+                      </Link>
+                    </p>
+                  </div>
+                ) : null}
               </div>
             </Col>
           </Row>

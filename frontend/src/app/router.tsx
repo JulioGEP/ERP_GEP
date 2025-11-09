@@ -40,6 +40,21 @@ const UsersPage = lazy(() => import('../pages/usuarios/UsersPage'));
 const TrainerDashboardPage = lazy(() => import('../pages/usuarios/trainer/TrainerDashboardPage'));
 const TrainerSessionsPage = lazy(() => import('../pages/usuarios/trainer/TrainerSessionsPage'));
 const TrainerAvailabilityPage = lazy(() => import('../pages/usuarios/trainer/TrainerAvailabilityPage'));
+const TrainerReportsIndexPage = lazy(
+  () => import('../pages/usuarios/trainer/informes/TrainerReportsIndexPage'),
+);
+const TrainerReportsFormacionPage = lazy(
+  () => import('../pages/usuarios/trainer/informes/TrainerReportsFormacionPage'),
+);
+const TrainerReportsPreventivoPage = lazy(
+  () => import('../pages/usuarios/trainer/informes/TrainerReportsPreventivoPage'),
+);
+const TrainerReportsSimulacroPage = lazy(
+  () => import('../pages/usuarios/trainer/informes/TrainerReportsSimulacroPage'),
+);
+const TrainerReportsRecursoPreventivoEbroPage = lazy(
+  () => import('../pages/usuarios/trainer/informes/TrainerReportsRecursoPreventivoEbroPage'),
+);
 const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 const HorasFormadoresPage = lazy(() => import('../pages/reporting/HorasFormadoresPage'));
@@ -270,6 +285,56 @@ export function AppRouter({
               path="/usuarios/trainer/sesiones"
               roles={['Formador']}
               element={<TrainerSessionsPage />}
+            />
+          }
+        />
+        <Route
+          path="/usuarios/trainer/informes"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/informes"
+              roles={['Formador']}
+              element={<TrainerReportsIndexPage />}
+            />
+          }
+        />
+        <Route
+          path="/usuarios/trainer/informes/formacion"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/informes/formacion"
+              roles={['Formador']}
+              element={<TrainerReportsFormacionPage />}
+            />
+          }
+        />
+        <Route
+          path="/usuarios/trainer/informes/preventivo"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/informes/preventivo"
+              roles={['Formador']}
+              element={<TrainerReportsPreventivoPage />}
+            />
+          }
+        />
+        <Route
+          path="/usuarios/trainer/informes/simulacro"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/informes/simulacro"
+              roles={['Formador']}
+              element={<TrainerReportsSimulacroPage />}
+            />
+          }
+        />
+        <Route
+          path="/usuarios/trainer/informes/recurso_preventivo_ebro"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/informes/recurso_preventivo_ebro"
+              roles={['Formador']}
+              element={<TrainerReportsRecursoPreventivoEbroPage />}
             />
           }
         />
