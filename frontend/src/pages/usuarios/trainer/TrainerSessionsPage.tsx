@@ -1036,25 +1036,24 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                             key={doc.id}
                             className="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2"
                           >
-                            <span className="fw-semibold flex-grow-1 text-break">
-                              {doc.drive_file_name ?? 'Documento'}
-                            </span>
+                            {doc.drive_web_view_link ? (
+                              <a
+                                href={doc.drive_web_view_link}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="fw-semibold flex-grow-1 text-break text-decoration-none"
+                              >
+                                {doc.drive_file_name ?? 'Documento'}
+                              </a>
+                            ) : (
+                              <span className="fw-semibold flex-grow-1 text-break">
+                                {doc.drive_file_name ?? 'Documento'}
+                              </span>
+                            )}
                             <span className="text-muted small">
                               {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
                             </span>
                             <div className="d-flex align-items-center gap-2">
-                              {doc.drive_web_view_link ? (
-                                <Button
-                                  as="a"
-                                  href={doc.drive_web_view_link}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  variant="outline-primary"
-                                  size="sm"
-                                >
-                                  Abrir en Drive
-                                </Button>
-                              ) : null}
                               {canDeleteDoc ? (
                                 <Button
                                   variant="outline-danger"
