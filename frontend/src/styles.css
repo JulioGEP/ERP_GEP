@@ -159,6 +159,12 @@ body {
   transform: none;
 }
 
+@media (min-width: 992px) {
+  .navbar .dropdown-toggle::after {
+    display: none;
+  }
+}
+
 .navbar .dropdown-item {
   color: var(--color-gray-medium);
   border-radius: 0.5rem;
