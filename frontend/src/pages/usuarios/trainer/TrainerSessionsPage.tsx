@@ -995,20 +995,6 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                     ) : (
                       <p className="text-muted mb-0">No hay documentos compartidos.</p>
                     )}
-                    {documentsQuery.data?.driveUrl ? (
-                      <div>
-                        <Button
-                          as="a"
-                          href={documentsQuery.data.driveUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          variant="outline-secondary"
-                          size="sm"
-                        >
-                          Abrir carpeta en Drive
-                        </Button>
-                      </div>
-                    ) : null}
                   </Stack>
                 )}
                 <Form.Group
