@@ -29,7 +29,15 @@ type SessionRecord = {
       email: string | null;
       phone: string | null;
     } | null;
-  } | null;
+    } | null;
+  sesion_trainers: Array<{
+    trainer_id: string | null;
+    trainers: {
+      trainer_id: string | null;
+      name: string | null;
+      apellido: string | null;
+    } | null;
+  }> | null;
   sesion_unidades: Array<{
     unidad_movil_id: string | null;
     unidades_moviles: {
@@ -66,6 +74,7 @@ type SessionPayload = {
   endDate: string | null;
   mobileUnits: Array<{ id: string; name: string | null; plate: string | null }>;
   isCompanyTraining: boolean;
+  companionTrainers: Array<{ trainerId: string; name: string | null; lastName: string | null }>;
 };
 
 const PIPELINE_LABELS_COMPANY = [
@@ -180,6 +189,12 @@ export const handler = createHttpHandler(async (request) => {
           },
         },
       },
+      sesion_trainers: {
+        select: {
+          trainer_id: true,
+          trainers: { select: { trainer_id: true, name: true, apellido: true } },
+        },
+      },
       sesion_unidades: {
         select: {
           unidad_movil_id: true,
@@ -262,6 +277,26 @@ export const handler = createHttpHandler(async (request) => {
       const fundaeLabel = sanitizeString(deal?.fundae_label ?? null);
       const commercialName = sanitizeString(deal?.comercial ?? null);
 
+      const companionTrainers = Array.isArray(session.sesion_trainers)
+        ? session.sesion_trainers
+            .map((link) => {
+              const trainerIdRaw =
+                sanitizeString(link?.trainer_id ?? null) ??
+                sanitizeString(link?.trainers?.trainer_id ?? null);
+              if (!trainerIdRaw || trainerIdRaw === trainer.trainer_id) {
+                return null;
+              }
+              const name = sanitizeString(link?.trainers?.name ?? null);
+              const lastName = sanitizeString(link?.trainers?.apellido ?? null);
+              return {
+                trainerId: trainerIdRaw,
+                name,
+                lastName,
+              };
+            })
+            .filter((value): value is { trainerId: string; name: string | null; lastName: string | null } => value !== null)
+        : [];
+
       const contactFirstName = sanitizeString(deal?.persons?.first_name ?? null);
       const contactLastName = sanitizeString(deal?.persons?.last_name ?? null);
       const clientName = sanitizeString(
@@ -309,6 +344,7 @@ export const handler = createHttpHandler(async (request) => {
           endDate,
           mobileUnits,
           isCompanyTraining,
+          companionTrainers,
         },
       };
     })
