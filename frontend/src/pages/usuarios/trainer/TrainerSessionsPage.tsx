@@ -30,10 +30,13 @@ import {
 import {
   fetchSessionComments,
   createSessionComment,
+  updateSessionComment,
+  deleteSessionComment,
 } from '../../../features/presupuestos/api/sessions.api';
 import {
   fetchSessionDocuments,
   uploadSessionDocuments,
+  deleteSessionDocument,
 } from '../../../features/presupuestos/api/documents.api';
 import {
   fetchSessionStudents,
@@ -42,6 +45,7 @@ import {
 } from '../../../features/presupuestos/api/students.api';
 import type { SessionComment, SessionStudent } from '../../../api/sessions.types';
 import { useCurrentUserIdentity } from '../../../features/presupuestos/useCurrentUserIdentity';
+import type { SessionDocumentsPayload } from '../../../api/sessions.types';
 
 function formatDateLabel(date: string): string {
   const parts = date.split('-').map((value) => Number.parseInt(value, 10));
@@ -116,6 +120,10 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
 
   const [commentContent, setCommentContent] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentContent, setEditingCommentContent] = useState('');
+  const [savingCommentId, setSavingCommentId] = useState<string | null>(null);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
 
   const commentMutation = useMutation({
     mutationFn: async (content: string) =>
@@ -141,6 +149,67 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     },
   });
 
+  const updateCommentMutation = useMutation({
+    mutationFn: async ({ commentId, content }: { commentId: string; content: string }) =>
+      updateSessionComment(
+        session.sessionId,
+        commentId,
+        { content },
+        { id: userId, name: userName },
+      ),
+    onSuccess: (updated) => {
+      setCommentError(null);
+      setEditingCommentId(null);
+      setEditingCommentContent('');
+      setSavingCommentId(null);
+      queryClient.setQueryData<SessionComment[] | undefined>(
+        ['trainer', 'session', session.sessionId, 'comments'],
+        (previous) =>
+          previous
+            ? previous.map((comment) => (comment.id === updated.id ? updated : comment))
+            : previous,
+      );
+    },
+    onError: (error: unknown) => {
+      setSavingCommentId(null);
+      if (error instanceof Error) {
+        setCommentError(error.message);
+      } else {
+        setCommentError('No se pudo actualizar el comentario.');
+      }
+    },
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: async (commentId: string) =>
+      deleteSessionComment(session.sessionId, commentId, { id: userId, name: userName }),
+    onSuccess: (_data, commentId) => {
+      setCommentError(null);
+      setDeletingCommentId(null);
+      setEditingCommentId((current) => {
+        if (current === commentId) {
+          setEditingCommentContent('');
+          return null;
+        }
+        return current;
+      });
+      setSavingCommentId((current) => (current === commentId ? null : current));
+      queryClient.setQueryData<SessionComment[] | undefined>(
+        ['trainer', 'session', session.sessionId, 'comments'],
+        (previous) =>
+          previous ? previous.filter((comment) => comment.id !== commentId) : previous,
+      );
+    },
+    onError: (error: unknown) => {
+      setDeletingCommentId(null);
+      if (error instanceof Error) {
+        setCommentError(error.message);
+      } else {
+        setCommentError('No se pudo eliminar el comentario.');
+      }
+    },
+  });
+
   const documentsQuery = useQuery({
     queryKey: ['trainer', 'session', session.sessionId, 'documents'],
     queryFn: () => fetchSessionDocuments(session.dealId, session.sessionId),
@@ -150,8 +219,87 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     return documentsQuery.data?.documents.filter((doc) => doc.compartir_formador) ?? [];
   }, [documentsQuery.data]);
 
+  const normalizedUserName = useMemo(() => userName.trim().toLowerCase(), [userName]);
+
   const [documentError, setDocumentError] = useState<string | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
+  const trainerDocumentStorageKey = useMemo(
+    () => `trainer-session-${session.sessionId}-${userId}-documents`,
+    [session.sessionId, userId],
+  );
+
+  const [trainerDocumentIds, setTrainerDocumentIds] = useState<string[]>([]);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(trainerDocumentStorageKey);
+      if (!stored) {
+        setTrainerDocumentIds([]);
+        return;
+      }
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter((value) => value.length);
+        setTrainerDocumentIds(normalized);
+      } else {
+        setTrainerDocumentIds([]);
+      }
+    } catch {
+      setTrainerDocumentIds([]);
+    }
+  }, [trainerDocumentStorageKey]);
+
+  const persistTrainerDocumentIds = useCallback(
+    (ids: string[]) => {
+      if (typeof window === 'undefined') return;
+      if (!ids.length) {
+        window.localStorage.removeItem(trainerDocumentStorageKey);
+        return;
+      }
+      window.localStorage.setItem(trainerDocumentStorageKey, JSON.stringify(ids));
+    },
+    [trainerDocumentStorageKey],
+  );
+
+  const updateTrainerDocumentIds = useCallback(
+    (updater: (current: Set<string>) => Set<string>) => {
+      setTrainerDocumentIds((currentList) => {
+        const currentSet = new Set(currentList);
+        const nextSet = updater(currentSet);
+        const currentSorted = Array.from(currentSet).sort();
+        const nextSorted = Array.from(nextSet).sort();
+        const isSame =
+          currentSorted.length === nextSorted.length &&
+          currentSorted.every((value, index) => value === nextSorted[index]);
+        if (isSame) return currentList;
+        const nextList = Array.from(nextSet);
+        persistTrainerDocumentIds(nextList);
+        return nextList;
+      });
+    },
+    [persistTrainerDocumentIds],
+  );
+
+  useEffect(() => {
+    if (!documentsQuery.isFetched || documentsQuery.isError) return;
+    updateTrainerDocumentIds((current) => {
+      if (!sharedDocuments.length) return new Set<string>();
+      const available = new Set(sharedDocuments.map((doc) => doc.id));
+      const next = new Set<string>();
+      current.forEach((value) => {
+        if (available.has(value)) {
+          next.add(value);
+        }
+      });
+      return next;
+    });
+  }, [documentsQuery.isError, documentsQuery.isFetched, sharedDocuments, updateTrainerDocumentIds]);
+
+  const trainerDocumentIdSet = useMemo(() => new Set(trainerDocumentIds), [trainerDocumentIds]);
 
   const documentMutation = useMutation({
     mutationFn: async (files: File[]) =>
@@ -166,9 +314,27 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
       if (documentInputRef.current) {
         documentInputRef.current.value = '';
       }
-      queryClient.setQueryData(
+      updateTrainerDocumentIds((current) => {
+        const next = new Set(current);
+        payload.documents.forEach((doc) => {
+          if (doc.id) {
+            next.add(doc.id);
+          }
+        });
+        return next;
+      });
+      queryClient.setQueryData<SessionDocumentsPayload | undefined>(
         ['trainer', 'session', session.sessionId, 'documents'],
-        payload,
+        (previous) => {
+          const previousDocs = previous?.documents ?? [];
+          const existingIds = new Set(payload.documents.map((doc) => doc.id));
+          const combinedDocs = [
+            ...payload.documents,
+            ...previousDocs.filter((doc) => !existingIds.has(doc.id)),
+          ];
+          const driveUrl = payload.driveUrl ?? previous?.driveUrl ?? null;
+          return { documents: combinedDocs, driveUrl };
+        },
       );
     },
     onError: (error: unknown) => {
@@ -176,6 +342,38 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
         setDocumentError(error.message);
       } else {
         setDocumentError('No se pudieron subir los documentos.');
+      }
+    },
+  });
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: async (documentId: string) =>
+      deleteSessionDocument(session.dealId, session.sessionId, documentId),
+    onSuccess: (_data, documentId) => {
+      setDocumentError(null);
+      setDeletingDocumentId(null);
+      updateTrainerDocumentIds((current) => {
+        const next = new Set(current);
+        next.delete(documentId);
+        return next;
+      });
+      queryClient.setQueryData<SessionDocumentsPayload | undefined>(
+        ['trainer', 'session', session.sessionId, 'documents'],
+        (previous) => {
+          if (!previous) return previous;
+          return {
+            driveUrl: previous.driveUrl,
+            documents: previous.documents.filter((doc) => doc.id !== documentId),
+          };
+        },
+      );
+    },
+    onError: (error: unknown) => {
+      setDeletingDocumentId(null);
+      if (error instanceof Error) {
+        setDocumentError(error.message);
+      } else {
+        setDocumentError('No se pudo eliminar el documento.');
       }
     },
   });
@@ -245,6 +443,54 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     [commentContent, commentMutation],
   );
 
+  const startEditingComment = useCallback((comment: SessionComment) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentContent(comment.content ?? '');
+    setCommentError(null);
+  }, []);
+
+  const cancelEditingComment = useCallback(() => {
+    setEditingCommentId(null);
+    setEditingCommentContent('');
+    setSavingCommentId(null);
+  }, []);
+
+  const handleCommentSave = useCallback(
+    async (comment: SessionComment) => {
+      const trimmed = editingCommentContent.trim();
+      if (!trimmed.length) {
+        setCommentError('El comentario no puede estar vacío.');
+        return;
+      }
+      setSavingCommentId(comment.id);
+      try {
+        await updateCommentMutation.mutateAsync({ commentId: comment.id, content: trimmed });
+      } catch (error) {
+        if (!(error instanceof Error)) {
+          setCommentError('No se pudo actualizar el comentario.');
+        }
+      }
+    },
+    [editingCommentContent, updateCommentMutation],
+  );
+
+  const handleCommentDelete = useCallback(
+    async (comment: SessionComment) => {
+      const confirmed = window.confirm('¿Eliminar este comentario?');
+      if (!confirmed) return;
+      setDeletingCommentId(comment.id);
+      setCommentError(null);
+      try {
+        await deleteCommentMutation.mutateAsync(comment.id);
+      } catch (error) {
+        if (!(error instanceof Error)) {
+          setCommentError('No se pudo eliminar el comentario.');
+        }
+      }
+    },
+    [deleteCommentMutation],
+  );
+
   const handleDocumentUpload = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const fileList = event.target.files;
@@ -253,6 +499,24 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
       documentMutation.mutate(files);
     },
     [documentMutation],
+  );
+
+  const handleDocumentDelete = useCallback(
+    async (documentId: string) => {
+      if (!documentId) return;
+      const confirmed = window.confirm('¿Eliminar este documento?');
+      if (!confirmed) return;
+      setDocumentError(null);
+      setDeletingDocumentId(documentId);
+      try {
+        await deleteDocumentMutation.mutateAsync(documentId);
+      } catch (error) {
+        if (!(error instanceof Error)) {
+          setDocumentError('No se pudo eliminar el documento.');
+        }
+      }
+    },
+    [deleteDocumentMutation],
   );
 
   const handleStudentFieldChange = useCallback(
@@ -515,19 +779,105 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                 ) : (
                   <Stack gap={3} className="mb-3">
                     {filteredComments.length ? (
-                      filteredComments.map((comment) => (
-                        <Card key={comment.id} className="border-0 bg-light">
-                          <Card.Body>
-                            <div className="text-muted small mb-2">
-                              {comment.author ?? '—'} ·{' '}
-                              {comment.created_at
-                                ? formatDateTime(comment.created_at)
-                                : '—'}
-                            </div>
-                            <div>{comment.content}</div>
-                          </Card.Body>
-                        </Card>
-                      ))
+                      filteredComments.map((comment) => {
+                        const author = (comment.author ?? '—').trim();
+                        const authorLower = author.toLowerCase();
+                        const canEdit =
+                          Boolean(authorLower.length) && authorLower === normalizedUserName;
+                        const isEditing = editingCommentId === comment.id;
+                        const isSaving =
+                          savingCommentId === comment.id && updateCommentMutation.isPending;
+                        const isDeleting =
+                          deletingCommentId === comment.id && deleteCommentMutation.isPending;
+                        const createdLabel = comment.created_at
+                          ? formatDateTime(comment.created_at)
+                          : '—';
+                        const updatedLabel =
+                          comment.updated_at && comment.updated_at !== comment.created_at
+                            ? formatDateTime(comment.updated_at)
+                            : null;
+                        const displayContent = comment.content?.trim().length
+                          ? comment.content
+                          : '—';
+
+                        return (
+                          <Card key={comment.id} className="border-0 bg-light">
+                            <Card.Body>
+                              <div className="text-muted small mb-2">
+                                {author.length ? author : '—'} · {createdLabel}
+                                {updatedLabel ? (
+                                  <span className="ms-2">Actualizado: {updatedLabel}</span>
+                                ) : null}
+                              </div>
+                              {isEditing ? (
+                                <Stack gap={2}>
+                                  <Form.Control
+                                    as="textarea"
+                                    rows={3}
+                                    value={editingCommentContent}
+                                    onChange={(event) => setEditingCommentContent(event.target.value)}
+                                    disabled={isSaving}
+                                  />
+                                  <div className="d-flex justify-content-end gap-2">
+                                    <Button
+                                      variant="outline-secondary"
+                                      size="sm"
+                                      onClick={cancelEditingComment}
+                                      disabled={isSaving}
+                                    >
+                                      Cancelar
+                                    </Button>
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
+                                      onClick={() => handleCommentSave(comment)}
+                                      disabled={
+                                        isSaving || !editingCommentContent.trim().length
+                                      }
+                                    >
+                                      {isSaving ? (
+                                        <Spinner animation="border" size="sm" role="status" />
+                                      ) : (
+                                        'Guardar'
+                                      )}
+                                    </Button>
+                                  </div>
+                                </Stack>
+                              ) : (
+                                <Stack gap={2}>
+                                  <p className="mb-0 text-break" style={{ whiteSpace: 'pre-line' }}>
+                                    {displayContent}
+                                  </p>
+                                  {canEdit ? (
+                                    <div className="d-flex flex-wrap gap-2">
+                                      <Button
+                                        variant="outline-primary"
+                                        size="sm"
+                                        onClick={() => startEditingComment(comment)}
+                                        disabled={isDeleting}
+                                      >
+                                        Editar
+                                      </Button>
+                                      <Button
+                                        variant="outline-danger"
+                                        size="sm"
+                                        onClick={() => handleCommentDelete(comment)}
+                                        disabled={isDeleting}
+                                      >
+                                        {isDeleting ? (
+                                          <Spinner animation="border" size="sm" role="status" />
+                                        ) : (
+                                          'Eliminar'
+                                        )}
+                                      </Button>
+                                    </div>
+                                  ) : null}
+                                </Stack>
+                              )}
+                            </Card.Body>
+                          </Card>
+                        );
+                      })
                     ) : (
                       <p className="text-muted mb-0">No hay comentarios compartidos.</p>
                     )}
@@ -573,26 +923,52 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                 ) : (
                   <Stack gap={2} className="mb-3">
                     {sharedDocuments.length ? (
-                      sharedDocuments.map((doc) => (
-                        <div key={doc.id} className="d-flex flex-column flex-md-row gap-2">
-                          <span className="fw-semibold">{doc.drive_file_name ?? 'Documento'}</span>
-                          <span className="text-muted small">
-                            {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
-                          </span>
-                          {doc.drive_web_view_link ? (
-                            <Button
-                              as="a"
-                              href={doc.drive_web_view_link}
-                              target="_blank"
-                              rel="noreferrer"
-                              variant="outline-primary"
-                              size="sm"
-                            >
-                              Abrir en Drive
-                            </Button>
-                          ) : null}
-                        </div>
-                      ))
+                      sharedDocuments.map((doc) => {
+                        const canDeleteDoc = trainerDocumentIdSet.has(doc.id);
+                        const isDeletingDoc =
+                          deletingDocumentId === doc.id && deleteDocumentMutation.isPending;
+                        return (
+                          <div
+                            key={doc.id}
+                            className="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2"
+                          >
+                            <span className="fw-semibold flex-grow-1 text-break">
+                              {doc.drive_file_name ?? 'Documento'}
+                            </span>
+                            <span className="text-muted small">
+                              {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
+                            </span>
+                            <div className="d-flex align-items-center gap-2">
+                              {doc.drive_web_view_link ? (
+                                <Button
+                                  as="a"
+                                  href={doc.drive_web_view_link}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  variant="outline-primary"
+                                  size="sm"
+                                >
+                                  Abrir en Drive
+                                </Button>
+                              ) : null}
+                              {canDeleteDoc ? (
+                                <Button
+                                  variant="outline-danger"
+                                  size="sm"
+                                  onClick={() => handleDocumentDelete(doc.id)}
+                                  disabled={isDeletingDoc}
+                                >
+                                  {isDeletingDoc ? (
+                                    <Spinner animation="border" size="sm" role="status" />
+                                  ) : (
+                                    'Eliminar'
+                                  )}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })
                     ) : (
                       <p className="text-muted mb-0">No hay documentos compartidos.</p>
                     )}
