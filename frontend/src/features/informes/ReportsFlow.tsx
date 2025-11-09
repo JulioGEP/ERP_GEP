@@ -14,7 +14,7 @@ export type ReportSessionInfo = {
   fecha?: string | null;
 };
 
-type ReportDraft = {
+export type ReportDraft = {
   type: ReportType;
   dealId?: string;
   datos?: Record<string, any>;
@@ -25,11 +25,6 @@ type ReportDraft = {
 };
 
 type Stage = 'form' | 'preview';
-
-export interface ReportsFlowProps {
-  type: ReportType;
-  title?: string;
-}
 
 const TITLES: Record<ReportType, string> = {
   formacion: 'Informe de Formación',
@@ -48,19 +43,75 @@ const createEmptyDraft = (type: ReportType): ReportDraft => ({
   sessionOptions: [],
 });
 
-export function ReportsFlow({ type, title }: ReportsFlowProps) {
+function mergeReportDraft(
+  base: ReportDraft,
+  input: Partial<ReportDraft> | null | undefined,
+  type: ReportType,
+): ReportDraft {
+  if (!input) {
+    return base;
+  }
+
+  const next: ReportDraft = {
+    ...base,
+    type,
+  };
+
+  if (input.dealId !== undefined && input.dealId !== null) {
+    next.dealId = String(input.dealId);
+  }
+
+  if (input.datos && typeof input.datos === 'object') {
+    next.datos = { ...base.datos, ...input.datos };
+  }
+
+  if (input.formador && typeof input.formador === 'object') {
+    next.formador = { ...base.formador, ...input.formador };
+  }
+
+  if (Array.isArray(input.imagenes)) {
+    next.imagenes = input.imagenes.map((imagen) => ({ ...(imagen ?? {}) }));
+  }
+
+  if (input.session && typeof input.session === 'object') {
+    next.session = { ...input.session };
+  }
+
+  if (Array.isArray(input.sessionOptions)) {
+    next.sessionOptions = input.sessionOptions
+      .filter((option): option is ReportSessionInfo => Boolean(option))
+      .map((option) => ({ ...option }));
+  }
+
+  return next;
+}
+
+export interface ReportsFlowProps {
+  type: ReportType;
+  title?: string;
+  initialDraft?: Partial<ReportDraft> | null;
+}
+
+const resolveInitialDraft = (
+  type: ReportType,
+  initialDraft: Partial<ReportDraft> | null | undefined,
+): ReportDraft => {
+  const base = createEmptyDraft(type);
+  return mergeReportDraft(base, initialDraft, type);
+};
+
+export function ReportsFlow({ type, title, initialDraft }: ReportsFlowProps) {
   const [stage, setStage] = useState<Stage>('form');
-  const [draft, setDraft] = useState<ReportDraft>(() => createEmptyDraft(type));
+  const resolvedInitialDraft = useMemo(
+    () => resolveInitialDraft(type, initialDraft),
+    [type, initialDraft],
+  );
+  const [draft, setDraft] = useState<ReportDraft>(() => resolvedInitialDraft);
 
   useEffect(() => {
     setStage('form');
-    setDraft((prev) => {
-      if (prev?.type === type) {
-        return prev;
-      }
-      return createEmptyDraft(type);
-    });
-  }, [type]);
+    setDraft(resolvedInitialDraft);
+  }, [type, resolvedInitialDraft]);
 
   const resolvedTitle = useMemo(() => title || TITLES[type], [title, type]);
 
@@ -73,7 +124,7 @@ export function ReportsFlow({ type, title }: ReportsFlowProps) {
     setStage('form');
   };
 
-  const formInitial = draft ?? createEmptyDraft(type);
+  const formInitial = draft ?? resolvedInitialDraft;
 
   if (stage === 'preview') {
     return (
@@ -87,21 +138,20 @@ export function ReportsFlow({ type, title }: ReportsFlowProps) {
   }
 
   // arriba, junto a los otros handlers
-const handleChooseAnother = () => {
-  setDraft(createEmptyDraft(type));
-  setStage('form');
-};
+  const handleChooseAnother = () => {
+    setDraft(createEmptyDraft(type));
+    setStage('form');
+  };
 
-return (
-  <Form
-    initial={formInitial}
-    title={resolvedTitle}
-    type={type}
-    onNext={handleNext}
-    onChooseAnother={handleChooseAnother}
-  />
-);
-
+  return (
+    <Form
+      initial={formInitial}
+      title={resolvedTitle}
+      type={type}
+      onNext={handleNext}
+      onChooseAnother={handleChooseAnother}
+    />
+  );
 }
 
 export default ReportsFlow;

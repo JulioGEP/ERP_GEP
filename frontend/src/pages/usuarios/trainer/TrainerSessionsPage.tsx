@@ -48,6 +48,7 @@ import {
 import type { SessionComment, SessionStudent } from '../../../api/sessions.types';
 import { useCurrentUserIdentity } from '../../../features/presupuestos/useCurrentUserIdentity';
 import type { SessionDocumentsPayload } from '../../../api/sessions.types';
+import type { ReportDraft, ReportSessionInfo } from '../../../features/informes/ReportsFlow';
 
 function formatDateLabel(date: string): string {
   const parts = date.split('-').map((value) => Number.parseInt(value, 10));
@@ -74,6 +75,33 @@ function formatDateTime(value: string | null): string | null {
     timeStyle: 'short',
   });
   return formatter.format(parsed);
+}
+
+function formatDateForInput(value: string | null): string {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (!trimmed.length) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed.slice(0, 10);
+  }
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function calculateDurationHours(start: string | null, end: string | null): string {
+  if (!start || !end) return '';
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diffMs = endDate.getTime() - startDate.getTime();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) return '';
+  const hours = diffMs / (1000 * 60 * 60);
+  if (!Number.isFinite(hours) || hours <= 0) return '';
+  const rounded = Math.round(hours * 100) / 100;
+  return String(rounded);
 }
 
 function renderBooleanField(field: { value: boolean | null; label: string | null }): string {
@@ -232,6 +260,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
   }, [documentsQuery.data]);
 
   const normalizedUserName = useMemo(() => userName.trim().toLowerCase(), [userName]);
+  const trainerDisplayName = useMemo(() => userName.trim(), [userName]);
 
   const [documentError, setDocumentError] = useState<string | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
@@ -466,6 +495,53 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     setEditingCommentContent('');
     setSavingCommentId(null);
   }, []);
+
+  const reportLinkState = useMemo(() => {
+    const dealId = session.dealId?.trim();
+    if (!dealId) return undefined;
+
+    const alumnosCount = students.length;
+    const alumnosValue = alumnosCount > 0 ? String(alumnosCount) : undefined;
+    const durationValue = calculateDurationHours(session.startDate, session.endDate);
+    const dateValue = formatDateForInput(session.startDate);
+
+    const datos: Record<string, unknown> = { tipo: 'formacion', idioma: 'ES', sesiones: 1 };
+    if (session.organizationName) datos.cliente = session.organizationName;
+    if (session.commercialName) datos.comercial = session.commercialName;
+    if (session.clientName) datos.contacto = session.clientName;
+    if (session.address) datos.sede = session.address;
+    if (trainerDisplayName) datos.formadorNombre = trainerDisplayName;
+    if (dateValue) datos.fecha = dateValue;
+    if (alumnosValue) datos.alumnos = alumnosValue;
+    if (durationValue) datos.duracion = durationValue;
+    const formationTitle = session.formationName ?? session.sessionTitle;
+    if (formationTitle) datos.formacionTitulo = formationTitle;
+
+    const sessionInfo: ReportSessionInfo | null = session.sessionId
+      ? {
+          id: session.sessionId,
+          number: null,
+          label: session.sessionTitle ?? session.formationName ?? null,
+          direccion: session.address ?? null,
+          nombre: session.formationName ?? session.sessionTitle ?? null,
+          fecha: session.startDate ?? null,
+        }
+      : null;
+
+    const prefill: Partial<ReportDraft> = {
+      type: 'formacion',
+      dealId,
+      datos,
+      formador: { nombre: trainerDisplayName, idioma: 'ES' },
+    };
+
+    if (sessionInfo) {
+      prefill.session = sessionInfo;
+      prefill.sessionOptions = [sessionInfo];
+    }
+
+    return { reportPrefill: prefill };
+  }, [session, students, trainerDisplayName]);
 
   const handleCommentSave = useCallback(
     async (comment: SessionComment) => {
@@ -1020,6 +1096,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                       <Link
                         to="/usuarios/trainer/informes/formacion"
                         className="text-decoration-none"
+                        state={reportLinkState}
                       >
                         https://erpgep.netlify.app/usuarios/trainer/informes/formacion
                       </Link>
