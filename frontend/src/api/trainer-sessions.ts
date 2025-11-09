@@ -14,6 +14,7 @@ export type TrainerSessionDetail = {
   organizationName: string | null;
   sessionTitle: string | null;
   formationName: string | null;
+  formationUrl: string | null;
   address: string | null;
   caes: { value: boolean | null; label: string | null };
   fundae: { value: boolean | null; label: string | null };
@@ -128,6 +129,7 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
     organizationName: sanitizeString(raw.organizationName),
     sessionTitle: sanitizeString(raw.sessionTitle),
     formationName: sanitizeString(raw.formationName),
+    formationUrl: sanitizeString((raw as { formationUrl?: unknown }).formationUrl),
     address: sanitizeString(raw.address),
     caes,
     fundae,
