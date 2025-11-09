@@ -12,6 +12,10 @@ export type TrainerSessionDetail = {
   dealId: string;
   budgetNumber: string | null;
   organizationName: string | null;
+  commercialName: string | null;
+  clientName: string | null;
+  clientPhone: string | null;
+  clientEmail: string | null;
   sessionTitle: string | null;
   formationName: string | null;
   formationUrl: string | null;
@@ -127,6 +131,10 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
     dealId,
     budgetNumber: sanitizeString(raw.budgetNumber),
     organizationName: sanitizeString(raw.organizationName),
+    commercialName: sanitizeString((raw as { commercialName?: unknown }).commercialName),
+    clientName: sanitizeString((raw as { clientName?: unknown }).clientName),
+    clientPhone: sanitizeString((raw as { clientPhone?: unknown }).clientPhone),
+    clientEmail: sanitizeString((raw as { clientEmail?: unknown }).clientEmail),
     sessionTitle: sanitizeString(raw.sessionTitle),
     formationName: sanitizeString(raw.formationName),
     formationUrl: sanitizeString((raw as { formationUrl?: unknown }).formationUrl),

@@ -7,6 +7,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type ReactNode,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -76,6 +77,21 @@ function renderBooleanField(field: { value: boolean | null; label: string | null
   if (field.value === true) return 'Sí';
   if (field.value === false) return 'No';
   return '—';
+}
+
+type InfoFieldProps = {
+  label: string;
+  children: ReactNode;
+  className?: string;
+};
+
+function InfoField({ label, children, className }: InfoFieldProps) {
+  return (
+    <div className={className}>
+      <span className="text-uppercase text-muted small fw-semibold d-block">{label}</span>
+      <div className="text-break">{children}</div>
+    </div>
+  );
 }
 
 type SessionDetailCardProps = {
@@ -282,39 +298,94 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
 
   const startLabel = formatDateTime(session.startDate);
   const endLabel = formatDateTime(session.endDate);
+  const formationDateLabel =
+    startLabel && endLabel
+      ? `${startLabel} · ${endLabel}`
+      : startLabel ?? endLabel ?? null;
+  const phoneHref = session.clientPhone
+    ? `tel:${session.clientPhone.replace(/\s+/g, '')}`
+    : null;
+  const mailHref = session.clientEmail ? `mailto:${session.clientEmail}` : null;
 
   return (
     <Card className="shadow-sm border-0">
       <Card.Body>
         <Stack gap={4}>
-          <Stack direction="horizontal" gap={3} className="flex-wrap">
-            <div>
-              <span className="text-uppercase text-muted small fw-semibold">
-                Organización
-              </span>
-              <div className="fs-5 fw-semibold">
-                {session.organizationName ?? '—'}
-              </div>
-            </div>
-            <div>
-              <span className="text-uppercase text-muted small fw-semibold">
-                Nº Presupuesto
-              </span>
-              <div className="fs-6 fw-semibold">
+          <Stack gap={3}>
+            <div className="row g-4">
+              <InfoField className="col-12 col-md-6 col-xl-3" label="Presupuesto">
                 {session.budgetNumber ?? '—'}
-              </div>
+              </InfoField>
+              <InfoField className="col-12 col-md-6 col-xl-3" label="Organización">
+                {session.organizationName ?? '—'}
+              </InfoField>
+              <InfoField className="col-12 col-md-6 col-xl-3" label="Comercial">
+                {session.commercialName ?? '—'}
+              </InfoField>
+              <InfoField className="col-12 col-md-6 col-xl-3" label="Fecha de la formación">
+                {formationDateLabel ?? '—'}
+              </InfoField>
             </div>
-            <div>
-              <span className="text-uppercase text-muted small fw-semibold">
-                Formación
-              </span>
-              <div>{session.formationName ?? session.sessionTitle ?? '—'}</div>
+
+            <div className="row g-4">
+              <InfoField className="col-12 col-md-6 col-xl-4" label="Cliente">
+                {session.clientName ?? '—'}
+              </InfoField>
+              <InfoField className="col-12 col-md-6 col-xl-4" label="Teléfono">
+                {session.clientPhone ? (
+                  <a href={phoneHref ?? undefined} className="text-decoration-none">
+                    {session.clientPhone}
+                  </a>
+                ) : (
+                  '—'
+                )}
+              </InfoField>
+              <InfoField className="col-12 col-md-6 col-xl-4" label="Mail">
+                {session.clientEmail ? (
+                  <a href={mailHref ?? undefined} className="text-decoration-none">
+                    {session.clientEmail}
+                  </a>
+                ) : (
+                  '—'
+                )}
+              </InfoField>
             </div>
-            <div>
-              <span className="text-uppercase text-muted small fw-semibold">
-                Presentación
-              </span>
-              <div className="text-break">
+
+            <div className="row g-4">
+              <InfoField className="col-12 col-md-6" label="Dirección de la sesión">
+                {session.address ? (
+                  <div className="d-flex align-items-start gap-2 flex-wrap">
+                    <div>{session.address}</div>
+                    {mapsUrl ? (
+                      <Button
+                        as="a"
+                        variant="outline-primary"
+                        size="sm"
+                        href={mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Ver en Maps
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : (
+                  '—'
+                )}
+              </InfoField>
+              <InfoField className="col-12 col-md-3" label="CAES">
+                {renderBooleanField(session.caes)}
+              </InfoField>
+              <InfoField className="col-12 col-md-3" label="FUNDAE">
+                {renderBooleanField(session.fundae)}
+              </InfoField>
+            </div>
+
+            <div className="row g-4">
+              <InfoField className="col-12 col-md-6 col-xl-4" label="Formación">
+                {session.formationName ?? session.sessionTitle ?? '—'}
+              </InfoField>
+              <InfoField className="col-12 col-md-6 col-xl-4" label="Presentación">
                 {session.formationUrl ? (
                   <a href={session.formationUrl} target="_blank" rel="noopener noreferrer">
                     {session.formationUrl}
@@ -322,304 +393,244 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                 ) : (
                   '—'
                 )}
-              </div>
+              </InfoField>
+              {session.mobileUnits.length ? (
+                <InfoField className="col-12 col-xl-4" label="Unidades móviles">
+                  <div className="d-flex flex-wrap gap-2">
+                    {session.mobileUnits.map((unit) => (
+                      <Badge key={unit.id} bg="info">
+                        {unit.name ?? unit.id}
+                        {unit.plate ? ` · ${unit.plate}` : ''}
+                      </Badge>
+                    ))}
+                  </div>
+                </InfoField>
+              ) : null}
             </div>
-            {session.mobileUnits.length ? (
-              <div>
-                <span className="text-uppercase text-muted small fw-semibold">
-                  Unidades móviles
-                </span>
-                <div>
-                  {session.mobileUnits.map((unit) => (
-                    <Badge key={unit.id} bg="info" className="me-1">
-                      {unit.name ?? unit.id}
-                      {unit.plate ? ` · ${unit.plate}` : ''}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </Stack>
 
-          <Row xs={1} md={2} className="g-4">
-            <Col>
-              <Stack gap={2}>
-                <div>
-                  <span className="text-uppercase text-muted small fw-semibold">
-                    Dirección de la sesión
-                  </span>
-                  {session.address ? (
-                    <div className="d-flex align-items-start gap-2 flex-wrap">
-                      <div>{session.address}</div>
-                      {mapsUrl ? (
-                        <Button
-                          as="a"
-                          variant="outline-primary"
-                          size="sm"
-                          href={mapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Ver en Maps
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div>—</div>
-                  )}
-                </div>
-                <div>
-                  <span className="text-uppercase text-muted small fw-semibold">
-                    Fechas
-                  </span>
-                  <div>
-                    {startLabel ? startLabel : '—'}
-                    {endLabel ? ` · ${endLabel}` : ''}
-                  </div>
-                </div>
-              </Stack>
-            </Col>
-            <Col>
-              <Stack gap={2}>
-                <div>
-                  <span className="text-uppercase text-muted small fw-semibold">CAES</span>
-                  <div>{renderBooleanField(session.caes)}</div>
-                </div>
-                <div>
-                  <span className="text-uppercase text-muted small fw-semibold">FUNDAE</span>
-                  <div>{renderBooleanField(session.fundae)}</div>
-                </div>
-              </Stack>
-            </Col>
-          </Row>
-
-          <Stack gap={3}>
-            <div>
-              <h5 className="fw-semibold mb-3">Comentarios</h5>
-              {commentError ? <Alert variant="danger">{commentError}</Alert> : null}
-              {commentsQuery.isError ? (
-                <Alert variant="danger">
-                  No se pudieron cargar los comentarios.
-                </Alert>
-              ) : null}
-              {commentsQuery.isLoading ? (
-                <div className="d-flex align-items-center gap-2">
-                  <Spinner animation="border" size="sm" />
-                  <span>Cargando comentarios…</span>
-                </div>
-              ) : (
-                <Stack gap={3} className="mb-3">
-                  {filteredComments.length ? (
-                    filteredComments.map((comment) => (
-                      <Card key={comment.id} className="border-0 bg-light">
-                        <Card.Body>
-                          <div className="text-muted small mb-2">
-                            {comment.author ?? '—'} ·{' '}
-                            {comment.created_at
-                              ? formatDateTime(comment.created_at)
-                              : '—'}
-                          </div>
-                          <div>{comment.content}</div>
-                        </Card.Body>
-                      </Card>
-                    ))
-                  ) : (
-                    <p className="text-muted mb-0">
-                      No hay comentarios compartidos.
-                    </p>
-                  )}
-                </Stack>
-              )}
-              <Form onSubmit={handleCommentSubmit} className="d-grid gap-3">
-                <Form.Group controlId={`trainer-session-${session.sessionId}-comment`}>
-                  <Form.Label>Nuevo comentario</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={3}
-                    value={commentContent}
-                    onChange={(event) => setCommentContent(event.target.value)}
-                    placeholder="Escribe un comentario para el equipo del ERP"
-                    disabled={commentMutation.isPending}
-                    required
-                  />
-                </Form.Group>
-                <div>
-                  <Button
-                    type="submit"
-                    disabled={commentMutation.isPending || !commentContent.trim().length}
-                  >
-                    {commentMutation.isPending ? 'Guardando…' : 'Añadir comentario'}
-                  </Button>
-                </div>
-              </Form>
-            </div>
-
-            <div>
-              <h5 className="fw-semibold mb-3">Documentos</h5>
-              {documentError ? <Alert variant="danger">{documentError}</Alert> : null}
-              {documentsQuery.isError ? (
-                <Alert variant="danger">
-                  No se pudieron cargar los documentos.
-                </Alert>
-              ) : null}
-              {documentsQuery.isLoading ? (
-                <div className="d-flex align-items-center gap-2">
-                  <Spinner animation="border" size="sm" />
-                  <span>Cargando documentos…</span>
-                </div>
-              ) : (
-                <Stack gap={2} className="mb-3">
-                  {sharedDocuments.length ? (
-                    sharedDocuments.map((doc) => (
-                      <div key={doc.id} className="d-flex flex-column flex-md-row gap-2">
-                        <span className="fw-semibold">{doc.drive_file_name ?? 'Documento'}</span>
-                        <span className="text-muted small">
-                          {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
-                        </span>
-                        {doc.drive_web_view_link ? (
-                          <Button
-                            as="a"
-                            href={doc.drive_web_view_link}
-                            target="_blank"
-                            rel="noreferrer"
-                            variant="outline-primary"
-                            size="sm"
-                          >
-                            Abrir en Drive
-                          </Button>
-                        ) : null}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-muted mb-0">No hay documentos compartidos.</p>
-                  )}
-                  {documentsQuery.data?.driveUrl ? (
-                    <div>
-                      <Button
-                        as="a"
-                        href={documentsQuery.data.driveUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        variant="outline-secondary"
-                        size="sm"
-                      >
-                        Abrir carpeta en Drive
-                      </Button>
-                    </div>
-                  ) : null}
-                </Stack>
-              )}
-              <Form.Group controlId={`trainer-session-${session.sessionId}-documents`} className="d-grid gap-2">
-                <Form.Label>Subir documentos</Form.Label>
-                <Form.Control
-                  type="file"
-                  multiple
-                  onChange={handleDocumentUpload}
-                  ref={documentInputRef}
-                  disabled={documentMutation.isPending}
-                />
-                <div className="text-muted small">
-                  Los documentos se compartirán automáticamente con el equipo del ERP.
-                </div>
-              </Form.Group>
-            </div>
-
-            <div>
-              <h5 className="fw-semibold mb-3">Alumnos</h5>
-              {studentError ? <Alert variant="danger">{studentError}</Alert> : null}
-              {studentsQuery.isError ? (
-                <Alert variant="danger">
-                  No se pudieron cargar los alumnos de la sesión.
-                </Alert>
-              ) : null}
-              {studentsQuery.isLoading ? (
-                <div className="d-flex align-items-center gap-2">
-                  <Spinner animation="border" size="sm" />
-                  <span>Cargando alumnos…</span>
-                </div>
-              ) : (
-                <Table responsive bordered hover size="sm">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Nombre</th>
-                      <th>Apellidos</th>
-                      <th>DNI</th>
-                      <th className="text-center">Apto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {students.length ? (
-                      students.map((student) => (
-                        <tr key={student.id}>
-                          <td>
-                            <Form.Control
-                              type="text"
-                              value={student.nombre}
-                              onChange={(event) =>
-                                handleStudentFieldChange(
-                                  student.id,
-                                  'nombre',
-                                  event.target.value,
-                                )
-                              }
-                              onBlur={() => handleStudentFieldBlur(student.id, 'nombre')}
-                              disabled={updateStudentMutation.isPending}
-                            />
-                          </td>
-                          <td>
-                            <Form.Control
-                              type="text"
-                              value={student.apellido}
-                              onChange={(event) =>
-                                handleStudentFieldChange(
-                                  student.id,
-                                  'apellido',
-                                  event.target.value,
-                                )
-                              }
-                              onBlur={() => handleStudentFieldBlur(student.id, 'apellido')}
-                              disabled={updateStudentMutation.isPending}
-                            />
-                          </td>
-                          <td>
-                            <Form.Control
-                              type="text"
-                              value={student.dni}
-                              onChange={(event) =>
-                                handleStudentFieldChange(
-                                  student.id,
-                                  'dni',
-                                  event.target.value,
-                                )
-                              }
-                              onBlur={() => handleStudentFieldBlur(student.id, 'dni')}
-                              disabled={updateStudentMutation.isPending}
-                            />
-                          </td>
-                          <td className="text-center">
-                            <Form.Check
-                              type="checkbox"
-                              checked={student.apto}
-                              onChange={(event) =>
-                                handleStudentAptoToggle(student.id, event.target.checked)
-                              }
-                              disabled={updateStudentMutation.isPending}
-                            />
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={4} className="text-center text-muted">
-                          No hay alumnos registrados para esta sesión.
+          <div>
+            <h5 className="fw-semibold mb-3">Alumnos</h5>
+            {studentError ? <Alert variant="danger">{studentError}</Alert> : null}
+            {studentsQuery.isError ? (
+              <Alert variant="danger">No se pudieron cargar los alumnos de la sesión.</Alert>
+            ) : null}
+            {studentsQuery.isLoading ? (
+              <div className="d-flex align-items-center gap-2">
+                <Spinner animation="border" size="sm" />
+                <span>Cargando alumnos…</span>
+              </div>
+            ) : (
+              <Table responsive bordered hover size="sm">
+                <thead className="table-light">
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Apellidos</th>
+                    <th>DNI</th>
+                    <th className="text-center">Apto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.length ? (
+                    students.map((student) => (
+                      <tr key={student.id}>
+                        <td>
+                          <Form.Control
+                            type="text"
+                            value={student.nombre}
+                            onChange={(event) =>
+                              handleStudentFieldChange(
+                                student.id,
+                                'nombre',
+                                event.target.value,
+                              )
+                            }
+                            onBlur={() => handleStudentFieldBlur(student.id, 'nombre')}
+                            disabled={updateStudentMutation.isPending}
+                          />
+                        </td>
+                        <td>
+                          <Form.Control
+                            type="text"
+                            value={student.apellido}
+                            onChange={(event) =>
+                              handleStudentFieldChange(
+                                student.id,
+                                'apellido',
+                                event.target.value,
+                              )
+                            }
+                            onBlur={() => handleStudentFieldBlur(student.id, 'apellido')}
+                            disabled={updateStudentMutation.isPending}
+                          />
+                        </td>
+                        <td>
+                          <Form.Control
+                            type="text"
+                            value={student.dni}
+                            onChange={(event) =>
+                              handleStudentFieldChange(student.id, 'dni', event.target.value)
+                            }
+                            onBlur={() => handleStudentFieldBlur(student.id, 'dni')}
+                            disabled={updateStudentMutation.isPending}
+                          />
+                        </td>
+                        <td className="text-center">
+                          <Form.Check
+                            type="checkbox"
+                            checked={Boolean(student.apto)}
+                            onChange={(event) =>
+                              handleStudentAptoToggle(student.id, event.target.checked)
+                            }
+                            disabled={updateStudentMutation.isPending}
+                          />
                         </td>
                       </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="text-center text-muted">
+                        No hay alumnos registrados para esta sesión.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </Table>
+            )}
+          </div>
+
+          <Row className="g-4">
+            <Col xs={12} xl={6}>
+              <div>
+                <h5 className="fw-semibold mb-3">Comentarios</h5>
+                {commentError ? <Alert variant="danger">{commentError}</Alert> : null}
+                {commentsQuery.isError ? (
+                  <Alert variant="danger">No se pudieron cargar los comentarios.</Alert>
+                ) : null}
+                {commentsQuery.isLoading ? (
+                  <div className="d-flex align-items-center gap-2">
+                    <Spinner animation="border" size="sm" />
+                    <span>Cargando comentarios…</span>
+                  </div>
+                ) : (
+                  <Stack gap={3} className="mb-3">
+                    {filteredComments.length ? (
+                      filteredComments.map((comment) => (
+                        <Card key={comment.id} className="border-0 bg-light">
+                          <Card.Body>
+                            <div className="text-muted small mb-2">
+                              {comment.author ?? '—'} ·{' '}
+                              {comment.created_at
+                                ? formatDateTime(comment.created_at)
+                                : '—'}
+                            </div>
+                            <div>{comment.content}</div>
+                          </Card.Body>
+                        </Card>
+                      ))
+                    ) : (
+                      <p className="text-muted mb-0">No hay comentarios compartidos.</p>
                     )}
-                  </tbody>
-                </Table>
-              )}
-            </div>
-          </Stack>
+                  </Stack>
+                )}
+                <Form onSubmit={handleCommentSubmit} className="d-grid gap-3">
+                  <Form.Group controlId={`trainer-session-${session.sessionId}-comment`}>
+                    <Form.Label>Nuevo comentario</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      value={commentContent}
+                      onChange={(event) => setCommentContent(event.target.value)}
+                      placeholder="Escribe un comentario para el equipo del ERP"
+                      disabled={commentMutation.isPending}
+                      required
+                    />
+                  </Form.Group>
+                  <div>
+                    <Button
+                      type="submit"
+                      disabled={commentMutation.isPending || !commentContent.trim().length}
+                    >
+                      {commentMutation.isPending ? 'Guardando…' : 'Añadir comentario'}
+                    </Button>
+                  </div>
+                </Form>
+              </div>
+            </Col>
+
+            <Col xs={12} xl={6}>
+              <div>
+                <h5 className="fw-semibold mb-3">Documentos</h5>
+                {documentError ? <Alert variant="danger">{documentError}</Alert> : null}
+                {documentsQuery.isError ? (
+                  <Alert variant="danger">No se pudieron cargar los documentos.</Alert>
+                ) : null}
+                {documentsQuery.isLoading ? (
+                  <div className="d-flex align-items-center gap-2">
+                    <Spinner animation="border" size="sm" />
+                    <span>Cargando documentos…</span>
+                  </div>
+                ) : (
+                  <Stack gap={2} className="mb-3">
+                    {sharedDocuments.length ? (
+                      sharedDocuments.map((doc) => (
+                        <div key={doc.id} className="d-flex flex-column flex-md-row gap-2">
+                          <span className="fw-semibold">{doc.drive_file_name ?? 'Documento'}</span>
+                          <span className="text-muted small">
+                            {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
+                          </span>
+                          {doc.drive_web_view_link ? (
+                            <Button
+                              as="a"
+                              href={doc.drive_web_view_link}
+                              target="_blank"
+                              rel="noreferrer"
+                              variant="outline-primary"
+                              size="sm"
+                            >
+                              Abrir en Drive
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-muted mb-0">No hay documentos compartidos.</p>
+                    )}
+                    {documentsQuery.data?.driveUrl ? (
+                      <div>
+                        <Button
+                          as="a"
+                          href={documentsQuery.data.driveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          variant="outline-secondary"
+                          size="sm"
+                        >
+                          Abrir carpeta en Drive
+                        </Button>
+                      </div>
+                    ) : null}
+                  </Stack>
+                )}
+                <Form.Group
+                  controlId={`trainer-session-${session.sessionId}-documents`}
+                  className="d-grid gap-2"
+                >
+                  <Form.Label>Subir documentos</Form.Label>
+                  <Form.Control
+                    type="file"
+                    multiple
+                    onChange={handleDocumentUpload}
+                    ref={documentInputRef}
+                    disabled={documentMutation.isPending}
+                  />
+                  <div className="text-muted small">
+                    Los documentos se compartirán automáticamente con el equipo del ERP.
+                  </div>
+                </Form.Group>
+              </div>
+            </Col>
+          </Row>
         </Stack>
       </Card.Body>
     </Card>
