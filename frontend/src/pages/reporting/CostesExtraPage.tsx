@@ -9,6 +9,7 @@ import { Alert, Button, Card, Form, Spinner, Table } from 'react-bootstrap';
 
 import { isApiError } from '../../api/client';
 import {
+  DEFAULT_TRAINER_EXTRA_COST_VALUES,
   fetchTrainerExtraCosts,
   saveTrainerExtraCost,
   type TrainerExtraCostFieldKey,
@@ -31,11 +32,6 @@ const COST_FIELD_DEFINITIONS: ReadonlyArray<{
   { key: 'horasExtras', label: 'Horas extras (€)' },
   { key: 'gastosExtras', label: 'Otros gastos (€)' },
 ];
-
-const DEFAULT_COST_FIELD_VALUES: Partial<Record<TrainerExtraCostFieldKey, number>> = {
-  precioCosteFormacion: 15,
-  precioCostePreventivo: 15,
-};
 
 function formatDateForInput(date: Date): string {
   const year = date.getFullYear();
@@ -80,7 +76,7 @@ function createDraftFromItem(item: TrainerExtraCostRecord): CostDraft {
   for (const definition of COST_FIELD_DEFINITIONS) {
     const baseValue = Number.isFinite(item.costs[definition.key])
       ? item.costs[definition.key]
-      : DEFAULT_COST_FIELD_VALUES[definition.key] ?? 0;
+      : DEFAULT_TRAINER_EXTRA_COST_VALUES[definition.key] ?? 0;
     fields[definition.key] = formatNumberInput(baseValue ?? 0);
   }
   return {
@@ -105,7 +101,7 @@ function evaluateDraft(
     }
     const baseValue = Number.isFinite(item.costs[definition.key])
       ? item.costs[definition.key]
-      : DEFAULT_COST_FIELD_VALUES[definition.key] ?? 0;
+      : DEFAULT_TRAINER_EXTRA_COST_VALUES[definition.key] ?? 0;
     if (Math.abs(parsed - baseValue) > 0.005) {
       dirty = true;
     }

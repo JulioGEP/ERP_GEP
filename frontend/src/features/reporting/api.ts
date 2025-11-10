@@ -119,6 +119,13 @@ const EXTRA_COST_FIELD_KEYS = [
 
 export type TrainerExtraCostFieldKey = (typeof EXTRA_COST_FIELD_KEYS)[number];
 
+export const DEFAULT_TRAINER_EXTRA_COST_VALUES: Partial<
+  Record<TrainerExtraCostFieldKey, number>
+> = {
+  precioCosteFormacion: 15,
+  precioCostePreventivo: 15,
+};
+
 export type TrainerExtraCostRecord = {
   key: string;
   recordId: string | null;
@@ -197,9 +204,18 @@ function sanitizeExtraCostItem(entry: unknown): TrainerExtraCostRecord | null {
   }
 
   const costsInput = raw.costs;
-  const costs: Record<TrainerExtraCostFieldKey, number> = {} as Record<TrainerExtraCostFieldKey, number>;
+  const costs: Record<TrainerExtraCostFieldKey, number> = {} as Record<
+    TrainerExtraCostFieldKey,
+    number
+  >;
   for (const field of EXTRA_COST_FIELD_KEYS) {
-    const value = costsInput && typeof costsInput === 'object' ? (costsInput as Record<string, unknown>)[field] : undefined;
+    const value = costsInput && typeof costsInput === 'object'
+      ? (costsInput as Record<string, unknown>)[field]
+      : undefined;
+    if (value === undefined) {
+      costs[field] = DEFAULT_TRAINER_EXTRA_COST_VALUES[field] ?? 0;
+      continue;
+    }
     costs[field] = sanitizeNumber(value);
   }
 
