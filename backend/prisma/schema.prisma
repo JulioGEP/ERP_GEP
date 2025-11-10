@@ -88,6 +88,7 @@ model variants {
   trainers         trainers?         @relation(fields: [trainer_id], references: [trainer_id], onUpdate: NoAction, map: "variants_trainer_fk")
   unidades_moviles unidades_moviles? @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction, map: "variants_unidad_fk")
   time_logs        trainer_session_time_logs[]
+  extra_costs      trainer_extra_costs[]
 
   @@index([id_padre], map: "idx_variants_id_padre")
   @@index([sala_id], map: "idx_variants_sala_id")
@@ -328,6 +329,7 @@ model sesiones {
   sesiones_comentarios sesiones_comentarios[]
   tokens               tokens[]
   time_logs            trainer_session_time_logs[]
+  extra_costs          trainer_extra_costs[]
 
   @@index([deal_id], map: "idx_sesiones_deal")
   @@index([deal_product_id], map: "idx_sesiones_deal_product")
@@ -375,6 +377,7 @@ model trainers {
   variants        variants[]
   availability    trainer_availability[]
   time_logs       trainer_session_time_logs[]
+  extra_costs     trainer_extra_costs[]
 
   @@index([apellido])
   @@index([especialidad])
@@ -420,6 +423,36 @@ model trainer_session_time_logs {
   @@unique([trainer_id, session_id], map: "trainer_session_time_logs_session_key")
   @@unique([trainer_id, variant_id], map: "trainer_session_time_logs_variant_key")
   @@map("trainer_session_time_logs")
+}
+
+model trainer_extra_costs {
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  trainer_id             String
+  session_id             String?  @db.Uuid
+  variant_id             String?  @db.Uuid
+  precio_coste_formacion Decimal  @default(0) @db.Decimal(12, 2)
+  precio_coste_preventivo Decimal @default(0) @db.Decimal(12, 2)
+  dietas                 Decimal  @default(0) @db.Decimal(12, 2)
+  kilometraje            Decimal  @default(0) @db.Decimal(12, 2)
+  pernocta               Decimal  @default(0) @db.Decimal(12, 2)
+  nocturnidad            Decimal  @default(0) @db.Decimal(12, 2)
+  festivo                Decimal  @default(0) @db.Decimal(12, 2)
+  horas_extras           Decimal  @default(0) @db.Decimal(12, 2)
+  gastos_extras          Decimal  @default(0) @db.Decimal(12, 2)
+  notas                  String?
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  trainer trainers @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
+  sesion  sesiones? @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  variant variants? @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([trainer_id], map: "idx_trainer_extra_costs_trainer_id")
+  @@index([session_id], map: "idx_trainer_extra_costs_session_id")
+  @@index([variant_id], map: "idx_trainer_extra_costs_variant_id")
+  @@unique([trainer_id, session_id], map: "trainer_extra_costs_session_key")
+  @@unique([trainer_id, variant_id], map: "trainer_extra_costs_variant_key")
+  @@map("trainer_extra_costs")
 }
 
 model unidades_moviles {
