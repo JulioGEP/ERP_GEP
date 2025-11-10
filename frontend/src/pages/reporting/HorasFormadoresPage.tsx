@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Alert, Card, Form, Spinner, Table } from 'react-bootstrap';
+import { Alert, Button, Card, Form, Spinner, Table } from 'react-bootstrap';
 import {
   fetchTrainerHours,
   type TrainerHoursFilters,
   type TrainerHoursItem,
 } from '../../features/reporting/api';
 import { isApiError } from '../../api/client';
+import { exportToExcel } from '../../shared/export/exportToExcel';
 
 function formatTrainerName(item: TrainerHoursItem): string {
   const parts = [item.name, item.lastName]
@@ -88,6 +89,72 @@ export default function HorasFormadoresPage() {
   const summaryServiceCost = hasLoadedData ? currencyFormatter.format(totalServiceCost) : '—';
   const summaryExtraCost = hasLoadedData ? currencyFormatter.format(totalExtraCost) : '—';
   const summaryPayrollCost = hasLoadedData ? currencyFormatter.format(totalPayrollCost) : '—';
+
+  const periodLabel = useMemo(() => {
+    if (filters.startDate && filters.endDate) {
+      return `${filters.startDate}_a_${filters.endDate}`;
+    }
+    if (filters.startDate) {
+      return `desde_${filters.startDate}`;
+    }
+    if (filters.endDate) {
+      return `hasta_${filters.endDate}`;
+    }
+    return 'completo';
+  }, [filters.endDate, filters.startDate]);
+
+  const canDownload = !hasInvalidRange && !trainerHoursQuery.isLoading && !trainerHoursQuery.isError && items.length > 0;
+
+  const handleDownload = () => {
+    if (!canDownload) {
+      return;
+    }
+
+    const roundToTwoDecimals = (value: number) => Math.round(value * 100) / 100;
+
+    const headerRow = [
+      'Formador',
+      'ID formador',
+      'Sesiones',
+      'Horas totales',
+      'Coste servicio (€)',
+      'Coste extra (€)',
+      'Nómina (€)',
+    ] as const;
+
+    const rows = items.map((item) => {
+      const displayName = formatTrainerName(item);
+      return [
+        displayName,
+        item.trainerId,
+        item.sessionCount,
+        roundToTwoDecimals(item.totalHours),
+        roundToTwoDecimals(item.serviceCost),
+        roundToTwoDecimals(item.extraCost),
+        roundToTwoDecimals(item.payrollCost),
+      ] as const;
+    });
+
+    const sheetRows = [
+      headerRow,
+      ...rows,
+      [
+        'Total',
+        '',
+        totalSessions,
+        roundToTwoDecimals(totalHours),
+        roundToTwoDecimals(totalServiceCost),
+        roundToTwoDecimals(totalExtraCost),
+        roundToTwoDecimals(totalPayrollCost),
+      ],
+    ];
+
+    exportToExcel({
+      rows: sheetRows,
+      fileName: `horas_formadores_${periodLabel}.xlsx`,
+      sheetName: 'Horas Formadores',
+    });
+  };
 
   let content: JSX.Element;
 
@@ -209,6 +276,14 @@ export default function HorasFormadoresPage() {
                   }}
                 />
               </Form.Group>
+              <Button
+                type="button"
+                className="ms-auto"
+                onClick={handleDownload}
+                disabled={!canDownload}
+              >
+                Descargar
+              </Button>
             </div>
           </Form>
           <div className="d-flex gap-3 flex-wrap mb-3">

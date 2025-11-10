@@ -17,6 +17,7 @@ import {
   type TrainerExtraCostRecord,
   type TrainerExtraCostSavePayload,
 } from '../../features/reporting/api';
+import { exportToExcel } from '../../shared/export/exportToExcel';
 
 const COST_FIELD_DEFINITIONS: ReadonlyArray<{
   key: TrainerExtraCostFieldKey;
@@ -196,6 +197,79 @@ export default function CostesExtraPage() {
       }),
     [],
   );
+
+  const periodLabel = useMemo(() => {
+    if (filters.startDate && filters.endDate) {
+      return `${filters.startDate}_a_${filters.endDate}`;
+    }
+    if (filters.startDate) {
+      return `desde_${filters.startDate}`;
+    }
+    if (filters.endDate) {
+      return `hasta_${filters.endDate}`;
+    }
+    return 'completo';
+  }, [filters.endDate, filters.startDate]);
+
+  const canDownload =
+    !hasInvalidRange &&
+    !extraCostsQuery.isLoading &&
+    !extraCostsQuery.isError &&
+    items.length > 0;
+
+  const handleDownload = () => {
+    if (!canDownload) {
+      return;
+    }
+
+    const headerRow = [
+      'Formador',
+      'ID formador',
+      'Tipo de asignación',
+      'Nombre asignación',
+      'Negocio',
+      'Producto',
+      'Ubicación',
+      'Inicio planificado',
+      'Fin planificado',
+      ...COST_FIELD_DEFINITIONS.map((definition) => definition.label),
+    ];
+
+    const rows = items.map((item) => {
+      const draft = drafts[item.key] ?? createDraftFromItem(item);
+      const assignmentLabel = formatAssignmentLabel(item.assignmentType);
+      const scheduledStart = item.scheduledStart
+        ? dateTimeFormatter.format(new Date(item.scheduledStart))
+        : '';
+      const scheduledEnd = item.scheduledEnd
+        ? dateTimeFormatter.format(new Date(item.scheduledEnd))
+        : '';
+
+      const costValues = COST_FIELD_DEFINITIONS.map((definition) => {
+        const parsed = parseInputToNumber(draft.fields[definition.key]);
+        return parsed ?? draft.fields[definition.key];
+      });
+
+      return [
+        buildTrainerDisplayName(item),
+        item.trainerId,
+        assignmentLabel,
+        item.sessionName ?? item.variantName ?? '',
+        item.dealTitle ?? '',
+        item.productName ?? '',
+        item.site ?? '',
+        scheduledStart,
+        scheduledEnd,
+        ...costValues,
+      ];
+    });
+
+    exportToExcel({
+      rows: [headerRow, ...rows],
+      fileName: `costes_extra_${periodLabel}.xlsx`,
+      sheetName: 'Costes Extra',
+    });
+  };
 
   const saveMutation = useMutation({
     mutationFn: async (variables: CostMutationVariables) => {
@@ -418,6 +492,11 @@ export default function CostesExtraPage() {
               <div className="ms-auto text-end">
                 <span className="text-muted d-block small">Registros mostrados</span>
                 <span className="fw-semibold h5 mb-0">{numberFormatter.format(items.length)}</span>
+                <div className="mt-2">
+                  <Button type="button" onClick={handleDownload} disabled={!canDownload}>
+                    Descargar
+                  </Button>
+                </div>
               </div>
             </div>
           </Form>
