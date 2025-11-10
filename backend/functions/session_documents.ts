@@ -23,6 +23,7 @@ import {
 const ONE_MEGABYTE = 1024 * 1024;
 const MAX_SESSION_DOCUMENT_SIZE_BYTES = 4 * ONE_MEGABYTE;
 const MAX_SESSION_DOCUMENT_SIZE_LABEL = '4 MB';
+const TRAINER_EXPENSE_FOLDER_NAME = 'Gastos Formador';
 
 type ParsedPath = {
   docId: string | null;
@@ -41,6 +42,7 @@ type SessionFileRecord = {
   sesion_id: string;
   file_type: string | null;
   compartir_formador: boolean;
+  trainer_expense: boolean;
   added_at: string | null;
   updated_at: string | null;
   drive_file_name: string | null;
@@ -75,6 +77,17 @@ function normalizeIncomingFileName(name: string): string {
   }
 }
 
+function prefixTrainerNameToFile(trainerName: string, fileName: string): string {
+  const trimmedTrainer = trainerName.trim();
+  if (!trimmedTrainer.length) return fileName;
+  const normalizedPrefix = `${trimmedTrainer} - `;
+  const lowerPrefix = normalizedPrefix.toLowerCase();
+  if (fileName.toLowerCase().startsWith(lowerPrefix)) {
+    return fileName;
+  }
+  return `${normalizedPrefix}${fileName}`;
+}
+
 function extractExtension(name: string): string | null {
   if (!name.includes('.')) return null;
   const parts = name.split('.');
@@ -107,6 +120,7 @@ function mapSessionFile(row: any): SessionFileRecord {
     sesion_id: toStringOrNull(row?.sesion_id) ?? '',
     file_type: toStringOrNull(row?.file_type),
     compartir_formador: Boolean(row?.compartir_formador),
+    trainer_expense: Boolean(row?.trainer_expense),
     added_at: row?.added_at ? toMadridISOString(row.added_at) : null,
     updated_at: row?.updated_at ? toMadridISOString(row.updated_at) : null,
     drive_file_name: toStringOrNull(row?.drive_file_name),
@@ -178,6 +192,19 @@ export const handler = async (event: any) => {
         payload?.compartir_formador ?? payload?.shareWithTrainer,
         false,
       );
+      const trainerExpense = parseBoolean(
+        payload?.trainer_expense ?? payload?.trainerExpense,
+        false,
+      );
+      const trainerName = toStringOrNull(payload?.trainer_name ?? payload?.trainerName);
+      const expenseFolderNameRaw = toStringOrNull(
+        payload?.expense_folder_name ?? payload?.expenseFolderName,
+      );
+      const expenseFolderName = trainerExpense
+        ? expenseFolderNameRaw && expenseFolderNameRaw.trim().length
+          ? expenseFolderNameRaw
+          : TRAINER_EXPENSE_FOLDER_NAME
+        : null;
 
       const filesInput: UploadedFileInput[] = Array.isArray(payload?.files)
         ? payload.files
@@ -274,7 +301,9 @@ export const handler = async (event: any) => {
         }
 
         const normalizedFileName = normalizeIncomingFileName(fileNameRaw) || fileNameRaw;
-        const extension = extractExtension(normalizedFileName) ?? 'bin';
+        const expenseAdjustedName =
+          trainerExpense && trainerName ? prefixTrainerNameToFile(trainerName, normalizedFileName) : normalizedFileName;
+        const extension = extractExtension(expenseAdjustedName) ?? 'bin';
 
         let uploadResult;
         try {
@@ -285,9 +314,10 @@ export const handler = async (event: any) => {
               deal.organizations?.name ?? (deal as any)?.organizations?.name ?? null,
             sessionNumber,
             sessionName,
-            fileName: normalizedFileName,
+            fileName: expenseAdjustedName,
             mimeType,
             data: buffer,
+            targetSubfolderName: expenseFolderName ?? undefined,
           });
         } catch (err: any) {
           const message = err?.message || 'No se pudo subir el archivo a Drive';
@@ -322,6 +352,7 @@ export const handler = async (event: any) => {
             sesion_id: sessionId,
             file_type: extension,
             compartir_formador: shareWithTrainer,
+            trainer_expense: trainerExpense,
             added_at: now,
             drive_file_name: uploadResult.driveFileName,
             drive_web_view_link: uploadResult.driveWebViewLink,

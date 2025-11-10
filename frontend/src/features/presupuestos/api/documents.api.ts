@@ -38,6 +38,9 @@ export async function uploadSessionDocuments(params: {
   sessionId: string;
   files: File[];
   shareWithTrainer: boolean;
+  trainerExpense?: boolean;
+  trainerName?: string | null;
+  expenseFolderName?: string | null;
 }): Promise<SessionDocumentsPayload> {
   const normalizedDealId = String(params.dealId ?? '').trim();
   const normalizedSessionId = String(params.sessionId ?? '').trim();
@@ -49,6 +52,11 @@ export async function uploadSessionDocuments(params: {
   if (!files.length) {
     throw new ApiError('VALIDATION_ERROR', 'Selecciona al menos un archivo');
   }
+
+  const trainerExpense = Boolean(params.trainerExpense);
+  const trainerName = typeof params.trainerName === 'string' ? params.trainerName.trim() : '';
+  const expenseFolderName =
+    typeof params.expenseFolderName === 'string' ? params.expenseFolderName.trim() : '';
 
   const oversizedFile = files.find((file) => file.size > SESSION_DOCUMENT_SIZE_LIMIT_BYTES);
   if (oversizedFile) {
@@ -77,6 +85,11 @@ export async function uploadSessionDocuments(params: {
         deal_id: normalizedDealId,
         sesion_id: normalizedSessionId,
         compartir_formador: params.shareWithTrainer,
+        trainer_expense: trainerExpense || undefined,
+        expense_folder_name: trainerExpense
+          ? expenseFolderName || 'Gastos Formador'
+          : undefined,
+        trainer_name: trainerExpense && trainerName ? trainerName : undefined,
         files: payloadFiles,
       }),
     },

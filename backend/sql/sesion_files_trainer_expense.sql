@@ -1,0 +1,2 @@
+ALTER TABLE sesion_files
+    ADD COLUMN IF NOT EXISTS trainer_expense BOOLEAN NOT NULL DEFAULT FALSE;
