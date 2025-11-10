@@ -1196,22 +1196,31 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                         return (
                           <div
                             key={doc.id}
-                            className="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2"
+                            className={`d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2 ${
+                              doc.trainer_expense ? 'rounded border border-warning-subtle bg-warning-subtle p-2' : ''
+                            }`}
                           >
-                            {doc.drive_web_view_link ? (
-                              <a
-                                href={doc.drive_web_view_link}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="fw-semibold flex-grow-1 text-break text-decoration-none"
-                              >
-                                {doc.drive_file_name ?? 'Documento'}
-                              </a>
-                            ) : (
-                              <span className="fw-semibold flex-grow-1 text-break">
-                                {doc.drive_file_name ?? 'Documento'}
-                              </span>
-                            )}
+                            <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2 flex-grow-1">
+                              {doc.drive_web_view_link ? (
+                                <a
+                                  href={doc.drive_web_view_link}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="fw-semibold text-break text-decoration-none"
+                                >
+                                  {doc.drive_file_name ?? 'Documento'}
+                                </a>
+                              ) : (
+                                <span className="fw-semibold text-break">
+                                  {doc.drive_file_name ?? 'Documento'}
+                                </span>
+                              )}
+                              {doc.trainer_expense ? (
+                                <Badge bg="warning" text="dark" className="text-uppercase fw-semibold">
+                                  Gasto
+                                </Badge>
+                              ) : null}
+                            </div>
                             <span className="text-muted small">
                               {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
                             </span>
@@ -1265,6 +1274,12 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                       ? ` Se subirán a la carpeta "${TRAINER_EXPENSE_FOLDER_NAME}" y se añadirá tu nombre al archivo.`
                       : null}
                   </div>
+                  {documentMutation.isPending ? (
+                    <div className="d-flex align-items-center gap-2 text-muted small">
+                      <Spinner animation="border" size="sm" role="status" />
+                      <span>Subiendo documentos…</span>
+                    </div>
+                  ) : null}
                 </Form.Group>
                 <div className="mt-4">
                   <h5 className="fw-semibold mb-2">Fichar sesión</h5>
