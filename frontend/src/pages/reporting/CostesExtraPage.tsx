@@ -121,6 +121,19 @@ function formatAssignmentLabel(value: 'session' | 'variant'): string {
   return value === 'session' ? 'Sesión' : 'Formación abierta';
 }
 
+function getPrimaryDateValue(item: TrainerExtraCostRecord): string | null {
+  return item.scheduledStart ?? item.scheduledEnd ?? item.createdAt ?? item.updatedAt;
+}
+
+function getSortTimestamp(item: TrainerExtraCostRecord): number {
+  const dateValue = getPrimaryDateValue(item);
+  if (!dateValue) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const timestamp = new Date(dateValue).getTime();
+  return Number.isNaN(timestamp) ? Number.POSITIVE_INFINITY : timestamp;
+}
+
 export default function CostesExtraPage() {
   const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(() => {
     const now = new Date();
@@ -188,6 +201,13 @@ export default function CostesExtraPage() {
   }, [items]);
 
   const numberFormatter = useMemo(() => new Intl.NumberFormat('es-ES'), []);
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-ES', {
+        dateStyle: 'short',
+      }),
+    [],
+  );
   const dateTimeFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('es-ES', {
@@ -196,6 +216,13 @@ export default function CostesExtraPage() {
       }),
     [],
   );
+
+  const sortedItems = useMemo(() => {
+    if (!items.length) {
+      return [] as TrainerExtraCostRecord[];
+    }
+    return [...items].sort((a, b) => getSortTimestamp(a) - getSortTimestamp(b));
+  }, [items]);
 
   const saveMutation = useMutation({
     mutationFn: async (variables: CostMutationVariables) => {
@@ -240,7 +267,7 @@ export default function CostesExtraPage() {
       return <Alert variant="danger">{message}</Alert>;
     }
 
-    if (!items.length) {
+    if (!sortedItems.length) {
       return <Alert variant="info">No hay registros de costes extra disponibles.</Alert>;
     }
 
@@ -249,6 +276,7 @@ export default function CostesExtraPage() {
         <Table striped bordered hover>
           <thead>
             <tr>
+              <th style={{ minWidth: '120px' }}>Fecha</th>
               <th style={{ minWidth: '220px' }}>Formador</th>
               <th style={{ minWidth: '260px' }}>Asignación</th>
               {COST_FIELD_DEFINITIONS.map((definition) => (
@@ -260,7 +288,7 @@ export default function CostesExtraPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => {
+            {sortedItems.map((item) => {
               const trainerDisplayName = buildTrainerDisplayName(item);
               const baseDraft = drafts[item.key] ?? createDraftFromItem(item);
               const saving =
@@ -287,6 +315,15 @@ export default function CostesExtraPage() {
 
               const draft = drafts[item.key] ?? baseDraft;
               const { dirty, invalid } = draft;
+
+              const primaryDateValue = getPrimaryDateValue(item);
+              let formattedDate = '—';
+              if (primaryDateValue) {
+                const parsedDate = new Date(primaryDateValue);
+                if (!Number.isNaN(parsedDate.getTime())) {
+                  formattedDate = dateFormatter.format(parsedDate);
+                }
+              }
 
               const scheduledStart = item.scheduledStart
                 ? dateTimeFormatter.format(new Date(item.scheduledStart))
@@ -322,6 +359,7 @@ export default function CostesExtraPage() {
 
               return (
                 <tr key={item.key}>
+                  <td className="align-middle">{formattedDate}</td>
                   <td className="align-middle">
                     <div className="fw-semibold">{trainerDisplayName}</div>
                     {trainerDisplayName !== item.trainerId ? (
