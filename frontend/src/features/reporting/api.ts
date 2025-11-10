@@ -29,6 +29,9 @@ export type TrainerHoursItem = {
   lastName: string | null;
   sessionCount: number;
   totalHours: number;
+  serviceCost: number;
+  extraCost: number;
+  payrollCost: number;
 };
 
 export type TrainerHoursResponse = {
@@ -36,6 +39,9 @@ export type TrainerHoursResponse = {
   summary: {
     totalSessions: number;
     totalHours: number;
+    totalServiceCost: number;
+    totalExtraCost: number;
+    totalPayrollCost: number;
   };
 };
 

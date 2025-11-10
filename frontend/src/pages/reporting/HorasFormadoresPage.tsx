@@ -54,15 +54,25 @@ export default function HorasFormadoresPage() {
     [],
   );
   const integerFormatter = useMemo(() => new Intl.NumberFormat('es-ES'), []);
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }),
+    [],
+  );
 
   const data = hasInvalidRange ? null : trainerHoursQuery.data ?? null;
   const items = data?.items ?? [];
   const totalSessions = data?.summary.totalSessions ?? 0;
   const totalHours = data?.summary.totalHours ?? 0;
+  const totalServiceCost = data?.summary.totalServiceCost ?? 0;
+  const totalExtraCost = data?.summary.totalExtraCost ?? 0;
+  const totalPayrollCost = data?.summary.totalPayrollCost ?? 0;
   const hasLoadedData = Boolean(data);
   const summaryTrainers = hasLoadedData ? integerFormatter.format(items.length) : '—';
   const summarySessions = hasLoadedData ? integerFormatter.format(totalSessions) : '—';
   const summaryHours = hasLoadedData ? hoursFormatter.format(totalHours) : '—';
+  const summaryServiceCost = hasLoadedData ? currencyFormatter.format(totalServiceCost) : '—';
+  const summaryExtraCost = hasLoadedData ? currencyFormatter.format(totalExtraCost) : '—';
+  const summaryPayrollCost = hasLoadedData ? currencyFormatter.format(totalPayrollCost) : '—';
 
   let content: JSX.Element;
 
@@ -93,12 +103,21 @@ export default function HorasFormadoresPage() {
         <Table striped bordered hover>
           <thead>
             <tr>
-              <th style={{ width: '50%' }}>Formador</th>
-              <th style={{ width: '25%' }} className="text-end">
+              <th style={{ width: '30%' }}>Formador</th>
+              <th style={{ width: '14%' }} className="text-end">
                 Sesiones
               </th>
-              <th style={{ width: '25%' }} className="text-end">
+              <th style={{ width: '14%' }} className="text-end">
                 Horas totales
+              </th>
+              <th style={{ width: '14%' }} className="text-end">
+                Coste servicio
+              </th>
+              <th style={{ width: '14%' }} className="text-end">
+                Coste extra
+              </th>
+              <th style={{ width: '14%' }} className="text-end">
+                Nómina
               </th>
             </tr>
           </thead>
@@ -116,6 +135,9 @@ export default function HorasFormadoresPage() {
                   </td>
                   <td className="text-end align-middle">{integerFormatter.format(item.sessionCount)}</td>
                   <td className="text-end align-middle">{hoursFormatter.format(item.totalHours)}</td>
+                  <td className="text-end align-middle">{currencyFormatter.format(item.serviceCost)}</td>
+                  <td className="text-end align-middle">{currencyFormatter.format(item.extraCost)}</td>
+                  <td className="text-end align-middle">{currencyFormatter.format(item.payrollCost)}</td>
                 </tr>
               );
             })}
@@ -125,6 +147,9 @@ export default function HorasFormadoresPage() {
               <th scope="row">Total</th>
               <th className="text-end">{integerFormatter.format(totalSessions)}</th>
               <th className="text-end">{hoursFormatter.format(totalHours)}</th>
+              <th className="text-end">{currencyFormatter.format(totalServiceCost)}</th>
+              <th className="text-end">{currencyFormatter.format(totalExtraCost)}</th>
+              <th className="text-end">{currencyFormatter.format(totalPayrollCost)}</th>
             </tr>
           </tfoot>
         </Table>
@@ -183,6 +208,18 @@ export default function HorasFormadoresPage() {
             <div>
               <span className="text-muted d-block small">Total de horas</span>
               <span className="fw-semibold h5 mb-0">{summaryHours}</span>
+            </div>
+            <div>
+              <span className="text-muted d-block small">Coste servicio</span>
+              <span className="fw-semibold h5 mb-0">{summaryServiceCost}</span>
+            </div>
+            <div>
+              <span className="text-muted d-block small">Coste extra</span>
+              <span className="fw-semibold h5 mb-0">{summaryExtraCost}</span>
+            </div>
+            <div>
+              <span className="text-muted d-block small">Nómina</span>
+              <span className="fw-semibold h5 mb-0">{summaryPayrollCost}</span>
             </div>
           </div>
           {content}
