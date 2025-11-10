@@ -1,5 +1,6 @@
 // frontend/src/pages/dashboard/DashboardPage.tsx
 import { useMemo, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Col, Row, Spinner, Stack } from 'react-bootstrap';
 import { fetchDashboardMetrics, type DashboardMetrics } from '../../api/dashboard';
@@ -125,6 +126,8 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
   const chartWidth = width - paddingX * 2;
   const chartHeight = height - paddingY * 2;
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [hoverInfo, setHoverInfo] = useState<
     { index: number; clientX: number; clientY: number } | null
   >(null);
@@ -229,7 +232,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
     return { left, top, maxWidth };
   })();
 
-  const handleMouseMove = (event: React.MouseEvent<SVGSVGElement>) => {
+  const handleMouseMove = (event: ReactMouseEvent<SVGSVGElement>) => {
     if (!data.length) return;
     const svgRect = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - svgRect.left;
@@ -251,7 +254,19 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
     setHoverInfo({ index, clientX: event.clientX, clientY: event.clientY });
   };
 
-  const handleMouseLeave = () => {
+  const handleMouseLeave = (event: ReactMouseEvent<SVGSVGElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && tooltipRef.current?.contains(nextTarget)) {
+      return;
+    }
+    setHoverInfo(null);
+  };
+
+  const handleTooltipMouseLeave = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && svgRef.current?.contains(nextTarget)) {
+      return;
+    }
     setHoverInfo(null);
   };
 
@@ -322,6 +337,7 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
             style={{ minWidth: `${width}px` }}
           >
             <svg
+              ref={svgRef}
               role="img"
               aria-label="Evolución de sesiones"
               aria-describedby="sessions-trend-desc"
@@ -466,13 +482,17 @@ function SessionsTimelineChart({ data }: SessionsTimelineChartProps) {
             </svg>
             {hoveredPoint && tooltipPosition ? (
               <div
+                ref={tooltipRef}
                 className="position-absolute bg-white border rounded shadow-sm p-3"
                 style={{
                   left: tooltipPosition.left,
                   top: tooltipPosition.top,
                   maxWidth: tooltipPosition.maxWidth,
-                  pointerEvents: 'none',
+                  maxHeight: 320,
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
                 }}
+                onMouseLeave={handleTooltipMouseLeave}
               >
                 <div className="text-uppercase text-muted small fw-semibold">
                   Presupuestos del día
