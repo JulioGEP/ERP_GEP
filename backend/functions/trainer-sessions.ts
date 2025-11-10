@@ -75,6 +75,7 @@ type SessionPayload = {
   endDate: string | null;
   mobileUnits: Array<{ id: string; name: string | null; plate: string | null }>;
   isCompanyTraining: boolean;
+  isGepServices: boolean;
   companionTrainers: Array<{ trainerId: string; name: string | null; lastName: string | null }>;
 };
 
@@ -84,6 +85,8 @@ const PIPELINE_LABELS_COMPANY = [
   'formación empresa',
   'formación empresas',
 ];
+
+const PIPELINE_LABELS_GEP_SERVICES = ['gep services'];
 
 function normalizePipeline(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -99,6 +102,12 @@ function isCompanyPipeline(value: unknown): boolean {
   const normalized = normalizePipeline(value);
   if (!normalized) return false;
   return PIPELINE_LABELS_COMPANY.includes(normalized);
+}
+
+function isGepServicesPipeline(value: unknown): boolean {
+  const normalized = normalizePipeline(value);
+  if (!normalized) return false;
+  return PIPELINE_LABELS_GEP_SERVICES.includes(normalized);
 }
 
 function toDateKey(value: Date | string | null | undefined): string | null {
@@ -331,6 +340,7 @@ export const handler = createHttpHandler(async (request) => {
 
       const pipeline = deal?.pipeline_id ?? null;
       const isCompanyTraining = isCompanyPipeline(pipeline);
+      const isGepServices = isGepServicesPipeline(pipeline);
 
       return {
         dateKey,
@@ -354,6 +364,7 @@ export const handler = createHttpHandler(async (request) => {
           endDate,
           mobileUnits,
           isCompanyTraining,
+          isGepServices,
           companionTrainers,
         },
       };

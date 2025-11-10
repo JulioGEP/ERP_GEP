@@ -33,6 +33,7 @@ export type TrainerSessionDetail = {
   endDate: string | null;
   mobileUnits: TrainerSessionMobileUnit[];
   isCompanyTraining: boolean;
+  isGepServices: boolean;
   companionTrainers: TrainerSessionTrainer[];
 };
 
@@ -125,6 +126,7 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
     fundae?: unknown;
     mobileUnits?: unknown;
     isCompanyTraining?: unknown;
+    isGepServices?: unknown;
     companionTrainers?: unknown;
   };
 
@@ -190,6 +192,7 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
     endDate: sanitizeDate(raw.endDate),
     mobileUnits: sanitizeMobileUnits(raw.mobileUnits),
     isCompanyTraining: Boolean(raw.isCompanyTraining),
+    isGepServices: Boolean(raw.isGepServices),
     companionTrainers,
   } satisfies TrainerSessionDetail;
 }
