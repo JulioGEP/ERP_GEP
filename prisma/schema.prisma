@@ -483,7 +483,7 @@ model users {
   first_name          String
   last_name           String
   email               String    @unique
-  role                String
+  role                erp_role
   active              Boolean   @default(true)
   password_hash       String?
   password_algo       String?
@@ -499,6 +499,18 @@ model users {
   trainer       trainers?
 
   @@map("users")
+}
+
+enum erp_role {
+  comercial
+  administracion
+  logistica
+  admin
+  people
+  formador
+  Formador
+
+  @@map("erp_role")
 }
 
 model auth_sessions {
