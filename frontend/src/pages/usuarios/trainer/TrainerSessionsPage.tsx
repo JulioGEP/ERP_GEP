@@ -252,6 +252,12 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     [timeLogQuery.data?.updatedAt],
   );
 
+  const hasExistingTimeLog = useMemo(() => {
+    const log = timeLogQuery.data;
+    if (!log) return false;
+    return Boolean(log.id ?? log.checkIn ?? log.checkOut ?? log.updatedAt);
+  }, [timeLogQuery.data]);
+
   const saveTimeLogMutation = useMutation({
     mutationFn: async ({ entry, exit }: { entry: string; exit: string }) =>
       saveTrainerSessionTimeLog({
@@ -1307,8 +1313,24 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                         </Col>
                       </Row>
                       <div className="d-flex justify-content-end">
-                        <Button type="submit" disabled={saveTimeLogMutation.isPending}>
-                          {saveTimeLogMutation.isPending ? 'Guardando…' : 'Guardar registro'}
+                        <Button
+                          type="submit"
+                          disabled={saveTimeLogMutation.isPending}
+                          style={
+                            hasExistingTimeLog
+                              ? {
+                                  backgroundColor: '#F5C147',
+                                  borderColor: '#F5C147',
+                                  color: '#212529',
+                                }
+                              : undefined
+                          }
+                        >
+                          {saveTimeLogMutation.isPending
+                            ? 'Guardando…'
+                            : hasExistingTimeLog
+                            ? 'Modificar'
+                            : 'Guardar registro'}
                         </Button>
                       </div>
                       {formattedTimeLogUpdated ? (
