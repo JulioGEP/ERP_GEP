@@ -174,6 +174,8 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
   const mapsUrl = session.address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(session.address)}`
     : null;
+  const isGepServices = session.isGepServices;
+  const isCompanyTraining = session.isCompanyTraining;
 
   const timeLogQuery = useQuery<TrainerSessionTimeLog | null>({
     queryKey: ['trainer', 'session', session.sessionId, 'time-log'],
@@ -584,6 +586,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
   const studentsQuery = useQuery({
     queryKey: ['trainer', 'session', session.sessionId, 'students'],
     queryFn: () => fetchSessionStudents(session.dealId, session.sessionId),
+    enabled: !isGepServices,
   });
 
   const [students, setStudents] = useState<SessionStudent[]>([]);
@@ -591,6 +594,12 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
   const [studentError, setStudentError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (isGepServices) {
+      setStudents([]);
+      studentsOriginalRef.current = new Map();
+      return;
+    }
+
     if (studentsQuery.data) {
       setStudents(studentsQuery.data);
       const map = new Map<string, SessionStudent>();
@@ -602,7 +611,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
       setStudents([]);
       studentsOriginalRef.current = new Map();
     }
-  }, [studentsQuery.data, studentsQuery.isError, studentsQuery.isLoading]);
+  }, [isGepServices, studentsQuery.data, studentsQuery.isError, studentsQuery.isLoading]);
 
   const updateStudentMutation = useMutation({
     mutationFn: ({
@@ -663,11 +672,17 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     if (!dealId) return undefined;
 
     const alumnosCount = students.length;
-    const alumnosValue = alumnosCount > 0 ? String(alumnosCount) : undefined;
+    const alumnosValue = !isGepServices && alumnosCount > 0 ? String(alumnosCount) : undefined;
     const durationValue = calculateDurationHours(session.startDate, session.endDate);
     const dateValue = formatDateForInput(session.startDate);
 
-    const datos: Record<string, unknown> = { tipo: 'formacion', idioma: 'ES', sesiones: 1 };
+    const datos: Record<string, unknown> = {
+      tipo: isGepServices ? 'preventivo' : 'formacion',
+      idioma: 'ES',
+    };
+    if (!isGepServices) {
+      datos.sesiones = 1;
+    }
     if (session.organizationName) datos.cliente = session.organizationName;
     if (session.commercialName) datos.comercial = session.commercialName;
     if (session.clientName) datos.contacto = session.clientName;
@@ -675,13 +690,23 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     if (trainerDisplayName) datos.formadorNombre = trainerDisplayName;
     if (dateValue) datos.fecha = dateValue;
     if (alumnosValue) datos.alumnos = alumnosValue;
-    if (durationValue) datos.duracion = durationValue;
+    if (!isGepServices && durationValue) datos.duracion = durationValue;
+    if (isGepServices) {
+      datos.preventivo = {
+        trabajos: '',
+        tareas: '',
+        observaciones: '',
+        incidencias: '',
+      };
+    }
     const templateValue = session.formationTemplate?.trim();
     const formationTitle = session.formationName ?? session.sessionTitle;
-    if (templateValue) {
-      datos.formacionTitulo = templateValue;
-    } else if (formationTitle) {
-      datos.formacionTitulo = formationTitle;
+    if (!isGepServices) {
+      if (templateValue) {
+        datos.formacionTitulo = templateValue;
+      } else if (formationTitle) {
+        datos.formacionTitulo = formationTitle;
+      }
     }
 
     const sessionInfo: ReportSessionInfo | null = session.sessionId
@@ -696,7 +721,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
       : null;
 
     const prefill: Partial<ReportDraft> = {
-      type: 'formacion',
+      type: isGepServices ? 'preventivo' : 'formacion',
       dealId,
       datos,
       formador: { nombre: trainerDisplayName, idioma: 'ES' },
@@ -708,7 +733,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     }
 
     return { reportPrefill: prefill };
-  }, [session, students, trainerDisplayName]);
+  }, [isGepServices, session, students, trainerDisplayName]);
 
   const handleCommentSave = useCallback(
     async (comment: SessionComment) => {
@@ -817,7 +842,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
 
   const startLabel = formatDateTime(session.startDate);
   const endLabel = formatDateTime(session.endDate);
-  const formationDateLabel =
+  const scheduleDateLabel =
     startLabel && endLabel
       ? `${startLabel} · ${endLabel}`
       : startLabel ?? endLabel ?? null;
@@ -841,8 +866,11 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
               <InfoField className="col-12 col-md-6 col-xl-3" label="Comercial">
                 {session.commercialName ?? '—'}
               </InfoField>
-              <InfoField className="col-12 col-md-6 col-xl-3" label="Fecha de la formación">
-                {formationDateLabel ?? '—'}
+              <InfoField
+                className="col-12 col-md-6 col-xl-3"
+                label={isGepServices ? 'Fecha del servicio' : 'Fecha de la formación'}
+              >
+                {scheduleDateLabel ?? '—'}
               </InfoField>
             </div>
 
@@ -871,7 +899,10 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
             </div>
 
             <div className="row g-4">
-              <InfoField className="col-12 col-md-6" label="Dirección de la sesión">
+              <InfoField
+                className="col-12 col-md-6"
+                label={isGepServices ? 'Dirección del servicio' : 'Dirección de la sesión'}
+              >
                 {session.address ? (
                   <div className="d-flex align-items-start gap-2 flex-wrap">
                     <div>{session.address}</div>
@@ -895,9 +926,11 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
               <InfoField className="col-12 col-md-2" label="CAES">
                 {renderBooleanField(session.caes)}
               </InfoField>
-              <InfoField className="col-12 col-md-2" label="FUNDAE">
-                {renderBooleanField(session.fundae)}
-              </InfoField>
+              {!isGepServices ? (
+                <InfoField className="col-12 col-md-2" label="FUNDAE">
+                  {renderBooleanField(session.fundae)}
+                </InfoField>
+              ) : null}
               <InfoField className="col-12 col-md-2" label="Acompañantes">
                 {session.companionTrainers.length ? (
                   <div className="d-flex flex-column gap-1">
@@ -912,18 +945,23 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
             </div>
 
             <div className="row g-4">
-              <InfoField className="col-12 col-md-6 col-xl-4" label="Formación">
+              <InfoField
+                className="col-12 col-md-6 col-xl-4"
+                label={isGepServices ? 'Servicio' : 'Formación'}
+              >
                 {session.formationName ?? session.sessionTitle ?? '—'}
               </InfoField>
-              <InfoField className="col-12 col-md-6 col-xl-4" label="Presentación">
-                {session.formationUrl ? (
-                  <a href={session.formationUrl} target="_blank" rel="noopener noreferrer">
-                    {session.formationUrl}
-                  </a>
-                ) : (
-                  '—'
-                )}
-              </InfoField>
+              {!isGepServices ? (
+                <InfoField className="col-12 col-md-6 col-xl-4" label="Presentación">
+                  {session.formationUrl ? (
+                    <a href={session.formationUrl} target="_blank" rel="noopener noreferrer">
+                      {session.formationUrl}
+                    </a>
+                  ) : (
+                    '—'
+                  )}
+                </InfoField>
+              ) : null}
               {session.mobileUnits.length ? (
                 <InfoField className="col-12 col-xl-4" label="Unidades móviles">
                   <div className="d-flex flex-wrap gap-2">
@@ -939,95 +977,97 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
             </div>
           </Stack>
 
-          <div>
-            <h5 className="fw-semibold mb-3">Alumnos</h5>
-            {studentError ? <Alert variant="danger">{studentError}</Alert> : null}
-            {studentsQuery.isError ? (
-              <Alert variant="danger">No se pudieron cargar los alumnos de la sesión.</Alert>
-            ) : null}
-            {studentsQuery.isLoading ? (
-              <div className="d-flex align-items-center gap-2">
-                <Spinner animation="border" size="sm" />
-                <span>Cargando alumnos…</span>
-              </div>
-            ) : (
-              <Table responsive bordered hover size="sm">
-                <thead className="table-light">
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Apellidos</th>
-                    <th>DNI</th>
-                    <th className="text-center">Apto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.length ? (
-                    students.map((student) => (
-                      <tr key={student.id}>
-                        <td>
-                          <Form.Control
-                            type="text"
-                            value={student.nombre}
-                            onChange={(event) =>
-                              handleStudentFieldChange(
-                                student.id,
-                                'nombre',
-                                event.target.value,
-                              )
-                            }
-                            onBlur={() => handleStudentFieldBlur(student.id, 'nombre')}
-                            disabled={updateStudentMutation.isPending}
-                          />
-                        </td>
-                        <td>
-                          <Form.Control
-                            type="text"
-                            value={student.apellido}
-                            onChange={(event) =>
-                              handleStudentFieldChange(
-                                student.id,
-                                'apellido',
-                                event.target.value,
-                              )
-                            }
-                            onBlur={() => handleStudentFieldBlur(student.id, 'apellido')}
-                            disabled={updateStudentMutation.isPending}
-                          />
-                        </td>
-                        <td>
-                          <Form.Control
-                            type="text"
-                            value={student.dni}
-                            onChange={(event) =>
-                              handleStudentFieldChange(student.id, 'dni', event.target.value)
-                            }
-                            onBlur={() => handleStudentFieldBlur(student.id, 'dni')}
-                            disabled={updateStudentMutation.isPending}
-                          />
-                        </td>
-                        <td className="text-center">
-                          <Form.Check
-                            type="checkbox"
-                            checked={Boolean(student.apto)}
-                            onChange={(event) =>
-                              handleStudentAptoToggle(student.id, event.target.checked)
-                            }
-                            disabled={updateStudentMutation.isPending}
-                          />
+          {!isGepServices ? (
+            <div>
+              <h5 className="fw-semibold mb-3">Alumnos</h5>
+              {studentError ? <Alert variant="danger">{studentError}</Alert> : null}
+              {studentsQuery.isError ? (
+                <Alert variant="danger">No se pudieron cargar los alumnos de la sesión.</Alert>
+              ) : null}
+              {studentsQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" />
+                  <span>Cargando alumnos…</span>
+                </div>
+              ) : (
+                <Table responsive bordered hover size="sm">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Apellidos</th>
+                      <th>DNI</th>
+                      <th className="text-center">Apto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.length ? (
+                      students.map((student) => (
+                        <tr key={student.id}>
+                          <td>
+                            <Form.Control
+                              type="text"
+                              value={student.nombre}
+                              onChange={(event) =>
+                                handleStudentFieldChange(
+                                  student.id,
+                                  'nombre',
+                                  event.target.value,
+                                )
+                              }
+                              onBlur={() => handleStudentFieldBlur(student.id, 'nombre')}
+                              disabled={updateStudentMutation.isPending}
+                            />
+                          </td>
+                          <td>
+                            <Form.Control
+                              type="text"
+                              value={student.apellido}
+                              onChange={(event) =>
+                                handleStudentFieldChange(
+                                  student.id,
+                                  'apellido',
+                                  event.target.value,
+                                )
+                              }
+                              onBlur={() => handleStudentFieldBlur(student.id, 'apellido')}
+                              disabled={updateStudentMutation.isPending}
+                            />
+                          </td>
+                          <td>
+                            <Form.Control
+                              type="text"
+                              value={student.dni}
+                              onChange={(event) =>
+                                handleStudentFieldChange(student.id, 'dni', event.target.value)
+                              }
+                              onBlur={() => handleStudentFieldBlur(student.id, 'dni')}
+                              disabled={updateStudentMutation.isPending}
+                            />
+                          </td>
+                          <td className="text-center">
+                            <Form.Check
+                              type="checkbox"
+                              checked={Boolean(student.apto)}
+                              onChange={(event) =>
+                                handleStudentAptoToggle(student.id, event.target.checked)
+                              }
+                              disabled={updateStudentMutation.isPending}
+                            />
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="text-center text-muted">
+                          No hay alumnos registrados para esta sesión.
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="text-center text-muted">
-                        No hay alumnos registrados para esta sesión.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            )}
-          </div>
+                    )}
+                  </tbody>
+                </Table>
+              )}
+            </div>
+          ) : null}
 
           <Row className="g-4">
             <Col xs={12} xl={6}>
@@ -1356,16 +1396,24 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                     </Form>
                   )}
                 </div>
-                {session.isCompanyTraining ? (
+                {isCompanyTraining || isGepServices ? (
                   <div className="mt-4">
-                    <h5 className="fw-semibold mb-2">Haz un informe sobre la formación</h5>
+                    <h5 className="fw-semibold mb-2">
+                      Haz un informe sobre {isGepServices ? 'el servicio' : 'la formación'}
+                    </h5>
                     <p className="mb-0">
                       <Link
-                        to="/usuarios/trainer/informes/formacion"
+                        to={
+                          isGepServices
+                            ? '/usuarios/trainer/informes/preventivo'
+                            : '/usuarios/trainer/informes/formacion'
+                        }
                         className="text-decoration-none"
                         state={reportLinkState}
                       >
-                        https://erpgep.netlify.app/usuarios/trainer/informes/formacion
+                        {isGepServices
+                          ? 'https://erpgep.netlify.app/usuarios/trainer/informes/preventivo'
+                          : 'https://erpgep.netlify.app/usuarios/trainer/informes/formacion'}
                       </Link>
                     </p>
                   </div>
@@ -1420,9 +1468,11 @@ export default function TrainerSessionsPage() {
     return dateEntries.find((entry) => entry.date === selectedDate) ?? null;
   }, [dateEntries, selectedDate]);
 
-  const companySessions = useMemo(() => {
+  const companyAndServiceSessions = useMemo(() => {
     if (!selectedEntry) return [];
-    return selectedEntry.sessions.filter((session) => session.isCompanyTraining);
+    return selectedEntry.sessions.filter(
+      (session) => session.isCompanyTraining || session.isGepServices,
+    );
   }, [selectedEntry]);
 
   const variantCount = selectedEntry?.variants.length ?? 0;
@@ -1505,17 +1555,17 @@ export default function TrainerSessionsPage() {
         </Card>
       ) : null}
 
-      {selectedEntry && !companySessions.length ? (
+      {selectedEntry && !companyAndServiceSessions.length ? (
         <Card className="shadow-sm border-0">
           <Card.Body>
             <p className="text-muted mb-0">
-              En esta fecha no tienes sesiones de formación empresa asignadas.
+              En esta fecha no tienes sesiones de formación empresa ni servicios asignados.
             </p>
           </Card.Body>
         </Card>
       ) : null}
 
-      {companySessions.map((session) => (
+      {companyAndServiceSessions.map((session) => (
         <SessionDetailCard key={session.sessionId} session={session} />
       ))}
     </Stack>
