@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Card, Spinner, Table } from 'react-bootstrap';
+import { Alert, Button, Card, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
 import { fetchControlHorarioRecords, type ControlHorarioRecord } from '../../features/reporting/api';
+import { exportToExcel } from '../../shared/export/exportToExcel';
 
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
@@ -45,6 +46,58 @@ export default function ControlHorarioPage() {
 
   const records = recordsQuery.data ?? [];
   const hasRecords = records.length > 0;
+
+  const canDownload = !recordsQuery.isLoading && !recordsQuery.isError && hasRecords;
+
+  const handleDownload = () => {
+    if (!canDownload) {
+      return;
+    }
+
+    const headerRow = [
+      'Nombre de la sesión',
+      'Nombre de la organización',
+      'Formador',
+      'Inicio planificado',
+      'Fin planificado',
+      'Entrada (marcaje)',
+      'Salida (marcaje)',
+      'Diferencia inicio (minutos)',
+      'Diferencia fin (minutos)',
+    ] as const;
+
+    const rows = records.map((record) => {
+      const plannedStart = record.plannedStart
+        ? dateTimeFormatter.format(new Date(record.plannedStart))
+        : '';
+      const plannedEnd = record.plannedEnd
+        ? dateTimeFormatter.format(new Date(record.plannedEnd))
+        : '';
+      const clockIn = record.clockIn ? dateTimeFormatter.format(new Date(record.clockIn)) : '';
+      const clockOut = record.clockOut ? dateTimeFormatter.format(new Date(record.clockOut)) : '';
+
+      const startDiff = diffInMinutes(record.plannedStart, record.clockIn);
+      const endDiff = diffInMinutes(record.plannedEnd, record.clockOut);
+
+      return [
+        record.sessionName ?? '',
+        record.organizationName ?? '',
+        record.trainerFullName ?? '',
+        plannedStart,
+        plannedEnd,
+        clockIn,
+        clockOut,
+        startDiff ?? '',
+        endDiff ?? '',
+      ];
+    });
+
+    exportToExcel({
+      rows: [headerRow, ...rows],
+      fileName: `control_horario_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      sheetName: 'Control Horario',
+    });
+  };
 
   let content: JSX.Element;
 
@@ -149,6 +202,11 @@ export default function ControlHorarioPage() {
           <p className="text-muted">
             Seguimiento de los marcajes realizados por los formadores en cada sesión planificada.
           </p>
+          <div className="d-flex justify-content-end mb-3">
+            <Button type="button" onClick={handleDownload} disabled={!canDownload}>
+              Descargar
+            </Button>
+          </div>
           {content}
         </Card.Body>
       </Card>
