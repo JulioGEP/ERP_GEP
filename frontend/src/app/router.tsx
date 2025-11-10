@@ -58,6 +58,7 @@ const TrainerReportsRecursoPreventivoEbroPage = lazy(
 const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 const HorasFormadoresPage = lazy(() => import('../pages/reporting/HorasFormadoresPage'));
+const ControlHorarioPage = lazy(() => import('../pages/reporting/ControlHorarioPage'));
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -361,6 +362,17 @@ export function AppRouter({
               path="/reporting/horas_formadores"
               roles={['Admin']}
               element={<HorasFormadoresPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/reporting/control_horario"
+          element={
+            <GuardedRoute
+              path="/reporting/control_horario"
+              roles={['Admin']}
+              element={<ControlHorarioPage />}
             />
           }
         />
