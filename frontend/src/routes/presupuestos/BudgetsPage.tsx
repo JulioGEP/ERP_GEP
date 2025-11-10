@@ -17,7 +17,7 @@ export function BudgetsPage({ budgets, ...rest }: BudgetsPageProps) {
     <BudgetSectionLayout
       {...rest}
       budgets={budgets}
-      title="Form. Empresa y GEP Services · Sin planificar"
+      title="Formación Abierta · Sin planificar"
       subtitle="Sube tu presupuesto y planifica"
       showFilters={false}
       defaultFilters={defaultFilters}
