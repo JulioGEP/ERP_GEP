@@ -32,6 +32,18 @@ const COST_FIELD_DEFINITIONS: ReadonlyArray<{
   { key: 'gastosExtras', label: 'Otros gastos (€)' },
 ];
 
+const DEFAULT_COST_FIELD_VALUES: Partial<Record<TrainerExtraCostFieldKey, number>> = {
+  precioCosteFormacion: 15,
+  precioCostePreventivo: 15,
+};
+
+function formatDateForInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 type CostDraft = {
   fields: Record<TrainerExtraCostFieldKey, string>;
   dirty: boolean;
@@ -66,7 +78,10 @@ function parseInputToNumber(value: string): number | null {
 function createDraftFromItem(item: TrainerExtraCostRecord): CostDraft {
   const fields = {} as Record<TrainerExtraCostFieldKey, string>;
   for (const definition of COST_FIELD_DEFINITIONS) {
-    fields[definition.key] = formatNumberInput(item.costs[definition.key] ?? 0);
+    const baseValue = Number.isFinite(item.costs[definition.key])
+      ? item.costs[definition.key]
+      : DEFAULT_COST_FIELD_VALUES[definition.key] ?? 0;
+    fields[definition.key] = formatNumberInput(baseValue ?? 0);
   }
   return {
     fields,
@@ -88,7 +103,9 @@ function evaluateDraft(
       invalid = true;
       continue;
     }
-    const baseValue = Number.isFinite(item.costs[definition.key]) ? item.costs[definition.key] : 0;
+    const baseValue = Number.isFinite(item.costs[definition.key])
+      ? item.costs[definition.key]
+      : DEFAULT_COST_FIELD_VALUES[definition.key] ?? 0;
     if (Math.abs(parsed - baseValue) > 0.005) {
       dirty = true;
     }
@@ -109,9 +126,14 @@ function formatAssignmentLabel(value: 'session' | 'variant'): string {
 }
 
 export default function CostesExtraPage() {
-  const [filters, setFilters] = useState<{ startDate: string; endDate: string }>({
-    startDate: '',
-    endDate: '',
+  const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return {
+      startDate: formatDateForInput(startOfMonth),
+      endDate: formatDateForInput(endOfMonth),
+    };
   });
 
   const hasInvalidRange = Boolean(
