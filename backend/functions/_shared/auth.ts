@@ -128,6 +128,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/informes/preventivo',
   '/informes/simulacro',
   '/informes/recurso_preventivo_ebro',
+  '/reporting/control_horario',
   '/reporting/horas_formadores',
   '/usuarios',
 ];
