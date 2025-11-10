@@ -25,9 +25,12 @@ import {
 } from 'react-bootstrap';
 import {
   fetchTrainerSessions,
+  fetchTrainerSessionTimeLog,
+  saveTrainerSessionTimeLog,
   type TrainerSessionDetail,
   type TrainerSessionsDateEntry,
   type TrainerSessionTrainer,
+  type TrainerSessionTimeLog,
 } from '../../../api/trainer-sessions';
 import {
   fetchSessionComments,
@@ -92,6 +95,27 @@ function formatDateForInput(value: string | null): string {
   return `${year}-${month}-${day}`;
 }
 
+function formatDateTimeLocalInput(value: string | null): string {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  const hours = String(parsed.getHours()).padStart(2, '0');
+  const minutes = String(parsed.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function parseDateTimeLocalInput(value: string): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
 function calculateDurationHours(start: string | null, end: string | null): string {
   if (!start || !end) return '';
   const startDate = new Date(start);
@@ -149,6 +173,11 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(session.address)}`
     : null;
 
+  const timeLogQuery = useQuery<TrainerSessionTimeLog | null>({
+    queryKey: ['trainer', 'session', session.sessionId, 'time-log'],
+    queryFn: () => fetchTrainerSessionTimeLog({ sessionId: session.sessionId }),
+  });
+
   const commentsQuery = useQuery({
     queryKey: ['trainer', 'session', session.sessionId, 'comments'],
     queryFn: () => fetchSessionComments(session.sessionId),
@@ -157,6 +186,127 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
   const filteredComments = useMemo(() => {
     return (commentsQuery.data ?? []).filter((comment) => comment.compartir_formador);
   }, [commentsQuery.data]);
+
+  const [timeLogEntryValue, setTimeLogEntryValue] = useState('');
+  const [timeLogExitValue, setTimeLogExitValue] = useState('');
+  const [timeLogError, setTimeLogError] = useState<string | null>(null);
+  const [timeLogSuccess, setTimeLogSuccess] = useState(false);
+  const timeLogInitializedRef = useRef(false);
+  const timeLogKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    timeLogInitializedRef.current = false;
+    timeLogKeyRef.current = null;
+    setTimeLogError(null);
+    setTimeLogSuccess(false);
+  }, [session.sessionId]);
+
+  useEffect(() => {
+    if (timeLogQuery.isLoading) return;
+    const record = timeLogQuery.data ?? null;
+    const entrySource = record?.checkIn ?? record?.scheduledStart ?? session.startDate ?? null;
+    const exitSource = record?.checkOut ?? record?.scheduledEnd ?? session.endDate ?? null;
+    const key = record
+      ? `${record.checkIn ?? ''}|${record.checkOut ?? ''}|${record.updatedAt ?? ''}`
+      : `session:${session.startDate ?? ''}|${session.endDate ?? ''}`;
+    if (timeLogInitializedRef.current && timeLogKeyRef.current === key) {
+      return;
+    }
+    timeLogInitializedRef.current = true;
+    timeLogKeyRef.current = key;
+    setTimeLogEntryValue(formatDateTimeLocalInput(entrySource));
+    setTimeLogExitValue(formatDateTimeLocalInput(exitSource));
+    if (!timeLogQuery.isError) {
+      setTimeLogError(null);
+    }
+  }, [
+    session.endDate,
+    session.startDate,
+    timeLogQuery.data,
+    timeLogQuery.isError,
+    timeLogQuery.isLoading,
+  ]);
+
+  useEffect(() => {
+    if (!timeLogSuccess) return;
+    const timeout = window.setTimeout(() => setTimeLogSuccess(false), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [timeLogSuccess]);
+
+  const timeLogLoadErrorMessage = useMemo(() => {
+    if (!timeLogQuery.isError) return null;
+    const error = timeLogQuery.error;
+    if (error instanceof Error) {
+      const message = error.message?.trim();
+      if (message?.length) {
+        return message;
+      }
+    }
+    return 'No se pudo cargar el registro horario.';
+  }, [timeLogQuery.error, timeLogQuery.isError]);
+
+  const formattedTimeLogUpdated = useMemo(
+    () => formatDateTime(timeLogQuery.data?.updatedAt ?? null),
+    [timeLogQuery.data?.updatedAt],
+  );
+
+  const saveTimeLogMutation = useMutation({
+    mutationFn: async ({ entry, exit }: { entry: string; exit: string }) =>
+      saveTrainerSessionTimeLog({
+        sessionId: session.sessionId,
+        checkIn: entry,
+        checkOut: exit,
+        scheduledStart: session.startDate ?? null,
+        scheduledEnd: session.endDate ?? null,
+      }),
+    onSuccess: (log) => {
+      queryClient.setQueryData<TrainerSessionTimeLog | null>(
+        ['trainer', 'session', session.sessionId, 'time-log'],
+        log,
+      );
+      setTimeLogEntryValue(
+        formatDateTimeLocalInput(
+          log.checkIn ?? log.scheduledStart ?? session.startDate ?? null,
+        ),
+      );
+      setTimeLogExitValue(
+        formatDateTimeLocalInput(
+          log.checkOut ?? log.scheduledEnd ?? session.endDate ?? null,
+        ),
+      );
+      const key = `${log.checkIn ?? ''}|${log.checkOut ?? ''}|${log.updatedAt ?? ''}`;
+      timeLogKeyRef.current = key;
+      timeLogInitializedRef.current = true;
+      setTimeLogError(null);
+      setTimeLogSuccess(true);
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setTimeLogError(error.message);
+      } else {
+        setTimeLogError('No se pudo guardar el registro horario.');
+      }
+    },
+  });
+
+  const handleTimeLogSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setTimeLogError(null);
+      const entryIso = parseDateTimeLocalInput(timeLogEntryValue);
+      const exitIso = parseDateTimeLocalInput(timeLogExitValue);
+      if (!entryIso || !exitIso) {
+        setTimeLogError('Introduce fechas y horas válidas para el registro.');
+        return;
+      }
+      if (new Date(exitIso).getTime() <= new Date(entryIso).getTime()) {
+        setTimeLogError('La hora de salida debe ser posterior a la hora de entrada.');
+        return;
+      }
+      saveTimeLogMutation.mutate({ entry: entryIso, exit: exitIso });
+    },
+    [saveTimeLogMutation, timeLogEntryValue, timeLogExitValue],
+  );
 
   const [commentContent, setCommentContent] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
@@ -1093,6 +1243,65 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                     Los documentos se compartirán automáticamente con el equipo del ERP.
                   </div>
                 </Form.Group>
+                <div className="mt-4">
+                  <h5 className="fw-semibold mb-2">Fichar sesión</h5>
+                  {timeLogLoadErrorMessage ? (
+                    <Alert variant="danger">{timeLogLoadErrorMessage}</Alert>
+                  ) : null}
+                  {timeLogError ? <Alert variant="danger">{timeLogError}</Alert> : null}
+                  {timeLogSuccess ? (
+                    <Alert variant="success">Registro horario guardado correctamente.</Alert>
+                  ) : null}
+                  {timeLogQuery.isLoading ? (
+                    <div className="d-flex align-items-center gap-2">
+                      <Spinner animation="border" size="sm" />
+                      <span>Cargando registro horario…</span>
+                    </div>
+                  ) : (
+                    <Form onSubmit={handleTimeLogSubmit} className="d-grid gap-3">
+                      <Row className="g-3">
+                        <Col xs={12} sm={6}>
+                          <Form.Group
+                            controlId={`trainer-session-${session.sessionId}-time-entry`}
+                          >
+                            <Form.Label>Hora de entrada</Form.Label>
+                            <Form.Control
+                              type="datetime-local"
+                              value={timeLogEntryValue}
+                              onChange={(event) => setTimeLogEntryValue(event.target.value)}
+                              disabled={saveTimeLogMutation.isPending}
+                              required
+                            />
+                          </Form.Group>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <Form.Group
+                            controlId={`trainer-session-${session.sessionId}-time-exit`}
+                          >
+                            <Form.Label>Hora de salida</Form.Label>
+                            <Form.Control
+                              type="datetime-local"
+                              value={timeLogExitValue}
+                              onChange={(event) => setTimeLogExitValue(event.target.value)}
+                              disabled={saveTimeLogMutation.isPending}
+                              required
+                            />
+                          </Form.Group>
+                        </Col>
+                      </Row>
+                      <div className="d-flex justify-content-end">
+                        <Button type="submit" disabled={saveTimeLogMutation.isPending}>
+                          {saveTimeLogMutation.isPending ? 'Guardando…' : 'Guardar registro'}
+                        </Button>
+                      </div>
+                      {formattedTimeLogUpdated ? (
+                        <div className="text-muted small">
+                          Última actualización: {formattedTimeLogUpdated}
+                        </div>
+                      ) : null}
+                    </Form>
+                  )}
+                </div>
                 {session.isCompanyTraining ? (
                   <div className="mt-4">
                     <h5 className="fw-semibold mb-2">Haz un informe sobre la formación</h5>

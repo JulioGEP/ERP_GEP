@@ -148,6 +148,7 @@ model variants {
   trainer trainers?         @relation("TrainerVariants", fields: [trainer_id], references: [trainer_id])
   sala    salas?            @relation("SalaVariants", fields: [sala_id], references: [sala_id])
   unidad  unidades_moviles? @relation("UnidadVariants", fields: [unidad_movil_id], references: [unidad_id])
+  time_logs trainer_session_time_logs[]
 
   @@index([id_padre], map: "idx_variants_id_padre")
   @@index([status], map: "idx_variants_status")
@@ -236,6 +237,7 @@ model trainers {
   session_trainers session_trainers[]
   variants         variants[]         @relation("TrainerVariants")
   availability     trainer_availability[]
+  time_logs        trainer_session_time_logs[]
 
   @@index([apellido])
   @@index([especialidad])
@@ -254,6 +256,33 @@ model trainer_availability {
   @@id([trainer_id, date])
   @@index([date], map: "idx_trainer_availability_date")
   @@map("trainer_availability")
+}
+
+model trainer_session_time_logs {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  trainer_id          String
+  session_id          String?  @db.Uuid
+  variant_id          String?  @db.Uuid
+  scheduled_start_utc DateTime? @db.Timestamptz(6)
+  scheduled_end_utc   DateTime? @db.Timestamptz(6)
+  check_in_utc        DateTime? @db.Timestamptz(6)
+  check_out_utc       DateTime? @db.Timestamptz(6)
+  recorded_by_user_id String?  @db.Uuid
+  recorded_by_name    String?
+  source              String?  @default("trainer_portal") @db.VarChar(50)
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @db.Timestamptz(6)
+
+  trainer trainers @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
+  session sessions? @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  variant variants? @relation(fields: [variant_id], references: [id], onDelete: Cascade)
+
+  @@index([trainer_id], map: "idx_trainer_session_time_logs_trainer_id")
+  @@index([session_id], map: "idx_trainer_session_time_logs_session_id")
+  @@index([variant_id], map: "idx_trainer_session_time_logs_variant_id")
+  @@unique([trainer_id, session_id], map: "trainer_session_time_logs_session_key")
+  @@unique([trainer_id, variant_id], map: "trainer_session_time_logs_variant_key")
+  @@map("trainer_session_time_logs")
 }
 
 model salas {
@@ -305,6 +334,7 @@ model sessions {
   session_files session_files[]
   alumnos       alumnos[]
   tokens        tokens[]
+  time_logs     trainer_session_time_logs[]
 
   @@index([deal_id], map: "idx_sesiones_deal_id")
   @@index([deal_product_id], map: "idx_sesiones_deal_product_id")
