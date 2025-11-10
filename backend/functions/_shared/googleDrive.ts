@@ -7,8 +7,8 @@ import { toMadridISOString } from "./timezone";
 import { getPrisma } from "./prisma";
 
 const DEFAULT_BASE_FOLDER_NAME = "Documentos ERP";
-const DEAL_DOCUMENTS_FOLDER_NAME = "Documentos del deal";
-const SESSION_DOCUMENTS_FOLDER_NAME = "Documentos del deal";
+const DEAL_DOCUMENTS_LEGACY_FOLDER_NAME = "Documentos del deal";
+const SESSION_DOCUMENTS_LEGACY_FOLDER_NAME = "Documentos del deal";
 const CERTIFICATES_FOLDER_NAME = "Certificados";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 const TOKEN_AUDIENCE = "https://oauth2.googleapis.com/token";
@@ -1592,19 +1592,51 @@ export async function uploadDealDocumentToGoogleDrive(params: {
 
   await ensureDealFolderPublicLink({ deal: params.deal, folderId: dealFolder.folderId });
 
-  const dealDocumentsFolderName =
-    sanitizeName(DEAL_DOCUMENTS_FOLDER_NAME) || DEAL_DOCUMENTS_FOLDER_NAME;
-  const dealDocumentsFolderId = await ensureFolder({
-    name: dealDocumentsFolderName,
+  const safeName = sanitizeName(params.fileName || "documento") || "documento";
+  const mimeType = params.mimeType?.trim() || "application/octet-stream";
+
+  const legacyDealDocumentsFolderName =
+    sanitizeName(DEAL_DOCUMENTS_LEGACY_FOLDER_NAME) || DEAL_DOCUMENTS_LEGACY_FOLDER_NAME;
+  const legacyDealDocumentsFolderId = await findFolder({
+    name: legacyDealDocumentsFolderName,
     parentId: dealFolder.folderId,
     driveId,
   });
 
-  const safeName = sanitizeName(params.fileName || "documento") || "documento";
-  const mimeType = params.mimeType?.trim() || "application/octet-stream";
+  if (legacyDealDocumentsFolderId) {
+    try {
+      await moveFolderChildrenToTarget({
+        sourceFolderId: legacyDealDocumentsFolderId,
+        targetFolderId: dealFolder.folderId,
+        driveId,
+        context: {
+          dealId: resolveDealId(params.deal),
+          organizationFolderId: organizationFolder.folderId,
+          legacyFolderName: legacyDealDocumentsFolderName,
+        },
+      });
+    } catch (err) {
+      console.warn("[google-drive-sync] No se pudieron mover los archivos de la carpeta heredada del deal", {
+        dealId: resolveDealId(params.deal),
+        legacyFolderId: legacyDealDocumentsFolderId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    try {
+      await driveDelete(legacyDealDocumentsFolderId);
+      removeFolderFromCache(dealFolder.folderId, legacyDealDocumentsFolderName);
+    } catch (err) {
+      console.warn("[google-drive-sync] No se pudo eliminar la carpeta heredada del deal", {
+        dealId: resolveDealId(params.deal),
+        legacyFolderId: legacyDealDocumentsFolderId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   const uploadResult = await uploadBufferToDrive({
-    parentId: dealDocumentsFolderId,
+    parentId: dealFolder.folderId,
     name: safeName,
     mimeType,
     data: params.data,
@@ -1865,7 +1897,7 @@ export async function deleteDealDocumentFromGoogleDrive(params: {
   }
 
   const dealDocumentsFolderName =
-    sanitizeName(DEAL_DOCUMENTS_FOLDER_NAME) || DEAL_DOCUMENTS_FOLDER_NAME;
+    sanitizeName(DEAL_DOCUMENTS_LEGACY_FOLDER_NAME) || DEAL_DOCUMENTS_LEGACY_FOLDER_NAME;
   const dealDocumentsFolderId = await findFolder({
     name: dealDocumentsFolderName,
     parentId: dealFolder.folderId,
@@ -2025,7 +2057,7 @@ export async function deleteSessionDocumentFromGoogleDrive(params: {
   const legacySessionFolderName = sessionFolderInfo.legacyFolderName;
 
   const sessionDocumentsFolderName =
-    sanitizeName(SESSION_DOCUMENTS_FOLDER_NAME) || SESSION_DOCUMENTS_FOLDER_NAME;
+    sanitizeName(SESSION_DOCUMENTS_LEGACY_FOLDER_NAME) || SESSION_DOCUMENTS_LEGACY_FOLDER_NAME;
   const certificatesFolderName = sanitizeName(CERTIFICATES_FOLDER_NAME) || CERTIFICATES_FOLDER_NAME;
 
   const sessionDocumentsFolderId = await findFolder({
