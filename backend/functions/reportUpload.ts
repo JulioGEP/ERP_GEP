@@ -95,7 +95,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       fileName,
       mimeType: 'application/pdf',
       data: pdfBuffer,
-      targetSubfolderName: 'Documentos del deal',
+      targetSubfolderName: 'Informe',
     })
 
     const folderLink = normalizeDriveUrl(uploadResult.sessionFolderWebViewLink ?? null)
