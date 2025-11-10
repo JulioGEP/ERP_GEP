@@ -24,6 +24,11 @@ const COST_FIELD_DEFINITIONS = [
 type CostFieldDefinition = (typeof COST_FIELD_DEFINITIONS)[number];
 export type CostFieldKey = CostFieldDefinition['key'];
 
+const DEFAULT_COST_VALUES: Partial<Record<CostFieldKey, number>> = {
+  precioCosteFormacion: 15,
+  precioCostePreventivo: 15,
+};
+
 type TrainerSummary = {
   trainer_id: string;
   name: string | null;
@@ -252,7 +257,7 @@ function buildCostKey(type: 'session' | 'variant', assignmentId: string, trainer
 function createEmptyCosts(): Record<CostFieldKey, number> {
   const result: Record<CostFieldKey, number> = {} as Record<CostFieldKey, number>;
   for (const definition of COST_FIELD_DEFINITIONS) {
-    result[definition.key] = 0;
+    result[definition.key] = DEFAULT_COST_VALUES[definition.key] ?? 0;
   }
   return result;
 }
@@ -411,8 +416,9 @@ function buildCostCreateData(
     notas: notes,
   };
   for (const definition of COST_FIELD_DEFINITIONS) {
-    const amount = values[definition.key] ?? 0;
-    data[definition.column] = formatAmount(amount);
+    const resolvedAmount =
+      values[definition.key] ?? DEFAULT_COST_VALUES[definition.key] ?? 0;
+    data[definition.column] = formatAmount(resolvedAmount);
   }
   return data;
 }
