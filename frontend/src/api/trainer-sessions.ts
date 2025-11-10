@@ -1,5 +1,5 @@
 // frontend/src/api/trainer-sessions.ts
-import { getJson } from './client';
+import { getJson, putJson } from './client';
 
 export type TrainerSessionMobileUnit = {
   id: string;
@@ -51,6 +51,22 @@ export type TrainerSessionsDateEntry = {
 
 export type TrainerSessionsResponse = {
   dates: TrainerSessionsDateEntry[];
+};
+
+export type TrainerSessionTimeLog = {
+  id: string;
+  trainerId: string;
+  sessionId: string | null;
+  variantId: string | null;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  checkIn: string | null;
+  checkOut: string | null;
+  recordedByUserId: string | null;
+  recordedByName: string | null;
+  source: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
 function sanitizeString(value: unknown): string | null {
@@ -208,9 +224,125 @@ function sanitizeDateEntry(value: unknown): TrainerSessionsDateEntry | null {
   return { date, sessions, variants } satisfies TrainerSessionsDateEntry;
 }
 
+function sanitizeTimeLog(value: unknown): TrainerSessionTimeLog | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Partial<TrainerSessionTimeLog> & {
+    id?: unknown;
+    trainer_id?: unknown;
+    session_id?: unknown;
+    variant_id?: unknown;
+    scheduled_start?: unknown;
+    scheduled_start_utc?: unknown;
+    scheduled_end?: unknown;
+    scheduled_end_utc?: unknown;
+    check_in?: unknown;
+    check_in_utc?: unknown;
+    check_out?: unknown;
+    check_out_utc?: unknown;
+    recorded_by_user_id?: unknown;
+    recorded_by_name?: unknown;
+    created_at?: unknown;
+    updated_at?: unknown;
+    source?: unknown;
+  };
+
+  const id = sanitizeString(raw.id);
+  const trainerId = sanitizeString(raw.trainerId ?? raw.trainer_id);
+  if (!id || !trainerId) return null;
+
+  const sessionId =
+    sanitizeString(raw.sessionId ?? raw.session_id) ?? null;
+  const variantId =
+    sanitizeString(raw.variantId ?? raw.variant_id) ?? null;
+
+  const scheduledStart =
+    sanitizeDate(
+      raw.scheduledStart ?? raw.scheduled_start ?? raw.scheduled_start_utc ?? null,
+    );
+  const scheduledEnd =
+    sanitizeDate(raw.scheduledEnd ?? raw.scheduled_end ?? raw.scheduled_end_utc ?? null);
+  const checkIn = sanitizeDate(raw.checkIn ?? raw.check_in ?? raw.check_in_utc ?? null);
+  const checkOut = sanitizeDate(raw.checkOut ?? raw.check_out ?? raw.check_out_utc ?? null);
+
+  return {
+    id,
+    trainerId,
+    sessionId,
+    variantId,
+    scheduledStart,
+    scheduledEnd,
+    checkIn,
+    checkOut,
+    recordedByUserId:
+      sanitizeString(raw.recordedByUserId ?? raw.recorded_by_user_id) ?? null,
+    recordedByName:
+      sanitizeString(raw.recordedByName ?? raw.recorded_by_name) ?? null,
+    source: sanitizeString(raw.source) ?? null,
+    createdAt: sanitizeDate(raw.createdAt ?? raw.created_at ?? null),
+    updatedAt: sanitizeDate(raw.updatedAt ?? raw.updated_at ?? null),
+  } satisfies TrainerSessionTimeLog;
+}
+
+type TrainerSessionTimeLogParams =
+  | { sessionId: string; variantId?: never }
+  | { sessionId?: never; variantId: string };
+
+function buildTimeLogQuery(params: TrainerSessionTimeLogParams): string {
+  const search = new URLSearchParams();
+  if ('sessionId' in params) {
+    const { sessionId } = params as { sessionId: string };
+    if (sessionId) search.set('sessionId', sessionId);
+  } else if ('variantId' in params) {
+    const { variantId } = params as { variantId: string };
+    if (variantId) search.set('variantId', variantId);
+  }
+  return search.toString();
+}
+
 export async function fetchTrainerSessions(): Promise<TrainerSessionsResponse> {
   const data = await getJson<any>('/trainer-sessions');
   const entries = Array.isArray(data?.dates) ? data.dates : [];
   const dates = entries.map(sanitizeDateEntry).filter(Boolean) as TrainerSessionsDateEntry[];
   return { dates };
+}
+
+export async function fetchTrainerSessionTimeLog(
+  params: TrainerSessionTimeLogParams,
+): Promise<TrainerSessionTimeLog | null> {
+  const query = buildTimeLogQuery(params);
+  if (!query.length) return null;
+  const data = await getJson<{ timeLog?: unknown }>(`/trainer-session-time-logs?${query}`);
+  return sanitizeTimeLog(data?.timeLog ?? null);
+}
+
+export type SaveTrainerSessionTimeLogInput = TrainerSessionTimeLogParams & {
+  checkIn: string;
+  checkOut: string;
+  scheduledStart?: string | null;
+  scheduledEnd?: string | null;
+};
+
+export async function saveTrainerSessionTimeLog(
+  input: SaveTrainerSessionTimeLogInput,
+): Promise<TrainerSessionTimeLog> {
+  const { checkIn, checkOut, scheduledStart, scheduledEnd, ...assignment } = input;
+  const query = buildTimeLogQuery(assignment as TrainerSessionTimeLogParams);
+  if (!query.length) {
+    throw new Error('Debes indicar una sesión o variante para guardar el registro horario.');
+  }
+
+  const body: Record<string, unknown> = { checkIn, checkOut };
+  if (scheduledStart !== undefined) body.scheduledStart = scheduledStart;
+  if (scheduledEnd !== undefined) body.scheduledEnd = scheduledEnd;
+
+  const data = await putJson<{ timeLog?: unknown }>(
+    `/trainer-session-time-logs?${query}`,
+    body,
+  );
+
+  const log = sanitizeTimeLog(data?.timeLog ?? null);
+  if (!log) {
+    throw new Error('Respuesta inválida del servidor al guardar el registro horario.');
+  }
+  return log;
 }
