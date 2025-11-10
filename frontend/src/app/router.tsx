@@ -59,6 +59,7 @@ const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 const HorasFormadoresPage = lazy(() => import('../pages/reporting/HorasFormadoresPage'));
 const ControlHorarioPage = lazy(() => import('../pages/reporting/ControlHorarioPage'));
+const CostesExtraPage = lazy(() => import('../pages/reporting/CostesExtraPage'));
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -362,6 +363,17 @@ export function AppRouter({
               path="/reporting/horas_formadores"
               roles={['Admin']}
               element={<HorasFormadoresPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/reporting/costes_extra"
+          element={
+            <GuardedRoute
+              path="/reporting/costes_extra"
+              roles={['Admin']}
+              element={<CostesExtraPage />}
             />
           }
         />
