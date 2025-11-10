@@ -111,6 +111,14 @@ function evaluateDraft(
   return { dirty, invalid };
 }
 
+function getSortTimestamp(value: string | null): number {
+  if (!value) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : Number.POSITIVE_INFINITY;
+}
+
 function buildTrainerDisplayName(item: TrainerExtraCostRecord): string {
   const parts = [item.trainerName, item.trainerLastName]
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
@@ -169,7 +177,23 @@ export default function CostesExtraPage() {
 
   const [drafts, setDrafts] = useState<Record<string, CostDraft>>({});
 
-  const items = hasInvalidRange ? [] : extraCostsQuery.data ?? [];
+  const items = useMemo(() => {
+    if (hasInvalidRange) {
+      return [] as TrainerExtraCostRecord[];
+    }
+    const source = extraCostsQuery.data ?? [];
+    if (!source.length) {
+      return source;
+    }
+    return [...source].sort((a, b) => {
+      const timeA = getSortTimestamp(a.scheduledStart);
+      const timeB = getSortTimestamp(b.scheduledStart);
+      if (timeA === timeB) {
+        return a.key.localeCompare(b.key);
+      }
+      return timeA < timeB ? -1 : 1;
+    });
+  }, [extraCostsQuery.data, hasInvalidRange]);
 
   useEffect(() => {
     if (!items.length) {
@@ -189,6 +213,13 @@ export default function CostesExtraPage() {
   }, [items]);
 
   const numberFormatter = useMemo(() => new Intl.NumberFormat('es-ES'), []);
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-ES', {
+        dateStyle: 'short',
+      }),
+    [],
+  );
   const dateTimeFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat('es-ES', {
@@ -223,6 +254,7 @@ export default function CostesExtraPage() {
     }
 
     const headerRow = [
+      'Fecha',
       'Formador',
       'ID formador',
       'Tipo de asignación',
@@ -238,6 +270,9 @@ export default function CostesExtraPage() {
     const rows = items.map((item) => {
       const draft = drafts[item.key] ?? createDraftFromItem(item);
       const assignmentLabel = formatAssignmentLabel(item.assignmentType);
+      const trainingDate = item.scheduledStart
+        ? dateFormatter.format(new Date(item.scheduledStart))
+        : '';
       const scheduledStart = item.scheduledStart
         ? dateTimeFormatter.format(new Date(item.scheduledStart))
         : '';
@@ -251,6 +286,7 @@ export default function CostesExtraPage() {
       });
 
       return [
+        trainingDate,
         buildTrainerDisplayName(item),
         item.trainerId,
         assignmentLabel,
@@ -323,6 +359,7 @@ export default function CostesExtraPage() {
         <Table striped bordered hover>
           <thead>
             <tr>
+              <th style={{ minWidth: '120px' }}>Fecha</th>
               <th style={{ minWidth: '220px' }}>Formador</th>
               <th style={{ minWidth: '260px' }}>Asignación</th>
               {COST_FIELD_DEFINITIONS.map((definition) => (
@@ -339,6 +376,9 @@ export default function CostesExtraPage() {
               const baseDraft = drafts[item.key] ?? createDraftFromItem(item);
               const saving =
                 saveMutation.isPending && saveMutation.variables?.key === item.key;
+              const trainingDateLabel = item.scheduledStart
+                ? dateFormatter.format(new Date(item.scheduledStart))
+                : '—';
 
               const handleFieldChange = (
                 fieldKey: TrainerExtraCostFieldKey,
@@ -396,6 +436,7 @@ export default function CostesExtraPage() {
 
               return (
                 <tr key={item.key}>
+                  <td className="align-middle">{trainingDateLabel}</td>
                   <td className="align-middle">
                     <div className="fw-semibold">{trainerDisplayName}</div>
                     {trainerDisplayName !== item.trainerId ? (
