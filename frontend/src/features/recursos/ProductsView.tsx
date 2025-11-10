@@ -121,7 +121,7 @@ const PRODUCT_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'code', label: 'Código' },
   { key: 'category', label: 'Categoría' },
   { key: 'type', label: 'Tipo' },
-  { key: 'template', label: 'Template' },
+  { key: 'template', label: 'Plantilla Certificado' },
   { key: 'url_formacion', label: 'URL formación' },
   { key: 'estado', label: 'Estado' },
 ];
@@ -788,7 +788,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
               className="btn btn-link text-decoration-none text-start text-muted text-uppercase small fw-semibold p-0"
               onClick={column.getToggleSortingHandler()}
             >
-              Template
+              Plantilla Certificado
               {sorted && (
                 <span className="ms-1" aria-hidden="true">
                   {sorted === 'asc' ? '▲' : '▼'}
