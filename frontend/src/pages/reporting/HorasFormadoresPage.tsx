@@ -18,11 +18,26 @@ function formatTrainerName(item: TrainerHoursItem): string {
   return item.trainerId;
 }
 
+function getCurrentMonthRange(): { startDate: string; endDate: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+  const formatDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  return {
+    startDate: formatDate(start),
+    endDate: formatDate(end),
+  };
+}
+
 export default function HorasFormadoresPage() {
-  const [filters, setFilters] = useState<{ startDate: string; endDate: string }>({
-    startDate: '',
-    endDate: '',
-  });
+  const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(getCurrentMonthRange);
 
   const hasInvalidRange = Boolean(filters.startDate && filters.endDate && filters.startDate > filters.endDate);
 
