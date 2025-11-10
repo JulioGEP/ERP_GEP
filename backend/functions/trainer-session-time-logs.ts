@@ -152,8 +152,8 @@ export const handler = createHttpHandler(async (request) => {
     }
     sessionId = sessionIdRaw;
     const assignment = await prisma.sesion_trainers.findFirst({
-      where: { sesion_id: sessionId, trainer_id: trainer.trainer_id },
-      select: { trainer_id: true },
+      where: { session_id: sessionId, trainer_id: trainer.trainer_id },
+      select: { session_id: true },
     });
     if (!assignment) {
       return errorResponse('FORBIDDEN', 'No tienes acceso a esta sesión.', 403);
