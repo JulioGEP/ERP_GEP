@@ -47,6 +47,22 @@ export default function ControlHorarioPage() {
   const records = recordsQuery.data ?? [];
   const hasRecords = records.length > 0;
 
+  const endedWithoutClockRecords = useMemo(() => {
+    const now = Date.now();
+
+    return records.filter((record) => {
+      const plannedEnd = parseDate(record.plannedEnd);
+      if (!plannedEnd) {
+        return false;
+      }
+
+      const hasEnded = plannedEnd.getTime() <= now;
+      const hasClocked = record.clockIn !== null || record.clockOut !== null;
+
+      return hasEnded && !hasClocked;
+    });
+  }, [records]);
+
   const canDownload = !recordsQuery.isLoading && !recordsQuery.isError && hasRecords;
 
   const handleDownload = () => {
@@ -117,78 +133,28 @@ export default function ControlHorarioPage() {
     content = <Alert variant="info">No hay registros de control horario disponibles.</Alert>;
   } else {
     content = (
-      <div className="table-responsive">
-        <Table striped bordered hover>
-          <thead>
-            <tr>
-              <th>Nombre de la sesión</th>
-              <th>Nombre de la organización</th>
-              <th>Nombre / Apellidos de formador</th>
-              <th>Horarios de inicio y fin de la sesión</th>
-              <th>Horario de marcaje de la formación</th>
-              <th>Diferencias (minutos)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((record) => {
-              const sessionName = record.sessionName ?? '—';
-              const organizationName = record.organizationName ?? '—';
-              const trainerFullName = record.trainerFullName ?? '—';
-              const plannedStart = record.plannedStart
-                ? dateTimeFormatter.format(new Date(record.plannedStart))
-                : '—';
-              const plannedEnd = record.plannedEnd
-                ? dateTimeFormatter.format(new Date(record.plannedEnd))
-                : '—';
-              const clockIn = record.clockIn
-                ? dateTimeFormatter.format(new Date(record.clockIn))
-                : '—';
-              const clockOut = record.clockOut
-                ? dateTimeFormatter.format(new Date(record.clockOut))
-                : '—';
+      <>
+        <RecordsTable
+          records={records}
+          dateTimeFormatter={dateTimeFormatter}
+          differenceFormatter={differenceFormatter}
+        />
 
-              const startDiff = diffInMinutes(record.plannedStart, record.clockIn);
-              const endDiff = diffInMinutes(record.plannedEnd, record.clockOut);
-
-              const differenceSummary = (() => {
-                const parts: string[] = [];
-                if (startDiff !== null) {
-                  parts.push(`Inicio: ${differenceFormatter.format(startDiff)} min`);
-                }
-                if (endDiff !== null) {
-                  parts.push(`Fin: ${differenceFormatter.format(endDiff)} min`);
-                }
-                return parts.length ? parts.join(' · ') : '—';
-              })();
-
-              return (
-                <tr key={record.id}>
-                  <td className="align-middle">{sessionName}</td>
-                  <td className="align-middle">{organizationName}</td>
-                  <td className="align-middle">{trainerFullName}</td>
-                  <td className="align-middle">
-                    <div>
-                      <span className="fw-semibold">Inicio:</span> {plannedStart}
-                    </div>
-                    <div>
-                      <span className="fw-semibold">Fin:</span> {plannedEnd}
-                    </div>
-                  </td>
-                  <td className="align-middle">
-                    <div>
-                      <span className="fw-semibold">Entrada:</span> {clockIn}
-                    </div>
-                    <div>
-                      <span className="fw-semibold">Salida:</span> {clockOut}
-                    </div>
-                  </td>
-                  <td className="align-middle">{differenceSummary}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </Table>
-      </div>
+        <div className="mt-4">
+          <h2 className="h5 mb-3">Sesiones finalizadas sin fichaje</h2>
+          {endedWithoutClockRecords.length > 0 ? (
+            <RecordsTable
+              records={endedWithoutClockRecords}
+              dateTimeFormatter={dateTimeFormatter}
+              differenceFormatter={differenceFormatter}
+            />
+          ) : (
+            <Alert variant="light" className="mb-0">
+              No hay sesiones finalizadas sin registro de fichaje.
+            </Alert>
+          )}
+        </div>
+      </>
     );
   }
 
@@ -211,5 +177,88 @@ export default function ControlHorarioPage() {
         </Card.Body>
       </Card>
     </section>
+  );
+}
+
+type RecordsTableProps = {
+  records: ControlHorarioRecord[];
+  dateTimeFormatter: Intl.DateTimeFormat;
+  differenceFormatter: Intl.NumberFormat;
+};
+
+function RecordsTable({ records, dateTimeFormatter, differenceFormatter }: RecordsTableProps) {
+  return (
+    <div className="table-responsive">
+      <Table striped bordered hover>
+        <thead>
+          <tr>
+            <th>Nombre de la sesión</th>
+            <th>Nombre de la organización</th>
+            <th>Nombre / Apellidos de formador</th>
+            <th>Horarios de inicio y fin de la sesión</th>
+            <th>Horario de marcaje de la formación</th>
+            <th>Diferencias (minutos)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((record) => {
+            const sessionName = record.sessionName ?? '—';
+            const organizationName = record.organizationName ?? '—';
+            const trainerFullName = record.trainerFullName ?? '—';
+            const plannedStart = record.plannedStart
+              ? dateTimeFormatter.format(new Date(record.plannedStart))
+              : '—';
+            const plannedEnd = record.plannedEnd
+              ? dateTimeFormatter.format(new Date(record.plannedEnd))
+              : '—';
+            const clockIn = record.clockIn
+              ? dateTimeFormatter.format(new Date(record.clockIn))
+              : '—';
+            const clockOut = record.clockOut
+              ? dateTimeFormatter.format(new Date(record.clockOut))
+              : '—';
+
+            const startDiff = diffInMinutes(record.plannedStart, record.clockIn);
+            const endDiff = diffInMinutes(record.plannedEnd, record.clockOut);
+
+            const differenceSummary = (() => {
+              const parts: string[] = [];
+              if (startDiff !== null) {
+                parts.push(`Inicio: ${differenceFormatter.format(startDiff)} min`);
+              }
+              if (endDiff !== null) {
+                parts.push(`Fin: ${differenceFormatter.format(endDiff)} min`);
+              }
+              return parts.length ? parts.join(' · ') : '—';
+            })();
+
+            return (
+              <tr key={record.id}>
+                <td className="align-middle">{sessionName}</td>
+                <td className="align-middle">{organizationName}</td>
+                <td className="align-middle">{trainerFullName}</td>
+                <td className="align-middle">
+                  <div>
+                    <span className="fw-semibold">Inicio:</span> {plannedStart}
+                  </div>
+                  <div>
+                    <span className="fw-semibold">Fin:</span> {plannedEnd}
+                  </div>
+                </td>
+                <td className="align-middle">
+                  <div>
+                    <span className="fw-semibold">Entrada:</span> {clockIn}
+                  </div>
+                  <div>
+                    <span className="fw-semibold">Salida:</span> {clockOut}
+                  </div>
+                </td>
+                <td className="align-middle">{differenceSummary}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </Table>
+    </div>
   );
 }
