@@ -424,6 +424,9 @@ export function normalizeSessionDocument(raw: any): SessionDocument {
     file_type: toStringValue(raw?.file_type ?? raw?.mime_type) ?? null,
     compartir_formador:
       typeof raw?.compartir_formador === 'boolean' ? raw.compartir_formador : false,
+    trainer_expense: Boolean(
+      raw?.trainer_expense ?? raw?.trainerExpense ?? raw?.es_gasto_formador ?? raw?.gasto_formador,
+    ),
     added_at: toStringValue(raw?.added_at) ?? null,
     updated_at: toStringValue(raw?.updated_at) ?? null,
     drive_file_name: toStringValue(raw?.drive_file_name) ?? null,

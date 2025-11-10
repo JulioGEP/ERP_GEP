@@ -53,6 +53,8 @@ import { useCurrentUserIdentity } from '../../../features/presupuestos/useCurren
 import type { SessionDocumentsPayload } from '../../../api/sessions.types';
 import type { ReportDraft, ReportSessionInfo } from '../../../features/informes/ReportsFlow';
 
+const TRAINER_EXPENSE_FOLDER_NAME = 'Gastos Formador';
+
 function formatDateLabel(date: string): string {
   const parts = date.split('-').map((value) => Number.parseInt(value, 10));
   if (parts.length !== 3 || parts.some((value) => Number.isNaN(value))) {
@@ -413,6 +415,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
   const trainerDisplayName = useMemo(() => userName.trim(), [userName]);
 
   const [documentError, setDocumentError] = useState<string | null>(null);
+  const [isExpense, setIsExpense] = useState(false);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
   const trainerDocumentStorageKey = useMemo(
     () => `trainer-session-${session.sessionId}-${userId}-documents`,
@@ -493,12 +496,15 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
   const trainerDocumentIdSet = useMemo(() => new Set(trainerDocumentIds), [trainerDocumentIds]);
 
   const documentMutation = useMutation({
-    mutationFn: async (files: File[]) =>
+    mutationFn: async ({ files, trainerExpense }: { files: File[]; trainerExpense: boolean }) =>
       uploadSessionDocuments({
         dealId: session.dealId,
         sessionId: session.sessionId,
         files,
         shareWithTrainer: true,
+        trainerExpense,
+        trainerName: trainerDisplayName,
+        expenseFolderName: TRAINER_EXPENSE_FOLDER_NAME,
       }),
     onSuccess: (payload) => {
       setDocumentError(null);
@@ -739,9 +745,9 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
       const fileList = event.target.files;
       if (!fileList || !fileList.length) return;
       const files = Array.from(fileList);
-      documentMutation.mutate(files);
+      documentMutation.mutate({ files, trainerExpense: isExpense });
     },
-    [documentMutation],
+    [documentMutation, isExpense],
   );
 
   const handleDocumentDelete = useCallback(
@@ -1232,6 +1238,14 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                   className="d-grid gap-2"
                 >
                   <Form.Label>Subir documentos</Form.Label>
+                  <Form.Check
+                    type="checkbox"
+                    id={`trainer-session-${session.sessionId}-documents-expense`}
+                    label="¿Gasto?"
+                    checked={isExpense}
+                    onChange={(event) => setIsExpense(event.target.checked)}
+                    disabled={documentMutation.isPending}
+                  />
                   <Form.Control
                     type="file"
                     multiple
@@ -1241,6 +1255,9 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                   />
                   <div className="text-muted small">
                     Los documentos se compartirán automáticamente con el equipo del ERP.
+                    {isExpense
+                      ? ` Se subirán a la carpeta "${TRAINER_EXPENSE_FOLDER_NAME}" y se añadirá tu nombre al archivo.`
+                      : null}
                   </div>
                 </Form.Group>
                 <div className="mt-4">
