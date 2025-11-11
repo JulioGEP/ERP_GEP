@@ -2,7 +2,7 @@
 import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
-import { logAudit, resolveUserIdFromEvent } from './_shared/audit-log';
+import { logAudit, resolveUserIdFromEvent, type JsonValue } from './_shared/audit-log';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 import { isTrustedClient, logSuspiciousRequest } from './_shared/security';
@@ -1460,7 +1460,7 @@ if (method === 'GET') {
         entityType: 'session',
         entityId: result.id,
         before: null,
-        after: auditAfter as Prisma.InputJsonValue,
+        after: auditAfter as JsonValue,
       });
 
       return successResponse({ session: result }, 201);
@@ -1599,8 +1599,8 @@ if (method === 'GET') {
             action: 'session.updated',
             entityType: 'session',
             entityId: sessionIdFromPath,
-            before: auditBeforeSnapshot as Prisma.InputJsonValue,
-            after: auditAfterSnapshot as Prisma.InputJsonValue,
+            before: auditBeforeSnapshot as JsonValue,
+            after: auditAfterSnapshot as JsonValue,
           });
         } catch (auditError) {
           console.error('[sessions] Failed to log session update', {

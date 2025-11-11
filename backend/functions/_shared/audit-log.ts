@@ -7,13 +7,32 @@ type PrismaClientOrTransaction =
   | PrismaClient
   | Prisma.TransactionClient;
 
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+export type JsonArray = JsonValue[];
+export type JsonObject = { [key: string]: JsonValue };
+
+type AuditLogCreatePayload = {
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  user_id: string | null;
+  before?: JsonValue | null;
+  after?: JsonValue | null;
+};
+
 export type LogAuditParams = {
   userId?: string | null;
   action: string;
   entityType: string;
   entityId: string;
-  before?: Prisma.InputJsonValue | null;
-  after?: Prisma.InputJsonValue | null;
+  before?: JsonValue | null;
+  after?: JsonValue | null;
   prisma?: PrismaClientOrTransaction;
 };
 
@@ -28,7 +47,7 @@ export async function logAudit({
 }: LogAuditParams): Promise<void> {
   const client = prisma ?? getPrisma();
 
-  const payload: Prisma.audit_logsUncheckedCreateInput = {
+  const payload: AuditLogCreatePayload = {
     action,
     entity_type: entityType,
     entity_id: entityId,

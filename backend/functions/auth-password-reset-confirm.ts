@@ -1,9 +1,8 @@
 import * as bcrypt from 'bcryptjs';
-import type { Prisma } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
-import { logAudit } from './_shared/audit-log';
+import { logAudit, type JsonValue } from './_shared/audit-log';
 
 export const handler = createHttpHandler<any>(async (request) => {
   if (request.method !== 'POST') {
@@ -79,11 +78,11 @@ export const handler = createHttpHandler<any>(async (request) => {
         action: 'auth.password_reset',
         entityType: 'user',
         entityId: user.id,
-        before: { password_updated_at: previousUpdatedAt } as Prisma.InputJsonValue,
+        before: { password_updated_at: previousUpdatedAt } as JsonValue,
         after: {
           password_updated_at: now.toISOString(),
           reset_via_token: true,
-        } as Prisma.InputJsonValue,
+        } as JsonValue,
       });
     } catch (auditError) {
       console.error('[auth-password-reset] Failed to log password reset', auditError);

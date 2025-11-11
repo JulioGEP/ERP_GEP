@@ -3,6 +3,7 @@ import { errorResponse, successResponse } from './_shared/response';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { toMadridISOString } from './_shared/timezone';
+import type { JsonValue } from './_shared/audit-log';
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
@@ -38,6 +39,23 @@ function buildUserFullName(
   return parts.join(' ');
 }
 
+type AuditLogWithUser = {
+  id: string;
+  created_at: Date;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  user_id: string | null;
+  before: JsonValue | null;
+  after: JsonValue | null;
+  user: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+  } | null;
+};
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'GET') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -51,7 +69,7 @@ export const handler = createHttpHandler(async (request) => {
 
   const limit = parseLimitParam(request.query.limit);
 
-  const logs = await prisma.audit_logs.findMany({
+  const logs = (await prisma.audit_logs.findMany({
     orderBy: { created_at: 'desc' },
     take: limit,
     include: {
@@ -64,7 +82,7 @@ export const handler = createHttpHandler(async (request) => {
         },
       },
     },
-  });
+  })) as AuditLogWithUser[];
 
   const entries = logs.map((log) => ({
     id: log.id,

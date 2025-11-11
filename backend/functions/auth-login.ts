@@ -1,9 +1,8 @@
 import * as bcrypt from 'bcryptjs';
-import type { Prisma } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
-import { logAudit } from './_shared/audit-log';
+import { logAudit, type JsonValue } from './_shared/audit-log';
 import {
   buildSessionCookie,
   getPermissionsForRole,
@@ -102,7 +101,7 @@ export const handler = createHttpHandler<any>(async (request) => {
           expires_at: session.expires_at?.toISOString() ?? null,
           ip_hash: session.ip_hash,
           user_agent: session.user_agent,
-        } as Prisma.InputJsonValue,
+        } as JsonValue,
       });
     } catch (auditError) {
       console.error('[auth-login] Failed to log login event', auditError);

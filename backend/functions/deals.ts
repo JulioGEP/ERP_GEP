@@ -20,7 +20,7 @@ import {
 import { generateSessionsForDeal } from "./_shared/sessionGeneration";
 import { studentsFromNotes } from "./_shared/studentsFromNotes";
 import type { StudentIdentifier } from "./_shared/studentsFromNotes";
-import { logAudit, resolveUserIdFromEvent } from "./_shared/audit-log";
+import { logAudit, resolveUserIdFromEvent, type JsonValue } from "./_shared/audit-log";
 import { isTrustedClient, logSuspiciousRequest } from "./_shared/security";
 
 const EDITABLE_FIELDS = new Set([
@@ -1021,12 +1021,12 @@ export const handler = async (event: any) => {
             action: 'deal.imported_pipedrive',
             entityType: 'deal',
             entityId: String(deal_id),
-            before: existedBeforeImport ? ({ existed_before_import: true } as Prisma.InputJsonValue) : null,
+            before: existedBeforeImport ? ({ existed_before_import: true } as JsonValue) : null,
             after: {
               deal_id: String(deal_id),
               warnings,
               existed_before_import: existedBeforeImport,
-            } as Prisma.InputJsonValue,
+            } as JsonValue,
           });
         } catch (auditError) {
           console.error('[deals] Failed to log Pipedrive import', auditError);
@@ -1419,8 +1419,8 @@ export const handler = async (event: any) => {
             action: "deal.updated",
             entityType: "deal",
             entityId: String(dealId),
-            before: hasBefore ? (beforePayload as Prisma.InputJsonValue) : null,
-            after: hasAfter ? (afterPayload as Prisma.InputJsonValue) : null,
+            before: hasBefore ? (beforePayload as JsonValue) : null,
+            after: hasAfter ? (afterPayload as JsonValue) : null,
           });
         }
       }
