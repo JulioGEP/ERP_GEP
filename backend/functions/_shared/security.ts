@@ -57,15 +57,73 @@ function resolveClientIpFromHeaders(
   return null;
 }
 
+const TRUSTED_FRONTEND_HOSTS = new Set(resolveTrustedFrontendHosts());
+
 export function isTrustedClient(
   headers: Record<string, string | undefined> | undefined,
 ): boolean {
   const normalized = normalizeHeaders(headers);
+
   const headerValue = normalized[CLIENT_HEADER_NAME];
-  if (!headerValue) {
+  if (
+    headerValue &&
+    headerValue.trim().toLowerCase() === TRUSTED_CLIENT_HEADER_VALUE
+  ) {
+    return true;
+  }
+
+  return hasTrustedFrontendReferer(normalized);
+}
+
+function resolveTrustedFrontendHosts(): string[] {
+  const candidates = [
+    process.env.PUBLIC_FRONTEND_BASE_URL,
+    process.env.PASSWORD_RESET_BASE_URL,
+    process.env.URL,
+    process.env.DEPLOY_PRIME_URL,
+    process.env.DEPLOY_URL,
+  ];
+
+  const hosts = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed.length) continue;
+    try {
+      const url = new URL(trimmed);
+      if (url.host) {
+        hosts.add(url.host.toLowerCase());
+      }
+    } catch {
+      // Ignorar valores inválidos
+    }
+  }
+
+  return Array.from(hosts);
+}
+
+function hasTrustedFrontendReferer(headers: Record<string, string>): boolean {
+  if (!TRUSTED_FRONTEND_HOSTS.size) {
     return false;
   }
-  return headerValue.trim().toLowerCase() === TRUSTED_CLIENT_HEADER_VALUE;
+
+  const refererCandidates = [headers['origin'], headers['referer']];
+
+  for (const candidate of refererCandidates) {
+    if (typeof candidate !== 'string' || !candidate.trim()) continue;
+    try {
+      const url = new URL(candidate);
+      const host = url.host.toLowerCase();
+      if (TRUSTED_FRONTEND_HOSTS.has(host)) {
+        return true;
+      }
+    } catch {
+      // Ignorar valores inválidos
+    }
+  }
+
+  return false;
 }
 
 type SuspiciousRequestParams = {
