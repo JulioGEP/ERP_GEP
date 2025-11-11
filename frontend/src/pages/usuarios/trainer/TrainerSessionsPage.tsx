@@ -1934,20 +1934,25 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     });
   }, [dealsWithKeys]);
 
-  const handleDealAccordionSelect = useCallback(
-    (eventKey: string | string[] | null | undefined, _event?: unknown) => {
-      if (!eventKey) return;
-      const normalizedKey = Array.isArray(eventKey) ? eventKey[0] ?? null : eventKey;
-      if (typeof normalizedKey !== 'string') return;
+  const handleDealAccordionSelect = useCallback((eventKey: string | string[] | null | undefined) => {
+    if (Array.isArray(eventKey)) {
+      const sanitizedKeys = eventKey.filter((key): key is string => typeof key === 'string' && key.length > 0);
+      setOpenDealKeys(sanitizedKeys);
+      return;
+    }
+
+    if (typeof eventKey === 'string') {
       setOpenDealKeys((current) => {
-        if (current.includes(normalizedKey)) {
-          return current.filter((key) => key !== normalizedKey);
+        if (current.includes(eventKey)) {
+          return current.filter((key) => key !== eventKey);
         }
-        return [...current, normalizedKey];
+        return [...current, eventKey];
       });
-    },
-    [],
-  );
+      return;
+    }
+
+    setOpenDealKeys([]);
+  }, []);
 
   const organizationList = useMemo(() => {
     if (variant.organizationNames.length) {
