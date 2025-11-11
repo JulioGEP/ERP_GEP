@@ -46,7 +46,7 @@ export default function TrainerReportsPreventivoPage() {
   }, [location.state]);
 
   return (
-    <section className="py-3">
+    <section className="py-2 py-md-3">
       <ReportsFlow type="preventivo" initialDraft={initialDraft} />
     </section>
   );

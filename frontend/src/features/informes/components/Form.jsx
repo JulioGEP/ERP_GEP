@@ -1030,16 +1030,19 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
 
 
   return (
-    <form ref={formRef} className="d-grid gap-4" onSubmit={onSubmit}>
-      <h1 className="h5 my-3">{title}</h1>
-
-      {canChooseAnother && (
-        <div className="d-flex justify-content-end mb-2">
-          <button type="button" className="btn btn-secondary" onClick={onChooseAnother}>
+    <form ref={formRef} className="d-grid gap-3" onSubmit={onSubmit}>
+      <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2">
+        <h1 className="h5 mb-0">{title}</h1>
+        {canChooseAnother && (
+          <button
+            type="button"
+            className="btn btn-secondary mt-2 mt-md-0"
+            onClick={onChooseAnother}
+          >
             Elegir otro informe
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ===== Cliente + Formador en 2 columnas ===== */}
       <div className="row g-3 align-items-stretch">
