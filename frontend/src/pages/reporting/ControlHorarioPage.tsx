@@ -47,20 +47,30 @@ export default function ControlHorarioPage() {
   const records = recordsQuery.data ?? [];
   const hasRecords = records.length > 0;
 
-  const endedWithoutClockRecords = useMemo(() => {
+  const endedWithoutClockSummary = useMemo(() => {
     const now = Date.now();
+    const counter = new Map<string, number>();
 
-    return records.filter((record) => {
+    for (const record of records) {
       const plannedEnd = parseDate(record.plannedEnd);
       if (!plannedEnd) {
-        return false;
+        continue;
       }
 
       const hasEnded = plannedEnd.getTime() <= now;
       const hasClocked = record.clockIn !== null || record.clockOut !== null;
 
-      return hasEnded && !hasClocked;
-    });
+      if (!hasEnded || hasClocked) {
+        continue;
+      }
+
+      const currentCount = counter.get(record.trainerFullName) ?? 0;
+      counter.set(record.trainerFullName, currentCount + 1);
+    }
+
+    return Array.from(counter.entries())
+      .map(([trainerFullName, sessionCount]) => ({ trainerFullName, sessionCount }))
+      .sort((a, b) => a.trainerFullName.localeCompare(b.trainerFullName, 'es', { sensitivity: 'base' }));
   }, [records]);
 
   const canDownload = !recordsQuery.isLoading && !recordsQuery.isError && hasRecords;
@@ -142,12 +152,8 @@ export default function ControlHorarioPage() {
 
         <div className="mt-4">
           <h2 className="h5 mb-3">Sesiones finalizadas sin fichaje</h2>
-          {endedWithoutClockRecords.length > 0 ? (
-            <RecordsTable
-              records={endedWithoutClockRecords}
-              dateTimeFormatter={dateTimeFormatter}
-              differenceFormatter={differenceFormatter}
-            />
+          {endedWithoutClockSummary.length > 0 ? (
+            <TrainerSummaryTable trainers={endedWithoutClockSummary} />
           ) : (
             <Alert variant="light" className="mb-0">
               No hay sesiones finalizadas sin registro de fichaje.
@@ -257,6 +263,33 @@ function RecordsTable({ records, dateTimeFormatter, differenceFormatter }: Recor
               </tr>
             );
           })}
+        </tbody>
+      </Table>
+    </div>
+  );
+}
+
+type TrainerSummaryTableProps = {
+  trainers: Array<{ trainerFullName: string; sessionCount: number }>;
+};
+
+function TrainerSummaryTable({ trainers }: TrainerSummaryTableProps) {
+  return (
+    <div className="table-responsive">
+      <Table striped bordered hover>
+        <thead>
+          <tr>
+            <th>Nombre / Apellidos de formador</th>
+            <th>Total de sesiones sin fichar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {trainers.map(({ trainerFullName, sessionCount }) => (
+            <tr key={trainerFullName}>
+              <td className="align-middle">{trainerFullName}</td>
+              <td className="align-middle">{sessionCount}</td>
+            </tr>
+          ))}
         </tbody>
       </Table>
     </div>
