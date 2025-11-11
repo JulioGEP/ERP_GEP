@@ -60,7 +60,7 @@ type VariantDealRecord = {
   deal_id: string | null;
   w_id_variation: string | null;
   fundae_label: string | null;
-  organization: { name: string | null } | null;
+  organizations: { name: string | null } | null;
   _count: { alumnos: number } | null;
   alumnos: Array<{
     id: string | null;
@@ -508,7 +508,7 @@ export const handler = createHttpHandler(async (request) => {
           deal_id: true,
           w_id_variation: true,
           fundae_label: true,
-          organization: { select: { name: true } },
+          organizations: { select: { name: true } },
           _count: { select: { alumnos: true } },
           alumnos: {
             select: {
@@ -528,7 +528,7 @@ export const handler = createHttpHandler(async (request) => {
         if (!wooId) continue;
         const dealId = sanitizeString(deal.deal_id);
         if (!dealId) continue;
-        const organizationName = sanitizeString(deal.organization?.name ?? null);
+        const organizationName = sanitizeString(deal.organizations?.name ?? null);
         const fundaeLabel = sanitizeString(deal.fundae_label ?? null);
 
         const studentRecords = Array.isArray(deal.alumnos) ? deal.alumnos : [];
