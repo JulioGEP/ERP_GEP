@@ -1727,13 +1727,46 @@ export default function TrainerSessionsPage() {
                       {sessionsQuery.isLoading ? 'Cargando fechas…' : 'Selecciona una fecha con asignaciones'}
                     </option>
                     {dateEntries.map((entry) => {
-                      const sessionCount = entry.sessions.length;
-                      const variantCountEntry = entry.variants.length;
                       const label = formatDateLabel(entry.date);
                       const suffixParts = [] as string[];
-                      if (sessionCount) suffixParts.push(`${sessionCount} sesión${sessionCount === 1 ? '' : 'es'}`);
+
+                      const sessionCounts = entry.sessions.reduce(
+                        (acc, session) => {
+                          if (session.isCompanyTraining) {
+                            acc.company += 1;
+                          } else if (session.isGepServices) {
+                            acc.services += 1;
+                          } else {
+                            acc.other += 1;
+                          }
+                          return acc;
+                        },
+                        { company: 0, services: 0, other: 0 },
+                      );
+
+                      if (sessionCounts.company) {
+                        suffixParts.push(
+                          `${sessionCounts.company} sesión${sessionCounts.company === 1 ? '' : 'es'} F.Empresa`,
+                        );
+                      }
+
+                      if (sessionCounts.services) {
+                        suffixParts.push(
+                          `${sessionCounts.services} sesión${sessionCounts.services === 1 ? '' : 'es'} Services`,
+                        );
+                      }
+
+                      if (sessionCounts.other) {
+                        suffixParts.push(
+                          `${sessionCounts.other} sesión${sessionCounts.other === 1 ? '' : 'es'}`,
+                        );
+                      }
+
+                      const variantCountEntry = entry.variants.length;
                       if (variantCountEntry) {
-                        suffixParts.push(`${variantCountEntry} variante${variantCountEntry === 1 ? '' : 's'}`);
+                        suffixParts.push(
+                          `${variantCountEntry} sesión${variantCountEntry === 1 ? '' : 'es'} F. Abierta`,
+                        );
                       }
                       const suffix = suffixParts.length ? ` · ${suffixParts.join(' · ')}` : '';
                       return (
