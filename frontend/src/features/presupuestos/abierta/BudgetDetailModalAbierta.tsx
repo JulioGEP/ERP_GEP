@@ -118,6 +118,21 @@ type BudgetFormValuesAbierta = {
 
 type DealNoteView = DealDetailViewModel['notes'][number];
 
+const HIDDEN_NOTE_PATTERNS = ['detalles del documentacion', 'alumnos del deal'];
+
+function normalizeHiddenNoteText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function shouldHideDealNote(note: DealNoteView): boolean {
+  const normalizedContent = normalizeHiddenNoteText(note.content ?? '');
+  if (!normalizedContent.length) return false;
+  return HIDDEN_NOTE_PATTERNS.some((pattern) => normalizedContent.includes(pattern));
+}
+
 function normalizeHoursMapValue(value?: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -777,7 +792,10 @@ export function BudgetDetailModalAbierta({
   }, [deal, summary]);
 
   const detailProducts = detailView.products;
-  const detailNotes = detailView.notes;
+  const detailNotes = useMemo(
+    () => detailView.notes.filter((note) => !shouldHideDealNote(note)),
+    [detailView],
+  );
   const documents = deal?.documents ?? EMPTY_DOCUMENTS;
   const driveFolderLink = useMemo(() => {
     for (const document of documents) {
