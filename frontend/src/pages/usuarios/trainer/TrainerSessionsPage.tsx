@@ -32,6 +32,7 @@ import {
   type TrainerSessionsDateEntry,
   type TrainerSessionTrainer,
   type TrainerSessionTimeLog,
+  type TrainerVariantDeal,
   type TrainerVariantDetail,
 } from '../../../api/trainer-sessions';
 import {
@@ -1573,6 +1574,9 @@ function VariantDealAccordionItem({ variantId, deal, eventKey }: VariantDealAcco
     });
   }, [notesSource]);
 
+  const noteCount = filteredNotes.length;
+  const totalRecordCount = documentCount + noteCount;
+
   const organizationName = (deal.organizationName ?? '').trim() || 'Organización sin nombre';
 
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -1740,11 +1744,11 @@ function VariantDealAccordionItem({ variantId, deal, eventKey }: VariantDealAcco
     [deleteMutation],
   );
 
-  const documentCountLabel = detailQuery.isLoading
+  const recordCountLabel = detailQuery.isLoading
     ? '…'
     : detailQuery.isError
     ? '—'
-    : String(documentCount);
+    : String(totalRecordCount);
 
   const isUploading = uploadMutation.isPending;
 
@@ -1754,7 +1758,7 @@ function VariantDealAccordionItem({ variantId, deal, eventKey }: VariantDealAcco
         <div className="d-flex justify-content-between align-items-center w-100">
           <span className="fw-semibold text-break">{organizationName}</span>
           <Badge bg="secondary" pill>
-            {documentCountLabel}
+            {recordCountLabel}
           </Badge>
         </div>
       </Accordion.Header>
@@ -1930,15 +1934,20 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     });
   }, [dealsWithKeys]);
 
-  const handleDealAccordionSelect = useCallback((eventKey: string | null) => {
-    if (!eventKey) return;
-    setOpenDealKeys((current) => {
-      if (current.includes(eventKey)) {
-        return current.filter((key) => key !== eventKey);
-      }
-      return [...current, eventKey];
-    });
-  }, []);
+  const handleDealAccordionSelect = useCallback(
+    (eventKey: string | string[] | null | undefined, _event?: unknown) => {
+      if (!eventKey) return;
+      const normalizedKey = Array.isArray(eventKey) ? eventKey[0] ?? null : eventKey;
+      if (typeof normalizedKey !== 'string') return;
+      setOpenDealKeys((current) => {
+        if (current.includes(normalizedKey)) {
+          return current.filter((key) => key !== normalizedKey);
+        }
+        return [...current, normalizedKey];
+      });
+    },
+    [],
+  );
 
   const organizationList = useMemo(() => {
     if (variant.organizationNames.length) {
