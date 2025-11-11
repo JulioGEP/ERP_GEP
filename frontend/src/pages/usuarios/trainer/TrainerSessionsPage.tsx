@@ -494,6 +494,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
         trainerExpense,
         trainerName: trainerDisplayName,
         expenseFolderName: TRAINER_EXPENSE_FOLDER_NAME,
+        user: { id: userId, name: trainerDisplayName },
       }),
     onSuccess: (payload) => {
       setDocumentError(null);
@@ -1372,6 +1373,14 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                         const canDeleteDoc = trainerDocumentIdSet.has(doc.id);
                         const isDeletingDoc =
                           deletingDocumentId === doc.id && deleteDocumentMutation.isPending;
+                        const addedAtLabel = doc.added_at ? formatDateTime(doc.added_at) : null;
+                        const uploadedByName = doc.uploaded_by_name?.trim() ?? '';
+                        const uploadedById = doc.uploaded_by_id?.trim() ?? '';
+                        const uploadedByLabel = uploadedByName
+                          ? uploadedByName
+                          : uploadedById
+                          ? uploadedById
+                          : 'Autor desconocido';
                         return (
                           <div
                             key={doc.id}
@@ -1400,9 +1409,10 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                                 </Badge>
                               ) : null}
                             </div>
-                            <span className="text-muted small">
-                              {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
-                            </span>
+                            <div className="text-muted small text-md-end">
+                              <div>{addedAtLabel ?? 'Sin fecha'}</div>
+                              <div>Subido por {uploadedByLabel}</div>
+                            </div>
                             <div className="d-flex align-items-center gap-2">
                               {canDeleteDoc ? (
                                 <Button

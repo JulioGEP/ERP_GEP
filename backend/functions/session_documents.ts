@@ -43,11 +43,29 @@ type SessionFileRecord = {
   file_type: string | null;
   compartir_formador: boolean;
   trainer_expense: boolean;
+  uploaded_by_id: string | null;
+  uploaded_by_name: string | null;
   added_at: string | null;
   updated_at: string | null;
   drive_file_name: string | null;
   drive_web_view_link: string | null;
 };
+
+function headerValue(event: any, key: string): string | null {
+  const headers = event?.headers;
+  if (!headers || typeof headers !== 'object') return null;
+  const target = key.toLowerCase();
+  for (const [headerKey, value] of Object.entries(headers)) {
+    if (typeof headerKey === 'string' && headerKey.toLowerCase() === target) {
+      if (typeof value === 'string') return value;
+      if (Array.isArray(value)) {
+        const found = value.find((entry) => typeof entry === 'string');
+        return typeof found === 'string' ? found : null;
+      }
+    }
+  }
+  return null;
+}
 
 function normalizeDriveUrl(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -121,7 +139,13 @@ function mapSessionFile(row: any): SessionFileRecord {
     file_type: toStringOrNull(row?.file_type),
     compartir_formador: Boolean(row?.compartir_formador),
     trainer_expense: Boolean(row?.trainer_expense),
-    added_at: row?.added_at ? toMadridISOString(row.added_at) : null,
+    uploaded_by_id: toStringOrNull(row?.uploaded_by_id),
+    uploaded_by_name: toStringOrNull(row?.uploaded_by_name),
+    added_at: row?.added_at
+      ? toMadridISOString(row.added_at)
+      : row?.created_at
+      ? toMadridISOString(row.created_at)
+      : null,
     updated_at: row?.updated_at ? toMadridISOString(row.updated_at) : null,
     drive_file_name: toStringOrNull(row?.drive_file_name),
     drive_web_view_link: toStringOrNull(row?.drive_web_view_link),
@@ -239,6 +263,15 @@ export const handler = async (event: any) => {
         return errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
       }
 
+      const uploaderIdRaw = headerValue(event, 'X-User-Id');
+      const uploaderNameRaw = headerValue(event, 'X-User-Name');
+      const uploaderId = typeof uploaderIdRaw === 'string' ? uploaderIdRaw.trim() : '';
+      const uploaderNameCandidate =
+        typeof uploaderNameRaw === 'string' ? uploaderNameRaw.trim() : '';
+      const normalizedUploaderId = uploaderId.length ? uploaderId : null;
+      const normalizedUploaderName =
+        uploaderNameCandidate.length ? uploaderNameCandidate : normalizedUploaderId;
+
       const sessionNumber = await resolveSessionNumber(prisma, session);
       const sessionName = toStringOrNull(session?.nombre_cache) ?? `Sesión ${sessionNumber}`;
 
@@ -353,6 +386,8 @@ export const handler = async (event: any) => {
             file_type: extension,
             compartir_formador: shareWithTrainer,
             trainer_expense: trainerExpense,
+            uploaded_by_id: normalizedUploaderId ?? undefined,
+            uploaded_by_name: normalizedUploaderName ?? undefined,
             added_at: now,
             drive_file_name: uploadResult.driveFileName,
             drive_web_view_link: uploadResult.driveWebViewLink,
