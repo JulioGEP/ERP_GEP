@@ -35,7 +35,7 @@ import {
   type TrainerVariantDeal,
   type TrainerVariantDetail,
 } from '../../../api/trainer-sessions';
-import { filterDealNotesForDisplay } from '../../../../utils/dealNotes';
+import { filterDealNotesForDisplay } from '../../../utils/dealNotes';
 import {
   fetchSessionComments,
   createSessionComment,

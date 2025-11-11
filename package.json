@@ -44,7 +44,8 @@
     },
     "parse5": {
       "entities": "^6.0.0"
-    }
+    },
+    "esbuild": "0.25.11"
   },
   "prisma": {
     "schema": "backend/prisma/schema.prisma"
