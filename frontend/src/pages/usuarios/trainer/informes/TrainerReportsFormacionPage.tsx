@@ -46,7 +46,7 @@ export default function TrainerReportsFormacionPage() {
   }, [location.state]);
 
   return (
-    <section className="py-3">
+    <section className="py-2 py-md-3">
       <ReportsFlow type="formacion" initialDraft={initialDraft} />
     </section>
   );
