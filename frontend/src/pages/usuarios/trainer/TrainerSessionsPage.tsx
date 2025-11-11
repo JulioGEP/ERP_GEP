@@ -1579,10 +1579,12 @@ function VariantDealAccordionItem({ variantId, deal, eventKey }: VariantDealAcco
   const notesSource: DealNote[] = detailQuery.data?.notes ?? [];
 
   const filteredNotes = useMemo(() => {
+    const blockedPhrases = ['detalles del documentación', 'alumnos del deal'];
     return notesSource.filter((note) => {
       const content = (note.content ?? '').trim();
       if (!content.length) return false;
-      return !content.toLowerCase().startsWith('alumnos del deal');
+      const normalized = content.toLowerCase();
+      return !blockedPhrases.some((phrase) => normalized.includes(phrase));
     });
   }, [notesSource]);
 
