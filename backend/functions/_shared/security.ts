@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { logAudit, resolveUserIdFromEvent } from './audit-log';
+import { logAudit, resolveUserIdFromEvent, type JsonValue } from './audit-log';
 import { getPrisma } from './prisma';
 import { sendEmail } from './mailer';
 
@@ -174,7 +174,7 @@ export async function logSuspiciousRequest({
       entityType: 'http_request',
       entityId: randomUUID(),
       before: null,
-      after: payload as Prisma.InputJsonValue,
+      after: payload as JsonValue,
       prisma: prismaClient,
     });
 

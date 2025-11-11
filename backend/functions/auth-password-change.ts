@@ -1,10 +1,9 @@
 import * as bcrypt from 'bcryptjs';
-import type { Prisma } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { requireAuth } from './_shared/auth';
-import { logAudit } from './_shared/audit-log';
+import { logAudit, type JsonValue } from './_shared/audit-log';
 
 const MIN_PASSWORD_LENGTH = 8;
 const BCRYPT_SALT_ROUNDS = 10;
@@ -99,8 +98,8 @@ export const handler = createHttpHandler<any>(async (request) => {
         action: 'auth.password_change',
         entityType: 'user',
         entityId: user.id,
-        before: { password_updated_at: previousUpdatedAt } as Prisma.InputJsonValue,
-        after: { password_updated_at: now.toISOString() } as Prisma.InputJsonValue,
+        before: { password_updated_at: previousUpdatedAt } as JsonValue,
+        after: { password_updated_at: now.toISOString() } as JsonValue,
       });
     } catch (auditError) {
       console.error('[auth-password-change] Failed to log password change', auditError);

@@ -1,18 +1,17 @@
 import { randomUUID } from 'crypto';
-import type { Prisma } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
-import { logAudit, resolveUserIdFromEvent } from './_shared/audit-log';
+import { logAudit, resolveUserIdFromEvent, type JsonValue } from './_shared/audit-log';
 import { getPrisma } from './_shared/prisma';
 
-function toJsonValue(input: unknown): Prisma.InputJsonValue | null {
+function toJsonValue(input: unknown): JsonValue | null {
   if (input === undefined || input === null) {
     return null;
   }
   if (typeof input === 'object') {
-    return input as Prisma.InputJsonValue;
+    return input as JsonValue;
   }
-  return JSON.parse(JSON.stringify(input)) as Prisma.InputJsonValue;
+  return JSON.parse(JSON.stringify(input)) as JsonValue;
 }
 
 export const handler = createHttpHandler<any>(async (request) => {
