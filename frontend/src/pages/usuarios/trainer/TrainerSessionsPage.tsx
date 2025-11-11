@@ -35,7 +35,6 @@ import {
   type TrainerVariantDeal,
   type TrainerVariantDetail,
 } from '../../../api/trainer-sessions';
-import { filterDealNotesForDisplay } from '../../../../utils/dealNotes';
 import {
   fetchSessionComments,
   createSessionComment,
@@ -1567,10 +1566,13 @@ function VariantDealAccordionItem({ variantId, deal, eventKey }: VariantDealAcco
   const documentCount = documents.length;
   const notesSource: DealNote[] = detailQuery.data?.notes ?? [];
 
-  const filteredNotes = useMemo(
-    () => filterDealNotesForDisplay(notesSource),
-    [notesSource],
-  );
+  const filteredNotes = useMemo(() => {
+    return notesSource.filter((note) => {
+      const content = (note.content ?? '').trim();
+      if (!content.length) return false;
+      return !content.toLowerCase().startsWith('alumnos del deal');
+    });
+  }, [notesSource]);
 
   const noteCount = filteredNotes.length;
   const totalRecordCount = documentCount + noteCount;
