@@ -20,6 +20,7 @@ import {
 import { generateSessionsForDeal } from "./_shared/sessionGeneration";
 import { studentsFromNotes } from "./_shared/studentsFromNotes";
 import type { StudentIdentifier } from "./_shared/studentsFromNotes";
+import { logAudit, resolveUserIdFromEvent } from "./_shared/audit-log";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -1248,15 +1249,102 @@ export const handler = async (event: any) => {
         }
       }
 
+      const toAuditValue = (value: unknown) => {
+        if (value instanceof Date) {
+          return value.toISOString();
+        }
+        return value;
+      };
+
+      const shouldLogAudit = Object.keys(patch).length > 0 || productPatches.length > 0;
+      const auditUserIdPromise: Promise<string | null> = shouldLogAudit
+        ? resolveUserIdFromEvent(event, prisma)
+        : Promise.resolve(null);
+
+      let dealAuditBefore: Record<string, unknown> | null = null;
+      let dealAuditAfter: Record<string, unknown> | null = null;
+
       if (Object.keys(patch).length) {
-        await prisma.deals.update({
+        const dealSelect = Object.keys(patch).reduce<Record<string, boolean>>((acc, key) => {
+          acc[key] = true;
+          return acc;
+        }, {});
+
+        const existingDeal = await prisma.deals.findUnique({
+          where: { deal_id: String(dealId) },
+          select: dealSelect,
+        });
+        if (existingDeal) {
+          dealAuditBefore = Object.entries(existingDeal).reduce<Record<string, unknown>>(
+            (acc, [key, value]) => {
+              acc[key] = toAuditValue(value);
+              return acc;
+            },
+            {},
+          );
+        }
+
+        const updatedDeal = await prisma.deals.update({
           where: { deal_id: String(dealId) },
           data: patch,
+          select: dealSelect,
         });
+        dealAuditAfter = Object.entries(updatedDeal).reduce<Record<string, unknown>>(
+          (acc, [key, value]) => {
+            acc[key] = toAuditValue(value);
+            return acc;
+          },
+          {},
+        );
       }
+
+      const productAuditKeyMap = new Map<string, Set<string>>();
+      for (const { id, data } of productPatches) {
+        productAuditKeyMap.set(id, new Set(Object.keys(data)));
+      }
+
+      const collectProductSnapshots = (
+        records: Array<Record<string, any>>,
+      ): Array<Record<string, unknown>> => {
+        return records
+          .map((record) => {
+            const keys = productAuditKeyMap.get(record.id);
+            if (!keys || !keys.size) return null;
+            const snapshot: Record<string, unknown> = { id: record.id };
+            keys.forEach((key) => {
+              if (key in record) {
+                snapshot[key] = toAuditValue(record[key]);
+              }
+            });
+            return Object.keys(snapshot).length > 1 ? snapshot : null;
+          })
+          .filter((item): item is Record<string, unknown> => Boolean(item));
+      };
+
+      let productAuditBefore: Array<Record<string, unknown>> = [];
+      let productAuditAfter: Array<Record<string, unknown>> = [];
 
       if (productPatches.length) {
         const timestamp = nowInMadridDate();
+        const productIds = productPatches.map((product) => product.id);
+        const productSelect = Array.from(
+          new Set(
+            productPatches.flatMap((product) => Object.keys(product.data)),
+          ),
+        ).reduce<Record<string, boolean>>(
+          (acc, key) => {
+            acc[key] = true;
+            return acc;
+          },
+          { id: true },
+        );
+
+        const existingProducts = await prisma.deal_products.findMany({
+          where: { id: { in: productIds }, deal_id: String(dealId) },
+          select: productSelect,
+        });
+        productAuditBefore = collectProductSnapshots(existingProducts);
+
         await Promise.all(
           productPatches.map((product) =>
             prisma.deal_products.updateMany({
@@ -1265,6 +1353,45 @@ export const handler = async (event: any) => {
             }),
           ),
         );
+
+        const updatedProducts = await prisma.deal_products.findMany({
+          where: { id: { in: productIds }, deal_id: String(dealId) },
+          select: productSelect,
+        });
+        productAuditAfter = collectProductSnapshots(updatedProducts);
+      }
+
+      if (shouldLogAudit) {
+        const beforePayload: Record<string, unknown> = {};
+        const afterPayload: Record<string, unknown> = {};
+
+        if (dealAuditBefore && Object.keys(dealAuditBefore).length) {
+          beforePayload.deal = dealAuditBefore;
+        }
+        if (dealAuditAfter && Object.keys(dealAuditAfter).length) {
+          afterPayload.deal = dealAuditAfter;
+        }
+        if (productAuditBefore.length) {
+          beforePayload.products = productAuditBefore;
+        }
+        if (productAuditAfter.length) {
+          afterPayload.products = productAuditAfter;
+        }
+
+        const hasBefore = Object.keys(beforePayload).length > 0;
+        const hasAfter = Object.keys(afterPayload).length > 0;
+        const auditUserId = await auditUserIdPromise;
+
+        if (hasBefore || hasAfter) {
+          await logAudit({
+            userId: auditUserId,
+            action: "deal.updated",
+            entityType: "deal",
+            entityId: String(dealId),
+            before: hasBefore ? (beforePayload as Prisma.InputJsonValue) : null,
+            after: hasAfter ? (afterPayload as Prisma.InputJsonValue) : null,
+          });
+        }
       }
 
       const updatedRaw = await prisma.deals.findUnique({
