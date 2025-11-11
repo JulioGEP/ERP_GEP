@@ -988,7 +988,12 @@ async function request(path: string, init?: RequestInit) {
       `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`,
       {
         ...init,
-        headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+        credentials: init?.credentials ?? 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-ERP-Client': 'frontend',
+          ...(init?.headers || {}),
+        },
       }
     );
   } catch (e: any) {

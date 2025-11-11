@@ -13,10 +13,20 @@ export async function requestJson<T = any>(
   init?: RequestInit,
   options?: RequestJsonOptions,
 ): Promise<T> {
+  const finalInit: RequestInit = {
+    ...init,
+    credentials: init?.credentials ?? 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-ERP-Client': 'frontend',
+      ...(init?.headers || {}),
+    },
+  };
+
   let response: Response;
 
   try {
-    response = await fetch(input, init);
+    response = await fetch(input, finalInit);
   } catch (error: unknown) {
     const message = options?.networkErrorMessage ?? 'No se pudo conectar con el servidor.';
     throw new ApiError('NETWORK_ERROR', message, undefined);

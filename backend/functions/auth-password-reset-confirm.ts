@@ -1,7 +1,9 @@
 import * as bcrypt from 'bcryptjs';
+import type { Prisma } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
+import { logAudit } from './_shared/audit-log';
 
 export const handler = createHttpHandler<any>(async (request) => {
   if (request.method !== 'POST') {
@@ -65,6 +67,27 @@ export const handler = createHttpHandler<any>(async (request) => {
         data: { revoked_at: now },
       }),
     ]);
+
+    const previousUpdatedAt =
+      user.password_updated_at instanceof Date
+        ? user.password_updated_at.toISOString()
+        : user.password_updated_at ?? null;
+
+    try {
+      await logAudit({
+        userId: user.id,
+        action: 'auth.password_reset',
+        entityType: 'user',
+        entityId: user.id,
+        before: { password_updated_at: previousUpdatedAt } as Prisma.InputJsonValue,
+        after: {
+          password_updated_at: now.toISOString(),
+          reset_via_token: true,
+        } as Prisma.InputJsonValue,
+      });
+    } catch (auditError) {
+      console.error('[auth-password-reset] Failed to log password reset', auditError);
+    }
 
     return successResponse({ message: 'Contraseña actualizada correctamente' });
   } catch (_err) {

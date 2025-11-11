@@ -641,13 +641,24 @@ function buildQuery(params: CalendarSessionsParams): string {
   return search.toString();
 }
 
+function fetchWithClient(input: RequestInfo | URL, init?: RequestInit) {
+  return fetch(input, {
+    ...init,
+    credentials: init?.credentials ?? 'include',
+    headers: {
+      'X-ERP-Client': 'frontend',
+      ...(init?.headers || {}),
+    },
+  });
+}
+
 export async function fetchCalendarSessions(
   params: CalendarSessionsParams,
 ): Promise<CalendarSessionsResponse> {
   const query = buildQuery(params);
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}/sessions/range?${query}`);
+    response = await fetchWithClient(`${API_BASE}/sessions/range?${query}`);
   } catch (error: any) {
     throw new ApiError('NETWORK_ERROR', error?.message ?? 'Fallo de red');
   }
@@ -687,7 +698,7 @@ export async function fetchCalendarVariants(
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}/calendar-variants?${search.toString()}`);
+    response = await fetchWithClient(`${API_BASE}/calendar-variants?${search.toString()}`);
   } catch (error: any) {
     throw new ApiError('NETWORK_ERROR', error?.message ?? 'Fallo de red');
   }

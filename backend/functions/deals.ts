@@ -21,6 +21,7 @@ import { generateSessionsForDeal } from "./_shared/sessionGeneration";
 import { studentsFromNotes } from "./_shared/studentsFromNotes";
 import type { StudentIdentifier } from "./_shared/studentsFromNotes";
 import { logAudit, resolveUserIdFromEvent } from "./_shared/audit-log";
+import { isTrustedClient, logSuspiciousRequest } from "./_shared/security";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -925,6 +926,17 @@ export const handler = async (event: any) => {
     const method = event.httpMethod;
     const path = event.path || "";
 
+    if (!isTrustedClient(event.headers)) {
+      await logSuspiciousRequest({
+        event,
+        headers: event.headers,
+        method: method ?? 'UNKNOWN',
+        path,
+        rawUrl: event.rawUrl ?? null,
+        reason: 'missing_or_invalid_client_header',
+      });
+    }
+
     // id por PATH o por QUERY (?dealId=)
     const qsId = event.queryStringParameters?.dealId
       ? String(event.queryStringParameters.dealId).trim()
@@ -1001,6 +1013,25 @@ export const handler = async (event: any) => {
           }
         }
         const deal = mapDealForApi(dealRaw);
+
+        try {
+          const auditUserId = await resolveUserIdFromEvent(event, prisma);
+          await logAudit({
+            userId: auditUserId,
+            action: 'deal.imported_pipedrive',
+            entityType: 'deal',
+            entityId: String(deal_id),
+            before: existedBeforeImport ? ({ existed_before_import: true } as Prisma.InputJsonValue) : null,
+            after: {
+              deal_id: String(deal_id),
+              warnings,
+              existed_before_import: existedBeforeImport,
+            } as Prisma.InputJsonValue,
+          });
+        } catch (auditError) {
+          console.error('[deals] Failed to log Pipedrive import', auditError);
+        }
+
         return successResponse({ ok: true, warnings, deal });
       } catch (e: any) {
         if (e?.code === DEAL_NOT_WON_ERROR_CODE) {
