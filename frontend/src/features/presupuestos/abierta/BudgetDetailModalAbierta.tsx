@@ -1272,8 +1272,7 @@ export function BudgetDetailModalAbierta({
   const dirtyDeal = !!initialEditable && !!form && JSON.stringify(initialEditable) !== JSON.stringify(form);
   const isDirty = dirtyDeal || dirtyProducts;
   const isRefetching = detailQuery.isRefetching || refreshMutation.isPending;
-
-  if (!dealId) return null;
+  const isModalVisible = normalizedDealId.length > 0;
 
   const presupuestoDisplay = detailView.dealId;
   const presupuestoHeaderLabel = presupuestoDisplay?.trim().length
@@ -1643,16 +1642,20 @@ export function BudgetDetailModalAbierta({
     setPreviewError(null);
   }
 
+  if (!isModalVisible) {
+    return null;
+  }
+
   return (
     <>
       <Modal
-      show={!!dealId}
-      onHide={requestClose}
-      size="lg"
-      backdrop="static"
-      centered
-      contentClassName="erp-modal-content"
-    >
+        show={isModalVisible}
+        onHide={requestClose}
+        size="lg"
+        backdrop="static"
+        centered
+        contentClassName="erp-modal-content"
+      >
       <Modal.Header className="erp-modal-header border-0 pb-0">
         <Modal.Title as="div" className="erp-modal-header-main">
           <div className="erp-modal-title text-truncate" title={modalTitleTooltip}>
