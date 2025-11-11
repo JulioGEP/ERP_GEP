@@ -117,30 +117,6 @@ Prisma genera automáticamente el cliente tipado en `node_modules/.prisma/client
 ## Audit Log
 El backend incorpora una tabla de auditoría (`audit_log`) que registra las operaciones de negocio relevantes (por ejemplo, actualización de deals o creación de sesiones). Cada evento almacena quién ejecutó la acción, el tipo de entidad afectada y un snapshot JSON con los cambios más relevantes para poder reconstruir el historial.
 
-### SQL manual para Neon
-Si necesitas crear la tabla manualmente en Neon, puedes ejecutar el siguiente script:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
-CREATE TABLE IF NOT EXISTS audit_log (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  created_at timestamptz(6) NOT NULL DEFAULT now(),
-  user_id uuid NULL REFERENCES users(id) ON DELETE SET NULL,
-  action text NOT NULL,
-  entity_type text NOT NULL,
-  entity_id text NOT NULL,
-  before jsonb,
-  after jsonb
-);
-
-CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log (entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log (user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON audit_log (created_at);
-```
-
-> ℹ️ `pgcrypto` se utiliza para `gen_random_uuid()`. En entornos donde la extensión ya esté habilitada no se vuelve a crear.
-
 ### Cómo registrar nuevas acciones
 - Importa el helper `logAudit` desde `backend/functions/_shared/audit-log` y llámalo después de completar la operación principal.
 - El helper recibe `userId`, `action`, `entityType`, `entityId`, `before` y `after` (JSON). Si la escritura del log falla, captura el error y no interrumpe la respuesta principal.
