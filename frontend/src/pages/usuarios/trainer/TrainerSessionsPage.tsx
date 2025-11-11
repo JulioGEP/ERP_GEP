@@ -1208,7 +1208,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                 </Table>
               )}
               <p className="text-muted small mt-2">
-                Si falta algún alumn@ elimina de la tabla, y añade un comentario del nombre de la persona
+                Si falta algún alumn@ eliminalo de la tabla, y añade un comentario con el nombre de la persona
                 que ha faltado
               </p>
               <h6 className="fw-semibold mt-4">Añadir alumn@ a la sesión</h6>
