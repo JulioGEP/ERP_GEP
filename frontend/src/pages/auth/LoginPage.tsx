@@ -107,7 +107,7 @@ export default function LoginPage() {
                 <Form.Label>Email</Form.Label>
                 <Form.Control
                   type="email"
-                  placeholder="tu@empresa.com"
+                  placeholder="tu@dominio.es"
                   value={email}
                   onChange={(e) => setEmail(e.currentTarget.value)}
                   onInput={(e) => setEmail(e.currentTarget.value)}
