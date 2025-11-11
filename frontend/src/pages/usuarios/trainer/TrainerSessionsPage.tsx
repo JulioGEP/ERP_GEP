@@ -44,6 +44,8 @@ import {
   deleteSessionDocument,
 } from '../../../features/presupuestos/api/documents.api';
 import {
+  createSessionStudent,
+  deleteSessionStudent,
   fetchSessionStudents,
   updateSessionStudent,
   type UpdateSessionStudentInput,
@@ -592,6 +594,13 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
   const [students, setStudents] = useState<SessionStudent[]>([]);
   const studentsOriginalRef = useRef<Map<string, SessionStudent>>(new Map());
   const [studentError, setStudentError] = useState<string | null>(null);
+  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
+  const [newStudent, setNewStudent] = useState({
+    nombre: '',
+    apellido: '',
+    dni: '',
+    apto: false,
+  });
 
   useEffect(() => {
     if (isGepServices) {
@@ -642,6 +651,72 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
           prev.map((student) => (student.id === original.id ? original : student)),
         );
       }
+    },
+  });
+
+  const createStudentMutation = useMutation({
+    mutationFn: ({
+      nombre,
+      apellido,
+      dni,
+      apto,
+    }: {
+      nombre: string;
+      apellido: string;
+      dni: string;
+      apto: boolean;
+    }) =>
+      createSessionStudent({
+        dealId: session.dealId,
+        sessionId: session.sessionId,
+        nombre,
+        apellido,
+        dni,
+        apto,
+      }),
+    onMutate: () => {
+      setStudentError(null);
+    },
+    onSuccess: (created) => {
+      studentsOriginalRef.current.set(created.id, created);
+      setStudents((prev) => [...prev, created]);
+      queryClient.setQueryData<SessionStudent[] | undefined>(
+        ['trainer', 'session', session.sessionId, 'students'],
+        (previous) => (previous ? [...previous, created] : [created]),
+      );
+      setNewStudent({ nombre: '', apellido: '', dni: '', apto: false });
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setStudentError(error.message);
+      } else {
+        setStudentError('No se pudo añadir el alumno.');
+      }
+    },
+  });
+
+  const deleteStudentMutation = useMutation({
+    mutationFn: (studentId: string) => deleteSessionStudent(studentId),
+    onMutate: (studentId: string) => {
+      setStudentError(null);
+      setDeletingStudentId(studentId);
+    },
+    onSuccess: (_, studentId) => {
+      studentsOriginalRef.current.delete(studentId);
+      setStudents((prev) => prev.filter((student) => student.id !== studentId));
+      queryClient.setQueryData<SessionStudent[] | undefined>(
+        ['trainer', 'session', session.sessionId, 'students'],
+        (previous) => previous?.filter((student) => student.id !== studentId),
+      );
+      setDeletingStudentId(null);
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setStudentError(error.message);
+      } else {
+        setStudentError('No se pudo eliminar el alumno.');
+      }
+      setDeletingStudentId(null);
     },
   });
 
@@ -840,6 +915,52 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     [updateStudentMutation],
   );
 
+  const handleStudentDelete = useCallback(
+    (studentId: string) => {
+      const confirmed = window.confirm('¿Eliminar este alumno?');
+      if (!confirmed) {
+        return;
+      }
+      deleteStudentMutation.mutate(studentId);
+    },
+    [deleteStudentMutation],
+  );
+
+  const handleNewStudentFieldChange = useCallback(
+    (field: 'nombre' | 'apellido' | 'dni', value: string) => {
+      setNewStudent((prev) => ({ ...prev, [field]: value }));
+    },
+    [],
+  );
+
+  const handleNewStudentAptoChange = useCallback((checked: boolean) => {
+    setNewStudent((prev) => ({ ...prev, apto: checked }));
+  }, []);
+
+  const handleNewStudentSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const nombre = newStudent.nombre.trim();
+      const apellido = newStudent.apellido.trim();
+      const dni = newStudent.dni.trim();
+      if (!nombre.length || !apellido.length || !dni.length) {
+        setStudentError('Nombre, apellidos y DNI son obligatorios.');
+        return;
+      }
+      if (!session.dealId) {
+        setStudentError('No se puede añadir alumnos a esta sesión.');
+        return;
+      }
+      createStudentMutation.mutate({
+        nombre,
+        apellido,
+        dni,
+        apto: newStudent.apto,
+      });
+    },
+    [createStudentMutation, newStudent, session.dealId],
+  );
+
   const startLabel = formatDateTime(session.startDate);
   const endLabel = formatDateTime(session.endDate);
   const scheduleDateLabel =
@@ -997,6 +1118,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                       <th>Apellidos</th>
                       <th>DNI</th>
                       <th className="text-center">Apto</th>
+                      <th className="text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1054,11 +1176,30 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                               disabled={updateStudentMutation.isPending}
                             />
                           </td>
+                          <td className="text-center">
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              onClick={() => handleStudentDelete(student.id)}
+                              disabled={
+                                (deleteStudentMutation.isPending &&
+                                  deletingStudentId === student.id) ||
+                                updateStudentMutation.isPending
+                              }
+                            >
+                              {deleteStudentMutation.isPending &&
+                              deletingStudentId === student.id ? (
+                                <Spinner animation="border" size="sm" />
+                              ) : (
+                                'Eliminar'
+                              )}
+                            </Button>
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={4} className="text-center text-muted">
+                        <td colSpan={5} className="text-center text-muted">
                           No hay alumnos registrados para esta sesión.
                         </td>
                       </tr>
@@ -1066,6 +1207,93 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                   </tbody>
                 </Table>
               )}
+              <p className="text-muted small mt-2">
+                Si falta algún alumn@ elimina de la tabla, y añade un comentario del nombre de la persona
+                que ha faltado
+              </p>
+              <h6 className="fw-semibold mt-4">Añadir alumn@ a la sesión</h6>
+              <Form className="mt-2" onSubmit={handleNewStudentSubmit}>
+                <Row className="g-2 align-items-end">
+                  <Col xs={12} md={3}>
+                    <Form.Group
+                      controlId={`trainer-session-${session.sessionId}-new-student-nombre`}
+                    >
+                      <Form.Label>Nombre</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={newStudent.nombre}
+                        onChange={(event) =>
+                          handleNewStudentFieldChange('nombre', event.target.value)
+                        }
+                        placeholder="Nombre"
+                        disabled={createStudentMutation.isPending}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md={3}>
+                    <Form.Group
+                      controlId={`trainer-session-${session.sessionId}-new-student-apellido`}
+                    >
+                      <Form.Label>Apellidos</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={newStudent.apellido}
+                        onChange={(event) =>
+                          handleNewStudentFieldChange('apellido', event.target.value)
+                        }
+                        placeholder="Apellidos"
+                        disabled={createStudentMutation.isPending}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md={3}>
+                    <Form.Group
+                      controlId={`trainer-session-${session.sessionId}-new-student-dni`}
+                    >
+                      <Form.Label>DNI</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={newStudent.dni}
+                        onChange={(event) => handleNewStudentFieldChange('dni', event.target.value)}
+                        placeholder="DNI"
+                        disabled={createStudentMutation.isPending}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md="auto">
+                    <Form.Group
+                      controlId={`trainer-session-${session.sessionId}-new-student-apto`}
+                      className="mb-0"
+                    >
+                      <Form.Check
+                        type="checkbox"
+                        label="Apto"
+                        checked={newStudent.apto}
+                        onChange={(event) => handleNewStudentAptoChange(event.target.checked)}
+                        disabled={createStudentMutation.isPending}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md="auto">
+                    <Button type="submit" disabled={createStudentMutation.isPending}>
+                      {createStudentMutation.isPending ? (
+                        <>
+                          <Spinner
+                            as="span"
+                            animation="border"
+                            size="sm"
+                            role="status"
+                            aria-hidden="true"
+                          />{' '}
+                          Guardando…
+                        </>
+                      ) : (
+                        'Añadir alumn@'
+                      )}
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
             </div>
           ) : null}
 
