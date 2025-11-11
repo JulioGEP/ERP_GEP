@@ -137,11 +137,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     label: 'Reporting',
     children: [
       {
-        key: 'Reporting/Logs',
-        label: 'Logs',
-        path: '/reporting/logs',
-      },
-      {
         key: 'Reporting/ControlHorario',
         label: 'Control Horario',
         path: '/reporting/control_horario',
@@ -155,6 +150,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         key: 'Reporting/HorasFormadores',
         label: 'Horas Formadores',
         path: '/reporting/horas_formadores',
+      },
+      {
+        key: 'Reporting/Logs',
+        label: 'Logs',
+        path: '/reporting/logs',
       },
     ],
   },
