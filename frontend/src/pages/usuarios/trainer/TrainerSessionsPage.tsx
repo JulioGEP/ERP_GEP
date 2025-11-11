@@ -11,12 +11,14 @@ import {
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Accordion,
   Alert,
   Badge,
   Button,
   Card,
   Col,
   Form,
+  ListGroup,
   Row,
   Spinner,
   Stack,
@@ -52,6 +54,8 @@ import {
 } from '../../../features/presupuestos/api/students.api';
 import type { SessionComment, SessionStudent } from '../../../api/sessions.types';
 import { useCurrentUserIdentity } from '../../../features/presupuestos/useCurrentUserIdentity';
+import { fetchDealDetail, uploadManualDocument, deleteDocument } from '../../../features/presupuestos/api/deals.api';
+import type { DealDocument, DealNote } from '../../../types/deal';
 import type { SessionDocumentsPayload } from '../../../api/sessions.types';
 
 const TRAINER_EXPENSE_FOLDER_NAME = 'Gastos Formador';
@@ -1537,12 +1541,404 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
   );
 }
 
+type VariantDealAccordionItemProps = {
+  variantId: string;
+  deal: TrainerVariantDeal;
+  eventKey: string;
+};
+
+function VariantDealAccordionItem({ variantId, deal, eventKey }: VariantDealAccordionItemProps) {
+  const queryClient = useQueryClient();
+  const { userId, userName } = useCurrentUserIdentity();
+
+  const detailQueryKey = useMemo(
+    () => ['trainer', 'variant', variantId, 'deal', deal.dealId] as const,
+    [deal.dealId, variantId],
+  );
+
+  const detailQuery = useQuery({
+    queryKey: detailQueryKey,
+    queryFn: () => fetchDealDetail(deal.dealId),
+  });
+
+  const documents: DealDocument[] = detailQuery.data?.documents ?? [];
+  const documentCount = documents.length;
+  const notesSource: DealNote[] = detailQuery.data?.notes ?? [];
+
+  const filteredNotes = useMemo(() => {
+    return notesSource.filter((note) => {
+      const content = (note.content ?? '').trim();
+      if (!content.length) return false;
+      return !content.toLowerCase().startsWith('alumnos del deal');
+    });
+  }, [notesSource]);
+
+  const organizationName = (deal.organizationName ?? '').trim() || 'Organización sin nombre';
+
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const storageKey = useMemo(
+    () => `trainer-variant-${variantId}-deal-${deal.dealId}-${userId}-documents`,
+    [deal.dealId, userId, variantId],
+  );
+
+  const [ownedDocumentIds, setOwnedDocumentIds] = useState<string[]>([]);
+  const [pendingBaseline, setPendingBaseline] = useState<string[] | null>(null);
+  const ownedDocumentIdSet = useMemo(() => new Set(ownedDocumentIds), [ownedDocumentIds]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (!stored) {
+        setOwnedDocumentIds([]);
+        return;
+      }
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .filter((value) => value.length);
+        setOwnedDocumentIds(normalized);
+      } else {
+        setOwnedDocumentIds([]);
+      }
+    } catch {
+      setOwnedDocumentIds([]);
+    }
+  }, [storageKey]);
+
+  const persistOwnedDocumentIds = useCallback(
+    (ids: string[]) => {
+      if (typeof window === 'undefined') return;
+      if (!ids.length) {
+        window.localStorage.removeItem(storageKey);
+        return;
+      }
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(ids));
+      } catch {
+        // Ignore storage errors
+      }
+    },
+    [storageKey],
+  );
+
+  const updateOwnedDocumentIds = useCallback(
+    (updater: (current: Set<string>) => Set<string>) => {
+      setOwnedDocumentIds((currentList) => {
+        const currentSet = new Set(currentList);
+        const nextSet = updater(currentSet);
+        const currentSorted = Array.from(currentSet).sort();
+        const nextList = Array.from(nextSet);
+        const nextSorted = nextList.slice().sort();
+        const isSame =
+          currentSorted.length === nextSorted.length &&
+          currentSorted.every((value, index) => value === nextSorted[index]);
+        if (isSame) return currentList;
+        persistOwnedDocumentIds(nextList);
+        return nextList;
+      });
+    },
+    [persistOwnedDocumentIds],
+  );
+
+  useEffect(() => {
+    if (!pendingBaseline) return;
+    if (detailQuery.isLoading) return;
+    const baselineSet = new Set(pendingBaseline);
+    const newIds = documents
+      .map((doc) => doc.id)
+      .filter((id) => id && !baselineSet.has(id));
+    if (newIds.length) {
+      updateOwnedDocumentIds((current) => {
+        const next = new Set(current);
+        newIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+    setPendingBaseline(null);
+  }, [detailQuery.isLoading, documents, pendingBaseline, updateOwnedDocumentIds]);
+
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+
+  const uploadMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      for (const file of files) {
+        await uploadManualDocument(deal.dealId, file, { id: userId, name: userName });
+      }
+    },
+    onMutate: async () => {
+      setUploadError(null);
+      return { previousDocIds: documents.map((doc) => doc.id) };
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setUploadError(error.message);
+      } else {
+        setUploadError('No se pudieron subir los documentos.');
+      }
+    },
+    onSuccess: (_data, _files, context) => {
+      setPendingBaseline(context?.previousDocIds ?? documents.map((doc) => doc.id));
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: detailQueryKey });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (documentId: string) => {
+      await deleteDocument(deal.dealId, documentId);
+    },
+    onMutate: (documentId: string) => {
+      setDeleteError(null);
+      setDeletingDocumentId(documentId);
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setDeleteError(error.message);
+      } else {
+        setDeleteError('No se pudo eliminar el documento.');
+      }
+    },
+    onSuccess: (_data, documentId) => {
+      updateOwnedDocumentIds((current) => {
+        const next = new Set(current);
+        next.delete(documentId);
+        return next;
+      });
+    },
+    onSettled: () => {
+      setDeletingDocumentId(null);
+      queryClient.invalidateQueries({ queryKey: detailQueryKey });
+    },
+  });
+
+  const handleFileInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const { files } = event.target;
+      if (!files || files.length === 0) {
+        return;
+      }
+      const fileList = Array.from(files).filter((file): file is File => file instanceof File);
+      if (!fileList.length) return;
+      uploadMutation.mutate(fileList);
+    },
+    [uploadMutation],
+  );
+
+  const handleDocumentDelete = useCallback(
+    (documentId: string) => {
+      deleteMutation.mutate(documentId);
+    },
+    [deleteMutation],
+  );
+
+  const documentCountLabel = detailQuery.isLoading
+    ? '…'
+    : detailQuery.isError
+    ? '—'
+    : String(documentCount);
+
+  const isUploading = uploadMutation.isPending;
+
+  return (
+    <Accordion.Item eventKey={eventKey}>
+      <Accordion.Header>
+        <div className="d-flex justify-content-between align-items-center w-100">
+          <span className="fw-semibold text-break">{organizationName}</span>
+          <Badge bg="secondary" pill>
+            {documentCountLabel}
+          </Badge>
+        </div>
+      </Accordion.Header>
+      <Accordion.Body>
+        {detailQuery.isLoading && !detailQuery.data ? (
+          <div className="d-flex align-items-center gap-2 text-muted small">
+            <Spinner animation="border" size="sm" role="status" />
+            <span>Cargando documentos…</span>
+          </div>
+        ) : null}
+        {detailQuery.isError ? (
+          <Alert variant="danger" className="mb-3">
+            No se pudo cargar la información del presupuesto.
+          </Alert>
+        ) : null}
+        {!detailQuery.isLoading && !detailQuery.isError ? (
+          <Stack gap={3}>
+            <div>
+              <div className="text-muted small">Presupuesto: {deal.dealId}</div>
+              {deal.studentCount ? (
+                <div className="text-muted small">Alumnos asignados: {deal.studentCount}</div>
+              ) : null}
+              {deal.fundaeLabel ? (
+                <div className="text-muted small">FUNDAE: {deal.fundaeLabel}</div>
+              ) : null}
+            </div>
+
+            {uploadError ? <Alert variant="danger">{uploadError}</Alert> : null}
+            {deleteError ? <Alert variant="danger">{deleteError}</Alert> : null}
+
+            <div>
+              <h6 className="fw-semibold">Documentos</h6>
+              {documents.length ? (
+                <ListGroup>
+                  {documents.map((doc) => {
+                    const href = doc.url ?? doc.drive_web_view_link ?? null;
+                    const displayName = doc.name ?? doc.drive_file_name ?? 'Documento';
+                    const addedAtLabel = doc.created_at ? formatDateTime(doc.created_at) : null;
+                    const canDelete = ownedDocumentIdSet.has(doc.id);
+                    const isDeleting = deleteMutation.isPending && deletingDocumentId === doc.id;
+                    return (
+                      <ListGroup.Item
+                        key={doc.id}
+                        className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2"
+                      >
+                        <div className="d-flex flex-column">
+                          {href ? (
+                            <a
+                              className="fw-semibold text-break"
+                              href={href}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            >
+                              {displayName}
+                            </a>
+                          ) : (
+                            <span className="fw-semibold text-break">{displayName}</span>
+                          )}
+                          <div className="text-muted small">
+                            {addedAtLabel ? addedAtLabel : 'Sin fecha'}
+                          </div>
+                        </div>
+                        {canDelete ? (
+                          <div className="d-flex justify-content-end">
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              onClick={() => handleDocumentDelete(doc.id)}
+                              disabled={isDeleting}
+                            >
+                              {isDeleting ? (
+                                <Spinner animation="border" size="sm" role="status" />
+                              ) : (
+                                'Eliminar'
+                              )}
+                            </Button>
+                          </div>
+                        ) : null}
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              ) : (
+                <p className="text-muted small mb-0">No hay documentos disponibles.</p>
+              )}
+            </div>
+
+            <Form.Group controlId={`trainer-variant-${variantId}-deal-${deal.dealId}-upload`}>
+              <Form.Label className="fw-semibold">Subir documentos</Form.Label>
+              <Form.Control
+                type="file"
+                multiple
+                onChange={handleFileInputChange}
+                ref={fileInputRef}
+                disabled={isUploading}
+              />
+              <div className="text-muted small mt-1">
+                Los archivos se guardarán en la jerarquía del presupuesto correspondiente.
+              </div>
+              {isUploading ? (
+                <div className="d-flex align-items-center gap-2 text-muted small mt-2">
+                  <Spinner animation="border" size="sm" role="status" />
+                  <span>Subiendo documentos…</span>
+                </div>
+              ) : null}
+            </Form.Group>
+
+            <div>
+              <h6 className="fw-semibold">Notas del presupuesto</h6>
+              {filteredNotes.length ? (
+                <ListGroup>
+                  {filteredNotes.map((note) => {
+                    const content = (note.content ?? '').trim();
+                    const createdLabel = note.created_at ? formatDateTime(note.created_at) : null;
+                    return (
+                      <ListGroup.Item key={note.id ?? `${deal.dealId}-${content.slice(0, 12)}`}>
+                        <div className="d-flex flex-column gap-1">
+                          <div className="d-flex flex-wrap gap-2 text-muted small">
+                            {note.author ? <span>{note.author}</span> : null}
+                            {createdLabel ? <span>{createdLabel}</span> : null}
+                          </div>
+                          <p className="mb-0" style={{ whiteSpace: 'pre-line' }}>
+                            {content}
+                          </p>
+                        </div>
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              ) : (
+                <p className="text-muted small mb-0">No hay notas disponibles.</p>
+              )}
+            </div>
+          </Stack>
+        ) : null}
+      </Accordion.Body>
+    </Accordion.Item>
+  );
+}
+
 type VariantDetailCardProps = {
   variant: TrainerVariantDetail;
 };
 
 function VariantDetailCard({ variant }: VariantDetailCardProps) {
   const formattedDate = useMemo(() => formatDateTime(variant.date), [variant.date]);
+
+  const dealsWithKeys = useMemo(() => {
+    const seenDealIds = new Set<string>();
+    const entries: Array<{ deal: TrainerVariantDeal; eventKey: string }> = [];
+    variant.deals.forEach((deal, index) => {
+      const normalizedId = (deal.dealId ?? '').trim();
+      if (normalizedId.length) {
+        if (seenDealIds.has(normalizedId)) {
+          return;
+        }
+        seenDealIds.add(normalizedId);
+      }
+      const eventKey = normalizedId.length ? normalizedId : `${variant.variantId}-deal-${index}`;
+      entries.push({ deal, eventKey });
+    });
+    return entries;
+  }, [variant.deals, variant.variantId]);
+
+  const [openDealKeys, setOpenDealKeys] = useState<string[]>([]);
+
+  useEffect(() => {
+    const validKeys = new Set(dealsWithKeys.map((entry) => entry.eventKey));
+    setOpenDealKeys((current) => {
+      const filtered = current.filter((key) => validKeys.has(key));
+      if (filtered.length === current.length) return current;
+      return filtered;
+    });
+  }, [dealsWithKeys]);
+
+  const handleDealAccordionSelect = useCallback((eventKey: string | null) => {
+    if (!eventKey) return;
+    setOpenDealKeys((current) => {
+      if (current.includes(eventKey)) {
+        return current.filter((key) => key !== eventKey);
+      }
+      return [...current, eventKey];
+    });
+  }, []);
 
   const organizationList = useMemo(() => {
     if (variant.organizationNames.length) {
@@ -1688,6 +2084,26 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
                 </tbody>
               </Table>
             </div>
+
+            {dealsWithKeys.length ? (
+              <div>
+                <h5 className="fw-semibold mb-3">Documentación por organización</h5>
+                <Accordion
+                  alwaysOpen
+                  activeKey={openDealKeys}
+                  onSelect={handleDealAccordionSelect}
+                >
+                  {dealsWithKeys.map(({ deal, eventKey }) => (
+                    <VariantDealAccordionItem
+                      key={eventKey}
+                      variantId={variant.variantId}
+                      deal={deal}
+                      eventKey={eventKey}
+                    />
+                  ))}
+                </Accordion>
+              </div>
+            ) : null}
           </Stack>
         </Stack>
       </Card.Body>
