@@ -279,6 +279,20 @@ export function normalizeDealDetail(raw: Json): DealDetail {
   const trainingAddress =
     toStringValue(raw?.training_address ?? raw?.trainingAddress ?? raw?.training?.address) ?? null;
 
+  const notesSource = Array.isArray(raw?.notes)
+    ? (raw.notes as unknown[])
+    : Array.isArray((raw as { deal_notes?: unknown })?.deal_notes)
+    ? ((raw as { deal_notes?: unknown[] }).deal_notes as unknown[])
+    : [];
+
+  const documentsSource = Array.isArray(raw?.documents)
+    ? (raw.documents as unknown[])
+    : Array.isArray((raw as { deal_files?: unknown })?.deal_files)
+    ? ((raw as { deal_files?: unknown[] }).deal_files as unknown[])
+    : Array.isArray((raw as { dealFiles?: unknown })?.dealFiles)
+    ? ((raw as { dealFiles?: unknown[] }).dealFiles as unknown[])
+    : [];
+
   const normalized: DealDetail = {
     deal_id: toStringValue(raw?.deal_id ?? raw?.dealId ?? raw?.id) ?? '',
     title: toStringValue(raw?.title) ?? null,
@@ -317,9 +331,8 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     w_id_variation: toStringValue(raw?.w_id_variation) ?? null,
     a_fecha: toStringValue(raw?.a_fecha) ?? null,
     modo_reserva: toStringValue(raw?.modo_reserva) ?? null,
-    notes: Array.isArray(raw?.notes)
-      ? (raw.notes as unknown[]).map((note) => normalizeDealNote(note))
-      : [],
+    notes: notesSource.map((note) => normalizeDealNote(note)),
+    documents: documentsSource.map((doc) => normalizeDealDocument(doc)),
     presu_holded: toStringValue(raw?.presu_holded) ?? null,
   };
 
