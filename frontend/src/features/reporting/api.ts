@@ -75,6 +75,19 @@ export type ControlHorarioRecord = {
   clockOut: string | null;
 };
 
+export type AuditLogEntry = {
+  id: string;
+  createdAt: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  userId: string | null;
+  userName: string | null;
+  userEmail: string | null;
+  before: unknown | null;
+  after: unknown | null;
+};
+
 function sanitizeControlHorarioRecord(entry: unknown): ControlHorarioRecord | null {
   if (!entry || typeof entry !== 'object') {
     return null;
@@ -109,6 +122,53 @@ export async function fetchControlHorarioRecords(): Promise<ControlHorarioRecord
   return entries
     .map(sanitizeControlHorarioRecord)
     .filter((record): record is ControlHorarioRecord => record !== null);
+}
+
+function sanitizeAuditLogEntry(entry: unknown): AuditLogEntry | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const raw = entry as Record<string, unknown>;
+  const id = sanitizeText(raw.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    createdAt: sanitizeDate(raw.createdAt ?? raw.created_at),
+    action: sanitizeText(raw.action) ?? '',
+    entityType: sanitizeText(raw.entityType ?? raw.entity_type) ?? '',
+    entityId: sanitizeText(raw.entityId ?? raw.entity_id) ?? '',
+    userId: sanitizeText(raw.userId ?? raw.user_id),
+    userName: sanitizeText(raw.userName ?? raw.user_name),
+    userEmail: sanitizeText(raw.userEmail ?? raw.user_email),
+    before: raw.before ?? null,
+    after: raw.after ?? null,
+  } satisfies AuditLogEntry;
+}
+
+export type FetchAuditLogsOptions = {
+  limit?: number;
+};
+
+export async function fetchAuditLogs(options: FetchAuditLogsOptions = {}): Promise<AuditLogEntry[]> {
+  const params = new URLSearchParams();
+  const limit = options.limit;
+  if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
+    const normalized = Math.min(Math.floor(limit), 500);
+    params.set('limit', String(normalized));
+  }
+
+  const query = params.toString();
+  const url = query.length ? `/reporting-logs?${query}` : '/reporting-logs';
+
+  const data = await getJson<{ logs?: unknown }>(url);
+  const entries = Array.isArray(data?.logs) ? data.logs : [];
+  return entries
+    .map(sanitizeAuditLogEntry)
+    .filter((entry): entry is AuditLogEntry => entry !== null);
 }
 
 const EXTRA_COST_FIELD_KEYS = [
