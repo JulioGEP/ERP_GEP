@@ -5,6 +5,7 @@ import { getPrisma } from './_shared/prisma';
 import { logAudit, resolveUserIdFromEvent } from './_shared/audit-log';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
+import { isTrustedClient, logSuspiciousRequest } from './_shared/security';
 import {
   getVariantResourceColumnsSupport,
   isVariantResourceColumnError,
@@ -359,6 +360,21 @@ function normalizeSession(row: SessionRecord) {
     drive_url: toTrimmed(normalized.drive_url),
     trainer_ids: trainerIds,
     unidad_movil_ids: unidadIds,
+  };
+}
+
+function buildSessionAuditSnapshot(session: ReturnType<typeof normalizeSession>) {
+  return {
+    id: session.id,
+    deal_id: session.deal_id,
+    deal_product_id: session.deal_product_id,
+    estado: session.estado,
+    fecha_inicio_utc: session.fecha_inicio_utc,
+    fecha_fin_utc: session.fecha_fin_utc,
+    sala_id: session.sala_id,
+    direccion: session.direccion,
+    trainer_ids: session.trainer_ids,
+    unidad_movil_ids: session.unidad_movil_ids,
   };
 }
 function buildNombreBase(name?: string | null, code?: string | null): string {
@@ -770,20 +786,36 @@ export const handler = async (event: any) => {
 
     const prisma = getPrisma();
     const method = event.httpMethod;
+
+    if (!isTrustedClient(event.headers)) {
+      await logSuspiciousRequest({
+        event,
+        headers: event.headers,
+        method: method ?? 'UNKNOWN',
+        path: String(event.path || ''),
+        rawUrl: event.rawUrl ?? null,
+        reason: 'missing_or_invalid_client_header',
+      });
+    }
+
     // Usa path o rawUrl (en Netlify local a veces solo viene rawUrl)
-const pathOrUrl = String(event.path || event.rawUrl || '');
-const query = event.queryStringParameters ?? {};
-const isCalendarMode = getCalendarFlag(query);
+    const pathOrUrl = String(event.path || event.rawUrl || '');
+    const query = event.queryStringParameters ?? {};
+    const isCalendarMode = getCalendarFlag(query);
 
-// Acepta /sesiones y /sessions y tolera querystring
-const isAvailabilityRequest = /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/availability(?:\?|$)/i.test(pathOrUrl);
-const isRangeRequest        = /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/range(?:\?|$)/i.test(pathOrUrl);
-const isDealSessionsRequest = /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/by-deal(?:\?|$)/i.test(pathOrUrl);
-const isCountsRequest       = /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/[^/]+\/counts(?:\?|$)/i.test(pathOrUrl);
+    // Acepta /sesiones y /sessions y tolera querystring
+    const isAvailabilityRequest =
+      /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/availability(?:\?|$)/i.test(pathOrUrl);
+    const isRangeRequest =
+      /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/range(?:\?|$)/i.test(pathOrUrl);
+    const isDealSessionsRequest =
+      /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/by-deal(?:\?|$)/i.test(pathOrUrl);
+    const isCountsRequest =
+      /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/[^/]+\/counts(?:\?|$)/i.test(pathOrUrl);
 
-// Para PATCH/DELETE lee el id desde pathOrUrl
-const sessionIdFromPath =
-  isAvailabilityRequest || isDealSessionsRequest ? null : parseSessionIdFromPath(pathOrUrl);
+    // Para PATCH/DELETE lee el id desde pathOrUrl
+    const sessionIdFromPath =
+      isAvailabilityRequest || isDealSessionsRequest ? null : parseSessionIdFromPath(pathOrUrl);
 
     // Generate from deal
     if (
@@ -1456,6 +1488,9 @@ if (method === 'GET') {
       const storedRecord = ensureSessionRelationsOrNull(storedRaw as any);
       if (!storedRecord) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
+      const auditUserIdPromise = resolveUserIdFromEvent(event, prisma);
+      const auditBeforeSnapshot = buildSessionAuditSnapshot(normalizeSession(storedRecord));
+
       const fechaInicio = (data as any).fecha_inicio_utc === undefined ? storedRecord.fecha_inicio_utc : ((data as any).fecha_inicio_utc as Date | null);
       const fechaFin = (data as any).fecha_fin_utc === undefined ? storedRecord.fecha_fin_utc : ((data as any).fecha_fin_utc as Date | null);
       const rangeError = ensureValidDateRange(fechaInicio, fechaFin);
@@ -1545,7 +1580,37 @@ if (method === 'GET') {
           sesion_unidades: { select: { unidad_movil_id: true } },
         },
       });
-      return successResponse({ session: normalizeSession(ensureSessionRelations(refreshedRaw as any)) });
+      const refreshedRecord = ensureSessionRelationsOrNull(refreshedRaw as any);
+      const normalizedSession = refreshedRecord ? normalizeSession(refreshedRecord) : null;
+
+      if (!normalizedSession) {
+        return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
+      }
+
+      const auditAfterSnapshot = buildSessionAuditSnapshot(normalizedSession);
+      const beforeJson = JSON.stringify(auditBeforeSnapshot);
+      const afterJson = JSON.stringify(auditAfterSnapshot);
+
+      if (beforeJson !== afterJson) {
+        try {
+          const auditUserId = await auditUserIdPromise;
+          await logAudit({
+            userId: auditUserId,
+            action: 'session.updated',
+            entityType: 'session',
+            entityId: sessionIdFromPath,
+            before: auditBeforeSnapshot as Prisma.InputJsonValue,
+            after: auditAfterSnapshot as Prisma.InputJsonValue,
+          });
+        } catch (auditError) {
+          console.error('[sessions] Failed to log session update', {
+            sessionId: sessionIdFromPath,
+            error: auditError,
+          });
+        }
+      }
+
+      return successResponse({ session: normalizedSession });
     }
 
     // Delete

@@ -153,6 +153,13 @@ export default function HorasFormadoresPage() {
       rows: sheetRows,
       fileName: `horas_formadores_${periodLabel}.xlsx`,
       sheetName: 'Horas Formadores',
+      auditEvent: {
+        action: 'reporting.horas_formadores.export',
+        details: {
+          period: periodLabel,
+          itemCount: items.length,
+        },
+      },
     });
   };
 

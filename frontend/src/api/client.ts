@@ -64,6 +64,7 @@ export async function requestJson<T = any>(
       credentials: init?.credentials ?? 'include',
       headers: {
         'Content-Type': 'application/json',
+        'X-ERP-Client': 'frontend',
         ...(init?.headers || {}),
       },
     });

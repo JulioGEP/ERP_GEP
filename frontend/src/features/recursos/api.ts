@@ -124,7 +124,17 @@ function buildRequestBody(payload: TrainerPayload): Record<string, any> {
 }
 
 async function requestJson(input: RequestInfo, init?: RequestInit) {
-  const response = await fetch(input, init);
+  const finalInit: RequestInit = {
+    ...init,
+    credentials: init?.credentials ?? 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-ERP-Client': 'frontend',
+      ...(init?.headers || {}),
+    },
+  };
+
+  const response = await fetch(input, finalInit);
   const text = await response.text();
   const json = parseJson(text);
 

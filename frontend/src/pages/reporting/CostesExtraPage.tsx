@@ -304,6 +304,13 @@ export default function CostesExtraPage() {
       rows: [headerRow, ...rows],
       fileName: `costes_extra_${periodLabel}.xlsx`,
       sheetName: 'Costes Extra',
+      auditEvent: {
+        action: 'reporting.costes_extra.export',
+        details: {
+          period: periodLabel,
+          itemCount: items.length,
+        },
+      },
     });
   };
 

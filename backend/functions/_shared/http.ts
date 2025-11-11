@@ -6,6 +6,7 @@ import {
   preflightResponse,
   successResponse,
 } from './response';
+import { isTrustedClient, logSuspiciousRequest } from './security';
 
 export type NetlifyHandlerEvent = HandlerEvent & {
   body?: string | null;
@@ -225,6 +226,17 @@ export function createHttpHandler<TBody = unknown>(handler: HttpHandler<TBody>) 
       rawBody: decodedBody.rawBody,
       body: parsedBody.body as TBody,
     };
+
+    if (!isTrustedClient(request.headers)) {
+      await logSuspiciousRequest({
+        event,
+        headers: event.headers,
+        method,
+        path: request.path,
+        rawUrl: event.rawUrl ?? null,
+        reason: 'missing_or_invalid_client_header',
+      });
+    }
 
     try {
       const result = await handler(request);

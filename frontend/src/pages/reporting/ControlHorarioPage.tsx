@@ -112,6 +112,12 @@ export default function ControlHorarioPage() {
       rows: [headerRow, ...rows],
       fileName: `control_horario_${new Date().toISOString().slice(0, 10)}.xlsx`,
       sheetName: 'Control Horario',
+      auditEvent: {
+        action: 'reporting.control_horario.export',
+        details: {
+          rowCount: rows.length,
+        },
+      },
     });
   };
 
