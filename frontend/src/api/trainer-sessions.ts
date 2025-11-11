@@ -37,11 +37,34 @@ export type TrainerSessionDetail = {
   companionTrainers: TrainerSessionTrainer[];
 };
 
+export type TrainerVariantDeal = {
+  dealId: string;
+  organizationName: string | null;
+  fundaeLabel: string | null;
+  studentCount: number;
+};
+
+export type TrainerVariantStudent = {
+  id: string;
+  dealId: string;
+  nombre: string | null;
+  apellido: string | null;
+  dni: string | null;
+  apto: boolean;
+  organizationName: string | null;
+  fundaeLabel: string | null;
+};
+
 export type TrainerVariantDetail = {
   variantId: string;
   productName: string | null;
   site: string | null;
   date: string | null;
+  wooId: string | null;
+  studentCount: number;
+  organizationNames: string[];
+  deals: TrainerVariantDeal[];
+  students: TrainerVariantStudent[];
 };
 
 export type TrainerSessionsDateEntry = {
@@ -115,6 +138,76 @@ function sanitizeMobileUnits(value: unknown): TrainerSessionMobileUnit[] {
       } satisfies TrainerSessionMobileUnit;
     })
     .filter((unit): unit is TrainerSessionMobileUnit => unit !== null);
+}
+
+function sanitizeStringArrayField(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const set = new Set<string>();
+  value.forEach((entry) => {
+    const normalized = sanitizeString(entry);
+    if (normalized) {
+      set.add(normalized);
+    }
+  });
+  return Array.from(set);
+}
+
+function sanitizeNonNegativeInteger(value: unknown): number {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return 0;
+    return Math.max(0, Math.trunc(value));
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) return 0;
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(0, Math.trunc(parsed));
+  }
+  return 0;
+}
+
+function sanitizeVariantDeals(value: unknown): TrainerVariantDeal[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const raw = entry as Partial<TrainerVariantDeal> & { dealId?: unknown; studentCount?: unknown };
+      const dealId = sanitizeString(raw.dealId ?? (raw as { deal_id?: unknown }).deal_id ?? null);
+      if (!dealId) return null;
+      return {
+        dealId,
+        organizationName: sanitizeString(raw.organizationName ?? (raw as { organization_name?: unknown }).organization_name ?? null),
+        fundaeLabel: sanitizeString(raw.fundaeLabel ?? (raw as { fundae_label?: unknown }).fundae_label ?? null),
+        studentCount: sanitizeNonNegativeInteger(raw.studentCount),
+      } satisfies TrainerVariantDeal;
+    })
+    .filter((deal): deal is TrainerVariantDeal => deal !== null);
+}
+
+function sanitizeVariantStudents(value: unknown): TrainerVariantStudent[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const raw = entry as Partial<TrainerVariantStudent> & { id?: unknown; dealId?: unknown };
+      const id = sanitizeString(raw.id ?? (raw as { student_id?: unknown }).student_id ?? null);
+      const dealId = sanitizeString(raw.dealId ?? (raw as { deal_id?: unknown }).deal_id ?? null);
+      if (!id || !dealId) return null;
+      return {
+        id,
+        dealId,
+        nombre: sanitizeString(raw.nombre),
+        apellido: sanitizeString(raw.apellido),
+        dni: sanitizeString(raw.dni),
+        apto: Boolean(raw.apto),
+        organizationName: sanitizeString(
+          raw.organizationName ?? (raw as { organization_name?: unknown }).organization_name ?? null,
+        ),
+        fundaeLabel: sanitizeString(raw.fundaeLabel ?? (raw as { fundae_label?: unknown }).fundae_label ?? null),
+      } satisfies TrainerVariantStudent;
+    })
+    .filter((student): student is TrainerVariantStudent => student !== null);
 }
 
 function sanitizeSession(value: unknown): TrainerSessionDetail | null {
@@ -200,14 +293,31 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
 function sanitizeVariant(value: unknown): TrainerVariantDetail | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Partial<TrainerVariantDetail> & { variantId?: unknown };
-  const variantId = sanitizeString(raw.variantId);
+  const variantId = sanitizeString(raw.variantId ?? (raw as { variant_id?: unknown }).variant_id ?? null);
   if (!variantId) return null;
+
+  const students = sanitizeVariantStudents(
+    raw.students ?? (raw as { students?: unknown }).students ?? null,
+  );
+  const deals = sanitizeVariantDeals(raw.deals ?? (raw as { deals?: unknown }).deals ?? null);
+  const organizationNames = sanitizeStringArrayField(
+    raw.organizationNames ?? (raw as { organization_names?: unknown }).organization_names ?? null,
+  );
+  const studentCountSanitized = sanitizeNonNegativeInteger(
+    raw.studentCount ?? (raw as { student_count?: unknown }).student_count ?? null,
+  );
+  const studentCount = studentCountSanitized || students.length;
 
   return {
     variantId,
     productName: sanitizeString(raw.productName),
     site: sanitizeString(raw.site),
     date: sanitizeDate(raw.date),
+    wooId: sanitizeString(raw.wooId ?? (raw as { woo_id?: unknown }).woo_id ?? null),
+    studentCount,
+    organizationNames,
+    deals,
+    students,
   } satisfies TrainerVariantDetail;
 }
 

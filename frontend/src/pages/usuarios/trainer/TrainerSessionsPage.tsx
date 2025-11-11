@@ -9,7 +9,6 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
@@ -31,6 +30,7 @@ import {
   type TrainerSessionsDateEntry,
   type TrainerSessionTrainer,
   type TrainerSessionTimeLog,
+  type TrainerVariantDetail,
 } from '../../../api/trainer-sessions';
 import {
   fetchSessionComments,
@@ -53,7 +53,6 @@ import {
 import type { SessionComment, SessionStudent } from '../../../api/sessions.types';
 import { useCurrentUserIdentity } from '../../../features/presupuestos/useCurrentUserIdentity';
 import type { SessionDocumentsPayload } from '../../../api/sessions.types';
-import type { ReportDraft, ReportSessionInfo } from '../../../features/informes/ReportsFlow';
 
 const TRAINER_EXPENSE_FOLDER_NAME = 'Gastos Formador';
 
@@ -84,21 +83,6 @@ function formatDateTime(value: string | null): string | null {
   return formatter.format(parsed);
 }
 
-function formatDateForInput(value: string | null): string {
-  if (!value) return '';
-  const trimmed = value.trim();
-  if (!trimmed.length) return '';
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-    return trimmed.slice(0, 10);
-  }
-  const parsed = new Date(trimmed);
-  if (Number.isNaN(parsed.getTime())) return '';
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 function formatDateTimeLocalInput(value: string | null): string {
   if (!value) return '';
   const parsed = new Date(value);
@@ -118,18 +102,6 @@ function parseDateTimeLocalInput(value: string): string | null {
   const parsed = new Date(trimmed);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString();
-}
-
-function calculateDurationHours(start: string | null, end: string | null): string {
-  if (!start || !end) return '';
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const diffMs = endDate.getTime() - startDate.getTime();
-  if (!Number.isFinite(diffMs) || diffMs <= 0) return '';
-  const hours = diffMs / (1000 * 60 * 60);
-  if (!Number.isFinite(hours) || hours <= 0) return '';
-  const rounded = Math.round(hours * 100) / 100;
-  return String(rounded);
 }
 
 function renderBooleanField(field: { value: boolean | null; label: string | null }): string {
@@ -741,74 +713,6 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     setEditingCommentContent('');
     setSavingCommentId(null);
   }, []);
-
-  const reportLinkState = useMemo(() => {
-    const dealId = session.dealId?.trim();
-    if (!dealId) return undefined;
-
-    const alumnosCount = students.length;
-    const alumnosValue = !isGepServices && alumnosCount > 0 ? String(alumnosCount) : undefined;
-    const durationValue = calculateDurationHours(session.startDate, session.endDate);
-    const dateValue = formatDateForInput(session.startDate);
-
-    const datos: Record<string, unknown> = {
-      tipo: isGepServices ? 'preventivo' : 'formacion',
-      idioma: 'ES',
-    };
-    if (!isGepServices) {
-      datos.sesiones = 1;
-    }
-    if (session.organizationName) datos.cliente = session.organizationName;
-    if (session.commercialName) datos.comercial = session.commercialName;
-    if (session.clientName) datos.contacto = session.clientName;
-    if (session.address) datos.sede = session.address;
-    if (trainerDisplayName) datos.formadorNombre = trainerDisplayName;
-    if (dateValue) datos.fecha = dateValue;
-    if (alumnosValue) datos.alumnos = alumnosValue;
-    if (!isGepServices && durationValue) datos.duracion = durationValue;
-    if (isGepServices) {
-      datos.preventivo = {
-        trabajos: '',
-        tareas: '',
-        observaciones: '',
-        incidencias: '',
-      };
-    }
-    const templateValue = session.formationTemplate?.trim();
-    const formationTitle = session.formationName ?? session.sessionTitle;
-    if (!isGepServices) {
-      if (templateValue) {
-        datos.formacionTitulo = templateValue;
-      } else if (formationTitle) {
-        datos.formacionTitulo = formationTitle;
-      }
-    }
-
-    const sessionInfo: ReportSessionInfo | null = session.sessionId
-      ? {
-          id: session.sessionId,
-          number: null,
-          label: session.sessionTitle ?? session.formationName ?? null,
-          direccion: session.address ?? null,
-          nombre: session.formationName ?? session.sessionTitle ?? null,
-          fecha: session.startDate ?? null,
-        }
-      : null;
-
-    const prefill: Partial<ReportDraft> = {
-      type: isGepServices ? 'preventivo' : 'formacion',
-      dealId,
-      datos,
-      formador: { nombre: trainerDisplayName, idioma: 'ES' },
-    };
-
-    if (sessionInfo) {
-      prefill.session = sessionInfo;
-      prefill.sessionOptions = [sessionInfo];
-    }
-
-    return { reportPrefill: prefill };
-  }, [isGepServices, session, students, trainerDisplayName]);
 
   const handleCommentSave = useCallback(
     async (comment: SessionComment) => {
@@ -1624,31 +1528,167 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                     </Form>
                   )}
                 </div>
-                {isCompanyTraining || isGepServices ? (
-                  <div className="mt-4">
-                    <h5 className="fw-semibold mb-2">
-                      Haz un informe sobre {isGepServices ? 'el servicio' : 'la formación'}
-                    </h5>
-                    <p className="mb-0">
-                      <Link
-                        to={
-                          isGepServices
-                            ? '/usuarios/trainer/informes/preventivo'
-                            : '/usuarios/trainer/informes/formacion'
-                        }
-                        className="text-decoration-none"
-                        state={reportLinkState}
-                      >
-                        {isGepServices
-                          ? 'https://erpgep.netlify.app/usuarios/trainer/informes/preventivo'
-                          : 'https://erpgep.netlify.app/usuarios/trainer/informes/formacion'}
-                      </Link>
-                    </p>
-                  </div>
-                ) : null}
               </div>
             </Col>
           </Row>
+        </Stack>
+      </Card.Body>
+    </Card>
+  );
+}
+
+type VariantDetailCardProps = {
+  variant: TrainerVariantDetail;
+};
+
+function VariantDetailCard({ variant }: VariantDetailCardProps) {
+  const formattedDate = useMemo(() => formatDateTime(variant.date), [variant.date]);
+
+  const organizationList = useMemo(() => {
+    if (variant.organizationNames.length) {
+      return variant.organizationNames;
+    }
+    const set = new Set<string>();
+    variant.students.forEach((student) => {
+      const name = (student.organizationName ?? '').trim();
+      if (name.length) {
+        set.add(name);
+      }
+    });
+    return Array.from(set);
+  }, [variant.organizationNames, variant.students]);
+
+  const studentCount = useMemo(() => {
+    const count = typeof variant.studentCount === 'number' ? variant.studentCount : 0;
+    return count > 0 ? count : variant.students.length;
+  }, [variant.studentCount, variant.students.length]);
+
+  const sortedStudents = useMemo(() => {
+    return variant.students.slice().sort((a, b) => {
+      const orgA = (a.organizationName ?? '').toLowerCase();
+      const orgB = (b.organizationName ?? '').toLowerCase();
+      if (orgA && orgB) {
+        const compare = orgA.localeCompare(orgB, 'es');
+        if (compare !== 0) return compare;
+      } else if (orgA) {
+        return -1;
+      } else if (orgB) {
+        return 1;
+      }
+
+      const lastA = (a.apellido ?? '').toLowerCase();
+      const lastB = (b.apellido ?? '').toLowerCase();
+      if (lastA && lastB) {
+        const compare = lastA.localeCompare(lastB, 'es');
+        if (compare !== 0) return compare;
+      } else if (lastA) {
+        return -1;
+      } else if (lastB) {
+        return 1;
+      }
+
+      const firstA = (a.nombre ?? '').toLowerCase();
+      const firstB = (b.nombre ?? '').toLowerCase();
+      if (firstA && firstB) {
+        const compare = firstA.localeCompare(firstB, 'es');
+        if (compare !== 0) return compare;
+      } else if (firstA) {
+        return -1;
+      } else if (firstB) {
+        return 1;
+      }
+
+      const dniA = (a.dni ?? '').toUpperCase();
+      const dniB = (b.dni ?? '').toUpperCase();
+      if (dniA && dniB) {
+        const compare = dniA.localeCompare(dniB, 'es');
+        if (compare !== 0) return compare;
+      } else if (dniA) {
+        return -1;
+      } else if (dniB) {
+        return 1;
+      }
+
+      return a.id.localeCompare(b.id, 'es');
+    });
+  }, [variant.students]);
+
+  return (
+    <Card className="shadow-sm border-0">
+      <Card.Body>
+        <Stack gap={3}>
+          <div>
+            <h4 className="fw-semibold mb-1">{variant.productName ?? 'Formación abierta'}</h4>
+            <p className="text-muted mb-0">
+              Formación abierta en {variant.site ?? '—'}
+            </p>
+          </div>
+
+          <Stack gap={3}>
+            <div className="row g-4">
+              <InfoField className="col-12 col-md-6 col-xl-4" label="Formación">
+                {variant.productName ?? '—'}
+              </InfoField>
+              <InfoField className="col-12 col-md-6 col-xl-4" label="Fecha de la formación">
+                {formattedDate ?? '—'}
+              </InfoField>
+              <InfoField className="col-12 col-md-6 col-xl-4" label="Alumnos">
+                {studentCount}
+              </InfoField>
+            </div>
+
+            <div className="row g-4">
+              <InfoField className="col-12 col-md-6 col-xl-6" label="Organización">
+                {organizationList.length ? (
+                  <div className="d-flex flex-column gap-1">
+                    {organizationList.map((name) => (
+                      <span key={name}>{name}</span>
+                    ))}
+                  </div>
+                ) : (
+                  '—'
+                )}
+              </InfoField>
+            </div>
+
+            <div>
+              <h5 className="fw-semibold mb-3">Alumnos</h5>
+              <Table responsive bordered hover size="sm">
+                <thead className="table-light">
+                  <tr>
+                    <th>Presupuesto</th>
+                    <th>Empresa</th>
+                    <th>FUNDAE</th>
+                    <th>Nombre</th>
+                    <th>Apellidos</th>
+                    <th>DNI</th>
+                    <th className="text-center">Apto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedStudents.length ? (
+                    sortedStudents.map((student) => (
+                      <tr key={student.id}>
+                        <td>{student.dealId}</td>
+                        <td>{student.organizationName ?? '—'}</td>
+                        <td>{student.fundaeLabel ?? '—'}</td>
+                        <td>{student.nombre ?? '—'}</td>
+                        <td>{student.apellido ?? '—'}</td>
+                        <td>{student.dni ?? '—'}</td>
+                        <td className="text-center">{student.apto ? 'Sí' : 'No'}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="text-center text-muted">
+                        No hay alumnos registrados para esta variante.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </Table>
+            </div>
+          </Stack>
         </Stack>
       </Card.Body>
     </Card>
@@ -1703,7 +1743,8 @@ export default function TrainerSessionsPage() {
     );
   }, [selectedEntry]);
 
-  const variantCount = selectedEntry?.variants.length ?? 0;
+  const variants = selectedEntry?.variants ?? [];
+  const variantCount = variants.length;
 
   return (
     <Stack gap={4} className="trainer-sessions-page">
@@ -1828,6 +1869,9 @@ export default function TrainerSessionsPage() {
 
       {companyAndServiceSessions.map((session) => (
         <SessionDetailCard key={session.sessionId} session={session} />
+      ))}
+      {variants.map((variant) => (
+        <VariantDetailCard key={variant.variantId} variant={variant} />
       ))}
     </Stack>
   );

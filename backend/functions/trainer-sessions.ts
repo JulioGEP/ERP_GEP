@@ -50,9 +50,69 @@ type SessionRecord = {
 
 type VariantRecord = {
   id: string;
+  id_woo: bigint | number | string | null;
   date: Date | string | null;
   sede: string | null;
   products: { name: string | null } | null;
+};
+
+type VariantDealRecord = {
+  deal_id: string | null;
+  w_id_variation: string | null;
+  fundae_label: string | null;
+  organization: { name: string | null } | null;
+  _count: { alumnos: number } | null;
+  alumnos: Array<{
+    id: string | null;
+    nombre: string | null;
+    apellido: string | null;
+    dni: string | null;
+    apto: boolean | null;
+    deal_id: string | null;
+  }> | null;
+};
+
+type VariantDealPayload = {
+  dealId: string;
+  organizationName: string | null;
+  fundaeLabel: string | null;
+  studentCount: number;
+  students: Array<{
+    id: string;
+    dealId: string;
+    nombre: string | null;
+    apellido: string | null;
+    dni: string | null;
+    apto: boolean;
+    organizationName: string | null;
+    fundaeLabel: string | null;
+  }>;
+};
+
+type VariantPayload = {
+  variantId: string;
+  productName: string | null;
+  site: string | null;
+  date: string | null;
+  wooId: string | null;
+  studentCount: number;
+  organizationNames: string[];
+  deals: Array<{
+    dealId: string;
+    organizationName: string | null;
+    fundaeLabel: string | null;
+    studentCount: number;
+  }>;
+  students: Array<{
+    id: string;
+    dealId: string;
+    nombre: string | null;
+    apellido: string | null;
+    dni: string | null;
+    apto: boolean;
+    organizationName: string | null;
+    fundaeLabel: string | null;
+  }>;
 };
 
 type SessionPayload = {
@@ -134,6 +194,21 @@ function sanitizeBoolean(value: unknown): boolean | null {
     if (!normalized.length) return null;
     if (['true', '1', 'si', 'sí', 'yes'].includes(normalized)) return true;
     if (['false', '0', 'no'].includes(normalized)) return false;
+  }
+  return null;
+}
+
+function sanitizeBigInt(value: unknown): string | null {
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return String(Math.trunc(value));
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
   }
   return null;
 }
@@ -402,18 +477,101 @@ export const handler = createHttpHandler(async (request) => {
     }
   }
 
-  let variantEntries: Array<{ dateKey: string; variant: { variantId: string; productName: string | null; site: string | null; date: string | null } }> = [];
+  let variantEntries: Array<{ dateKey: string; variant: VariantPayload }> = [];
 
   if (variantIds.size) {
     const variants = (await prisma.variants.findMany({
       where: { id: { in: Array.from(variantIds) } },
       select: {
         id: true,
+        id_woo: true,
         date: true,
         sede: true,
         products: { select: { name: true } },
       },
     })) as VariantRecord[];
+
+    const variantWooIds = Array.from(
+      new Set(
+        variants
+          .map((variant) => sanitizeBigInt(variant.id_woo))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    const dealsByWooId = new Map<string, VariantDealPayload[]>();
+
+    if (variantWooIds.length) {
+      const variantDeals = (await prisma.deals.findMany({
+        where: { w_id_variation: { in: variantWooIds } },
+        select: {
+          deal_id: true,
+          w_id_variation: true,
+          fundae_label: true,
+          organization: { select: { name: true } },
+          _count: { select: { alumnos: true } },
+          alumnos: {
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              dni: true,
+              apto: true,
+              deal_id: true,
+            },
+          },
+        },
+      })) as VariantDealRecord[];
+
+      for (const deal of variantDeals) {
+        const wooId = sanitizeString(deal.w_id_variation);
+        if (!wooId) continue;
+        const dealId = sanitizeString(deal.deal_id);
+        if (!dealId) continue;
+        const organizationName = sanitizeString(deal.organization?.name ?? null);
+        const fundaeLabel = sanitizeString(deal.fundae_label ?? null);
+
+        const studentRecords = Array.isArray(deal.alumnos) ? deal.alumnos : [];
+        const students = studentRecords
+          .map((record) => {
+            const studentId = sanitizeString(record.id);
+            if (!studentId) return null;
+            const studentDealId = sanitizeString(record.deal_id) ?? dealId;
+            return {
+              id: studentId,
+              dealId: studentDealId,
+              nombre: sanitizeString(record.nombre),
+              apellido: sanitizeString(record.apellido),
+              dni: sanitizeString(record.dni),
+              apto: Boolean(record.apto),
+              organizationName,
+              fundaeLabel,
+            } satisfies VariantDealPayload['students'][number];
+          })
+          .filter((student): student is VariantDealPayload['students'][number] => student !== null);
+
+        const studentCountRaw = deal._count?.alumnos;
+        const studentCount =
+          typeof studentCountRaw === 'number' && Number.isFinite(studentCountRaw)
+            ? Math.max(0, Math.trunc(studentCountRaw))
+            : students.length;
+
+        const payload: VariantDealPayload = {
+          dealId,
+          organizationName,
+          fundaeLabel,
+          studentCount,
+          students,
+        };
+
+        const existing = dealsByWooId.get(wooId);
+        if (existing) {
+          existing.push(payload);
+        } else {
+          dealsByWooId.set(wooId, [payload]);
+        }
+      }
+    }
 
     variantEntries = variants
       .map((variant) => {
@@ -421,6 +579,23 @@ export const handler = createHttpHandler(async (request) => {
         if (!variantId) return null;
         const dateKey = toDateKey(variant.date);
         if (!dateKey) return null;
+        const wooId = sanitizeBigInt(variant.id_woo);
+        const deals = wooId ? dealsByWooId.get(wooId) ?? [] : [];
+        const students = deals.flatMap((deal) => deal.students);
+        const studentCount = deals.reduce((total, deal) => total + deal.studentCount, 0);
+        const organizationNames = Array.from(
+          new Set(
+            deals
+              .map((deal) => deal.organizationName)
+              .filter((name): name is string => Boolean(name)),
+          ),
+        );
+        const sanitizedDeals = deals.map((deal) => ({
+          dealId: deal.dealId,
+          organizationName: deal.organizationName,
+          fundaeLabel: deal.fundaeLabel,
+          studentCount: deal.studentCount,
+        }));
         return {
           dateKey,
           variant: {
@@ -428,26 +603,18 @@ export const handler = createHttpHandler(async (request) => {
             productName: sanitizeString(variant.products?.name ?? null),
             site: sanitizeString(variant.sede ?? null),
             date: toMadridISOString(variant.date),
+            wooId,
+            studentCount,
+            organizationNames,
+            deals: sanitizedDeals,
+            students,
           },
         };
       })
-      .filter(
-        (
-          entry,
-        ): entry is {
-          dateKey: string;
-          variant: { variantId: string; productName: string | null; site: string | null; date: string | null };
-        } => entry !== null,
-      );
+      .filter((entry): entry is { dateKey: string; variant: VariantPayload } => entry !== null);
   }
 
-  const map = new Map<
-    string,
-    {
-      sessions: SessionPayload[];
-      variants: Array<{ variantId: string; productName: string | null; site: string | null; date: string | null }>;
-    }
-  >();
+  const map = new Map<string, { sessions: SessionPayload[]; variants: VariantPayload[] }>();
 
   for (const entry of sessionEntries) {
     const bucket = map.get(entry.dateKey);
