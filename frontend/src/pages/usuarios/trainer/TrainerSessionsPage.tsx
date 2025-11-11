@@ -40,6 +40,7 @@ import {
   createSessionComment,
   updateSessionComment,
   deleteSessionComment,
+  fetchDealSessions,
 } from '../../../features/presupuestos/api/sessions.api';
 import {
   fetchSessionDocuments,
@@ -49,6 +50,7 @@ import {
 import {
   createSessionStudent,
   deleteSessionStudent,
+  fetchDealStudents,
   fetchSessionStudents,
   updateSessionStudent,
   type UpdateSessionStudentInput,
@@ -1903,7 +1905,13 @@ type VariantDetailCardProps = {
   variant: TrainerVariantDetail;
 };
 
+type VariantStudentsQueryData = {
+  list: SessionStudent[];
+  byDeal: Record<string, SessionStudent[]>;
+};
+
 function VariantDetailCard({ variant }: VariantDetailCardProps) {
+  const queryClient = useQueryClient();
   const formattedDate = useMemo(() => formatDateTime(variant.date), [variant.date]);
 
   const dealsWithKeys = useMemo(() => {
@@ -1954,29 +1962,458 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     setOpenDealKeys([]);
   }, []);
 
+  const dealMetadata = useMemo(() => {
+    const map: Record<string, { organizationName: string | null; fundaeLabel: string | null }> = {};
+    variant.deals.forEach((deal) => {
+      const id = (deal.dealId ?? '').trim();
+      if (!id.length) return;
+      map[id] = {
+        organizationName: deal.organizationName ?? null,
+        fundaeLabel: deal.fundaeLabel ?? null,
+      };
+    });
+    return map;
+  }, [variant.deals]);
+
+  const dealIds = useMemo(() => {
+    const ids: string[] = [];
+    variant.deals.forEach((deal) => {
+      const id = (deal.dealId ?? '').trim();
+      if (!id.length || ids.includes(id)) {
+        return;
+      }
+      ids.push(id);
+    });
+    return ids;
+  }, [variant.deals]);
+
+  const studentsQueryKey = useMemo(
+    () => ['trainer', 'variant', variant.variantId, 'deal-students', dealIds] as const,
+    [variant.variantId, dealIds],
+  );
+
+  const studentsQuery = useQuery<VariantStudentsQueryData>({
+    queryKey: studentsQueryKey,
+    queryFn: async () => {
+      const results = await Promise.all(
+        dealIds.map(async (dealId) => {
+          const students = await fetchDealStudents(dealId);
+          return { dealId, students };
+        }),
+      );
+      const byDeal: Record<string, SessionStudent[]> = {};
+      const list: SessionStudent[] = [];
+      results.forEach(({ dealId, students }) => {
+        byDeal[dealId] = students;
+        list.push(...students);
+      });
+      return { list, byDeal } satisfies VariantStudentsQueryData;
+    },
+    enabled: dealIds.length > 0,
+  });
+
+  const [students, setStudents] = useState<SessionStudent[]>([]);
+  const studentsOriginalRef = useRef<Map<string, SessionStudent>>(new Map());
+  const [studentError, setStudentError] = useState<string | null>(null);
+  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
+  const [dealSessionMap, setDealSessionMap] = useState<Map<string, string>>(() => new Map());
+  const [newStudent, setNewStudent] = useState({
+    dealId: '',
+    nombre: '',
+    apellido: '',
+    dni: '',
+    apto: false,
+  });
+
+  useEffect(() => {
+    if (!dealIds.length) {
+      setStudents([]);
+      studentsOriginalRef.current = new Map();
+    }
+  }, [dealIds]);
+
+  useEffect(() => {
+    setNewStudent((prev) => {
+      if (!dealIds.length) {
+        if (!prev.dealId.length && !prev.nombre.length && !prev.apellido.length && !prev.dni.length && !prev.apto) {
+          return prev;
+        }
+        return { ...prev, dealId: '' };
+      }
+      if (prev.dealId && dealIds.includes(prev.dealId)) {
+        return prev;
+      }
+      return { ...prev, dealId: dealIds[0] };
+    });
+  }, [dealIds]);
+
+  useEffect(() => {
+    if (studentsQuery.data) {
+      const { list } = studentsQuery.data;
+      setStudents(list);
+      const map = new Map<string, SessionStudent>();
+      list.forEach((student) => {
+        map.set(student.id, student);
+      });
+      studentsOriginalRef.current = map;
+      setDealSessionMap((current) => {
+        let changed = false;
+        const next = new Map(current);
+        list.forEach((student) => {
+          const dealId = (student.deal_id ?? '').trim();
+          const sessionId = (student.sesion_id ?? '').trim();
+          if (dealId.length && sessionId.length && !next.has(dealId)) {
+            next.set(dealId, sessionId);
+            changed = true;
+          }
+        });
+        return changed ? next : current;
+      });
+    } else if (!studentsQuery.isLoading && !studentsQuery.isError) {
+      setStudents([]);
+      studentsOriginalRef.current = new Map();
+    }
+  }, [studentsQuery.data, studentsQuery.isError, studentsQuery.isLoading]);
+
+  const resolveDealSessionId = useCallback(
+    async (dealId: string) => {
+      const normalized = dealId.trim();
+      if (!normalized.length) {
+        return null;
+      }
+      const existing = dealSessionMap.get(normalized);
+      if (existing) {
+        return existing;
+      }
+      const groups = await fetchDealSessions(normalized);
+      for (const group of groups) {
+        if (!group) continue;
+        for (const session of group.sessions ?? []) {
+          const sessionId = (session?.id ?? '').trim();
+          if (!sessionId.length) continue;
+          setDealSessionMap((current) => {
+            const currentValue = current.get(normalized);
+            if (currentValue === sessionId) {
+              return current;
+            }
+            const next = new Map(current);
+            next.set(normalized, sessionId);
+            return next;
+          });
+          return sessionId;
+        }
+      }
+      return null;
+    },
+    [dealSessionMap],
+  );
+
+  const updateStudentMutation = useMutation({
+    mutationFn: ({
+      studentId,
+      data,
+    }: {
+      studentId: string;
+      data: UpdateSessionStudentInput;
+    }) => updateSessionStudent(studentId, data),
+    onMutate: () => {
+      setStudentError(null);
+    },
+    onSuccess: (updated) => {
+      studentsOriginalRef.current.set(updated.id, updated);
+      setStudents((prev) => prev.map((student) => (student.id === updated.id ? updated : student)));
+      queryClient.setQueryData<VariantStudentsQueryData | undefined>(studentsQueryKey, (previous) => {
+        if (!previous) {
+          const byDeal: Record<string, SessionStudent[]> = {};
+          if (updated.deal_id) {
+            byDeal[updated.deal_id] = [updated];
+          }
+          return { list: [updated], byDeal } satisfies VariantStudentsQueryData;
+        }
+        const list = previous.list.map((student) => (student.id === updated.id ? updated : student));
+        const byDeal: Record<string, SessionStudent[]> = {};
+        Object.entries(previous.byDeal).forEach(([dealId, entries]) => {
+          byDeal[dealId] = entries.map((student) => (student.id === updated.id ? updated : student));
+        });
+        if (updated.deal_id && !byDeal[updated.deal_id]) {
+          byDeal[updated.deal_id] = [updated];
+        }
+        return { list, byDeal } satisfies VariantStudentsQueryData;
+      });
+    },
+    onError: (error: unknown, variables) => {
+      if (error instanceof Error) {
+        setStudentError(error.message);
+      } else {
+        setStudentError('No se pudo actualizar el alumno.');
+      }
+      const original = studentsOriginalRef.current.get(variables.studentId);
+      if (original) {
+        setStudents((prev) => prev.map((student) => (student.id === original.id ? original : student)));
+      }
+    },
+  });
+
+  const createStudentMutation = useMutation({
+    mutationFn: ({
+      dealId,
+      sessionId,
+      nombre,
+      apellido,
+      dni,
+      apto,
+    }: {
+      dealId: string;
+      sessionId: string;
+      nombre: string;
+      apellido: string;
+      dni: string;
+      apto: boolean;
+    }) =>
+      createSessionStudent({
+        dealId,
+        sessionId,
+        nombre,
+        apellido,
+        dni,
+        apto,
+      }),
+    onMutate: () => {
+      setStudentError(null);
+    },
+    onSuccess: (created) => {
+      studentsOriginalRef.current.set(created.id, created);
+      setStudents((prev) => [...prev, created]);
+      setDealSessionMap((current) => {
+        if (!created.deal_id || !created.sesion_id) {
+          return current;
+        }
+        const existing = current.get(created.deal_id);
+        if (existing === created.sesion_id) {
+          return current;
+        }
+        const next = new Map(current);
+        next.set(created.deal_id, created.sesion_id);
+        return next;
+      });
+      queryClient.setQueryData<VariantStudentsQueryData | undefined>(studentsQueryKey, (previous) => {
+        if (!previous) {
+          return {
+            list: [created],
+            byDeal: created.deal_id ? { [created.deal_id]: [created] } : {},
+          } satisfies VariantStudentsQueryData;
+        }
+        const list = [...previous.list, created];
+        const byDeal: Record<string, SessionStudent[]> = { ...previous.byDeal };
+        const dealId = created.deal_id ?? '';
+        if (dealId.length) {
+          const existing = byDeal[dealId] ?? [];
+          byDeal[dealId] = [...existing, created];
+        }
+        return { list, byDeal } satisfies VariantStudentsQueryData;
+      });
+      setNewStudent((prev) => ({
+        dealId: prev.dealId,
+        nombre: '',
+        apellido: '',
+        dni: '',
+        apto: false,
+      }));
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setStudentError(error.message);
+      } else {
+        setStudentError('No se pudo añadir el alumno.');
+      }
+    },
+  });
+
+  const deleteStudentMutation = useMutation({
+    mutationFn: (studentId: string) => deleteSessionStudent(studentId),
+    onMutate: (studentId: string) => {
+      setStudentError(null);
+      setDeletingStudentId(studentId);
+      const student = studentsOriginalRef.current.get(studentId) ?? null;
+      return { student };
+    },
+    onSuccess: (_data, studentId, context) => {
+      studentsOriginalRef.current.delete(studentId);
+      setStudents((prev) => prev.filter((student) => student.id !== studentId));
+      queryClient.setQueryData<VariantStudentsQueryData | undefined>(studentsQueryKey, (previous) => {
+        if (!previous) return previous;
+        const list = previous.list.filter((student) => student.id !== studentId);
+        const byDeal: Record<string, SessionStudent[]> = {};
+        Object.entries(previous.byDeal).forEach(([dealId, entries]) => {
+          byDeal[dealId] = entries.filter((student) => student.id !== studentId);
+        });
+        if (context?.student?.deal_id && !(context.student.deal_id in byDeal)) {
+          byDeal[context.student.deal_id] = [];
+        }
+        return { list, byDeal } satisfies VariantStudentsQueryData;
+      });
+      setDeletingStudentId(null);
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setStudentError(error.message);
+      } else {
+        setStudentError('No se pudo eliminar el alumno.');
+      }
+      setDeletingStudentId(null);
+    },
+  });
+
+  const handleStudentFieldChange = useCallback(
+    (studentId: string, field: 'nombre' | 'apellido' | 'dni', value: string) => {
+      setStudents((prev) =>
+        prev.map((student) => (student.id === studentId ? { ...student, [field]: value } : student)),
+      );
+      setStudentError(null);
+    },
+    [],
+  );
+
+  const handleStudentFieldBlur = useCallback(
+    (studentId: string, field: 'nombre' | 'apellido' | 'dni') => {
+      const current = students.find((student) => student.id === studentId);
+      const original = studentsOriginalRef.current.get(studentId);
+      if (!current || !original) {
+        return;
+      }
+      const currentValue = (current as Record<typeof field, string>)[field] ?? '';
+      const originalValue = (original as Record<typeof field, string>)[field] ?? '';
+      if (currentValue === originalValue) {
+        return;
+      }
+      const payload = { [field]: currentValue } as UpdateSessionStudentInput;
+      updateStudentMutation.mutate({ studentId, data: payload });
+    },
+    [students, updateStudentMutation],
+  );
+
+  const handleStudentAptoToggle = useCallback(
+    (studentId: string, checked: boolean) => {
+      setStudents((prev) =>
+        prev.map((student) => (student.id === studentId ? { ...student, apto: checked } : student)),
+      );
+      const original = studentsOriginalRef.current.get(studentId);
+      if (original && original.apto === checked) {
+        return;
+      }
+      updateStudentMutation.mutate({ studentId, data: { apto: checked } });
+    },
+    [updateStudentMutation],
+  );
+
+  const handleStudentDelete = useCallback(
+    (studentId: string) => {
+      if (typeof window !== 'undefined') {
+        const confirmed = window.confirm('¿Eliminar este alumno?');
+        if (!confirmed) {
+          return;
+        }
+      }
+      deleteStudentMutation.mutate(studentId);
+    },
+    [deleteStudentMutation],
+  );
+
+  const handleNewStudentFieldChange = useCallback(
+    (field: 'dealId' | 'nombre' | 'apellido' | 'dni', value: string) => {
+      setNewStudent((prev) => ({ ...prev, [field]: value }));
+      setStudentError(null);
+    },
+    [],
+  );
+
+  const handleNewStudentAptoChange = useCallback((checked: boolean) => {
+    setNewStudent((prev) => ({ ...prev, apto: checked }));
+    setStudentError(null);
+  }, []);
+
+  const handleNewStudentSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const dealId = newStudent.dealId.trim();
+      const nombre = newStudent.nombre.trim();
+      const apellido = newStudent.apellido.trim();
+      const dni = newStudent.dni.trim();
+      if (!dealId.length) {
+        setStudentError('Selecciona la empresa del alumn@.');
+        return;
+      }
+      if (!nombre.length || !apellido.length || !dni.length) {
+        setStudentError('Nombre, apellidos y DNI son obligatorios.');
+        return;
+      }
+      try {
+        let sessionId = dealSessionMap.get(dealId) ?? null;
+        if (!sessionId) {
+          sessionId = await resolveDealSessionId(dealId);
+        }
+        if (!sessionId) {
+          setStudentError('No se encontró una sesión asociada a la empresa seleccionada.');
+          return;
+        }
+        createStudentMutation.mutate({
+          dealId,
+          sessionId,
+          nombre,
+          apellido,
+          dni,
+          apto: newStudent.apto,
+        });
+      } catch (error: unknown) {
+        if (error instanceof Error) {
+          setStudentError(error.message);
+        } else {
+          setStudentError('No se pudo determinar la sesión para el nuevo alumno.');
+        }
+      }
+    },
+    [createStudentMutation, dealSessionMap, newStudent, resolveDealSessionId],
+  );
+
+  const studentCount = useMemo(() => {
+    if (students.length) {
+      return students.length;
+    }
+    const count = typeof variant.studentCount === 'number' ? variant.studentCount : 0;
+    return count > 0 ? count : variant.students.length;
+  }, [students.length, variant.studentCount, variant.students.length]);
+
   const organizationList = useMemo(() => {
+    const names = new Set<string>();
+    if (students.length) {
+      students.forEach((student) => {
+        const dealId = (student.deal_id ?? '').trim();
+        if (!dealId.length) return;
+        const name = (dealMetadata[dealId]?.organizationName ?? '').trim();
+        if (name.length) {
+          names.add(name);
+        }
+      });
+      if (names.size) {
+        return Array.from(names);
+      }
+    }
     if (variant.organizationNames.length) {
       return variant.organizationNames;
     }
-    const set = new Set<string>();
     variant.students.forEach((student) => {
       const name = (student.organizationName ?? '').trim();
       if (name.length) {
-        set.add(name);
+        names.add(name);
       }
     });
-    return Array.from(set);
-  }, [variant.organizationNames, variant.students]);
-
-  const studentCount = useMemo(() => {
-    const count = typeof variant.studentCount === 'number' ? variant.studentCount : 0;
-    return count > 0 ? count : variant.students.length;
-  }, [variant.studentCount, variant.students.length]);
+    return Array.from(names);
+  }, [dealMetadata, students, variant.organizationNames, variant.students]);
 
   const sortedStudents = useMemo(() => {
-    return variant.students.slice().sort((a, b) => {
-      const orgA = (a.organizationName ?? '').toLowerCase();
-      const orgB = (b.organizationName ?? '').toLowerCase();
+    return students.slice().sort((a, b) => {
+      const orgA = (dealMetadata[a.deal_id ?? '']?.organizationName ?? '').toLowerCase();
+      const orgB = (dealMetadata[b.deal_id ?? '']?.organizationName ?? '').toLowerCase();
       if (orgA && orgB) {
         const compare = orgA.localeCompare(orgB, 'es');
         if (compare !== 0) return compare;
@@ -2021,7 +2458,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
 
       return a.id.localeCompare(b.id, 'es');
     });
-  }, [variant.students]);
+  }, [dealMetadata, students]);
 
   return (
     <Card className="shadow-sm border-0">
@@ -2063,40 +2500,220 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
 
             <div>
               <h5 className="fw-semibold mb-3">Alumnos</h5>
-              <Table responsive bordered hover size="sm">
-                <thead className="table-light">
-                  <tr>
-                    <th>Presupuesto</th>
-                    <th>Empresa</th>
-                    <th>FUNDAE</th>
-                    <th>Nombre</th>
-                    <th>Apellidos</th>
-                    <th>DNI</th>
-                    <th className="text-center">Apto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedStudents.length ? (
-                    sortedStudents.map((student) => (
-                      <tr key={student.id}>
-                        <td>{student.dealId}</td>
-                        <td>{student.organizationName ?? '—'}</td>
-                        <td>{student.fundaeLabel ?? '—'}</td>
-                        <td>{student.nombre ?? '—'}</td>
-                        <td>{student.apellido ?? '—'}</td>
-                        <td>{student.dni ?? '—'}</td>
-                        <td className="text-center">{student.apto ? 'Sí' : 'No'}</td>
-                      </tr>
-                    ))
-                  ) : (
+              {studentError ? <Alert variant="danger">{studentError}</Alert> : null}
+              {studentsQuery.isError ? (
+                <Alert variant="danger">No se pudieron cargar los alumnos de las organizaciones.</Alert>
+              ) : null}
+              {studentsQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" role="status" />
+                  <span>Cargando alumnos…</span>
+                </div>
+              ) : (
+                <Table responsive bordered hover size="sm">
+                  <thead className="table-light">
                     <tr>
-                      <td colSpan={7} className="text-center text-muted">
-                        No hay alumnos registrados para esta variante.
-                      </td>
+                      <th>Presupuesto</th>
+                      <th>Empresa</th>
+                      <th>FUNDAE</th>
+                      <th>Nombre</th>
+                      <th>Apellidos</th>
+                      <th>DNI</th>
+                      <th className="text-center">Apto</th>
+                      <th className="text-center">Acciones</th>
                     </tr>
-                  )}
-                </tbody>
-              </Table>
+                  </thead>
+                  <tbody>
+                    {sortedStudents.length ? (
+                      sortedStudents.map((student) => {
+                        const dealId = student.deal_id ?? '';
+                        const organizationName = (dealMetadata[dealId]?.organizationName ?? '').trim();
+                        const fundaeLabel = (dealMetadata[dealId]?.fundaeLabel ?? '').trim();
+                        const isDeleting = deleteStudentMutation.isPending && deletingStudentId === student.id;
+                        return (
+                          <tr key={student.id}>
+                            <td>{student.deal_id}</td>
+                            <td>{organizationName.length ? organizationName : '—'}</td>
+                            <td>{fundaeLabel.length ? fundaeLabel : '—'}</td>
+                            <td>
+                              <Form.Control
+                                type="text"
+                                value={student.nombre}
+                                onChange={(event) =>
+                                  handleStudentFieldChange(student.id, 'nombre', event.target.value)
+                                }
+                                onBlur={() => handleStudentFieldBlur(student.id, 'nombre')}
+                                disabled={updateStudentMutation.isPending}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="text"
+                                value={student.apellido}
+                                onChange={(event) =>
+                                  handleStudentFieldChange(student.id, 'apellido', event.target.value)
+                                }
+                                onBlur={() => handleStudentFieldBlur(student.id, 'apellido')}
+                                disabled={updateStudentMutation.isPending}
+                              />
+                            </td>
+                            <td>
+                              <Form.Control
+                                type="text"
+                                value={student.dni}
+                                onChange={(event) =>
+                                  handleStudentFieldChange(student.id, 'dni', event.target.value)
+                                }
+                                onBlur={() => handleStudentFieldBlur(student.id, 'dni')}
+                                disabled={updateStudentMutation.isPending}
+                              />
+                            </td>
+                            <td className="text-center">
+                              <Form.Check
+                                type="checkbox"
+                                checked={Boolean(student.apto)}
+                                onChange={(event) =>
+                                  handleStudentAptoToggle(student.id, event.target.checked)
+                                }
+                                disabled={updateStudentMutation.isPending}
+                              />
+                            </td>
+                            <td className="text-center">
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => handleStudentDelete(student.id)}
+                                disabled={
+                                  (deleteStudentMutation.isPending && deletingStudentId === student.id) ||
+                                  updateStudentMutation.isPending
+                                }
+                              >
+                                {isDeleting ? <Spinner animation="border" size="sm" /> : 'Eliminar'}
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="text-center text-muted">
+                          No hay alumnos registrados para esta variante.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </Table>
+              )}
+              {dealIds.length ? (
+                <>
+                  <h6 className="fw-semibold mt-4">Añadir alumn@ a la sesión</h6>
+                  <Form className="mt-2" onSubmit={handleNewStudentSubmit}>
+                    <Row className="g-2 align-items-end">
+                      <Col xs={12} md={3}>
+                        <Form.Group controlId={`variant-${variant.variantId}-new-student-deal`}>
+                          <Form.Label>Empresa</Form.Label>
+                          <Form.Select
+                            value={newStudent.dealId}
+                            onChange={(event) =>
+                              handleNewStudentFieldChange('dealId', event.target.value)
+                            }
+                            disabled={createStudentMutation.isPending}
+                            required
+                          >
+                            <option value="">Selecciona empresa</option>
+                            {dealIds.map((dealId) => {
+                              const name = (dealMetadata[dealId]?.organizationName ?? '').trim();
+                              return (
+                                <option key={dealId} value={dealId}>
+                                  {name.length ? `${name} · ${dealId}` : dealId}
+                                </option>
+                              );
+                            })}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} md={3}>
+                        <Form.Group
+                          controlId={`variant-${variant.variantId}-new-student-nombre`}
+                        >
+                          <Form.Label>Nombre</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={newStudent.nombre}
+                            onChange={(event) =>
+                              handleNewStudentFieldChange('nombre', event.target.value)
+                            }
+                            placeholder="Nombre"
+                            disabled={createStudentMutation.isPending}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} md={3}>
+                        <Form.Group
+                          controlId={`variant-${variant.variantId}-new-student-apellido`}
+                        >
+                          <Form.Label>Apellidos</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={newStudent.apellido}
+                            onChange={(event) =>
+                              handleNewStudentFieldChange('apellido', event.target.value)
+                            }
+                            placeholder="Apellidos"
+                            disabled={createStudentMutation.isPending}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} md={2}>
+                        <Form.Group controlId={`variant-${variant.variantId}-new-student-dni`}>
+                          <Form.Label>DNI</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={newStudent.dni}
+                            onChange={(event) =>
+                              handleNewStudentFieldChange('dni', event.target.value)
+                            }
+                            placeholder="DNI"
+                            disabled={createStudentMutation.isPending}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} md="auto">
+                        <Form.Group
+                          controlId={`variant-${variant.variantId}-new-student-apto`}
+                          className="mb-0"
+                        >
+                          <Form.Check
+                            type="checkbox"
+                            label="Apto"
+                            checked={newStudent.apto}
+                            onChange={(event) => handleNewStudentAptoChange(event.target.checked)}
+                            disabled={createStudentMutation.isPending}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} md="auto">
+                        <Button type="submit" disabled={createStudentMutation.isPending}>
+                          {createStudentMutation.isPending ? (
+                            <>
+                              <Spinner
+                                as="span"
+                                animation="border"
+                                size="sm"
+                                role="status"
+                                aria-hidden="true"
+                              />{' '}
+                              Guardando…
+                            </>
+                          ) : (
+                            'Añadir alumn@'
+                          )}
+                        </Button>
+                      </Col>
+                    </Row>
+                  </Form>
+                </>
+              ) : null}
             </div>
 
             {dealsWithKeys.length ? (
