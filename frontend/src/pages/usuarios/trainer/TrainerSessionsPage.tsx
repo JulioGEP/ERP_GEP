@@ -1857,7 +1857,7 @@ export default function TrainerSessionsPage() {
         </Card>
       ) : null}
 
-      {selectedEntry && !companyAndServiceSessions.length ? (
+      {selectedEntry && !companyAndServiceSessions.length && !variants.length ? (
         <Card className="shadow-sm border-0">
           <Card.Body>
             <p className="text-muted mb-0">
