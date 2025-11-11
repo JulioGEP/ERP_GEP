@@ -38,7 +38,6 @@ import { SessionsAccordionServices } from './sessions/SessionsAccordionServices'
 import type { DealEditablePatch } from '../api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../../types/deal';
 import { buildFieldTooltip } from '../../../utils/fieldTooltip';
-import { filterDealNotesForDisplay } from '../../../utils/dealNotes';
 import {
   FOLLOW_UP_FIELDS,
   isAffirmativeLabel,
@@ -574,10 +573,7 @@ export function BudgetDetailModalServices({
   }, [deal, summary]);
 
   const detailProducts = detailView.products;
-  const detailNotes = useMemo(
-    () => filterDealNotesForDisplay(detailView.notes),
-    [detailView.notes],
-  );
+  const detailNotes = detailView.notes;
   const documents = deal?.documents ?? EMPTY_DOCUMENTS;
   const driveFolderLink = useMemo(() => {
     for (const document of documents) {
