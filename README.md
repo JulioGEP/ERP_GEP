@@ -9,6 +9,7 @@ Plataforma interna para gestionar presupuestos, planificación de formaciones y 
 - [Backend: funciones y librerías compartidas](#backend-funciones-y-librerías-compartidas)
 - [Frontend: organización y flujo de la aplicación](#frontend-organización-y-flujo-de-la-aplicación)
 - [Datos y Prisma](#datos-y-prisma)
+- [Audit Log](#audit-log)
 - [Integraciones externas](#integraciones-externas)
 - [Requisitos y configuración de entorno](#requisitos-y-configuración-de-entorno)
 - [Puesta en marcha local](#puesta-en-marcha-local)
@@ -112,6 +113,15 @@ El esquema `prisma/schema.prisma` modela las entidades principales:
 - **Formación abierta y certificados**: tablas auxiliares para plantillas, cursos y variantes utilizadas en WooCommerce.
 
 Prisma genera automáticamente el cliente tipado en `node_modules/.prisma/client` mediante `npm run generate` o durante el `postinstall` del proyecto.
+
+## Audit Log
+El backend incorpora una tabla de auditoría (`audit_log`) que registra las operaciones de negocio relevantes (por ejemplo, actualización de deals o creación de sesiones). Cada evento almacena quién ejecutó la acción, el tipo de entidad afectada y un snapshot JSON con los cambios más relevantes para poder reconstruir el historial.
+
+### Cómo registrar nuevas acciones
+- Importa el helper `logAudit` desde `backend/functions/_shared/audit-log` y llámalo después de completar la operación principal.
+- El helper recibe `userId`, `action`, `entityType`, `entityId`, `before` y `after` (JSON). Si la escritura del log falla, captura el error y no interrumpe la respuesta principal.
+- Usa `resolveUserIdFromEvent(event, prisma)` para extraer el usuario autenticado desde la cookie `erp_session` en funciones que todavía no utilizan `requireAuth`.
+- Limita los snapshots a los campos relevantes que hayan cambiado para mantener los registros compactos.
 
 ## Integraciones externas
 - **Pipedrive API**: importación/sincronización de deals, notas y documentos (`deals.ts`, `deal_documents.ts`, `_shared/pipedrive.ts`).

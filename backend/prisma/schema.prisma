@@ -30,6 +30,7 @@ model users {
   trainer             trainers?
 
   auth_sessions       auth_sessions[]
+  audit_logs          audit_logs[]
 }
 
 model tokens {
@@ -42,6 +43,23 @@ model tokens {
   ip_created String?
   user_agent String?
   sesiones   sesiones  @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model audit_logs {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  user_id     String?   @db.Uuid
+  action      String
+  entity_type String
+  entity_id   String
+  before      Json?
+  after       Json?
+  user        users?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([entity_type, entity_id])
+  @@index([user_id])
+  @@index([created_at])
+  @@map("audit_log")
 }
 
 model products {

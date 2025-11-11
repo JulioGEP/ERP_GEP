@@ -2,6 +2,7 @@
 import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
+import { logAudit, resolveUserIdFromEvent } from './_shared/audit-log';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 import {
@@ -1318,6 +1319,8 @@ if (method === 'GET') {
       const fechaFinDate = fechaFinResult === undefined ? null : (fechaFinResult as Date | null);
       const salaId = toTrimmed(body.sala_id);
 
+      const auditUserIdPromise = resolveUserIdFromEvent(event, prisma);
+
       const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const deal = await tx.deals.findUnique({
           where: { deal_id: dealId },
@@ -1403,6 +1406,29 @@ if (method === 'GET') {
         });
 
         return normalizeSession(ensureSessionRelations(storedRaw as any));
+      });
+
+      const auditUserId = await auditUserIdPromise;
+      const auditAfter = {
+        id: result.id,
+        deal_id: result.deal_id,
+        deal_product_id: result.deal_product_id,
+        estado: result.estado,
+        fecha_inicio_utc: result.fecha_inicio_utc,
+        fecha_fin_utc: result.fecha_fin_utc,
+        sala_id: result.sala_id,
+        direccion: result.direccion,
+        trainer_ids: result.trainer_ids,
+        unidad_movil_ids: result.unidad_movil_ids,
+      };
+
+      await logAudit({
+        userId: auditUserId,
+        action: 'session.created',
+        entityType: 'session',
+        entityId: result.id,
+        before: null,
+        after: auditAfter as Prisma.InputJsonValue,
       });
 
       return successResponse({ session: result }, 201);
