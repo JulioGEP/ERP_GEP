@@ -1,7 +1,7 @@
 // frontend/src/features/recursos/api.ts
 import { API_BASE, ApiError } from "../../api/client";
-import type { Trainer } from "../../types/trainer";
-import { SEDE_OPTIONS } from "./trainers.constants";
+import type { Trainer, TrainerDocument } from "../../types/trainer";
+import { SEDE_OPTIONS, type TrainerDocumentTypeValue } from "./trainers.constants";
 
 export type TrainerPayload = {
   trainer_id?: string | null;
@@ -31,6 +31,22 @@ type TrainerMutationResponse = {
   error_code?: string;
 };
 
+type TrainerDocumentsListResponse = {
+  ok: boolean;
+  documents?: unknown;
+  drive_folder_web_view_link?: unknown;
+  message?: string;
+  error_code?: string;
+};
+
+type TrainerDocumentMutationResponse = {
+  ok: boolean;
+  document?: unknown;
+  drive_folder_web_view_link?: unknown;
+  message?: string;
+  error_code?: string;
+};
+
 function parseJson(text: string): any {
   if (!text) return {};
   try {
@@ -38,6 +54,45 @@ function parseJson(text: string): any {
   } catch (error) {
     throw new ApiError("INVALID_RESPONSE", "Respuesta JSON inválida del servidor");
   }
+}
+
+function normalizeTrainerDocument(row: any): TrainerDocument {
+  if (!row || typeof row !== "object") {
+    throw new ApiError("INVALID_RESPONSE", "Formato de documento de formador no válido");
+  }
+
+  const document: TrainerDocument = {
+    id: String(row.id ?? row.document_id ?? ""),
+    trainer_id: String(row.trainer_id ?? ""),
+    document_type: String(row.document_type ?? row.type ?? ""),
+    document_type_label: row.document_type_label ?? row.documentTypeLabel ?? null,
+    file_name: row.file_name ?? row.fileName ?? null,
+    original_file_name: row.original_file_name ?? row.originalFileName ?? null,
+    mime_type: row.mime_type ?? row.mimeType ?? null,
+    file_size:
+      typeof row.file_size === "number"
+        ? row.file_size
+        : typeof row.fileSize === "number"
+          ? row.fileSize
+          : null,
+    drive_file_id: row.drive_file_id ?? row.driveFileId ?? null,
+    drive_file_name: row.drive_file_name ?? row.driveFileName ?? null,
+    drive_web_view_link: row.drive_web_view_link ?? row.driveWebViewLink ?? null,
+    uploaded_at:
+      row.uploaded_at instanceof Date
+        ? row.uploaded_at.toISOString()
+        : row.uploaded_at ?? null,
+    created_at:
+      row.created_at instanceof Date
+        ? row.created_at.toISOString()
+        : row.created_at ?? null,
+    updated_at:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : row.updated_at ?? null,
+  };
+
+  return document;
 }
 
 function normalizeTrainer(row: any): Trainer {
@@ -177,4 +232,67 @@ export async function updateTrainer(trainerId: string, payload: TrainerPayload):
   })) as TrainerMutationResponse;
 
   return normalizeTrainer(json.trainer);
+}
+
+export async function fetchTrainerDocuments(trainerId: string): Promise<{
+  documents: TrainerDocument[];
+  driveFolderWebViewLink: string | null;
+}> {
+  if (!trainerId) {
+    throw new ApiError("VALIDATION_ERROR", "trainerId es obligatorio");
+  }
+
+  const url = `${API_BASE}/trainer_documents?trainerId=${encodeURIComponent(trainerId)}`;
+  const json = (await requestJson(url)) as TrainerDocumentsListResponse;
+  const rows = Array.isArray(json.documents) ? json.documents : [];
+
+  const documents = rows.map((row) => normalizeTrainerDocument(row));
+  const linkValue = json.drive_folder_web_view_link;
+  const driveFolderWebViewLink =
+    typeof linkValue === "string" && linkValue.trim().length ? linkValue : null;
+
+  return { documents, driveFolderWebViewLink };
+}
+
+export async function uploadTrainerDocument(input: {
+  trainerId: string;
+  documentType: TrainerDocumentTypeValue;
+  fileName: string;
+  mimeType?: string | null;
+  fileSize?: number | null;
+  contentBase64: string;
+}): Promise<{ document: TrainerDocument; driveFolderWebViewLink: string | null }> {
+  const body = {
+    trainer_id: input.trainerId,
+    document_type: input.documentType,
+    file: {
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      fileSize: input.fileSize ?? undefined,
+      contentBase64: input.contentBase64,
+    },
+  };
+
+  const json = (await requestJson(`${API_BASE}/trainer_documents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })) as TrainerDocumentMutationResponse;
+
+  const document = normalizeTrainerDocument(json.document);
+  const linkValue = json.drive_folder_web_view_link;
+  const driveFolderWebViewLink =
+    typeof linkValue === "string" && linkValue.trim().length ? linkValue : null;
+
+  return { document, driveFolderWebViewLink };
+}
+
+export async function deleteTrainerDocument(documentId: string): Promise<void> {
+  if (!documentId) {
+    throw new ApiError("VALIDATION_ERROR", "documentId es obligatorio");
+  }
+
+  await requestJson(`${API_BASE}/trainer_documents/${encodeURIComponent(documentId)}`, {
+    method: "DELETE",
+  });
 }

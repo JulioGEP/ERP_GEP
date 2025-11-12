@@ -240,10 +240,32 @@ model trainers {
   availability     trainer_availability[]
   time_logs        trainer_session_time_logs[]
   extra_costs      trainer_extra_costs[]
+  documents        trainer_documents[]
 
   @@index([apellido])
   @@index([especialidad])
   @@unique([user_id])
+}
+
+model trainer_documents {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  trainer_id         String
+  document_type      String   @db.VarChar(32)
+  file_name          String   @db.VarChar(255)
+  original_file_name String?  @db.VarChar(255)
+  mime_type          String?  @db.VarChar(191)
+  file_size          Int?
+  drive_file_id      String?  @db.VarChar(128)
+  drive_file_name    String   @db.VarChar(255)
+  drive_web_view_link String?
+  uploaded_at        DateTime @default(now()) @db.Timestamptz(6)
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  trainer trainers @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
+
+  @@index([trainer_id], map: "idx_trainer_documents_trainer_id")
+  @@map("trainer_documents")
 }
 
 model trainer_availability {
