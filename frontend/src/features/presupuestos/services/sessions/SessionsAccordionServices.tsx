@@ -157,7 +157,6 @@ function SessionDocumentsAccordionItem({
   initialDriveUrl?: string | null;
 }) {
   const qc = useQueryClient();
-  const { userId, userName } = useCurrentUserIdentity();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [updatingDocumentId, setUpdatingDocumentId] = useState<string | null>(null);
@@ -193,7 +192,6 @@ function SessionDocumentsAccordionItem({
         sessionId,
         files: input.files,
         shareWithTrainer: input.shareWithTrainer,
-        user: { id: userId, name: userName },
       }),
   });
 
@@ -538,7 +536,6 @@ function SessionDocumentsAccordionItem({
                 <tr>
                   <th>Nombre</th>
                   <th>Tipo</th>
-                  <th>Autor</th>
                   <th>Fecha de alta</th>
                   <th>Enlace Drive</th>
                   <th className="text-center">Compartir con formador/a</th>
@@ -550,7 +547,6 @@ function SessionDocumentsAccordionItem({
                   const displayName = (doc.drive_file_name ?? '').trim() || 'Documento';
                   const typeLabel = (doc.file_type ?? '').toUpperCase() || '—';
                   const driveLink = (doc.drive_web_view_link ?? '').trim();
-                  const authorLabel = (doc.author ?? '').trim() || '—';
                   const isUpdating = updateSharePending && updatingDocumentId === doc.id;
                   const isDeleting = deletePending && deletingDocumentId === doc.id;
 
@@ -558,7 +554,6 @@ function SessionDocumentsAccordionItem({
                     <tr key={doc.id}>
                       <td className="align-middle">{displayName}</td>
                       <td className="align-middle">{typeLabel}</td>
-                      <td className="align-middle">{authorLabel}</td>
                       <td className="align-middle">{formatAddedAt(doc.added_at)}</td>
                       <td className="align-middle">
                         {driveLink ? (

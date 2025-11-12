@@ -84,7 +84,6 @@ export type SessionDocument = {
   file_type: string | null;
   compartir_formador: boolean;
   trainer_expense: boolean;
-  author: string | null;
   added_at: string | null;
   updated_at: string | null;
   drive_file_name: string | null;
@@ -789,7 +788,6 @@ function normalizeSessionDocument(raw: any): SessionDocument {
   const fileType = toStringValue(raw?.file_type);
   const driveFileName = toStringValue(raw?.drive_file_name);
   const driveLink = toStringValue(raw?.drive_web_view_link);
-  const author = toStringValue(raw?.author);
   const createdAt = toStringValue(raw?.added_at ?? raw?.created_at);
   const updatedAt = toStringValue(raw?.updated_at);
 
@@ -802,7 +800,6 @@ function normalizeSessionDocument(raw: any): SessionDocument {
     trainer_expense: Boolean(
       raw?.trainer_expense ?? raw?.trainerExpense ?? raw?.es_gasto_formador ?? raw?.gasto_formador,
     ),
-    author: author ?? null,
     added_at: createdAt ?? null,
     updated_at: updatedAt ?? null,
     drive_file_name: driveFileName ?? null,
@@ -1910,7 +1907,6 @@ export async function uploadSessionDocuments(params: {
   trainerExpense?: boolean;
   trainerName?: string | null;
   expenseFolderName?: string | null;
-  user?: { id?: string | null; name?: string | null };
 }): Promise<SessionDocumentsPayload> {
   const normalizedDealId = String(params.dealId ?? '').trim();
   const normalizedSessionId = String(params.sessionId ?? '').trim();
@@ -1947,15 +1943,8 @@ export async function uploadSessionDocuments(params: {
     })),
   );
 
-  const headers: Record<string, string> = {};
-  const userId = typeof params.user?.id === 'string' ? params.user.id.trim() : '';
-  const userName = typeof params.user?.name === 'string' ? params.user.name.trim() : '';
-  if (userId.length) headers['X-User-Id'] = userId;
-  if (userName.length) headers['X-User-Name'] = userName;
-
   const data = await request(`/session_documents`, {
     method: 'POST',
-    headers,
     body: JSON.stringify({
       deal_id: normalizedDealId,
       sesion_id: normalizedSessionId,
