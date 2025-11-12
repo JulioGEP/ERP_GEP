@@ -27,6 +27,13 @@ const SESSION_ESTADOS: SessionEstado[] = [
 
 export type SessionTrainerInviteStatus = 'NOT_SENT' | 'PENDING' | 'CONFIRMED' | 'DECLINED';
 
+export type SessionTrainerInviteSummary = {
+  trainer_id: string | null;
+  status: TrainerInviteStatus;
+  sent_at: string | null;
+  responded_at: string | null;
+};
+
 export type SessionDTO = {
   id: string;
   deal_id: string;
@@ -41,6 +48,7 @@ export type SessionDTO = {
   trainer_ids: string[];
   unidad_movil_ids: string[];
   trainer_invite_status: SessionTrainerInviteStatus;
+  trainer_invites: SessionTrainerInviteSummary[];
 };
 
 export type SessionGroupDTO = {
@@ -782,6 +790,14 @@ function normalizeSession(row: any): SessionDTO {
   const trainer_ids = toStringArray(row?.trainer_ids);
   const unidad_movil_ids = toStringArray(row?.unidad_movil_ids);
   const trainer_invite_status = toSessionTrainerInviteStatus(row?.trainer_invite_status);
+  const trainer_invites = (Array.isArray(row?.trainer_invites) ? row.trainer_invites : []).map(
+    (invite: any): SessionTrainerInviteSummary => ({
+      trainer_id: toStringValue(invite?.trainer_id) ?? null,
+      status: normalizeTrainerInviteStatus(invite?.status),
+      sent_at: toStringValue(invite?.sent_at) ?? null,
+      responded_at: toStringValue(invite?.responded_at) ?? null,
+    }),
+  );
 
   return {
     id,
@@ -797,6 +813,7 @@ function normalizeSession(row: any): SessionDTO {
     trainer_ids,
     unidad_movil_ids,
     trainer_invite_status,
+    trainer_invites,
   };
 }
 

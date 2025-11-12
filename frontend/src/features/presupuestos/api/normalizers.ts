@@ -386,6 +386,11 @@ export function normalizeDealDocument(raw: any): DealDocument {
 }
 
 export function normalizeSession(row: any): SessionDTO {
+  const invitesSource = Array.isArray(row?.trainer_invites)
+    ? row.trainer_invites
+    : Array.isArray(row?.trainerInvites)
+    ? row.trainerInvites
+    : [];
   return {
     id: toStringValue(row?.id) ?? '',
     deal_id: toStringValue(row?.deal_id ?? row?.dealId) ?? '',
@@ -400,6 +405,12 @@ export function normalizeSession(row: any): SessionDTO {
     trainer_ids: sanitizeStringArray(row?.trainer_ids) ?? [],
     unidad_movil_ids: sanitizeStringArray(row?.unidad_movil_ids) ?? [],
     trainer_invite_status: toSessionTrainerInviteStatus(row?.trainer_invite_status),
+    trainer_invites: invitesSource.map((invite: any) => ({
+      trainer_id: toStringValue(invite?.trainer_id ?? invite?.trainerId) ?? null,
+      status: normalizeTrainerInviteStatus(invite?.status),
+      sent_at: toStringValue(invite?.sent_at ?? invite?.sentAt) ?? null,
+      responded_at: toStringValue(invite?.responded_at ?? invite?.respondedAt) ?? null,
+    })),
   } satisfies SessionDTO;
 }
 

@@ -127,6 +127,7 @@ type TrainerInviteStatusValue = 'PENDING' | 'CONFIRMED' | 'DECLINED';
 type SessionTrainerInviteSummaryStatus = 'NOT_SENT' | TrainerInviteStatusValue;
 
 type SessionTrainerInviteLink = {
+  trainer_id: string | null;
   status: TrainerInviteStatusValue;
   sent_at: Date | string | null;
   responded_at: Date | string | null;
@@ -220,11 +221,17 @@ function normalizeTrainerInviteStatusValue(value: unknown): TrainerInviteStatusV
 
 function normalizeSessionTrainerInviteLink(link: any): SessionTrainerInviteLink {
   if (!link || typeof link !== 'object') {
-    return { status: 'PENDING', sent_at: null, responded_at: null };
+    return { trainer_id: null, status: 'PENDING', sent_at: null, responded_at: null };
   }
 
-  const record = link as { status?: unknown; sent_at?: Date | string | null; responded_at?: Date | string | null };
+  const record = link as {
+    trainer_id?: unknown;
+    status?: unknown;
+    sent_at?: Date | string | null;
+    responded_at?: Date | string | null;
+  };
   return {
+    trainer_id: record?.trainer_id ? String(record.trainer_id) : null,
     status: normalizeTrainerInviteStatusValue(record.status),
     sent_at: record.sent_at ?? null,
     responded_at: record.responded_at ?? null,
@@ -233,14 +240,28 @@ function normalizeSessionTrainerInviteLink(link: any): SessionTrainerInviteLink 
 
 function resolveTrainerInviteSummaryStatus(
   invites: SessionTrainerInviteLink[] | null | undefined,
+  trainerIds?: string[] | null,
 ): SessionTrainerInviteSummaryStatus {
   if (!Array.isArray(invites) || invites.length === 0) {
     return 'NOT_SENT';
   }
-  if (invites.some((invite) => invite.status === 'DECLINED')) {
+  const normalizedIds = Array.isArray(trainerIds)
+    ? new Set(trainerIds.map((id) => (typeof id === 'string' ? id.trim() : '')).filter((id) => id.length))
+    : null;
+  const relevantInvites = normalizedIds
+    ? invites.filter((invite) => {
+        const trainerId = typeof invite.trainer_id === 'string' ? invite.trainer_id.trim() : '';
+        return trainerId.length ? normalizedIds.has(trainerId) : false;
+      })
+    : invites;
+
+  if (relevantInvites.length === 0) {
+    return 'NOT_SENT';
+  }
+  if (relevantInvites.some((invite) => invite.status === 'DECLINED')) {
     return 'DECLINED';
   }
-  if (invites.some((invite) => invite.status === 'CONFIRMED')) {
+  if (relevantInvites.some((invite) => invite.status === 'CONFIRMED')) {
     return 'CONFIRMED';
   }
   return 'PENDING';
@@ -424,7 +445,15 @@ function normalizeSession(row: SessionRecord) {
   const trainerIds = normalized.trainers.map((t) => t.trainer_id);
   const unidadIds = normalized.unidades.map((u) => u.unidad_id);
   const estado = resolveSessionEstado(normalized);
-  const trainerInviteStatus = resolveTrainerInviteSummaryStatus(normalized.trainer_invites);
+  const trainerInviteStatus = resolveTrainerInviteSummaryStatus(normalized.trainer_invites, trainerIds);
+  const trainerInvites = Array.isArray(normalized.trainer_invites)
+    ? normalized.trainer_invites.map((invite) => ({
+        trainer_id: invite.trainer_id ? String(invite.trainer_id) : null,
+        status: invite.status,
+        sent_at: toIsoOrNull(invite.sent_at),
+        responded_at: toIsoOrNull(invite.responded_at),
+      }))
+    : [];
   return {
     id: normalized.id,
     deal_id: normalized.deal_id,
@@ -439,6 +468,7 @@ function normalizeSession(row: SessionRecord) {
     trainer_ids: trainerIds,
     unidad_movil_ids: unidadIds,
     trainer_invite_status: trainerInviteStatus,
+    trainer_invites: trainerInvites,
   };
 }
 
@@ -842,7 +872,7 @@ async function fetchSessionsByProduct(
         sesion_trainers: { select: { trainer_id: true } },
         sesion_unidades: { select: { unidad_movil_id: true } },
         deals: { select: { sede_label: true, pipeline_id: true } },
-        trainer_session_invites: { select: { status: true, sent_at: true, responded_at: true } },
+        trainer_session_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
       },
     }),
   ]);
@@ -1521,7 +1551,7 @@ if (method === 'GET') {
             deals: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
             sesion_unidades: { select: { unidad_movil_id: true } },
-            trainer_session_invites: { select: { status: true, sent_at: true, responded_at: true } },
+            trainer_session_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
           },
         });
 
@@ -1571,7 +1601,7 @@ if (method === 'GET') {
           deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
-          trainer_session_invites: { select: { status: true, sent_at: true, responded_at: true } },
+          trainer_session_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
         },
       });
       const storedRecord = ensureSessionRelationsOrNull(storedRaw as any);
@@ -1667,7 +1697,7 @@ if (method === 'GET') {
           deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
-          trainer_session_invites: { select: { status: true, sent_at: true, responded_at: true } },
+          trainer_session_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
         },
       });
       const refreshedRecord = ensureSessionRelationsOrNull(refreshedRaw as any);
