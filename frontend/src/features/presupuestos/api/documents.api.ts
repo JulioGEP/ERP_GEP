@@ -41,7 +41,6 @@ export async function uploadSessionDocuments(params: {
   trainerExpense?: boolean;
   trainerName?: string | null;
   expenseFolderName?: string | null;
-  user?: { id?: string | null; name?: string | null };
 }): Promise<SessionDocumentsPayload> {
   const normalizedDealId = String(params.dealId ?? '').trim();
   const normalizedSessionId = String(params.sessionId ?? '').trim();
@@ -69,12 +68,6 @@ export async function uploadSessionDocuments(params: {
     throw new ApiError('PAYLOAD_TOO_LARGE', SESSION_DOCUMENT_SIZE_LIMIT_MESSAGE, 413);
   }
 
-  const headers: Record<string, string> = {};
-  const userIdHeader = typeof params.user?.id === 'string' ? params.user.id.trim() : '';
-  const userNameHeader = typeof params.user?.name === 'string' ? params.user.name.trim() : '';
-  if (userIdHeader.length) headers['X-User-Id'] = userIdHeader;
-  if (userNameHeader.length) headers['X-User-Name'] = userNameHeader;
-
   const payloadFiles = await Promise.all(
     files.map(async (file) => ({
       fileName: file.name,
@@ -88,7 +81,6 @@ export async function uploadSessionDocuments(params: {
     `/session_documents`,
     {
       method: 'POST',
-      headers: Object.keys(headers).length ? headers : undefined,
       body: JSON.stringify({
         deal_id: normalizedDealId,
         sesion_id: normalizedSessionId,

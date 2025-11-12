@@ -156,7 +156,6 @@ function SessionDocumentsAccordionItem({
   onNotify?: (toast: ToastParams) => void;
   initialDriveUrl?: string | null;
 }) {
-  const { userId, userName } = useCurrentUserIdentity();
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [documentError, setDocumentError] = useState<string | null>(null);
@@ -193,7 +192,6 @@ function SessionDocumentsAccordionItem({
         sessionId,
         files: input.files,
         shareWithTrainer: input.shareWithTrainer,
-        user: { id: userId, name: userName },
       }),
   });
 
