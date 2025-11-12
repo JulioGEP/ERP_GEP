@@ -25,6 +25,7 @@ import {
   type SessionGroupDTO,
   type SessionPublicLink,
   type SessionStudent,
+  type SessionTrainerInviteStatus,
   type TrainerOption,
   type SessionEstado,
   type MobileUnitOption,
@@ -61,6 +62,15 @@ function toSessionEstadoValue(value: unknown): SessionEstado {
   return SESSION_ESTADOS.includes(normalized as SessionEstado)
     ? (normalized as SessionEstado)
     : 'BORRADOR';
+}
+
+function toSessionTrainerInviteStatus(value: unknown): SessionTrainerInviteStatus {
+  const text = toStringValue(value);
+  if (!text) return 'NOT_SENT';
+  const normalized = text.toUpperCase();
+  return normalized === 'NOT_SENT' || normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED'
+    ? (normalized as SessionTrainerInviteStatus)
+    : 'NOT_SENT';
 }
 
 function buildPersonFullName(person?: {
@@ -389,6 +399,7 @@ export function normalizeSession(row: any): SessionDTO {
     drive_url: toStringValue(row?.drive_url ?? row?.driveUrl) ?? null,
     trainer_ids: sanitizeStringArray(row?.trainer_ids) ?? [],
     unidad_movil_ids: sanitizeStringArray(row?.unidad_movil_ids) ?? [],
+    trainer_invite_status: toSessionTrainerInviteStatus(row?.trainer_invite_status),
   } satisfies SessionDTO;
 }
 

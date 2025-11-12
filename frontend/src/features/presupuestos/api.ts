@@ -25,6 +25,8 @@ const SESSION_ESTADOS: SessionEstado[] = [
   'FINALIZADA',
 ];
 
+export type SessionTrainerInviteStatus = 'NOT_SENT' | 'PENDING' | 'CONFIRMED' | 'DECLINED';
+
 export type SessionDTO = {
   id: string;
   deal_id: string;
@@ -38,6 +40,7 @@ export type SessionDTO = {
   drive_url: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
+  trainer_invite_status: SessionTrainerInviteStatus;
 };
 
 export type SessionGroupDTO = {
@@ -339,6 +342,15 @@ function toSessionEstadoValue(value: unknown): SessionEstado {
   return SESSION_ESTADOS.includes(normalized as SessionEstado)
     ? (normalized as SessionEstado)
     : 'BORRADOR';
+}
+
+function toSessionTrainerInviteStatus(value: unknown): SessionTrainerInviteStatus {
+  const text = toStringValue(value);
+  if (!text) return 'NOT_SENT';
+  const normalized = text.toUpperCase();
+  return normalized === 'NOT_SENT' || normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED'
+    ? (normalized as SessionTrainerInviteStatus)
+    : 'NOT_SENT';
 }
 
 function buildPersonFullName(person?: {
@@ -769,6 +781,7 @@ function normalizeSession(row: any): SessionDTO {
 
   const trainer_ids = toStringArray(row?.trainer_ids);
   const unidad_movil_ids = toStringArray(row?.unidad_movil_ids);
+  const trainer_invite_status = toSessionTrainerInviteStatus(row?.trainer_invite_status);
 
   return {
     id,
@@ -783,6 +796,7 @@ function normalizeSession(row: any): SessionDTO {
     drive_url: drive_url ?? null,
     trainer_ids,
     unidad_movil_ids,
+    trainer_invite_status,
   };
 }
 

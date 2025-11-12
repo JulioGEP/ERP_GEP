@@ -122,6 +122,16 @@ type SessionStudentRecord = {
   dni?: string | null;
 };
 
+type TrainerInviteStatusValue = 'PENDING' | 'CONFIRMED' | 'DECLINED';
+
+type SessionTrainerInviteSummaryStatus = 'NOT_SENT' | TrainerInviteStatusValue;
+
+type SessionTrainerInviteLink = {
+  status: TrainerInviteStatusValue;
+  sent_at: Date | string | null;
+  responded_at: Date | string | null;
+};
+
 type SessionRecord = {
   id: string;
   deal_id: string;
@@ -142,6 +152,8 @@ type SessionRecord = {
   salas?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
   _count?: { alumnos?: number | null } | null;
   alumnos?: SessionStudentRecord[] | null;
+  trainer_invites?: SessionTrainerInviteLink[] | null;
+  trainer_session_invites?: SessionTrainerInviteLink[] | null;
 };
 
 type SessionStudentResponse = {
@@ -198,11 +210,49 @@ function mapSessionStudentForResponse(
   };
 }
 
+function normalizeTrainerInviteStatusValue(value: unknown): TrainerInviteStatusValue {
+  const text = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (text === 'CONFIRMED' || text === 'DECLINED') {
+    return text;
+  }
+  return 'PENDING';
+}
+
+function normalizeSessionTrainerInviteLink(link: any): SessionTrainerInviteLink {
+  if (!link || typeof link !== 'object') {
+    return { status: 'PENDING', sent_at: null, responded_at: null };
+  }
+
+  const record = link as { status?: unknown; sent_at?: Date | string | null; responded_at?: Date | string | null };
+  return {
+    status: normalizeTrainerInviteStatusValue(record.status),
+    sent_at: record.sent_at ?? null,
+    responded_at: record.responded_at ?? null,
+  };
+}
+
+function resolveTrainerInviteSummaryStatus(
+  invites: SessionTrainerInviteLink[] | null | undefined,
+): SessionTrainerInviteSummaryStatus {
+  if (!Array.isArray(invites) || invites.length === 0) {
+    return 'NOT_SENT';
+  }
+  if (invites.some((invite) => invite.status === 'DECLINED')) {
+    return 'DECLINED';
+  }
+  if (invites.some((invite) => invite.status === 'CONFIRMED')) {
+    return 'CONFIRMED';
+  }
+  return 'PENDING';
+}
+
 function ensureSessionRelations(row: any): SessionRecord {
   if (!row || typeof row !== 'object') return row as SessionRecord;
   const record = row as SessionRecord & {
     sesion_trainers?: SessionTrainerLink[];
     sesion_unidades?: SessionUnitLink[];
+    trainer_session_invites?: SessionTrainerInviteLink[];
+    trainer_invites?: SessionTrainerInviteLink[];
   };
   if (record.deal == null && (record as any).deals !== undefined) {
     record.deal = (record as any).deals ?? null;
@@ -223,6 +273,12 @@ function ensureSessionRelations(row: any): SessionRecord {
     : Array.isArray(record.sesion_unidades)
       ? record.sesion_unidades.map((link) => normalizeSessionUnitLink(link))
       : [];
+  const invitesSource = Array.isArray(record.trainer_invites)
+    ? record.trainer_invites
+    : Array.isArray(record.trainer_session_invites)
+      ? record.trainer_session_invites
+      : [];
+  record.trainer_invites = invitesSource.map((invite) => normalizeSessionTrainerInviteLink(invite));
   return record;
 }
 
@@ -368,6 +424,7 @@ function normalizeSession(row: SessionRecord) {
   const trainerIds = normalized.trainers.map((t) => t.trainer_id);
   const unidadIds = normalized.unidades.map((u) => u.unidad_id);
   const estado = resolveSessionEstado(normalized);
+  const trainerInviteStatus = resolveTrainerInviteSummaryStatus(normalized.trainer_invites);
   return {
     id: normalized.id,
     deal_id: normalized.deal_id,
@@ -381,6 +438,7 @@ function normalizeSession(row: SessionRecord) {
     drive_url: toTrimmed(normalized.drive_url),
     trainer_ids: trainerIds,
     unidad_movil_ids: unidadIds,
+    trainer_invite_status: trainerInviteStatus,
   };
 }
 
@@ -784,6 +842,7 @@ async function fetchSessionsByProduct(
         sesion_trainers: { select: { trainer_id: true } },
         sesion_unidades: { select: { unidad_movil_id: true } },
         deals: { select: { sede_label: true, pipeline_id: true } },
+        trainer_session_invites: { select: { status: true, sent_at: true, responded_at: true } },
       },
     }),
   ]);
@@ -1462,6 +1521,7 @@ if (method === 'GET') {
             deals: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
             sesion_unidades: { select: { unidad_movil_id: true } },
+            trainer_session_invites: { select: { status: true, sent_at: true, responded_at: true } },
           },
         });
 
@@ -1511,6 +1571,7 @@ if (method === 'GET') {
           deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
+          trainer_session_invites: { select: { status: true, sent_at: true, responded_at: true } },
         },
       });
       const storedRecord = ensureSessionRelationsOrNull(storedRaw as any);
@@ -1606,6 +1667,7 @@ if (method === 'GET') {
           deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
+          trainer_session_invites: { select: { status: true, sent_at: true, responded_at: true } },
         },
       });
       const refreshedRecord = ensureSessionRelationsOrNull(refreshedRaw as any);

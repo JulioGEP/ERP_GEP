@@ -13,6 +13,8 @@ export const SESSION_ESTADOS: SessionEstado[] = [
   'FINALIZADA',
 ];
 
+export type SessionTrainerInviteStatus = 'NOT_SENT' | 'PENDING' | 'CONFIRMED' | 'DECLINED';
+
 export type SessionDTO = {
   id: string;
   deal_id: string;
@@ -26,6 +28,7 @@ export type SessionDTO = {
   drive_url: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
+  trainer_invite_status: SessionTrainerInviteStatus;
 };
 
 export type SessionGroupDTO = {
