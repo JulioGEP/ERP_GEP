@@ -985,22 +985,23 @@ async function ensureUniqueSubfolder(params: {
 
 async function ensureTrainersRootFolder(params: {
   driveId: string;
-  baseFolderId: string;
+  baseFolderId?: string | null;
   createIfMissing?: boolean;
 }): Promise<string | null> {
   const sanitizedName = sanitizeName(TRAINERS_FOLDER_NAME) || TRAINERS_FOLDER_NAME;
+  const parentId = params.driveId;
 
   if (params.createIfMissing === false) {
     return findFolder({
       name: sanitizedName,
-      parentId: params.baseFolderId,
+      parentId,
       driveId: params.driveId,
     });
   }
 
   return ensureUniqueSubfolder({
     driveId: params.driveId,
-    parentId: params.baseFolderId,
+    parentId,
     folderName: sanitizedName,
     context: { scope: "trainerDocuments" },
   });
@@ -2203,8 +2204,9 @@ export async function deleteTrainerDocumentFromGoogleDrive(params: {
   });
 
   if (!baseFolderId) {
-    console.warn("[google-drive-sync] Carpeta base no encontrada al eliminar documento de formador");
-    return { fileDeleted: false };
+    console.warn("[google-drive-sync] Carpeta base no encontrada al eliminar documento de formador", {
+      trainerId,
+    });
   }
 
   const trainersRootId = await ensureTrainersRootFolder({
@@ -2305,7 +2307,9 @@ export async function getTrainerFolderWebViewLink(params: {
   }
 
   if (!baseFolderId) {
-    return null;
+    console.warn("[google-drive-sync] Carpeta base no encontrada al obtener enlace de formador", {
+      trainerId,
+    });
   }
 
   const trainersRootId = await ensureTrainersRootFolder({
