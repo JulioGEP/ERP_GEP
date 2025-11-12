@@ -52,6 +52,7 @@ export type CalendarVariantDeal = {
   fundaeLabel: string | null;
   hotelLabel: string | null;
   transporte: string | null;
+  organizationName: string | null;
 };
 
 export type CalendarVariantEvent = {
@@ -85,6 +86,7 @@ export type CalendarSession = {
   dealTitle: string | null;
   dealAddress: string | null;
   dealSedeLabel: string | null;
+  dealOrganizationName: string | null;
   dealPipelineId: string | null;
   dealCaesLabel: string | null;
   dealFundaeLabel: string | null;
@@ -496,6 +498,7 @@ function sanitizeVariantDeals(payload: any): CalendarVariantDeal[] {
       const fundaeLabel = toTrimmed(item?.fundae_label);
       const hotelLabel = toTrimmed(item?.hotel_label);
       const transporte = toTrimmed(item?.transporte);
+      const organizationName = toTrimmed(item?.organization_name ?? item?.organizationName);
 
       if (!id && !title && !pipelineId && !trainingAddress && !sedeLabel && !caesLabel && !fundaeLabel && !hotelLabel && !transporte) {
         return null;
@@ -511,6 +514,7 @@ function sanitizeVariantDeals(payload: any): CalendarVariantDeal[] {
         fundaeLabel,
         hotelLabel,
         transporte,
+        organizationName,
       } satisfies CalendarVariantDeal;
     })
     .filter((deal): deal is CalendarVariantDeal => deal !== null);
@@ -603,6 +607,7 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
         dealTitle: toOptionalString(row?.deal_title),
         dealAddress: toOptionalString(row?.deal_training_address),
         dealSedeLabel: toOptionalString(row?.deal_sede_label),
+        dealOrganizationName: toOptionalString(row?.deal_organization_name),
         dealPipelineId: toOptionalString(row?.deal_pipeline_id),
         dealCaesLabel: toOptionalString(row?.deal_caes_label),
         dealFundaeLabel: toOptionalString(row?.deal_fundae_label),
