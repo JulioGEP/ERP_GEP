@@ -1,6 +1,6 @@
 // frontend/src/features/recursos/api.ts
 import { API_BASE, ApiError } from "../../api/client";
-import type { Trainer } from "../../types/trainer";
+import type { Trainer, TrainerDocument, TrainerDocumentType } from "../../types/trainer";
 import { SEDE_OPTIONS } from "./trainers.constants";
 
 export type TrainerPayload = {
@@ -27,6 +27,20 @@ type TrainerListResponse = {
 type TrainerMutationResponse = {
   ok: boolean;
   trainer?: unknown;
+  message?: string;
+  error_code?: string;
+};
+
+type TrainerDocumentsResponse = {
+  ok: boolean;
+  documents?: unknown;
+  message?: string;
+  error_code?: string;
+};
+
+type TrainerDocumentMutationResponse = {
+  ok: boolean;
+  document?: unknown;
   message?: string;
   error_code?: string;
 };
@@ -64,6 +78,43 @@ function normalizeTrainer(row: any): Trainer {
       : [],
     created_at: createdAt,
     updated_at: updatedAt,
+  };
+}
+
+function normalizeTrainerDocument(row: any): TrainerDocument {
+  if (!row || typeof row !== "object") {
+    throw new ApiError("INVALID_RESPONSE", "Formato de documento de formador no válido");
+  }
+
+  return {
+    id: String(row.id ?? row.document_id ?? ""),
+    trainer_id: String(row.trainer_id ?? row.trainerId ?? ""),
+    document_type: String(row.document_type ?? row.documentType ?? "otros") as TrainerDocumentType,
+    document_type_label: toNullableString(row.document_type_label ?? row.documentTypeLabel) ?? String(row.document_type ?? ""),
+    file_name: String(row.file_name ?? row.fileName ?? ""),
+    original_file_name: toNullableString(row.original_file_name ?? row.originalFileName),
+    mime_type: toNullableString(row.mime_type ?? row.mimeType),
+    file_size:
+      typeof row.file_size === "number"
+        ? row.file_size
+        : Number.isFinite(Number(row.file_size))
+          ? Number(row.file_size)
+          : null,
+    drive_file_id: toNullableString(row.drive_file_id ?? row.driveFileId),
+    drive_file_name: String(row.drive_file_name ?? row.driveFileName ?? row.file_name ?? ""),
+    drive_web_view_link: toNullableString(row.drive_web_view_link ?? row.driveWebViewLink),
+    uploaded_at:
+      row.uploaded_at instanceof Date
+        ? row.uploaded_at.toISOString()
+        : toNullableString(row.uploaded_at ?? row.uploadedAt),
+    created_at:
+      row.created_at instanceof Date
+        ? row.created_at.toISOString()
+        : toNullableString(row.created_at ?? row.createdAt),
+    updated_at:
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : toNullableString(row.updated_at ?? row.updatedAt),
   };
 }
 
@@ -177,4 +228,63 @@ export async function updateTrainer(trainerId: string, payload: TrainerPayload):
   })) as TrainerMutationResponse;
 
   return normalizeTrainer(json.trainer);
+}
+
+export async function fetchTrainerDocuments(trainerId: string): Promise<TrainerDocument[]> {
+  if (!trainerId) {
+    throw new ApiError("VALIDATION_ERROR", "trainerId es obligatorio");
+  }
+
+  const json = (await requestJson(
+    `${API_BASE}/trainer_documents?trainerId=${encodeURIComponent(trainerId)}`,
+  )) as TrainerDocumentsResponse;
+
+  const rows = Array.isArray(json.documents) ? json.documents : [];
+  return rows.map((row) => normalizeTrainerDocument(row));
+}
+
+export type TrainerDocumentUploadInput = {
+  trainerId: string;
+  documentType: TrainerDocumentType;
+  fileName: string;
+  mimeType: string;
+  contentBase64: string;
+  fileSize: number;
+};
+
+export async function uploadTrainerDocument(input: TrainerDocumentUploadInput): Promise<TrainerDocument> {
+  if (!input.trainerId) {
+    throw new ApiError("VALIDATION_ERROR", "trainerId es obligatorio");
+  }
+
+  const body = {
+    trainer_id: input.trainerId,
+    document_type: input.documentType,
+    file: {
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      contentBase64: input.contentBase64,
+      fileSize: input.fileSize,
+    },
+  };
+
+  const json = (await requestJson(`${API_BASE}/trainer_documents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })) as TrainerDocumentMutationResponse;
+
+  return normalizeTrainerDocument(json.document);
+}
+
+export async function deleteTrainerDocument(params: { trainerId: string; documentId: string }): Promise<void> {
+  if (!params.trainerId || !params.documentId) {
+    throw new ApiError("VALIDATION_ERROR", "trainerId y documentId son obligatorios");
+  }
+
+  await requestJson(`${API_BASE}/trainer_documents/${encodeURIComponent(params.documentId)}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ trainer_id: params.trainerId }),
+  });
 }

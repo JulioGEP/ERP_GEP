@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Col, Form, Modal, Row, Spinner } from "react-bootstrap";
 import type { Trainer } from "../../types/trainer";
 import { SEDE_OPTIONS, type SedeOption } from "./trainers.constants";
+import { TrainerDocumentsPanel } from "./TrainerDocumentsPanel";
 
 export type TrainerFormValues = {
   name: string;
@@ -24,6 +25,7 @@ type TrainerModalProps = {
   isSaving: boolean;
   onClose: () => void;
   onSubmit: (values: TrainerFormValues) => void;
+  onNotify?: (params: { variant: "success" | "danger" | "info"; message: string }) => void;
 };
 
 const EMPTY_FORM: TrainerFormValues = {
@@ -63,6 +65,7 @@ export function TrainerModal({
   isSaving,
   onClose,
   onSubmit,
+  onNotify,
 }: TrainerModalProps) {
   const [formValues, setFormValues] = useState<TrainerFormValues>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
@@ -343,6 +346,11 @@ export function TrainerModal({
           </Button>
         </Modal.Footer>
       </Form>
+      {mode === "edit" && initialData && (
+        <div className="px-4 pb-4">
+          <TrainerDocumentsPanel trainer={initialData} onNotify={onNotify} />
+        </div>
+      )}
     </Modal>
   );
 }

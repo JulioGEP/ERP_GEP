@@ -330,6 +330,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
         isSaving={isSaving}
         onClose={handleModalClose}
         onSubmit={handleSubmit}
+        onNotify={onNotify}
       />
     </div>
   );

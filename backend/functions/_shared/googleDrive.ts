@@ -10,6 +10,7 @@ const DEFAULT_BASE_FOLDER_NAME = "Documentos ERP";
 const DEAL_DOCUMENTS_LEGACY_FOLDER_NAME = "Documentos del deal";
 const SESSION_DOCUMENTS_LEGACY_FOLDER_NAME = "Documentos del deal";
 const CERTIFICATES_FOLDER_NAME = "Certificados";
+const TRAINERS_ROOT_FOLDER_NAME = "Formadores";
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 const TOKEN_AUDIENCE = "https://oauth2.googleapis.com/token";
 const DRIVE_API_BASE = "https://www.googleapis.com/drive/v3";
@@ -116,6 +117,49 @@ function uniqueSanitizedNames(names: Array<string | null | undefined>): string[]
     result.push(sanitized);
   }
   return result;
+}
+
+function resolveTrainerId(trainer: any): string | null {
+  if (!trainer || typeof trainer !== "object") return null;
+  const rawId = (trainer as any).trainer_id ?? (trainer as any).trainerId ?? (trainer as any).id ?? null;
+  return toNonEmptyString(rawId);
+}
+
+function resolveTrainerFullName(trainer: any): string | null {
+  const firstName = toNonEmptyString((trainer as any)?.name);
+  const lastName = toNonEmptyString((trainer as any)?.apellido);
+  const parts = [firstName, lastName].filter((value): value is string => Boolean(value));
+  if (parts.length) {
+    return parts.join(" ");
+  }
+  return null;
+}
+
+function resolveTrainerFolderNames(trainer: any): { preferredName: string; legacyNames: string[] } {
+  const fullName = resolveTrainerFullName(trainer);
+  const trainerId = resolveTrainerId(trainer);
+  const dni = toNonEmptyString((trainer as any)?.dni ?? (trainer as any)?.documento_identidad);
+
+  let preferredName = sanitizeName(fullName || "") || sanitizeName(dni || "") || sanitizeName(trainerId || "") || "Sin nombre";
+
+  if (!preferredName) {
+    preferredName = "Sin nombre";
+  }
+
+  const legacyCandidates: Array<string | null> = [];
+  if (dni) {
+    legacyCandidates.push(`${preferredName} - ${dni}`);
+  }
+  if (trainerId) {
+    legacyCandidates.push(`${preferredName} - ${trainerId}`);
+  }
+  if (dni && trainerId) {
+    legacyCandidates.push(`${preferredName} - ${dni} - ${trainerId}`);
+  }
+
+  const legacyNames = uniqueSanitizedNames(legacyCandidates).filter((name) => name !== preferredName);
+
+  return { preferredName, legacyNames };
 }
 
 function resolveOrganizationFolderNames(params: {
@@ -481,6 +525,63 @@ async function ensureOrganizationFolder(params: {
   return {
     folderId: result.folderId,
     folderName: result.folderName,
+    preferredName,
+    legacyNames,
+  };
+}
+
+async function ensureTrainerFolder(params: {
+  driveId: string;
+  trainer: any;
+  createIfMissing?: boolean;
+}): Promise<
+  | {
+      folderId: string;
+      folderName: string;
+      baseFolderId: string;
+      preferredName: string;
+      legacyNames: string[];
+    }
+  | null
+> {
+  const baseFolderId = params.createIfMissing === false
+    ? await findFolder({
+        name: TRAINERS_ROOT_FOLDER_NAME,
+        parentId: params.driveId,
+        driveId: params.driveId,
+      })
+    : await ensureFolder({
+        name: TRAINERS_ROOT_FOLDER_NAME,
+        parentId: params.driveId,
+        driveId: params.driveId,
+      });
+
+  if (!baseFolderId) {
+    return null;
+  }
+
+  const { preferredName, legacyNames } = resolveTrainerFolderNames(params.trainer);
+
+  const folderResult = await ensureFolderWithCandidates({
+    driveId: params.driveId,
+    parentId: baseFolderId,
+    preferredName,
+    legacyNames,
+    createIfMissing: params.createIfMissing,
+    context: {
+      trainerId: resolveTrainerId(params.trainer),
+      trainerName: resolveTrainerFullName(params.trainer) ?? undefined,
+    },
+  });
+
+  if (!folderResult) {
+    return null;
+  }
+
+  return {
+    folderId: folderResult.folderId,
+    folderName: folderResult.folderName,
+    baseFolderId,
     preferredName,
     legacyNames,
   };
@@ -1658,6 +1759,142 @@ export async function uploadDealDocumentToGoogleDrive(params: {
     driveFileName: uploadResult.name || safeName,
     driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
   };
+}
+
+export async function uploadTrainerDocumentToGoogleDrive(params: {
+  trainer: any;
+  fileName: string;
+  mimeType?: string | null;
+  data: Buffer;
+}): Promise<{
+  driveFileId: string;
+  driveFileName: string;
+  driveWebViewLink: string | null;
+  trainerFolderWebViewLink: string | null;
+}> {
+  const driveId = resolveDriveSharedId();
+  if (!driveId) {
+    throw new Error("Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)");
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error("Credenciales de Google Drive no configuradas");
+  }
+
+  const trainerFolder = await ensureTrainerFolder({
+    driveId,
+    trainer: params.trainer,
+    createIfMissing: true,
+  });
+
+  if (!trainerFolder) {
+    throw new Error("No se pudo preparar la carpeta del formador en Drive");
+  }
+
+  const safeName = sanitizeName(params.fileName || "documento") || "documento";
+  const mimeType = params.mimeType?.trim() || "application/octet-stream";
+
+  const uploadResult = await uploadBufferToDrive({
+    parentId: trainerFolder.folderId,
+    name: safeName,
+    mimeType,
+    data: params.data,
+  });
+
+  let publicLink = uploadResult.webViewLink;
+  try {
+    publicLink = await ensureFilePublicWebViewLink(uploadResult.id);
+  } catch (err) {
+    console.warn("[google-drive-sync] No se pudo generar enlace público de documento de formador", {
+      trainerId: resolveTrainerId(params.trainer),
+      trainerName: resolveTrainerFullName(params.trainer),
+      fileId: uploadResult.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  let trainerFolderLink: string | null = null;
+  try {
+    trainerFolderLink = await ensureFilePublicWebViewLink(trainerFolder.folderId);
+  } catch (err) {
+    console.warn("[google-drive-sync] No se pudo generar enlace público de carpeta de formador", {
+      trainerId: resolveTrainerId(params.trainer),
+      trainerName: resolveTrainerFullName(params.trainer),
+      folderId: trainerFolder.folderId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  return {
+    driveFileId: uploadResult.id,
+    driveFileName: uploadResult.name || safeName,
+    driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
+    trainerFolderWebViewLink: trainerFolderLink,
+  };
+}
+
+export async function deleteTrainerDocumentFromGoogleDrive(params: {
+  trainer: any;
+  driveFileId?: string | null;
+  driveFileName?: string | null;
+}): Promise<void> {
+  const driveId = resolveDriveSharedId();
+  if (!driveId) {
+    throw new Error("Google Drive no está configurado (falta GOOGLE_DRIVE_SHARED_DRIVE_ID)");
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error("Credenciales de Google Drive no configuradas");
+  }
+
+  if (params.driveFileId) {
+    await driveDelete(params.driveFileId);
+    return;
+  }
+
+  const trainerFolder = await ensureTrainerFolder({
+    driveId,
+    trainer: params.trainer,
+    createIfMissing: false,
+  });
+
+  if (!trainerFolder) {
+    console.warn("[google-drive-sync] Carpeta de formador no encontrada al eliminar documento", {
+      trainerId: resolveTrainerId(params.trainer),
+      trainerName: resolveTrainerFullName(params.trainer),
+      driveFileName: params.driveFileName ?? null,
+    });
+    return;
+  }
+
+  let fileId: string | null = null;
+  if (params.driveFileName) {
+    try {
+      fileId = await findFileIdInFolder({
+        folderId: trainerFolder.folderId,
+        driveId,
+        name: params.driveFileName,
+      });
+    } catch (err) {
+      console.warn("[google-drive-sync] Error buscando documento de formador en Drive", {
+        trainerId: resolveTrainerId(params.trainer),
+        trainerName: resolveTrainerFullName(params.trainer),
+        folderId: trainerFolder.folderId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  if (!fileId) {
+    console.warn("[google-drive-sync] Documento de formador no encontrado para eliminar", {
+      trainerId: resolveTrainerId(params.trainer),
+      trainerName: resolveTrainerFullName(params.trainer),
+      driveFileName: params.driveFileName ?? null,
+    });
+    return;
+  }
+
+  await driveDelete(fileId);
 }
 
 export async function uploadSessionDocumentToGoogleDrive(params: {
