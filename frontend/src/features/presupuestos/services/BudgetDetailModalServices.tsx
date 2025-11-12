@@ -1171,6 +1171,7 @@ export function BudgetDetailModalServices({
                 dealAddress={defaultSessionAddress ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
+                confirmationContext="service"
               />
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>

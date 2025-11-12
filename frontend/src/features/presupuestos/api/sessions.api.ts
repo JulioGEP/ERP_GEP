@@ -21,11 +21,30 @@ import type {
   SessionDTO,
   SessionGroupDTO,
   SessionPublicLink,
+  SessionTrainerConfirmation,
   SessionEstado,
 } from '../../../api/sessions.types';
 
 async function request<T = any>(path: string, init?: RequestInit) {
   return requestJson<T>(path, init);
+}
+
+function normalizeTrainerConfirmations(input: unknown): SessionTrainerConfirmation[] {
+  if (!Array.isArray(input)) return [];
+  return (input as unknown[])
+    .map((entry) => {
+      const trainerId = typeof (entry as any)?.trainer_id === 'string' ? (entry as any).trainer_id.trim() : '';
+      if (!trainerId.length) {
+        return null;
+      }
+      const mailSentAtValue = (entry as any)?.mail_sent_at;
+      const mailSentAt =
+        typeof mailSentAtValue === 'string' && mailSentAtValue.trim().length
+          ? mailSentAtValue.trim()
+          : null;
+      return { trainer_id: trainerId, mail_sent_at: mailSentAt } satisfies SessionTrainerConfirmation;
+    })
+    .filter((entry): entry is SessionTrainerConfirmation => entry !== null);
 }
 
 export async function generateSessionsFromDeal(dealId: string): Promise<number> {
@@ -396,4 +415,40 @@ export async function deleteSessionPublicLink(
   await request(`/session_public_links?${params.toString()}`, {
     method: 'DELETE',
   });
+}
+
+export async function sendSessionTrainerConfirmationMail(params: {
+  sessionId: string;
+  context: 'company' | 'service';
+}): Promise<SessionTrainerConfirmation[]> {
+  const sessionId = String(params?.sessionId ?? '').trim();
+  if (!sessionId) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId es obligatorio');
+  }
+
+  const context = params?.context === 'company' || params?.context === 'service' ? params.context : null;
+  if (!context) {
+    throw new ApiError('VALIDATION_ERROR', 'context inválido');
+  }
+
+  const data = await request<{ trainer_confirmations?: unknown }>('/trainer-confirmations', {
+    method: 'POST',
+    body: JSON.stringify({ targetType: 'session', targetId: sessionId, context }),
+  });
+
+  return normalizeTrainerConfirmations(data?.trainer_confirmations);
+}
+
+export async function sendVariantTrainerConfirmationMail(variantId: string): Promise<SessionTrainerConfirmation[]> {
+  const normalizedId = String(variantId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'variantId es obligatorio');
+  }
+
+  const data = await request<{ trainer_confirmations?: unknown }>('/trainer-confirmations', {
+    method: 'POST',
+    body: JSON.stringify({ targetType: 'variant', targetId: normalizedId }),
+  });
+
+  return normalizeTrainerConfirmations(data?.trainer_confirmations);
 }

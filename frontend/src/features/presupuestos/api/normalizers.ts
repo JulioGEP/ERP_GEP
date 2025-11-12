@@ -388,6 +388,14 @@ export function normalizeSession(row: any): SessionDTO {
     estado: toSessionEstadoValue(row?.estado),
     drive_url: toStringValue(row?.drive_url ?? row?.driveUrl) ?? null,
     trainer_ids: sanitizeStringArray(row?.trainer_ids) ?? [],
+    trainer_confirmations: Array.isArray(row?.trainer_confirmations)
+      ? (row.trainer_confirmations as any[])
+          .map((entry) => ({
+            trainer_id: toStringValue((entry as any)?.trainer_id) ?? '',
+            mail_sent_at: toStringValue((entry as any)?.mail_sent_at) ?? null,
+          }))
+          .filter((entry) => entry.trainer_id.length > 0)
+      : [],
     unidad_movil_ids: sanitizeStringArray(row?.unidad_movil_ids) ?? [],
   } satisfies SessionDTO;
 }
