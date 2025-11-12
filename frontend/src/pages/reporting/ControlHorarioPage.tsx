@@ -11,12 +11,21 @@ function parseDate(value: string | null): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function diffInMinutes(reference: string | null, actual: string | null): number | null {
+type DiffInMinutesOptions = {
+  invertSign?: boolean;
+};
+
+function diffInMinutes(
+  reference: string | null,
+  actual: string | null,
+  { invertSign = false }: DiffInMinutesOptions = {},
+): number | null {
   const referenceDate = parseDate(reference);
   const actualDate = parseDate(actual);
   if (!referenceDate || !actualDate) return null;
   const diffMilliseconds = actualDate.getTime() - referenceDate.getTime();
-  return Math.round(diffMilliseconds / (1000 * 60));
+  const diffMinutes = Math.round(diffMilliseconds / (1000 * 60));
+  return invertSign ? -diffMinutes : diffMinutes;
 }
 
 export default function ControlHorarioPage() {
@@ -92,7 +101,7 @@ export default function ControlHorarioPage() {
       const clockIn = record.clockIn ? dateTimeFormatter.format(new Date(record.clockIn)) : '';
       const clockOut = record.clockOut ? dateTimeFormatter.format(new Date(record.clockOut)) : '';
 
-      const startDiff = diffInMinutes(record.plannedStart, record.clockIn);
+      const startDiff = diffInMinutes(record.plannedStart, record.clockIn, { invertSign: true });
       const endDiff = diffInMinutes(record.plannedEnd, record.clockOut);
 
       return [
@@ -224,7 +233,7 @@ function RecordsTable({ records, dateTimeFormatter, differenceFormatter }: Recor
               ? dateTimeFormatter.format(new Date(record.clockOut))
               : '—';
 
-            const startDiff = diffInMinutes(record.plannedStart, record.clockIn);
+            const startDiff = diffInMinutes(record.plannedStart, record.clockIn, { invertSign: true });
             const endDiff = diffInMinutes(record.plannedEnd, record.clockOut);
 
             const differenceSummary = (() => {
