@@ -43,12 +43,6 @@
   --color-background: #fafafa;
   --color-red-muted: #f9d1d3;
   --font-family-base: 'Poppins', sans-serif;
-  --bs-primary: var(--color-red);
-  --bs-primary-rgb: 232, 71, 77;
-  --bs-link-color: var(--color-red);
-  --bs-link-color-rgb: 232, 71, 77;
-  --bs-link-hover-color: #d93b41;
-  --bs-link-hover-color-rgb: 217, 59, 65;
 }
 
 .login-page-wrapper {
@@ -141,20 +135,6 @@ body {
   border-color: var(--color-red);
 }
 
-.btn-link {
-  color: var(--color-red);
-}
-
-.btn-link:hover,
-.btn-link:focus {
-  color: #d93b41;
-}
-
-.btn-link:active,
-.btn-link.active {
-  color: #c23438;
-}
-
 .navbar .nav-link {
   font-weight: 500;
   color: var(--color-gray-medium);
@@ -232,16 +212,6 @@ body {
   background-color: var(--color-red);
   border-color: var(--color-red);
   color: #ffffff;
-}
-
-.form-control:focus,
-.form-select:focus {
-  border-color: rgba(232, 71, 77, 0.4);
-  box-shadow: 0 0 0 0.25rem rgba(232, 71, 77, 0.15);
-}
-
-.spinner-border {
-  color: var(--color-red);
 }
 
 .training-points-list .input-group {
