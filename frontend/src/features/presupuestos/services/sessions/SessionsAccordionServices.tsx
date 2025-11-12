@@ -56,6 +56,7 @@ import {
   type RoomOption,
   type MobileUnitOption,
   type SessionEstado,
+  type SessionTrainerInviteStatus,
   type SessionComment,
   type SessionDocument,
   type SessionCounts,
@@ -110,6 +111,13 @@ const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
 };
 const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['BORRADOR', 'SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
 const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
+
+const TRAINER_INVITE_STATUS_BADGES: Record<SessionTrainerInviteStatus, { label: string; variant: string }> = {
+  NOT_SENT: { label: 'Sin enviar el mail', variant: 'warning' },
+  PENDING: { label: 'Mail enviado', variant: 'info' },
+  CONFIRMED: { label: 'Aceptada', variant: 'success' },
+  DECLINED: { label: 'Denegada', variant: 'danger' },
+};
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 const IN_COMPANY_ROOM_VALUE = '__IN_COMPANY__';
@@ -784,6 +792,7 @@ type SessionFormState = {
   drive_url: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
+  trainer_invite_status: SessionTrainerInviteStatus;
 };
 
 type IsoRange = {
@@ -947,6 +956,7 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     drive_url: session.drive_url ?? null,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
+    trainer_invite_status: session.trainer_invite_status,
   };
 }
 
@@ -1469,6 +1479,23 @@ export function SessionsAccordionServices({
             error: hasSuccess ? null : message,
           },
         }));
+
+        setForms((current) => {
+          const existing = current[trimmedId];
+          if (!existing) return current;
+          const next: SessionFormState = {
+            ...existing,
+            trainer_invite_status: 'PENDING' as SessionTrainerInviteStatus,
+          };
+          const nextMap = { ...current, [trimmedId]: next };
+          formsRef.current = nextMap;
+          return nextMap;
+        });
+        const savedExisting = lastSavedRef.current[trimmedId];
+        const nextSavedEntry: SessionFormState = savedExisting
+          ? { ...savedExisting, trainer_invite_status: 'PENDING' as SessionTrainerInviteStatus }
+          : formsRef.current[trimmedId];
+        lastSavedRef.current = { ...lastSavedRef.current, [trimmedId]: nextSavedEntry };
 
         onNotify?.({ variant: toastVariant, message });
       } catch (error) {
@@ -2131,6 +2158,8 @@ function SessionEditor({
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const trainerPointerInteractingRef = useRef(false);
   const unitPointerInteractingRef = useRef(false);
+  const inviteStatusInfo = TRAINER_INVITE_STATUS_BADGES[form.trainer_invite_status] ??
+    TRAINER_INVITE_STATUS_BADGES.NOT_SENT;
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
@@ -2540,6 +2569,9 @@ function SessionEditor({
                           'Enviar confirmación a formadores'
                         )}
                       </Button>
+                      <div className="mt-2">
+                        <Badge bg={inviteStatusInfo.variant}>{inviteStatusInfo.label}</Badge>
+                      </div>
                       {hasError ? (
                         <div className="text-danger small mt-1">{errorMessage}</div>
                       ) : message ? (
