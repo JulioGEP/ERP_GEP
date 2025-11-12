@@ -71,6 +71,7 @@ export async function createSession(
     direccion?: string | null;
     trainer_ids?: string[];
     unidad_movil_ids?: string[];
+    force_estado_borrador?: boolean;
   },
 ): Promise<SessionDTO> {
   const body: Record<string, unknown> = {
@@ -92,6 +93,9 @@ export async function createSession(
 
   const unidadIds = sanitizeStringArray(payload.unidad_movil_ids);
   if (unidadIds !== undefined) body.unidad_movil_ids = unidadIds;
+  if (payload.force_estado_borrador !== undefined) {
+    body.force_estado_borrador = Boolean(payload.force_estado_borrador);
+  }
 
   const data = await request<{ session?: unknown }>('/sessions', {
     method: 'POST',
