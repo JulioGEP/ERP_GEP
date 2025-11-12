@@ -311,6 +311,14 @@ function computeAutomaticSessionEstadoFromValues(args: {
 }
 function resolveAutomaticSessionEstado(row: SessionRecord): AutomaticSessionEstado {
   const normalized = ensureSessionRelations(row);
+  const storedEstado = toSessionEstado(normalized.estado);
+  if (storedEstado === 'BORRADOR') {
+    const hasStart = normalized.fecha_inicio_utc instanceof Date;
+    const hasEnd = normalized.fecha_fin_utc instanceof Date;
+    if (!hasStart && !hasEnd) {
+      return 'BORRADOR';
+    }
+  }
   const trainerIds = normalized.trainers
     .map((t) => t.trainer_id)
     .filter((id): id is string => Boolean(id));
