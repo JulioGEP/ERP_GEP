@@ -1998,6 +1998,7 @@ export function SessionsAccordionMaterial({
       trainer_ids?: string[];
       unidad_movil_ids?: string[];
       sala_id?: string | null;
+      force_estado_borrador?: boolean;
     }) =>
       createSession({
         ...input,
@@ -2228,6 +2229,7 @@ export function SessionsAccordionMaterial({
         trainer_ids: session.trainer_ids,
         unidad_movil_ids: session.unidad_movil_ids,
         sala_id: session.sala_id,
+        force_estado_borrador: true,
       });
       await invalidateProductSessions(productId);
     } catch (error) {

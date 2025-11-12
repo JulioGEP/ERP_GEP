@@ -61,6 +61,19 @@ function toOptionalText(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   return String(value);
 }
+function shouldForceEstadoBorrador(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized.length) return false;
+    return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return false;
+    return value === 1;
+  }
+  return false;
+}
 function parseJson(body: string | null | undefined): any {
   if (!body) return {};
   try {
@@ -1350,6 +1363,7 @@ if (method === 'GET') {
       const fechaInicioDate = fechaInicioResult === undefined ? null : (fechaInicioResult as Date | null);
       const fechaFinDate = fechaFinResult === undefined ? null : (fechaFinResult as Date | null);
       const salaId = toTrimmed(body.sala_id);
+      const forceEstadoBorrador = shouldForceEstadoBorrador(body.force_estado_borrador);
 
       const auditUserIdPromise = resolveUserIdFromEvent(event, prisma);
 
@@ -1386,6 +1400,8 @@ if (method === 'GET') {
           dealPipeline: deal.pipeline_id ?? null,
         });
 
+        const finalEstado = forceEstadoBorrador ? 'BORRADOR' : autoEstado;
+
         // Construimos un unchecked create para evitar el XOR con relaciones anidadas
         const createData: Record<string, unknown> = {
           id: randomUUID(),
@@ -1394,7 +1410,7 @@ if (method === 'GET') {
           nombre_cache: baseName,
           direccion: direccion ?? deal.training_address ?? '',
           sala_id: salaId ?? null,
-          estado: autoEstado,
+          estado: finalEstado,
         };
 
         // Solo añadimos las fechas si vienen definidas (no mandar undefined)

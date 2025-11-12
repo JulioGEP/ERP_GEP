@@ -2141,6 +2141,7 @@ export function SessionsAccordionAbierta({
       trainer_ids?: string[];
       unidad_movil_ids?: string[];
       sala_id?: string | null;
+      force_estado_borrador?: boolean;
     }) =>
       createSession({
         ...input,
@@ -2353,6 +2354,8 @@ export function SessionsAccordionAbierta({
       if (ENABLE_ROOMS) {
         payload.sala_id = session.sala_id;
       }
+
+      payload.force_estado_borrador = true;
 
       await createMutation.mutateAsync(payload);
       await invalidateProductSessions(productId);
