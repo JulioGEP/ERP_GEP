@@ -66,6 +66,7 @@ const SESSION_ESTADO_OPTIONS = Object.entries(SESSION_ESTADO_LABELS).map(([value
 const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_id', label: 'Presupuesto' },
   { key: 'deal_title', label: 'Título del Presupuesto' },
+  { key: 'deal_organization_name', label: 'Empresa' },
   { key: 'deal_pipeline_id', label: 'Negocio' },
   { key: 'deal_training_address', label: 'Dirección de formación' },
   { key: 'deal_sede_label', label: 'Sede' },
@@ -479,6 +480,8 @@ function isSessionPendingCompletion(session: CalendarSession): boolean {
 const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSession) => string> = {
   deal_id: (session) => safeString(session.dealId),
   deal_title: (session) => safeString(session.dealTitle ?? ''),
+  deal_organization_name: (session) =>
+    safeString(session.dealOrganizationName ?? session.dealTitle ?? ''),
   deal_pipeline_id: (session) => safeString(session.dealPipelineId ?? ''),
   deal_training_address: (session) => safeString(session.dealAddress ?? session.direccion ?? ''),
   deal_sede_label: (session) => safeString(session.dealSedeLabel ?? ''),
@@ -511,6 +514,8 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
 const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVariantEvent) => string> = {
   deal_id: (variant) => joinVariantDealValues(variant, (deal) => deal.id),
   deal_title: (variant) => joinVariantDealValues(variant, (deal) => deal.title),
+  deal_organization_name: (variant) =>
+    joinVariantDealValues(variant, (deal) => deal.organizationName ?? deal.title),
   deal_pipeline_id: (variant) => joinVariantDealValues(variant, (deal) => deal.pipelineId),
   deal_training_address: (variant) => {
     const values = [safeString(variant.variant.sede ?? '')]
@@ -1385,8 +1390,10 @@ export function CalendarView({
       return { left: null, right: null } satisfies TooltipLine;
     }
     if (tooltip.kind === 'session') {
+      const organizationLabel =
+        tooltip.session.dealOrganizationName?.trim() || tooltip.session.dealTitle?.trim() || '';
       return {
-        left: tooltip.session.dealTitle?.trim() || 'Sin empresa',
+        left: organizationLabel.length ? organizationLabel : 'Sin empresa',
         right: tooltip.session.dealAddress?.trim() || tooltip.session.direccion?.trim() || 'Sin dirección',
         separator: ' - ',
       } satisfies TooltipLine;
