@@ -63,8 +63,6 @@ export interface DealDocument {
   drive_file_name?: string | null;
   drive_web_view_link?: string | null;
   created_at?: string | null;   // ISO
-  author?: string | null;
-  author_id?: string | null;
 }
 
 /* ======================

@@ -88,8 +88,6 @@ export type SessionDocument = {
   updated_at: string | null;
   drive_file_name: string | null;
   drive_web_view_link: string | null;
-  author: string | null;
-  author_id: string | null;
 };
 
 export type SessionDocumentsPayload = {
@@ -754,8 +752,6 @@ function normalizeDealDocument(raw: any): DealDocument {
     drive_file_name: driveFileName ?? null,
     drive_web_view_link: driveWebViewLink ?? null,
     created_at: toStringValue(raw?.created_at ?? raw?.added_at),
-    author: toStringValue(raw?.author ?? raw?.author_name ?? raw?.authorName) ?? null,
-    author_id: toStringValue(raw?.author_id ?? raw?.authorId) ?? null,
   };
 }
 
@@ -863,8 +859,6 @@ function normalizeSessionDocument(raw: any): SessionDocument {
     updated_at: updatedAt ?? null,
     drive_file_name: driveFileName ?? null,
     drive_web_view_link: driveLink ?? null,
-    author: toStringValue(raw?.author ?? raw?.author_name ?? raw?.uploaded_by_name) ?? null,
-    author_id: toStringValue(raw?.author_id ?? raw?.uploaded_by_id ?? raw?.authorId) ?? null,
   };
 }
 
@@ -2040,7 +2034,6 @@ export async function uploadSessionDocuments(params: {
   trainerExpense?: boolean;
   trainerName?: string | null;
   expenseFolderName?: string | null;
-  user?: { id: string; name?: string };
 }): Promise<SessionDocumentsPayload> {
   const normalizedDealId = String(params.dealId ?? '').trim();
   const normalizedSessionId = String(params.sessionId ?? '').trim();
@@ -2077,13 +2070,8 @@ export async function uploadSessionDocuments(params: {
     })),
   );
 
-  const headers: Record<string, string> = {};
-  if (params.user?.id) headers['X-User-Id'] = params.user.id;
-  if (params.user?.name) headers['X-User-Name'] = params.user.name;
-
   const data = await request(`/session_documents`, {
     method: 'POST',
-    headers,
     body: JSON.stringify({
       deal_id: normalizedDealId,
       sesion_id: normalizedSessionId,
