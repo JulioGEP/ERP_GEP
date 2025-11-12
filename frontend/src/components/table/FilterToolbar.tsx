@@ -905,6 +905,24 @@ export function FilterToolbar({
                               'Escribe valores separados por comas para filtrar'
                             }
                           />
+                          {definition.allowNegation && (
+                            <div className="mt-2">
+                              <Form.Check
+                                type="switch"
+                                id={`${controlId}-negation`}
+                                label={definition.negationLabel ?? 'Excluir coincidencias'}
+                                checked={Boolean(draftNegations[definition.key])}
+                                onChange={(event) =>
+                                  handleNegationToggle(definition.key, event.target.checked)
+                                }
+                              />
+                              {definition.negationDescription && (
+                                <div className="text-muted small mt-1">
+                                  {definition.negationDescription}
+                                </div>
+                              )}
+                            </div>
+                          )}
                           {isOpen && (
                             <div className="border rounded mt-2 p-3 bg-white shadow-sm">
                               {!definition.searchFromInput && (
