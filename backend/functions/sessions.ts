@@ -17,6 +17,10 @@ import {
   reindexSessionNames,
   toNonNegativeInt,
 } from './_shared/sessionGeneration';
+import {
+  removeSessionAssignments,
+  syncSessionAssignments,
+} from './_shared/trainerCalendar';
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 30;
@@ -1487,6 +1491,18 @@ if (method === 'GET') {
         after: auditAfter as JsonValue,
       });
 
+      try {
+        await syncSessionAssignments(prisma, result.id, {
+          previousTrainerIds: [],
+          nextTrainerIds: result.trainer_ids ?? [],
+        });
+      } catch (calendarError) {
+        console.warn('[sessions] No se pudo sincronizar Google Calendar tras crear la sesión', {
+          sessionId: result.id,
+          error: calendarError,
+        });
+      }
+
       return successResponse({ session: result }, 201);
     }
 
@@ -1634,6 +1650,22 @@ if (method === 'GET') {
         }
       }
 
+      const previousTrainerIds = ensureSessionRelations(storedRecord).trainers
+        .map((link) => link.trainer_id)
+        .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+
+      try {
+        await syncSessionAssignments(prisma, sessionIdFromPath, {
+          previousTrainerIds,
+          nextTrainerIds: normalizedSession.trainer_ids ?? [],
+        });
+      } catch (calendarError) {
+        console.warn('[sessions] No se pudo sincronizar Google Calendar tras actualizar la sesión', {
+          sessionId: sessionIdFromPath,
+          error: calendarError,
+        });
+      }
+
       return successResponse({ session: normalizedSession });
     }
 
@@ -1641,7 +1673,7 @@ if (method === 'GET') {
     if (method === 'DELETE' && sessionIdFromPath) {
       const existing = await prisma.sesiones.findUnique({
         where: { id: sessionIdFromPath },
-        select: { id: true, deal_product_id: true },
+        select: { id: true, deal_product_id: true, sesion_trainers: { select: { trainer_id: true } } },
       });
       if (!existing) return errorResponse('NOT_FOUND', 'Sesión no encontrada', 404);
 
@@ -1660,6 +1692,21 @@ if (method === 'GET') {
         });
         if (product) await reindexSessionNames(tx, product.id, buildNombreBase(product.name, product.code));
       });
+
+      const isValidTrainerId = (id: string | null): id is string => typeof id === 'string' && id.trim().length > 0;
+      const trainerIdsToRemove = (existing.sesion_trainers ?? [])
+        .map((entry: { trainer_id: string | null }) => entry.trainer_id)
+        .filter(isValidTrainerId);
+      if (trainerIdsToRemove.length) {
+        try {
+          await removeSessionAssignments(prisma, sessionIdFromPath, trainerIdsToRemove);
+        } catch (calendarError) {
+          console.warn('[sessions] No se pudo eliminar la sesión en Google Calendar tras borrar la asignación', {
+            sessionId: sessionIdFromPath,
+            error: calendarError,
+          });
+        }
+      }
 
       return successResponse({});
     }
