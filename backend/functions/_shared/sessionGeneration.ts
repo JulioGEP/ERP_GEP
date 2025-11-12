@@ -91,17 +91,6 @@ async function syncSessionsForProduct(
     select: { id: true },
   });
 
-  let deleted = 0;
-  if (existing.length > targetQuantity) {
-    const toDelete = existing.slice(targetQuantity);
-    if (toDelete.length) {
-      const result = await tx.sesiones.deleteMany({
-        where: { id: { in: toDelete.map(({ id }: { id: string }) => id) } },
-      });
-      deleted += result.count;
-    }
-  }
-
   let created = 0;
   if (existing.length < targetQuantity) {
     const totalToCreate = targetQuantity - existing.length;
@@ -122,7 +111,7 @@ async function syncSessionsForProduct(
 
   await reindexSessionNames(tx, product.id, baseName);
 
-  return { created, deleted };
+  return { created, deleted: 0 };
 }
 
 export async function generateSessionsForDeal(tx: Prisma.TransactionClient, dealId: string) {
