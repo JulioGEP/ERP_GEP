@@ -1441,7 +1441,14 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                   <Form.Check
                     type="checkbox"
                     id={`trainer-session-${session.sessionId}-documents-expense`}
-                    label="¿Gasto?"
+                    label={
+                      <>
+                        ¿Gasto?
+                        <span className="text-muted ms-2">
+                          Si el archivo es un gasto, antes de subirlo marca la casilla
+                        </span>
+                      </>
+                    }
                     checked={isExpense}
                     onChange={(event) => setIsExpense(event.target.checked)}
                     disabled={documentMutation.isPending}
