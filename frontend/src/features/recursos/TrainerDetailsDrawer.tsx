@@ -131,7 +131,7 @@ export function TrainerDetailsDrawer({
       scroll
       backdrop={false}
       restoreFocus={false}
-      style={{ width: "min(90vw, 480px)" }}
+      style={{ width: "min(95vw, 820px)" }}
     >
       <Offcanvas.Header closeButton>
         <Offcanvas.Title>
@@ -159,13 +159,9 @@ export function TrainerDetailsDrawer({
             </div>
             <div>
               <h3 className="h6 mb-3">Documentos</h3>
-              <Alert variant="info" className="mb-0">
-                La subida de documentos se realiza desde la ventana de edición del formador.
-              </Alert>
             </div>
             <div>
-              <div className="d-flex align-items-center justify-content-between mb-2">
-                <h4 className="h6 mb-0">Histórico</h4>
+              <div className="d-flex align-items-center justify-content-end mb-2">
                 {driveFolderLink && (
                   <Button
                     variant="link"
