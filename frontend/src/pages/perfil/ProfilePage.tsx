@@ -30,6 +30,8 @@ export default function ProfilePage() {
     staleTime: 60_000,
   });
 
+  const calendarConfigured = calendarStatusQuery.data?.configured ?? false;
+
   const formatCalendarDate = useCallback((iso: string | null | undefined) => {
     if (!iso) return null;
     const date = new Date(iso);
@@ -292,26 +294,42 @@ export default function ProfilePage() {
                 </div>
               </div>
             ) : (
-              <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-                <div>
-                  <div className="fw-semibold text-uppercase text-muted small">Estado</div>
-                  <div>No conectado</div>
-                  {!calendarStatusQuery.data?.configured ? (
+              <div className="d-grid gap-3">
+                {!calendarConfigured ? (
+                  <Alert variant="warning" className="mb-0">
+                    La integración de Google Calendar todavía no está configurada. Contacta con un administrador para
+                    habilitarla.
+                  </Alert>
+                ) : null}
+                <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+                  <div>
+                    <div className="fw-semibold text-uppercase text-muted small">Estado</div>
+                    <div>No conectado</div>
                     <div className="text-muted small">
-                      Puedes vincular tu cuenta de Google Calendar cuando quieras desde este perfil.
+                      {calendarConfigured
+                        ? 'Puedes vincular tu cuenta de Google Calendar cuando quieras desde este perfil.'
+                        : 'Esperamos poder ofrecer esta sincronización pronto.'}
                     </div>
-                  ) : null}
-                </div>
-                <div>
-                  <Button onClick={() => calendarConnectMutation.mutate()} disabled={calendarConnectMutation.isPending}>
-                    {calendarConnectMutation.isPending ? (
-                      <>
-                        <Spinner animation="border" size="sm" className="me-2" /> Conectando…
-                      </>
-                    ) : (
-                      'Conectar con Google Calendar'
-                    )}
-                  </Button>
+                  </div>
+                  <div>
+                    <Button
+                      onClick={() => calendarConnectMutation.mutate()}
+                      disabled={!calendarConfigured || calendarConnectMutation.isPending}
+                      title={
+                        !calendarConfigured
+                          ? 'Esta opción estará disponible cuando un administrador configure la integración.'
+                          : undefined
+                      }
+                    >
+                      {calendarConnectMutation.isPending ? (
+                        <>
+                          <Spinner animation="border" size="sm" className="me-2" /> Conectando…
+                        </>
+                      ) : (
+                        'Conectar con Google Calendar'
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
