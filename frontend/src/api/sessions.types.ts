@@ -72,6 +72,7 @@ export type SessionDocument = {
   file_type: string | null;
   compartir_formador: boolean;
   trainer_expense: boolean;
+  author: string | null;
   added_at: string | null;
   updated_at: string | null;
   drive_file_name: string | null;

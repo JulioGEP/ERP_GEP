@@ -43,6 +43,7 @@ type SessionFileRecord = {
   file_type: string | null;
   compartir_formador: boolean;
   trainer_expense: boolean;
+  author: string | null;
   added_at: string | null;
   updated_at: string | null;
   drive_file_name: string | null;
@@ -64,6 +65,15 @@ function parsePath(path: string): ParsedPath {
   }
   const docId = segments[1] ? decodeURIComponent(segments[1]) : null;
   return { docId };
+}
+
+function headerValue(event: any, key: string): string | null {
+  if (!event) return null;
+  const headers = event.headers || {};
+  const direct = headers[key];
+  if (typeof direct === 'string') return direct;
+  const lower = headers[key.toLowerCase()];
+  return typeof lower === 'string' ? lower : null;
 }
 
 function normalizeIncomingFileName(name: string): string {
@@ -121,6 +131,7 @@ function mapSessionFile(row: any): SessionFileRecord {
     file_type: toStringOrNull(row?.file_type),
     compartir_formador: Boolean(row?.compartir_formador),
     trainer_expense: Boolean(row?.trainer_expense),
+    author: toStringOrNull(row?.author),
     added_at: row?.added_at ? toMadridISOString(row.added_at) : null,
     updated_at: row?.updated_at ? toMadridISOString(row.updated_at) : null,
     drive_file_name: toStringOrNull(row?.drive_file_name),
@@ -137,6 +148,9 @@ export const handler = async (event: any) => {
     const method = event.httpMethod;
     const prisma = getPrisma();
     const { docId } = parsePath(event.path || '');
+    const requestAuthorRaw =
+      headerValue(event, 'X-User-Name')?.trim() || headerValue(event, 'X-User-Id')?.trim() || null;
+    const requestAuthor = requestAuthorRaw && requestAuthorRaw.length ? requestAuthorRaw : null;
 
     if (method === 'GET') {
       const params = event.queryStringParameters || {};
@@ -345,6 +359,8 @@ export const handler = async (event: any) => {
         }
 
         const id = randomUUID();
+        const resolvedAuthor = requestAuthor ?? trainerName ?? null;
+
         const created = await prisma.sesion_files.create({
           data: {
             id,
@@ -354,6 +370,7 @@ export const handler = async (event: any) => {
             compartir_formador: shareWithTrainer,
             trainer_expense: trainerExpense,
             added_at: now,
+            author: resolvedAuthor ?? undefined,
             drive_file_name: uploadResult.driveFileName,
             drive_web_view_link: uploadResult.driveWebViewLink,
           },

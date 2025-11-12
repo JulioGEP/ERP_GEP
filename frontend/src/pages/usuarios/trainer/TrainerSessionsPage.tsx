@@ -494,6 +494,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
         trainerExpense,
         trainerName: trainerDisplayName,
         expenseFolderName: TRAINER_EXPENSE_FOLDER_NAME,
+        user: { id: userId, name: userName },
       }),
     onSuccess: (payload) => {
       setDocumentError(null);
@@ -1372,6 +1373,13 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                         const canDeleteDoc = trainerDocumentIdSet.has(doc.id);
                         const isDeletingDoc =
                           deletingDocumentId === doc.id && deleteDocumentMutation.isPending;
+                        const authorLabel = (doc.author ?? '').trim();
+                        const addedAtLabel = doc.added_at ? formatDateTime(doc.added_at) : null;
+                        const metaParts: string[] = [];
+                        if (authorLabel.length) {
+                          metaParts.push(authorLabel);
+                        }
+                        metaParts.push(addedAtLabel ?? 'Sin fecha');
                         return (
                           <div
                             key={doc.id}
@@ -1400,9 +1408,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                                 </Badge>
                               ) : null}
                             </div>
-                            <span className="text-muted small">
-                              {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
-                            </span>
+                            <span className="text-muted small">{metaParts.join(' · ')}</span>
                             <div className="d-flex align-items-center gap-2">
                               {canDeleteDoc ? (
                                 <Button
