@@ -1,4 +1,4 @@
-import { ChangeEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Accordion,
@@ -18,7 +18,7 @@ import {
 } from 'react-bootstrap';
 
 import { ApiError } from "../../api/client";
-import type { SessionStudent } from "../../api/sessions.types";
+import type { SessionStudent, TrainerConfirmationStatusDTO } from "../../api/sessions.types";
 import {
   fetchActiveTrainers,
   fetchMobileUnitsCatalog,
@@ -34,6 +34,7 @@ import {
   deleteProductVariant,
   fetchDealsByVariation,
   fetchProductsWithVariants,
+  sendVariantConfirmations,
   updateProductVariant,
   updateProductVariantDefaults,
 } from './api';
@@ -49,6 +50,10 @@ import type {
   VariantUpdatePayload,
 } from './types';
 import { buildVariantGroups, compareVariants, findDealProductPriceForProduct } from './utils';
+import {
+  TRAINER_CONFIRMATION_STATUS_BADGE_VARIANTS,
+  TRAINER_CONFIRMATION_STATUS_LABELS,
+} from '../../utils/trainerConfirmations';
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', {
   dateStyle: 'medium',
@@ -770,6 +775,13 @@ export function VariantModal({
   const [isDealStudentsLoading, setIsDealStudentsLoading] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDealSummary, setSelectedDealSummary] = useState<DealSummary | null>(null);
+  const [trainerConfirmations, setTrainerConfirmations] = useState<TrainerConfirmationStatusDTO[]>([]);
+  const [confirmationState, setConfirmationState] = useState<{
+    sending: boolean;
+    error: string | null;
+    lastSentAt: number | null;
+  }>({ sending: false, error: null, lastSentAt: null });
+  const previousVariantIdRef = useRef<string | null>(null);
   const totalDealStudents = useMemo(
     () => {
       if (!deals.length) {
@@ -1018,6 +1030,8 @@ export function VariantModal({
   const [unitFilter, setUnitFilter] = useState('');
 
   useEffect(() => {
+    const currentVariantId = variant?.id ?? null;
+    const isSameVariant = previousVariantIdRef.current === currentVariantId;
     if (!variant) {
       setFormValues({
         price: '',
@@ -1051,6 +1065,9 @@ export function VariantModal({
       setIsDealStudentsLoading(false);
       setSelectedDealId(null);
       setSelectedDealSummary(null);
+      setTrainerConfirmations([]);
+      setConfirmationState({ sending: false, error: null, lastSentAt: null });
+      previousVariantIdRef.current = null;
       return;
     }
 
@@ -1061,6 +1078,11 @@ export function VariantModal({
       setSaveSuccess(null);
       setSelectedDealId(null);
       setSelectedDealSummary(null);
+    setTrainerConfirmations(Array.isArray(variant.trainer_confirmations) ? variant.trainer_confirmations : []);
+    if (!isSameVariant) {
+      setConfirmationState({ sending: false, error: null, lastSentAt: null });
+    }
+    previousVariantIdRef.current = currentVariantId;
   }, [variant]);
 
   useEffect(() => {
@@ -1376,6 +1398,47 @@ export function VariantModal({
     return map;
   }, [trainers, variant]);
 
+  const confirmationLookup = useMemo(() => {
+    const map = new Map<string, TrainerConfirmationStatusDTO>();
+    trainerConfirmations.forEach((entry) => {
+      if (entry?.trainer_id?.trim()) {
+        map.set(entry.trainer_id, entry);
+      }
+    });
+    return map;
+  }, [trainerConfirmations]);
+
+  const trainerChips = useMemo(
+    () =>
+      formValues.trainer_ids.map((trainerId) => {
+        const confirmation = confirmationLookup.get(trainerId);
+        const trainerRecord = trainerLookup.get(trainerId);
+        const nameParts: string[] = [];
+        const firstName = trainerRecord?.name?.trim();
+        if (firstName) nameParts.push(firstName);
+        const lastName = trainerRecord?.apellido?.trim();
+        if (lastName) nameParts.push(lastName);
+        const displayName = nameParts.length ? nameParts.join(' ') : trainerId;
+        const status = confirmation?.status ?? 'PENDING';
+        return {
+          trainerId,
+          name: displayName,
+          status,
+          label:
+            TRAINER_CONFIRMATION_STATUS_LABELS[status] ??
+            TRAINER_CONFIRMATION_STATUS_LABELS.PENDING,
+          variant:
+            TRAINER_CONFIRMATION_STATUS_BADGE_VARIANTS[status] ?? 'secondary',
+        };
+      }),
+    [confirmationLookup, formValues.trainer_ids, trainerLookup],
+  );
+
+  const pendingTrainerIds = useMemo(
+    () => trainerChips.filter((chip) => chip.status === 'PENDING').map((chip) => chip.trainerId),
+    [trainerChips],
+  );
+
   const unitLookup = useMemo(() => {
     const map = new Map<string, VariantUnitRecord>();
 
@@ -1472,6 +1535,7 @@ export function VariantModal({
 
   const trainerSummaryDisplay = trainerSummary || trainerDisplay;
   const unitSummaryDisplay = unitSummary || unitDisplay;
+  const hasAssignedTrainers = formValues.trainer_ids.length > 0;
 
   const handleTrainerToggle = (trainerId: string, checked: boolean) => {
     setFormValues((prev) => {
@@ -1509,6 +1573,36 @@ export function VariantModal({
     !areStringArraysEqual(formValues.trainer_ids, initialValues.trainer_ids) ||
     formValues.sala_id !== initialValues.sala_id ||
     !areStringArraysEqual(formValues.unidad_movil_ids, initialValues.unidad_movil_ids);
+
+  const sendConfirmationsDisabled =
+    !hasAssignedTrainers ||
+    !pendingTrainerIds.length ||
+    isDirty ||
+    isSaving ||
+    confirmationState.sending;
+
+  const showDirtyBeforeSend = isDirty && hasAssignedTrainers;
+  const confirmationSuccess = Boolean(confirmationState.lastSentAt && !confirmationState.error);
+
+  const handleSendConfirmationsClick = useCallback(async () => {
+    if (!variant) return;
+    if (!pendingTrainerIds.length || confirmationState.sending) {
+      return;
+    }
+
+    setConfirmationState((current) => ({ ...current, sending: true, error: null }));
+
+    try {
+      const statuses = await sendVariantConfirmations(variant.id, pendingTrainerIds);
+      setTrainerConfirmations(statuses);
+      onVariantUpdated({ ...variant, trainer_confirmations: statuses });
+      setConfirmationState({ sending: false, error: null, lastSentAt: Date.now() });
+    } catch (error) {
+      const message =
+        error instanceof ApiError ? error.message : 'No se pudieron enviar los mails de confirmación.';
+      setConfirmationState({ sending: false, error: message, lastSentAt: null });
+    }
+  }, [confirmationState.sending, onVariantUpdated, pendingTrainerIds, variant]);
 
   const handleSave = async (closeAfter: boolean) => {
     if (!variant) return;
@@ -1676,6 +1770,8 @@ export function VariantModal({
       const nextValues = variantToFormValues(enhancedVariant);
       setFormValues(nextValues);
       setInitialValues(nextValues);
+      setTrainerConfirmations(enhancedVariant.trainer_confirmations ?? []);
+      setConfirmationState({ sending: false, error: null, lastSentAt: null });
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
 
       if (closeAfter) {
@@ -1868,6 +1964,49 @@ export function VariantModal({
                         </div>
                       </Collapse>
                     </div>
+                    {hasAssignedTrainers ? (
+                      <div className="mt-2">
+                        <div className="d-flex flex-wrap align-items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            onClick={() => void handleSendConfirmationsClick()}
+                            disabled={sendConfirmationsDisabled}
+                          >
+                            {confirmationState.sending ? (
+                              <span className="d-inline-flex align-items-center gap-2">
+                                <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                                Enviando…
+                              </span>
+                            ) : (
+                              'Mail de confirmación'
+                            )}
+                          </Button>
+                          <div className="d-flex flex-wrap gap-2">
+                            {trainerChips.map((chip) => (
+                              <Badge
+                                key={`${chip.trainerId}-${chip.status}`}
+                                bg={chip.variant}
+                                className={`fw-normal${chip.variant === 'warning' ? ' text-dark' : ''}`}
+                              >
+                                {chip.name} · {chip.label}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        {showDirtyBeforeSend ? (
+                          <div className="text-muted small mt-1">
+                            Guarda los cambios antes de enviar el mail de confirmación.
+                          </div>
+                        ) : null}
+                        {confirmationState.error ? (
+                          <div className="text-danger small mt-1">{confirmationState.error}</div>
+                        ) : null}
+                        {confirmationSuccess ? (
+                          <div className="text-success small mt-1">Mail de confirmación enviado.</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </Form.Group>
                 </Col>
                 <Col md={4}>

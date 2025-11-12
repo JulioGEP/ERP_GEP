@@ -13,6 +13,15 @@ export const SESSION_ESTADOS: SessionEstado[] = [
   'FINALIZADA',
 ];
 
+export type TrainerConfirmationStatus = 'PENDING' | 'MAIL_SENT' | 'CONFIRMED' | 'DECLINED';
+
+export type TrainerConfirmationStatusDTO = {
+  trainer_id: string;
+  status: TrainerConfirmationStatus;
+  mail_sent_at: string | null;
+  updated_at: string | null;
+};
+
 export type SessionDTO = {
   id: string;
   deal_id: string;
@@ -26,6 +35,7 @@ export type SessionDTO = {
   drive_url: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
+  trainer_confirmations: TrainerConfirmationStatusDTO[];
 };
 
 export type SessionGroupDTO = {

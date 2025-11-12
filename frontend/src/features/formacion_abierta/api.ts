@@ -7,12 +7,14 @@ import type {
   VariantInfo,
   VariantUpdatePayload,
 } from './types';
+import type { TrainerConfirmationStatusDTO } from '../../api/sessions.types';
 import {
   normalizeDealTag,
   normalizeProductDefaults,
   normalizeProductFromResponse,
   normalizeVariantFromResponse,
 } from './utils';
+import { normalizeTrainerConfirmation } from '../../utils/trainerConfirmations';
 
 export type ProductsVariantsResponse = {
   ok?: boolean;
@@ -152,6 +154,45 @@ export async function updateProductVariant(
   }
 
   return normalizeVariantFromResponse(json.variant, variantId);
+}
+
+export async function sendVariantConfirmations(
+  variantId: string,
+  trainerIds: string[],
+): Promise<TrainerConfirmationStatusDTO[]> {
+  const normalizedId = String(variantId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'variantId es obligatorio');
+  }
+
+  const payload: Record<string, unknown> = {
+    kind: 'variant',
+    id: normalizedId,
+  };
+
+  if (Array.isArray(trainerIds) && trainerIds.length) {
+    const sanitized = trainerIds
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value, index, array) => value.length && array.indexOf(value) === index);
+    if (sanitized.length) {
+      payload.trainers = sanitized;
+    }
+  }
+
+  const data = await requestJson<{ statuses?: unknown }>(
+    apiPath('confirmations/send'),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    { defaultErrorMessage: 'No se pudieron enviar los mails de confirmación.' },
+  );
+
+  const statuses = Array.isArray(data?.statuses) ? data.statuses : [];
+  return statuses
+    .map((entry: any) => normalizeTrainerConfirmation(entry))
+    .filter((entry) => entry.trainer_id.length);
 }
 
 export async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]> {

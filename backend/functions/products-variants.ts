@@ -1,6 +1,6 @@
 // backend/functions/products-variants.ts
 
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, type TrainerConfirmationState } from '@prisma/client';
 import {
   join,
   sqltag as sql,
@@ -16,6 +16,10 @@ import { errorResponse, successResponse } from './_shared/response';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
 import {
+  serializeTrainerConfirmation,
+  syncTrainerConfirmations,
+} from './_shared/trainer-confirmations';
+import {
   getVariantResourceColumnsSupport,
   isVariantResourceColumnError,
   setVariantResourceColumnsSupport,
@@ -29,6 +33,23 @@ const VARIANT_UNIT_TABLE = 'variant_unit_links';
 
 let variantTrainerLinksSupported: boolean | null = null;
 let variantUnitLinksSupported: boolean | null = null;
+
+const TRAINER_CONFIRMATION_STATE_VALUES: TrainerConfirmationState[] = [
+  'PENDING',
+  'MAIL_SENT',
+  'CONFIRMED',
+  'DECLINED',
+];
+
+function toTrainerConfirmationState(value: unknown): TrainerConfirmationState {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toUpperCase();
+    if ((TRAINER_CONFIRMATION_STATE_VALUES as string[]).includes(normalized)) {
+      return normalized as TrainerConfirmationState;
+    }
+  }
+  return 'PENDING';
+}
 
 function isMissingRelationError(error: unknown, relation: string): boolean {
   if (error instanceof PrismaClientKnownRequestError) {
@@ -1033,6 +1054,14 @@ type VariantRecord = {
   products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
   trainer_links?: VariantTrainerLink[];
+  trainer_confirmations?:
+    | Array<{
+        trainer_id: string;
+        status?: TrainerConfirmationState | string | null;
+        mail_sent_at?: Date | string | null;
+        updated_at?: Date | string | null;
+      }>
+    | null;
   salas?: { sala_id: string; name: string; sede: string | null } | null;
   unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
   unidad_links?: VariantUnitLink[];
@@ -1111,6 +1140,9 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       unidad_movil_id: true,
       created_at: true,
       updated_at: true,
+      trainer_confirmations: {
+        select: { trainer_id: true, status: true, mail_sent_at: true, updated_at: true },
+      },
     };
 
     if (!includeResources) return base;
@@ -1495,6 +1527,19 @@ function normalizeVariant(record: VariantRecord) {
     ? unitRecords.find((item) => item.unidad_id === primaryUnitId) ?? null
     : null;
 
+  const confirmations = Array.isArray(record.trainer_confirmations)
+    ? record.trainer_confirmations
+        .filter((entry) => typeof entry?.trainer_id === 'string' && entry.trainer_id.trim().length)
+        .map((entry) =>
+          serializeTrainerConfirmation({
+            trainer_id: entry.trainer_id,
+            status: toTrainerConfirmationState(entry.status),
+            mail_sent_at: entry.mail_sent_at ?? null,
+            updated_at: entry.updated_at ?? null,
+          }),
+        )
+    : [];
+
   return {
     id: record.id,
     id_woo: record.id_woo?.toString(),
@@ -1518,6 +1563,7 @@ function normalizeVariant(record: VariantRecord) {
     unidad: unitDetail,
     unidad_movil_ids: uniqueUnitIds,
     unidades: unitRecords,
+    trainer_confirmations: confirmations,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
   } as const;
@@ -1775,6 +1821,12 @@ export const handler = createHttpHandler<any>(async (request) => {
       await tx.variants.update({ where: { id: variantId }, data });
       if (trainerIdsUpdate !== undefined) {
         await syncVariantTrainerAssignments(tx, variantId, nextTrainerIds);
+        await syncTrainerConfirmations({
+          prisma: tx,
+          trainerIds: nextTrainerIds,
+          sessionId: null,
+          variantId,
+        });
       }
       if (unidadIdsUpdate !== undefined) {
         await syncVariantUnitAssignments(tx, variantId, nextUnidadIds);
@@ -1802,6 +1854,9 @@ export const handler = createHttpHandler<any>(async (request) => {
         unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
         created_at: true,
         updated_at: true,
+        trainer_confirmations: {
+          select: { trainer_id: true, status: true, mail_sent_at: true, updated_at: true },
+        },
       },
     });
 
