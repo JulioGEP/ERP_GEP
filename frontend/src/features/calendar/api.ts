@@ -52,6 +52,7 @@ export type CalendarVariantDeal = {
   fundaeLabel: string | null;
   hotelLabel: string | null;
   transporte: string | null;
+  organizationName: string | null;
 };
 
 export type CalendarVariantEvent = {
@@ -83,6 +84,7 @@ export type CalendarSession = {
   id: string;
   dealId: string;
   dealTitle: string | null;
+  dealOrganizationName: string | null;
   dealAddress: string | null;
   dealSedeLabel: string | null;
   dealPipelineId: string | null;
@@ -496,8 +498,22 @@ function sanitizeVariantDeals(payload: any): CalendarVariantDeal[] {
       const fundaeLabel = toTrimmed(item?.fundae_label);
       const hotelLabel = toTrimmed(item?.hotel_label);
       const transporte = toTrimmed(item?.transporte);
+      const organizationName = toTrimmed(
+        item?.organization_name ?? item?.organizationName ?? item?.deal_organization_name,
+      );
 
-      if (!id && !title && !pipelineId && !trainingAddress && !sedeLabel && !caesLabel && !fundaeLabel && !hotelLabel && !transporte) {
+      if (
+        !id &&
+        !title &&
+        !pipelineId &&
+        !trainingAddress &&
+        !sedeLabel &&
+        !caesLabel &&
+        !fundaeLabel &&
+        !hotelLabel &&
+        !transporte &&
+        !organizationName
+      ) {
         return null;
       }
 
@@ -511,6 +527,7 @@ function sanitizeVariantDeals(payload: any): CalendarVariantDeal[] {
         fundaeLabel,
         hotelLabel,
         transporte,
+        organizationName,
       } satisfies CalendarVariantDeal;
     })
     .filter((deal): deal is CalendarVariantDeal => deal !== null);
@@ -601,6 +618,9 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
         id,
         dealId: toTrimmed(row?.deal_id) ?? '',
         dealTitle: toOptionalString(row?.deal_title),
+        dealOrganizationName: toOptionalString(
+          row?.deal_organization_name ?? row?.organization_name ?? row?.organizationName,
+        ),
         dealAddress: toOptionalString(row?.deal_training_address),
         dealSedeLabel: toOptionalString(row?.deal_sede_label),
         dealPipelineId: toOptionalString(row?.deal_pipeline_id),
