@@ -192,19 +192,6 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     unidades.push(fallbackUnidadRecord);
   }
 
-  const trainerConfirmations = Array.isArray(input?.trainer_confirmations)
-    ? (input.trainer_confirmations as unknown[])
-        .map((entry) => {
-          const trainerId = toTrimmedString((entry as any)?.trainer_id);
-          if (!trainerId) {
-            return null;
-          }
-          const mailSentAtRaw = toTrimmedString((entry as any)?.mail_sent_at);
-          return { trainer_id: trainerId, mail_sent_at: mailSentAtRaw };
-        })
-        .filter((entry): entry is { trainer_id: string; mail_sent_at: string | null } => entry !== null)
-    : [];
-
   return {
     id: String(input?.id ?? fallbackId),
     id_woo: input?.id_woo != null ? String(input.id_woo) : '',
@@ -219,7 +206,6 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     trainer: trainers.find((item) => item.trainer_id === (trainerIds[0] ?? trainerId ?? '')) ?? null,
     trainer_ids: trainerIds,
     trainers,
-    trainer_confirmations: trainerConfirmations,
     sala_id: salaId,
     sala:
   input?.sala && typeof input.sala === 'object'

@@ -1549,7 +1549,6 @@ type SessionFormState = {
   estado: SessionEstado;
   drive_url: string | null;
   trainer_ids: string[];
-  trainer_confirmations: SessionDTO['trainer_confirmations'];
   unidad_movil_ids: string[];
 };
 
@@ -1602,9 +1601,6 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     estado: session.estado,
     drive_url: session.drive_url ?? null,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
-    trainer_confirmations: Array.isArray(session.trainer_confirmations)
-      ? [...session.trainer_confirmations]
-      : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
   };
 }

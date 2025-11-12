@@ -25,13 +25,7 @@ export type SessionDTO = {
   estado: SessionEstado;
   drive_url: string | null;
   trainer_ids: string[];
-  trainer_confirmations: SessionTrainerConfirmation[];
   unidad_movil_ids: string[];
-};
-
-export type SessionTrainerConfirmation = {
-  trainer_id: string;
-  mail_sent_at: string | null;
 };
 
 export type SessionGroupDTO = {

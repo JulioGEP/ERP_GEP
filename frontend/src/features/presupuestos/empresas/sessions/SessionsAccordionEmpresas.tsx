@@ -55,7 +55,6 @@ import {
   fetchSessionPublicLink,
   createSessionPublicLink,
   deleteSessionPublicLink,
-  sendSessionTrainerConfirmationMail,
   type SessionPublicLink,
   SESSION_DOCUMENT_SIZE_LIMIT_BYTES,
   SESSION_DOCUMENT_SIZE_LIMIT_LABEL,
@@ -1552,7 +1551,6 @@ type SessionFormState = {
   estado: SessionEstado;
   drive_url: string | null;
   trainer_ids: string[];
-  trainer_confirmations: SessionDTO['trainer_confirmations'];
   unidad_movil_ids: string[];
 };
 
@@ -1696,9 +1694,6 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     estado: session.estado,
     drive_url: session.drive_url ?? null,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
-    trainer_confirmations: Array.isArray(session.trainer_confirmations)
-      ? [...session.trainer_confirmations]
-      : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
   };
 }
@@ -2034,26 +2029,6 @@ export function SessionsAccordionEmpresas({
       [sessionId]: { saving: false, error: null, dirty: true },
     }));
   };
-
-  const handleConfirmationsUpdate = useCallback(
-    (sessionId: string, confirmations: SessionDTO['trainer_confirmations']) => {
-      setForms((current) => {
-        const existing = current[sessionId];
-        if (!existing) return current;
-        const next = { ...existing, trainer_confirmations: confirmations };
-        const nextMap = { ...current, [sessionId]: next };
-        formsRef.current = nextMap;
-        return nextMap;
-      });
-      if (lastSavedRef.current[sessionId]) {
-        lastSavedRef.current[sessionId] = {
-          ...lastSavedRef.current[sessionId],
-          trainer_confirmations: confirmations,
-        };
-      }
-    },
-    [],
-  );
 
   const hasSessionChanges = useCallback(
     (sessionId: string) => {
@@ -2738,10 +2713,6 @@ export function SessionsAccordionEmpresas({
                   dealId={dealId}
                   dealSede={normalizedDealSede}
                   onNotify={onNotify}
-                  confirmationContext="company"
-                  onConfirmationsUpdate={(confirmations) =>
-                    handleConfirmationsUpdate(activeSession.sessionId, confirmations)
-                  }
                 />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
@@ -2786,8 +2757,6 @@ interface SessionEditorProps {
   dealId: string;
   dealSede: string | null;
   onNotify?: (toast: ToastParams) => void;
-  confirmationContext?: 'company' | 'service';
-  onConfirmationsUpdate?: (confirmations: SessionDTO['trainer_confirmations']) => void;
 }
 
 function SessionEditor({
@@ -2804,8 +2773,6 @@ function SessionEditor({
   dealId,
   dealSede,
   onNotify,
-  confirmationContext,
-  onConfirmationsUpdate,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
@@ -2819,67 +2786,6 @@ function SessionEditor({
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
-
-  const trainerLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
-    trainers.forEach((trainer) => {
-      const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
-      map.set(trainer.trainer_id, label.length ? label : trainer.trainer_id);
-    });
-    return map;
-  }, [trainers]);
-
-  const trainerConfirmationEntries = useMemo(() => {
-    const confirmationMap = new Map(
-      (Array.isArray(form.trainer_confirmations) ? form.trainer_confirmations : []).map((entry) => [
-        entry.trainer_id,
-        entry.mail_sent_at ?? null,
-      ]),
-    );
-    return form.trainer_ids
-      .map((trainerId) => trainerId?.trim())
-      .filter((value): value is string => Boolean(value))
-      .map((trainerId) => ({
-        trainerId,
-        label: trainerLabelMap.get(trainerId) ?? trainerId,
-        mailSentAt: confirmationMap.get(trainerId) ?? null,
-      }));
-  }, [form.trainer_confirmations, form.trainer_ids, trainerLabelMap]);
-
-  const confirmationMutation = useMutation({
-    mutationFn: async () => {
-      if (!confirmationContext) {
-        throw new Error('Contexto no disponible');
-      }
-      return sendSessionTrainerConfirmationMail({ sessionId: form.id, context: confirmationContext });
-    },
-    onSuccess: (confirmations) => {
-      onConfirmationsUpdate?.(confirmations);
-      onNotify?.({ variant: 'success', message: 'Correos de confirmación enviados.' });
-    },
-    onError: (error: unknown) => {
-      const message = isApiError(error)
-        ? error.message
-        : error instanceof Error
-        ? error.message
-        : 'No se pudo enviar el correo de confirmación';
-      onNotify?.({ variant: 'danger', message });
-    },
-  });
-
-  const handleSendConfirmationMail = useCallback(() => {
-    if (!confirmationContext || !form.trainer_ids.length || confirmationMutation.isPending) {
-      return;
-    }
-    confirmationMutation.mutate();
-  }, [confirmationContext, confirmationMutation, form.trainer_ids.length]);
-
-  const confirmationButtonDisabled =
-    !confirmationContext ||
-    !form.trainer_ids.length ||
-    status.dirty ||
-    status.saving ||
-    confirmationMutation.isPending;
 
   const filteredUnits = useMemo(() => {
     const search = unitFilter.trim().toLowerCase();
@@ -3262,19 +3168,6 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
-            {trainerConfirmationEntries.length ? (
-              <div className="d-flex flex-wrap gap-2 mt-2">
-                {trainerConfirmationEntries.map((entry) => (
-                  <Badge
-                    key={entry.trainerId}
-                    bg={entry.mailSentAt ? 'primary' : 'warning'}
-                    text={entry.mailSentAt ? undefined : 'dark'}
-                  >
-                    {entry.label} · {entry.mailSentAt ? 'Mail enviado' : 'Mail sin enviar'}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
             {availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
             )}
@@ -3467,22 +3360,7 @@ function SessionEditor({
             <span className="text-success">Guardado ✓</span>
           ) : null}
         </div>
-        <div className="d-flex justify-content-end flex-wrap gap-2">
-          {confirmationContext ? (
-            <Button
-              variant="outline-primary"
-              onClick={handleSendConfirmationMail}
-              disabled={confirmationButtonDisabled}
-            >
-              {confirmationMutation.isPending ? (
-                <span className="d-inline-flex align-items-center gap-2">
-                  <Spinner size="sm" animation="border" role="status" aria-hidden="true" /> Enviando…
-                </span>
-              ) : (
-                'Mail de confirmación'
-              )}
-            </Button>
-          ) : null}
+        <div className="d-flex justify-content-end">
           <Button variant="primary" onClick={handleManualSave} disabled={!status.dirty || status.saving}>
             {status.saving ? (
               <span className="d-inline-flex align-items-center gap-2">
