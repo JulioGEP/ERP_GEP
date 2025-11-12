@@ -1,8 +1,16 @@
 // frontend/src/features/recursos/TrainerModal.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Col, Form, Modal, Row, Spinner } from "react-bootstrap";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Trainer } from "../../types/trainer";
-import { SEDE_OPTIONS, type SedeOption } from "./trainers.constants";
+import {
+  SEDE_OPTIONS,
+  TRAINER_DOCUMENT_TYPES,
+  type SedeOption,
+  type TrainerDocumentTypeValue,
+} from "./trainers.constants";
+import { uploadTrainerDocument } from "./api";
+import { blobOrFileToBase64 } from "../../utils/base64";
 
 export type TrainerFormValues = {
   name: string;
@@ -24,6 +32,7 @@ type TrainerModalProps = {
   isSaving: boolean;
   onClose: () => void;
   onSubmit: (values: TrainerFormValues) => void;
+  onNotify?: (toast: { variant: "success" | "danger" | "info"; message: string }) => void;
 };
 
 const EMPTY_FORM: TrainerFormValues = {
@@ -63,19 +72,40 @@ export function TrainerModal({
   isSaving,
   onClose,
   onSubmit,
+  onNotify,
 }: TrainerModalProps) {
   const [formValues, setFormValues] = useState<TrainerFormValues>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [isSedeMenuOpen, setIsSedeMenuOpen] = useState(false);
   const sedeContainerRef = useRef<HTMLDivElement | null>(null);
+  const queryClient = useQueryClient();
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedDocumentType, setSelectedDocumentType] = useState<TrainerDocumentTypeValue>(
+    TRAINER_DOCUMENT_TYPES[0].value,
+  );
+  const [selectedDocument, setSelectedDocument] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (show) {
       setFormValues(trainerToFormValues(initialData));
       setError(null);
+      setUploadError(null);
+      setUploadSuccess(null);
+      setSelectedDocument(null);
+      if (documentInputRef.current) {
+        documentInputRef.current.value = "";
+      }
     }
     if (!show) {
       setIsSedeMenuOpen(false);
+      setUploadError(null);
+      setUploadSuccess(null);
+      setSelectedDocument(null);
+      if (documentInputRef.current) {
+        documentInputRef.current.value = "";
+      }
     }
   }, [show, initialData]);
 
@@ -140,6 +170,42 @@ export function TrainerModal({
 
   const sedeDisplayValue = formValues.sede.join(", ");
 
+  const trainerId = initialData?.trainer_id ?? null;
+
+  const uploadMutation = useMutation({
+    mutationFn: async (params: { file: File; type: TrainerDocumentTypeValue }) => {
+      if (!trainerId) {
+        throw new Error("trainerId es obligatorio");
+      }
+      const base64 = await blobOrFileToBase64(params.file);
+      return uploadTrainerDocument({
+        trainerId,
+        documentType: params.type,
+        fileName: params.file.name,
+        mimeType: params.file.type || undefined,
+        fileSize: params.file.size,
+        contentBase64: base64,
+      });
+    },
+    onSuccess: () => {
+      setSelectedDocument(null);
+      if (documentInputRef.current) {
+        documentInputRef.current.value = "";
+      }
+      setUploadError(null);
+      setUploadSuccess("Documento subido correctamente.");
+      if (trainerId) {
+        queryClient.invalidateQueries({ queryKey: ["trainer-documents", trainerId] });
+      }
+      onNotify?.({ variant: "success", message: "Documento subido correctamente." });
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : "No se pudo subir el documento.";
+      setUploadError(message);
+      setUploadSuccess(null);
+    },
+  });
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = formValues.name.trim();
@@ -164,6 +230,53 @@ export function TrainerModal({
     };
 
     onSubmit(payload);
+  };
+
+  const handleDocumentTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedDocumentType(event.target.value as TrainerDocumentTypeValue);
+  };
+
+  const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+  const handleDocumentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadError(null);
+    setUploadSuccess(null);
+    const file = event.target.files?.[0] ?? null;
+    if (file && file.size > MAX_FILE_SIZE_BYTES) {
+      setUploadError("El archivo no puede superar los 10 MB.");
+      event.target.value = "";
+      setSelectedDocument(null);
+      return;
+    }
+    setSelectedDocument(file);
+  };
+
+  const handleUploadDocument = () => {
+    if (!trainerId) {
+      setUploadError("Guarda el formador antes de subir documentos.");
+      return;
+    }
+    if (!selectedDocument) {
+      setUploadError("Selecciona un archivo para subir.");
+      return;
+    }
+    uploadMutation.mutate({ file: selectedDocument, type: selectedDocumentType });
+  };
+
+  const isUploadingDocument = uploadMutation.isPending;
+
+  const documentTypeLabel = useMemo(() => {
+    const option = TRAINER_DOCUMENT_TYPES.find((item) => item.value === selectedDocumentType);
+    return option?.label ?? selectedDocumentType;
+  }, [selectedDocumentType]);
+
+  const formatFileSize = (file: File | null) => {
+    if (!file) return "";
+    if (file.size < 1024) return `${file.size} B`;
+    if (file.size < 1024 * 1024) {
+      return `${(file.size / 1024).toFixed(1)} KB`;
+    }
+    return `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
   };
 
   return (
@@ -314,6 +427,66 @@ export function TrainerModal({
                 />
               </Form.Group>
             </Col>
+            {mode === "edit" && (
+              <Col md={12}>
+                <div className="border-top pt-3 mt-1">
+                  <h6 className="mb-3">Documentos</h6>
+                  <div className="d-flex flex-column flex-lg-row gap-2">
+                    <Form.Select
+                      value={selectedDocumentType}
+                      onChange={handleDocumentTypeChange}
+                      disabled={isUploadingDocument}
+                    >
+                      {TRAINER_DOCUMENT_TYPES.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <Form.Control
+                      ref={documentInputRef}
+                      type="file"
+                      onChange={handleDocumentChange}
+                      disabled={isUploadingDocument}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleUploadDocument}
+                      disabled={isUploadingDocument || !trainerId}
+                    >
+                      {isUploadingDocument ? (
+                        <>
+                          <Spinner animation="border" size="sm" role="status" className="me-2" />
+                          Subiendo...
+                        </>
+                      ) : (
+                        "Subir documento"
+                      )}
+                    </Button>
+                  </div>
+                  {uploadError && (
+                    <div className="alert alert-danger mt-3 mb-0" role="alert">
+                      {uploadError}
+                    </div>
+                  )}
+                  {!uploadError && uploadSuccess && (
+                    <div className="alert alert-success mt-3 mb-0" role="alert">
+                      {uploadSuccess}
+                    </div>
+                  )}
+                  {!uploadError && selectedDocument && !uploadSuccess && (
+                    <div className="text-muted small mt-2">
+                      Archivo seleccionado: {selectedDocument.name} ({formatFileSize(selectedDocument)}) – Tipo: {documentTypeLabel}
+                    </div>
+                  )}
+                  {!trainerId && (
+                    <div className="alert alert-info mt-3 mb-0" role="alert">
+                      Guarda el formador para poder gestionar sus documentos.
+                    </div>
+                  )}
+                </div>
+              </Col>
+            )}
             <Col xs={12}>
               <Form.Group controlId="trainerActivo">
                 <Form.Check
