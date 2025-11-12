@@ -440,9 +440,7 @@ export function normalizeSessionDocument(raw: any): SessionDocument {
     trainer_expense: Boolean(
       raw?.trainer_expense ?? raw?.trainerExpense ?? raw?.es_gasto_formador ?? raw?.gasto_formador,
     ),
-    uploaded_by_id: toStringValue(raw?.uploaded_by_id ?? raw?.uploadedById) ?? null,
-    uploaded_by_name: toStringValue(raw?.uploaded_by_name ?? raw?.uploadedByName) ?? null,
-    added_at: toStringValue(raw?.added_at ?? raw?.created_at) ?? null,
+    added_at: toStringValue(raw?.added_at) ?? null,
     updated_at: toStringValue(raw?.updated_at) ?? null,
     drive_file_name: toStringValue(raw?.drive_file_name) ?? null,
     drive_web_view_link:
