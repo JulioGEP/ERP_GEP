@@ -73,6 +73,7 @@ export type ControlHorarioRecord = {
   plannedEnd: string | null;
   clockIn: string | null;
   clockOut: string | null;
+  isVariant: boolean;
 };
 
 export type AuditLogEntry = {
@@ -113,6 +114,7 @@ function sanitizeControlHorarioRecord(entry: unknown): ControlHorarioRecord | nu
     plannedEnd: sanitizeDate(raw.plannedEnd ?? raw.planned_end),
     clockIn: sanitizeDate(raw.clockIn ?? raw.clock_in),
     clockOut: sanitizeDate(raw.clockOut ?? raw.clock_out),
+    isVariant: Boolean(raw.isVariant ?? raw.is_variant),
   } satisfies ControlHorarioRecord;
 }
 
