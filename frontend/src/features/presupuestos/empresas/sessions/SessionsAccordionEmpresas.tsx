@@ -40,6 +40,7 @@ import {
   patchSession,
   createSession,
   deleteSession,
+  sendSessionTrainerInvites,
   fetchSessionComments,
   createSessionComment,
   updateSessionComment,
@@ -1927,6 +1928,9 @@ export function SessionsAccordionEmpresas({
   const lastSavedRef = useRef<Record<string, SessionFormState>>({});
   const sessionProductRef = useRef<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<Record<string, SaveStatus>>({});
+  const [inviteStatus, setInviteStatus] = useState<
+    Record<string, { sending: boolean; message: string | null; error: string | null }>
+  >({});
   const [activeSession, setActiveSession] = useState<
     | {
         sessionId: string;
@@ -2009,6 +2013,10 @@ export function SessionsAccordionEmpresas({
 
   const deleteMutation = useMutation({
     mutationFn: (sessionId: string) => deleteSession(sessionId),
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: (sessionId: string) => sendSessionTrainerInvites(sessionId),
   });
 
   const handleFieldChange = (sessionId: string, updater: (current: SessionFormState) => SessionFormState) => {
@@ -2134,6 +2142,71 @@ export function SessionsAccordionEmpresas({
       [sessionId]: { saving: false, error: null, dirty: false },
     }));
   }, []);
+
+  const handleSendInvites = useCallback(
+    async (sessionId: string) => {
+      const trimmedId = sessionId?.trim();
+      if (!trimmedId) {
+        return;
+      }
+
+      setInviteStatus((current) => ({
+        ...current,
+        [trimmedId]: { sending: true, message: null, error: null },
+      }));
+
+      try {
+        const response = await inviteMutation.mutateAsync(trimmedId);
+        const sentCount = response.invites.filter((invite) => invite.status === 'SENT').length;
+        const failedCount = response.invites.filter((invite) => invite.status === 'FAILED').length;
+        const skippedNames = response.skippedTrainers
+          .map((trainer) => [trainer.name, trainer.apellido].filter(Boolean).join(' ').trim())
+          .filter((value) => value.length);
+
+        const parts: string[] = [];
+        if (sentCount) {
+          parts.push(`${sentCount} invitación${sentCount === 1 ? '' : 'es'} enviadas`);
+        }
+        if (failedCount) {
+          parts.push(`${failedCount} invitación${failedCount === 1 ? '' : 'es'} con error`);
+        }
+        if (!sentCount && !failedCount) {
+          parts.push('No se enviaron invitaciones');
+        }
+        if (skippedNames.length) {
+          parts.push(`Sin email: ${skippedNames.join(', ')}`);
+        }
+
+        const message = parts.join('. ');
+        const hasSuccess = sentCount > 0;
+        const hasIssues = failedCount > 0 || skippedNames.length > 0;
+        const toastVariant: ToastParams['variant'] = !hasSuccess
+          ? 'danger'
+          : hasIssues
+          ? 'info'
+          : 'success';
+
+        setInviteStatus((current) => ({
+          ...current,
+          [trimmedId]: {
+            sending: false,
+            message,
+            error: hasSuccess ? null : message,
+          },
+        }));
+
+        onNotify?.({ variant: toastVariant, message });
+      } catch (error) {
+        const message = formatErrorMessage(error, 'No se pudo enviar la invitación');
+        setInviteStatus((current) => ({
+          ...current,
+          [trimmedId]: { sending: false, message: null, error: message },
+        }));
+        onNotify?.({ variant: 'danger', message });
+      }
+    },
+    [inviteMutation, onNotify],
+  );
 
   const handleCloseSession = useCallback(
     async (sessionId: string) => {
@@ -2709,6 +2782,8 @@ export function SessionsAccordionEmpresas({
                   onSave={(options) => handleSaveSession(activeSession.sessionId, options)}
                   dealId={dealId}
                   dealSede={normalizedDealSede}
+                  inviteStatusMap={inviteStatus}
+                  onSendInvites={handleSendInvites}
                   onNotify={onNotify}
                 />
               ) : (
@@ -2753,6 +2828,8 @@ interface SessionEditorProps {
   onSave: (options?: { notifyOnSuccess?: boolean }) => Promise<boolean> | boolean;
   dealId: string;
   dealSede: string | null;
+  inviteStatusMap: Record<string, { sending: boolean; message: string | null; error: string | null }>;
+  onSendInvites: (sessionId: string) => void;
   onNotify?: (toast: ToastParams) => void;
 }
 
@@ -2769,6 +2846,8 @@ function SessionEditor({
   onSave,
   dealId,
   dealSede,
+  inviteStatusMap,
+  onSendInvites,
   onNotify,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
@@ -3165,6 +3244,39 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
+            {form.estado === 'PLANIFICADA' && form.trainer_ids.length > 0 ? (
+              <div className="mt-2">
+                {(() => {
+                  const inviteState = inviteStatusMap[form.id];
+                  const isSending = inviteState?.sending ?? false;
+                  const message = inviteState?.message;
+                  const errorMessage = inviteState?.error;
+                  return (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline-primary"
+                        disabled={isSending}
+                        onClick={() => onSendInvites(form.id)}
+                      >
+                        {isSending ? (
+                          <>
+                            <Spinner animation="border" size="sm" className="me-2" role="status" /> Enviando…
+                          </>
+                        ) : (
+                          'Enviar confirmación a formadores'
+                        )}
+                      </Button>
+                      {errorMessage ? (
+                        <div className="text-danger small mt-1">{errorMessage}</div>
+                      ) : message ? (
+                        <div className="text-muted small mt-1">{message}</div>
+                      ) : null}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : null}
             {availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
             )}
