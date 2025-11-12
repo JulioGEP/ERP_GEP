@@ -41,6 +41,7 @@ export async function uploadSessionDocuments(params: {
   trainerExpense?: boolean;
   trainerName?: string | null;
   expenseFolderName?: string | null;
+  user?: { id?: string | null; name?: string | null };
 }): Promise<SessionDocumentsPayload> {
   const normalizedDealId = String(params.dealId ?? '').trim();
   const normalizedSessionId = String(params.sessionId ?? '').trim();
@@ -77,10 +78,17 @@ export async function uploadSessionDocuments(params: {
     })),
   );
 
+  const headers: Record<string, string> = {};
+  const userId = typeof params.user?.id === 'string' ? params.user.id.trim() : '';
+  const userName = typeof params.user?.name === 'string' ? params.user.name.trim() : '';
+  if (userId.length) headers['X-User-Id'] = userId;
+  if (userName.length) headers['X-User-Name'] = userName;
+
   const data = await request<{ documents?: unknown[]; drive_url?: unknown; driveUrl?: unknown }>(
     `/session_documents`,
     {
       method: 'POST',
+      headers,
       body: JSON.stringify({
         deal_id: normalizedDealId,
         sesion_id: normalizedSessionId,
