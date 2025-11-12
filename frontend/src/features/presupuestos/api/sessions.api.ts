@@ -13,7 +13,6 @@ import {
   normalizeSessionGroup,
   normalizeSessionPublicLink,
 } from './normalizers';
-import { normalizeTrainerConfirmation } from '../../../utils/trainerConfirmations';
 import type {
   CreateSessionCommentInput,
   SessionAvailability,
@@ -23,7 +22,6 @@ import type {
   SessionGroupDTO,
   SessionPublicLink,
   SessionEstado,
-  TrainerConfirmationStatusDTO,
 } from '../../../api/sessions.types';
 
 async function request<T = any>(path: string, init?: RequestInit) {
@@ -180,36 +178,6 @@ export async function deleteSession(sessionId: string): Promise<void> {
   await request(`/sessions/${encodeURIComponent(normalizedId)}`, {
     method: 'DELETE',
   });
-}
-
-export async function sendSessionConfirmations(
-  sessionId: string,
-  trainerIds: string[],
-): Promise<TrainerConfirmationStatusDTO[]> {
-  const normalizedId = String(sessionId ?? '').trim();
-  if (!normalizedId) {
-    throw new ApiError('VALIDATION_ERROR', 'sessionId es obligatorio');
-  }
-
-  const payload: Record<string, unknown> = {
-    kind: 'session',
-    id: normalizedId,
-  };
-
-  const sanitizedIds = sanitizeStringArray(trainerIds);
-  if (sanitizedIds && sanitizedIds.length) {
-    payload.trainers = sanitizedIds;
-  }
-
-  const data = await request<{ statuses?: unknown }>(`/confirmations/send`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-
-  const statuses = Array.isArray(data?.statuses) ? data.statuses : [];
-  return statuses
-    .map((entry: any) => normalizeTrainerConfirmation(entry))
-    .filter((entry) => entry.trainer_id.length);
 }
 
 export async function fetchSessionAvailability(params: {

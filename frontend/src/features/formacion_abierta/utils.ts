@@ -8,7 +8,6 @@ import type {
   VariantMonthGroup,
   VariantSortKey,
 } from './types';
-import { normalizeTrainerConfirmation } from '../../utils/trainerConfirmations';
 
 const MONTH_NAMES = [
   'Enero',
@@ -193,15 +192,6 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     unidades.push(fallbackUnidadRecord);
   }
 
-  const confirmationsRaw = Array.isArray(input?.trainer_confirmations)
-    ? input.trainer_confirmations
-    : Array.isArray(input?.trainerConfirmations)
-    ? input.trainerConfirmations
-    : [];
-  const trainerConfirmations = confirmationsRaw
-    .map((entry: any) => normalizeTrainerConfirmation(entry))
-    .filter((entry) => entry.trainer_id.length);
-
   return {
     id: String(input?.id ?? fallbackId),
     id_woo: input?.id_woo != null ? String(input.id_woo) : '',
@@ -235,7 +225,6 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     unidades,
     created_at: input?.created_at ?? null,
     updated_at: input?.updated_at ?? null,
-    trainer_confirmations: trainerConfirmations,
   } satisfies VariantInfo;
 }
 
