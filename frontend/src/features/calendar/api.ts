@@ -135,6 +135,15 @@ export type CalendarVariantsResponse = {
   variants: CalendarVariantEvent[];
 };
 
+export type CalendarOrganizationsParams = {
+  search?: string;
+  limit?: number;
+};
+
+export type CalendarOrganizationsResponse = {
+  organizations: string[];
+};
+
 const SESSION_ESTADO_VALUES: SessionEstado[] = [
   'BORRADOR',
   'PLANIFICADA',
@@ -732,4 +741,47 @@ export async function fetchCalendarVariants(
     },
     variants,
   } satisfies CalendarVariantsResponse;
+}
+
+export async function fetchCalendarOrganizations(
+  params: CalendarOrganizationsParams,
+): Promise<CalendarOrganizationsResponse> {
+  const search = new URLSearchParams();
+  const normalizedQuery = params.search?.trim() ?? '';
+  if (normalizedQuery.length) {
+    search.set('search', normalizedQuery);
+  }
+  if (typeof params.limit === 'number' && Number.isFinite(params.limit)) {
+    search.set('limit', String(params.limit));
+  }
+
+  let response: Response;
+  try {
+    const queryString = search.toString();
+    const suffix = queryString.length ? `?${queryString}` : '';
+    response = await fetchWithClient(`${API_BASE}/calendar-organizations${suffix}`);
+  } catch (error: any) {
+    throw new ApiError('NETWORK_ERROR', error?.message ?? 'Fallo de red');
+  }
+
+  let payload: any = {};
+  try {
+    payload = await response.json();
+  } catch {
+    /* cuerpo vacío */
+  }
+
+  if (!response.ok || payload?.ok === false) {
+    const code = payload?.error_code ?? payload?.code ?? `HTTP_${response.status}`;
+    const message = payload?.message ?? 'Error al cargar las organizaciones del calendario';
+    throw new ApiError(code, message, response.status);
+  }
+
+  const organizations = Array.isArray(payload?.organizations)
+    ? payload.organizations
+        .map((value: unknown) => toOptionalString(value))
+        .filter((value: string | null): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+
+  return { organizations } satisfies CalendarOrganizationsResponse;
 }

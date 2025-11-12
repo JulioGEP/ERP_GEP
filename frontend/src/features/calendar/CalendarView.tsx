@@ -10,6 +10,8 @@ import {
   type CalendarSessionsResponse,
   type CalendarVariantEvent,
   type CalendarVariantsResponse,
+  type CalendarOrganizationsResponse,
+  fetchCalendarOrganizations,
 } from './api';
 import type { SessionEstado } from '../../api/sessions.types';
 import { ApiError } from '../../api/client';
@@ -1142,6 +1144,71 @@ export function CalendarView({
     return result;
   }, [sessions, variants, includeVariants]);
 
+  const [organizationSearch, setOrganizationSearch] = useState('');
+  const debouncedOrganizationSearch = useDebouncedValue(organizationSearch, DEBOUNCE_MS);
+  const normalizedOrganizationSearch = debouncedOrganizationSearch.trim();
+
+  const organizationOptionsQuery = useQuery<CalendarOrganizationsResponse, ApiError>({
+    queryKey: ['calendar-filter-organizations', normalizedOrganizationSearch],
+    queryFn: () =>
+      fetchCalendarOrganizations({
+        search: normalizedOrganizationSearch,
+        limit: 25,
+      }),
+    enabled: normalizedOrganizationSearch.length >= 2,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const remoteOrganizationOptions = useMemo<FilterOption[]>(() => {
+    const organizations = organizationOptionsQuery.data?.organizations ?? [];
+    if (!organizations.length) {
+      return [];
+    }
+    const seen = new Set<string>();
+    const options: FilterOption[] = [];
+    organizations.forEach((name) => {
+      const value = safeString(name);
+      if (!value.length) {
+        return;
+      }
+      const normalized = value.toLocaleLowerCase('es-ES');
+      if (seen.has(normalized)) {
+        return;
+      }
+      seen.add(normalized);
+      options.push({ value, label: value });
+    });
+    options.sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+    return options;
+  }, [organizationOptionsQuery.data]);
+
+  const organizationFilterOptions = useMemo<FilterOption[]>(() => {
+    const baseOptions = selectOptionsByKey['deal_organization_name'] ?? [];
+    if (!baseOptions.length && !remoteOrganizationOptions.length) {
+      return [];
+    }
+    const seen = new Set<string>();
+    const merged: FilterOption[] = [];
+    baseOptions.forEach((option) => {
+      const normalized = option.value.toLocaleLowerCase('es-ES');
+      if (seen.has(normalized)) {
+        return;
+      }
+      seen.add(normalized);
+      merged.push(option);
+    });
+    remoteOrganizationOptions.forEach((option) => {
+      const normalized = option.value.toLocaleLowerCase('es-ES');
+      if (seen.has(normalized)) {
+        return;
+      }
+      seen.add(normalized);
+      merged.push(option);
+    });
+    merged.sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
+    return merged;
+  }, [remoteOrganizationOptions, selectOptionsByKey]);
+
   const calendarFilterDefinitions = useMemo<FilterDefinition[]>(
     () =>
       CALENDAR_FILTER_DEFINITIONS.map((definition) => {
@@ -1161,6 +1228,15 @@ export function CalendarView({
           } satisfies FilterDefinition;
         }
 
+        if (definition.key === 'deal_organization_name') {
+          return {
+            ...definition,
+            type: 'select',
+            options: organizationFilterOptions,
+            placeholder: definition.placeholder ?? 'Escribe para buscar organizaciones',
+          } satisfies FilterDefinition;
+        }
+
         if (CALENDAR_DYNAMIC_SELECT_KEYS.has(definition.key)) {
           const options = selectOptionsByKey[definition.key] ?? [];
           return {
@@ -1173,7 +1249,7 @@ export function CalendarView({
 
         return definition;
       }),
-    [productFilterOptions, selectOptionsByKey],
+    [productFilterOptions, selectOptionsByKey, organizationFilterOptions],
   );
 
   const {
@@ -1199,6 +1275,15 @@ export function CalendarView({
       setSearchValue(value);
     },
     [setSearchValue],
+  );
+
+  const handleFilterOptionSearchChange = useCallback(
+    (key: string, value: string) => {
+      if (key === 'deal_organization_name') {
+        setOrganizationSearch(value);
+      }
+    },
+    [setOrganizationSearch],
   );
 
   const sessionFilterRows = useMemo(
@@ -1695,6 +1780,7 @@ export function CalendarView({
                   onApplyFilterState={({ filters, searchValue }) =>
                     setFiltersAndSearch(filters, searchValue)
                   }
+                  onOptionSearchChange={handleFilterOptionSearchChange}
                 />
               </div>
             </div>

@@ -65,6 +65,7 @@ interface FilterToolbarProps {
   debounceMs?: number; // mantenido por compatibilidad, no se usa directamente
   viewStorageKey?: string;
   onApplyFilterState?: (state: { filters: Record<string, string>; searchValue: string }) => void;
+  onOptionSearchChange?: (key: string, value: string) => void;
 }
 
 function formatFilterValue(
@@ -122,6 +123,7 @@ export function FilterToolbar({
   isServerBusy = false,
   viewStorageKey,
   onApplyFilterState,
+  onOptionSearchChange,
 }: FilterToolbarProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [draftFilters, setDraftFilters] = useState<Record<string, string>>({});
@@ -372,17 +374,23 @@ export function FilterToolbar({
     }
   }, []);
 
-  const handleOptionSearchChange = useCallback((key: string, query: string) => {
-    setOptionSearchTerms((current) => {
-      if (!query.length) {
-        if (!(key in current)) return current;
-        const next = { ...current };
-        delete next[key];
-        return next;
+  const handleOptionSearchChange = useCallback(
+    (key: string, query: string) => {
+      setOptionSearchTerms((current) => {
+        if (!query.length) {
+          if (!(key in current)) return current;
+          const next = { ...current };
+          delete next[key];
+          return next;
+        }
+        return { ...current, [key]: query };
+      });
+      if (onOptionSearchChange) {
+        onOptionSearchChange(key, query);
       }
-      return { ...current, [key]: query };
-    });
-  }, []);
+    },
+    [onOptionSearchChange],
+  );
 
   const handleDraftChange = useCallback((key: string, value: string) => {
     setDraftFilters((current) => ({ ...current, [key]: value }));
@@ -700,11 +708,14 @@ export function FilterToolbar({
         if (key in next) {
           delete next[key];
           changed = true;
+          if (onOptionSearchChange) {
+            onOptionSearchChange(key, '');
+          }
         }
       });
       return changed ? next : current;
     });
-  }, [filters, openSelectKey]);
+  }, [filters, openSelectKey, onOptionSearchChange]);
 
   useEffect(() => {
     if (!isSavedViewsOpen) return;
