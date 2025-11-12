@@ -440,7 +440,6 @@ export function normalizeSessionDocument(raw: any): SessionDocument {
     trainer_expense: Boolean(
       raw?.trainer_expense ?? raw?.trainerExpense ?? raw?.es_gasto_formador ?? raw?.gasto_formador,
     ),
-    author: toStringValue(raw?.author) ?? null,
     added_at: toStringValue(raw?.added_at) ?? null,
     updated_at: toStringValue(raw?.updated_at) ?? null,
     drive_file_name: toStringValue(raw?.drive_file_name) ?? null,
