@@ -122,6 +122,7 @@ model deals {
   title                String?
   org_id               String?
   pipeline_id          String?
+  pipeline_label       String?
   training_address     String?
   sede_label           String?
   caes_label           String?
