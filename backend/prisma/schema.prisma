@@ -107,6 +107,7 @@ model variants {
   unidades_moviles unidades_moviles? @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction, map: "variants_unidad_fk")
   time_logs        trainer_session_time_logs[]
   extra_costs      trainer_extra_costs[]
+  trainer_confirmations trainer_confirmation_status[]
 
   @@index([id_padre], map: "idx_variants_id_padre")
   @@index([sala_id], map: "idx_variants_sala_id")
@@ -349,6 +350,7 @@ model sesiones {
   tokens               tokens[]
   time_logs            trainer_session_time_logs[]
   extra_costs          trainer_extra_costs[]
+  trainer_confirmations trainer_confirmation_status[]
 
   @@index([deal_id], map: "idx_sesiones_deal")
   @@index([deal_product_id], map: "idx_sesiones_deal_product")
@@ -397,6 +399,7 @@ model trainers {
   availability    trainer_availability[]
   time_logs       trainer_session_time_logs[]
   extra_costs     trainer_extra_costs[]
+  trainer_confirmations trainer_confirmation_status[]
 
   @@index([apellido])
   @@index([especialidad])
@@ -474,6 +477,31 @@ model trainer_extra_costs {
   @@map("trainer_extra_costs")
 }
 
+model trainer_confirmation_status {
+  id                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sesion_id          String?                  @db.Uuid
+  variant_id         String?                  @db.Uuid
+  trainer_id         String
+  status             TrainerConfirmationState @default(PENDING)
+  mail_sent_at       DateTime?                @db.Timestamptz(6)
+  responded_at       DateTime?                @db.Timestamptz(6)
+  created_at         DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime                 @default(now()) @updatedAt @db.Timestamptz(6)
+  confirmation_token String?
+  token_expires_at   DateTime?                @db.Timestamptz(6)
+
+  sesion  sesiones? @relation(fields: [sesion_id], references: [id], onDelete: Cascade)
+  variant variants? @relation(fields: [variant_id], references: [id], onDelete: Cascade)
+  trainer trainers  @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
+
+  @@index([trainer_id], map: "idx_trainer_conf_trainer")
+  @@index([sesion_id], map: "idx_trainer_conf_session")
+  @@index([variant_id], map: "idx_trainer_conf_variant")
+  @@unique([sesion_id, trainer_id], map: "uq_trainer_conf_session_trainer")
+  @@unique([variant_id, trainer_id], map: "uq_trainer_conf_variant_trainer")
+  @@map("trainer_confirmation_status")
+}
+
 model unidades_moviles {
   unidad_id       String            @id
   name            String?
@@ -512,6 +540,13 @@ enum SessionEstado {
   SUSPENDIDA
   CANCELADA
   FINALIZADA
+}
+
+enum TrainerConfirmationState {
+  PENDING
+  MAIL_SENT
+  CONFIRMED
+  DECLINED
 }
 
 enum deal_session_status {

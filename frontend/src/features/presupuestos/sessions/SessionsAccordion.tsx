@@ -40,6 +40,7 @@ import {
   patchSession,
   createSession,
   deleteSession,
+  sendSessionConfirmations,
   fetchSessionComments,
   createSessionComment,
   updateSessionComment,
@@ -67,6 +68,7 @@ import {
   type SessionDocument,
   type SessionStudent,
   type SessionCounts,
+  type TrainerConfirmationStatusDTO,
 } from '../api';
 import { isApiError } from '../api';
 import { buildFieldTooltip } from '../../../utils/fieldTooltip';
@@ -77,6 +79,10 @@ import {
   type SessionDocumentsEventDetail,
 } from '../../../utils/sessionDocumentsEvents';
 import { useCurrentUserIdentity } from '../useCurrentUserIdentity';
+import {
+  TRAINER_CONFIRMATION_STATUS_BADGE_VARIANTS,
+  TRAINER_CONFIRMATION_STATUS_LABELS,
+} from '../../../utils/trainerConfirmations';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -1547,6 +1553,7 @@ type SessionFormState = {
   drive_url: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
+  trainer_confirmations: TrainerConfirmationStatusDTO[];
 };
 
 type IsoRange = {
@@ -1690,6 +1697,9 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     drive_url: session.drive_url ?? null,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
+    trainer_confirmations: Array.isArray(session.trainer_confirmations)
+      ? [...session.trainer_confirmations]
+      : [],
   };
 }
 
@@ -1927,6 +1937,9 @@ export function SessionsAccordion({
   const lastSavedRef = useRef<Record<string, SessionFormState>>({});
   const sessionProductRef = useRef<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<Record<string, SaveStatus>>({});
+  const [mailStatus, setMailStatus] = useState<
+    Record<string, { sending: boolean; error: string | null; lastSentAt: number | null }>
+  >({});
   const [activeSession, setActiveSession] = useState<
     | {
         sessionId: string;
@@ -1983,6 +1996,13 @@ export function SessionsAccordion({
       }
       return next;
     });
+    setMailStatus(() => {
+      const next: Record<string, { sending: boolean; error: string | null; lastSentAt: number | null }> = {};
+      for (const sessionId of Object.keys(nextForms)) {
+        next[sessionId] = { sending: false, error: null, lastSentAt: null };
+      }
+      return next;
+    });
   }, [generationDone, queriesUpdatedKey, applicableProducts]);
 
   const patchMutation = useMutation({
@@ -2009,6 +2029,11 @@ export function SessionsAccordion({
 
   const deleteMutation = useMutation({
     mutationFn: (sessionId: string) => deleteSession(sessionId),
+  });
+
+  const sendConfirmationsMutation = useMutation({
+    mutationFn: ({ sessionId, trainerIds }: { sessionId: string; trainerIds: string[] }) =>
+      sendSessionConfirmations(sessionId, trainerIds),
   });
 
   const handleFieldChange = (sessionId: string, updater: (current: SessionFormState) => SessionFormState) => {
@@ -2096,6 +2121,10 @@ export function SessionsAccordion({
           ...current,
           [sessionId]: { saving: false, error: null, dirty: false, savedAt: Date.now() },
         }));
+        setMailStatus((current) => ({
+          ...current,
+          [sessionId]: { sending: false, error: null, lastSentAt: null },
+        }));
         await qc.invalidateQueries({ queryKey: ['calendarSessions'] });
         if (notifyOnSuccess) {
           onNotify?.({ variant: 'success', message: 'Sesión guardada correctamente' });
@@ -2121,6 +2150,61 @@ export function SessionsAccordion({
   const handleSaveSession = useCallback(
     (sessionId: string, options?: { notifyOnSuccess?: boolean }) => runSave(sessionId, options),
     [runSave],
+  );
+
+  const handleSendSessionConfirmations = useCallback(
+    async (sessionId: string, trainerIds: string[]) => {
+      if (!trainerIds.length) return false;
+
+      setMailStatus((current) => ({
+        ...current,
+        [sessionId]: { sending: true, error: null, lastSentAt: current[sessionId]?.lastSentAt ?? null },
+      }));
+
+      try {
+        const statuses = await sendConfirmationsMutation.mutateAsync({ sessionId, trainerIds });
+        const normalizedStatuses = Array.isArray(statuses) ? statuses : [];
+
+        const currentForms = formsRef.current;
+        const existingForm = currentForms[sessionId];
+        if (existingForm) {
+          const updatedForm: SessionFormState = {
+            ...existingForm,
+            trainer_confirmations: normalizedStatuses,
+          };
+          formsRef.current = { ...currentForms, [sessionId]: updatedForm };
+          setForms((current) => ({ ...current, [sessionId]: updatedForm }));
+        }
+
+        const savedForm = lastSavedRef.current[sessionId];
+        if (savedForm) {
+          lastSavedRef.current[sessionId] = {
+            ...savedForm,
+            trainer_confirmations: normalizedStatuses,
+          };
+        }
+
+        setMailStatus((current) => ({
+          ...current,
+          [sessionId]: { sending: false, error: null, lastSentAt: Date.now() },
+        }));
+        onNotify?.({ variant: 'success', message: 'Mail de confirmación enviado.' });
+        return true;
+      } catch (error) {
+        const message = isApiError(error)
+          ? error.message
+          : error instanceof Error
+          ? error.message
+          : 'No se pudieron enviar los mails de confirmación.';
+        setMailStatus((current) => ({
+          ...current,
+          [sessionId]: { sending: false, error: message, lastSentAt: null },
+        }));
+        onNotify?.({ variant: 'danger', message });
+        return false;
+      }
+    },
+    [onNotify, sendConfirmationsMutation],
   );
 
   const revertSessionChanges = useCallback((sessionId: string) => {
@@ -2710,6 +2794,16 @@ export function SessionsAccordion({
                   dealId={dealId}
                   dealSede={normalizedDealSede}
                   onNotify={onNotify}
+                  mailStatus={
+                    mailStatus[activeSession.sessionId] ?? {
+                      sending: false,
+                      error: null,
+                      lastSentAt: null,
+                    }
+                  }
+                  onSendConfirmations={(trainerIds) =>
+                    handleSendSessionConfirmations(activeSession.sessionId, trainerIds)
+                  }
                 />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
@@ -2754,6 +2848,8 @@ interface SessionEditorProps {
   dealId: string;
   dealSede: string | null;
   onNotify?: (toast: ToastParams) => void;
+  mailStatus: { sending: boolean; error: string | null; lastSentAt: number | null };
+  onSendConfirmations: (trainerIds: string[]) => Promise<boolean> | boolean;
 }
 
 function SessionEditor({
@@ -2770,6 +2866,8 @@ function SessionEditor({
   dealId,
   dealSede,
   onNotify,
+  mailStatus,
+  onSendConfirmations,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
@@ -2809,6 +2907,59 @@ function SessionEditor({
   const unitSummary = selectedUnits
     .map((unit) => (unit.matricula ? `${unit.name} (${unit.matricula})` : unit.name))
     .join(', ');
+
+  const trainerLookup = useMemo(() => {
+    const map = new Map<string, TrainerOption>();
+    trainers.forEach((trainer) => map.set(trainer.trainer_id, trainer));
+    return map;
+  }, [trainers]);
+
+  const confirmationLookup = useMemo(() => {
+    const map = new Map<string, TrainerConfirmationStatusDTO>();
+    (form.trainer_confirmations ?? []).forEach((entry) => {
+      if (entry?.trainer_id?.trim()) {
+        map.set(entry.trainer_id, entry);
+      }
+    });
+    return map;
+  }, [form.trainer_confirmations]);
+
+  const trainerChips = useMemo(
+    () =>
+      form.trainer_ids.map((trainerId) => {
+        const trainer = trainerLookup.get(trainerId);
+        const nameParts: string[] = [];
+        const firstName = trainer?.name?.trim();
+        if (firstName) nameParts.push(firstName);
+        const lastName = trainer?.apellido?.trim();
+        if (lastName) nameParts.push(lastName);
+        const displayName = nameParts.length ? nameParts.join(' ') : trainerId;
+        const confirmation = confirmationLookup.get(trainerId);
+        const status = confirmation?.status ?? 'PENDING';
+        return {
+          trainerId,
+          name: displayName,
+          status,
+          label:
+            TRAINER_CONFIRMATION_STATUS_LABELS[status] ??
+            TRAINER_CONFIRMATION_STATUS_LABELS.PENDING,
+          variant:
+            TRAINER_CONFIRMATION_STATUS_BADGE_VARIANTS[status] ?? 'secondary',
+        };
+      }),
+    [confirmationLookup, form.trainer_ids, trainerLookup],
+  );
+
+  const pendingTrainerIds = useMemo(
+    () => trainerChips.filter((chip) => chip.status === 'PENDING').map((chip) => chip.trainerId),
+    [trainerChips],
+  );
+
+  const hasAssignedTrainers = form.trainer_ids.length > 0;
+  const sendConfirmationsDisabled =
+    !hasAssignedTrainers || !pendingTrainerIds.length || status.dirty || status.saving || mailStatus.sending;
+  const showDirtyBeforeSend = status.dirty && hasAssignedTrainers;
+  const confirmationSuccess = Boolean(mailStatus.lastSentAt && !mailStatus.error);
 
   const availabilityRange = useMemo(
     () => buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local),
@@ -3165,6 +3316,49 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
+            {hasAssignedTrainers ? (
+              <div className="mt-2">
+                <div className="d-flex flex-wrap align-items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline-primary"
+                    disabled={sendConfirmationsDisabled}
+                    onClick={() => void onSendConfirmations(pendingTrainerIds)}
+                  >
+                    {mailStatus.sending ? (
+                      <span className="d-inline-flex align-items-center gap-2">
+                        <Spinner animation="border" size="sm" role="status" aria-hidden="true" />
+                        Enviando…
+                      </span>
+                    ) : (
+                      'Mail de confirmación'
+                    )}
+                  </Button>
+                  <div className="d-flex flex-wrap gap-2">
+                    {trainerChips.map((chip) => (
+                      <Badge
+                        key={`${chip.trainerId}-${chip.status}`}
+                        bg={chip.variant}
+                        className={`fw-normal${chip.variant === 'warning' ? ' text-dark' : ''}`}
+                      >
+                        {chip.name} · {chip.label}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                {showDirtyBeforeSend ? (
+                  <div className="text-muted small mt-1">
+                    Guarda los cambios antes de enviar el mail de confirmación.
+                  </div>
+                ) : null}
+                {mailStatus.error ? (
+                  <div className="text-danger small mt-1">{mailStatus.error}</div>
+                ) : null}
+                {confirmationSuccess ? (
+                  <div className="text-success small mt-1">Mail de confirmación enviado.</div>
+                ) : null}
+              </div>
+            ) : null}
             {availabilityError && (
               <div className="text-danger small mt-1">No se pudo comprobar la disponibilidad.</div>
             )}
