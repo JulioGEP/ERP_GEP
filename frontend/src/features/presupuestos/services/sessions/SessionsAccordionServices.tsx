@@ -66,6 +66,13 @@ import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
 import { formatSedeLabel } from '../../formatSedeLabel';
 import { useApplicableDealProducts } from '../../shared/useApplicableDealProducts';
 import {
+  buildTrainerInviteStatusMapFromSession,
+  setTrainerInviteStatusForIds,
+  summarizeTrainerInviteStatus,
+  syncTrainerInviteStatusMap,
+  type TrainerInviteStatusMap,
+} from '../../shared/trainerInviteStatus';
+import {
   SESSION_DOCUMENTS_EVENT,
   type SessionDocumentsEventDetail,
 } from '../../../../utils/sessionDocumentsEvents';
@@ -793,6 +800,7 @@ type SessionFormState = {
   trainer_ids: string[];
   unidad_movil_ids: string[];
   trainer_invite_status: SessionTrainerInviteStatus;
+  trainer_invite_statuses: TrainerInviteStatusMap;
 };
 
 type IsoRange = {
@@ -945,6 +953,8 @@ function addHoursToLocalDateTime(value: string, hours: number): string | null {
 }
 
 function mapSessionToForm(session: SessionDTO): SessionFormState {
+  const trainerInviteStatuses = buildTrainerInviteStatusMapFromSession(session);
+  const trainerInviteStatus = summarizeTrainerInviteStatus(trainerInviteStatuses);
   return {
     id: session.id,
     nombre_cache: session.nombre_cache,
@@ -956,7 +966,8 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     drive_url: session.drive_url ?? null,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
-    trainer_invite_status: session.trainer_invite_status,
+    trainer_invite_status: trainerInviteStatus,
+    trainer_invite_statuses: trainerInviteStatuses,
   };
 }
 
@@ -1480,20 +1491,42 @@ export function SessionsAccordionServices({
           },
         }));
 
+        const sentTrainerIds = response.invites
+          .filter((invite) => invite.status === 'SENT')
+          .map((invite) => invite.trainerId)
+          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+
         setForms((current) => {
           const existing = current[trimmedId];
           if (!existing) return current;
+          const syncedMap = syncTrainerInviteStatusMap(existing.trainer_invite_statuses, existing.trainer_ids);
+          const updatedMap = sentTrainerIds.length
+            ? setTrainerInviteStatusForIds(syncedMap, sentTrainerIds, 'PENDING')
+            : syncedMap;
+          const summaryStatus = summarizeTrainerInviteStatus(updatedMap);
           const next: SessionFormState = {
             ...existing,
-            trainer_invite_status: 'PENDING' as SessionTrainerInviteStatus,
+            trainer_invite_status: summaryStatus,
+            trainer_invite_statuses: updatedMap,
           };
           const nextMap = { ...current, [trimmedId]: next };
           formsRef.current = nextMap;
           return nextMap;
         });
         const savedExisting = lastSavedRef.current[trimmedId];
+        const savedMap = savedExisting
+          ? syncTrainerInviteStatusMap(savedExisting.trainer_invite_statuses, savedExisting.trainer_ids)
+          : {};
+        const updatedSavedMap = sentTrainerIds.length
+          ? setTrainerInviteStatusForIds(savedMap, sentTrainerIds, 'PENDING')
+          : savedMap;
+        const savedSummary = summarizeTrainerInviteStatus(updatedSavedMap);
         const nextSavedEntry: SessionFormState = savedExisting
-          ? { ...savedExisting, trainer_invite_status: 'PENDING' as SessionTrainerInviteStatus }
+          ? {
+              ...savedExisting,
+              trainer_invite_status: savedSummary,
+              trainer_invite_statuses: updatedSavedMap,
+            }
           : formsRef.current[trimmedId];
         lastSavedRef.current = { ...lastSavedRef.current, [trimmedId]: nextSavedEntry };
 
@@ -2158,11 +2191,32 @@ function SessionEditor({
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const trainerPointerInteractingRef = useRef(false);
   const unitPointerInteractingRef = useRef(false);
-  const inviteStatusInfo = TRAINER_INVITE_STATUS_BADGES[form.trainer_invite_status] ??
-    TRAINER_INVITE_STATUS_BADGES.NOT_SENT;
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
+
+  const handleTrainerSelectionChange = useCallback(
+    (trainerId: string, checked: boolean) => {
+      onChange((current) => {
+        const set = new Set(current.trainer_ids);
+        if (checked) {
+          set.add(trainerId);
+        } else {
+          set.delete(trainerId);
+        }
+        const nextIds = Array.from(set);
+        const nextStatusMap = syncTrainerInviteStatusMap(current.trainer_invite_statuses, nextIds);
+        const summaryStatus = summarizeTrainerInviteStatus(nextStatusMap);
+        return {
+          ...current,
+          trainer_ids: nextIds,
+          trainer_invite_statuses: nextStatusMap,
+          trainer_invite_status: summaryStatus,
+        };
+      });
+    },
+    [onChange],
+  );
 
   const filteredUnits = useMemo(() => {
     const search = unitFilter.trim().toLowerCase();
@@ -2523,15 +2577,7 @@ function SessionEditor({
                               checked={checked}
                               disabled={blocked && !checked}
                               onChange={(event) =>
-                                onChange((current) => {
-                                  const set = new Set(current.trainer_ids);
-                                  if (event.target.checked) {
-                                    set.add(trainer.trainer_id);
-                                  } else {
-                                    set.delete(trainer.trainer_id);
-                                  }
-                                  return { ...current, trainer_ids: Array.from(set) };
-                                })
+                                handleTrainerSelectionChange(trainer.trainer_id, event.target.checked)
                               }
                             />
                           </ListGroup.Item>
@@ -2569,9 +2615,25 @@ function SessionEditor({
                           'Enviar confirmación a formadores'
                         )}
                       </Button>
-                      <div className="mt-2">
-                        <Badge bg={inviteStatusInfo.variant}>{inviteStatusInfo.label}</Badge>
-                      </div>
+                      {selectedTrainers.length ? (
+                        <div className="mt-2 d-flex flex-column gap-1">
+                          {selectedTrainers.map((trainer) => {
+                            const trainerId = trainer.trainer_id;
+                            const status = trainerId
+                              ? form.trainer_invite_statuses[trainerId] ?? 'NOT_SENT'
+                              : 'NOT_SENT';
+                            const statusInfo =
+                              TRAINER_INVITE_STATUS_BADGES[status] ?? TRAINER_INVITE_STATUS_BADGES.NOT_SENT;
+                            const trainerLabel = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
+                            return (
+                              <div key={trainer.trainer_id} className="d-flex align-items-center gap-2 small">
+                                <span>{trainerLabel}</span>
+                                <Badge bg={statusInfo.variant}>{statusInfo.label}</Badge>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                       {hasError ? (
                         <div className="text-danger small mt-1">{errorMessage}</div>
                       ) : message ? (

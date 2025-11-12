@@ -15,6 +15,13 @@ export const SESSION_ESTADOS: SessionEstado[] = [
 
 export type SessionTrainerInviteStatus = 'NOT_SENT' | 'PENDING' | 'CONFIRMED' | 'DECLINED';
 
+export type SessionTrainerInviteSummary = {
+  trainer_id: string | null;
+  status: 'PENDING' | 'CONFIRMED' | 'DECLINED';
+  sent_at: string | null;
+  responded_at: string | null;
+};
+
 export type SessionDTO = {
   id: string;
   deal_id: string;
@@ -29,6 +36,7 @@ export type SessionDTO = {
   trainer_ids: string[];
   unidad_movil_ids: string[];
   trainer_invite_status: SessionTrainerInviteStatus;
+  trainer_invites: SessionTrainerInviteSummary[];
 };
 
 export type SessionGroupDTO = {
