@@ -10,8 +10,6 @@ import {
   type CalendarSessionsResponse,
   type CalendarVariantEvent,
   type CalendarVariantsResponse,
-  type CalendarOrganizationsResponse,
-  fetchCalendarOrganizations,
 } from './api';
 import type { SessionEstado } from '../../api/sessions.types';
 import { ApiError } from '../../api/client';
@@ -71,17 +69,6 @@ const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_pipeline_id', label: 'Negocio' },
   { key: 'deal_training_address', label: 'Dirección de formación' },
   { key: 'deal_sede_label', label: 'Sede' },
-  {
-    key: 'deal_organization_name',
-    label: 'Organización',
-    description: 'Busca y selecciona una o varias organizaciones.',
-    type: 'select',
-    placeholder: 'Escribe para buscar organizaciones',
-    allowNegation: true,
-    negationLabel: 'Excluir coincidencias',
-    negationDescription: 'Activa la opción para ocultar las organizaciones seleccionadas.',
-    searchFromInput: true,
-  },
   { key: 'deal_caes_label', label: 'CAES' },
   { key: 'deal_fundae_label', label: 'FUNDAE' },
   { key: 'deal_hotel_label', label: 'Hotel' },
@@ -111,7 +98,6 @@ const CALENDAR_SELECT_FILTER_KEYS = new Set<string>([
   'deal_fundae_label',
   'deal_hotel_label',
   'deal_transporte',
-  'deal_organization_name',
   'product_name',
   'estado',
   'trainer',
@@ -496,7 +482,6 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
   deal_pipeline_id: (session) => safeString(session.dealPipelineId ?? ''),
   deal_training_address: (session) => safeString(session.dealAddress ?? session.direccion ?? ''),
   deal_sede_label: (session) => safeString(session.dealSedeLabel ?? ''),
-  deal_organization_name: (session) => safeString(session.dealOrganizationName ?? ''),
   deal_caes_label: (session) => safeString(session.dealCaesLabel ?? ''),
   deal_fundae_label: (session) => safeString(session.dealFundaeLabel ?? ''),
   deal_hotel_label: (session) => safeString(session.dealHotelLabel ?? ''),
@@ -539,8 +524,6 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
       .filter((value) => value.length);
     return values.join(' ');
   },
-  deal_organization_name: (variant) =>
-    joinVariantDealValues(variant, (deal) => deal.organizationName ?? null),
   deal_caes_label: (variant) => joinVariantDealValues(variant, (deal) => deal.caesLabel),
   deal_fundae_label: (variant) => joinVariantDealValues(variant, (deal) => deal.fundaeLabel),
   deal_hotel_label: (variant) => joinVariantDealValues(variant, (deal) => deal.hotelLabel),
@@ -722,39 +705,19 @@ function applyCalendarFilters(
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
       filterEntries.every(([key, value]) => {
-        const rawParts = splitFilterValue(value);
-        if (!rawParts.length) {
-          return true;
+        const parts = splitFilterValue(value);
+        if (parts.length > 1) {
+          return parts.some((part) => {
+            const normalizedPart = normalizeText(safeString(part));
+            if (!normalizedPart.length) return false;
+            const targetValue = row.normalized[key] ?? '';
+            return targetValue.includes(normalizedPart);
+          });
         }
-        const parsedParts = rawParts
-          .map((part) => {
-            const isNegated = part.startsWith('!');
-            const normalizedPart = normalizeText(
-              safeString(isNegated ? part.slice(1) : part),
-            );
-            if (!normalizedPart.length) {
-              return null;
-            }
-            return { value: normalizedPart, isNegated };
-          })
-          .filter((item): item is { value: string; isNegated: boolean } => item !== null);
-        if (!parsedParts.length) {
-          return true;
-        }
-        const targetValue = row.normalized[key] ?? '';
-        const includeValues = parsedParts
-          .filter((item) => !item.isNegated)
-          .map((item) => item.value);
-        if (includeValues.length && !includeValues.some((part) => targetValue.includes(part))) {
-          return false;
-        }
-        const excludeValues = parsedParts
-          .filter((item) => item.isNegated)
-          .map((item) => item.value);
-        if (excludeValues.length && excludeValues.some((part) => targetValue.includes(part))) {
-          return false;
-        }
-        return true;
+        const normalizedValue = normalizeText(safeString(value));
+        if (!normalizedValue.length) return true;
+        const target = row.normalized[key] ?? '';
+        return target.includes(normalizedValue);
       }),
     );
   }
@@ -1074,7 +1037,6 @@ export function CalendarView({
       addValue('deal_fundae_label', session.dealFundaeLabel);
       addValue('deal_hotel_label', session.dealHotelLabel);
       addValue('deal_transporte', session.dealTransporte);
-      addValue('deal_organization_name', session.dealOrganizationName);
       session.trainers.forEach((trainer) => addValue('trainer', formatResourceName(trainer)));
       session.units.forEach((unit) => addValue('unit', formatResourceName(unit)));
       if (session.room) {
@@ -1095,7 +1057,6 @@ export function CalendarView({
           addValue('deal_fundae_label', deal.fundaeLabel);
           addValue('deal_hotel_label', deal.hotelLabel);
           addValue('deal_transporte', deal.transporte);
-          addValue('deal_organization_name', deal.organizationName);
         });
 
         const trainers = getVariantTrainerResources(variant);
@@ -1144,71 +1105,6 @@ export function CalendarView({
     return result;
   }, [sessions, variants, includeVariants]);
 
-  const [organizationSearch, setOrganizationSearch] = useState('');
-  const debouncedOrganizationSearch = useDebouncedValue(organizationSearch, DEBOUNCE_MS);
-  const normalizedOrganizationSearch = debouncedOrganizationSearch.trim();
-
-  const organizationOptionsQuery = useQuery<CalendarOrganizationsResponse, ApiError>({
-    queryKey: ['calendar-filter-organizations', normalizedOrganizationSearch],
-    queryFn: () =>
-      fetchCalendarOrganizations({
-        search: normalizedOrganizationSearch,
-        limit: 25,
-      }),
-    enabled: normalizedOrganizationSearch.length >= 2,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const remoteOrganizationOptions = useMemo<FilterOption[]>(() => {
-    const organizations = organizationOptionsQuery.data?.organizations ?? [];
-    if (!organizations.length) {
-      return [];
-    }
-    const seen = new Set<string>();
-    const options: FilterOption[] = [];
-    organizations.forEach((name) => {
-      const value = safeString(name);
-      if (!value.length) {
-        return;
-      }
-      const normalized = value.toLocaleLowerCase('es-ES');
-      if (seen.has(normalized)) {
-        return;
-      }
-      seen.add(normalized);
-      options.push({ value, label: value });
-    });
-    options.sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
-    return options;
-  }, [organizationOptionsQuery.data]);
-
-  const organizationFilterOptions = useMemo<FilterOption[]>(() => {
-    const baseOptions = selectOptionsByKey['deal_organization_name'] ?? [];
-    if (!baseOptions.length && !remoteOrganizationOptions.length) {
-      return [];
-    }
-    const seen = new Set<string>();
-    const merged: FilterOption[] = [];
-    baseOptions.forEach((option) => {
-      const normalized = option.value.toLocaleLowerCase('es-ES');
-      if (seen.has(normalized)) {
-        return;
-      }
-      seen.add(normalized);
-      merged.push(option);
-    });
-    remoteOrganizationOptions.forEach((option) => {
-      const normalized = option.value.toLocaleLowerCase('es-ES');
-      if (seen.has(normalized)) {
-        return;
-      }
-      seen.add(normalized);
-      merged.push(option);
-    });
-    merged.sort((a, b) => a.label.localeCompare(b.label, 'es', { sensitivity: 'base' }));
-    return merged;
-  }, [remoteOrganizationOptions, selectOptionsByKey]);
-
   const calendarFilterDefinitions = useMemo<FilterDefinition[]>(
     () =>
       CALENDAR_FILTER_DEFINITIONS.map((definition) => {
@@ -1228,15 +1124,6 @@ export function CalendarView({
           } satisfies FilterDefinition;
         }
 
-        if (definition.key === 'deal_organization_name') {
-          return {
-            ...definition,
-            type: 'select',
-            options: organizationFilterOptions,
-            placeholder: definition.placeholder ?? 'Escribe para buscar organizaciones',
-          } satisfies FilterDefinition;
-        }
-
         if (CALENDAR_DYNAMIC_SELECT_KEYS.has(definition.key)) {
           const options = selectOptionsByKey[definition.key] ?? [];
           return {
@@ -1249,7 +1136,7 @@ export function CalendarView({
 
         return definition;
       }),
-    [productFilterOptions, selectOptionsByKey, organizationFilterOptions],
+    [productFilterOptions, selectOptionsByKey],
   );
 
   const {
@@ -1275,15 +1162,6 @@ export function CalendarView({
       setSearchValue(value);
     },
     [setSearchValue],
-  );
-
-  const handleFilterOptionSearchChange = useCallback(
-    (key: string, value: string) => {
-      if (key === 'deal_organization_name') {
-        setOrganizationSearch(value);
-      }
-    },
-    [setOrganizationSearch],
   );
 
   const sessionFilterRows = useMemo(
@@ -1780,7 +1658,6 @@ export function CalendarView({
                   onApplyFilterState={({ filters, searchValue }) =>
                     setFiltersAndSearch(filters, searchValue)
                   }
-                  onOptionSearchChange={handleFilterOptionSearchChange}
                 />
               </div>
             </div>

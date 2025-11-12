@@ -16,10 +16,6 @@ export type FilterDefinition = {
   type?: FilterInputType;
   options?: FilterOption[];
   placeholder?: string;
-  allowNegation?: boolean;
-  negationLabel?: string;
-  negationDescription?: string;
-  searchFromInput?: boolean;
 };
 
 type BadgeDescriptor = {
@@ -30,18 +26,6 @@ type BadgeDescriptor = {
 };
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-
-function stripNegationPrefix(rawValue: string): string {
-  const sanitized = splitFilterValue(rawValue).map((part) =>
-    part.startsWith('!') ? part.slice(1) : part,
-  );
-  return joinFilterValues(sanitized);
-}
-
-function isValueFullyNegated(rawValue: string): boolean {
-  const parts = splitFilterValue(rawValue);
-  return parts.length > 0 && parts.every((part) => part.startsWith('!'));
-}
 
 type SavedFilterView = {
   id: string;
@@ -65,7 +49,6 @@ interface FilterToolbarProps {
   debounceMs?: number; // mantenido por compatibilidad, no se usa directamente
   viewStorageKey?: string;
   onApplyFilterState?: (state: { filters: Record<string, string>; searchValue: string }) => void;
-  onOptionSearchChange?: (key: string, value: string) => void;
 }
 
 function formatFilterValue(
@@ -73,23 +56,6 @@ function formatFilterValue(
   rawValue: string,
 ): string | string[] {
   if (!definition) return rawValue;
-  if (definition.allowNegation) {
-    const parts = splitFilterValue(rawValue);
-    if (!parts.length) {
-      return rawValue;
-    }
-    const cleaned = parts.map((part) => (part.startsWith('!') ? part.slice(1) : part));
-    const display = cleaned.join(', ');
-    if (!display.length) {
-      return rawValue;
-    }
-    const isNegated = parts.every((part) => part.startsWith('!'));
-    if (isNegated) {
-      const label = definition.negationLabel ?? 'Excluir coincidencias';
-      return `${label}: ${display}`;
-    }
-    return display;
-  }
   if (definition.type === 'select' && definition.options) {
     const selected = splitFilterValue(rawValue);
     const labels = definition.options.reduce<Record<string, string>>((map, option) => {
@@ -123,11 +89,9 @@ export function FilterToolbar({
   isServerBusy = false,
   viewStorageKey,
   onApplyFilterState,
-  onOptionSearchChange,
 }: FilterToolbarProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [draftFilters, setDraftFilters] = useState<Record<string, string>>({});
-  const [draftNegations, setDraftNegations] = useState<Record<string, boolean>>({});
   const [searchDraft, setSearchDraft] = useState(searchValue);
   const [savedViews, setSavedViews] = useState<SavedFilterView[]>([]);
   const [optionSearchTerms, setOptionSearchTerms] = useState<Record<string, string>>({});
@@ -287,31 +251,13 @@ export function FilterToolbar({
   }, [activeFilters, filterMap, onFilterChange, onRemoveFilter, onSearchChange, searchValue]);
 
   const handleModalOpen = useCallback(() => {
-    const initialDrafts: Record<string, string> = { ...activeFilters };
-    const initialNegations: Record<string, boolean> = {};
-
-    filters.forEach((definition) => {
-      if (!definition.allowNegation) {
-        return;
-      }
-      const rawValue = activeFilters[definition.key];
-      if (!rawValue) {
-        return;
-      }
-      if (isValueFullyNegated(rawValue)) {
-        initialDrafts[definition.key] = stripNegationPrefix(rawValue);
-        initialNegations[definition.key] = true;
-      }
-    });
-
-    setDraftFilters(initialDrafts);
-    setDraftNegations(initialNegations);
+    setDraftFilters({ ...activeFilters });
     setSearchDraft(searchValue);
     setOptionSearchTerms({});
     setOpenSelectKey(null);
     setIsSavedViewsOpen(false);
     setIsModalOpen(true);
-  }, [activeFilters, filters, searchValue]);
+  }, [activeFilters, searchValue]);
 
   const handleModalClose = useCallback(() => {
     setOpenSelectKey(null);
@@ -320,7 +266,6 @@ export function FilterToolbar({
   }, []);
 
   const handleToggleOption = useCallback((key: string, optionValue: string) => {
-    let nextValue = '';
     setDraftFilters((current) => {
       const selected = new Set(splitFilterValue(current[key]));
       if (selected.has(optionValue)) {
@@ -328,7 +273,7 @@ export function FilterToolbar({
       } else {
         selected.add(optionValue);
       }
-      nextValue = joinFilterValues(selected);
+      const nextValue = joinFilterValues(selected);
       if (!nextValue.length) {
         const next = { ...current };
         delete next[key];
@@ -336,16 +281,6 @@ export function FilterToolbar({
       }
       return { ...current, [key]: nextValue };
     });
-    if (!nextValue.length) {
-      setDraftNegations((current) => {
-        if (!current[key]) {
-          return current;
-        }
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
-    }
   }, []);
 
   const handleSelectInputChange = useCallback((key: string, displayValue: string) => {
@@ -362,95 +297,23 @@ export function FilterToolbar({
       }
       return { ...current, [key]: joinFilterValues(parts) };
     });
-    if (!parts.length) {
-      setDraftNegations((current) => {
-        if (!current[key]) {
-          return current;
-        }
+  }, []);
+
+  const handleOptionSearchChange = useCallback((key: string, query: string) => {
+    setOptionSearchTerms((current) => {
+      if (!query.length) {
+        if (!(key in current)) return current;
         const next = { ...current };
         delete next[key];
         return next;
-      });
-    }
-  }, []);
-
-  const handleOptionSearchChange = useCallback(
-    (key: string, query: string) => {
-      setOptionSearchTerms((current) => {
-        if (!query.length) {
-          if (!(key in current)) return current;
-          const next = { ...current };
-          delete next[key];
-          return next;
-        }
-        return { ...current, [key]: query };
-      });
-      if (onOptionSearchChange) {
-        onOptionSearchChange(key, query);
       }
-    },
-    [onOptionSearchChange],
-  );
+      return { ...current, [key]: query };
+    });
+  }, []);
 
   const handleDraftChange = useCallback((key: string, value: string) => {
     setDraftFilters((current) => ({ ...current, [key]: value }));
-    setDraftNegations((current) => {
-      if (!current[key]) {
-        return current;
-      }
-      if (value.trim().length) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[key];
-      return next;
-    });
   }, []);
-
-  const handleNegationToggle = useCallback((key: string, isChecked: boolean) => {
-    setDraftNegations((current) => {
-      if (isChecked) {
-        return { ...current, [key]: true };
-      }
-      if (!current[key]) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[key];
-      return next;
-    });
-    setDraftFilters((current) => {
-      if (!(key in current)) {
-        return current;
-      }
-      const normalized = stripNegationPrefix(current[key]);
-      if (normalized === current[key]) {
-        return current;
-      }
-      return { ...current, [key]: normalized };
-    });
-  }, []);
-
-  const buildFinalFilterValue = useCallback(
-    (definition: FilterDefinition, rawValue: string): string => {
-      const normalized = definition.type === 'select' ? rawValue : rawValue.trim();
-      if (!definition.allowNegation) {
-        return normalized;
-      }
-      const isNegated = Boolean(draftNegations[definition.key]);
-      const sanitizedParts = splitFilterValue(normalized)
-        .map((part) => (part.startsWith('!') ? part.slice(1) : part))
-        .filter((part) => part.length > 0);
-      if (!sanitizedParts.length) {
-        return '';
-      }
-      const finalParts = isNegated
-        ? sanitizedParts.map((part) => `!${part}`)
-        : sanitizedParts;
-      return joinFilterValues(finalParts);
-    },
-    [draftNegations],
-  );
 
   const handleApply = useCallback(() => {
     const trimmedSearch = searchDraft.trim();
@@ -460,10 +323,10 @@ export function FilterToolbar({
 
     filters.forEach((definition) => {
       const raw = draftFilters[definition.key] ?? '';
-      const finalValue = buildFinalFilterValue(definition, raw);
-      if (finalValue.length) {
-        if (activeFilters[definition.key] !== finalValue) {
-          onFilterChange(definition.key, finalValue);
+      const normalized = definition.type === 'select' ? raw : raw.trim();
+      if (normalized.length) {
+        if (activeFilters[definition.key] !== normalized) {
+          onFilterChange(definition.key, normalized);
         }
       } else if (activeFilters[definition.key]) {
         onRemoveFilter(definition.key);
@@ -474,7 +337,6 @@ export function FilterToolbar({
     setOpenSelectKey(null);
   }, [
     activeFilters,
-    buildFinalFilterValue,
     draftFilters,
     filters,
     onFilterChange,
@@ -486,7 +348,6 @@ export function FilterToolbar({
 
   const handleClearAll = useCallback(() => {
     setDraftFilters({});
-    setDraftNegations({});
     setSearchDraft('');
     onClearAll();
     setIsModalOpen(false);
@@ -509,9 +370,9 @@ export function FilterToolbar({
 
     const normalizedFilters = filters.reduce<Record<string, string>>((acc, definition) => {
       const rawValue = draftFilters[definition.key] ?? '';
-      const finalValue = buildFinalFilterValue(definition, rawValue);
-      if (finalValue.length) {
-        acc[definition.key] = finalValue;
+      const normalized = definition.type === 'select' ? rawValue : rawValue.trim();
+      if (normalized.length) {
+        acc[definition.key] = normalized;
       }
       return acc;
     }, {});
@@ -562,7 +423,6 @@ export function FilterToolbar({
     setIsModalOpen(false);
     setOpenSelectKey(null);
   }, [
-    buildFinalFilterValue,
     draftFilters,
     filters,
     persistSavedViews,
@@ -602,20 +462,7 @@ export function FilterToolbar({
         onSearchChange(normalizedSearch);
       }
 
-      const draftFiltersFromView: Record<string, string> = {};
-      const draftNegationsFromView: Record<string, boolean> = {};
-      Object.entries(filteredFilters).forEach(([key, value]) => {
-        const definition = filterMap.get(key);
-        if (definition?.allowNegation && isValueFullyNegated(value)) {
-          draftFiltersFromView[key] = stripNegationPrefix(value);
-          draftNegationsFromView[key] = true;
-        } else {
-          draftFiltersFromView[key] = value;
-        }
-      });
-
-      setDraftFilters(draftFiltersFromView);
-      setDraftNegations(draftNegationsFromView);
+      setDraftFilters({ ...normalizedFilters });
       setSearchDraft(normalizedSearch);
       setIsModalOpen(false);
       setIsSavedViewsOpen(false);
@@ -633,7 +480,6 @@ export function FilterToolbar({
     },
     [
       activeFilters,
-      filterMap,
       filters,
       onApplyFilterState,
       onFilterChange,
@@ -687,35 +533,6 @@ export function FilterToolbar({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [openSelectKey]);
-
-  useEffect(() => {
-    if (openSelectKey !== null) {
-      return;
-    }
-    setOptionSearchTerms((current) => {
-      if (!Object.keys(current).length) {
-        return current;
-      }
-      const keysWithCustomSearch = new Set(
-        filters.filter((definition) => definition.searchFromInput).map((definition) => definition.key),
-      );
-      if (!keysWithCustomSearch.size) {
-        return current;
-      }
-      const next = { ...current };
-      let changed = false;
-      keysWithCustomSearch.forEach((key) => {
-        if (key in next) {
-          delete next[key];
-          changed = true;
-          if (onOptionSearchChange) {
-            onOptionSearchChange(key, '');
-          }
-        }
-      });
-      return changed ? next : current;
-    });
-  }, [filters, openSelectKey, onOptionSearchChange]);
 
   useEffect(() => {
     if (!isSavedViewsOpen) return;
@@ -856,12 +673,9 @@ export function FilterToolbar({
                 const controlId = `${idPrefix}-${definition.key}`;
                 if (definition.type === 'select') {
                   const options = definition.options ?? [];
-                  const selectedValues = splitFilterValue(draftFilters[definition.key]);
-                  const selected = new Set(selectedValues);
+                  const selected = new Set(splitFilterValue(draftFilters[definition.key]));
+                  const displayValue = Array.from(selected).join(', ');
                   const query = optionSearchTerms[definition.key] ?? '';
-                  const isOpen = openSelectKey === definition.key;
-                  const displayValue =
-                    definition.searchFromInput && isOpen ? query : Array.from(selected).join(', ');
                   const normalizedQuery = query.trim().toLocaleLowerCase('es-ES');
                   const filteredOptions = normalizedQuery.length
                     ? options.filter((option) =>
@@ -869,6 +683,7 @@ export function FilterToolbar({
                       )
                     : options;
 
+                  const isOpen = openSelectKey === definition.key;
                   return (
                     <Col xs={12} lg={4} key={definition.key}>
                       <div
@@ -892,50 +707,25 @@ export function FilterToolbar({
                             value={displayValue}
                             onFocus={() => setOpenSelectKey(definition.key)}
                             onClick={() => setOpenSelectKey(definition.key)}
-                            onChange={(event) => {
-                              if (definition.searchFromInput) {
-                                setOpenSelectKey(definition.key);
-                                handleOptionSearchChange(definition.key, event.target.value);
-                              } else {
-                                handleSelectInputChange(definition.key, event.target.value);
-                              }
-                            }}
+                            onChange={(event) =>
+                              handleSelectInputChange(definition.key, event.target.value)
+                            }
                             placeholder={
                               definition.placeholder ??
                               'Escribe valores separados por comas para filtrar'
                             }
                           />
-                          {definition.allowNegation && (
-                            <div className="mt-2">
-                              <Form.Check
-                                type="switch"
-                                id={`${controlId}-negation`}
-                                label={definition.negationLabel ?? 'Excluir coincidencias'}
-                                checked={Boolean(draftNegations[definition.key])}
-                                onChange={(event) =>
-                                  handleNegationToggle(definition.key, event.target.checked)
-                                }
-                              />
-                              {definition.negationDescription && (
-                                <div className="text-muted small mt-1">
-                                  {definition.negationDescription}
-                                </div>
-                              )}
-                            </div>
-                          )}
                           {isOpen && (
                             <div className="border rounded mt-2 p-3 bg-white shadow-sm">
-                              {!definition.searchFromInput && (
-                                <Form.Control
-                                  type="search"
-                                  value={query}
-                                  onChange={(event) =>
-                                    handleOptionSearchChange(definition.key, event.target.value)
-                                  }
-                                  placeholder="Filtrar opciones"
-                                  className="mb-3"
-                                />
-                              )}
+                              <Form.Control
+                                type="search"
+                                value={query}
+                                onChange={(event) =>
+                                  handleOptionSearchChange(definition.key, event.target.value)
+                                }
+                                placeholder="Filtrar opciones"
+                                className="mb-3"
+                              />
                               {options.length ? (
                                 filteredOptions.length ? (
                                   <div
@@ -995,22 +785,6 @@ export function FilterToolbar({
                         onChange={(event) => handleDraftChange(definition.key, event.target.value)}
                         placeholder={definition.placeholder ?? 'Introduce un valor'}
                       />
-                      {definition.allowNegation && (
-                        <div className="mt-2">
-                          <Form.Check
-                            type="switch"
-                            id={`${controlId}-negation`}
-                            label={definition.negationLabel ?? 'Excluir coincidencias'}
-                            checked={Boolean(draftNegations[definition.key])}
-                            onChange={(event) =>
-                              handleNegationToggle(definition.key, event.target.checked)
-                            }
-                          />
-                          {definition.negationDescription && (
-                            <div className="text-muted small">{definition.negationDescription}</div>
-                          )}
-                        </div>
-                      )}
                     </Form.Group>
                   </Col>
                 );
