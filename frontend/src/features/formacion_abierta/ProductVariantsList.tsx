@@ -24,7 +24,7 @@ import {
   fetchMobileUnitsCatalog,
   fetchRoomsCatalog,
 } from "../presupuestos/api/catalogs.api";
-import { fetchSessionAvailability, sendVariantTrainerConfirmationMail } from "../presupuestos/api/sessions.api";
+import { fetchSessionAvailability } from "../presupuestos/api/sessions.api";
 import { fetchDealStudents } from "../presupuestos/api/students.api";
 import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailModalAbierta';
 import type { DealSummary } from '../../types/deal';
@@ -770,10 +770,6 @@ export function VariantModal({
   const [isDealStudentsLoading, setIsDealStudentsLoading] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDealSummary, setSelectedDealSummary] = useState<DealSummary | null>(null);
-  const [trainerConfirmations, setTrainerConfirmations] = useState<VariantInfo['trainer_confirmations']>(
-    variant?.trainer_confirmations ?? [],
-  );
-  const [confirmationSending, setConfirmationSending] = useState(false);
   const totalDealStudents = useMemo(
     () => {
       if (!deals.length) {
@@ -852,30 +848,6 @@ export function VariantModal({
     }
     return '—';
   }, [variant]);
-
-  const trainerNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    trainers.forEach((trainer) => {
-      const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
-      map.set(trainer.trainer_id, label.length ? label : trainer.trainer_id);
-    });
-    (variant?.trainers ?? []).forEach((trainer) => {
-      const id = trainer?.trainer_id?.trim();
-      if (!id) return;
-      const label = `${trainer.name ?? ''}${trainer.apellido ? ` ${trainer.apellido}` : ''}`.trim();
-      if (!map.has(id)) {
-        map.set(id, label.length ? label : id);
-      }
-    });
-    if (variant?.trainer?.trainer_id) {
-      const id = variant.trainer.trainer_id.trim();
-      const label = `${variant.trainer.name ?? ''}${variant.trainer.apellido ? ` ${variant.trainer.apellido}` : ''}`.trim();
-      if (!map.has(id)) {
-        map.set(id, label.length ? label : id);
-      }
-    }
-    return map;
-  }, [trainers, variant?.trainer, variant?.trainers]);
 
   const roomDisplay = useMemo(() => {
     if (!variant) return '—';
@@ -1079,8 +1051,6 @@ export function VariantModal({
       setIsDealStudentsLoading(false);
       setSelectedDealId(null);
       setSelectedDealSummary(null);
-      setTrainerConfirmations([]);
-      setConfirmationSending(false);
       return;
     }
 
@@ -1088,11 +1058,9 @@ export function VariantModal({
     setFormValues(nextValues);
     setInitialValues(nextValues);
     setSaveError(null);
-    setSaveSuccess(null);
-    setSelectedDealId(null);
-    setSelectedDealSummary(null);
-    setTrainerConfirmations(Array.isArray(variant.trainer_confirmations) ? variant.trainer_confirmations : []);
-    setConfirmationSending(false);
+      setSaveSuccess(null);
+      setSelectedDealId(null);
+      setSelectedDealSummary(null);
   }, [variant]);
 
   useEffect(() => {
@@ -1542,28 +1510,6 @@ export function VariantModal({
     formValues.sala_id !== initialValues.sala_id ||
     !areStringArraysEqual(formValues.unidad_movil_ids, initialValues.unidad_movil_ids);
 
-  const savedTrainerIds = useMemo(
-    () =>
-      initialValues.trainer_ids
-        .map((id) => (typeof id === 'string' ? id.trim() : ''))
-        .filter((value): value is string => value.length > 0),
-    [initialValues.trainer_ids],
-  );
-
-  const trainerConfirmationEntries = useMemo(() => {
-    const confirmationMap = new Map(
-      trainerConfirmations.map((entry) => [entry.trainer_id, entry.mail_sent_at ?? null]),
-    );
-    return savedTrainerIds.map((trainerId) => ({
-      trainerId,
-      label: trainerNameMap.get(trainerId) ?? trainerId,
-      mailSentAt: confirmationMap.get(trainerId) ?? null,
-    }));
-  }, [savedTrainerIds, trainerConfirmations, trainerNameMap]);
-
-  const confirmationButtonDisabled =
-    confirmationSending || isDirty || !savedTrainerIds.length || !variant;
-
   const handleSave = async (closeAfter: boolean) => {
     if (!variant) return;
     if (isSaving) return;
@@ -1730,7 +1676,6 @@ export function VariantModal({
       const nextValues = variantToFormValues(enhancedVariant);
       setFormValues(nextValues);
       setInitialValues(nextValues);
-      setTrainerConfirmations(enhancedVariant.trainer_confirmations ?? []);
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
 
       if (closeAfter) {
@@ -1742,29 +1687,6 @@ export function VariantModal({
       setSaveError(message);
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleSendConfirmationMail = async () => {
-    if (!variant) return;
-    if (!savedTrainerIds.length || confirmationSending) return;
-
-    setConfirmationSending(true);
-    setSaveError(null);
-    setSaveSuccess(null);
-
-    try {
-      const confirmations = await sendVariantTrainerConfirmationMail(variant.id);
-      setTrainerConfirmations(confirmations);
-      onVariantUpdated({ ...variant, trainer_confirmations: confirmations });
-      setSaveSuccess('Correos de confirmación enviados correctamente.');
-    } catch (error) {
-      const message = error instanceof ApiError
-        ? error.message
-        : 'No se pudo enviar el mail de confirmación.';
-      setSaveError(message);
-    } finally {
-      setConfirmationSending(false);
     }
   };
 
@@ -1826,20 +1748,6 @@ export function VariantModal({
                 </div>
               </Col>
             </Row>
-
-            {trainerConfirmationEntries.length ? (
-              <div className="d-flex flex-wrap gap-2">
-                {trainerConfirmationEntries.map((entry) => (
-                  <Badge
-                    key={entry.trainerId}
-                    bg={entry.mailSentAt ? 'primary' : 'warning'}
-                    text={entry.mailSentAt ? undefined : 'dark'}
-                  >
-                    {entry.label} · {entry.mailSentAt ? 'Mail enviado' : 'Mail sin enviar'}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
 
             {saveError && <Alert variant="danger" className="mb-0">{saveError}</Alert>}
             {saveSuccess && <Alert variant="success" className="mb-0">{saveSuccess}</Alert>}
@@ -2265,25 +2173,12 @@ export function VariantModal({
           </div>
         ) : null}
       </Modal.Body>
-      <Modal.Footer>
-        <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
-          Cerrar
-        </Button>
-        <Button
-          variant="outline-primary"
-          onClick={handleSendConfirmationMail}
-          disabled={confirmationButtonDisabled}
-        >
-          {confirmationSending ? (
-            <span className="d-inline-flex align-items-center gap-2">
-              <Spinner animation="border" size="sm" role="status" aria-hidden="true" /> Enviando…
-            </span>
-          ) : (
-            'Mail de confirmación'
-          )}
-        </Button>
-        <Button
-          variant="primary"
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
+            Cerrar
+          </Button>
+          <Button
+            variant="primary"
           onClick={() => handleSave(false)}
           disabled={isSaving || !isDirty}
         >

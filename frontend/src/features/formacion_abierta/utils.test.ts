@@ -25,7 +25,6 @@ const sampleVariant = (overrides: Partial<VariantInfo> = {}): VariantInfo => ({
   trainer_ids: [],
   trainer: null,
   trainers: [],
-  trainer_confirmations: [],
   sala_id: null,
   sala: null,
   unidad_movil_id: null,

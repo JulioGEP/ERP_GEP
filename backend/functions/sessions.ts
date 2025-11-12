@@ -96,11 +96,6 @@ type SessionTrainerLink = {
   trainers?: { trainer_id: string; name?: string | null; apellido?: string | null } | null;
 };
 
-type SessionTrainerConfirmationLink = {
-  trainer_id: string;
-  mail_sent_at: Date | null;
-};
-
 type SessionUnitLink = {
   unidad_id: string | null;
   unidad_movil_id?: string | null;
@@ -127,7 +122,6 @@ type SessionRecord = {
   drive_url: string | null;
   trainers: SessionTrainerLink[];
   sesion_trainers?: SessionTrainerLink[];
-  trainer_confirmations?: SessionTrainerConfirmationLink[];
   unidades: SessionUnitLink[];
   sesion_unidades?: SessionUnitLink[];
   deal?: { sede_label: string | null; pipeline_id: string | null } | null;
@@ -196,7 +190,6 @@ function ensureSessionRelations(row: any): SessionRecord {
   const record = row as SessionRecord & {
     sesion_trainers?: SessionTrainerLink[];
     sesion_unidades?: SessionUnitLink[];
-    trainer_confirmations?: SessionTrainerConfirmationLink[];
   };
   if (record.deal == null && (record as any).deals !== undefined) {
     record.deal = (record as any).deals ?? null;
@@ -212,9 +205,6 @@ function ensureSessionRelations(row: any): SessionRecord {
     : Array.isArray(record.sesion_trainers)
       ? record.sesion_trainers
       : [];
-  record.trainer_confirmations = Array.isArray(record.trainer_confirmations)
-    ? record.trainer_confirmations
-    : [];
   record.unidades = Array.isArray(record.unidades)
     ? record.unidades.map((link) => normalizeSessionUnitLink(link))
     : Array.isArray(record.sesion_unidades)
@@ -229,48 +219,6 @@ function ensureSessionRelationsOrNull(row: any): SessionRecord | null {
 
 function ensureSessionRelationsList(rows: any[]): SessionRecord[] {
   return rows.map((row) => ensureSessionRelations(row));
-}
-
-async function syncSessionTrainerConfirmations(
-  prisma: Prisma.TransactionClient,
-  sessionId: string,
-  trainerIds: string[],
-): Promise<void> {
-  const normalizedIds = Array.from(
-    new Set(
-      trainerIds
-        .map((value) => toTrimmed(value))
-        .filter((value): value is string => Boolean(value)),
-    ),
-  );
-
-  if (!normalizedIds.length) {
-    await prisma.trainer_confirmation_status.deleteMany({ where: { sesion_id: sessionId } });
-    return;
-  }
-
-  await prisma.trainer_confirmation_status.deleteMany({
-    where: {
-      sesion_id: sessionId,
-      trainer_id: { notIn: normalizedIds },
-    },
-  });
-
-  const existing = await prisma.trainer_confirmation_status.findMany({
-    where: { sesion_id: sessionId, trainer_id: { in: normalizedIds } },
-    select: { trainer_id: true },
-  });
-  const existingSet = new Set(existing.map((row) => row.trainer_id));
-
-  for (const trainerId of normalizedIds) {
-    if (existingSet.has(trainerId)) continue;
-    await prisma.trainer_confirmation_status.create({
-      data: {
-        sesion_id: sessionId,
-        trainer_id: trainerId,
-      },
-    });
-  }
 }
 
 const SEDE_ALIASES: Record<string, string> = {
@@ -399,12 +347,6 @@ function normalizeSession(row: SessionRecord) {
   const trainerIds = normalized.trainers.map((t) => t.trainer_id);
   const unidadIds = normalized.unidades.map((u) => u.unidad_id);
   const estado = resolveSessionEstado(normalized);
-  const trainerConfirmations = Array.isArray(normalized.trainer_confirmations)
-    ? normalized.trainer_confirmations.map((entry) => ({
-        trainer_id: entry.trainer_id,
-        mail_sent_at: toIsoOrNull(entry.mail_sent_at),
-      }))
-    : [];
   return {
     id: normalized.id,
     deal_id: normalized.deal_id,
@@ -417,7 +359,6 @@ function normalizeSession(row: SessionRecord) {
     estado,
     drive_url: toTrimmed(normalized.drive_url),
     trainer_ids: trainerIds,
-    trainer_confirmations: trainerConfirmations,
     unidad_movil_ids: unidadIds,
   };
 }
@@ -821,7 +762,6 @@ async function fetchSessionsByProduct(
       include: {
         sesion_trainers: { select: { trainer_id: true } },
         sesion_unidades: { select: { unidad_movil_id: true } },
-        trainer_confirmations: { select: { trainer_id: true, mail_sent_at: true } },
         deals: { select: { sede_label: true, pipeline_id: true } },
       },
     }),
@@ -1249,7 +1189,6 @@ if (method === 'GET') {
         sesion_unidades: {
           select: { unidad_movil_id: true, unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } } },
         },
-        trainer_confirmations: { select: { trainer_id: true, mail_sent_at: true } },
         alumnos: { select: { id: true, nombre: true, apellido: true, dni: true } },
         _count: { select: { alumnos: true } },
       },
@@ -1478,7 +1417,6 @@ if (method === 'GET') {
             })),
           });
         }
-        await syncSessionTrainerConfirmations(tx, created.id, trainerIdsResult as string[]);
         if ((unidadIdsResult as string[]).length) {
           await tx.sesion_unidades.createMany({
             data: (unidadIdsResult as string[]).map((unidadId: string) => ({
@@ -1496,7 +1434,6 @@ if (method === 'GET') {
             deals: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
             sesion_unidades: { select: { unidad_movil_id: true } },
-            trainer_confirmations: { select: { trainer_id: true, mail_sent_at: true } },
           },
         });
 
@@ -1546,7 +1483,6 @@ if (method === 'GET') {
           deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
-          trainer_confirmations: { select: { trainer_id: true, mail_sent_at: true } },
         },
       });
       const storedRecord = ensureSessionRelationsOrNull(storedRaw as any);
@@ -1621,7 +1557,6 @@ if (method === 'GET') {
               })),
             });
           }
-          await syncSessionTrainerConfirmations(tx, sessionIdFromPath, trainerIds as string[]);
         }
         if (unidadIds !== undefined) {
           await tx.sesion_unidades.deleteMany({ where: { sesion_id: sessionIdFromPath } });
@@ -1643,7 +1578,6 @@ if (method === 'GET') {
           deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
-          trainer_confirmations: { select: { trainer_id: true, mail_sent_at: true } },
         },
       });
       const refreshedRecord = ensureSessionRelationsOrNull(refreshedRaw as any);

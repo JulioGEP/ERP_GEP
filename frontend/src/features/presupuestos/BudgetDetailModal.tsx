@@ -1306,7 +1306,6 @@ export function BudgetDetailModal({
                 dealSedeLabel={dealSedeLabel ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
-                confirmationContext="company"
               />
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>
