@@ -7,13 +7,11 @@ import { nowInMadridDate, nowInMadridISO, toMadridISOString } from "./_shared/ti
 import { COMMON_HEADERS, successResponse, errorResponse } from "./_shared/response";
 import { downloadFile as downloadPipedriveFile } from "./_shared/pipedrive";
 import { deleteDealDocumentFromGoogleDrive, uploadDealDocumentToGoogleDrive } from "./_shared/googleDrive";
-import { extractRequestUser } from "./_shared/requestUser";
 
 const BUCKET = process.env.S3_BUCKET!;
 const REGION = process.env.S3_REGION!;
 const ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID!;
 const SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY!;
-const DEFAULT_DOCUMENT_AUTHOR = process.env.DEFAULT_DOCUMENT_AUTHOR || "erp_user";
 
 if (!BUCKET || !REGION || !ACCESS_KEY_ID || !SECRET_ACCESS_KEY) {
   console.warn(
@@ -183,9 +181,6 @@ export const handler = async (event: any) => {
     if (!dealId) return errorResponse("VALIDATION_ERROR", "deal_id requerido en path", 400);
 
     const prisma = getPrisma();
-    const requestUser = extractRequestUser(event);
-    const authorId = requestUser.id;
-    const authorName = requestUser.displayName ?? DEFAULT_DOCUMENT_AUTHOR;
     const dealIdStr = String(dealId).trim();
     if (!dealIdStr) return errorResponse("VALIDATION_ERROR", "deal_id inválido", 400);
 
@@ -337,8 +332,6 @@ export const handler = async (event: any) => {
             drive_file_name: uploadResult.driveFileName,
             drive_web_view_link: uploadResult.driveWebViewLink,
             added_at: now,
-            author_id: authorId,
-            author_name: authorName,
           },
         });
 
@@ -347,9 +340,6 @@ export const handler = async (event: any) => {
           id,
           drive_file_name: uploadResult.driveFileName,
           drive_web_view_link: uploadResult.driveWebViewLink,
-          author_id: authorId ?? null,
-          author_name: authorName,
-          author: authorName,
         });
 
         if (fetchedFromStorage && storageKey) {
@@ -391,12 +381,10 @@ export const handler = async (event: any) => {
           file_type: mime_type ?? null,
           file_url: storage_key, // guardamos la clave S3 (no es URL pública)
           added_at: nowInMadridDate(), // opcional: marca de alta en hora local de Madrid
-          author_id: authorId,
-          author_name: authorName,
         },
       });
 
-      return successResponse({ ok: true, id, author_id: authorId ?? null, author_name: authorName, author: authorName });
+      return successResponse({ ok: true, id });
     }
 
     // 3) Listado (mapeamos a la forma esperada por el front)
@@ -412,8 +400,6 @@ export const handler = async (event: any) => {
           drive_file_name: true,
           drive_web_view_link: true,
           created_at: true,
-          author_id: true,
-          author_name: true,
         },
       });
 
@@ -432,9 +418,6 @@ export const handler = async (event: any) => {
           drive_web_view_link: d.drive_web_view_link ?? null,
           // no tenemos `size` en el esquema → lo omitimos
           created_at: toMadridISOString(d.created_at),
-          author_id: d.author_id ?? null,
-          author_name: d.author_name ?? null,
-          author: d.author_name ?? d.author_id ?? null,
         };
       });
 

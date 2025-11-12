@@ -30,6 +30,4 @@ export type TrainerDocument = {
   uploaded_at: string | null;
   created_at: string | null;
   updated_at: string | null;
-  author: string | null;
-  author_id: string | null;
 };

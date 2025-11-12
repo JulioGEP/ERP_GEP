@@ -90,8 +90,6 @@ function normalizeTrainerDocument(row: any): TrainerDocument {
       row.updated_at instanceof Date
         ? row.updated_at.toISOString()
         : row.updated_at ?? null,
-    author: row.uploaded_by_name ?? row.author ?? row.author_name ?? null,
-    author_id: row.uploaded_by_id ?? row.author_id ?? null,
   };
 
   return document;
@@ -263,7 +261,6 @@ export async function uploadTrainerDocument(input: {
   mimeType?: string | null;
   fileSize?: number | null;
   contentBase64: string;
-  user?: { id: string; name?: string };
 }): Promise<{ document: TrainerDocument; driveFolderWebViewLink: string | null }> {
   const body = {
     trainer_id: input.trainerId,
@@ -276,13 +273,9 @@ export async function uploadTrainerDocument(input: {
     },
   };
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (input.user?.id) headers["X-User-Id"] = input.user.id;
-  if (input.user?.name) headers["X-User-Name"] = input.user.name;
-
   const json = (await requestJson(`${API_BASE}/trainer_documents`, {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   })) as TrainerDocumentMutationResponse;
 

@@ -372,8 +372,6 @@ export function normalizeDealDocument(raw: any): DealDocument {
       isHttpUrl(raw?.drive_web_view_link ?? raw?.driveUrl)
         ? String(raw?.drive_web_view_link ?? raw?.driveUrl)
         : null,
-    author: toStringValue(raw?.author ?? raw?.author_name ?? raw?.authorName) ?? null,
-    author_id: toStringValue(raw?.author_id ?? raw?.authorId) ?? null,
   } as DealDocument;
 }
 
@@ -449,8 +447,6 @@ export function normalizeSessionDocument(raw: any): SessionDocument {
       isHttpUrl(raw?.drive_web_view_link ?? raw?.driveUrl)
         ? String(raw?.drive_web_view_link ?? raw?.driveUrl)
         : null,
-    author: toStringValue(raw?.author ?? raw?.author_name ?? raw?.uploaded_by_name) ?? null,
-    author_id: toStringValue(raw?.author_id ?? raw?.uploaded_by_id ?? raw?.authorId) ?? null,
   } satisfies SessionDocument;
 }
 
