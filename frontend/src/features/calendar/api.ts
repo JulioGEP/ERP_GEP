@@ -52,7 +52,6 @@ export type CalendarVariantDeal = {
   fundaeLabel: string | null;
   hotelLabel: string | null;
   transporte: string | null;
-  organizationName: string | null;
 };
 
 export type CalendarVariantEvent = {
@@ -86,7 +85,6 @@ export type CalendarSession = {
   dealTitle: string | null;
   dealAddress: string | null;
   dealSedeLabel: string | null;
-  dealOrganizationName: string | null;
   dealPipelineId: string | null;
   dealCaesLabel: string | null;
   dealFundaeLabel: string | null;
@@ -133,15 +131,6 @@ export type CalendarVariantsParams = {
 export type CalendarVariantsResponse = {
   range: { start: string; end: string };
   variants: CalendarVariantEvent[];
-};
-
-export type CalendarOrganizationsParams = {
-  search?: string;
-  limit?: number;
-};
-
-export type CalendarOrganizationsResponse = {
-  organizations: string[];
 };
 
 const SESSION_ESTADO_VALUES: SessionEstado[] = [
@@ -507,7 +496,6 @@ function sanitizeVariantDeals(payload: any): CalendarVariantDeal[] {
       const fundaeLabel = toTrimmed(item?.fundae_label);
       const hotelLabel = toTrimmed(item?.hotel_label);
       const transporte = toTrimmed(item?.transporte);
-      const organizationName = toTrimmed(item?.organization_name ?? item?.organizationName);
 
       if (!id && !title && !pipelineId && !trainingAddress && !sedeLabel && !caesLabel && !fundaeLabel && !hotelLabel && !transporte) {
         return null;
@@ -523,7 +511,6 @@ function sanitizeVariantDeals(payload: any): CalendarVariantDeal[] {
         fundaeLabel,
         hotelLabel,
         transporte,
-        organizationName,
       } satisfies CalendarVariantDeal;
     })
     .filter((deal): deal is CalendarVariantDeal => deal !== null);
@@ -616,7 +603,6 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
         dealTitle: toOptionalString(row?.deal_title),
         dealAddress: toOptionalString(row?.deal_training_address),
         dealSedeLabel: toOptionalString(row?.deal_sede_label),
-        dealOrganizationName: toOptionalString(row?.deal_organization_name),
         dealPipelineId: toOptionalString(row?.deal_pipeline_id),
         dealCaesLabel: toOptionalString(row?.deal_caes_label),
         dealFundaeLabel: toOptionalString(row?.deal_fundae_label),
@@ -741,47 +727,4 @@ export async function fetchCalendarVariants(
     },
     variants,
   } satisfies CalendarVariantsResponse;
-}
-
-export async function fetchCalendarOrganizations(
-  params: CalendarOrganizationsParams,
-): Promise<CalendarOrganizationsResponse> {
-  const search = new URLSearchParams();
-  const normalizedQuery = params.search?.trim() ?? '';
-  if (normalizedQuery.length) {
-    search.set('search', normalizedQuery);
-  }
-  if (typeof params.limit === 'number' && Number.isFinite(params.limit)) {
-    search.set('limit', String(params.limit));
-  }
-
-  let response: Response;
-  try {
-    const queryString = search.toString();
-    const suffix = queryString.length ? `?${queryString}` : '';
-    response = await fetchWithClient(`${API_BASE}/calendar-organizations${suffix}`);
-  } catch (error: any) {
-    throw new ApiError('NETWORK_ERROR', error?.message ?? 'Fallo de red');
-  }
-
-  let payload: any = {};
-  try {
-    payload = await response.json();
-  } catch {
-    /* cuerpo vacío */
-  }
-
-  if (!response.ok || payload?.ok === false) {
-    const code = payload?.error_code ?? payload?.code ?? `HTTP_${response.status}`;
-    const message = payload?.message ?? 'Error al cargar las organizaciones del calendario';
-    throw new ApiError(code, message, response.status);
-  }
-
-  const organizations = Array.isArray(payload?.organizations)
-    ? payload.organizations
-        .map((value: unknown) => toOptionalString(value))
-        .filter((value: string | null): value is string => typeof value === 'string' && value.trim().length > 0)
-    : [];
-
-  return { organizations } satisfies CalendarOrganizationsResponse;
 }
