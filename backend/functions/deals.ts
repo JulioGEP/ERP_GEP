@@ -454,6 +454,9 @@ function mapDealFileForApi(file: any) {
     drive_file_name: file.drive_file_name ?? null,
     drive_web_view_link: file.drive_web_view_link ?? null,
     created_at: toMadridISOString(createdAt),
+    author_id: file.author_id ?? null,
+    author_name: file.author_name ?? null,
+    author: file.author_name ?? file.author_id ?? null,
   };
 }
 

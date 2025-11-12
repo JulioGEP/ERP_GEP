@@ -179,6 +179,8 @@ model deal_files {
   file_type           String?
   drive_file_name     String?
   drive_web_view_link String?
+  author_id           String?
+  author_name         String?
   added_at            DateTime? @db.Timestamptz(6)
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
   updated_at          DateTime  @default(now()) @db.Timestamptz(6)
@@ -258,6 +260,8 @@ model trainer_documents {
   drive_file_id      String?  @db.VarChar(128)
   drive_file_name    String   @db.VarChar(255)
   drive_web_view_link String?
+  uploaded_by_id     String?  @db.VarChar(191)
+  uploaded_by_name   String?  @db.VarChar(255)
   uploaded_at        DateTime @default(now()) @db.Timestamptz(6)
   created_at         DateTime @default(now()) @db.Timestamptz(6)
   updated_at         DateTime @default(now()) @updatedAt @db.Timestamptz(6)
@@ -425,6 +429,9 @@ model session_files {
   updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
   drive_file_name     String
   drive_web_view_link String?
+  uploaded_by_id      String?  @db.VarChar(191)
+  uploaded_by_name    String?  @db.VarChar(255)
+  trainer_expense     Boolean  @default(false)
 
   deal    deals    @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "session_files_deal_fk")
   session sessions @relation(fields: [sesion_id], references: [id], onDelete: Cascade, map: "session_files_session_fk")

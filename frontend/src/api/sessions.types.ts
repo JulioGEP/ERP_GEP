@@ -76,6 +76,8 @@ export type SessionDocument = {
   updated_at: string | null;
   drive_file_name: string | null;
   drive_web_view_link: string | null;
+  author: string | null;
+  author_id: string | null;
 };
 
 export type SessionDocumentsPayload = {

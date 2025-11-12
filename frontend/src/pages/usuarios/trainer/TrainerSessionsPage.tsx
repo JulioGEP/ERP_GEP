@@ -494,6 +494,7 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
         trainerExpense,
         trainerName: trainerDisplayName,
         expenseFolderName: TRAINER_EXPENSE_FOLDER_NAME,
+        user: { id: userId, name: userName },
       }),
     onSuccess: (payload) => {
       setDocumentError(null);
@@ -1400,9 +1401,10 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                                 </Badge>
                               ) : null}
                             </div>
-                            <span className="text-muted small">
-                              {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
-                            </span>
+                            <div className="text-muted small text-md-end">
+                              <div>{doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}</div>
+                              <div>Autor: {doc.author ?? '—'}</div>
+                            </div>
                             <div className="d-flex align-items-center gap-2">
                               {canDeleteDoc ? (
                                 <Button
@@ -1808,6 +1810,7 @@ function VariantDealAccordionItem({ variantId, deal, eventKey }: VariantDealAcco
                     const href = doc.url ?? doc.drive_web_view_link ?? null;
                     const displayName = doc.name ?? doc.drive_file_name ?? 'Documento';
                     const addedAtLabel = doc.created_at ? formatDateTime(doc.created_at) : null;
+                    const authorLabel = doc.author ?? '—';
                     const canDelete = ownedDocumentIdSet.has(doc.id);
                     const isDeleting = deleteMutation.isPending && deletingDocumentId === doc.id;
                     return (
@@ -1829,7 +1832,8 @@ function VariantDealAccordionItem({ variantId, deal, eventKey }: VariantDealAcco
                             <span className="fw-semibold text-break">{displayName}</span>
                           )}
                           <div className="text-muted small">
-                            {addedAtLabel ? addedAtLabel : 'Sin fecha'}
+                            <div>{addedAtLabel ? addedAtLabel : 'Sin fecha'}</div>
+                            <div>Autor: {authorLabel}</div>
                           </div>
                         </div>
                         {canDelete ? (

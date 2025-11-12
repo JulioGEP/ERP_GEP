@@ -151,11 +151,13 @@ function SessionDocumentsAccordionItem({
   dealId,
   onNotify,
   initialDriveUrl,
+  currentUser,
 }: {
   sessionId: string;
   dealId: string;
   onNotify?: (toast: ToastParams) => void;
   initialDriveUrl?: string | null;
+  currentUser?: { id: string; name: string };
 }) {
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -193,6 +195,7 @@ function SessionDocumentsAccordionItem({
         sessionId,
         files: input.files,
         shareWithTrainer: input.shareWithTrainer,
+        user: currentUser,
       }),
   });
 
@@ -538,6 +541,7 @@ function SessionDocumentsAccordionItem({
                   <th>Nombre</th>
                   <th>Tipo</th>
                   <th>Fecha de alta</th>
+                  <th>Autor</th>
                   <th>Enlace Drive</th>
                   <th className="text-center">Compartir con formador/a</th>
                   <th className="text-center">Acciones</th>
@@ -556,6 +560,7 @@ function SessionDocumentsAccordionItem({
                       <td className="align-middle">{displayName}</td>
                       <td className="align-middle">{typeLabel}</td>
                       <td className="align-middle">{formatAddedAt(doc.added_at)}</td>
+                      <td className="align-middle">{doc.author ?? '—'}</td>
                       <td className="align-middle">
                         {driveLink ? (
                           <Button
@@ -3171,6 +3176,7 @@ function SessionCommentsSection({
           dealId={dealId}
           onNotify={onNotify}
           initialDriveUrl={driveUrl ?? null}
+          currentUser={{ id: userId, name: userName }}
         />
       </Accordion>
 

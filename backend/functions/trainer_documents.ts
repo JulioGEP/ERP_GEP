@@ -12,6 +12,7 @@ import {
   getTrainerFolderWebViewLink,
   uploadTrainerDocumentToGoogleDrive,
 } from './_shared/googleDrive';
+import { extractRequestUser } from './_shared/requestUser';
 
 const ALLOWED_DOCUMENT_TYPES = new Map([
   ['curriculum_vitae', 'Curriculum Vitae'],
@@ -22,6 +23,7 @@ const ALLOWED_DOCUMENT_TYPES = new Map([
 
 const MAX_TRAINER_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_TRAINER_DOCUMENT_SIZE_LABEL = '10 MB';
+const DEFAULT_DOCUMENT_AUTHOR = process.env.DEFAULT_DOCUMENT_AUTHOR || 'erp_user';
 
 type ParsedPath = {
   documentId: string | null;
@@ -38,6 +40,8 @@ type TrainerDocumentRecord = {
   drive_file_id: string | null;
   drive_file_name: string | null;
   drive_web_view_link: string | null;
+  uploaded_by_id: string | null;
+  uploaded_by_name: string | null;
   uploaded_at: Date | string | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
@@ -99,6 +103,9 @@ function mapTrainerDocument(row: TrainerDocumentRecord) {
     drive_file_id: toStringOrNull(row.drive_file_id),
     drive_file_name: toStringOrNull(row.drive_file_name),
     drive_web_view_link: toStringOrNull(row.drive_web_view_link),
+    author_id: toStringOrNull(row.uploaded_by_id),
+    author_name: toStringOrNull(row.uploaded_by_name),
+    author: toStringOrNull(row.uploaded_by_name) ?? toStringOrNull(row.uploaded_by_id),
     uploaded_at: row.uploaded_at ? toMadridISOString(row.uploaded_at) : null,
     created_at: row.created_at ? toMadridISOString(row.created_at) : null,
     updated_at: row.updated_at ? toMadridISOString(row.updated_at) : null,
@@ -268,6 +275,10 @@ export const handler = async (event: any) => {
         data: buffer,
       });
 
+      const requestUser = extractRequestUser(event);
+      const uploadedById = requestUser.id;
+      const uploadedByName = requestUser.displayName ?? DEFAULT_DOCUMENT_AUTHOR;
+
       const created = await prisma.trainer_documents.create({
         data: {
           trainer_id: trainerId,
@@ -280,6 +291,8 @@ export const handler = async (event: any) => {
           drive_file_name: uploadResult.driveFileName,
           drive_web_view_link: uploadResult.driveWebViewLink,
           uploaded_at: nowInMadridDate(),
+          uploaded_by_id: uploadedById,
+          uploaded_by_name: uploadedByName,
         },
       });
 
