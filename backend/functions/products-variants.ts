@@ -21,11 +21,6 @@ import {
   setVariantResourceColumnsSupport,
 } from './_shared/variant-resources';
 import { mapDbStockStatusToApiValue } from './_shared/variant-defaults';
-import {
-  getVariantTrainerIds,
-  removeVariantAssignments,
-  syncVariantAssignments,
-} from './_shared/trainerCalendar';
 
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
 
@@ -1823,18 +1818,6 @@ export const handler = createHttpHandler<any>(async (request) => {
         unidad_links: refreshedUnitAssignments.get(variantId) ?? [],
       } as VariantRecord);
 
-    try {
-      await syncVariantAssignments(prisma, variantId, {
-        previousTrainerIds: normalizedExistingTrainerIds,
-        nextTrainerIds,
-      });
-    } catch (calendarError) {
-      console.warn('[products-variants] No se pudo sincronizar Google Calendar tras actualizar la variante', {
-        variantId,
-        error: calendarError,
-      });
-    }
-
     return successResponse({ ok: true, variant: enrichedRefreshed ? normalizeVariant(enrichedRefreshed) : null });
   }
 
@@ -1848,14 +1831,6 @@ export const handler = createHttpHandler<any>(async (request) => {
     });
     if (!variant) return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
 
-    const trainerIdsToRemove = await getVariantTrainerIds(prisma, variantId).catch((error) => {
-      console.warn('[products-variants] No se pudo obtener la lista de formadores asignados antes de eliminar la variante', {
-        variantId,
-        error,
-      });
-      return [] as string[];
-    });
-
     let wooMessage: string | undefined;
     try {
       const result = await deleteVariantFromWooCommerce(variant.id_padre, variant.id_woo);
@@ -1866,17 +1841,6 @@ export const handler = createHttpHandler<any>(async (request) => {
     }
 
     await prisma.variants.delete({ where: { id: variantId } });
-
-    if (trainerIdsToRemove.length) {
-      try {
-        await removeVariantAssignments(prisma, variantId, trainerIdsToRemove);
-      } catch (calendarError) {
-        console.warn('[products-variants] No se pudo eliminar la variante en Google Calendar tras borrar la asignación', {
-          variantId,
-          error: calendarError,
-        });
-      }
-    }
     return successResponse({ ok: true, message: wooMessage ?? 'Variante eliminada correctamente' });
   }
 
