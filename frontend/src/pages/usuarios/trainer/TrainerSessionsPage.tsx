@@ -1922,6 +1922,128 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
   const queryClient = useQueryClient();
   const formattedDate = useMemo(() => formatDateTime(variant.date), [variant.date]);
 
+  const timeLogQuery = useQuery<TrainerSessionTimeLog | null>({
+    queryKey: ['trainer', 'variant', variant.variantId, 'time-log'],
+    queryFn: () => fetchTrainerSessionTimeLog({ variantId: variant.variantId }),
+  });
+
+  const [timeLogEntryValue, setTimeLogEntryValue] = useState('');
+  const [timeLogExitValue, setTimeLogExitValue] = useState('');
+  const [timeLogError, setTimeLogError] = useState<string | null>(null);
+  const [timeLogSuccess, setTimeLogSuccess] = useState(false);
+  const timeLogInitializedRef = useRef(false);
+  const timeLogKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    timeLogInitializedRef.current = false;
+    timeLogKeyRef.current = null;
+    setTimeLogError(null);
+    setTimeLogSuccess(false);
+  }, [variant.variantId]);
+
+  useEffect(() => {
+    if (timeLogQuery.isLoading) return;
+    const record = timeLogQuery.data ?? null;
+    const entrySource = record?.checkIn ?? record?.scheduledStart ?? variant.date ?? null;
+    const exitSource = record?.checkOut ?? record?.scheduledEnd ?? variant.date ?? null;
+    const key = record
+      ? `${record.checkIn ?? ''}|${record.checkOut ?? ''}|${record.updatedAt ?? ''}`
+      : `variant:${variant.date ?? ''}`;
+    if (timeLogInitializedRef.current && timeLogKeyRef.current === key) {
+      return;
+    }
+    timeLogInitializedRef.current = true;
+    timeLogKeyRef.current = key;
+    setTimeLogEntryValue(formatDateTimeLocalInput(entrySource));
+    setTimeLogExitValue(formatDateTimeLocalInput(exitSource));
+    if (!timeLogQuery.isError) {
+      setTimeLogError(null);
+    }
+  }, [timeLogQuery.data, timeLogQuery.isError, timeLogQuery.isLoading, variant.date]);
+
+  useEffect(() => {
+    if (!timeLogSuccess) return;
+    const timeout = window.setTimeout(() => setTimeLogSuccess(false), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [timeLogSuccess]);
+
+  const timeLogLoadErrorMessage = useMemo(() => {
+    if (!timeLogQuery.isError) return null;
+    const error = timeLogQuery.error;
+    if (error instanceof Error) {
+      const message = error.message?.trim();
+      if (message?.length) {
+        return message;
+      }
+    }
+    return 'No se pudo cargar el registro horario.';
+  }, [timeLogQuery.error, timeLogQuery.isError]);
+
+  const formattedTimeLogUpdated = useMemo(
+    () => formatDateTime(timeLogQuery.data?.updatedAt ?? null),
+    [timeLogQuery.data?.updatedAt],
+  );
+
+  const hasExistingTimeLog = useMemo(() => {
+    const log = timeLogQuery.data;
+    if (!log) return false;
+    return Boolean(log.id ?? log.checkIn ?? log.checkOut ?? log.updatedAt);
+  }, [timeLogQuery.data]);
+
+  const saveTimeLogMutation = useMutation({
+    mutationFn: async ({ entry, exit }: { entry: string; exit: string }) =>
+      saveTrainerSessionTimeLog({
+        variantId: variant.variantId,
+        checkIn: entry,
+        checkOut: exit,
+        scheduledStart: variant.date ?? null,
+        scheduledEnd: variant.date ?? null,
+      }),
+    onSuccess: (log) => {
+      queryClient.setQueryData<TrainerSessionTimeLog | null>(
+        ['trainer', 'variant', variant.variantId, 'time-log'],
+        log,
+      );
+      setTimeLogEntryValue(
+        formatDateTimeLocalInput(log.checkIn ?? log.scheduledStart ?? variant.date ?? null),
+      );
+      setTimeLogExitValue(
+        formatDateTimeLocalInput(log.checkOut ?? log.scheduledEnd ?? variant.date ?? null),
+      );
+      const key = `${log.checkIn ?? ''}|${log.checkOut ?? ''}|${log.updatedAt ?? ''}`;
+      timeLogKeyRef.current = key;
+      timeLogInitializedRef.current = true;
+      setTimeLogError(null);
+      setTimeLogSuccess(true);
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setTimeLogError(error.message);
+      } else {
+        setTimeLogError('No se pudo guardar el registro horario.');
+      }
+    },
+  });
+
+  const handleTimeLogSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setTimeLogError(null);
+      const entryIso = parseDateTimeLocalInput(timeLogEntryValue);
+      const exitIso = parseDateTimeLocalInput(timeLogExitValue);
+      if (!entryIso || !exitIso) {
+        setTimeLogError('Introduce fechas y horas válidas para el registro.');
+        return;
+      }
+      if (new Date(exitIso).getTime() <= new Date(entryIso).getTime()) {
+        setTimeLogError('La hora de salida debe ser posterior a la hora de entrada.');
+        return;
+      }
+      saveTimeLogMutation.mutate({ entry: entryIso, exit: exitIso });
+    },
+    [saveTimeLogMutation, timeLogEntryValue, timeLogExitValue],
+  );
+
   const dealsWithKeys = useMemo(() => {
     const seenDealIds = new Set<string>();
     const entries: Array<{ deal: TrainerVariantDeal; eventKey: string }> = [];
@@ -2472,12 +2594,12 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     <Card className="shadow-sm border-0">
       <Card.Body>
         <Stack gap={3}>
-          <div>
+            <div>
             <h4 className="fw-semibold mb-1">{variant.productName ?? 'Formación abierta'}</h4>
             <p className="text-muted mb-0">
               Formación abierta en {variant.site ?? '—'}
             </p>
-          </div>
+            </div>
 
           <Stack gap={3}>
             <div className="row g-4">
@@ -2504,6 +2626,74 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
                   '—'
                 )}
               </InfoField>
+            </div>
+
+            <div>
+              <h5 className="fw-semibold mb-2">Fichar sesión</h5>
+              {timeLogLoadErrorMessage ? <Alert variant="danger">{timeLogLoadErrorMessage}</Alert> : null}
+              {timeLogError ? <Alert variant="danger">{timeLogError}</Alert> : null}
+              {timeLogSuccess ? (
+                <Alert variant="success">Registro horario guardado correctamente.</Alert>
+              ) : null}
+              {timeLogQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" />
+                  <span>Cargando registro horario…</span>
+                </div>
+              ) : (
+                <Form onSubmit={handleTimeLogSubmit} className="d-grid gap-3">
+                  <Row className="g-3">
+                    <Col xs={12} sm={6}>
+                      <Form.Group controlId={`trainer-variant-${variant.variantId}-time-entry`}>
+                        <Form.Label>Hora de entrada</Form.Label>
+                        <Form.Control
+                          type="datetime-local"
+                          value={timeLogEntryValue}
+                          onChange={(event) => setTimeLogEntryValue(event.target.value)}
+                          disabled={saveTimeLogMutation.isPending}
+                          required
+                        />
+                      </Form.Group>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                      <Form.Group controlId={`trainer-variant-${variant.variantId}-time-exit`}>
+                        <Form.Label>Hora de salida</Form.Label>
+                        <Form.Control
+                          type="datetime-local"
+                          value={timeLogExitValue}
+                          onChange={(event) => setTimeLogExitValue(event.target.value)}
+                          disabled={saveTimeLogMutation.isPending}
+                          required
+                        />
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                  <div className="d-flex justify-content-end">
+                    <Button
+                      type="submit"
+                      disabled={saveTimeLogMutation.isPending}
+                      style={
+                        hasExistingTimeLog
+                          ? {
+                              backgroundColor: '#F5C147',
+                              borderColor: '#F5C147',
+                              color: '#212529',
+                            }
+                          : undefined
+                      }
+                    >
+                      {saveTimeLogMutation.isPending
+                        ? 'Guardando…'
+                        : hasExistingTimeLog
+                        ? 'Modificar'
+                        : 'Guardar registro'}
+                    </Button>
+                  </div>
+                  {formattedTimeLogUpdated ? (
+                    <div className="text-muted small">Última actualización: {formattedTimeLogUpdated}</div>
+                  ) : null}
+                </Form>
+              )}
             </div>
 
             <div>
