@@ -14,3 +14,20 @@ export type Trainer = {
   created_at: string | null;
   updated_at: string | null;
 };
+
+export type TrainerDocument = {
+  id: string;
+  trainer_id: string;
+  document_type: string;
+  document_type_label?: string | null;
+  file_name: string | null;
+  original_file_name: string | null;
+  mime_type: string | null;
+  file_size: number | null;
+  drive_file_id: string | null;
+  drive_file_name: string | null;
+  drive_web_view_link: string | null;
+  uploaded_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};

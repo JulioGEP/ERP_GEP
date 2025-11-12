@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/TrainersView.tsx
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Button, ButtonGroup, Form, Spinner, Table } from "react-bootstrap";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrainerModal, type TrainerFormValues } from "./TrainerModal";
@@ -10,8 +10,9 @@ import { ApiError } from "../../api/client";
 import { useDataTable } from "../../hooks/useDataTable";
 import { SortableHeader } from "../../components/table/SortableHeader";
 import { DataTablePagination } from "../../components/table/DataTablePagination";
+import { TrainerDetailsDrawer } from "./TrainerDetailsDrawer";
 
-type ToastParams = {
+export type ToastParams = {
   variant: "success" | "danger" | "info";
   message: string;
 };
@@ -61,6 +62,8 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [selectedTrainer, setSelectedTrainer] = useState<Trainer | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [detailTrainer, setDetailTrainer] = useState<Trainer | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
@@ -100,6 +103,9 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
       });
       setShowModal(false);
       setSelectedTrainer(null);
+      setDetailTrainer((current) =>
+        current && current.trainer_id === trainer.trainer_id ? trainer : current,
+      );
       queryClient.invalidateQueries({ queryKey: ["trainers"] });
     },
     onError: (error: unknown) => {
@@ -138,10 +144,20 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
     setShowModal(true);
   };
 
-  const handleSelectTrainer = (trainer: Trainer) => {
+  const handleOpenDetails = (trainer: Trainer) => {
+    setDetailTrainer(trainer);
+    setShowDetails(true);
+  };
+
+  const handleEditTrainer = (trainer: Trainer) => {
     setSelectedTrainer(trainer);
     setModalMode("edit");
     setShowModal(true);
+  };
+
+  const handleDetailsClose = () => {
+    setShowDetails(false);
+    setDetailTrainer(null);
   };
 
   const handleModalClose = () => {
@@ -193,6 +209,14 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
     () => "Consulta, edita o añade nuevos formadores y bomberos a tu base de datos.",
     []
   );
+
+  useEffect(() => {
+    if (!detailTrainer) return;
+    const updated = trainers.find((trainer) => trainer.trainer_id === detailTrainer.trainer_id);
+    if (updated && updated !== detailTrainer) {
+      setDetailTrainer(updated);
+    }
+  }, [trainers, detailTrainer]);
 
   return (
     <div className="d-grid gap-4">
@@ -271,12 +295,15 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                   sortState={sortState}
                   onSort={requestSort}
                 />
+                <th className="text-end">
+                  <span className="fw-semibold">Acciones</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={3} className="py-5 text-center">
+                  <td colSpan={4} className="py-5 text-center">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
@@ -287,18 +314,42 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                     <tr
                       key={trainer.trainer_id}
                       role="button"
-                      onClick={() => handleSelectTrainer(trainer)}
+                      onClick={() => handleOpenDetails(trainer)}
                       style={{ cursor: "pointer" }}
                     >
                       <td className="fw-semibold">{fullName}</td>
                       <td>{trainer.especialidad ?? "—"}</td>
                       <td>{trainer.email ?? "—"}</td>
+                      <td className="text-end">
+                        <div className="d-inline-flex gap-2">
+                          <Button
+                            variant="link"
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleOpenDetails(trainer);
+                            }}
+                          >
+                            Ver perfil
+                          </Button>
+                          <Button
+                            variant="link"
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleEditTrainer(trainer);
+                            }}
+                          >
+                            Editar
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
               ) : trainers.length ? (
                 <tr>
-                  <td colSpan={3} className="py-5 text-center text-muted">
+                  <td colSpan={4} className="py-5 text-center text-muted">
                     {hasFiltersApplied
                       ? "No se encontraron formadores que coincidan con los filtros aplicados."
                       : "No hay formadores registrados todavía."}
@@ -306,7 +357,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                 </tr>
               ) : (
                 <tr>
-                  <td colSpan={3} className="py-5 text-center text-muted">
+                  <td colSpan={4} className="py-5 text-center text-muted">
                     No hay formadores registrados todavía.
                   </td>
                 </tr>
@@ -330,6 +381,15 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
         isSaving={isSaving}
         onClose={handleModalClose}
         onSubmit={handleSubmit}
+      />
+      <TrainerDetailsDrawer
+        trainer={detailTrainer}
+        show={showDetails}
+        onClose={handleDetailsClose}
+        onEdit={(trainer) => {
+          handleEditTrainer(trainer);
+        }}
+        onNotify={onNotify}
       />
     </div>
   );
