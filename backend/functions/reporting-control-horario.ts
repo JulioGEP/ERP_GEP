@@ -163,6 +163,7 @@ export const handler = createHttpHandler(async (request) => {
     clockOut: toMadridISOString(log.check_out_utc),
     createdAt: toMadridISOString(log.created_at),
     updatedAt: toMadridISOString(log.updated_at),
+    isVariant: Boolean(log.variant) && !log.sesion,
   }));
 
   return successResponse({ records });

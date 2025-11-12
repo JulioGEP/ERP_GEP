@@ -38,6 +38,14 @@ export default function ControlHorarioPage() {
     [],
   );
 
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-ES', {
+        dateStyle: 'short',
+      }),
+    [],
+  );
+
   const differenceFormatter = useMemo(
     () =>
       new Intl.NumberFormat('es-ES', {
@@ -93,16 +101,22 @@ export default function ControlHorarioPage() {
 
     const rows = records.map((record) => {
       const plannedStart = record.plannedStart
-        ? dateTimeFormatter.format(new Date(record.plannedStart))
+        ? (record.isVariant
+            ? dateFormatter.format(new Date(record.plannedStart))
+            : dateTimeFormatter.format(new Date(record.plannedStart)))
         : '';
       const plannedEnd = record.plannedEnd
-        ? dateTimeFormatter.format(new Date(record.plannedEnd))
+        ? (record.isVariant
+            ? dateFormatter.format(new Date(record.plannedEnd))
+            : dateTimeFormatter.format(new Date(record.plannedEnd)))
         : '';
       const clockIn = record.clockIn ? dateTimeFormatter.format(new Date(record.clockIn)) : '';
       const clockOut = record.clockOut ? dateTimeFormatter.format(new Date(record.clockOut)) : '';
 
-      const startDiff = diffInMinutes(record.plannedStart, record.clockIn, { invertSign: true });
-      const endDiff = diffInMinutes(record.plannedEnd, record.clockOut);
+      const startDiff = record.isVariant
+        ? null
+        : diffInMinutes(record.plannedStart, record.clockIn, { invertSign: true });
+      const endDiff = record.isVariant ? null : diffInMinutes(record.plannedEnd, record.clockOut);
 
       return [
         record.sessionName ?? '',
@@ -152,6 +166,7 @@ export default function ControlHorarioPage() {
         <RecordsTable
           records={records}
           dateTimeFormatter={dateTimeFormatter}
+          dateFormatter={dateFormatter}
           differenceFormatter={differenceFormatter}
         />
 
@@ -161,6 +176,7 @@ export default function ControlHorarioPage() {
             <RecordsTable
               records={endedWithoutClockRecords}
               dateTimeFormatter={dateTimeFormatter}
+              dateFormatter={dateFormatter}
               differenceFormatter={differenceFormatter}
             />
           ) : (
@@ -198,10 +214,11 @@ export default function ControlHorarioPage() {
 type RecordsTableProps = {
   records: ControlHorarioRecord[];
   dateTimeFormatter: Intl.DateTimeFormat;
+  dateFormatter: Intl.DateTimeFormat;
   differenceFormatter: Intl.NumberFormat;
 };
 
-function RecordsTable({ records, dateTimeFormatter, differenceFormatter }: RecordsTableProps) {
+function RecordsTable({ records, dateTimeFormatter, dateFormatter, differenceFormatter }: RecordsTableProps) {
   return (
     <div className="table-responsive">
       <Table striped bordered hover>
@@ -221,10 +238,14 @@ function RecordsTable({ records, dateTimeFormatter, differenceFormatter }: Recor
             const organizationName = record.organizationName ?? '—';
             const trainerFullName = record.trainerFullName ?? '—';
             const plannedStart = record.plannedStart
-              ? dateTimeFormatter.format(new Date(record.plannedStart))
+              ? record.isVariant
+                ? dateFormatter.format(new Date(record.plannedStart))
+                : dateTimeFormatter.format(new Date(record.plannedStart))
               : '—';
             const plannedEnd = record.plannedEnd
-              ? dateTimeFormatter.format(new Date(record.plannedEnd))
+              ? record.isVariant
+                ? dateFormatter.format(new Date(record.plannedEnd))
+                : dateTimeFormatter.format(new Date(record.plannedEnd))
               : '—';
             const clockIn = record.clockIn
               ? dateTimeFormatter.format(new Date(record.clockIn))
@@ -233,10 +254,17 @@ function RecordsTable({ records, dateTimeFormatter, differenceFormatter }: Recor
               ? dateTimeFormatter.format(new Date(record.clockOut))
               : '—';
 
-            const startDiff = diffInMinutes(record.plannedStart, record.clockIn, { invertSign: true });
-            const endDiff = diffInMinutes(record.plannedEnd, record.clockOut);
+            const startDiff = record.isVariant
+              ? null
+              : diffInMinutes(record.plannedStart, record.clockIn, { invertSign: true });
+            const endDiff = record.isVariant
+              ? null
+              : diffInMinutes(record.plannedEnd, record.clockOut);
 
             const differenceSummary = (() => {
+              if (record.isVariant) {
+                return '—';
+              }
               const parts: string[] = [];
               if (startDiff !== null) {
                 parts.push(`Inicio: ${differenceFormatter.format(startDiff)} min`);
