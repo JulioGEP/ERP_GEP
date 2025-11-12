@@ -10,6 +10,7 @@ import {
   type TrainerDocumentTypeValue,
 } from "./trainers.constants";
 import { uploadTrainerDocument } from "./api";
+import { useCurrentUserIdentity } from "../presupuestos/useCurrentUserIdentity";
 import { blobOrFileToBase64 } from "../../utils/base64";
 
 export type TrainerFormValues = {
@@ -80,6 +81,7 @@ export function TrainerModal({
   const sedeContainerRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
   const documentInputRef = useRef<HTMLInputElement | null>(null);
+  const { userId, userName } = useCurrentUserIdentity();
   const [selectedDocumentType, setSelectedDocumentType] = useState<TrainerDocumentTypeValue>(
     TRAINER_DOCUMENT_TYPES[0].value,
   );
@@ -185,6 +187,7 @@ export function TrainerModal({
         mimeType: params.file.type || undefined,
         fileSize: params.file.size,
         contentBase64: base64,
+        user: { id: userId, name: userName },
       });
     },
     onSuccess: () => {

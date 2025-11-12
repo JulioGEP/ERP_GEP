@@ -189,6 +189,7 @@ export function TrainerDetailsDrawer({
                       <th>Tipo</th>
                       <th>Nombre</th>
                       <th>Tamaño</th>
+                      <th>Autor</th>
                       <th>Subido</th>
                       <th className="text-end">Acciones</th>
                     </tr>
@@ -215,6 +216,7 @@ export function TrainerDetailsDrawer({
                             )}
                           </td>
                           <td>{formatFileSize(document.file_size)}</td>
+                          <td>{document.author ?? '—'}</td>
                           <td>{formatDateTimeLabel(document.uploaded_at)}</td>
                           <td className="text-end">
                             <Button

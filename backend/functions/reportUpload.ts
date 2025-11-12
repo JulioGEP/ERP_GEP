@@ -7,8 +7,10 @@ import { nowInMadridDate, toMadridISOString } from './_shared/timezone'
 import { ensureSessionContext, resolveSessionNumber, toStringOrNull } from './_shared/sessions'
 import { normalizeDriveUrl } from './_shared/drive'
 import { uploadSessionDocumentToGoogleDrive } from './_shared/googleDrive'
+import { extractRequestUser } from './_shared/requestUser'
 
 const METHOD_NOT_ALLOWED = errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405)
+const DEFAULT_DOCUMENT_AUTHOR = process.env.DEFAULT_DOCUMENT_AUTHOR || 'erp_user'
 
 const sanitizeFileName = (name: unknown, fallback = 'Informe.pdf'): string => {
   if (typeof name !== 'string') return fallback
@@ -47,6 +49,9 @@ const mapSessionFile = (row: any) => ({
   updated_at: row?.updated_at ? toMadridISOString(row.updated_at) : null,
   drive_file_name: row?.drive_file_name ?? null,
   drive_web_view_link: row?.drive_web_view_link ?? null,
+  author_id: row?.uploaded_by_id ?? null,
+  author_name: row?.uploaded_by_name ?? null,
+  author: row?.uploaded_by_name ?? row?.uploaded_by_id ?? null,
 })
 
 export const handler = createHttpHandler<any>(async (request) => {
@@ -117,6 +122,10 @@ export const handler = createHttpHandler<any>(async (request) => {
     const now = nowInMadridDate()
     let record: any = null
     let persistenceError: unknown = null
+    const requestUser = extractRequestUser(request)
+    const uploadedById = requestUser.id
+    const uploadedByName = requestUser.displayName ?? DEFAULT_DOCUMENT_AUTHOR
+
     const createPayload = {
       id: randomUUID(),
       deal_id: dealId,
@@ -127,6 +136,8 @@ export const handler = createHttpHandler<any>(async (request) => {
       updated_at: now,
       drive_file_name: uploadResult.driveFileName,
       drive_web_view_link: uploadResult.driveWebViewLink,
+      uploaded_by_id: uploadedById,
+      uploaded_by_name: uploadedByName,
     }
 
     try {
@@ -142,15 +153,17 @@ export const handler = createHttpHandler<any>(async (request) => {
     sesion_id: sessionId,
     drive_file_name: uploadResult.driveFileName,
   },
-  data: {
-    deal_id: dealId,
-    file_type: 'pdf',
-    compartir_formador: true,
-    added_at: now,
-    updated_at: now,
-    drive_file_name: uploadResult.driveFileName,
-    drive_web_view_link: uploadResult.driveWebViewLink,
-  },
+          data: {
+            deal_id: dealId,
+            file_type: 'pdf',
+            compartir_formador: true,
+            added_at: now,
+            updated_at: now,
+            drive_file_name: uploadResult.driveFileName,
+            drive_web_view_link: uploadResult.driveWebViewLink,
+            uploaded_by_id: uploadedById,
+            uploaded_by_name: uploadedByName,
+          },
 })
 
 if (updateResult.count > 0) {

@@ -19,11 +19,13 @@ import {
   resolveSessionNumber,
   toStringOrNull,
 } from './_shared/sessions';
+import { extractRequestUser } from './_shared/requestUser';
 
 const ONE_MEGABYTE = 1024 * 1024;
 const MAX_SESSION_DOCUMENT_SIZE_BYTES = 4 * ONE_MEGABYTE;
 const MAX_SESSION_DOCUMENT_SIZE_LABEL = '4 MB';
 const TRAINER_EXPENSE_FOLDER_NAME = 'Gastos Formador';
+const DEFAULT_DOCUMENT_AUTHOR = process.env.DEFAULT_DOCUMENT_AUTHOR || 'erp_user';
 
 type ParsedPath = {
   docId: string | null;
@@ -47,6 +49,9 @@ type SessionFileRecord = {
   updated_at: string | null;
   drive_file_name: string | null;
   drive_web_view_link: string | null;
+  author_id: string | null;
+  author_name: string | null;
+  author: string | null;
 };
 
 function normalizeDriveUrl(value: unknown): string | null {
@@ -125,6 +130,9 @@ function mapSessionFile(row: any): SessionFileRecord {
     updated_at: row?.updated_at ? toMadridISOString(row.updated_at) : null,
     drive_file_name: toStringOrNull(row?.drive_file_name),
     drive_web_view_link: toStringOrNull(row?.drive_web_view_link),
+    author_id: toStringOrNull(row?.uploaded_by_id),
+    author_name: toStringOrNull(row?.uploaded_by_name),
+    author: toStringOrNull(row?.uploaded_by_name) ?? toStringOrNull(row?.uploaded_by_id),
   };
 
 }
@@ -243,6 +251,9 @@ export const handler = async (event: any) => {
       const sessionName = toStringOrNull(session?.nombre_cache) ?? `Sesión ${sessionNumber}`;
 
       const now = nowInMadridDate();
+      const requestUser = extractRequestUser(event);
+      const uploadedById = requestUser.id;
+      const uploadedByName = requestUser.displayName ?? DEFAULT_DOCUMENT_AUTHOR;
       const createdRecords: SessionFileRecord[] = [];
       let processedTotalSize = 0;
 
@@ -356,6 +367,8 @@ export const handler = async (event: any) => {
             added_at: now,
             drive_file_name: uploadResult.driveFileName,
             drive_web_view_link: uploadResult.driveWebViewLink,
+            uploaded_by_id: uploadedById,
+            uploaded_by_name: uploadedByName,
           },
         });
 

@@ -1499,6 +1499,7 @@ export function BudgetDetailModal({
                             : d.source === 'MANUAL'
                             ? 'Manual'
                             : 'Interno';
+                        const authorLabel = displayOrDash(d.author ?? null);
                         return (
                           <ListGroup.Item
                             key={d.id}
@@ -1529,6 +1530,7 @@ export function BudgetDetailModal({
                                 {sizeLabel ? <span>{sizeLabel}</span> : null}
                                 <span>({sourceLabel})</span>
                               </div>
+                              <div className="text-muted small">Autor: {authorLabel}</div>
                             </div>
                             {d.source !== 'PIPEDRIVE' ? (
                               <div className="d-flex gap-2">
