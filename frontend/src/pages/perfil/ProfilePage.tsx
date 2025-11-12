@@ -246,10 +246,6 @@ export default function ProfilePage() {
               <Alert variant="danger" className="mb-0">
                 No se pudo obtener el estado de Google Calendar.
               </Alert>
-            ) : calendarStatusQuery.data && !calendarStatusQuery.data.configured ? (
-              <Alert variant="warning" className="mb-0">
-                La integración con Google Calendar no está disponible. Ponte en contacto con el administrador.
-              </Alert>
             ) : calendarStatusQuery.data?.connected ? (
               <div className="d-flex flex-column flex-lg-row justify-content-between gap-3">
                 <div className="d-grid gap-1">
@@ -300,6 +296,11 @@ export default function ProfilePage() {
                 <div>
                   <div className="fw-semibold text-uppercase text-muted small">Estado</div>
                   <div>No conectado</div>
+                  {!calendarStatusQuery.data?.configured ? (
+                    <div className="text-muted small">
+                      Puedes vincular tu cuenta de Google Calendar cuando quieras desde este perfil.
+                    </div>
+                  ) : null}
                 </div>
                 <div>
                   <Button onClick={() => calendarConnectMutation.mutate()} disabled={calendarConnectMutation.isPending}>
