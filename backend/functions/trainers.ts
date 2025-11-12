@@ -1,11 +1,11 @@
 // backend/functions/trainers.ts
 import type { Prisma } from '@prisma/client';
-import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
+import { syncUserForTrainer, type TrainerRecordForUserSync } from './_shared/trainerUsers';
 
 const OPTIONAL_STRING_FIELDS = [
   'apellido',
@@ -18,9 +18,6 @@ const OPTIONAL_STRING_FIELDS = [
 ] as const;
 
 const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
-
-const DEFAULT_PASSWORD = '123456';
-const BCRYPT_SALT_ROUNDS = 10;
 
 type TrainerRecord = {
   trainer_id: string;
@@ -219,90 +216,20 @@ function handleKnownPrismaError(error: unknown) {
   return null;
 }
 
-/**
- * Upsert del usuario a partir de un trainer y enlace de trainers.user_id
- * - Si no hay email, no crea usuario (permite trainers sin login).
- * - Si existe user_id, actualiza ese user; si no existe, upsert por email.
- * - role: 'Formador' (enum erp_role).
- */
-type PrismaClientLike = Prisma.TransactionClient | ReturnType<typeof getPrisma>;
+const SYNC_FIELDS: Array<keyof TrainerRecord> = [
+  'trainer_id',
+  'name',
+  'apellido',
+  'email',
+  'activo',
+  'user_id',
+];
 
-async function syncUserForTrainer(prisma: PrismaClientLike, trainer: TrainerRecord) {
-  // Si no hay email, no podemos upsertear user por constraint unique de users.email
-  if (!trainer.email) return null;
-
-  const userPayload = {
-    first_name: trainer.name,
-    last_name: trainer.apellido ?? '',
-    email: trainer.email,
-    role: 'Formador',
-    active: Boolean(trainer.activo),
-    updated_at: new Date(),
-  };
-
-  let userId: string | null = trainer.user_id ?? null;
-
-  // Si ya hay un user_id, intentamos actualizar ese usuario.
-  if (userId) {
-    try {
-      const updatedUser = await prisma.users.update({
-        where: { id: userId },
-        data: userPayload,
-        select: { id: true },
-      });
-      userId = updatedUser.id;
-    } catch (e: any) {
-      // Si no existe (P2025), caemos a upsert por email
-      userId = null;
-    }
-  }
-
-  // Si no hay user_id válido, hacemos upsert por email
-  if (!userId) {
-    const existing = await prisma.users.findFirst({
-      where: { email: { equals: trainer.email!, mode: 'insensitive' } },
-      select: { id: true },
-    });
-
-    if (existing) {
-      const updated = await prisma.users.update({
-        where: { id: existing.id },
-        data: userPayload,
-        select: { id: true },
-      });
-      userId = updated.id;
-    } else {
-      const now = new Date();
-      const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, BCRYPT_SALT_ROUNDS);
-        const created = await prisma.users.create({
-          data: {
-            id: randomUUID(),
-            first_name: trainer.name,
-            last_name: trainer.apellido ?? '',
-            email: trainer.email!,
-            role: 'Formador',
-            active: Boolean(trainer.activo),
-            password_hash: passwordHash,
-            password_algo: 'bcrypt',
-            password_updated_at: now,
-            created_at: now,
-            updated_at: now,
-          },
-          select: { id: true },
-        });
-      userId = created.id;
-    }
-  }
-
-  // Enlazamos el trainer con el user si hiciera falta
-  if (!trainer.user_id || trainer.user_id !== userId) {
-    await prisma.trainers.update({
-      where: { trainer_id: trainer.trainer_id },
-      data: { user_id: userId },
-    });
-  }
-
-  return userId;
+function pickTrainerSyncFields(trainer: TrainerRecord): TrainerRecordForUserSync {
+  return SYNC_FIELDS.reduce((acc, key) => {
+    (acc as any)[key] = trainer[key];
+    return acc;
+  }, {} as TrainerRecordForUserSync);
 }
 
 export const handler = createHttpHandler<any>(async (request) => {
@@ -343,7 +270,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       // Transacción: crear trainer → sincronizar user → devolver trainer normalizado
       const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const newTrainer = await tx.trainers.create({ data: result.data });
-        await syncUserForTrainer(tx, newTrainer as TrainerRecord);
+        await syncUserForTrainer(tx, pickTrainerSyncFields(newTrainer as TrainerRecord));
         return tx.trainers.findUnique({ where: { trainer_id: newTrainer.trainer_id } });
       });
 
@@ -371,7 +298,7 @@ export const handler = createHttpHandler<any>(async (request) => {
           data: result.data,
         });
 
-        await syncUserForTrainer(tx, tr as TrainerRecord);
+        await syncUserForTrainer(tx, pickTrainerSyncFields(tr as TrainerRecord));
 
         return tx.trainers.findUnique({ where: { trainer_id: tr.trainer_id } });
       });

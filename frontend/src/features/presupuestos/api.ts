@@ -128,6 +128,61 @@ export type SessionPublicLink = {
   user_agent: string | null;
 };
 
+export type TrainerInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
+
+export type SessionTrainerInviteSession = {
+  id: string;
+  name: string | null;
+  product_name: string | null;
+  product_code: string | null;
+  deal_id: string | null;
+  deal_title: string | null;
+  pipeline_id: string | null;
+  pipeline_label: string | null;
+  address: string | null;
+  start_at: string | null;
+  end_at: string | null;
+};
+
+export type SessionTrainerInvite = {
+  token: string;
+  status: TrainerInviteStatus;
+  sent_at: string | null;
+  responded_at: string | null;
+  created_by: {
+    user_id: string | null;
+    name: string | null;
+    email: string | null;
+  };
+  trainer: {
+    id: string;
+    name: string | null;
+    last_name: string | null;
+    email: string | null;
+  };
+  session: SessionTrainerInviteSession;
+};
+
+export type TrainerInviteSendResult = {
+  trainerId: string;
+  email: string;
+  name: string;
+  token: string;
+  status: 'SENT' | 'FAILED';
+};
+
+export type TrainerInviteSkipped = {
+  trainer_id: string;
+  name: string | null;
+  apellido: string | null;
+};
+
+export type SendSessionTrainerInvitesResult = {
+  session: SessionTrainerInviteSession;
+  invites: TrainerInviteSendResult[];
+  skippedTrainers: TrainerInviteSkipped[];
+};
+
 export type PublicSessionInfo = {
   deal_id: string | null;
   sesion_id: string | null;
@@ -870,6 +925,74 @@ function normalizeSessionPublicLink(raw: any): SessionPublicLink {
     active,
     ip_created: ipCreated,
     user_agent: userAgent,
+  };
+}
+
+function normalizeTrainerInviteStatus(raw: any): TrainerInviteStatus {
+  const value = (toStringValue(raw) ?? '').trim().toUpperCase();
+  if (value === 'CONFIRMED' || value === 'DECLINED') {
+    return value;
+  }
+  return 'PENDING';
+}
+
+function normalizeSessionTrainerInviteSession(raw: any): SessionTrainerInviteSession {
+  return {
+    id: toStringValue(raw?.id) ?? '',
+    name: toStringValue(raw?.name) ?? null,
+    product_name: toStringValue(raw?.product_name) ?? null,
+    product_code: toStringValue(raw?.product_code) ?? null,
+    deal_id: toStringValue(raw?.deal_id) ?? null,
+    deal_title: toStringValue(raw?.deal_title) ?? null,
+    pipeline_id: toStringValue(raw?.pipeline_id) ?? null,
+    pipeline_label: toStringValue(raw?.pipeline_label) ?? null,
+    address: toStringValue(raw?.address) ?? null,
+    start_at: toStringValue(raw?.start_at) ?? null,
+    end_at: toStringValue(raw?.end_at) ?? null,
+  };
+}
+
+function normalizeTrainerInviteSendResult(raw: any): TrainerInviteSendResult {
+  const statusRaw = toStringValue(raw?.status);
+  return {
+    trainerId: toStringValue(raw?.trainerId) ?? '',
+    email: toStringValue(raw?.email) ?? '',
+    name: toStringValue(raw?.name) ?? '',
+    token: toStringValue(raw?.token) ?? '',
+    status: statusRaw === 'FAILED' ? 'FAILED' : 'SENT',
+  };
+}
+
+function normalizeTrainerInviteSkipped(raw: any): TrainerInviteSkipped {
+  return {
+    trainer_id: toStringValue(raw?.trainer_id) ?? '',
+    name: toStringValue(raw?.name) ?? null,
+    apellido: toStringValue(raw?.apellido) ?? null,
+  };
+}
+
+function normalizeSessionTrainerInvite(raw: any): SessionTrainerInvite {
+  const trainerRaw = raw?.trainer ?? {};
+  const createdByRaw = raw?.created_by ?? {};
+  const sessionRaw = raw?.session ?? {};
+
+  return {
+    token: toStringValue(raw?.token) ?? '',
+    status: normalizeTrainerInviteStatus(raw?.status),
+    sent_at: toStringValue(raw?.sent_at) ?? null,
+    responded_at: toStringValue(raw?.responded_at) ?? null,
+    created_by: {
+      user_id: toStringValue(createdByRaw?.user_id) ?? null,
+      name: toStringValue(createdByRaw?.name) ?? null,
+      email: toStringValue(createdByRaw?.email) ?? null,
+    },
+    trainer: {
+      id: toStringValue(trainerRaw?.id) ?? toStringValue(raw?.trainer_id) ?? '',
+      name: toStringValue(trainerRaw?.name) ?? null,
+      last_name: toStringValue(trainerRaw?.last_name) ?? null,
+      email: toStringValue(trainerRaw?.email) ?? null,
+    },
+    session: normalizeSessionTrainerInviteSession(sessionRaw),
   };
 }
 
@@ -2329,6 +2452,58 @@ export async function deleteSessionPublicLink(
   await request(`/session_public_links?${params.toString()}`, {
     method: 'DELETE',
   });
+}
+
+export async function sendSessionTrainerInvites(sessionId: string): Promise<SendSessionTrainerInvitesResult> {
+  const normalizedId = String(sessionId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId es obligatorio');
+  }
+
+  const data = await request('/session-trainer-invites', {
+    method: 'POST',
+    body: JSON.stringify({ sessionId: normalizedId }),
+  });
+
+  const invitesRaw = Array.isArray(data?.invites) ? data.invites : [];
+  const skippedRaw = Array.isArray(data?.skippedTrainers) ? data.skippedTrainers : [];
+
+  return {
+    session: normalizeSessionTrainerInviteSession(data?.session ?? {}),
+    invites: invitesRaw.map((row: unknown) => normalizeTrainerInviteSendResult(row)),
+    skippedTrainers: skippedRaw.map((row: unknown) => normalizeTrainerInviteSkipped(row)),
+  };
+}
+
+export async function fetchSessionTrainerInvite(token: string): Promise<SessionTrainerInvite> {
+  const normalizedToken = String(token ?? '').trim();
+  if (!normalizedToken) {
+    throw new ApiError('VALIDATION_ERROR', 'token es obligatorio');
+  }
+
+  const data = await request(`/session-trainer-invites/${encodeURIComponent(normalizedToken)}`);
+  return normalizeSessionTrainerInvite(data?.invite ?? {});
+}
+
+export async function respondSessionTrainerInvite(
+  token: string,
+  action: 'confirm' | 'decline',
+): Promise<SessionTrainerInvite> {
+  const normalizedToken = String(token ?? '').trim();
+  if (!normalizedToken) {
+    throw new ApiError('VALIDATION_ERROR', 'token es obligatorio');
+  }
+  const normalizedAction = action === 'confirm' || action === 'decline' ? action : '';
+  if (!normalizedAction) {
+    throw new ApiError('VALIDATION_ERROR', 'Acción inválida');
+  }
+
+  const data = await request(`/session-trainer-invites/${encodeURIComponent(normalizedToken)}/respond`, {
+    method: 'POST',
+    body: JSON.stringify({ action: normalizedAction }),
+  });
+
+  return normalizeSessionTrainerInvite(data?.invite ?? {});
 }
 
 export async function fetchPublicSessionStudents(token: string): Promise<{
