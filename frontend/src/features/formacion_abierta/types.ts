@@ -1,5 +1,3 @@
-import type { TrainerConfirmationStatusDTO } from '../../api/sessions.types';
-
 export type VariantInfo = {
   id: string;
   id_woo: string;
@@ -22,7 +20,6 @@ export type VariantInfo = {
   unidades: Array<{ unidad_id: string; name: string; matricula: string | null }>;
   created_at: string | null;
   updated_at: string | null;
-  trainer_confirmations: TrainerConfirmationStatusDTO[];
 };
 
 export type ProductDefaults = {

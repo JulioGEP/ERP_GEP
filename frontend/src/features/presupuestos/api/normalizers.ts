@@ -14,7 +14,6 @@ import {
   toNumber,
   toStringValue,
 } from '../../../api/client';
-import { normalizeTrainerConfirmation } from '../../../utils/trainerConfirmations';
 import {
   SESSION_ESTADOS,
   type ProductVariantOption,
@@ -377,11 +376,6 @@ export function normalizeDealDocument(raw: any): DealDocument {
 }
 
 export function normalizeSession(row: any): SessionDTO {
-  const confirmationsRaw = Array.isArray(row?.trainer_confirmations)
-    ? row.trainer_confirmations
-    : Array.isArray(row?.trainerConfirmations)
-    ? row.trainerConfirmations
-    : [];
   return {
     id: toStringValue(row?.id) ?? '',
     deal_id: toStringValue(row?.deal_id ?? row?.dealId) ?? '',
@@ -395,9 +389,6 @@ export function normalizeSession(row: any): SessionDTO {
     drive_url: toStringValue(row?.drive_url ?? row?.driveUrl) ?? null,
     trainer_ids: sanitizeStringArray(row?.trainer_ids) ?? [],
     unidad_movil_ids: sanitizeStringArray(row?.unidad_movil_ids) ?? [],
-    trainer_confirmations: confirmationsRaw
-      .map((entry: any) => normalizeTrainerConfirmation(entry))
-      .filter((entry) => entry.trainer_id.length),
   } satisfies SessionDTO;
 }
 

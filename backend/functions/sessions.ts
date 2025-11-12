@@ -1,6 +1,6 @@
 // backend/functions/sesiones.ts
 import { randomUUID } from 'crypto';
-import type { Prisma, TrainerConfirmationState } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { logAudit, resolveUserIdFromEvent, type JsonValue } from './_shared/audit-log';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
@@ -17,10 +17,6 @@ import {
   reindexSessionNames,
   toNonNegativeInt,
 } from './_shared/sessionGeneration';
-import {
-  serializeTrainerConfirmation,
-  syncTrainerConfirmations,
-} from './_shared/trainer-confirmations';
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 30;
@@ -37,23 +33,6 @@ const MANUAL_SESSION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCELADA',
 const BORRADOR_TRANSITION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCELADA']);
 
 type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>;
-
-const TRAINER_CONFIRMATION_STATE_VALUES: TrainerConfirmationState[] = [
-  'PENDING',
-  'MAIL_SENT',
-  'CONFIRMED',
-  'DECLINED',
-];
-
-function toTrainerConfirmationState(value: unknown): TrainerConfirmationState {
-  if (typeof value === 'string') {
-    const normalized = value.trim().toUpperCase();
-    if ((TRAINER_CONFIRMATION_STATE_VALUES as string[]).includes(normalized)) {
-      return normalized as TrainerConfirmationState;
-    }
-  }
-  return 'PENDING';
-}
 
 // Unidades “comodín” que no bloquean disponibilidad
 const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
@@ -163,14 +142,6 @@ type SessionRecord = {
   salas?: { sala_id?: string | null; name?: string | null; sede?: string | null } | null;
   _count?: { alumnos?: number | null } | null;
   alumnos?: SessionStudentRecord[] | null;
-  trainer_confirmations?:
-    | Array<{
-        trainer_id: string;
-        status?: TrainerConfirmationState | string | null;
-        mail_sent_at?: Date | string | null;
-        updated_at?: Date | string | null;
-      }>
-    | null;
 };
 
 type SessionStudentResponse = {
@@ -252,8 +223,6 @@ function ensureSessionRelations(row: any): SessionRecord {
     : Array.isArray(record.sesion_unidades)
       ? record.sesion_unidades.map((link) => normalizeSessionUnitLink(link))
       : [];
-  const confirmations = (record as any).trainer_confirmations;
-  record.trainer_confirmations = Array.isArray(confirmations) ? confirmations : [];
   return record;
 }
 
@@ -399,18 +368,6 @@ function normalizeSession(row: SessionRecord) {
   const trainerIds = normalized.trainers.map((t) => t.trainer_id);
   const unidadIds = normalized.unidades.map((u) => u.unidad_id);
   const estado = resolveSessionEstado(normalized);
-  const confirmations = Array.isArray(normalized.trainer_confirmations)
-    ? normalized.trainer_confirmations
-        .filter((entry) => typeof entry?.trainer_id === 'string' && entry.trainer_id.trim().length)
-        .map((entry) =>
-          serializeTrainerConfirmation({
-            trainer_id: entry.trainer_id,
-            status: toTrainerConfirmationState(entry.status),
-            mail_sent_at: entry.mail_sent_at ?? null,
-            updated_at: entry.updated_at ?? null,
-          }),
-        )
-    : [];
   return {
     id: normalized.id,
     deal_id: normalized.deal_id,
@@ -424,7 +381,6 @@ function normalizeSession(row: SessionRecord) {
     drive_url: toTrimmed(normalized.drive_url),
     trainer_ids: trainerIds,
     unidad_movil_ids: unidadIds,
-    trainer_confirmations: confirmations,
   };
 }
 
@@ -828,9 +784,6 @@ async function fetchSessionsByProduct(
         sesion_trainers: { select: { trainer_id: true } },
         sesion_unidades: { select: { unidad_movil_id: true } },
         deals: { select: { sede_label: true, pipeline_id: true } },
-        trainer_confirmations: {
-          select: { trainer_id: true, status: true, mail_sent_at: true, updated_at: true },
-        },
       },
     }),
   ]);
@@ -1262,9 +1215,6 @@ if (method === 'GET') {
         },
         alumnos: { select: { id: true, nombre: true, apellido: true, dni: true } },
         _count: { select: { alumnos: true } },
-        trainer_confirmations: {
-          select: { trainer_id: true, status: true, mail_sent_at: true, updated_at: true },
-        },
       },
       orderBy: [{ fecha_inicio_utc: "asc" }],
     });
@@ -1495,12 +1445,6 @@ if (method === 'GET') {
             })),
           });
         }
-        await syncTrainerConfirmations({
-          prisma: tx,
-          trainerIds: trainerIdsResult as string[],
-          sessionId: created.id,
-          variantId: null,
-        });
         if ((unidadIdsResult as string[]).length) {
           await tx.sesion_unidades.createMany({
             data: (unidadIdsResult as string[]).map((unidadId: string) => ({
@@ -1518,9 +1462,6 @@ if (method === 'GET') {
             deals: { select: { sede_label: true, pipeline_id: true } },
             sesion_trainers: { select: { trainer_id: true } },
             sesion_unidades: { select: { unidad_movil_id: true } },
-            trainer_confirmations: {
-              select: { trainer_id: true, status: true, mail_sent_at: true, updated_at: true },
-            },
           },
         });
 
@@ -1570,9 +1511,6 @@ if (method === 'GET') {
           deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
-          trainer_confirmations: {
-            select: { trainer_id: true, status: true, mail_sent_at: true, updated_at: true },
-          },
         },
       });
       const storedRecord = ensureSessionRelationsOrNull(storedRaw as any);
@@ -1647,12 +1585,6 @@ if (method === 'GET') {
               })),
             });
           }
-          await syncTrainerConfirmations({
-            prisma: tx,
-            trainerIds: trainerIds as string[],
-            sessionId: sessionIdFromPath,
-            variantId: null,
-          });
         }
         if (unidadIds !== undefined) {
           await tx.sesion_unidades.deleteMany({ where: { sesion_id: sessionIdFromPath } });
@@ -1674,9 +1606,6 @@ if (method === 'GET') {
           deals: { select: { sede_label: true, pipeline_id: true } },
           sesion_trainers: { select: { trainer_id: true } },
           sesion_unidades: { select: { unidad_movil_id: true } },
-          trainer_confirmations: {
-            select: { trainer_id: true, status: true, mail_sent_at: true, updated_at: true },
-          },
         },
       });
       const refreshedRecord = ensureSessionRelationsOrNull(refreshedRaw as any);
