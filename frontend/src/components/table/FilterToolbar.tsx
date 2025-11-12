@@ -19,6 +19,7 @@ export type FilterDefinition = {
   allowNegation?: boolean;
   negationLabel?: string;
   negationDescription?: string;
+  searchFromInput?: boolean;
 };
 
 type BadgeDescriptor = {
@@ -680,6 +681,32 @@ export function FilterToolbar({
   }, [openSelectKey]);
 
   useEffect(() => {
+    if (openSelectKey !== null) {
+      return;
+    }
+    setOptionSearchTerms((current) => {
+      if (!Object.keys(current).length) {
+        return current;
+      }
+      const keysWithCustomSearch = new Set(
+        filters.filter((definition) => definition.searchFromInput).map((definition) => definition.key),
+      );
+      if (!keysWithCustomSearch.size) {
+        return current;
+      }
+      const next = { ...current };
+      let changed = false;
+      keysWithCustomSearch.forEach((key) => {
+        if (key in next) {
+          delete next[key];
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, [filters, openSelectKey]);
+
+  useEffect(() => {
     if (!isSavedViewsOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
@@ -818,9 +845,12 @@ export function FilterToolbar({
                 const controlId = `${idPrefix}-${definition.key}`;
                 if (definition.type === 'select') {
                   const options = definition.options ?? [];
-                  const selected = new Set(splitFilterValue(draftFilters[definition.key]));
-                  const displayValue = Array.from(selected).join(', ');
+                  const selectedValues = splitFilterValue(draftFilters[definition.key]);
+                  const selected = new Set(selectedValues);
                   const query = optionSearchTerms[definition.key] ?? '';
+                  const isOpen = openSelectKey === definition.key;
+                  const displayValue =
+                    definition.searchFromInput && isOpen ? query : Array.from(selected).join(', ');
                   const normalizedQuery = query.trim().toLocaleLowerCase('es-ES');
                   const filteredOptions = normalizedQuery.length
                     ? options.filter((option) =>
@@ -828,7 +858,6 @@ export function FilterToolbar({
                       )
                     : options;
 
-                  const isOpen = openSelectKey === definition.key;
                   return (
                     <Col xs={12} lg={4} key={definition.key}>
                       <div
@@ -852,9 +881,14 @@ export function FilterToolbar({
                             value={displayValue}
                             onFocus={() => setOpenSelectKey(definition.key)}
                             onClick={() => setOpenSelectKey(definition.key)}
-                            onChange={(event) =>
-                              handleSelectInputChange(definition.key, event.target.value)
-                            }
+                            onChange={(event) => {
+                              if (definition.searchFromInput) {
+                                setOpenSelectKey(definition.key);
+                                handleOptionSearchChange(definition.key, event.target.value);
+                              } else {
+                                handleSelectInputChange(definition.key, event.target.value);
+                              }
+                            }}
                             placeholder={
                               definition.placeholder ??
                               'Escribe valores separados por comas para filtrar'
@@ -862,15 +896,17 @@ export function FilterToolbar({
                           />
                           {isOpen && (
                             <div className="border rounded mt-2 p-3 bg-white shadow-sm">
-                              <Form.Control
-                                type="search"
-                                value={query}
-                                onChange={(event) =>
-                                  handleOptionSearchChange(definition.key, event.target.value)
-                                }
-                                placeholder="Filtrar opciones"
-                                className="mb-3"
-                              />
+                              {!definition.searchFromInput && (
+                                <Form.Control
+                                  type="search"
+                                  value={query}
+                                  onChange={(event) =>
+                                    handleOptionSearchChange(definition.key, event.target.value)
+                                  }
+                                  placeholder="Filtrar opciones"
+                                  className="mb-3"
+                                />
+                              )}
                               {options.length ? (
                                 filteredOptions.length ? (
                                   <div

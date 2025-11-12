@@ -72,10 +72,13 @@ const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   {
     key: 'deal_organization_name',
     label: 'Organización',
-    description: 'Escribe uno o varios nombres separados por comas.',
+    description: 'Busca y selecciona una o varias organizaciones.',
+    type: 'select',
+    placeholder: 'Escribe para buscar organizaciones',
     allowNegation: true,
     negationLabel: 'Excluir coincidencias',
     negationDescription: 'Activa la opción para ocultar las organizaciones seleccionadas.',
+    searchFromInput: true,
   },
   { key: 'deal_caes_label', label: 'CAES' },
   { key: 'deal_fundae_label', label: 'FUNDAE' },
@@ -106,6 +109,7 @@ const CALENDAR_SELECT_FILTER_KEYS = new Set<string>([
   'deal_fundae_label',
   'deal_hotel_label',
   'deal_transporte',
+  'deal_organization_name',
   'product_name',
   'estado',
   'trainer',
@@ -1068,6 +1072,7 @@ export function CalendarView({
       addValue('deal_fundae_label', session.dealFundaeLabel);
       addValue('deal_hotel_label', session.dealHotelLabel);
       addValue('deal_transporte', session.dealTransporte);
+      addValue('deal_organization_name', session.dealOrganizationName);
       session.trainers.forEach((trainer) => addValue('trainer', formatResourceName(trainer)));
       session.units.forEach((unit) => addValue('unit', formatResourceName(unit)));
       if (session.room) {
@@ -1088,6 +1093,7 @@ export function CalendarView({
           addValue('deal_fundae_label', deal.fundaeLabel);
           addValue('deal_hotel_label', deal.hotelLabel);
           addValue('deal_transporte', deal.transporte);
+          addValue('deal_organization_name', deal.organizationName);
         });
 
         const trainers = getVariantTrainerResources(variant);
