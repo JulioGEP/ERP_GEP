@@ -12,6 +12,7 @@ export type VariantInfo = {
   trainer_ids: string[];
   trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
   trainers: Array<{ trainer_id: string; name: string | null; apellido: string | null }>;
+  trainer_confirmations: Array<{ trainer_id: string; mail_sent_at: string | null }>;
   sala_id: string | null;
   sala: { sala_id: string; name: string; sede: string | null } | null;
   unidad_movil_id: string | null;

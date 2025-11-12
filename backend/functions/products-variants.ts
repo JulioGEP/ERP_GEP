@@ -126,6 +126,11 @@ type VariantUnitLink = {
   position: number;
 };
 
+type VariantTrainerConfirmation = {
+  trainer_id: string;
+  mail_sent_at: Date | null;
+};
+
 function sanitizeIdArray(value: unknown): string[] | null {
   if (value === null) return [];
   if (value === undefined) return [];
@@ -274,6 +279,41 @@ async function syncVariantTrainerAssignments(
       return;
     }
     throw error;
+  }
+}
+
+async function syncVariantTrainerConfirmationRecords(
+  prisma: PrismaClientOrTx,
+  variantId: string,
+  trainerIds: string[],
+): Promise<void> {
+  const normalized = Array.from(
+    new Set(trainerIds.map((value) => toTrimmed(value)).filter((value): value is string => Boolean(value))),
+  );
+
+  if (!normalized.length) {
+    await prisma.trainer_confirmation_status.deleteMany({ where: { variant_id: variantId } });
+    return;
+  }
+
+  await prisma.trainer_confirmation_status.deleteMany({
+    where: { variant_id: variantId, trainer_id: { notIn: normalized } },
+  });
+
+  const existing = await prisma.trainer_confirmation_status.findMany({
+    where: { variant_id: variantId, trainer_id: { in: normalized } },
+    select: { trainer_id: true },
+  });
+  const existingSet = new Set(existing.map((row) => row.trainer_id));
+
+  for (const trainerId of normalized) {
+    if (existingSet.has(trainerId)) continue;
+    await prisma.trainer_confirmation_status.create({
+      data: {
+        variant_id: variantId,
+        trainer_id: trainerId,
+      },
+    });
   }
 }
 
@@ -1033,6 +1073,7 @@ type VariantRecord = {
   products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
   trainer_links?: VariantTrainerLink[];
+  trainer_confirmations?: VariantTrainerConfirmation[];
   salas?: { sala_id: string; name: string; sede: string | null } | null;
   unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
   unidad_links?: VariantUnitLink[];
@@ -1193,14 +1234,25 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
 
       let trainerAssignments = new Map<string, VariantTrainerLink[]>();
       let unitAssignments = new Map<string, VariantUnitLink[]>();
+      let trainerConfirmations = new Map<string, VariantTrainerConfirmation[]>();
 
       if (variantIds.length) {
-        const assignmentResults = await Promise.all([
+        const [trainerLinks, unitLinks, confirmationRows] = await Promise.all([
           fetchVariantTrainerAssignments(prisma, variantIds),
           fetchVariantUnitAssignments(prisma, variantIds),
+          prisma.trainer_confirmation_status.findMany({
+            where: { variant_id: { in: variantIds } },
+            select: { variant_id: true, trainer_id: true, mail_sent_at: true },
+          }),
         ]);
-        trainerAssignments = assignmentResults[0];
-        unitAssignments = assignmentResults[1];
+        trainerAssignments = trainerLinks;
+        unitAssignments = unitLinks;
+        for (const row of confirmationRows) {
+          const variantId = String(row.variant_id);
+          const list = trainerConfirmations.get(variantId) ?? [];
+          list.push({ trainer_id: row.trainer_id, mail_sent_at: row.mail_sent_at });
+          trainerConfirmations.set(variantId, list);
+        }
       }
 
       const trainerIdsToLookup = new Set<string>();
@@ -1215,6 +1267,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
 
           variant.trainer_links = trainerLinks;
           variant.unidad_links = unitLinks;
+          variant.trainer_confirmations = trainerConfirmations.get(variantId) ?? [];
 
           for (const link of trainerLinks) {
             const trimmed = toTrimmed(link.trainer_id);
@@ -1440,6 +1493,12 @@ function normalizeVariant(record: VariantRecord) {
   const trainerDetail = primaryTrainerId
     ? trainerRecords.find((item) => item.trainer_id === primaryTrainerId) ?? null
     : null;
+  const trainerConfirmations = Array.isArray(record.trainer_confirmations)
+    ? record.trainer_confirmations.map((entry) => ({
+        trainer_id: entry.trainer_id,
+        mail_sent_at: toMadridISOString(entry.mail_sent_at),
+      }))
+    : [];
 
   const unitLinks = Array.isArray(record.unidad_links) ? record.unidad_links : [];
   const unitIdsFromLinks = unitLinks
@@ -1510,6 +1569,7 @@ function normalizeVariant(record: VariantRecord) {
     trainer: trainerDetail,
     trainer_ids: uniqueTrainerIds,
     trainers: trainerRecords,
+    trainer_confirmations: trainerConfirmations,
     sala_id: record.sala_id ?? null,
     sala: record.salas
       ? { sala_id: record.salas.sala_id, name: record.salas.name, sede: record.salas.sede ?? null }
@@ -1775,6 +1835,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       await tx.variants.update({ where: { id: variantId }, data });
       if (trainerIdsUpdate !== undefined) {
         await syncVariantTrainerAssignments(tx, variantId, nextTrainerIds);
+        await syncVariantTrainerConfirmationRecords(tx, variantId, nextTrainerIds);
       }
       if (unidadIdsUpdate !== undefined) {
         await syncVariantUnitAssignments(tx, variantId, nextUnidadIds);
@@ -1800,14 +1861,19 @@ export const handler = createHttpHandler<any>(async (request) => {
         trainers: { select: { trainer_id: true, name: true, apellido: true } },
         salas: { select: { sala_id: true, name: true, sede: true } },
         unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
+        trainer_confirmations: { select: { trainer_id: true, mail_sent_at: true } },
         created_at: true,
         updated_at: true,
       },
     });
 
-    const [refreshedTrainerAssignments, refreshedUnitAssignments] = await Promise.all([
+    const [refreshedTrainerAssignments, refreshedUnitAssignments, refreshedConfirmations] = await Promise.all([
       fetchVariantTrainerAssignments(prisma, [variantId]),
       fetchVariantUnitAssignments(prisma, [variantId]),
+      prisma.trainer_confirmation_status.findMany({
+        where: { variant_id: variantId },
+        select: { trainer_id: true, mail_sent_at: true },
+      }),
     ]);
 
     const enrichedRefreshed =
@@ -1816,6 +1882,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         ...(refreshed as any),
         trainer_links: refreshedTrainerAssignments.get(variantId) ?? [],
         unidad_links: refreshedUnitAssignments.get(variantId) ?? [],
+        trainer_confirmations: refreshedConfirmations ?? [],
       } as VariantRecord);
 
     return successResponse({ ok: true, variant: enrichedRefreshed ? normalizeVariant(enrichedRefreshed) : null });
