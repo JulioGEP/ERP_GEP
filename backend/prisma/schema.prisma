@@ -1,6 +1,6 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+  provider = "prisma-client-js"
+  binaryTargets = ["native","rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -10,27 +10,27 @@ datasource db {
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model users {
-  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   first_name          String
   last_name           String
-  email               String    @unique
+  email               String          @unique
   role                erp_role
-  active              Boolean   @default(true)
-  created_at          DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+  active              Boolean         @default(true)
+  created_at          DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime        @default(now()) @updatedAt @db.Timestamptz(6)
   password_hash       String?
-  password_algo       String    @default("bcrypt")
-  password_updated_at DateTime  @default(now()) @db.Timestamptz(6)
+  password_algo       String          @default("bcrypt")
+  password_updated_at DateTime        @default(now()) @db.Timestamptz(6)
   name                String?
   reset_token         String?
-  reset_token_expires DateTime? @db.Timestamptz(6)
-  reset_requested_at  DateTime? @db.Timestamptz(6)
+  reset_token_expires DateTime?       @db.Timestamptz(6)
+  reset_requested_at  DateTime?       @db.Timestamptz(6)
 
   // relación recíproca 1:1 (FK vive en trainers.user_id)
-  trainer trainers?
+  trainer             trainers?
 
-  auth_sessions auth_sessions[]
-  audit_logs    audit_logs[]
+  auth_sessions       auth_sessions[]
+  audit_logs          audit_logs[]
 }
 
 model tokens {
@@ -46,15 +46,15 @@ model tokens {
 }
 
 model audit_logs {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  created_at  DateTime @default(now()) @db.Timestamptz(6)
-  user_id     String?  @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  user_id     String?   @db.Uuid
   action      String
   entity_type String
   entity_id   String
   before      Json?
   after       Json?
-  user        users?   @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  user        users?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
 
   @@index([entity_type, entity_id])
   @@index([user_id])
@@ -86,25 +86,25 @@ model products {
 }
 
 model variants {
-  id               String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  id_woo           BigInt                      @unique
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id_woo           BigInt            @unique
   name             String?
   status           String?
-  price            Decimal?                    @db.Decimal(12, 2)
+  price            Decimal?          @db.Decimal(12, 2)
   stock            Int?
   stock_status     String?
   sede             String?
-  date             DateTime?                   @db.Timestamp(6)
+  date             DateTime?         @db.Timestamp(6)
   id_padre         BigInt
-  created_at       DateTime?                   @default(now()) @db.Timestamp(6)
-  updated_at       DateTime?                   @default(now()) @updatedAt @db.Timestamp(6)
+  created_at       DateTime?         @default(now()) @db.Timestamp(6)
+  updated_at       DateTime?         @default(now()) @updatedAt @db.Timestamp(6)
   trainer_id       String?
-  sala_id          String?                     @db.Uuid
+  sala_id          String?           @db.Uuid
   unidad_movil_id  String?
-  products         products                    @relation(fields: [id_padre], references: [id_woo], map: "variants_product_fk")
-  salas            salas?                      @relation(fields: [sala_id], references: [sala_id], onUpdate: NoAction, map: "variants_sala_fk")
-  trainers         trainers?                   @relation(fields: [trainer_id], references: [trainer_id], onUpdate: NoAction, map: "variants_trainer_fk")
-  unidades_moviles unidades_moviles?           @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction, map: "variants_unidad_fk")
+  products         products          @relation(fields: [id_padre], references: [id_woo], map: "variants_product_fk")
+  salas            salas?            @relation(fields: [sala_id], references: [sala_id], onUpdate: NoAction, map: "variants_sala_fk")
+  trainers         trainers?         @relation(fields: [trainer_id], references: [trainer_id], onUpdate: NoAction, map: "variants_trainer_fk")
+  unidades_moviles unidades_moviles? @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction, map: "variants_unidad_fk")
   time_logs        trainer_session_time_logs[]
   extra_costs      trainer_extra_costs[]
 
@@ -325,26 +325,26 @@ model sesion_unidades {
 }
 
 model sesiones {
-  id                   String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                   String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   deal_id              String
   deal_product_id      String
   nombre_cache         String
-  fecha_inicio_utc     DateTime?                   @db.Timestamptz(6)
-  fecha_fin_utc        DateTime?                   @db.Timestamptz(6)
-  sala_id              String?                     @db.Uuid
-  direccion            String                      @default("")
+  fecha_inicio_utc     DateTime?              @db.Timestamptz(6)
+  fecha_fin_utc        DateTime?              @db.Timestamptz(6)
+  sala_id              String?                @db.Uuid
+  direccion            String                 @default("")
   comentarios          String?
-  created_at           DateTime                    @default(now()) @db.Timestamptz(6)
-  updated_at           DateTime                    @default(now()) @db.Timestamptz(6)
-  estado               SessionEstado               @default(BORRADOR)
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime               @default(now()) @db.Timestamptz(6)
+  estado               SessionEstado          @default(BORRADOR)
   drive_url            String?
   alumnos              alumnos[]
   sesion_files         sesion_files[]
   sesion_trainers      sesion_trainers[]
   sesion_unidades      sesion_unidades[]
-  deals                deals                       @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, onUpdate: NoAction)
-  deal_products        deal_products               @relation(fields: [deal_product_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  salas                salas?                      @relation(fields: [sala_id], references: [sala_id], onUpdate: NoAction)
+  deals                deals                  @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, onUpdate: NoAction)
+  deal_products        deal_products          @relation(fields: [deal_product_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  salas                salas?                 @relation(fields: [sala_id], references: [sala_id], onUpdate: NoAction)
   sesiones_comentarios sesiones_comentarios[]
   tokens               tokens[]
   time_logs            trainer_session_time_logs[]
@@ -374,37 +374,37 @@ model sesiones_comentarios {
 }
 
 model trainers {
-  trainer_id   String   @id
-  name         String
-  email        String?  @unique
-  phone        String?
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime @updatedAt @db.Timestamptz(6)
-  activo       Boolean  @default(true)
-  apellido     String?
-  dni          String?  @unique
-  direccion    String?
-  especialidad String?
-  titulacion   String?
-  sede         String[] @default([])
+  trainer_id      String            @id
+  name            String
+  email           String?           @unique
+  phone           String?
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime          @updatedAt @db.Timestamptz(6)
+  activo          Boolean           @default(true)
+  apellido        String?
+  dni             String?           @unique
+  direccion       String?
+  especialidad    String?
+  titulacion      String?
+  sede            String[]          @default([])
 
   // FK a users para relación 1:1 (la PK de users es id UUID)
-  user_id String? @db.Uuid
-  user    users?  @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  user_id         String?           @db.Uuid
+  user            users?            @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  sesion_trainers             sesion_trainers[]
-  variants                    variants[]
-  availability                trainer_availability[]
-  time_logs                   trainer_session_time_logs[]
-  extra_costs                 trainer_extra_costs[]
+  sesion_trainers sesion_trainers[]
+  variants        variants[]
+  availability    trainer_availability[]
+  time_logs       trainer_session_time_logs[]
+  extra_costs     trainer_extra_costs[]
   google_calendar_credentials trainer_google_credentials?
   google_calendar_events      trainer_google_events[]
   google_calendar_states      trainer_google_oauth_states[]
-  documents                   trainer_documents[]
+  documents       trainer_documents[]
 
-  @@unique([user_id])
   @@index([apellido])
   @@index([especialidad])
+  @@unique([user_id])
 }
 
 model trainer_documents {
@@ -420,7 +420,7 @@ model trainer_documents {
   drive_web_view_link String?
   uploaded_at         DateTime @default(now()) @db.Timestamptz(6)
   created_at          DateTime @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime @updatedAt @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   trainer trainers @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -443,67 +443,67 @@ model trainer_availability {
 }
 
 model trainer_session_time_logs {
-  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   trainer_id          String
-  session_id          String?   @db.Uuid
-  variant_id          String?   @db.Uuid
+  session_id          String?  @db.Uuid
+  variant_id          String?  @db.Uuid
   scheduled_start_utc DateTime? @db.Timestamptz(6)
   scheduled_end_utc   DateTime? @db.Timestamptz(6)
   check_in_utc        DateTime? @db.Timestamptz(6)
   check_out_utc       DateTime? @db.Timestamptz(6)
-  recorded_by_user_id String?   @db.Uuid
+  recorded_by_user_id String?  @db.Uuid
   recorded_by_name    String?
-  source              String?   @default("trainer_portal") @db.VarChar(50)
-  created_at          DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime  @default(now()) @db.Timestamptz(6)
+  source              String?  @default("trainer_portal") @db.VarChar(50)
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime @default(now()) @db.Timestamptz(6)
 
-  trainer trainers  @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
+  trainer trainers @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
   sesion  sesiones? @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   variant variants? @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([trainer_id, session_id], map: "trainer_session_time_logs_session_key")
-  @@unique([trainer_id, variant_id], map: "trainer_session_time_logs_variant_key")
   @@index([trainer_id], map: "idx_trainer_session_time_logs_trainer_id")
   @@index([session_id], map: "idx_trainer_session_time_logs_session_id")
   @@index([variant_id], map: "idx_trainer_session_time_logs_variant_id")
+  @@unique([trainer_id, session_id], map: "trainer_session_time_logs_session_key")
+  @@unique([trainer_id, variant_id], map: "trainer_session_time_logs_variant_key")
   @@map("trainer_session_time_logs")
 }
 
 model trainer_extra_costs {
-  id                      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  trainer_id              String
-  session_id              String?  @db.Uuid
-  variant_id              String?  @db.Uuid
-  precio_coste_formacion  Decimal  @default(0) @db.Decimal(12, 2)
-  precio_coste_preventivo Decimal  @default(0) @db.Decimal(12, 2)
-  dietas                  Decimal  @default(0) @db.Decimal(12, 2)
-  kilometraje             Decimal  @default(0) @db.Decimal(12, 2)
-  pernocta                Decimal  @default(0) @db.Decimal(12, 2)
-  nocturnidad             Decimal  @default(0) @db.Decimal(12, 2)
-  festivo                 Decimal  @default(0) @db.Decimal(12, 2)
-  horas_extras            Decimal  @default(0) @db.Decimal(12, 2)
-  gastos_extras           Decimal  @default(0) @db.Decimal(12, 2)
-  notas                   String?
-  created_at              DateTime @default(now()) @db.Timestamptz(6)
-  updated_at              DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  id                     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  trainer_id             String
+  session_id             String?  @db.Uuid
+  variant_id             String?  @db.Uuid
+  precio_coste_formacion Decimal  @default(0) @db.Decimal(12, 2)
+  precio_coste_preventivo Decimal @default(0) @db.Decimal(12, 2)
+  dietas                 Decimal  @default(0) @db.Decimal(12, 2)
+  kilometraje            Decimal  @default(0) @db.Decimal(12, 2)
+  pernocta               Decimal  @default(0) @db.Decimal(12, 2)
+  nocturnidad            Decimal  @default(0) @db.Decimal(12, 2)
+  festivo                Decimal  @default(0) @db.Decimal(12, 2)
+  horas_extras           Decimal  @default(0) @db.Decimal(12, 2)
+  gastos_extras          Decimal  @default(0) @db.Decimal(12, 2)
+  notas                  String?
+  created_at             DateTime @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
-  trainer trainers  @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
+  trainer trainers @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade)
   sesion  sesiones? @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   variant variants? @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([trainer_id, session_id], map: "trainer_extra_costs_session_key")
-  @@unique([trainer_id, variant_id], map: "trainer_extra_costs_variant_key")
   @@index([trainer_id], map: "idx_trainer_extra_costs_trainer_id")
   @@index([session_id], map: "idx_trainer_extra_costs_session_id")
   @@index([variant_id], map: "idx_trainer_extra_costs_variant_id")
+  @@unique([trainer_id, session_id], map: "trainer_extra_costs_session_key")
+  @@unique([trainer_id, variant_id], map: "trainer_extra_costs_variant_key")
   @@map("trainer_extra_costs")
 }
 
 model trainer_google_credentials {
-  trainer_id     String    @id
+  trainer_id     String   @id
   google_user_id String
   email          String?
-  calendar_id    String    @default("primary")
+  calendar_id    String   @default("primary")
   access_token   String?
   refresh_token  String?
   scope          String?
@@ -520,7 +520,7 @@ model trainer_google_credentials {
 }
 
 model trainer_google_events {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   trainer_id     String
   resource_type  String
   resource_id    String
