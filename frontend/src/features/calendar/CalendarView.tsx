@@ -69,6 +69,14 @@ const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_pipeline_id', label: 'Negocio' },
   { key: 'deal_training_address', label: 'Dirección de formación' },
   { key: 'deal_sede_label', label: 'Sede' },
+  {
+    key: 'deal_organization_name',
+    label: 'Organización',
+    description: 'Escribe uno o varios nombres separados por comas.',
+    allowNegation: true,
+    negationLabel: 'Excluir coincidencias',
+    negationDescription: 'Activa la opción para ocultar las organizaciones seleccionadas.',
+  },
   { key: 'deal_caes_label', label: 'CAES' },
   { key: 'deal_fundae_label', label: 'FUNDAE' },
   { key: 'deal_hotel_label', label: 'Hotel' },
@@ -482,6 +490,7 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
   deal_pipeline_id: (session) => safeString(session.dealPipelineId ?? ''),
   deal_training_address: (session) => safeString(session.dealAddress ?? session.direccion ?? ''),
   deal_sede_label: (session) => safeString(session.dealSedeLabel ?? ''),
+  deal_organization_name: (session) => safeString(session.dealOrganizationName ?? ''),
   deal_caes_label: (session) => safeString(session.dealCaesLabel ?? ''),
   deal_fundae_label: (session) => safeString(session.dealFundaeLabel ?? ''),
   deal_hotel_label: (session) => safeString(session.dealHotelLabel ?? ''),
@@ -524,6 +533,8 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
       .filter((value) => value.length);
     return values.join(' ');
   },
+  deal_organization_name: (variant) =>
+    joinVariantDealValues(variant, (deal) => deal.organizationName ?? null),
   deal_caes_label: (variant) => joinVariantDealValues(variant, (deal) => deal.caesLabel),
   deal_fundae_label: (variant) => joinVariantDealValues(variant, (deal) => deal.fundaeLabel),
   deal_hotel_label: (variant) => joinVariantDealValues(variant, (deal) => deal.hotelLabel),
@@ -705,19 +716,39 @@ function applyCalendarFilters(
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
       filterEntries.every(([key, value]) => {
-        const parts = splitFilterValue(value);
-        if (parts.length > 1) {
-          return parts.some((part) => {
-            const normalizedPart = normalizeText(safeString(part));
-            if (!normalizedPart.length) return false;
-            const targetValue = row.normalized[key] ?? '';
-            return targetValue.includes(normalizedPart);
-          });
+        const rawParts = splitFilterValue(value);
+        if (!rawParts.length) {
+          return true;
         }
-        const normalizedValue = normalizeText(safeString(value));
-        if (!normalizedValue.length) return true;
-        const target = row.normalized[key] ?? '';
-        return target.includes(normalizedValue);
+        const parsedParts = rawParts
+          .map((part) => {
+            const isNegated = part.startsWith('!');
+            const normalizedPart = normalizeText(
+              safeString(isNegated ? part.slice(1) : part),
+            );
+            if (!normalizedPart.length) {
+              return null;
+            }
+            return { value: normalizedPart, isNegated };
+          })
+          .filter((item): item is { value: string; isNegated: boolean } => item !== null);
+        if (!parsedParts.length) {
+          return true;
+        }
+        const targetValue = row.normalized[key] ?? '';
+        const includeValues = parsedParts
+          .filter((item) => !item.isNegated)
+          .map((item) => item.value);
+        if (includeValues.length && !includeValues.some((part) => targetValue.includes(part))) {
+          return false;
+        }
+        const excludeValues = parsedParts
+          .filter((item) => item.isNegated)
+          .map((item) => item.value);
+        if (excludeValues.length && excludeValues.some((part) => targetValue.includes(part))) {
+          return false;
+        }
+        return true;
       }),
     );
   }
