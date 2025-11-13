@@ -46,7 +46,6 @@ import {
 } from '../hooks/useDealFollowUpToggle';
 import { DEALS_QUERY_KEY } from '../queryKeys';
 import { useCurrentUserIdentity } from '../useCurrentUserIdentity';
-import type { InitialSessionSelection, InitialSessionSelectionResult } from '../types';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -103,8 +102,6 @@ interface Props {
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
   autoRefreshOnOpen?: boolean;
-  initialSessionSelection?: InitialSessionSelection | null;
-  onInitialSessionSelectionHandled?: (result: InitialSessionSelectionResult) => void;
 }
 
 type BudgetFormValuesServices = {
@@ -174,8 +171,6 @@ export function BudgetDetailModalServices({
   onShowProductComment,
   onNotify,
   autoRefreshOnOpen: _autoRefreshOnOpen,
-  initialSessionSelection,
-  onInitialSessionSelectionHandled,
 }: Props) {
   void _autoRefreshOnOpen;
   const qc = useQueryClient();
@@ -1176,8 +1171,6 @@ export function BudgetDetailModalServices({
                 dealAddress={defaultSessionAddress ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
-                initialSessionSelection={initialSessionSelection ?? null}
-                onInitialSelectionHandled={onInitialSessionSelectionHandled}
               />
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>
