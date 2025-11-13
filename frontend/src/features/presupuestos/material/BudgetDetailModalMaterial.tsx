@@ -47,6 +47,7 @@ import {
 } from '../hooks/useDealFollowUpToggle';
 import { DEALS_QUERY_KEY } from '../queryKeys';
 import { useCurrentUserIdentity } from '../useCurrentUserIdentity';
+import type { InitialSessionSelection, InitialSessionSelectionResult } from '../types';
 
 function normalizeId(value: unknown): string {
   if (typeof value === 'string') {
@@ -103,6 +104,8 @@ interface Props {
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
   autoRefreshOnOpen?: boolean;
+  initialSessionSelection?: InitialSessionSelection | null;
+  onInitialSessionSelectionHandled?: (result: InitialSessionSelectionResult) => void;
 }
 
 type BudgetFormValuesMaterial = {
@@ -189,6 +192,8 @@ export function BudgetDetailModalMaterial({
   onShowProductComment,
   onNotify,
   autoRefreshOnOpen: _autoRefreshOnOpen,
+  initialSessionSelection: _initialSessionSelection,
+  onInitialSessionSelectionHandled: _onInitialSessionSelectionHandled,
 }: Props) {
   void _autoRefreshOnOpen;
   const qc = useQueryClient();

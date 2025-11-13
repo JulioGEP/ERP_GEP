@@ -86,6 +86,7 @@ import {
   type SessionDocumentsEventDetail,
 } from '../../../../utils/sessionDocumentsEvents';
 import { useCurrentUserIdentity } from '../../useCurrentUserIdentity';
+import type { InitialSessionSelection, InitialSessionSelectionResult } from '../../types';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -1835,6 +1836,8 @@ interface SessionsAccordionEmpresasProps {
   dealSedeLabel: string | null;
   products: DealProduct[];
   onNotify?: (toast: ToastParams) => void;
+  initialSessionSelection?: InitialSessionSelection | null;
+  onInitialSelectionHandled?: (result: InitialSessionSelectionResult) => void;
 }
 
 export function SessionsAccordionEmpresas({
@@ -1843,6 +1846,8 @@ export function SessionsAccordionEmpresas({
   dealSedeLabel,
   products,
   onNotify,
+  initialSessionSelection,
+  onInitialSelectionHandled,
 }: SessionsAccordionEmpresasProps) {
   const qc = useQueryClient();
   const { applicableProducts, shouldShow, generationKey } = useApplicableDealProducts(products);
@@ -1880,6 +1885,7 @@ export function SessionsAccordionEmpresas({
   }, [dealId, generationKey]);
 
   const [pageByProduct, setPageByProduct] = useState<Record<string, number>>({});
+  const [pendingInitialSelection, setPendingInitialSelection] = useState<InitialSessionSelection | null>(null);
 
   const handleOpenMap = (address: string) => {
     const trimmed = address.trim();
@@ -1902,6 +1908,113 @@ export function SessionsAccordionEmpresas({
       return next;
     });
   }, [applicableProducts]);
+
+  useEffect(() => {
+    setPendingInitialSelection(initialSessionSelection ?? null);
+  }, [initialSessionSelection]);
+
+  useEffect(() => {
+    if (!pendingInitialSelection) {
+      return;
+    }
+    if (!generationDone) {
+      return;
+    }
+
+    const sessionId = pendingInitialSelection.sessionId?.trim();
+    if (!sessionId) {
+      setPendingInitialSelection(null);
+      onInitialSelectionHandled?.({ success: false });
+      return;
+    }
+
+    const notifyFailure = () => {
+      setPendingInitialSelection(null);
+      onInitialSelectionHandled?.({ success: false });
+    };
+
+    let productId = pendingInitialSelection.productId?.trim() ?? '';
+    let productIndex = productId.length
+      ? applicableProducts.findIndex((product) => product.id === productId)
+      : -1;
+
+    if (productIndex < 0 && !productId.length) {
+      for (let index = 0; index < sessionQueries.length; index += 1) {
+        const group = (sessionQueries[index]?.data as SessionGroupDTO | null) ?? null;
+        if (!group) continue;
+        if (group.sessions.some((session) => session.id === sessionId)) {
+          productIndex = index;
+          productId = applicableProducts[index]?.id ?? '';
+          break;
+        }
+      }
+    }
+
+    if (productIndex < 0) {
+      if (productId.length && applicableProducts.length) {
+        notifyFailure();
+      }
+      return;
+    }
+
+    const product = applicableProducts[productIndex];
+    if (!product) {
+      notifyFailure();
+      return;
+    }
+
+    const currentPage = pageByProduct[product.id] ?? 1;
+    const query = sessionQueries[productIndex];
+    if (!query) {
+      return;
+    }
+
+    if (query.fetchStatus === 'fetching' || query.isFetching) {
+      return;
+    }
+
+    const group = (query.data as SessionGroupDTO | null) ?? null;
+    if (!group) {
+      if (query.error) {
+        notifyFailure();
+      }
+      return;
+    }
+
+    const pagination = group.pagination ?? { page: currentPage, totalPages: 1 };
+    const sessions = group.sessions ?? [];
+    const sessionIndex = sessions.findIndex((item) => item.id === sessionId);
+
+    if (sessionIndex >= 0) {
+      const displayIndex = ((pagination.page ?? currentPage) - 1) * SESSION_LIMIT + sessionIndex + 1;
+      const productName = product.name ?? product.code ?? 'Producto';
+      setActiveSession({ sessionId, productId: product.id, productName, displayIndex });
+      setPendingInitialSelection(null);
+      onInitialSelectionHandled?.({ success: true });
+      return;
+    }
+
+    const totalPages = pagination.totalPages ?? 1;
+    if (currentPage < totalPages) {
+      setPageByProduct((current) => {
+        const nextPage = Math.min(totalPages, currentPage + 1);
+        if (nextPage === currentPage) {
+          return current;
+        }
+        return { ...current, [product.id]: nextPage };
+      });
+      return;
+    }
+
+    notifyFailure();
+  }, [
+    applicableProducts,
+    generationDone,
+    onInitialSelectionHandled,
+    pageByProduct,
+    pendingInitialSelection,
+    sessionQueries,
+  ]);
 
   const trainersQuery = useQuery({
     queryKey: ['trainers', 'active'],

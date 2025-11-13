@@ -9,6 +9,10 @@ import { BudgetDetailModalServices } from '../features/presupuestos/services/Bud
 import { BudgetDetailModalMaterial } from '../features/presupuestos/material/BudgetDetailModalMaterial';
 import { ProductCommentWindow } from '../features/presupuestos/ProductCommentWindow';
 import type { ProductCommentPayload } from '../features/presupuestos/ProductCommentWindow';
+import type {
+  InitialSessionSelection,
+  InitialSessionSelectionResult,
+} from '../features/presupuestos/types';
 import { VariantModal } from '../features/formacion_abierta/ProductVariantsList';
 import type { ActiveVariant, ProductInfo, VariantInfo } from '../features/formacion_abierta/types';
 import { ApiError } from '../api/client';
@@ -266,6 +270,11 @@ const BUDGET_MODAL_COMPONENTS = new Map<string, ComponentType<BudgetModalProps>>
 
 const KNOWN_PIPELINE_KEYS = new Set(BUDGET_MODAL_COMPONENTS.keys());
 const FORMACION_ABIERTA_PIPELINE_KEY = normalizePipelineKey('Formación Abierta');
+const SESSION_FOCUS_PIPELINE_KEYS = new Set([
+  normalizePipelineKey('Formación Empresas'),
+  normalizePipelineKey('Formación Empresa'),
+  normalizePipelineKey('GEP Services'),
+]);
 
 function resolveBudgetModalComponent(
   keyCandidates: readonly unknown[],
@@ -288,6 +297,8 @@ type ToastMessage = {
   variant: 'success' | 'danger' | 'info' | 'warning';
   message: string;
 };
+
+type PendingCalendarSession = InitialSessionSelection & { pipelineKey: string };
 
 function sanitizeString(value: unknown): string | null {
   if (value === null || value === undefined) {
@@ -623,6 +634,9 @@ export default function AuthenticatedApp() {
   const [autoRefreshBudgetId, setAutoRefreshBudgetId] = useState<string | null>(null);
   const [isCheckingExistingDeal, setIsCheckingExistingDeal] = useState(false);
   const [activeCalendarVariant, setActiveCalendarVariant] = useState<ActiveVariant | null>(null);
+  const [pendingCalendarSession, setPendingCalendarSession] = useState<PendingCalendarSession | null>(
+    null,
+  );
 
   const queryClient = useQueryClient();
 
@@ -1103,6 +1117,7 @@ export default function AuthenticatedApp() {
     setSelectedBudgetSummary(null);
     setSelectedBudgetId(null);
     setAutoRefreshBudgetId(null);
+    setPendingCalendarSession(null);
   }, []);
 
   const handleShowProductComment = useCallback((payload: ProductCommentPayload) => {
@@ -1143,6 +1158,12 @@ export default function AuthenticatedApp() {
         const id = session.dealId?.trim();
         if (!id) {
           pushToast({ variant: 'danger', message: 'No se pudo determinar el identificador del presupuesto.' });
+          return;
+        }
+
+        const sessionId = session.id?.trim() ?? '';
+        if (!sessionId.length) {
+          pushToast({ variant: 'danger', message: 'No se pudo determinar el identificador de la sesión.' });
           return;
         }
 
@@ -1225,6 +1246,22 @@ export default function AuthenticatedApp() {
         if (!pipelineLabel) {
           pushToast({ variant: 'danger', message: 'No se pudo determinar el pipeline del presupuesto.' });
           return;
+        }
+
+        const normalizedPipelineKey = normalizePipelineKey(pipelineLabel ?? pipelineId ?? pipelineCandidate);
+
+        const shouldFocusSession = normalizedPipelineKey.length
+          ? SESSION_FOCUS_PIPELINE_KEYS.has(normalizedPipelineKey)
+          : false;
+
+        if (shouldFocusSession) {
+          setPendingCalendarSession({
+            pipelineKey: normalizedPipelineKey,
+            sessionId,
+            productId: productId.length ? productId : null,
+          });
+        } else {
+          setPendingCalendarSession(null);
         }
 
         const summaryWithPipeline: DealSummary = {
@@ -1342,8 +1379,23 @@ export default function AuthenticatedApp() {
     : pipelineIdKey
     ? [pipelineIdKey]
     : [];
+  const resolvedPipelineKey = pipelineLabelKey || pipelineIdKey || '';
+  const initialSessionSelectionForModal: InitialSessionSelection | null =
+    resolvedPipelineKey.length && pendingCalendarSession?.pipelineKey === resolvedPipelineKey
+      ? {
+          sessionId: pendingCalendarSession.sessionId,
+          productId: pendingCalendarSession.productId,
+        }
+      : null;
 
   const BudgetModalComponent = resolveBudgetModalComponent(pipelineKeyCandidates);
+
+  const handleInitialSessionSelectionHandled = useCallback(
+    (_result: InitialSessionSelectionResult) => {
+      setPendingCalendarSession(null);
+    },
+    [],
+  );
 
   const budgetModalProps: BudgetModalProps = {
     dealId: selectedBudgetId,
@@ -1352,6 +1404,8 @@ export default function AuthenticatedApp() {
     onShowProductComment: handleShowProductComment,
     onNotify: pushToast,
     autoRefreshOnOpen: !!selectedBudgetId && selectedBudgetId === autoRefreshBudgetId,
+    initialSessionSelection: initialSessionSelectionForModal,
+    onInitialSessionSelectionHandled: handleInitialSessionSelectionHandled,
   };
 
   return (
