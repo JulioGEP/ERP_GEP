@@ -46,6 +46,7 @@ import {
   uploadSessionDocuments,
   updateSessionDocumentShare,
   deleteSessionDocument,
+  sendSessionTrainerInvites,
   fetchSessionStudents,
   createSessionStudent,
   updateSessionStudent,
@@ -63,6 +64,7 @@ import {
   type RoomOption,
   type MobileUnitOption,
   type SessionEstado,
+  type SessionTrainerInviteStatus,
   type SessionComment,
   type SessionDocument,
   type SessionStudent,
@@ -75,6 +77,13 @@ import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
 import { formatSedeLabel } from '../../formatSedeLabel';
 import { SESSION_CODE_PREFIXES, useApplicableDealProducts } from '../../shared/useApplicableDealProducts';
 import {
+  buildTrainerInviteStatusMapFromSession,
+  setTrainerInviteStatusForIds,
+  summarizeTrainerInviteStatus,
+  syncTrainerInviteStatusMap,
+  type TrainerInviteStatusMap,
+} from '../../shared/trainerInviteStatus';
+import {
   SESSION_DOCUMENTS_EVENT,
   type SessionDocumentsEventDetail,
 } from '../../../../utils/sessionDocumentsEvents';
@@ -86,7 +95,7 @@ const MADRID_TIMEZONE = 'Europe/Madrid';
 const ENABLE_SESSION_DOCUMENTS = false;
 const ENABLE_SESSION_COMMENTS = false;
 const ENABLE_SESSION_STATE = false;
-const ENABLE_TRAINERS = false;
+const ENABLE_TRAINERS = true;
 const ENABLE_MOBILE_UNITS = false;
 const ENABLE_ROOMS = false;
 const ENABLE_ADDRESS = false;
@@ -128,6 +137,12 @@ const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
 };
 const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['BORRADOR', 'SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
 const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
+const TRAINER_INVITE_STATUS_BADGES: Record<SessionTrainerInviteStatus, { label: string; variant: string }> = {
+  NOT_SENT: { label: 'Sin enviar el mail', variant: 'warning' },
+  PENDING: { label: 'Pendiente', variant: 'info' },
+  CONFIRMED: { label: 'Confirmado', variant: 'success' },
+  DECLINED: { label: 'Rechazado', variant: 'danger' },
+};
 
 function buildSessionDisplayName(rawName: string | null | undefined, displayIndex: number): string {
   if (typeof rawName === 'string') {
@@ -1545,6 +1560,8 @@ type SessionFormState = {
   drive_url: string | null;
   trainer_ids: string[];
   unidad_movil_ids: string[];
+  trainer_invite_status: SessionTrainerInviteStatus;
+  trainer_invite_statuses: TrainerInviteStatusMap;
 };
 
 type SaveStatus = {
@@ -1588,6 +1605,8 @@ function isApplicableProduct(product: DealProduct): product is DealProduct & { i
 }
 
 function mapSessionToForm(session: SessionDTO): SessionFormState {
+  const trainerInviteStatuses = buildTrainerInviteStatusMapFromSession(session);
+  const trainerInviteStatus = summarizeTrainerInviteStatus(trainerInviteStatuses);
   return {
     id: session.id,
     nombre_cache: session.nombre_cache,
@@ -1597,6 +1616,8 @@ function mapSessionToForm(session: SessionDTO): SessionFormState {
     drive_url: session.drive_url ?? null,
     trainer_ids: Array.isArray(session.trainer_ids) ? [...session.trainer_ids] : [],
     unidad_movil_ids: Array.isArray(session.unidad_movil_ids) ? [...session.unidad_movil_ids] : [],
+    trainer_invite_status: trainerInviteStatus,
+    trainer_invite_statuses: trainerInviteStatuses,
   };
 }
 
@@ -2070,6 +2091,9 @@ export function SessionsAccordionAbierta({
   const lastSavedRef = useRef<Record<string, SessionFormState>>({});
   const sessionProductRef = useRef<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<Record<string, SaveStatus>>({});
+  const [inviteStatus, setInviteStatus] = useState<
+    Record<string, { sending: boolean; message: string | null; error: string | null }>
+  >({});
   const [activeSession, setActiveSession] = useState<
     | {
         sessionId: string;
@@ -2126,6 +2150,7 @@ export function SessionsAccordionAbierta({
       }
       return next;
     });
+    setInviteStatus({});
   }, [generationDone, queriesUpdatedKey, applicableProducts]);
 
   const patchMutation = useMutation({
@@ -2152,6 +2177,10 @@ export function SessionsAccordionAbierta({
 
   const deleteMutation = useMutation({
     mutationFn: (sessionId: string) => deleteSession(sessionId),
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: (sessionId: string) => sendSessionTrainerInvites(sessionId),
   });
 
   const handleFieldChange = (sessionId: string, updater: (current: SessionFormState) => SessionFormState) => {
@@ -2232,6 +2261,111 @@ export function SessionsAccordionAbierta({
       }
     },
     [onNotify, patchMutation, qc],
+  );
+
+  const handleSendInvites = useCallback(
+    async (sessionId: string) => {
+      const trimmedId = sessionId?.trim();
+      if (!trimmedId) {
+        return;
+      }
+
+      setInviteStatus((current) => ({
+        ...current,
+        [trimmedId]: { sending: true, message: null, error: null },
+      }));
+
+      try {
+        const response = await inviteMutation.mutateAsync(trimmedId);
+        const sentCount = response.invites.filter((invite) => invite.status === 'SENT').length;
+        const failedCount = response.invites.filter((invite) => invite.status === 'FAILED').length;
+        const skippedNames = response.skippedTrainers
+          .map((trainer) => [trainer.name, trainer.apellido].filter(Boolean).join(' ').trim())
+          .filter((value) => value.length);
+
+        const parts: string[] = [];
+        if (sentCount) {
+          parts.push(`${sentCount} invitación${sentCount === 1 ? '' : 'es'} enviadas`);
+        }
+        if (failedCount) {
+          parts.push(`${failedCount} invitación${failedCount === 1 ? '' : 'es'} con error`);
+        }
+        if (!sentCount && !failedCount) {
+          parts.push('No se enviaron invitaciones');
+        }
+        if (skippedNames.length) {
+          parts.push(`Sin email: ${skippedNames.join(', ')}`);
+        }
+
+        const message = parts.join('. ');
+        const hasSuccess = sentCount > 0;
+        const hasIssues = failedCount > 0 || skippedNames.length > 0;
+        const toastVariant: ToastParams['variant'] = !hasSuccess
+          ? 'danger'
+          : hasIssues
+          ? 'info'
+          : 'success';
+
+        setInviteStatus((current) => ({
+          ...current,
+          [trimmedId]: {
+            sending: false,
+            message,
+            error: hasSuccess ? null : message,
+          },
+        }));
+
+        const sentTrainerIds = response.invites
+          .filter((invite) => invite.status === 'SENT')
+          .map((invite) => invite.trainerId)
+          .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+
+        setForms((current) => {
+          const existing = current[trimmedId];
+          if (!existing) return current;
+          const syncedMap = syncTrainerInviteStatusMap(existing.trainer_invite_statuses, existing.trainer_ids);
+          const updatedMap = sentTrainerIds.length
+            ? setTrainerInviteStatusForIds(syncedMap, sentTrainerIds, 'PENDING')
+            : syncedMap;
+          const summaryStatus = summarizeTrainerInviteStatus(updatedMap);
+          const next: SessionFormState = {
+            ...existing,
+            trainer_invite_status: summaryStatus,
+            trainer_invite_statuses: updatedMap,
+          };
+          const nextMap = { ...current, [trimmedId]: next };
+          formsRef.current = nextMap;
+          return nextMap;
+        });
+
+        const savedExisting = lastSavedRef.current[trimmedId];
+        const savedMap = savedExisting
+          ? syncTrainerInviteStatusMap(savedExisting.trainer_invite_statuses, savedExisting.trainer_ids)
+          : {};
+        const updatedSavedMap = sentTrainerIds.length
+          ? setTrainerInviteStatusForIds(savedMap, sentTrainerIds, 'PENDING')
+          : savedMap;
+        const savedSummary = summarizeTrainerInviteStatus(updatedSavedMap);
+        const nextSavedEntry: SessionFormState = savedExisting
+          ? {
+              ...savedExisting,
+              trainer_invite_status: savedSummary,
+              trainer_invite_statuses: updatedSavedMap,
+            }
+          : formsRef.current[trimmedId];
+        lastSavedRef.current = { ...lastSavedRef.current, [trimmedId]: nextSavedEntry };
+
+        onNotify?.({ variant: toastVariant, message });
+      } catch (error) {
+        const message = formatErrorMessage(error, 'No se pudo enviar la invitación');
+        setInviteStatus((current) => ({
+          ...current,
+          [trimmedId]: { sending: false, message: null, error: message },
+        }));
+        onNotify?.({ variant: 'danger', message });
+      }
+    },
+    [inviteMutation, onNotify],
   );
 
   const handleSaveSession = useCallback(
@@ -2445,6 +2579,13 @@ export function SessionsAccordionAbierta({
       sessionProductRef.current = nextSessionProducts;
 
       setSaveStatus((current) => {
+        if (!current[sessionId]) return current;
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
+
+      setInviteStatus((current) => {
         if (!current[sessionId]) return current;
         const next = { ...current };
         delete next[sessionId];
@@ -2785,6 +2926,8 @@ export function SessionsAccordionAbierta({
                   variantOptionsLoading={variantOptionsLoading}
                   variantSaving={variantSaving}
                   onVariantSelect={handleVariantSelect}
+                  inviteStatusMap={inviteStatus}
+                  onSendInvites={handleSendInvites}
                   onNotify={onNotify}
                   variantParentName={variantParentName}
                 />
@@ -2839,6 +2982,8 @@ interface SessionEditorProps {
   onVariantSelect?: (variantWooId: string) => Promise<boolean>;
   onNotify?: (toast: ToastParams) => void;
   variantParentName: string | null;
+  inviteStatusMap: Record<string, { sending: boolean; message: string | null; error: string | null }>;
+  onSendInvites: (sessionId: string) => void;
 }
 
 function SessionEditor({
@@ -2861,6 +3006,8 @@ function SessionEditor({
   onVariantSelect,
   onNotify,
   variantParentName,
+  inviteStatusMap,
+  onSendInvites,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
@@ -2883,6 +3030,29 @@ function SessionEditor({
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
+
+  const handleTrainerSelectionChange = useCallback(
+    (trainerId: string, checked: boolean) => {
+      onChange((current) => {
+        const set = new Set(current.trainer_ids);
+        if (checked) {
+          set.add(trainerId);
+        } else {
+          set.delete(trainerId);
+        }
+        const nextIds = Array.from(set);
+        const nextStatusMap = syncTrainerInviteStatusMap(current.trainer_invite_statuses, nextIds);
+        const summaryStatus = summarizeTrainerInviteStatus(nextStatusMap);
+        return {
+          ...current,
+          trainer_ids: nextIds,
+          trainer_invite_statuses: nextStatusMap,
+          trainer_invite_status: summaryStatus,
+        };
+      });
+    },
+    [onChange],
+  );
 
   const filteredTrainers = useMemo(() => {
     const search = trainerFilter.trim().toLowerCase();
@@ -3253,15 +3423,7 @@ function SessionEditor({
                               checked={checked}
                               disabled={blocked && !checked}
                               onChange={(event) =>
-                                onChange((current) => {
-                                  const set = new Set(current.trainer_ids);
-                                  if (event.target.checked) {
-                                    set.add(trainer.trainer_id);
-                                  } else {
-                                    set.delete(trainer.trainer_id);
-                                  }
-                                  return { ...current, trainer_ids: Array.from(set) };
-                                })
+                                handleTrainerSelectionChange(trainer.trainer_id, event.target.checked)
                               }
                             />
                           </ListGroup.Item>
@@ -3275,6 +3437,59 @@ function SessionEditor({
                 </div>
               </Collapse>
             </div>
+            {form.estado === 'PLANIFICADA' && form.trainer_ids.length > 0 ? (
+              <div className="mt-2">
+                {(() => {
+                  const inviteState = inviteStatusMap[form.id];
+                  const isSending = inviteState?.sending ?? false;
+                  const hasError = Boolean(inviteState?.error);
+                  const message = inviteState?.message;
+                  const errorMessage = inviteState?.error;
+                  return (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline-primary"
+                        disabled={isSending}
+                        onClick={() => onSendInvites(form.id)}
+                      >
+                        {isSending ? (
+                          <>
+                            <Spinner animation="border" size="sm" className="me-2" role="status" /> Enviando…
+                          </>
+                        ) : (
+                          'Enviar confirmación'
+                        )}
+                      </Button>
+                      {selectedTrainers.length ? (
+                        <div className="mt-2 d-flex flex-column gap-1">
+                          {selectedTrainers.map((trainer) => {
+                            const trainerId = trainer.trainer_id;
+                            const status = trainerId
+                              ? form.trainer_invite_statuses[trainerId] ?? 'NOT_SENT'
+                              : 'NOT_SENT';
+                            const statusInfo =
+                              TRAINER_INVITE_STATUS_BADGES[status] ?? TRAINER_INVITE_STATUS_BADGES.NOT_SENT;
+                            const trainerLabel = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
+                            return (
+                              <div key={trainer.trainer_id} className="d-flex align-items-center gap-2 small">
+                                <span>{trainerLabel}</span>
+                                <Badge bg={statusInfo.variant}>{statusInfo.label}</Badge>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                      {hasError ? (
+                        <div className="text-danger small mt-1">{errorMessage}</div>
+                      ) : message ? (
+                        <div className="text-muted small mt-1">{message}</div>
+                      ) : null}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : null}
           </Form.Group>
         </Col>
         ) : null}
