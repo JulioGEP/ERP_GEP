@@ -2,6 +2,7 @@
 import { randomUUID } from 'crypto';
 import { validate as isUUID } from 'uuid';
 import type { PrismaClient } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { getPrisma } from './_shared/prisma';
 import {
   COMMON_HEADERS,
@@ -24,6 +25,77 @@ const ONE_MEGABYTE = 1024 * 1024;
 const MAX_SESSION_DOCUMENT_SIZE_BYTES = 4 * ONE_MEGABYTE;
 const MAX_SESSION_DOCUMENT_SIZE_LABEL = '4 MB';
 const TRAINER_EXPENSE_FOLDER_NAME = 'Gastos Formador';
+
+let trainerExpenseColumnSupported: boolean | null = null;
+
+const TRAINER_EXPENSE_ERROR_PATTERNS = [
+  /sesion[_\s]?files.*trainer[_\s]?expense/i,
+  /trainer[_\s]?expense.*sesion[_\s]?files/i,
+  /trainer[_\s]?expense/i,
+];
+
+function isTrainerExpenseColumnError(error: unknown): boolean {
+  if (error instanceof PrismaClientKnownRequestError) {
+    if (error.code === 'P2021' || error.code === 'P2022') {
+      const meta = (error as any)?.meta as Record<string, unknown> | undefined;
+      const columnNameRaw = meta?.column ?? meta?.column_name;
+      const columnName = typeof columnNameRaw === 'string' ? columnNameRaw : '';
+      if (columnName) {
+        return TRAINER_EXPENSE_ERROR_PATTERNS.some((pattern) => pattern.test(columnName));
+      }
+      return true;
+    }
+  }
+
+  if (error instanceof Error) {
+    return TRAINER_EXPENSE_ERROR_PATTERNS.some((pattern) => pattern.test(error.message));
+  }
+
+  return false;
+}
+
+async function ensureTrainerExpenseColumn(prisma: PrismaClient): Promise<boolean> {
+  if (trainerExpenseColumnSupported === true) {
+    return true;
+  }
+
+  try {
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "sesion_files" ADD COLUMN IF NOT EXISTS "trainer_expense" BOOLEAN NOT NULL DEFAULT FALSE',
+    );
+    trainerExpenseColumnSupported = true;
+    return true;
+  } catch (err) {
+    console.error('[SessionDocuments] No se pudo asegurar la columna trainer_expense', err);
+    trainerExpenseColumnSupported = false;
+    return false;
+  }
+}
+
+async function withTrainerExpenseSupport<T extends PromiseLike<unknown>>(
+  prisma: PrismaClient,
+  operation: () => T,
+): Promise<Awaited<T>> {
+  try {
+    const result = await operation();
+    if (trainerExpenseColumnSupported === null) {
+      trainerExpenseColumnSupported = true;
+    }
+    return result;
+  } catch (error) {
+    if (!isTrainerExpenseColumnError(error)) {
+      throw error;
+    }
+
+    const ensured = await ensureTrainerExpenseColumn(prisma);
+    if (!ensured) {
+      throw error;
+    }
+
+    const retried = await operation();
+    return retried;
+  }
+}
 
 type ParsedPath = {
   docId: string | null;
@@ -156,10 +228,12 @@ export const handler = async (event: any) => {
       const session = context.session!;
       const sessionDriveUrl = normalizeDriveUrl(session?.drive_url ?? null);
 
-      const files = await prisma.sesion_files.findMany({
-        where: { deal_id: dealId, sesion_id: sessionId },
-        orderBy: { added_at: 'desc' },
-      });
+      const files = await withTrainerExpenseSupport(prisma, () =>
+        prisma.sesion_files.findMany({
+          where: { deal_id: dealId, sesion_id: sessionId },
+          orderBy: { added_at: 'desc' },
+        }),
+      );
 
       return successResponse({
         documents: files.map(mapSessionFile),
@@ -345,19 +419,21 @@ export const handler = async (event: any) => {
         }
 
         const id = randomUUID();
-        const created = await prisma.sesion_files.create({
-          data: {
-            id,
-            deal_id: dealId,
-            sesion_id: sessionId,
-            file_type: extension,
-            compartir_formador: shareWithTrainer,
-            trainer_expense: trainerExpense,
-            added_at: now,
-            drive_file_name: uploadResult.driveFileName,
-            drive_web_view_link: uploadResult.driveWebViewLink,
-          },
-        });
+        const created = await withTrainerExpenseSupport(prisma, () =>
+          prisma.sesion_files.create({
+            data: {
+              id,
+              deal_id: dealId,
+              sesion_id: sessionId,
+              file_type: extension,
+              compartir_formador: shareWithTrainer,
+              trainer_expense: trainerExpense,
+              added_at: now,
+              drive_file_name: uploadResult.driveFileName,
+              drive_web_view_link: uploadResult.driveWebViewLink,
+            },
+          }),
+        );
 
         createdRecords.push(mapSessionFile(created));
       }
@@ -397,18 +473,22 @@ export const handler = async (event: any) => {
         false,
       );
 
-      const existing = await prisma.sesion_files.findUnique({ where: { id: docId } });
+      const existing = await withTrainerExpenseSupport(prisma, () =>
+        prisma.sesion_files.findUnique({ where: { id: docId } }),
+      );
       if (!existing || existing.deal_id !== dealId || existing.sesion_id !== sessionId) {
         return errorResponse('NOT_FOUND', 'Documento no encontrado', 404);
       }
 
-      const updated = await prisma.sesion_files.update({
-        where: { id: docId },
-        data: {
-          compartir_formador: compartirFormador,
-          updated_at: nowInMadridDate(),
-        },
-      });
+      const updated = await withTrainerExpenseSupport(prisma, () =>
+        prisma.sesion_files.update({
+          where: { id: docId },
+          data: {
+            compartir_formador: compartirFormador,
+            updated_at: nowInMadridDate(),
+          },
+        }),
+      );
 
       return successResponse({ document: mapSessionFile(updated) });
     }
@@ -441,7 +521,9 @@ export const handler = async (event: any) => {
         return errorResponse('VALIDATION_ERROR', 'sessionId inválido (UUID)', 400);
       }
 
-      const existing = await prisma.sesion_files.findUnique({ where: { id: docId } });
+      const existing = await withTrainerExpenseSupport(prisma, () =>
+        prisma.sesion_files.findUnique({ where: { id: docId } }),
+      );
       if (!existing || existing.deal_id !== dealId || existing.sesion_id !== sessionId) {
         return errorResponse('NOT_FOUND', 'Documento no encontrado', 404);
       }
@@ -482,7 +564,9 @@ export const handler = async (event: any) => {
         return errorResponse('UPLOAD_ERROR', message, 502);
       }
 
-      await prisma.sesion_files.delete({ where: { id: docId } });
+      await withTrainerExpenseSupport(prisma, () =>
+        prisma.sesion_files.delete({ where: { id: docId } }),
+      );
 
       return successResponse({ ok: true });
     }
