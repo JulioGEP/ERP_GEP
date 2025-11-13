@@ -1503,6 +1503,8 @@ export function VariantModal({
     return map;
   }, [units, variant]);
 
+  const hasAssignedTrainers = formValues.trainer_ids.length > 0;
+
   const selectedTrainers = useMemo(() => {
     if (!formValues.trainer_ids.length) {
       return [] as VariantTrainerRecord[];
@@ -1969,27 +1971,27 @@ export function VariantModal({
                     </div>
                   </Form.Group>
                   <div className="mt-2">
-                    <div className="d-flex flex-column gap-2">
-                      <div className="d-flex flex-wrap align-items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline-primary"
-                          disabled={inviteState.sending || !variant || !formValues.trainer_ids.length}
-                          onClick={handleSendInvites}
-                        >
-                          {inviteState.sending ? (
-                            <>
-                              <Spinner animation="border" size="sm" className="me-2" role="status" /> Enviando…
-                            </>
-                          ) : (
-                            'Enviar confirmación'
-                          )}
-                        </Button>
-                        <Badge bg={TRAINER_INVITE_STATUS_BADGES[trainerInviteSummary].variant}>
-                          {TRAINER_INVITE_STATUS_BADGES[trainerInviteSummary].label}
-                        </Badge>
-                      </div>
-                      {formValues.trainer_ids.length ? (
+                    {hasAssignedTrainers ? (
+                      <div className="d-flex flex-column gap-2">
+                        <div className="d-flex flex-wrap align-items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            disabled={inviteState.sending || !variant}
+                            onClick={handleSendInvites}
+                          >
+                            {inviteState.sending ? (
+                              <>
+                                <Spinner animation="border" size="sm" className="me-2" role="status" /> Enviando…
+                              </>
+                            ) : (
+                              'Enviar confirmación'
+                            )}
+                          </Button>
+                          <Badge bg={TRAINER_INVITE_STATUS_BADGES[trainerInviteSummary].variant}>
+                            {TRAINER_INVITE_STATUS_BADGES[trainerInviteSummary].label}
+                          </Badge>
+                        </div>
                         <div className="d-flex flex-column gap-1 small">
                           {formValues.trainer_ids.map((trainerId) => {
                             const trainerInfo = trainerLookup.get(trainerId);
@@ -2007,15 +2009,13 @@ export function VariantModal({
                             );
                           })}
                         </div>
-                      ) : (
-                        <div className="text-muted small">Añade formadores para enviar confirmación.</div>
-                      )}
-                      {inviteState.error ? (
-                        <div className="text-danger small">{inviteState.error}</div>
-                      ) : inviteState.message ? (
-                        <div className="text-muted small">{inviteState.message}</div>
-                      ) : null}
-                    </div>
+                        {inviteState.error ? (
+                          <div className="text-danger small">{inviteState.error}</div>
+                        ) : inviteState.message ? (
+                          <div className="text-muted small">{inviteState.message}</div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </Col>
                 <Col md={4}>
