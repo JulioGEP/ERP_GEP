@@ -59,7 +59,7 @@ type VariantRecord = {
   date: Date | string | null;
   sede: string | null;
   products: { name: string | null } | null;
-  trainer_variant_invites?: Array<{ trainer_id: string | null; status: string | null; token: string | null }> | null;
+  variant_invites?: Array<{ trainer_id: string | null; status: string | null; token: string | null }> | null;
 };
 
 type VariantDealRecord = {
@@ -539,7 +539,7 @@ export const handler = createHttpHandler(async (request) => {
         date: true,
         sede: true,
         products: { select: { name: true } },
-        trainer_variant_invites: { select: { trainer_id: true, status: true, token: true } },
+        variant_invites: { select: { trainer_id: true, status: true, token: true } },
       },
     })) as VariantRecord[];
 
@@ -648,8 +648,8 @@ export const handler = createHttpHandler(async (request) => {
           fundaeLabel: deal.fundaeLabel,
           studentCount: deal.studentCount,
         }));
-        const inviteRecords = Array.isArray(variant.trainer_variant_invites)
-          ? (variant.trainer_variant_invites as Array<{ trainer_id?: unknown; status?: unknown; token?: unknown }>)
+        const inviteRecords = Array.isArray(variant.variant_invites)
+          ? (variant.variant_invites as Array<{ trainer_id?: unknown; status?: unknown; token?: unknown }>)
           : [];
         const inviteForTrainer = inviteRecords.find((invite) => {
           const inviteTrainerId = typeof invite?.trainer_id === 'string' ? invite.trainer_id.trim() : '';

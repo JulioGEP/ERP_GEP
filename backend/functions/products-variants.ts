@@ -1080,7 +1080,7 @@ type VariantRecord = {
   products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
   trainer_links?: VariantTrainerLink[];
-  trainer_variant_invites?: VariantInviteLink[];
+  variant_invites?: VariantInviteLink[];
   salas?: { sala_id: string; name: string; sede: string | null } | null;
   unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
   unidad_links?: VariantUnitLink[];
@@ -1159,7 +1159,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       unidad_movil_id: true,
       created_at: true,
       updated_at: true,
-      trainer_variant_invites: {
+      variant_invites: {
         select: { trainer_id: true, status: true, sent_at: true, responded_at: true },
       },
     };
@@ -1492,8 +1492,8 @@ function normalizeVariant(record: VariantRecord) {
     ? trainerRecords.find((item) => item.trainer_id === primaryTrainerId) ?? null
     : null;
 
-  const inviteLinks = Array.isArray(record.trainer_variant_invites)
-    ? (record.trainer_variant_invites as VariantInviteLink[])
+  const inviteLinks = Array.isArray(record.variant_invites)
+    ? (record.variant_invites as VariantInviteLink[])
     : [];
   const inviteStatusMap = buildTrainerInviteStatusMap(uniqueTrainerIds, inviteLinks);
   const inviteSummaryStatus = summarizeTrainerInviteStatus(inviteStatusMap);
@@ -1859,7 +1859,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         trainers: { select: { trainer_id: true, name: true, apellido: true } },
         salas: { select: { sala_id: true, name: true, sede: true } },
         unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
-        trainer_variant_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
+        variant_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
         created_at: true,
         updated_at: true,
       },
