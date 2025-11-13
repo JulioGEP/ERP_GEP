@@ -3009,7 +3009,6 @@ export default function TrainerSessionsPage() {
   }, [sessionsQuery.refetch]);
 
   const isFetchingSessions = sessionsQuery.isFetching;
-  const isLoadingSessions = sessionsQuery.isLoading;
 
   const selectedEntry = useMemo(() => {
     if (!selectedDate) return null;
@@ -3107,26 +3106,11 @@ export default function TrainerSessionsPage() {
                     <Button
                       type="button"
                       variant="outline-primary"
-                      size="sm"
                       onClick={handleRefreshClick}
                       disabled={isFetchingSessions}
                       className="flex-shrink-0 w-100 w-md-auto ms-md-auto ms-lg-3"
                     >
-                      {isFetchingSessions ? (
-                        <>
-                          <Spinner
-                            as="span"
-                            animation="border"
-                            size="sm"
-                            role="status"
-                            aria-hidden="true"
-                            className="me-2"
-                          />
-                          {isLoadingSessions ? 'Cargando…' : 'Actualizando…'}
-                        </>
-                      ) : (
-                        'Actualizar'
-                      )}
+                      Actualizar
                     </Button>
                   </div>
                 </Col>
