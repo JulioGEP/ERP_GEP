@@ -64,6 +64,7 @@ type VariantInviteRecord = {
   token: string;
   status: TrainerInviteStatus;
   sent_at: Date | string | null;
+  created_at: Date | string | null;
   responded_at: Date | string | null;
   created_by_user_id: string | null;
   created_by_email: string | null;
@@ -646,10 +647,12 @@ export const handler = createHttpHandler(async (request) => {
       if (status === 'CONFIRMED') {
         try {
           await syncUserForTrainer(prisma, {
-            trainerId: invite.trainer_id,
-            trainerEmail: invite.trainer_email ?? invite.trainers?.email ?? null,
-            trainerName: invite.trainers?.name ?? null,
-            trainerLastName: invite.trainers?.apellido ?? null,
+            trainer_id: invite.trainer_id,
+            name: invite.trainers?.name ?? 'Formador',
+            apellido: invite.trainers?.apellido ?? null,
+            email: invite.trainers?.email ?? invite.trainer_email ?? null,
+            activo: Boolean(invite.trainers?.activo ?? true),
+            user_id: invite.trainers?.user_id ?? null,
           });
         } catch (error) {
           console.error('[variant-trainer-invites] Failed to sync trainer user on confirm', {
@@ -732,7 +735,7 @@ export const handler = createHttpHandler(async (request) => {
 
     const now = new Date();
     const invites = trainersToInvite.length
-      ? await prisma.$transaction(async (tx) => {
+      ? await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
           const created: Array<{ token: string; trainer: VariantTrainerRecord }> = [];
           for (const trainer of trainersToInvite) {
             const token = generateToken();
