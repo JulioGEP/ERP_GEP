@@ -13,6 +13,8 @@ export type TrainerSessionTrainer = {
   lastName: string | null;
 };
 
+export type TrainerSessionInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
+
 export type TrainerSessionDetail = {
   sessionId: string;
   dealId: string;
@@ -35,6 +37,8 @@ export type TrainerSessionDetail = {
   isCompanyTraining: boolean;
   isGepServices: boolean;
   companionTrainers: TrainerSessionTrainer[];
+  trainerInviteStatus: TrainerSessionInviteStatus | null;
+  trainerInviteToken: string | null;
 };
 
 export type TrainerVariantDeal = {
@@ -111,6 +115,15 @@ function sanitizeBoolean(value: unknown): boolean | null {
     if (!normalized.length) return null;
     if (['true', '1', 'si', 'sí', 'yes'].includes(normalized)) return true;
     if (['false', '0', 'no'].includes(normalized)) return false;
+  }
+  return null;
+}
+
+function sanitizeTrainerInviteStatus(value: unknown): TrainerSessionInviteStatus | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED') {
+    return normalized;
   }
   return null;
 }
@@ -287,6 +300,8 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
     isCompanyTraining: Boolean(raw.isCompanyTraining),
     isGepServices: Boolean(raw.isGepServices),
     companionTrainers,
+    trainerInviteStatus: sanitizeTrainerInviteStatus((raw as { trainerInviteStatus?: unknown }).trainerInviteStatus),
+    trainerInviteToken: sanitizeString((raw as { trainerInviteToken?: unknown }).trainerInviteToken),
   } satisfies TrainerSessionDetail;
 }
 
