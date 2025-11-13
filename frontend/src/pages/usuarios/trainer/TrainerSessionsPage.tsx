@@ -3042,8 +3042,8 @@ export default function TrainerSessionsPage() {
                 <Form.Label column sm={12} md={3} className="text-md-end fw-semibold">
                   Selecciona una fecha
                 </Form.Label>
-                <Col sm={12} md={6} lg={5}>
-                  <div className="d-flex flex-column flex-md-row gap-2">
+                <Col sm={12} md={9}>
+                  <div className="d-flex flex-column flex-md-row gap-2 align-items-stretch w-100">
                     <Form.Select
                       value={selectedDate ?? ''}
                       onChange={handleDateChange}
@@ -3107,9 +3107,10 @@ export default function TrainerSessionsPage() {
                     <Button
                       type="button"
                       variant="outline-primary"
+                      size="sm"
                       onClick={handleRefreshClick}
                       disabled={isFetchingSessions}
-                      className="flex-shrink-0 w-100 w-md-auto"
+                      className="flex-shrink-0 w-100 w-md-auto ms-md-auto ms-lg-3"
                     >
                       {isFetchingSessions ? (
                         <>
@@ -3129,13 +3130,6 @@ export default function TrainerSessionsPage() {
                     </Button>
                   </div>
                 </Col>
-                {selectedEntry ? (
-                  <Col sm={12} md={3} className="text-md-start text-muted small">
-                    {variantCount
-                      ? `También tienes ${variantCount} variante${variantCount === 1 ? '' : 's'} asignada${variantCount === 1 ? '' : 's'} en esta fecha.`
-                      : 'Solo hay sesiones asignadas en esta fecha.'}
-                  </Col>
-                ) : null}
               </Form.Group>
             </Form>
             {hasPendingSessions ? (
