@@ -1,3 +1,5 @@
+export type TrainerInviteStatus = 'NOT_SENT' | 'PENDING' | 'CONFIRMED' | 'DECLINED';
+
 export type VariantInfo = {
   id: string;
   id_woo: string;
@@ -20,6 +22,8 @@ export type VariantInfo = {
   unidades: Array<{ unidad_id: string; name: string; matricula: string | null }>;
   created_at: string | null;
   updated_at: string | null;
+  trainer_invite_status: TrainerInviteStatus;
+  trainer_invite_statuses: Record<string, TrainerInviteStatus>;
 };
 
 export type ProductDefaults = {

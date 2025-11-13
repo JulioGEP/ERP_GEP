@@ -59,6 +59,7 @@ type VariantRecord = {
   date: Date | string | null;
   sede: string | null;
   products: { name: string | null } | null;
+  trainer_variant_invites?: Array<{ trainer_id: string | null; status: string | null; token: string | null }> | null;
 };
 
 type VariantDealRecord = {
@@ -118,6 +119,8 @@ type VariantPayload = {
     organizationName: string | null;
     fundaeLabel: string | null;
   }>;
+  trainerInviteStatus: TrainerInviteStatus | null;
+  trainerInviteToken: string | null;
 };
 
 type SessionPayload = {
@@ -147,6 +150,15 @@ type SessionPayload = {
 };
 
 type TrainerInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
+
+function normalizeInviteStatus(value: unknown): TrainerInviteStatus | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED') {
+    return normalized as TrainerInviteStatus;
+  }
+  return null;
+}
 
 const PIPELINE_LABELS_COMPANY = [
   'formacion empresa',
@@ -527,6 +539,7 @@ export const handler = createHttpHandler(async (request) => {
         date: true,
         sede: true,
         products: { select: { name: true } },
+        trainer_variant_invites: { select: { trainer_id: true, status: true, token: true } },
       },
     })) as VariantRecord[];
 
@@ -635,6 +648,15 @@ export const handler = createHttpHandler(async (request) => {
           fundaeLabel: deal.fundaeLabel,
           studentCount: deal.studentCount,
         }));
+        const inviteRecords = Array.isArray(variant.trainer_variant_invites)
+          ? (variant.trainer_variant_invites as Array<{ trainer_id?: unknown; status?: unknown; token?: unknown }>)
+          : [];
+        const inviteForTrainer = inviteRecords.find((invite) => {
+          const inviteTrainerId = typeof invite?.trainer_id === 'string' ? invite.trainer_id.trim() : '';
+          return inviteTrainerId.length ? inviteTrainerId === trainer.trainer_id : false;
+        });
+        const trainerInviteStatus = inviteForTrainer ? normalizeInviteStatus(inviteForTrainer.status) : null;
+        const trainerInviteToken = inviteForTrainer ? sanitizeString(inviteForTrainer.token) : null;
         return {
           dateKey,
           variant: {
@@ -647,6 +669,8 @@ export const handler = createHttpHandler(async (request) => {
             organizationNames,
             deals: sanitizedDeals,
             students,
+            trainerInviteStatus,
+            trainerInviteToken,
           },
         };
       })

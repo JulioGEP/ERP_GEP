@@ -3,6 +3,7 @@ import type {
   DealTag,
   ProductDefaults,
   ProductInfo,
+  TrainerInviteStatus,
   VariantInfo,
   VariantLocationGroup,
   VariantMonthGroup,
@@ -44,6 +45,26 @@ function toNumberOrNull(value: unknown): number | null {
   }
 
   return null;
+}
+
+function normalizeTrainerInviteStatusValue(value: unknown): TrainerInviteStatus {
+  const text = toTrimmedString(value)?.toUpperCase() ?? '';
+  if (text === 'CONFIRMED' || text === 'DECLINED' || text === 'PENDING') {
+    return text as TrainerInviteStatus;
+  }
+  if (text === 'NOT_SENT') {
+    return 'NOT_SENT';
+  }
+  return 'NOT_SENT';
+}
+
+function computeTrainerInviteSummaryStatus(map: Record<string, TrainerInviteStatus>): TrainerInviteStatus {
+  const values = Object.values(map);
+  if (!values.length) return 'NOT_SENT';
+  if (values.includes('DECLINED')) return 'DECLINED';
+  if (values.includes('CONFIRMED')) return 'CONFIRMED';
+  if (values.includes('PENDING')) return 'PENDING';
+  return 'NOT_SENT';
 }
 
 export function normalizeVariantFromResponse(input: any, fallbackId: string): VariantInfo {
@@ -115,6 +136,19 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
   if (!trainers.length && fallbackTrainerRecord) {
     trainers.push(fallbackTrainerRecord);
   }
+
+  const inviteStatusMap: Record<string, TrainerInviteStatus> = {};
+  trainerIds.forEach((id) => {
+    inviteStatusMap[id] = 'NOT_SENT';
+  });
+  if (input?.trainer_invite_statuses && typeof input.trainer_invite_statuses === 'object') {
+    Object.entries(input.trainer_invite_statuses as Record<string, unknown>).forEach(([key, value]) => {
+      const id = toTrimmedString(key);
+      if (!id) return;
+      inviteStatusMap[id] = normalizeTrainerInviteStatusValue(value);
+    });
+  }
+  const trainerInviteStatus = computeTrainerInviteSummaryStatus(inviteStatusMap);
 
   const salaIdRaw = input?.sala_id;
   const salaId = salaIdRaw != null && String(salaIdRaw).trim().length
@@ -225,6 +259,8 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     unidades,
     created_at: input?.created_at ?? null,
     updated_at: input?.updated_at ?? null,
+    trainer_invite_status: trainerInviteStatus,
+    trainer_invite_statuses: inviteStatusMap,
   } satisfies VariantInfo;
 }
 

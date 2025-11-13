@@ -155,8 +155,21 @@ export type SessionTrainerInviteSession = {
   end_at: string | null;
 };
 
-export type SessionTrainerInvite = {
+export type TrainerInviteVariantTarget = {
+  id: string;
+  woo_id: string | null;
+  name: string | null;
+  product_name: string | null;
+  product_code: string | null;
+  site: string | null;
+  date: string | null;
+  start_at: string | null;
+  end_at: string | null;
+};
+
+export type TrainerInvite = {
   token: string;
+  type: 'session' | 'variant';
   status: TrainerInviteStatus;
   sent_at: string | null;
   responded_at: string | null;
@@ -171,7 +184,8 @@ export type SessionTrainerInvite = {
     last_name: string | null;
     email: string | null;
   };
-  session: SessionTrainerInviteSession;
+  session: SessionTrainerInviteSession | null;
+  variant: TrainerInviteVariantTarget | null;
 };
 
 export type TrainerInviteSendResult = {
@@ -190,6 +204,12 @@ export type TrainerInviteSkipped = {
 
 export type SendSessionTrainerInvitesResult = {
   session: SessionTrainerInviteSession;
+  invites: TrainerInviteSendResult[];
+  skippedTrainers: TrainerInviteSkipped[];
+};
+
+export type SendVariantTrainerInvitesResult = {
+  variant: TrainerInviteVariantTarget;
   invites: TrainerInviteSendResult[];
   skippedTrainers: TrainerInviteSkipped[];
 };
@@ -983,6 +1003,20 @@ function normalizeSessionTrainerInviteSession(raw: any): SessionTrainerInviteSes
   };
 }
 
+function normalizeTrainerInviteVariant(raw: any): TrainerInviteVariantTarget {
+  return {
+    id: toStringValue(raw?.id) ?? '',
+    woo_id: toStringValue(raw?.woo_id) ?? null,
+    name: toStringValue(raw?.name) ?? null,
+    product_name: toStringValue(raw?.product_name) ?? null,
+    product_code: toStringValue(raw?.product_code) ?? null,
+    site: toStringValue(raw?.site) ?? null,
+    date: toStringValue(raw?.date) ?? null,
+    start_at: toStringValue(raw?.start_at) ?? null,
+    end_at: toStringValue(raw?.end_at) ?? null,
+  };
+}
+
 function normalizeTrainerInviteSendResult(raw: any): TrainerInviteSendResult {
   const statusRaw = toStringValue(raw?.status);
   return {
@@ -1002,13 +1036,25 @@ function normalizeTrainerInviteSkipped(raw: any): TrainerInviteSkipped {
   };
 }
 
-function normalizeSessionTrainerInvite(raw: any): SessionTrainerInvite {
+function normalizeTrainerInvite(raw: any): TrainerInvite {
   const trainerRaw = raw?.trainer ?? {};
   const createdByRaw = raw?.created_by ?? {};
-  const sessionRaw = raw?.session ?? {};
+  const sessionRaw = raw?.session ?? null;
+  const variantRaw = raw?.variant ?? null;
+  const typeRaw = raw?.type;
+  const type: 'session' | 'variant' = typeRaw === 'variant' ? 'variant' : 'session';
+  const session =
+    sessionRaw && typeof sessionRaw === 'object'
+      ? normalizeSessionTrainerInviteSession(sessionRaw)
+      : null;
+  const variant =
+    type === 'variant' && variantRaw && typeof variantRaw === 'object'
+      ? normalizeTrainerInviteVariant(variantRaw)
+      : null;
 
   return {
     token: toStringValue(raw?.token) ?? '',
+    type,
     status: normalizeTrainerInviteStatus(raw?.status),
     sent_at: toStringValue(raw?.sent_at) ?? null,
     responded_at: toStringValue(raw?.responded_at) ?? null,
@@ -1023,7 +1069,8 @@ function normalizeSessionTrainerInvite(raw: any): SessionTrainerInvite {
       last_name: toStringValue(trainerRaw?.last_name) ?? null,
       email: toStringValue(trainerRaw?.email) ?? null,
     },
-    session: normalizeSessionTrainerInviteSession(sessionRaw),
+    session,
+    variant,
   };
 }
 
@@ -2506,20 +2553,51 @@ export async function sendSessionTrainerInvites(sessionId: string): Promise<Send
   };
 }
 
-export async function fetchSessionTrainerInvite(token: string): Promise<SessionTrainerInvite> {
+export async function sendVariantTrainerInvites(variantId: string): Promise<SendVariantTrainerInvitesResult> {
+  const normalizedId = String(variantId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'variantId es obligatorio');
+  }
+
+  const data = await request('/variant-trainer-invites', {
+    method: 'POST',
+    body: JSON.stringify({ variantId: normalizedId }),
+  });
+
+  const invitesRaw = Array.isArray(data?.invites) ? data.invites : [];
+  const skippedRaw = Array.isArray(data?.skippedTrainers) ? data.skippedTrainers : [];
+
+  return {
+    variant: normalizeTrainerInviteVariant(data?.variant ?? {}),
+    invites: invitesRaw.map((row: unknown) => normalizeTrainerInviteSendResult(row)),
+    skippedTrainers: skippedRaw.map((row: unknown) => normalizeTrainerInviteSkipped(row)),
+  };
+}
+
+export async function fetchSessionTrainerInvite(token: string): Promise<TrainerInvite> {
   const normalizedToken = String(token ?? '').trim();
   if (!normalizedToken) {
     throw new ApiError('VALIDATION_ERROR', 'token es obligatorio');
   }
 
   const data = await request(`/session-trainer-invites/${encodeURIComponent(normalizedToken)}`);
-  return normalizeSessionTrainerInvite(data?.invite ?? {});
+  return normalizeTrainerInvite(data?.invite ?? {});
+}
+
+export async function fetchVariantTrainerInvite(token: string): Promise<TrainerInvite> {
+  const normalizedToken = String(token ?? '').trim();
+  if (!normalizedToken) {
+    throw new ApiError('VALIDATION_ERROR', 'token es obligatorio');
+  }
+
+  const data = await request(`/variant-trainer-invites/${encodeURIComponent(normalizedToken)}`);
+  return normalizeTrainerInvite(data?.invite ?? {});
 }
 
 export async function respondSessionTrainerInvite(
   token: string,
   action: 'confirm' | 'decline',
-): Promise<SessionTrainerInvite> {
+): Promise<TrainerInvite> {
   const normalizedToken = String(token ?? '').trim();
   if (!normalizedToken) {
     throw new ApiError('VALIDATION_ERROR', 'token es obligatorio');
@@ -2534,7 +2612,28 @@ export async function respondSessionTrainerInvite(
     body: JSON.stringify({ action: normalizedAction }),
   });
 
-  return normalizeSessionTrainerInvite(data?.invite ?? {});
+  return normalizeTrainerInvite(data?.invite ?? {});
+}
+
+export async function respondVariantTrainerInvite(
+  token: string,
+  action: 'confirm' | 'decline',
+): Promise<TrainerInvite> {
+  const normalizedToken = String(token ?? '').trim();
+  if (!normalizedToken) {
+    throw new ApiError('VALIDATION_ERROR', 'token es obligatorio');
+  }
+  const normalizedAction = action === 'confirm' || action === 'decline' ? action : '';
+  if (!normalizedAction) {
+    throw new ApiError('VALIDATION_ERROR', 'Acción inválida');
+  }
+
+  const data = await request(`/variant-trainer-invites/${encodeURIComponent(normalizedToken)}/respond`, {
+    method: 'POST',
+    body: JSON.stringify({ action: normalizedAction }),
+  });
+
+  return normalizeTrainerInvite(data?.invite ?? {});
 }
 
 export async function fetchPublicSessionStudents(token: string): Promise<{
