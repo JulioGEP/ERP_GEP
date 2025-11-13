@@ -3,25 +3,35 @@ import { useParams } from 'react-router-dom';
 import { Alert, Button, Card, Container, Spinner } from 'react-bootstrap';
 import {
   fetchSessionTrainerInvite,
+  fetchVariantTrainerInvite,
   respondSessionTrainerInvite,
-  type SessionTrainerInvite,
+  respondVariantTrainerInvite,
+  type TrainerInvite,
 } from '../features/presupuestos/api';
 import { buildFieldTooltip } from '../utils/fieldTooltip';
 
-function buildTrainerDisplay(invite: SessionTrainerInvite): string {
-  const parts = [invite.trainer.name, invite.trainer.last_name].filter((value) => value && value.trim().length);
-  return parts.length ? parts.join(' ') : 'Formador';
-}
+const MADRID_TIMEZONE = 'Europe/Madrid';
 
-function formatAddress(address: string | null): string {
-  const trimmed = address?.trim();
-  return trimmed && trimmed.length ? trimmed : 'Por confirmar';
-}
+type PublicTrainerInvitePageProps = {
+  inviteType: 'session' | 'variant';
+};
 
 type FeedbackState = {
   variant: 'success' | 'danger' | 'info';
   message: string;
 } | null;
+
+function buildTrainerDisplay(invite: TrainerInvite): string {
+  const parts = [invite.trainer.name, invite.trainer.last_name]
+    .map((value) => (value ? value.trim() : ''))
+    .filter(Boolean);
+  return parts.length ? parts.join(' ') : 'Formador';
+}
+
+function formatAddress(value: string | null): string {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length ? trimmed : 'Por confirmar';
+}
 
 function extractErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'message' in error && typeof (error as any).message === 'string') {
@@ -85,17 +95,17 @@ function formatDateTimeRange(
   return { label: 'Pendiente de programar', full: 'Pendiente de programar' };
 }
 
-export function PublicTrainerSessionInvitePage() {
+export function PublicTrainerInvitePage({ inviteType }: PublicTrainerInvitePageProps) {
   const { token } = useParams<{ token: string }>();
   const [loading, setLoading] = useState(true);
-  const [invite, setInvite] = useState<SessionTrainerInvite | null>(null);
+  const [invite, setInvite] = useState<TrainerInvite | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
 
   useEffect(() => {
     let isMounted = true;
-    const normalizedToken = token?.trim();
+    const normalizedToken = (token ?? '').trim();
     if (!normalizedToken) {
       setInvite(null);
       setError('Token no válido');
@@ -109,7 +119,9 @@ export function PublicTrainerSessionInvitePage() {
     setError(null);
     setFeedback(null);
 
-    fetchSessionTrainerInvite(normalizedToken)
+    const fetchFn = inviteType === 'variant' ? fetchVariantTrainerInvite : fetchSessionTrainerInvite;
+
+    fetchFn(normalizedToken)
       .then((data) => {
         if (!isMounted) return;
         setInvite(data);
@@ -125,25 +137,42 @@ export function PublicTrainerSessionInvitePage() {
     return () => {
       isMounted = false;
     };
-  }, [token]);
+  }, [token, inviteType]);
 
+  const resolvedType: 'session' | 'variant' = invite?.type ?? inviteType;
+  const isVariantInvite = resolvedType === 'variant';
+  const variantInfo = invite?.variant ?? null;
+  const sessionInfo = invite?.session ?? null;
   const trainerName = useMemo(() => (invite ? buildTrainerDisplay(invite) : ''), [invite]);
-  const dateRangeLabel = useMemo(
-    () => (invite ? formatDateTimeRange(invite.session.start_at, invite.session.end_at, 'Europe/Madrid') : null),
-    [invite],
-  );
+
+  const dateRangeLabel = useMemo(() => {
+    if (!invite) return null;
+    if (isVariantInvite) {
+      const start = variantInfo?.start_at ?? variantInfo?.date ?? null;
+      const end = variantInfo?.end_at ?? variantInfo?.date ?? null;
+      return formatDateTimeRange(start, end, MADRID_TIMEZONE);
+    }
+    return formatDateTimeRange(sessionInfo?.start_at ?? null, sessionInfo?.end_at ?? null, MADRID_TIMEZONE);
+  }, [invite, isVariantInvite, variantInfo, sessionInfo]);
 
   const handleRespond = async (action: 'confirm' | 'decline') => {
-    if (!invite || !token) return;
+    const normalizedToken = (token ?? '').trim();
+    if (!invite || !normalizedToken) return;
+
     setSubmitting(true);
     setFeedback(null);
     try {
-      const updated = await respondSessionTrainerInvite(token, action);
+      const responder = resolvedType === 'variant' ? respondVariantTrainerInvite : respondSessionTrainerInvite;
+      const updated = await responder(normalizedToken, action);
       setInvite(updated);
       const message =
         action === 'confirm'
-          ? 'Has confirmado tu asistencia. Gracias por aceptar la sesión.'
-          : 'Has rechazado la sesión. Hemos avisado al equipo.';
+          ? resolvedType === 'variant'
+            ? 'Has confirmado tu asistencia. Gracias por aceptar la formación.'
+            : 'Has confirmado tu asistencia. Gracias por aceptar la sesión.'
+          : resolvedType === 'variant'
+            ? 'Has rechazado la formación. Hemos avisado al equipo.'
+            : 'Has rechazado la sesión. Hemos avisado al equipo.';
       setFeedback({
         variant: action === 'confirm' ? 'success' : 'info',
         message,
@@ -156,12 +185,22 @@ export function PublicTrainerSessionInvitePage() {
   };
 
   const currentStatus = invite?.status ?? 'PENDING';
+  const heading = isVariantInvite ? 'Confirmación de formación' : 'Confirmación de sesión';
+  const activityLabel = isVariantInvite
+    ? variantInfo?.name ?? variantInfo?.product_name ?? 'Formación'
+    : sessionInfo?.name ?? 'Sesión';
+  const subtitle = isVariantInvite
+    ? variantInfo?.product_name && variantInfo.product_name !== activityLabel
+      ? variantInfo.product_name
+      : variantInfo?.product_code ?? null
+    : sessionInfo?.deal_title ?? null;
+  const location = isVariantInvite ? formatAddress(variantInfo?.site ?? null) : formatAddress(sessionInfo?.address ?? null);
 
   return (
     <Container className="py-5" style={{ maxWidth: 720 }}>
       <Card className="shadow-sm">
         <Card.Body>
-          <h1 className="h4 fw-bold mb-3">Confirmación de sesión</h1>
+          <h1 className="h4 fw-bold mb-3">{heading}</h1>
           {loading ? (
             <div className="d-flex align-items-center gap-2">
               <Spinner animation="border" role="status" />
@@ -178,15 +217,25 @@ export function PublicTrainerSessionInvitePage() {
                 <div className="fw-semibold" title={buildFieldTooltip(trainerName)}>
                   {trainerName}
                 </div>
+                {invite.trainer.email ? (
+                  <div className="text-muted" title={buildFieldTooltip(invite.trainer.email)}>
+                    {invite.trainer.email}
+                  </div>
+                ) : null}
               </div>
               <div>
-                <div className="text-muted small">Sesión</div>
-                <div className="fw-semibold" title={buildFieldTooltip(invite.session.name)}>
-                  {invite.session.name ?? 'Sesión'}
+                <div className="text-muted small">{isVariantInvite ? 'Formación' : 'Sesión'}</div>
+                <div className="fw-semibold" title={buildFieldTooltip(activityLabel)}>
+                  {activityLabel}
                 </div>
-                {invite.session.deal_title ? (
-                  <div className="text-muted" title={buildFieldTooltip(invite.session.deal_title)}>
-                    {invite.session.deal_title}
+                {subtitle ? (
+                  <div className="text-muted" title={buildFieldTooltip(subtitle)}>
+                    {subtitle}
+                  </div>
+                ) : null}
+                {isVariantInvite && variantInfo?.product_code ? (
+                  <div className="text-muted" title={buildFieldTooltip(variantInfo.product_code)}>
+                    Código: {variantInfo.product_code}
                   </div>
                 ) : null}
               </div>
@@ -198,41 +247,42 @@ export function PublicTrainerSessionInvitePage() {
               </div>
               <div>
                 <div className="text-muted small">Ubicación</div>
-                <div title={buildFieldTooltip(invite.session.address)}>
-                  {formatAddress(invite.session.address)}
-                </div>
+                <div title={buildFieldTooltip(location)}>{location}</div>
               </div>
-              {feedback ? <Alert variant={feedback.variant}>{feedback.message}</Alert> : null}
-              {currentStatus === 'PENDING' ? (
-                <div className="d-flex flex-column flex-sm-row gap-2">
-                  <Button
-                    variant="success"
-                    disabled={submitting}
-                    onClick={() => handleRespond('confirm')}
-                  >
-                    {submitting ? <Spinner animation="border" size="sm" role="status" className="me-2" /> : null}
-                    Confirmar
-                  </Button>
-                  <Button
-                    variant="outline-danger"
-                    disabled={submitting}
-                    onClick={() => handleRespond('decline')}
-                  >
-                    {submitting ? <Spinner animation="border" size="sm" role="status" className="me-2" /> : null}
-                    Rechazar
-                  </Button>
-                </div>
-              ) : (
-                <Alert variant={currentStatus === 'CONFIRMED' ? 'success' : 'info'} className="mb-0">
-                  {currentStatus === 'CONFIRMED'
-                    ? 'Has confirmado esta sesión. Te esperamos en la fecha indicada.'
-                    : 'Registramos que has rechazado esta sesión. El equipo ya ha sido avisado.'}
+              {feedback ? (
+                <Alert variant={feedback.variant}>{feedback.message}</Alert>
+              ) : null}
+              <div className="d-flex flex-wrap gap-2">
+                <Button
+                  variant="success"
+                  disabled={submitting || currentStatus !== 'PENDING'}
+                  onClick={() => handleRespond('confirm')}
+                >
+                  {submitting ? 'Enviando…' : 'Confirmar asistencia'}
+                </Button>
+                <Button
+                  variant="outline-danger"
+                  disabled={submitting || currentStatus !== 'PENDING'}
+                  onClick={() => handleRespond('decline')}
+                >
+                  {submitting ? 'Enviando…' : 'No puedo asistir'}
+                </Button>
+              </div>
+              {currentStatus !== 'PENDING' ? (
+                <Alert variant="info" className="mb-0">
+                  Ya registraste tu respuesta como <strong>{currentStatus.toLowerCase()}</strong>.
                 </Alert>
-              )}
+              ) : null}
             </div>
-          ) : null}
+          ) : (
+            <Alert variant="warning" className="mb-0">
+              No se encontró la invitación.
+            </Alert>
+          )}
         </Card.Body>
       </Card>
     </Container>
   );
 }
+
+export default PublicTrainerInvitePage;

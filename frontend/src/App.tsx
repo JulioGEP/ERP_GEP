@@ -28,11 +28,7 @@ const PublicSessionStudentsPage = lazy(() =>
     default: m.PublicSessionStudentsPage,
   }))
 );
-const PublicTrainerSessionInvitePage = lazy(() =>
-  import('./public/PublicTrainerSessionInvitePage').then((m) => ({
-    default: m.PublicTrainerSessionInvitePage,
-  }))
-);
+const PublicTrainerInvitePage = lazy(() => import('./public/PublicTrainerInvitePage'));
 
 export default function App() {
   return (
@@ -44,7 +40,11 @@ export default function App() {
         />
         <Route
           path="/public/formadores/sesiones/:token"
-          element={<PublicTrainerSessionInvitePage />}
+          element={<PublicTrainerInvitePage inviteType="session" />}
+        />
+        <Route
+          path="/public/formadores/variantes/:token"
+          element={<PublicTrainerInvitePage inviteType="variant" />}
         />
         <Route path="/auth/password/forgot" element={<PasswordResetRequestPage />} />
         <Route path="/auth/password/reset" element={<PasswordResetPage />} />
