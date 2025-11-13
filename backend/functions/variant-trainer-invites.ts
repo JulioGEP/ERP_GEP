@@ -480,39 +480,11 @@ async function collectVariantTrainers(
 ): Promise<{ withEmail: VariantTrainerRecord[]; withoutEmail: InviteSkippedTrainer[] }> {
   const map = new Map<string, VariantTrainerRecord>();
 
-  if (variant.trainers?.trainer_id) {
-    const trainerId = variant.trainers.trainer_id;
-    map.set(trainerId, {
-      trainer_id: trainerId,
-      name: variant.trainers.name ?? null,
-      apellido: variant.trainers.apellido ?? null,
-      email: variant.trainers.email ?? null,
-      activo: variant.trainers.activo ?? null,
-      user_id: variant.trainers.user_id ?? null,
-    });
-  }
-
-  if (variant.trainer_id && !map.has(variant.trainer_id)) {
-    const trainerRecord = await prisma.trainers.findUnique({
-      where: { trainer_id: variant.trainer_id },
-      select: { trainer_id: true, name: true, apellido: true, email: true, activo: true, user_id: true },
-    });
-    if (trainerRecord) {
-      map.set(trainerRecord.trainer_id, {
-        trainer_id: trainerRecord.trainer_id,
-        name: trainerRecord.name ?? null,
-        apellido: trainerRecord.apellido ?? null,
-        email: trainerRecord.email ?? null,
-        activo: trainerRecord.activo ?? null,
-        user_id: trainerRecord.user_id ?? null,
-      });
-    }
-  }
-
   const assignments = await fetchVariantTrainerAssignments(prisma, variant.id);
-  for (const assignment of assignments) {
-    if (!assignment.trainer_id) continue;
-    if (!map.has(assignment.trainer_id)) {
+
+  if (assignments.length) {
+    for (const assignment of assignments) {
+      if (!assignment.trainer_id) continue;
       map.set(assignment.trainer_id, {
         trainer_id: assignment.trainer_id,
         name: assignment.name ?? null,
@@ -521,6 +493,48 @@ async function collectVariantTrainers(
         activo: assignment.activo ?? null,
         user_id: assignment.user_id ?? null,
       });
+    }
+
+    const relationTrainerId = variant.trainers?.trainer_id ?? null;
+    if (relationTrainerId && map.has(relationTrainerId)) {
+      const current = map.get(relationTrainerId)!;
+      map.set(relationTrainerId, {
+        ...current,
+        name: variant.trainers?.name ?? current.name ?? null,
+        apellido: variant.trainers?.apellido ?? current.apellido ?? null,
+        email: variant.trainers?.email ?? current.email ?? null,
+        activo: variant.trainers?.activo ?? current.activo ?? null,
+        user_id: variant.trainers?.user_id ?? current.user_id ?? null,
+      });
+    }
+  } else {
+    if (variant.trainers?.trainer_id) {
+      const trainerId = variant.trainers.trainer_id;
+      map.set(trainerId, {
+        trainer_id: trainerId,
+        name: variant.trainers.name ?? null,
+        apellido: variant.trainers.apellido ?? null,
+        email: variant.trainers.email ?? null,
+        activo: variant.trainers.activo ?? null,
+        user_id: variant.trainers.user_id ?? null,
+      });
+    }
+
+    if (variant.trainer_id && !map.has(variant.trainer_id)) {
+      const trainerRecord = await prisma.trainers.findUnique({
+        where: { trainer_id: variant.trainer_id },
+        select: { trainer_id: true, name: true, apellido: true, email: true, activo: true, user_id: true },
+      });
+      if (trainerRecord) {
+        map.set(trainerRecord.trainer_id, {
+          trainer_id: trainerRecord.trainer_id,
+          name: trainerRecord.name ?? null,
+          apellido: trainerRecord.apellido ?? null,
+          email: trainerRecord.email ?? null,
+          activo: trainerRecord.activo ?? null,
+          user_id: trainerRecord.user_id ?? null,
+        });
+      }
     }
   }
 

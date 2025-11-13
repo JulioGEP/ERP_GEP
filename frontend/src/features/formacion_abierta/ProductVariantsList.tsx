@@ -71,9 +71,9 @@ const STOCK_STATUS_SUMMARY_LABELS: Record<string, string> = {
 };
 
 const TRAINER_INVITE_STATUS_BADGES: Record<SessionTrainerInviteStatus, { label: string; variant: string }> = {
-  NOT_SENT: { label: 'Pendiente de enviar', variant: 'secondary' },
-  PENDING: { label: 'Pendiente', variant: 'warning' },
-  CONFIRMED: { label: 'Confirmada', variant: 'success' },
+  NOT_SENT: { label: 'Sin enviar mail', variant: 'warning' },
+  PENDING: { label: 'Mail enviado', variant: 'info' },
+  CONFIRMED: { label: 'Aceptada', variant: 'success' },
   DECLINED: { label: 'Rechazada', variant: 'danger' },
 };
 
