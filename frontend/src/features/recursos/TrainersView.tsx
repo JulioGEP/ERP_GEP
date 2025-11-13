@@ -21,6 +21,51 @@ type TrainersViewProps = {
   onNotify: (toast: ToastParams) => void;
 };
 
+const EXPIRATION_FIELDS = [
+  "revision_medica_caducidad",
+  "epis_caducidad",
+  "dni_caducidad",
+  "carnet_conducir_caducidad",
+  "certificado_bombero_caducidad",
+] as const satisfies ReadonlyArray<
+  keyof Pick<
+    Trainer,
+    | "revision_medica_caducidad"
+    | "epis_caducidad"
+    | "dni_caducidad"
+    | "carnet_conducir_caducidad"
+    | "certificado_bombero_caducidad"
+  >
+>;
+
+function parseDate(value: string | null): Date | null {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function getExpirationThreshold(): Date {
+  const threshold = new Date();
+  threshold.setMonth(threshold.getMonth() + 2);
+  return threshold;
+}
+
+function hasUpcomingExpiration(trainer: Trainer, threshold: Date): boolean {
+  return EXPIRATION_FIELDS.some((field) => {
+    const expirationDate = parseDate(trainer[field]);
+
+    if (!expirationDate) return false;
+
+    return expirationDate <= threshold;
+  });
+}
+
 function buildPayload(values: TrainerFormValues): TrainerPayload {
   const toNullable = (value: string): string | null => {
     const trimmed = value.trim();
@@ -147,6 +192,8 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
     () => searchTerm.trim().length > 0 || statusFilter !== "all",
     [searchTerm, statusFilter]
   );
+
+  const expirationThreshold = getExpirationThreshold();
 
   const handleAddTrainer = () => {
     setSelectedTrainer(null);
@@ -320,11 +367,16 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
               ) : totalItems ? (
                 pageItems.map((trainer) => {
                   const fullName = buildFullName(trainer);
+                  const shouldHighlightExpiration = hasUpcomingExpiration(
+                    trainer,
+                    expirationThreshold,
+                  );
                   return (
                     <tr
                       key={trainer.trainer_id}
                       role="button"
                       onClick={() => handleOpenDetails(trainer)}
+                      className={shouldHighlightExpiration ? "table-danger" : undefined}
                       style={{ cursor: "pointer" }}
                     >
                       <td className="fw-semibold">{fullName}</td>
