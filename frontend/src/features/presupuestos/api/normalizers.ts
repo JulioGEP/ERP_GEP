@@ -26,6 +26,7 @@ import {
   type SessionPublicLink,
   type SessionStudent,
   type SessionTrainerInviteStatus,
+  type SessionTrainerInviteSummary,
   type TrainerOption,
   type SessionEstado,
   type MobileUnitOption,
@@ -71,6 +72,16 @@ function toSessionTrainerInviteStatus(value: unknown): SessionTrainerInviteStatu
   return normalized === 'NOT_SENT' || normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED'
     ? (normalized as SessionTrainerInviteStatus)
     : 'NOT_SENT';
+}
+
+function normalizeTrainerInviteStatus(
+  raw: unknown,
+): SessionTrainerInviteSummary['status'] {
+  const value = (toStringValue(raw) ?? '').trim().toUpperCase();
+  if (value === 'CONFIRMED' || value === 'DECLINED') {
+    return value;
+  }
+  return 'PENDING';
 }
 
 function buildPersonFullName(person?: {
