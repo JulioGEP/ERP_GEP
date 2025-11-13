@@ -1913,6 +1913,26 @@ export function SessionsAccordionEmpresas({
     setPendingInitialSelection(initialSessionSelection ?? null);
   }, [initialSessionSelection]);
 
+  const sessionQueries = useQueries({
+    queries: applicableProducts.map((product) => {
+      const currentPage = pageByProduct[product.id] ?? 1;
+      return {
+        queryKey: ['dealSessions', dealId, product.id, currentPage, SESSION_LIMIT],
+        queryFn: async () => {
+          const groups = await fetchDealSessions(dealId, {
+            productId: product.id,
+            page: currentPage,
+            limit: SESSION_LIMIT,
+          });
+          return groups[0] ?? null;
+        },
+        enabled: shouldShow && generationDone,
+        staleTime: 0,
+        refetchOnWindowFocus: false,
+      };
+    }),
+  });
+
   useEffect(() => {
     if (!pendingInitialSelection) {
       return;
@@ -2035,26 +2055,6 @@ export function SessionsAccordionEmpresas({
     queryFn: fetchMobileUnitsCatalog,
     enabled: shouldShow,
     staleTime: 5 * 60 * 1000,
-  });
-
-  const sessionQueries = useQueries({
-    queries: applicableProducts.map((product) => {
-      const currentPage = pageByProduct[product.id] ?? 1;
-      return {
-        queryKey: ['dealSessions', dealId, product.id, currentPage, SESSION_LIMIT],
-        queryFn: async () => {
-          const groups = await fetchDealSessions(dealId, {
-            productId: product.id,
-            page: currentPage,
-            limit: SESSION_LIMIT,
-          });
-          return groups[0] ?? null;
-        },
-        enabled: shouldShow && generationDone,
-        staleTime: 0,
-        refetchOnWindowFocus: false,
-      };
-    }),
   });
 
   const formsRef = useRef<Record<string, SessionFormState>>({});
