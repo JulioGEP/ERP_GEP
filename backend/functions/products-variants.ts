@@ -126,53 +126,6 @@ type VariantUnitLink = {
   position: number;
 };
 
-type VariantInviteLink = {
-  trainer_id: string | null;
-  status: string | null;
-  sent_at: Date | string | null;
-  responded_at: Date | string | null;
-};
-
-type TrainerInviteSummaryStatus = 'NOT_SENT' | 'PENDING' | 'CONFIRMED' | 'DECLINED';
-
-function normalizeTrainerInviteStatusValue(value: unknown): TrainerInviteSummaryStatus {
-  if (typeof value !== 'string') {
-    return 'PENDING';
-  }
-  const normalized = value.trim().toUpperCase();
-  if (normalized === 'CONFIRMED' || normalized === 'DECLINED' || normalized === 'PENDING') {
-    return normalized as TrainerInviteSummaryStatus;
-  }
-  return 'PENDING';
-}
-
-function buildTrainerInviteStatusMap(
-  trainerIds: string[],
-  invites: VariantInviteLink[],
-): Record<string, TrainerInviteSummaryStatus> {
-  const map: Record<string, TrainerInviteSummaryStatus> = {};
-  for (const id of trainerIds) {
-    if (!id) continue;
-    map[id] = 'NOT_SENT';
-  }
-  for (const invite of invites) {
-    const trainerId = typeof invite.trainer_id === 'string' ? invite.trainer_id.trim() : '';
-    if (!trainerId.length) continue;
-    const status = normalizeTrainerInviteStatusValue(invite.status);
-    map[trainerId] = status;
-  }
-  return map;
-}
-
-function summarizeTrainerInviteStatus(map: Record<string, TrainerInviteSummaryStatus>): TrainerInviteSummaryStatus {
-  const values = Object.values(map);
-  if (!values.length) return 'NOT_SENT';
-  if (values.includes('DECLINED')) return 'DECLINED';
-  if (values.includes('CONFIRMED')) return 'CONFIRMED';
-  if (values.includes('PENDING')) return 'PENDING';
-  return 'NOT_SENT';
-}
-
 function sanitizeIdArray(value: unknown): string[] | null {
   if (value === null) return [];
   if (value === undefined) return [];
@@ -1080,7 +1033,6 @@ type VariantRecord = {
   products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
   trainer_links?: VariantTrainerLink[];
-  variant_invites?: VariantInviteLink[];
   salas?: { sala_id: string; name: string; sede: string | null } | null;
   unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
   unidad_links?: VariantUnitLink[];
@@ -1159,9 +1111,6 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       unidad_movil_id: true,
       created_at: true,
       updated_at: true,
-      variant_invites: {
-        select: { trainer_id: true, status: true, sent_at: true, responded_at: true },
-      },
     };
 
     if (!includeResources) return base;
@@ -1492,12 +1441,6 @@ function normalizeVariant(record: VariantRecord) {
     ? trainerRecords.find((item) => item.trainer_id === primaryTrainerId) ?? null
     : null;
 
-  const inviteLinks = Array.isArray(record.variant_invites)
-    ? (record.variant_invites as VariantInviteLink[])
-    : [];
-  const inviteStatusMap = buildTrainerInviteStatusMap(uniqueTrainerIds, inviteLinks);
-  const inviteSummaryStatus = summarizeTrainerInviteStatus(inviteStatusMap);
-
   const unitLinks = Array.isArray(record.unidad_links) ? record.unidad_links : [];
   const unitIdsFromLinks = unitLinks
     .map((link) => toTrimmed(link.unidad_id))
@@ -1577,8 +1520,6 @@ function normalizeVariant(record: VariantRecord) {
     unidades: unitRecords,
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
-    trainer_invite_status: inviteSummaryStatus,
-    trainer_invite_statuses: inviteStatusMap,
   } as const;
 }
 
@@ -1859,7 +1800,6 @@ export const handler = createHttpHandler<any>(async (request) => {
         trainers: { select: { trainer_id: true, name: true, apellido: true } },
         salas: { select: { sala_id: true, name: true, sede: true } },
         unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
-        variant_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
         created_at: true,
         updated_at: true,
       },

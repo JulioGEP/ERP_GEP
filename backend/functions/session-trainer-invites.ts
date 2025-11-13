@@ -76,7 +76,6 @@ type TrainerInviteRecord = {
 
 type NormalizedInvite = {
   token: string;
-  type: 'session';
   status: 'PENDING' | 'CONFIRMED' | 'DECLINED';
   sent_at: string | null;
   responded_at: string | null;
@@ -311,7 +310,6 @@ function normalizeInvite(record: TrainerInviteRecord): NormalizedInvite {
 
   return {
     token: record.token,
-    type: 'session',
     status: record.status,
     sent_at: toMadridISOString(record.sent_at ?? record.created_at ?? null),
     responded_at: toMadridISOString(record.responded_at ?? null),
