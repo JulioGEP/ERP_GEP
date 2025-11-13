@@ -219,7 +219,7 @@ export function PublicTrainerSessionInvitePage() {
                     onClick={() => handleRespond('decline')}
                   >
                     {submitting ? <Spinner animation="border" size="sm" role="status" className="me-2" /> : null}
-                    Denegar
+                    Rechazar
                   </Button>
                 </div>
               ) : (

@@ -2612,7 +2612,7 @@ function SessionEditor({
                             <Spinner animation="border" size="sm" className="me-2" role="status" /> Enviando…
                           </>
                         ) : (
-                          'Enviar confirmación a formadores'
+                          'Enviar confirmación'
                         )}
                       </Button>
                       {selectedTrainers.length ? (
