@@ -15,6 +15,11 @@ export type TrainerPayload = {
   titulacion?: string | null;
   activo?: boolean | null;
   sede?: string[] | null;
+  revision_medica_caducidad?: string | null;
+  epis_caducidad?: string | null;
+  dni_caducidad?: string | null;
+  carnet_conducir_caducidad?: string | null;
+  certificado_bombero_caducidad?: string | null;
 };
 
 type TrainerListResponse = {
@@ -102,6 +107,22 @@ function normalizeTrainer(row: any): Trainer {
 
   const createdAt = row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at ?? null;
   const updatedAt = row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at ?? null;
+  const revisionMedicaCaducidad =
+    row.revision_medica_caducidad instanceof Date
+      ? row.revision_medica_caducidad.toISOString()
+      : row.revision_medica_caducidad ?? null;
+  const episCaducidad =
+    row.epis_caducidad instanceof Date ? row.epis_caducidad.toISOString() : row.epis_caducidad ?? null;
+  const dniCaducidad =
+    row.dni_caducidad instanceof Date ? row.dni_caducidad.toISOString() : row.dni_caducidad ?? null;
+  const carnetConducirCaducidad =
+    row.carnet_conducir_caducidad instanceof Date
+      ? row.carnet_conducir_caducidad.toISOString()
+      : row.carnet_conducir_caducidad ?? null;
+  const certificadoBomberoCaducidad =
+    row.certificado_bombero_caducidad instanceof Date
+      ? row.certificado_bombero_caducidad.toISOString()
+      : row.certificado_bombero_caducidad ?? null;
 
   return {
     trainer_id: String(row.trainer_id ?? row.id ?? ""),
@@ -113,6 +134,11 @@ function normalizeTrainer(row: any): Trainer {
     direccion: row.direccion ?? null,
     especialidad: row.especialidad ?? null,
     titulacion: row.titulacion ?? null,
+    revision_medica_caducidad: revisionMedicaCaducidad,
+    epis_caducidad: episCaducidad,
+    dni_caducidad: dniCaducidad,
+    carnet_conducir_caducidad: carnetConducirCaducidad,
+    certificado_bombero_caducidad: certificadoBomberoCaducidad,
     activo: Boolean(row.activo ?? false),
     sede: Array.isArray(row.sede)
       ? row.sede.filter((value: unknown): value is string => typeof value === "string")
@@ -154,6 +180,21 @@ function buildRequestBody(payload: TrainerPayload): Record<string, any> {
   for (const field of fields) {
     if (field in payload) {
       body[field] = toNullableString(payload[field as keyof TrainerPayload]);
+    }
+  }
+
+  const dateFields: Array<keyof TrainerPayload> = [
+    "revision_medica_caducidad",
+    "epis_caducidad",
+    "dni_caducidad",
+    "carnet_conducir_caducidad",
+    "certificado_bombero_caducidad",
+  ];
+
+  for (const field of dateFields) {
+    if (field in payload) {
+      const value = toNullableString(payload[field]);
+      body[field] = value;
     }
   }
 
