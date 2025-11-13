@@ -2,6 +2,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Card, Spinner, Stack, Table } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import { fetchTrainerDashboard } from '../../../api/trainer-dashboard';
 import type { TrainerDashboardResponse } from '../../../api/trainer-dashboard';
 
@@ -71,6 +72,7 @@ function VariantMobileUnit({
 }
 
 export default function TrainerDashboardPage() {
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: QUERY_KEY,
     queryFn: () => fetchTrainerDashboard(),
@@ -78,6 +80,7 @@ export default function TrainerDashboardPage() {
   });
 
   const updatedAt = useMemo(() => formatUpdatedAt(query.data?.generatedAt ?? null), [query.data?.generatedAt]);
+  const pendingConfirmations = query.data?.metrics.pendingConfirmations ?? 0;
 
   return (
     <Stack gap={4} className="trainer-dashboard">
@@ -105,7 +108,18 @@ export default function TrainerDashboardPage() {
           <Card className="shadow-sm border-0">
             <Card.Body className="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-3">
               <div className="flex-grow-1">
-                <span className="text-uppercase text-muted small fw-semibold">Sesiones asignadas</span>
+                <div className="d-flex align-items-center gap-2">
+                  <span className="text-uppercase text-muted small fw-semibold">Sesiones asignadas</span>
+                  <Button
+                    variant={pendingConfirmations ? 'outline-warning' : 'outline-secondary'}
+                    size="sm"
+                    className="text-nowrap"
+                    onClick={() => navigate('/usuarios/trainer/pendientes')}
+                    disabled={!query.data}
+                  >
+                    Pendientes: {query.data ? formatNumber(pendingConfirmations) : '—'}
+                  </Button>
+                </div>
                 <div className="display-6 fw-bold text-primary">{formatNumber(query.data.metrics.totalAssigned)}</div>
                 <div className="text-muted small">
                   Formaciones Empresa: {formatNumber(query.data.metrics.companySessions)} · GEP Services:{' '}

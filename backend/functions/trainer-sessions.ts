@@ -29,7 +29,7 @@ type SessionRecord = {
       email: string | null;
       phone: string | null;
     } | null;
-    } | null;
+  } | null;
   sesion_trainers: Array<{
     trainer_id: string | null;
     trainers: {
@@ -45,6 +45,11 @@ type SessionRecord = {
       name: string | null;
       matricula: string | null;
     } | null;
+  }> | null;
+  trainer_session_invites: Array<{
+    trainer_id: string | null;
+    status: string | null;
+    token: string | null;
   }> | null;
 };
 
@@ -137,7 +142,11 @@ type SessionPayload = {
   isCompanyTraining: boolean;
   isGepServices: boolean;
   companionTrainers: Array<{ trainerId: string; name: string | null; lastName: string | null }>;
+  trainerInviteStatus: TrainerInviteStatus | null;
+  trainerInviteToken: string | null;
 };
+
+type TrainerInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
 
 const PIPELINE_LABELS_COMPANY = [
   'formacion empresa',
@@ -198,6 +207,15 @@ function sanitizeBoolean(value: unknown): boolean | null {
   return null;
 }
 
+function normalizeTrainerInviteStatus(value: unknown): TrainerInviteStatus | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED') {
+    return normalized;
+  }
+  return null;
+}
+
 function sanitizeBigInt(value: unknown): string | null {
   if (typeof value === 'bigint') {
     return value.toString();
@@ -240,6 +258,8 @@ export const handler = createHttpHandler(async (request) => {
   if (!trainer) {
     return successResponse({ dates: [] });
   }
+
+  const trainerId = sanitizeString(trainer.trainer_id) ?? trainer.trainer_id;
 
   const sessions = (await prisma.sesiones.findMany({
     where: {
@@ -290,6 +310,13 @@ export const handler = createHttpHandler(async (request) => {
               matricula: true,
             },
           },
+        },
+      },
+      trainer_session_invites: {
+        select: {
+          trainer_id: true,
+          status: true,
+          token: true,
         },
       },
     },
@@ -376,7 +403,7 @@ export const handler = createHttpHandler(async (request) => {
               const trainerIdRaw =
                 sanitizeString(link?.trainer_id ?? null) ??
                 sanitizeString(link?.trainers?.trainer_id ?? null);
-              if (!trainerIdRaw || trainerIdRaw === trainer.trainer_id) {
+              if (!trainerIdRaw || trainerIdRaw === trainerId) {
                 return null;
               }
               const name = sanitizeString(link?.trainers?.name ?? null);
@@ -389,6 +416,16 @@ export const handler = createHttpHandler(async (request) => {
             })
             .filter((value): value is { trainerId: string; name: string | null; lastName: string | null } => value !== null)
         : [];
+
+      const inviteRecords = Array.isArray(session.trainer_session_invites)
+        ? session.trainer_session_invites
+        : [];
+      const inviteForTrainer = inviteRecords.find((invite) => {
+        const inviteTrainerId = sanitizeString(invite?.trainer_id ?? null);
+        return inviteTrainerId === trainerId;
+      });
+      const trainerInviteStatus = inviteForTrainer ? normalizeTrainerInviteStatus(inviteForTrainer.status) : null;
+      const trainerInviteToken = inviteForTrainer ? sanitizeString(inviteForTrainer.token ?? null) : null;
 
       const contactFirstName = sanitizeString(deal?.persons?.first_name ?? null);
       const contactLastName = sanitizeString(deal?.persons?.last_name ?? null);
@@ -441,6 +478,8 @@ export const handler = createHttpHandler(async (request) => {
           isCompanyTraining,
           isGepServices,
           companionTrainers,
+          trainerInviteStatus,
+          trainerInviteToken,
         },
       };
     })

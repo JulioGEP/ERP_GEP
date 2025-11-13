@@ -10,6 +10,7 @@ type TrainerDashboardMetrics = {
   companySessions: number;
   gepServicesSessions: number;
   openTrainingVariants: number;
+  pendingConfirmations: number;
 };
 
 type TrainerDashboardSession = {
@@ -40,6 +41,7 @@ type SessionRecord = {
     unidad_movil_id: string | null;
     unidades_moviles: { unidad_id: string | null; name: string | null; matricula: string | null } | null;
   }> | null;
+  trainer_session_invites: Array<{ trainer_id: string | null; status: string | null }> | null;
 };
 
 type VariantRecord = {
@@ -103,6 +105,15 @@ function toMaybeString(value: unknown): string | null {
   return null;
 }
 
+function normalizeTrainerInviteStatus(value: unknown): 'PENDING' | 'CONFIRMED' | 'DECLINED' | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED') {
+    return normalized;
+  }
+  return null;
+}
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method !== 'GET') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -132,6 +143,7 @@ export const handler = createHttpHandler(async (request) => {
         companySessions: 0,
         gepServicesSessions: 0,
         openTrainingVariants: 0,
+        pendingConfirmations: 0,
       },
       sessions: [],
       variants: [],
@@ -139,6 +151,8 @@ export const handler = createHttpHandler(async (request) => {
     };
     return successResponse(empty);
   }
+
+  const trainerId = toMaybeString(trainer.trainer_id) ?? trainer.trainer_id;
 
   const pipelineFilter = {
     OR: [...PIPELINE_LABELS_COMPANY, ...PIPELINE_LABELS_GEP].map((label) => ({
@@ -163,9 +177,19 @@ export const handler = createHttpHandler(async (request) => {
           unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
         },
       },
+      trainer_session_invites: { select: { trainer_id: true, status: true } },
     },
     orderBy: [{ fecha_inicio_utc: 'asc' }],
   })) as SessionRecord[];
+
+  const pendingConfirmations = sessions.reduce((total, session) => {
+    const invites = Array.isArray(session.trainer_session_invites)
+      ? session.trainer_session_invites
+      : [];
+    const match = invites.find((invite) => toMaybeString(invite?.trainer_id) === trainerId);
+    const status = match ? normalizeTrainerInviteStatus(match.status) : null;
+    return status === 'PENDING' ? total + 1 : total;
+  }, 0);
 
   const variantPrimaryRecords = (await prisma.variants.findMany({
     where: { trainer_id: trainer.trainer_id },
@@ -311,6 +335,7 @@ export const handler = createHttpHandler(async (request) => {
       companySessions,
       gepServicesSessions,
       openTrainingVariants,
+      pendingConfirmations,
     },
     sessions: sessionRows,
     variants: variantDetails,

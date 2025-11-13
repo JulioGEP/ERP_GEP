@@ -6,6 +6,7 @@ export type TrainerDashboardMetrics = {
   companySessions: number;
   gepServicesSessions: number;
   openTrainingVariants: number;
+  pendingConfirmations: number;
 };
 
 export type TrainerDashboardSession = {
@@ -131,6 +132,7 @@ export async function fetchTrainerDashboard(): Promise<TrainerDashboardResponse>
       companySessions: toNonNegativeInteger(metrics.companySessions),
       gepServicesSessions: toNonNegativeInteger(metrics.gepServicesSessions),
       openTrainingVariants: toNonNegativeInteger(metrics.openTrainingVariants),
+      pendingConfirmations: toNonNegativeInteger(metrics.pendingConfirmations),
     },
     sessions,
     variants,

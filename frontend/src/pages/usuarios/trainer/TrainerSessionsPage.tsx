@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import {
   Accordion,
   Alert,
@@ -118,6 +119,15 @@ function renderBooleanField(field: { value: boolean | null; label: string | null
   if (field.value === true) return 'Sí';
   if (field.value === false) return 'No';
   return '—';
+}
+
+function isSessionConfirmed(session: TrainerSessionDetail): boolean {
+  const status = session.trainerInviteStatus;
+  return status === null || status === 'CONFIRMED';
+}
+
+function isSessionPending(session: TrainerSessionDetail): boolean {
+  return session.trainerInviteStatus === 'PENDING';
 }
 
 function formatTrainerName(trainer: TrainerSessionTrainer): string {
@@ -2956,7 +2966,24 @@ export default function TrainerSessionsPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const dateEntries = sessionsQuery.data?.dates ?? [];
+  const allDateEntries = sessionsQuery.data?.dates ?? [];
+  const dateEntries = useMemo(() => {
+    if (!allDateEntries.length) return [] as TrainerSessionsDateEntry[];
+    return allDateEntries
+      .map((entry) => {
+        const confirmedSessions = entry.sessions.filter(isSessionConfirmed);
+        if (confirmedSessions.length === entry.sessions.length) {
+          return entry;
+        }
+        return { ...entry, sessions: confirmedSessions } satisfies TrainerSessionsDateEntry;
+      })
+      .filter((entry) => entry.sessions.length || entry.variants.length);
+  }, [allDateEntries]);
+
+  const hasPendingSessions = useMemo(
+    () => allDateEntries.some((entry) => entry.sessions.some(isSessionPending)),
+    [allDateEntries],
+  );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
@@ -3074,6 +3101,12 @@ export default function TrainerSessionsPage() {
                 ) : null}
               </Form.Group>
             </Form>
+            {hasPendingSessions ? (
+              <p className="text-muted small mb-0">
+                Tienes sesiones pendientes de confirmar en la sección{' '}
+                <Link to="/usuarios/trainer/pendientes">Pendientes</Link>.
+              </p>
+            ) : null}
           </Stack>
         </Card.Body>
       </Card>
@@ -3097,7 +3130,9 @@ export default function TrainerSessionsPage() {
         <Card className="shadow-sm border-0">
           <Card.Body>
             <p className="text-muted mb-0">
-              No tienes sesiones ni variantes asignadas en el calendario.
+              {hasPendingSessions
+                ? 'No tienes sesiones confirmadas todavía. Revisa la sección Pendientes para aceptar o rechazar tus invitaciones.'
+                : 'No tienes sesiones ni variantes asignadas en el calendario.'}
             </p>
           </Card.Body>
         </Card>
