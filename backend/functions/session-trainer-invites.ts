@@ -40,6 +40,12 @@ type SessionWithRelations = {
     code: string | null;
   } | null;
   sesion_trainers: SessionTrainerLinkRecord[] | null;
+  trainer_session_invites?:
+    | Array<{
+        trainer_id: string | null;
+        status: TrainerInviteStatus | null;
+      }>
+    | null;
 };
 
 type TrainerInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
@@ -106,6 +112,15 @@ const PIPELINE_KEYS_ALLOWED = new Set([
   'formacion empresa',
   'formacion empresas',
 ]);
+
+function normalizeInviteStatus(value: unknown): TrainerInviteStatus | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED') {
+    return normalized as TrainerInviteStatus;
+  }
+  return null;
+}
 
 function normalizePipeline(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -720,6 +735,12 @@ export const handler = createHttpHandler(async (request) => {
             },
           },
         },
+        trainer_session_invites: {
+          select: {
+            trainer_id: true,
+            status: true,
+          },
+        },
       },
     });
 
@@ -737,55 +758,76 @@ export const handler = createHttpHandler(async (request) => {
     }
 
     const { withEmail, withoutEmail } = filterTrainersWithEmail(session);
+
+    const existingInviteStatuses = new Map<string, TrainerInviteStatus>();
+    for (const invite of session.trainer_session_invites ?? []) {
+      const trainerId = typeof invite?.trainer_id === 'string' ? invite.trainer_id.trim() : '';
+      if (!trainerId.length) continue;
+      const status = normalizeInviteStatus(invite?.status ?? null);
+      if (status) {
+        existingInviteStatuses.set(trainerId, status);
+      }
+    }
+
+    const trainersToInvite = withEmail.filter((trainer) => !existingInviteStatuses.has(trainer.trainer_id));
+
     if (!withEmail.length) {
       return errorResponse('NO_TRAINERS', 'No hay formadores con email asignados a la sesión', 400);
     }
 
     const now = new Date();
-    const invites = await prismaTx.$transaction(async (tx: Prisma.TransactionClient) => {
-      const created: Array<{ token: string; trainer: typeof withEmail[number] }> = [];
-      for (const trainer of withEmail) {
-        const token = generateToken();
-        const existing = await tx.trainer_session_invites.findFirst({
-          where: { session_id: session.id, trainer_id: trainer.trainer_id },
-        });
+    const invites = trainersToInvite.length
+      ? await prismaTx.$transaction(async (tx: Prisma.TransactionClient) => {
+          const created: Array<{ token: string; trainer: typeof withEmail[number] }> = [];
+          for (const trainer of trainersToInvite) {
+            const token = generateToken();
+            const existing = await tx.trainer_session_invites.findFirst({
+              where: { session_id: session.id, trainer_id: trainer.trainer_id },
+            });
 
-        let inviteToken = token;
-        if (existing) {
-          const updated = await tx.trainer_session_invites.update({
-            where: { id: existing.id },
-            data: {
-              token,
-              status: 'PENDING',
-              sent_at: now,
-              responded_at: null,
-              created_by_user_id: auth.user.id,
-              created_by_email: auth.user.email,
-              created_by_name: `${auth.user.first_name} ${auth.user.last_name}`.trim(),
-              trainer_email: trainer.email,
-            },
-          });
-          inviteToken = updated.token;
-        } else {
-          const createdInvite = await tx.trainer_session_invites.create({
-            data: {
-              session_id: session.id,
-              trainer_id: trainer.trainer_id,
-              token,
-              status: 'PENDING',
-              sent_at: now,
-              created_by_user_id: auth.user.id,
-              created_by_email: auth.user.email,
-              created_by_name: `${auth.user.first_name} ${auth.user.last_name}`.trim(),
-              trainer_email: trainer.email,
-            },
-          });
-          inviteToken = createdInvite.token;
-        }
-        created.push({ token: inviteToken, trainer });
-      }
-      return created;
-    });
+            const existingStatus = normalizeInviteStatus(existing?.status ?? null);
+
+            if (existing && existingStatus) {
+              continue;
+            }
+
+            let inviteToken = token;
+            if (existing) {
+              const updated = await tx.trainer_session_invites.update({
+                where: { id: existing.id },
+                data: {
+                  token,
+                  status: 'PENDING',
+                  sent_at: now,
+                  responded_at: null,
+                  created_by_user_id: auth.user.id,
+                  created_by_email: auth.user.email,
+                  created_by_name: `${auth.user.first_name} ${auth.user.last_name}`.trim(),
+                  trainer_email: trainer.email,
+                },
+              });
+              inviteToken = updated.token;
+            } else {
+              const createdInvite = await tx.trainer_session_invites.create({
+                data: {
+                  session_id: session.id,
+                  trainer_id: trainer.trainer_id,
+                  token,
+                  status: 'PENDING',
+                  sent_at: now,
+                  created_by_user_id: auth.user.id,
+                  created_by_email: auth.user.email,
+                  created_by_name: `${auth.user.first_name} ${auth.user.last_name}`.trim(),
+                  trainer_email: trainer.email,
+                },
+              });
+              inviteToken = createdInvite.token;
+            }
+            created.push({ token: inviteToken, trainer });
+          }
+          return created;
+        })
+      : [];
 
     const baseUrl = buildBaseUrl(request);
     const sessionPayload = buildSessionPayload(session);
