@@ -3004,6 +3004,13 @@ export default function TrainerSessionsPage() {
     setSelectedDate(value ? value : null);
   }, []);
 
+  const handleRefreshClick = useCallback(() => {
+    void sessionsQuery.refetch();
+  }, [sessionsQuery.refetch]);
+
+  const isFetchingSessions = sessionsQuery.isFetching;
+  const isLoadingSessions = sessionsQuery.isLoading;
+
   const selectedEntry = useMemo(() => {
     if (!selectedDate) return null;
     return dateEntries.find((entry) => entry.date === selectedDate) ?? null;
@@ -3036,61 +3043,91 @@ export default function TrainerSessionsPage() {
                   Selecciona una fecha
                 </Form.Label>
                 <Col sm={12} md={6} lg={5}>
-                  <Form.Select value={selectedDate ?? ''} onChange={handleDateChange} disabled={!dateEntries.length}>
-                    <option value="" disabled>
-                      {sessionsQuery.isLoading ? 'Cargando fechas…' : 'Selecciona una fecha con asignaciones'}
-                    </option>
-                    {dateEntries.map((entry) => {
-                      const label = formatDateLabel(entry.date);
-                      const suffixParts = [] as string[];
+                  <div className="d-flex flex-column flex-md-row gap-2">
+                    <Form.Select
+                      value={selectedDate ?? ''}
+                      onChange={handleDateChange}
+                      disabled={!dateEntries.length}
+                      className="flex-grow-1"
+                    >
+                      <option value="" disabled>
+                        {sessionsQuery.isLoading ? 'Cargando fechas…' : 'Selecciona una fecha con asignaciones'}
+                      </option>
+                      {dateEntries.map((entry) => {
+                        const label = formatDateLabel(entry.date);
+                        const suffixParts = [] as string[];
 
-                      const sessionCounts = entry.sessions.reduce(
-                        (acc, session) => {
-                          if (session.isCompanyTraining) {
-                            acc.company += 1;
-                          } else if (session.isGepServices) {
-                            acc.services += 1;
-                          } else {
-                            acc.other += 1;
-                          }
-                          return acc;
-                        },
-                        { company: 0, services: 0, other: 0 },
-                      );
-
-                      if (sessionCounts.company) {
-                        suffixParts.push(
-                          `${sessionCounts.company} sesión${sessionCounts.company === 1 ? '' : 'es'} F.Empresa`,
+                        const sessionCounts = entry.sessions.reduce(
+                          (acc, session) => {
+                            if (session.isCompanyTraining) {
+                              acc.company += 1;
+                            } else if (session.isGepServices) {
+                              acc.services += 1;
+                            } else {
+                              acc.other += 1;
+                            }
+                            return acc;
+                          },
+                          { company: 0, services: 0, other: 0 },
                         );
-                      }
 
-                      if (sessionCounts.services) {
-                        suffixParts.push(
-                          `${sessionCounts.services} sesión${sessionCounts.services === 1 ? '' : 'es'} Services`,
-                        );
-                      }
+                        if (sessionCounts.company) {
+                          suffixParts.push(
+                            `${sessionCounts.company} sesión${sessionCounts.company === 1 ? '' : 'es'} F.Empresa`,
+                          );
+                        }
 
-                      if (sessionCounts.other) {
-                        suffixParts.push(
-                          `${sessionCounts.other} sesión${sessionCounts.other === 1 ? '' : 'es'}`,
-                        );
-                      }
+                        if (sessionCounts.services) {
+                          suffixParts.push(
+                            `${sessionCounts.services} sesión${sessionCounts.services === 1 ? '' : 'es'} Services`,
+                          );
+                        }
 
-                      const variantCountEntry = entry.variants.length;
-                      if (variantCountEntry) {
-                        suffixParts.push(
-                          `${variantCountEntry} sesión${variantCountEntry === 1 ? '' : 'es'} F. Abierta`,
+                        if (sessionCounts.other) {
+                          suffixParts.push(
+                            `${sessionCounts.other} sesión${sessionCounts.other === 1 ? '' : 'es'}`,
+                          );
+                        }
+
+                        const variantCountEntry = entry.variants.length;
+                        if (variantCountEntry) {
+                          suffixParts.push(
+                            `${variantCountEntry} sesión${variantCountEntry === 1 ? '' : 'es'} F. Abierta`,
+                          );
+                        }
+                        const suffix = suffixParts.length ? ` · ${suffixParts.join(' · ')}` : '';
+                        return (
+                          <option key={entry.date} value={entry.date}>
+                            {label}
+                            {suffix}
+                          </option>
                         );
-                      }
-                      const suffix = suffixParts.length ? ` · ${suffixParts.join(' · ')}` : '';
-                      return (
-                        <option key={entry.date} value={entry.date}>
-                          {label}
-                          {suffix}
-                        </option>
-                      );
-                    })}
-                  </Form.Select>
+                      })}
+                    </Form.Select>
+                    <Button
+                      type="button"
+                      variant="outline-primary"
+                      onClick={handleRefreshClick}
+                      disabled={isFetchingSessions}
+                      className="flex-shrink-0 w-100 w-md-auto"
+                    >
+                      {isFetchingSessions ? (
+                        <>
+                          <Spinner
+                            as="span"
+                            animation="border"
+                            size="sm"
+                            role="status"
+                            aria-hidden="true"
+                            className="me-2"
+                          />
+                          {isLoadingSessions ? 'Cargando…' : 'Actualizando…'}
+                        </>
+                      ) : (
+                        'Actualizar'
+                      )}
+                    </Button>
+                  </div>
                 </Col>
                 {selectedEntry ? (
                   <Col sm={12} md={3} className="text-md-start text-muted small">
