@@ -35,7 +35,6 @@ import {
 } from '../presupuestos/api';
 import {
   setTrainerInviteStatusForIds,
-  summarizeTrainerInviteStatus,
   syncTrainerInviteStatusMap,
   type TrainerInviteStatusMap,
 } from '../presupuestos/shared/trainerInviteStatus';
@@ -788,7 +787,6 @@ export function VariantModal({
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDealSummary, setSelectedDealSummary] = useState<DealSummary | null>(null);
   const [trainerInviteStatusMap, setTrainerInviteStatusMap] = useState<TrainerInviteStatusMap>({});
-  const [trainerInviteSummary, setTrainerInviteSummary] = useState<SessionTrainerInviteStatus>('NOT_SENT');
   const [inviteState, setInviteState] = useState<{ sending: boolean; message: string | null; error: string | null }>({
     sending: false,
     message: null,
@@ -1076,7 +1074,6 @@ export function VariantModal({
       setSelectedDealId(null);
       setSelectedDealSummary(null);
       setTrainerInviteStatusMap({});
-      setTrainerInviteSummary('NOT_SENT');
       setInviteState({ sending: false, message: null, error: null });
       return;
     }
@@ -1093,7 +1090,6 @@ export function VariantModal({
       nextValues.trainer_ids,
     );
     setTrainerInviteStatusMap(initialInviteMap);
-    setTrainerInviteSummary(summarizeTrainerInviteStatus(initialInviteMap));
     setInviteState({ sending: false, message: null, error: null });
   }, [variant]);
 
@@ -1107,11 +1103,7 @@ export function VariantModal({
   }, [variant]);
 
   useEffect(() => {
-    setTrainerInviteStatusMap((current) => {
-      const next = syncTrainerInviteStatusMap(current, formValues.trainer_ids);
-      setTrainerInviteSummary(summarizeTrainerInviteStatus(next));
-      return next;
-    });
+    setTrainerInviteStatusMap((current) => syncTrainerInviteStatusMap(current, formValues.trainer_ids));
   }, [formValues.trainer_ids]);
 
   useEffect(() => {
@@ -1357,9 +1349,7 @@ export function VariantModal({
 
       setTrainerInviteStatusMap((current) => {
         const base = syncTrainerInviteStatusMap(current, formValues.trainer_ids);
-        const next = sentTrainerIds.length ? setTrainerInviteStatusForIds(base, sentTrainerIds, 'PENDING') : base;
-        setTrainerInviteSummary(summarizeTrainerInviteStatus(next));
-        return next;
+        return sentTrainerIds.length ? setTrainerInviteStatusForIds(base, sentTrainerIds, 'PENDING') : base;
       });
 
       const messages: string[] = [];
@@ -1775,7 +1765,6 @@ export function VariantModal({
         nextValues.trainer_ids,
       );
       setTrainerInviteStatusMap(updatedInviteMap);
-      setTrainerInviteSummary(summarizeTrainerInviteStatus(updatedInviteMap));
       setInviteState({ sending: false, message: null, error: null });
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
 
@@ -1988,9 +1977,6 @@ export function VariantModal({
                               'Enviar confirmación'
                             )}
                           </Button>
-                          <Badge bg={TRAINER_INVITE_STATUS_BADGES[trainerInviteSummary].variant}>
-                            {TRAINER_INVITE_STATUS_BADGES[trainerInviteSummary].label}
-                          </Badge>
                         </div>
                         <div className="d-flex flex-column gap-1 small">
                           {formValues.trainer_ids.map((trainerId) => {
