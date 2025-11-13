@@ -1,4 +1,4 @@
-import { ChangeEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState, useId } from 'react';
+import { ChangeEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Accordion,
@@ -30,15 +30,6 @@ import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailMo
 import type { DealSummary } from '../../types/deal';
 import { emitToast } from '../../utils/toast';
 import {
-  sendVariantTrainerInvites,
-  type SessionTrainerInviteStatus,
-} from '../presupuestos/api';
-import {
-  setTrainerInviteStatusForIds,
-  syncTrainerInviteStatusMap,
-  type TrainerInviteStatusMap,
-} from '../presupuestos/shared/trainerInviteStatus';
-import {
   createProductVariantsForProduct,
   deleteProductVariant,
   fetchDealsByVariation,
@@ -68,13 +59,6 @@ const STOCK_STATUS_SUMMARY_LABELS: Record<string, string> = {
   instock: 'En stock',
   outofstock: 'Sin stock',
   onbackorder: 'Reservar por adelantado',
-};
-
-const TRAINER_INVITE_STATUS_BADGES: Record<SessionTrainerInviteStatus, { label: string; variant: string }> = {
-  NOT_SENT: { label: 'Sin enviar mail', variant: 'warning' },
-  PENDING: { label: 'Mail enviado', variant: 'info' },
-  CONFIRMED: { label: 'Aceptada', variant: 'success' },
-  DECLINED: { label: 'Rechazada', variant: 'danger' },
 };
 
 function formatDate(value: string | null) {
@@ -786,12 +770,6 @@ export function VariantModal({
   const [isDealStudentsLoading, setIsDealStudentsLoading] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDealSummary, setSelectedDealSummary] = useState<DealSummary | null>(null);
-  const [trainerInviteStatusMap, setTrainerInviteStatusMap] = useState<TrainerInviteStatusMap>({});
-  const [inviteState, setInviteState] = useState<{ sending: boolean; message: string | null; error: string | null }>({
-    sending: false,
-    message: null,
-    error: null,
-  });
   const totalDealStudents = useMemo(
     () => {
       if (!deals.length) {
@@ -1034,8 +1012,6 @@ export function VariantModal({
   const trainerPointerInteractingRef = useRef(false);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const unitPointerInteractingRef = useRef(false);
-  const trainerOptionsId = useId();
-  const unitOptionsId = useId();
   const [trainerListOpen, setTrainerListOpen] = useState(false);
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitListOpen, setUnitListOpen] = useState(false);
@@ -1075,8 +1051,6 @@ export function VariantModal({
       setIsDealStudentsLoading(false);
       setSelectedDealId(null);
       setSelectedDealSummary(null);
-      setTrainerInviteStatusMap({});
-      setInviteState({ sending: false, message: null, error: null });
       return;
     }
 
@@ -1084,15 +1058,9 @@ export function VariantModal({
     setFormValues(nextValues);
     setInitialValues(nextValues);
     setSaveError(null);
-    setSaveSuccess(null);
-    setSelectedDealId(null);
-    setSelectedDealSummary(null);
-    const initialInviteMap = syncTrainerInviteStatusMap(
-      variant.trainer_invite_statuses as unknown as TrainerInviteStatusMap,
-      nextValues.trainer_ids,
-    );
-    setTrainerInviteStatusMap(initialInviteMap);
-    setInviteState({ sending: false, message: null, error: null });
+      setSaveSuccess(null);
+      setSelectedDealId(null);
+      setSelectedDealSummary(null);
   }, [variant]);
 
   useEffect(() => {
@@ -1103,10 +1071,6 @@ export function VariantModal({
     setUnitFilter('');
     unitPointerInteractingRef.current = false;
   }, [variant]);
-
-  useEffect(() => {
-    setTrainerInviteStatusMap((current) => syncTrainerInviteStatusMap(current, formValues.trainer_ids));
-  }, [formValues.trainer_ids]);
 
   useEffect(() => {
     let ignore = false;
@@ -1335,54 +1299,6 @@ export function VariantModal({
     setSelectedDealSummary(null);
   };
 
-  const handleSendInvites = async () => {
-    if (!variant) {
-      return;
-    }
-    setInviteState({ sending: true, message: null, error: null });
-    try {
-      const result = await sendVariantTrainerInvites(variant.id);
-      const sentTrainerIds = result.invites
-        .filter((invite) => invite.status === 'SENT')
-        .map((invite) => invite.trainerId)
-        .filter((id): id is string => Boolean(id));
-      const failedCount = result.invites.filter((invite) => invite.status === 'FAILED').length;
-      const skippedCount = result.skippedTrainers.length;
-
-      setTrainerInviteStatusMap((current) => {
-        const base = syncTrainerInviteStatusMap(current, formValues.trainer_ids);
-        return sentTrainerIds.length ? setTrainerInviteStatusForIds(base, sentTrainerIds, 'PENDING') : base;
-      });
-
-      const messages: string[] = [];
-      if (sentTrainerIds.length) {
-        messages.push(
-          sentTrainerIds.length === 1 ? 'Se envió 1 invitación.' : `Se enviaron ${sentTrainerIds.length} invitaciones.`,
-        );
-      }
-      if (failedCount) {
-        messages.push(failedCount === 1 ? '1 invitación falló.' : `${failedCount} invitaciones fallaron.`);
-      }
-      if (skippedCount) {
-        messages.push(skippedCount === 1 ? '1 formador sin email.' : `${skippedCount} formadores sin email.`);
-      }
-
-      setInviteState({
-        sending: false,
-        message: messages.length ? messages.join(' ') : 'No se enviaron invitaciones.',
-        error: null,
-      });
-    } catch (error) {
-      const message =
-        error instanceof ApiError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : 'No se pudieron enviar las invitaciones.';
-      setInviteState({ sending: false, message: null, error: message });
-    }
-  };
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -1494,8 +1410,6 @@ export function VariantModal({
 
     return map;
   }, [units, variant]);
-
-  const hasAssignedTrainers = formValues.trainer_ids.length > 0;
 
   const selectedTrainers = useMemo(() => {
     if (!formValues.trainer_ids.length) {
@@ -1762,12 +1676,6 @@ export function VariantModal({
       const nextValues = variantToFormValues(enhancedVariant);
       setFormValues(nextValues);
       setInitialValues(nextValues);
-      const updatedInviteMap = syncTrainerInviteStatusMap(
-        enhancedVariant.trainer_invite_statuses as unknown as TrainerInviteStatusMap,
-        nextValues.trainer_ids,
-      );
-      setTrainerInviteStatusMap(updatedInviteMap);
-      setInviteState({ sending: false, message: null, error: null });
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
 
       if (closeAfter) {
@@ -1882,7 +1790,7 @@ export function VariantModal({
                         placeholder="Selecciona formadores"
                         value={trainerSummaryDisplay}
                         aria-expanded={trainerListOpen}
-                        aria-controls={trainerOptionsId}
+                        aria-controls="variant-trainer-options"
                         className="session-multiselect-summary"
                         disabled={isSaving || trainersLoading || availabilityLoading}
                         onMouseDown={() => {
@@ -1914,7 +1822,7 @@ export function VariantModal({
                         title={trainerSummaryDisplay || 'Sin formadores'}
                       />
                       <Collapse in={trainerListOpen && !isSaving && !trainersLoading && !availabilityLoading}>
-                        <div id={trainerOptionsId} className="session-multiselect-panel mt-2">
+                        <div id="variant-trainer-options" className="session-multiselect-panel mt-2">
                           <Form.Control
                             type="search"
                             placeholder="Buscar"
@@ -1961,50 +1869,6 @@ export function VariantModal({
                       </Collapse>
                     </div>
                   </Form.Group>
-                  <div className="mt-2">
-                    {hasAssignedTrainers ? (
-                      <div className="d-flex flex-column gap-2">
-                        <div className="d-flex flex-wrap align-items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline-primary"
-                            disabled={inviteState.sending || !variant}
-                            onClick={handleSendInvites}
-                          >
-                            {inviteState.sending ? (
-                              <>
-                                <Spinner animation="border" size="sm" className="me-2" role="status" /> Enviando…
-                              </>
-                            ) : (
-                              'Enviar confirmación'
-                            )}
-                          </Button>
-                        </div>
-                        <div className="d-flex flex-column gap-1 small">
-                          {formValues.trainer_ids.map((trainerId) => {
-                            const trainerInfo = trainerLookup.get(trainerId);
-                            const trainerLabel = trainerInfo
-                              ? `${trainerInfo.name ?? ''}${trainerInfo.apellido ? ` ${trainerInfo.apellido}` : ''}`.trim() ||
-                                trainerId
-                              : trainerId;
-                            const status = trainerInviteStatusMap[trainerId] ?? 'NOT_SENT';
-                            const badge = TRAINER_INVITE_STATUS_BADGES[status];
-                            return (
-                              <div key={trainerId} className="d-flex align-items-center gap-2">
-                                <span>{trainerLabel}</span>
-                                <Badge bg={badge.variant}>{badge.label}</Badge>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {inviteState.error ? (
-                          <div className="text-danger small">{inviteState.error}</div>
-                        ) : inviteState.message ? (
-                          <div className="text-muted small">{inviteState.message}</div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
                 </Col>
                 <Col md={4}>
                   <Form.Group controlId="variantRoom" className="mb-0">
@@ -2046,7 +1910,7 @@ export function VariantModal({
                         placeholder="Selecciona unidades móviles"
                         value={unitSummaryDisplay}
                         aria-expanded={unitListOpen}
-                        aria-controls={unitOptionsId}
+                        aria-controls="variant-unit-options"
                         className="session-multiselect-summary"
                         disabled={isSaving || unitsLoading || availabilityLoading}
                         onMouseDown={() => {
@@ -2078,7 +1942,7 @@ export function VariantModal({
                         title={unitSummaryDisplay || 'Sin unidades móviles'}
                       />
                       <Collapse in={unitListOpen && !isSaving && !unitsLoading && !availabilityLoading}>
-                        <div id={unitOptionsId} className="session-multiselect-panel mt-2">
+                        <div id="variant-unit-options" className="session-multiselect-panel mt-2">
                           <Form.Control
                             type="search"
                             placeholder="Buscar"

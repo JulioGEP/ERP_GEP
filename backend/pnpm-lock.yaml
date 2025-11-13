@@ -29,9 +29,6 @@ importers:
       nodemailer:
         specifier: ^6.10.1
         version: 6.10.1
-      punycode:
-        specifier: ^2.3.1
-        version: 2.3.1
       uuid:
         specifier: ^9.0.1
         version: 9.0.1
@@ -4432,7 +4429,3 @@ snapshots:
       readable-stream: 4.7.0
 
   zod@3.25.76: {}
-
-  punycode@2.3.1:
-    resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
-    engines: {node: '>=6'}
