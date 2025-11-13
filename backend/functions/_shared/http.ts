@@ -1,3 +1,5 @@
+import './bootstrap';
+
 import type { HandlerEvent, HandlerContext } from '@netlify/functions';
 
 import {

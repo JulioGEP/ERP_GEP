@@ -1,4 +1,4 @@
-import { ChangeEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState, useId } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Accordion,
@@ -1034,6 +1034,8 @@ export function VariantModal({
   const trainerPointerInteractingRef = useRef(false);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const unitPointerInteractingRef = useRef(false);
+  const trainerOptionsId = useId();
+  const unitOptionsId = useId();
   const [trainerListOpen, setTrainerListOpen] = useState(false);
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitListOpen, setUnitListOpen] = useState(false);
@@ -1880,7 +1882,7 @@ export function VariantModal({
                         placeholder="Selecciona formadores"
                         value={trainerSummaryDisplay}
                         aria-expanded={trainerListOpen}
-                        aria-controls="variant-trainer-options"
+                        aria-controls={trainerOptionsId}
                         className="session-multiselect-summary"
                         disabled={isSaving || trainersLoading || availabilityLoading}
                         onMouseDown={() => {
@@ -1912,7 +1914,7 @@ export function VariantModal({
                         title={trainerSummaryDisplay || 'Sin formadores'}
                       />
                       <Collapse in={trainerListOpen && !isSaving && !trainersLoading && !availabilityLoading}>
-                        <div id="variant-trainer-options" className="session-multiselect-panel mt-2">
+                        <div id={trainerOptionsId} className="session-multiselect-panel mt-2">
                           <Form.Control
                             type="search"
                             placeholder="Buscar"
@@ -2044,7 +2046,7 @@ export function VariantModal({
                         placeholder="Selecciona unidades móviles"
                         value={unitSummaryDisplay}
                         aria-expanded={unitListOpen}
-                        aria-controls="variant-unit-options"
+                        aria-controls={unitOptionsId}
                         className="session-multiselect-summary"
                         disabled={isSaving || unitsLoading || availabilityLoading}
                         onMouseDown={() => {
@@ -2076,7 +2078,7 @@ export function VariantModal({
                         title={unitSummaryDisplay || 'Sin unidades móviles'}
                       />
                       <Collapse in={unitListOpen && !isSaving && !unitsLoading && !availabilityLoading}>
-                        <div id="variant-unit-options" className="session-multiselect-panel mt-2">
+                        <div id={unitOptionsId} className="session-multiselect-panel mt-2">
                           <Form.Control
                             type="search"
                             placeholder="Buscar"
