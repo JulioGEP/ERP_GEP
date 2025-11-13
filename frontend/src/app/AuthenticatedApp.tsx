@@ -502,6 +502,7 @@ export default function AuthenticatedApp() {
     if (normalizedRole === 'formador') {
       items.unshift(
         { key: 'Trainer/Dashboard', label: 'Mi panel', path: '/usuarios/trainer/dashboard' },
+        { key: 'Trainer/PendingSessions', label: 'Pendientes', path: '/usuarios/trainer/pendientes' },
         { key: 'Trainer/Sessions', label: 'Mis sesiones', path: '/usuarios/trainer/sesiones' },
         {
           key: 'Trainer/Reports',
