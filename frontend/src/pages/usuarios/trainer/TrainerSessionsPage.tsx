@@ -123,7 +123,7 @@ function renderBooleanField(field: { value: boolean | null; label: string | null
 
 function isSessionConfirmed(session: TrainerSessionDetail): boolean {
   const status = session.trainerInviteStatus;
-  return status === null || status === 'CONFIRMED';
+  return status === 'CONFIRMED';
 }
 
 function isSessionPending(session: TrainerSessionDetail): boolean {
