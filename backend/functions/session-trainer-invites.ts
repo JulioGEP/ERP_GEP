@@ -111,6 +111,7 @@ const PIPELINE_KEYS_ALLOWED = new Set([
   'gep services',
   'formacion empresa',
   'formacion empresas',
+  'formacion abierta',
 ]);
 
 function normalizeInviteStatus(value: unknown): TrainerInviteStatus | null {
