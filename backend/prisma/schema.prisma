@@ -388,6 +388,11 @@ model trainers {
   direccion       String?
   especialidad    String?
   titulacion      String?
+  revision_medica_caducidad     DateTime? @db.Date
+  epis_caducidad                DateTime? @db.Date
+  dni_caducidad                 DateTime? @db.Date
+  carnet_conducir_caducidad     DateTime? @db.Date
+  certificado_bombero_caducidad DateTime? @db.Date
   sede            String[]          @default([])
 
   // FK a users para relación 1:1 (la PK de users es id UUID)

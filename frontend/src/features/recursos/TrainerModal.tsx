@@ -11,6 +11,30 @@ import {
 } from "./trainers.constants";
 import { uploadTrainerDocument } from "./api";
 import { blobOrFileToBase64 } from "../../utils/base64";
+import { formatDateForInput, isDateNearExpiry } from "./trainerDates";
+
+type DateFieldKey =
+  | "revision_medica_caducidad"
+  | "epis_caducidad"
+  | "dni_caducidad"
+  | "carnet_conducir_caducidad"
+  | "certificado_bombero_caducidad";
+
+const DATE_FIELD_CONFIG: Array<{ key: DateFieldKey; label: string; controlId: string }> = [
+  { key: "revision_medica_caducidad", label: "Revisión médica (caducidad)", controlId: "trainerRevisionMedicaCaducidad" },
+  { key: "epis_caducidad", label: "Caducidad EPIs", controlId: "trainerEpisCaducidad" },
+  { key: "dni_caducidad", label: "Caducidad DNI", controlId: "trainerDniCaducidad" },
+  {
+    key: "carnet_conducir_caducidad",
+    label: "Caducidad carnet de conducir",
+    controlId: "trainerCarnetConducirCaducidad",
+  },
+  {
+    key: "certificado_bombero_caducidad",
+    label: "Caducidad certificado bombero",
+    controlId: "trainerCertificadoBomberoCaducidad",
+  },
+];
 
 export type TrainerFormValues = {
   name: string;
@@ -23,6 +47,11 @@ export type TrainerFormValues = {
   titulacion: string;
   activo: boolean;
   sede: string[];
+  revision_medica_caducidad: string;
+  epis_caducidad: string;
+  dni_caducidad: string;
+  carnet_conducir_caducidad: string;
+  certificado_bombero_caducidad: string;
 };
 
 type TrainerModalProps = {
@@ -46,6 +75,11 @@ const EMPTY_FORM: TrainerFormValues = {
   titulacion: "",
   activo: true,
   sede: [],
+  revision_medica_caducidad: "",
+  epis_caducidad: "",
+  dni_caducidad: "",
+  carnet_conducir_caducidad: "",
+  certificado_bombero_caducidad: "",
 };
 
 function trainerToFormValues(trainer?: Trainer | null): TrainerFormValues {
@@ -62,6 +96,11 @@ function trainerToFormValues(trainer?: Trainer | null): TrainerFormValues {
     titulacion: trainer.titulacion ?? "",
     activo: trainer.activo ?? false,
     sede: Array.isArray(trainer.sede) ? trainer.sede : [],
+    revision_medica_caducidad: formatDateForInput(trainer.revision_medica_caducidad),
+    epis_caducidad: formatDateForInput(trainer.epis_caducidad),
+    dni_caducidad: formatDateForInput(trainer.dni_caducidad),
+    carnet_conducir_caducidad: formatDateForInput(trainer.carnet_conducir_caducidad),
+    certificado_bombero_caducidad: formatDateForInput(trainer.certificado_bombero_caducidad),
   };
 }
 
@@ -427,6 +466,23 @@ export function TrainerModal({
                 />
               </Form.Group>
             </Col>
+            {DATE_FIELD_CONFIG.map(({ key, label, controlId }) => {
+              const value = formValues[key];
+              return (
+                <Col md={6} key={key}>
+                  <Form.Group controlId={controlId}>
+                    <Form.Label>{label}</Form.Label>
+                    <Form.Control
+                      type="date"
+                      value={value}
+                      onChange={handleChange(key)}
+                      disabled={isSaving}
+                      className={isDateNearExpiry(value) ? "text-danger" : undefined}
+                    />
+                  </Form.Group>
+                </Col>
+              );
+            })}
             {mode === "edit" && (
               <Col md={12}>
                 <div className="border-top pt-3 mt-1">

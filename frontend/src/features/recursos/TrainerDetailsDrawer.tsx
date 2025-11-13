@@ -8,6 +8,7 @@ import {
 } from "./trainers.constants";
 import { deleteTrainerDocument, fetchTrainerDocuments } from "./api";
 import { ApiError } from "../../api/client";
+import { formatDateForDisplay, isDateNearExpiry } from "./trainerDates";
 
 type TrainerDetailsDrawerProps = {
   trainer: Trainer | null;
@@ -123,6 +124,16 @@ export function TrainerDetailsDrawer({
     deleteMutation.mutate(document);
   };
 
+  const trainerExpiryDates: Array<{ label: string; value: string | null }> = trainer
+    ? [
+        { label: "Revisión médica", value: trainer.revision_medica_caducidad },
+        { label: "Caducidad EPIs", value: trainer.epis_caducidad },
+        { label: "Caducidad DNI", value: trainer.dni_caducidad },
+        { label: "Caducidad carnet de conducir", value: trainer.carnet_conducir_caducidad },
+        { label: "Caducidad certificado bombero", value: trainer.certificado_bombero_caducidad },
+      ]
+    : [];
+
   return (
     <Offcanvas
       show={show}
@@ -151,6 +162,14 @@ export function TrainerDetailsDrawer({
                   <span>Email: {trainer.email ?? "—"}</span>
                   <span>Teléfono: {trainer.phone ?? "—"}</span>
                   <span>DNI: {trainer.dni ?? "—"}</span>
+                  {trainerExpiryDates.map(({ label, value }) => {
+                    const isExpiring = isDateNearExpiry(value);
+                    return (
+                      <span key={label} className={isExpiring ? "text-danger fw-semibold" : undefined}>
+                        {label}: {formatDateForDisplay(value)}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
               <Button variant="outline-primary" size="sm" onClick={handleEditClick}>

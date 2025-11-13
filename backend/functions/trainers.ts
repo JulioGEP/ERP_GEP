@@ -17,6 +17,14 @@ const OPTIONAL_STRING_FIELDS = [
   'titulacion',
 ] as const;
 
+const OPTIONAL_DATE_FIELDS = [
+  'revision_medica_caducidad',
+  'epis_caducidad',
+  'dni_caducidad',
+  'carnet_conducir_caducidad',
+  'certificado_bombero_caducidad',
+] as const;
+
 const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
 
 type TrainerRecord = {
@@ -29,6 +37,11 @@ type TrainerRecord = {
   direccion: string | null;
   especialidad: string | null;
   titulacion: string | null;
+  revision_medica_caducidad: Date | string | null;
+  epis_caducidad: Date | string | null;
+  dni_caducidad: Date | string | null;
+  carnet_conducir_caducidad: Date | string | null;
+  certificado_bombero_caducidad: Date | string | null;
   activo: boolean;
   sede?: string[] | null;
   created_at: Date | string | null;
@@ -65,6 +78,11 @@ function normalizeTrainer(row: TrainerRecord) {
     direccion: row.direccion,
     especialidad: row.especialidad,
     titulacion: row.titulacion,
+    revision_medica_caducidad: toMadridISOString(row.revision_medica_caducidad),
+    epis_caducidad: toMadridISOString(row.epis_caducidad),
+    dni_caducidad: toMadridISOString(row.dni_caducidad),
+    carnet_conducir_caducidad: toMadridISOString(row.carnet_conducir_caducidad),
+    certificado_bombero_caducidad: toMadridISOString(row.certificado_bombero_caducidad),
     activo: Boolean(row.activo),
     sede: normalizedSede,
     created_at: toMadridISOString(row.created_at),
@@ -116,6 +134,93 @@ function parseSedeInput(input: unknown): ParseSedeResult {
   return { values };
 }
 
+type ParseDateResult =
+  | { value: Date | null }
+  | { error: ReturnType<typeof errorResponse> };
+
+function parseDateField(
+  fieldName: (typeof OPTIONAL_DATE_FIELDS)[number],
+  input: unknown,
+): ParseDateResult {
+  if (input === undefined) {
+    return { value: null };
+  }
+
+  if (input === null) {
+    return { value: null };
+  }
+
+  if (input instanceof Date) {
+    if (Number.isNaN(input.getTime())) {
+      return {
+        error: errorResponse(
+          'VALIDATION_ERROR',
+          `El campo ${fieldName} debe ser una fecha válida`,
+          400,
+        ),
+      };
+    }
+    return { value: input };
+  }
+
+  const toDate = (value: string | number): ParseDateResult => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed.length) {
+        return { value: null };
+      }
+      const normalized = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+        ? `${trimmed}T00:00:00.000Z`
+        : trimmed;
+      const date = new Date(normalized);
+      if (Number.isNaN(date.getTime())) {
+        return {
+          error: errorResponse(
+            'VALIDATION_ERROR',
+            `El campo ${fieldName} debe ser una fecha válida`,
+            400,
+          ),
+        };
+      }
+      return { value: date };
+    }
+
+    if (typeof value === 'number') {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return {
+          error: errorResponse(
+            'VALIDATION_ERROR',
+            `El campo ${fieldName} debe ser una fecha válida`,
+            400,
+          ),
+        };
+      }
+      return { value: date };
+    }
+
+    return {
+      error: errorResponse(
+        'VALIDATION_ERROR',
+        `El campo ${fieldName} debe ser una fecha válida`,
+        400,
+      ),
+    };
+  };
+
+  if (typeof input === 'string' || typeof input === 'number') {
+    return toDate(input);
+  }
+
+  return {
+    error: errorResponse(
+      'VALIDATION_ERROR',
+      `El campo ${fieldName} debe ser una fecha válida`,
+      400,
+    ),
+  };
+}
+
 function buildCreateData(body: any) {
   const name = toNullableString(body?.name);
   if (!name) {
@@ -132,6 +237,14 @@ function buildCreateData(body: any) {
 
   for (const field of OPTIONAL_STRING_FIELDS) {
     data[field] = toNullableString(body?.[field]);
+  }
+
+  for (const field of OPTIONAL_DATE_FIELDS) {
+    const result = parseDateField(field, body?.[field]);
+    if ('error' in result) {
+      return { error: result.error };
+    }
+    data[field] = result.value;
   }
 
   const sedeResult = parseSedeInput(body?.sede);
@@ -171,6 +284,17 @@ function buildUpdateData(body: any) {
   for (const field of OPTIONAL_STRING_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(body, field)) {
       data[field] = toNullableString(body[field]);
+      hasChanges = true;
+    }
+  }
+
+  for (const field of OPTIONAL_DATE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(body, field)) {
+      const result = parseDateField(field, body[field]);
+      if ('error' in result) {
+        return { error: result.error };
+      }
+      data[field] = result.value;
       hasChanges = true;
     }
   }

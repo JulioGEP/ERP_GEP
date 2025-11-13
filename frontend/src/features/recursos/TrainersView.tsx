@@ -27,6 +27,11 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     return trimmed.length ? trimmed : null;
   };
 
+  const toNullableDate = (value: string): string | null => {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  };
+
   return {
     name: values.name.trim(),
     apellido: toNullable(values.apellido),
@@ -38,6 +43,11 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     titulacion: toNullable(values.titulacion),
     activo: values.activo,
     sede: values.sede.filter((value) => SEDE_OPTIONS.includes(value as (typeof SEDE_OPTIONS)[number])),
+    revision_medica_caducidad: toNullableDate(values.revision_medica_caducidad),
+    epis_caducidad: toNullableDate(values.epis_caducidad),
+    dni_caducidad: toNullableDate(values.dni_caducidad),
+    carnet_conducir_caducidad: toNullableDate(values.carnet_conducir_caducidad),
+    certificado_bombero_caducidad: toNullableDate(values.certificado_bombero_caducidad),
   };
 }
 
