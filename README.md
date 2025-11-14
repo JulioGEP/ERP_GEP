@@ -186,6 +186,7 @@ El backend incorpora una tabla de auditoría (`audit_log`) que registra las oper
 | `npm run clean` | Elimina dependencias locales y artefactos de Prisma.
 | `npm run typecheck:functions` | Type-check de todas las funciones Netlify.
 | `npm run build` | Compila el frontend (previo `npm run build:frontend`).
+| `npm run prisma:format` | Formatea `backend/prisma/schema.prisma` reutilizando la instalación local del workspace `backend` y evita accesos a registro externos.
 | `npm run prisma:prune` | Elimina binarios de Prisma sobrantes durante builds en Netlify/CI.
 | `npm run netlify:build` | Pipeline completo usado en Netlify (`generate` + prune + build).
 | `npm run test --workspace frontend` | Ejecuta tests de la SPA con Vitest.
@@ -194,7 +195,7 @@ El backend incorpora una tabla de auditoría (`audit_log`) que registra las oper
 ## Testing y calidad
 - **Frontend**: `npm run test --workspace frontend` (Vitest) y `npm run typecheck --workspace frontend`.
 - **Backend**: `npm run typecheck:functions` para validar los tipos en todas las funciones.
-- **Linting/format**: el frontend incluye ESLint + Prettier (ejecutar manualmente desde el workspace si es necesario).
+- **Linting/format**: el frontend incluye ESLint + Prettier (ejecutar manualmente desde el workspace si es necesario). Para formatear el esquema de Prisma usa `npm run prisma:format`, que invoca el binario ya instalado en el workspace `backend` y evita descargas con `npx`.
 
 ## Despliegue
 - Netlify ejecuta `npm run netlify:build`, genera Prisma Client, limpia binarios innecesarios y compila el frontend.
