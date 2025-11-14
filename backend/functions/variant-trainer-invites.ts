@@ -1,7 +1,7 @@
 // backend/functions/variant-trainer-invites.ts
 import { randomBytes } from 'crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { sqltag as sql, PrismaClientKnownRequestError, PrismaClientUnknownRequestError } from '@prisma/client/runtime/library';
+import { sqltag as sql, raw, PrismaClientKnownRequestError, PrismaClientUnknownRequestError } from '@prisma/client/runtime/library';
 
 import { createHttpHandler, type HttpRequest } from './_shared/http';
 import { requireAuth } from './_shared/auth';
@@ -102,7 +102,7 @@ type VariantTrainerRow = {
 
 async function fetchVariantTrainers(prisma: Prisma.TransactionClient | PrismaClient, variantId: string) {
   try {
-    const rows = (await prisma.$queryRaw(
+    const rows = await prisma.$queryRaw(
       sql`
         SELECT vtl.trainer_id,
                t.name,
@@ -110,12 +110,12 @@ async function fetchVariantTrainers(prisma: Prisma.TransactionClient | PrismaCli
                t.email,
                t.activo,
                t.user_id
-        FROM ${sql.identifier([VARIANT_TRAINER_LINKS_TABLE])} vtl
+        FROM ${raw(VARIANT_TRAINER_LINKS_TABLE)} vtl
         LEFT JOIN trainers t ON t.trainer_id = vtl.trainer_id
         WHERE vtl.variant_id = ${variantId}::uuid
         ORDER BY vtl.position ASC
       `,
-    )) as VariantTrainerRow[];
+    ) as VariantTrainerRow[];
     return rows;
   } catch (error) {
     if (isMissingRelationError(error, VARIANT_TRAINER_LINKS_TABLE)) {
@@ -631,8 +631,8 @@ export const handler = createHttpHandler(async (request) => {
       return errorResponse('NO_TRAINERS', 'No hay formadores asignados a la variante', 400);
     }
 
-    const withEmail = assigned.filter((row) => typeof row.email === 'string' && row.email.trim().length);
-    const withoutEmail = assigned.filter((row) => !row.email || !row.email.trim().length);
+    const withEmail = assigned.filter((row: VariantTrainerRow) => typeof row.email === 'string' && row.email.trim().length);
+    const withoutEmail = assigned.filter((row: VariantTrainerRow) => !row.email || !row.email.trim().length);
     if (!withEmail.length) {
       return errorResponse('NO_EMAIL', 'No hay formadores con email registrado', 400);
     }
@@ -645,13 +645,13 @@ export const handler = createHttpHandler(async (request) => {
       if (status) existingInviteStatuses.set(trainerId, status);
     }
 
-    const trainersToInvite = withEmail.filter((row) => !existingInviteStatuses.has(row.trainer_id));
+    const trainersToInvite = withEmail.filter((row: VariantTrainerRow) => !existingInviteStatuses.has(row.trainer_id));
     if (!trainersToInvite.length) {
       return errorResponse('ALREADY_SENT', 'No hay invitaciones pendientes de enviar', 400);
     }
 
     const now = new Date();
-    const invites = await prisma.$transaction(async (tx) => {
+    const invites = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const created: Array<{ token: string; trainer: VariantTrainerRow }> = [];
       for (const trainer of trainersToInvite) {
         const token = generateToken();
@@ -725,7 +725,7 @@ export const handler = createHttpHandler(async (request) => {
       }
     }
 
-    const skippedTrainers = withoutEmail.map((row) => ({
+    const skippedTrainers = withoutEmail.map((row: VariantTrainerRow) => ({
       trainer_id: row.trainer_id,
       name: row.name ?? null,
       apellido: row.apellido ?? null,
