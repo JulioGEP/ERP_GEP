@@ -1,4 +1,12 @@
-import { ChangeEvent, MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ChangeEvent,
+  MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Accordion,
@@ -17,15 +25,21 @@ import {
   Table,
 } from 'react-bootstrap';
 
-import { ApiError } from "../../api/client";
-import type { SessionStudent } from "../../api/sessions.types";
+import { ApiError } from '../../api/client';
+import type { SessionStudent } from '../../api/sessions.types';
 import {
   fetchActiveTrainers,
   fetchMobileUnitsCatalog,
   fetchRoomsCatalog,
-} from "../presupuestos/api/catalogs.api";
-import { fetchSessionAvailability } from "../presupuestos/api/sessions.api";
-import { fetchDealStudents } from "../presupuestos/api/students.api";
+} from '../presupuestos/api/catalogs.api';
+import { fetchSessionAvailability } from '../presupuestos/api/sessions.api';
+import { fetchDealStudents } from '../presupuestos/api/students.api';
+import {
+  setTrainerInviteStatusForIds,
+  summarizeTrainerInviteStatus,
+  syncTrainerInviteStatusMap,
+  type TrainerInviteStatusMap,
+} from "../presupuestos/shared/trainerInviteStatus";
 import { BudgetDetailModalAbierta } from '../presupuestos/abierta/BudgetDetailModalAbierta';
 import type { DealSummary } from '../../types/deal';
 import { emitToast } from '../../utils/toast';
@@ -34,6 +48,7 @@ import {
   deleteProductVariant,
   fetchDealsByVariation,
   fetchProductsWithVariants,
+  sendVariantTrainerInvites,
   updateProductVariant,
   updateProductVariantDefaults,
 } from './api';
@@ -43,6 +58,7 @@ import type {
   ProductDefaults,
   ProductDefaultsUpdatePayload,
   ProductInfo,
+  TrainerInviteStatus,
   VariantInfo,
   VariantLocationGroup,
   VariantMonthGroup,
@@ -124,6 +140,15 @@ const PUBLICATION_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'publish', label: 'Publicado' },
   { value: 'private', label: 'Cancelado' },
 ];
+
+const TRAINER_INVITE_STATUS_BADGES: Record<TrainerInviteStatus, { label: string; variant: string }> = {
+  NOT_SENT: { label: 'Sin enviar el mail', variant: 'warning' },
+  PENDING: { label: 'Mail enviado', variant: 'info' },
+  CONFIRMED: { label: 'Aceptada', variant: 'success' },
+  DECLINED: { label: 'Denegada', variant: 'danger' },
+};
+
+type InviteStatusState = { sending: boolean; message: string | null; error: string | null };
 
 function getStatusBadgeVariant(status: string | null): string {
   const normalized = status?.toLowerCase();
@@ -770,6 +795,10 @@ export function VariantModal({
   const [isDealStudentsLoading, setIsDealStudentsLoading] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedDealSummary, setSelectedDealSummary] = useState<DealSummary | null>(null);
+  const [trainerInviteStatusMap, setTrainerInviteStatusMap] = useState<TrainerInviteStatusMap>({});
+  const [initialTrainerInviteStatusMap, setInitialTrainerInviteStatusMap] = useState<TrainerInviteStatusMap>({});
+  const [trainerInviteSummary, setTrainerInviteSummary] = useState<TrainerInviteStatus>('NOT_SENT');
+  const [inviteStatus, setInviteStatus] = useState<InviteStatusState>({ sending: false, message: null, error: null });
   const totalDealStudents = useMemo(
     () => {
       if (!deals.length) {
@@ -1051,6 +1080,10 @@ export function VariantModal({
       setIsDealStudentsLoading(false);
       setSelectedDealId(null);
       setSelectedDealSummary(null);
+      setTrainerInviteStatusMap({});
+      setInitialTrainerInviteStatusMap({});
+      setTrainerInviteSummary('NOT_SENT');
+      setInviteStatus({ sending: false, message: null, error: null });
       return;
     }
 
@@ -1058,9 +1091,15 @@ export function VariantModal({
     setFormValues(nextValues);
     setInitialValues(nextValues);
     setSaveError(null);
-      setSaveSuccess(null);
-      setSelectedDealId(null);
-      setSelectedDealSummary(null);
+    const baseStatusMap = variant.trainer_invite_statuses ?? {};
+    const syncedStatusMap = syncTrainerInviteStatusMap(baseStatusMap, nextValues.trainer_ids);
+    setTrainerInviteStatusMap(syncedStatusMap);
+    setInitialTrainerInviteStatusMap(syncedStatusMap);
+    setTrainerInviteSummary(variant.trainer_invite_status ?? 'NOT_SENT');
+    setInviteStatus({ sending: false, message: null, error: null });
+    setSaveSuccess(null);
+    setSelectedDealId(null);
+    setSelectedDealSummary(null);
   }, [variant]);
 
   useEffect(() => {
@@ -1425,6 +1464,32 @@ export function VariantModal({
     );
   }, [formValues.trainer_ids, trainerLookup]);
 
+  const trainerInviteDetails = useMemo(
+    () =>
+      selectedTrainers.map((trainer, index) => {
+        const trainerId = trainer.trainer_id;
+        const status: TrainerInviteStatus = trainerId
+          ? trainerInviteStatusMap[trainerId] ?? 'NOT_SENT'
+          : 'NOT_SENT';
+        const badgeInfo = TRAINER_INVITE_STATUS_BADGES[status] ?? TRAINER_INVITE_STATUS_BADGES.NOT_SENT;
+        const labelParts = [trainer.name, trainer.apellido].filter((value) => value && value.trim().length);
+        const label = labelParts.length
+          ? labelParts.join(' ')
+          : trainerId && trainerId.trim().length
+          ? trainerId
+          : `Formador ${index + 1}`;
+        return {
+          key: trainerId && trainerId.trim().length ? trainerId : `trainer-${index}`,
+          label,
+          status,
+          badge: badgeInfo,
+        };
+      }),
+    [selectedTrainers, trainerInviteStatusMap],
+  );
+
+  const hasPendingInviteTargets = trainerInviteDetails.some((item) => item.status === 'NOT_SENT');
+
   const selectedUnits = useMemo(() => {
     if (!formValues.unidad_movil_ids.length) {
       return [] as VariantUnitRecord[];
@@ -1474,6 +1539,7 @@ export function VariantModal({
   const unitSummaryDisplay = unitSummary || unitDisplay;
 
   const handleTrainerToggle = (trainerId: string, checked: boolean) => {
+    let nextIds: string[] = [];
     setFormValues((prev) => {
       const set = new Set(prev.trainer_ids);
       if (checked) {
@@ -1481,10 +1547,84 @@ export function VariantModal({
       } else {
         set.delete(trainerId);
       }
-      return { ...prev, trainer_ids: Array.from(set) };
+      nextIds = Array.from(set);
+      return { ...prev, trainer_ids: nextIds };
     });
+    setTrainerInviteStatusMap((current) => {
+      let nextMap = syncTrainerInviteStatusMap(current, nextIds);
+      if (checked) {
+        nextMap = setTrainerInviteStatusForIds(nextMap, [trainerId], 'NOT_SENT');
+      }
+      setTrainerInviteSummary(summarizeTrainerInviteStatus(nextMap));
+      return nextMap;
+    });
+    setInviteStatus({ sending: false, message: null, error: null });
     setSaveSuccess(null);
   };
+
+  const handleSendInvites = useCallback(async () => {
+    if (!variant) return;
+    const variantId = String(variant.id ?? '').trim();
+    if (!variantId) return;
+
+    if (!hasPendingInviteTargets) {
+      setInviteStatus({
+        sending: false,
+        message: 'Todos los formadores ya han recibido la invitación.',
+        error: null,
+      });
+      return;
+    }
+
+    setInviteStatus({ sending: true, message: null, error: null });
+
+    try {
+      const response = await sendVariantTrainerInvites(variantId);
+      const sentTrainerIds = response.invites
+        .filter((invite) => invite.status === 'SENT')
+        .map((invite) => invite.trainerId)
+        .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+
+      setTrainerInviteStatusMap((current) => {
+        const synced = syncTrainerInviteStatusMap(current, formValues.trainer_ids);
+        const nextMap = sentTrainerIds.length
+          ? setTrainerInviteStatusForIds(synced, sentTrainerIds, 'PENDING')
+          : synced;
+        setTrainerInviteSummary(summarizeTrainerInviteStatus(nextMap));
+        return nextMap;
+      });
+      setInitialTrainerInviteStatusMap((current) => {
+        const synced = syncTrainerInviteStatusMap(current, formValues.trainer_ids);
+        return sentTrainerIds.length
+          ? setTrainerInviteStatusForIds(synced, sentTrainerIds, 'PENDING')
+          : synced;
+      });
+
+      const sentCount = response.invites.filter((invite) => invite.status === 'SENT').length;
+      const failedCount = response.invites.filter((invite) => invite.status === 'FAILED').length;
+      const skippedNames = response.skippedTrainers
+        .map((trainer) => [trainer.name, trainer.apellido].filter(Boolean).join(' ').trim())
+        .filter((value) => value.length);
+
+      const parts: string[] = [];
+      if (sentCount) parts.push(`${sentCount} invitación${sentCount === 1 ? '' : 'es'} enviadas`);
+      if (failedCount) parts.push(`${failedCount} invitación${failedCount === 1 ? '' : 'es'} con error`);
+      if (!sentCount && !failedCount) parts.push('No se enviaron invitaciones');
+      if (skippedNames.length) parts.push(`Sin email: ${skippedNames.join(', ')}`);
+
+      const message = parts.join('. ');
+      const hasSuccess = sentCount > 0;
+
+      setInviteStatus({
+        sending: false,
+        message,
+        error: hasSuccess ? null : message,
+      });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo enviar la invitación.';
+      setInviteStatus({ sending: false, message: null, error: message });
+    }
+  }, [formValues.trainer_ids, hasPendingInviteTargets, variant]);
 
   const handleUnitToggle = (unitId: string, checked: boolean) => {
     setFormValues((prev) => {
@@ -1677,6 +1817,13 @@ export function VariantModal({
       setFormValues(nextValues);
       setInitialValues(nextValues);
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
+      const updatedStatusMap = syncTrainerInviteStatusMap(
+        enhancedVariant.trainer_invite_statuses ?? {},
+        nextValues.trainer_ids,
+      );
+      setTrainerInviteStatusMap(updatedStatusMap);
+      setInitialTrainerInviteStatusMap(updatedStatusMap);
+      setTrainerInviteSummary(enhancedVariant.trainer_invite_status ?? 'NOT_SENT');
 
       if (closeAfter) {
         onHide();
@@ -1869,6 +2016,46 @@ export function VariantModal({
                       </Collapse>
                     </div>
                   </Form.Group>
+                  {selectedTrainers.length ? (
+                    <div className="mt-2">
+                      <div className="d-flex flex-column gap-1">
+                        {trainerInviteDetails.map((item) => (
+                          <div key={item.key} className="d-flex align-items-center gap-2 small">
+                            <span>{item.label}</span>
+                            <Badge bg={item.badge.variant}>{item.badge.label}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 d-flex flex-column gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          disabled={inviteStatus.sending || !hasPendingInviteTargets}
+                          onClick={() => {
+                            void handleSendInvites();
+                          }}
+                        >
+                          {inviteStatus.sending ? (
+                            <>
+                              <Spinner animation="border" size="sm" role="status" className="me-2" />
+                              Enviando…
+                            </>
+                          ) : (
+                            'Enviar confirmación'
+                          )}
+                        </Button>
+                        {inviteStatus.error ? (
+                          <div className="text-danger small">{inviteStatus.error}</div>
+                        ) : inviteStatus.message ? (
+                          <div className="text-muted small">{inviteStatus.message}</div>
+                        ) : !hasPendingInviteTargets ? (
+                          <div className="text-muted small">
+                            Todos los formadores ya han recibido la invitación.
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
                 </Col>
                 <Col md={4}>
                   <Form.Group controlId="variantRoom" className="mb-0">

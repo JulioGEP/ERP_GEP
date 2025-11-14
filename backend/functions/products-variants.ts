@@ -26,6 +26,10 @@ const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750
 
 const VARIANT_TRAINER_TABLE = 'variant_trainer_links';
 const VARIANT_UNIT_TABLE = 'variant_unit_links';
+const VARIANT_TRAINER_INVITES_TABLE = 'variant_trainer_invites';
+
+type TrainerInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
+type TrainerInviteSummaryStatus = TrainerInviteStatus | 'NOT_SENT';
 
 let variantTrainerLinksSupported: boolean | null = null;
 let variantUnitLinksSupported: boolean | null = null;
@@ -47,6 +51,28 @@ function isMissingRelationError(error: unknown, relation: string): boolean {
 }
 
 type PrismaClientOrTx = PrismaClient | Prisma.TransactionClient;
+
+function normalizeTrainerInviteStatus(value: unknown): TrainerInviteStatus | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED') {
+    return normalized as TrainerInviteStatus;
+  }
+  return null;
+}
+
+function summarizeTrainerInviteStatus(
+  map: Record<string, TrainerInviteSummaryStatus>,
+): TrainerInviteSummaryStatus {
+  const values = Object.values(map);
+  if (!values.length) {
+    return 'NOT_SENT';
+  }
+  if (values.includes('DECLINED')) return 'DECLINED';
+  if (values.includes('CONFIRMED')) return 'CONFIRMED';
+  if (values.includes('PENDING')) return 'PENDING';
+  return 'NOT_SENT';
+}
 
 async function ensureVariantTrainerLinksTable(prisma: PrismaClientOrTx): Promise<boolean> {
   if (variantTrainerLinksSupported === false) return false;
@@ -1033,6 +1059,12 @@ type VariantRecord = {
   products?: { hora_inicio: Date | string | null; hora_fin: Date | string | null } | null;
   trainers?: { trainer_id: string; name: string | null; apellido: string | null } | null;
   trainer_links?: VariantTrainerLink[];
+  trainer_invites?: Array<{
+    trainer_id: string | null;
+    status: TrainerInviteStatus | string | null;
+    sent_at: Date | string | null;
+    responded_at: Date | string | null;
+  }>;
   salas?: { sala_id: string; name: string; sede: string | null } | null;
   unidades_moviles?: { unidad_id: string; name: string; matricula: string | null } | null;
   unidad_links?: VariantUnitLink[];
@@ -1111,6 +1143,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       unidad_movil_id: true,
       created_at: true,
       updated_at: true,
+      trainer_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
     };
 
     if (!includeResources) return base;
@@ -1441,6 +1474,37 @@ function normalizeVariant(record: VariantRecord) {
     ? trainerRecords.find((item) => item.trainer_id === primaryTrainerId) ?? null
     : null;
 
+  const inviteRecords = Array.isArray(record.trainer_invites) ? record.trainer_invites : [];
+  const inviteSummaries: Array<{
+    trainer_id: string;
+    status: TrainerInviteStatus;
+    sent_at: string | null;
+    responded_at: string | null;
+  }> = [];
+  const inviteStatusMap: Record<string, TrainerInviteSummaryStatus> = {};
+  for (const id of uniqueTrainerIds) {
+    if (id) {
+      inviteStatusMap[id] = 'NOT_SENT';
+    }
+  }
+  for (const invite of inviteRecords) {
+    const trainerId = toTrimmed((invite as any)?.trainer_id ?? null);
+    const status = normalizeTrainerInviteStatus((invite as any)?.status ?? null);
+    if (!trainerId || !status) continue;
+    inviteSummaries.push({
+      trainer_id: trainerId,
+      status,
+      sent_at: toMadridISOString((invite as any)?.sent_at ?? null),
+      responded_at: toMadridISOString((invite as any)?.responded_at ?? null),
+    });
+    if (inviteStatusMap[trainerId] !== undefined) {
+      inviteStatusMap[trainerId] = status;
+    } else {
+      inviteStatusMap[trainerId] = status;
+    }
+  }
+  const trainerInviteStatus = summarizeTrainerInviteStatus(inviteStatusMap);
+
   const unitLinks = Array.isArray(record.unidad_links) ? record.unidad_links : [];
   const unitIdsFromLinks = unitLinks
     .map((link) => toTrimmed(link.unidad_id))
@@ -1510,6 +1574,9 @@ function normalizeVariant(record: VariantRecord) {
     trainer: trainerDetail,
     trainer_ids: uniqueTrainerIds,
     trainers: trainerRecords,
+    trainer_invite_status: trainerInviteStatus,
+    trainer_invite_statuses: inviteStatusMap,
+    trainer_invites: inviteSummaries,
     sala_id: record.sala_id ?? null,
     sala: record.salas
       ? { sala_id: record.salas.sala_id, name: record.salas.name, sede: record.salas.sede ?? null }
@@ -1775,6 +1842,16 @@ export const handler = createHttpHandler<any>(async (request) => {
       await tx.variants.update({ where: { id: variantId }, data });
       if (trainerIdsUpdate !== undefined) {
         await syncVariantTrainerAssignments(tx, variantId, nextTrainerIds);
+        if (nextTrainerIds.length) {
+          await tx.variant_trainer_invites.deleteMany({
+            where: {
+              variant_id: variantId,
+              trainer_id: { notIn: nextTrainerIds },
+            },
+          });
+        } else {
+          await tx.variant_trainer_invites.deleteMany({ where: { variant_id: variantId } });
+        }
       }
       if (unidadIdsUpdate !== undefined) {
         await syncVariantUnitAssignments(tx, variantId, nextUnidadIds);
