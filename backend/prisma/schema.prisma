@@ -107,6 +107,7 @@ model variants {
   unidades_moviles unidades_moviles? @relation(fields: [unidad_movil_id], references: [unidad_id], onUpdate: NoAction, map: "variants_unidad_fk")
   time_logs        trainer_session_time_logs[]
   extra_costs      trainer_extra_costs[]
+  trainer_invites  variant_trainer_invites[]
 
   @@index([id_padre], map: "idx_variants_id_padre")
   @@index([sala_id], map: "idx_variants_sala_id")
@@ -434,6 +435,30 @@ model trainer_session_invites {
   @@index([trainer_id], map: "idx_trainer_session_invites_trainer_id")
   @@index([created_by_user_id], map: "idx_trainer_session_invites_created_by")
   @@map("trainer_session_invites")
+}
+
+model variant_trainer_invites {
+  id                 String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  variant_id         String                     @db.Uuid
+  trainer_id         String
+  token              String                     @unique
+  status             TrainerSessionInviteStatus @default(PENDING)
+  sent_at            DateTime                   @default(now()) @db.Timestamptz(6)
+  responded_at       DateTime?                  @db.Timestamptz(6)
+  created_by_user_id String?                    @db.Uuid
+  created_by_email   String?
+  created_by_name    String?
+  trainer_email      String?
+  created_at         DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime                   @default(now()) @updatedAt @db.Timestamptz(6)
+  variant            variants                   @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  trainers           trainers                   @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([variant_id, trainer_id], map: "uq_variant_trainer_invites_variant_trainer")
+  @@index([variant_id], map: "idx_variant_trainer_invites_variant_id")
+  @@index([trainer_id], map: "idx_variant_trainer_invites_trainer_id")
+  @@index([created_by_user_id], map: "idx_variant_trainer_invites_created_by")
+  @@map("variant_trainer_invites")
 }
 
 model trainer_documents {

@@ -149,8 +149,9 @@ model variants {
   trainer trainers?         @relation("TrainerVariants", fields: [trainer_id], references: [trainer_id])
   sala    salas?            @relation("SalaVariants", fields: [sala_id], references: [sala_id])
   unidad  unidades_moviles? @relation("UnidadVariants", fields: [unidad_movil_id], references: [unidad_id])
-  time_logs    trainer_session_time_logs[]
-  extra_costs  trainer_extra_costs[]
+  time_logs       trainer_session_time_logs[]
+  extra_costs     trainer_extra_costs[]
+  trainer_invites variant_trainer_invites[]
 
   @@index([id_padre], map: "idx_variants_id_padre")
   @@index([status], map: "idx_variants_status")
@@ -484,6 +485,12 @@ enum SessionEstado {
   FINALIZADA
 }
 
+enum TrainerSessionInviteStatus {
+  PENDING
+  CONFIRMED
+  DECLINED
+}
+
 model session_trainers {
   session_id String   @map("sesion_id")
   trainer_id String
@@ -571,4 +578,28 @@ model auth_sessions {
   @@index([user_id], map: "auth_sessions_user_id_idx")
   @@index([expires_at], map: "auth_sessions_expires_at_idx")
   @@map("auth_sessions")
+}
+
+model variant_trainer_invites {
+  id                 String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  variant_id         String                     @db.Uuid
+  trainer_id         String
+  token              String                     @unique
+  status             TrainerSessionInviteStatus @default(PENDING)
+  sent_at            DateTime                   @default(now()) @db.Timestamptz(6)
+  responded_at       DateTime?                  @db.Timestamptz(6)
+  created_by_user_id String?                    @db.Uuid
+  created_by_email   String?
+  created_by_name    String?
+  trainer_email      String?
+  created_at         DateTime                   @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime                   @default(now()) @updatedAt @db.Timestamptz(6)
+  variant            variants                   @relation(fields: [variant_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  trainer            trainers                   @relation(fields: [trainer_id], references: [trainer_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([variant_id, trainer_id], map: "variant_trainer_invites_variant_id_trainer_id_key")
+  @@index([variant_id], map: "idx_variant_trainer_invites_variant_id")
+  @@index([trainer_id], map: "idx_variant_trainer_invites_trainer_id")
+  @@index([created_by_user_id], map: "idx_variant_trainer_invites_created_by_user_id")
+  @@map("variant_trainer_invites")
 }

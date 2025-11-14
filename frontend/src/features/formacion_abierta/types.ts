@@ -1,3 +1,12 @@
+export type TrainerInviteStatus = 'NOT_SENT' | 'PENDING' | 'CONFIRMED' | 'DECLINED';
+
+export type VariantTrainerInvite = {
+  trainer_id: string | null;
+  status: 'PENDING' | 'CONFIRMED' | 'DECLINED';
+  sent_at: string | null;
+  responded_at: string | null;
+};
+
 export type VariantInfo = {
   id: string;
   id_woo: string;
@@ -12,6 +21,9 @@ export type VariantInfo = {
   trainer_ids: string[];
   trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
   trainers: Array<{ trainer_id: string; name: string | null; apellido: string | null }>;
+  trainer_invite_status: TrainerInviteStatus;
+  trainer_invite_statuses: Record<string, TrainerInviteStatus>;
+  trainer_invites: VariantTrainerInvite[];
   sala_id: string | null;
   sala: { sala_id: string; name: string; sede: string | null } | null;
   unidad_movil_id: string | null;

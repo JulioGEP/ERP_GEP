@@ -3,10 +3,12 @@ import type {
   DealTag,
   ProductDefaults,
   ProductInfo,
+  TrainerInviteStatus,
   VariantInfo,
   VariantLocationGroup,
   VariantMonthGroup,
   VariantSortKey,
+  VariantTrainerInvite,
 } from './types';
 
 const MONTH_NAMES = [
@@ -43,6 +45,26 @@ function toNumberOrNull(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  return null;
+}
+
+function toTrainerInviteStatus(value: unknown): TrainerInviteStatus {
+  if (typeof value !== 'string') {
+    return 'NOT_SENT';
+  }
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED') {
+    return normalized as TrainerInviteStatus;
+  }
+  return 'NOT_SENT';
+}
+
+function toTrainerInviteResponseStatus(value: unknown): VariantTrainerInvite['status'] | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED') {
+    return normalized as VariantTrainerInvite['status'];
+  }
   return null;
 }
 
@@ -192,6 +214,40 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     unidades.push(fallbackUnidadRecord);
   }
 
+  const trainerInviteStatus = toTrainerInviteStatus(input?.trainer_invite_status);
+  const trainerInviteStatusesRaw =
+    input?.trainer_invite_statuses && typeof input.trainer_invite_statuses === 'object'
+      ? (input.trainer_invite_statuses as Record<string, unknown>)
+      : {};
+  const trainerInviteStatuses: Record<string, TrainerInviteStatus> = {};
+  Object.entries(trainerInviteStatusesRaw).forEach(([key, value]) => {
+    const normalizedKey = toTrimmedString(key);
+    if (!normalizedKey) return;
+    trainerInviteStatuses[normalizedKey] = toTrainerInviteStatus(value);
+  });
+
+  const trainerInvitesRaw: unknown[] = Array.isArray(input?.trainer_invites) ? input.trainer_invites : [];
+  const trainerInvites: VariantTrainerInvite[] = [];
+  trainerInvitesRaw.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const record = entry as Record<string, unknown>;
+    const trainerId = toTrimmedString(record.trainer_id);
+    const status = toTrainerInviteResponseStatus(record.status);
+    if (!trainerId || !status) {
+      return;
+    }
+    const sentAt = typeof record.sent_at === 'string' ? record.sent_at : null;
+    const respondedAt = typeof record.responded_at === 'string' ? record.responded_at : null;
+    trainerInvites.push({
+      trainer_id: trainerId,
+      status,
+      sent_at: sentAt,
+      responded_at: respondedAt,
+    });
+  });
+
   return {
     id: String(input?.id ?? fallbackId),
     id_woo: input?.id_woo != null ? String(input.id_woo) : '',
@@ -206,6 +262,9 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     trainer: trainers.find((item) => item.trainer_id === (trainerIds[0] ?? trainerId ?? '')) ?? null,
     trainer_ids: trainerIds,
     trainers,
+    trainer_invite_status: trainerInviteStatus,
+    trainer_invite_statuses: trainerInviteStatuses,
+    trainer_invites: trainerInvites,
     sala_id: salaId,
     sala:
   input?.sala && typeof input.sala === 'object'
