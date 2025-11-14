@@ -239,6 +239,7 @@ model trainers {
 
   session_trainers session_trainers[]
   variants         variants[]         @relation("TrainerVariants")
+  trainer_invites  variant_trainer_invites[]
   availability     trainer_availability[]
   time_logs        trainer_session_time_logs[]
   extra_costs      trainer_extra_costs[]
