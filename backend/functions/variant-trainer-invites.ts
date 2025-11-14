@@ -186,6 +186,7 @@ function computeVariantRange(
 type VariantRecord = {
   id: string;
   name: string | null;
+  status: string | null;
   date: Date | string | null;
   sede: string | null;
   products: {
@@ -235,6 +236,7 @@ type NormalizedInvite = {
   variant: {
     id: string;
     name: string | null;
+    status: string | null;
     product_name: string | null;
     product_code: string | null;
     sede: string | null;
@@ -248,6 +250,7 @@ function buildVariantPayload(variant: VariantRecord | null): NormalizedInvite['v
     return {
       id: '',
       name: null,
+      status: null,
       product_name: null,
       product_code: null,
       sede: null,
@@ -262,6 +265,7 @@ function buildVariantPayload(variant: VariantRecord | null): NormalizedInvite['v
   return {
     id: variant.id,
     name: variant.name ?? null,
+    status: variant.status ?? null,
     product_name: variant.products?.name ?? null,
     product_code: variant.products?.code ?? null,
     sede: variant.sede ?? null,
@@ -397,6 +401,7 @@ export const handler = createHttpHandler(async (request) => {
             select: {
               id: true,
               name: true,
+              status: true,
               date: true,
               sede: true,
               products: {
@@ -441,6 +446,7 @@ export const handler = createHttpHandler(async (request) => {
             select: {
               id: true,
               name: true,
+              status: true,
               date: true,
               sede: true,
               products: {
@@ -474,40 +480,50 @@ export const handler = createHttpHandler(async (request) => {
       const now = new Date();
       let updated = invite;
       if (action === 'confirm') {
-        updated = await prisma.variant_trainer_invites.update({
-          where: { token },
-          data: {
-            status: 'CONFIRMED',
-            responded_at: now,
-          },
-          include: {
-            variant: {
-              select: {
-                id: true,
-                name: true,
-                date: true,
-                sede: true,
-                products: {
-                  select: {
-                    name: true,
-                    code: true,
-                    hora_inicio: true,
-                    hora_fin: true,
+        updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          if (invite.variant_id) {
+            await tx.variants.update({
+              where: { id: invite.variant_id },
+              data: { status: 'publish' },
+            });
+          }
+
+          return tx.variant_trainer_invites.update({
+            where: { token },
+            data: {
+              status: 'CONFIRMED',
+              responded_at: now,
+            },
+            include: {
+              variant: {
+                select: {
+                  id: true,
+                  name: true,
+                  status: true,
+                  date: true,
+                  sede: true,
+                  products: {
+                    select: {
+                      name: true,
+                      code: true,
+                      hora_inicio: true,
+                      hora_fin: true,
+                    },
                   },
                 },
               },
-            },
-            trainers: {
-              select: {
-                trainer_id: true,
-                name: true,
-                apellido: true,
-                email: true,
-                activo: true,
-                user_id: true,
+              trainers: {
+                select: {
+                  trainer_id: true,
+                  name: true,
+                  apellido: true,
+                  email: true,
+                  activo: true,
+                  user_id: true,
+                },
               },
             },
-          },
+          });
         });
         const trainer = updated.trainers;
         if (trainer) {
@@ -528,40 +544,50 @@ export const handler = createHttpHandler(async (request) => {
           }
         }
       } else {
-        updated = await prisma.variant_trainer_invites.update({
-          where: { token },
-          data: {
-            status: 'DECLINED',
-            responded_at: now,
-          },
-          include: {
-            variant: {
-              select: {
-                id: true,
-                name: true,
-                date: true,
-                sede: true,
-                products: {
-                  select: {
-                    name: true,
-                    code: true,
-                    hora_inicio: true,
-                    hora_fin: true,
+        updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          if (invite.variant_id) {
+            await tx.variants.update({
+              where: { id: invite.variant_id },
+              data: { status: 'private' },
+            });
+          }
+
+          return tx.variant_trainer_invites.update({
+            where: { token },
+            data: {
+              status: 'DECLINED',
+              responded_at: now,
+            },
+            include: {
+              variant: {
+                select: {
+                  id: true,
+                  name: true,
+                  status: true,
+                  date: true,
+                  sede: true,
+                  products: {
+                    select: {
+                      name: true,
+                      code: true,
+                      hora_inicio: true,
+                      hora_fin: true,
+                    },
                   },
                 },
               },
-            },
-            trainers: {
-              select: {
-                trainer_id: true,
-                name: true,
-                apellido: true,
-                email: true,
-                activo: true,
-                user_id: true,
+              trainers: {
+                select: {
+                  trainer_id: true,
+                  name: true,
+                  apellido: true,
+                  email: true,
+                  activo: true,
+                  user_id: true,
+                },
               },
             },
-          },
+          });
         });
         if (updated.created_by_email) {
           try {
