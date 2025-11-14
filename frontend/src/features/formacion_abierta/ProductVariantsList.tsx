@@ -195,6 +195,20 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
   if (variant.trainer?.trainer_id?.trim()) {
     trainerIdSet.add(variant.trainer.trainer_id.trim());
   }
+  if (Array.isArray(variant.trainer_invites)) {
+    variant.trainer_invites.forEach((invite) => {
+      if (invite?.trainer_id?.trim()) {
+        trainerIdSet.add(invite.trainer_id.trim());
+      }
+    });
+  }
+  if (variant.trainer_invite_statuses) {
+    Object.keys(variant.trainer_invite_statuses).forEach((trainerId) => {
+      if (trainerId?.trim()) {
+        trainerIdSet.add(trainerId.trim());
+      }
+    });
+  }
 
   const unitIdSet = new Set<string>();
   if (Array.isArray(variant.unidad_movil_ids)) {
