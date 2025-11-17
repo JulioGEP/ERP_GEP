@@ -246,6 +246,7 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
       sent_at: sentAt,
       responded_at: respondedAt,
     });
+    trainerInviteStatuses[trainerId] = status;
   });
 
   return {

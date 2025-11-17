@@ -62,6 +62,7 @@ import type {
   VariantInfo,
   VariantLocationGroup,
   VariantMonthGroup,
+  VariantTrainerInvite,
   VariantUpdatePayload,
 } from './types';
 import { buildVariantGroups, compareVariants, findDealProductPriceForProduct } from './utils';
@@ -145,8 +146,46 @@ const TRAINER_INVITE_STATUS_BADGES: Record<TrainerInviteStatus, { label: string;
   NOT_SENT: { label: 'Sin enviar el mail', variant: 'warning' },
   PENDING: { label: 'Mail enviado', variant: 'info' },
   CONFIRMED: { label: 'Aceptada', variant: 'success' },
-  DECLINED: { label: 'Denegada', variant: 'danger' },
+  DECLINED: { label: 'Rechazada', variant: 'danger' },
 };
+
+function normalizeTrainerInviteId(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function mergeTrainerInviteStatusSources(
+  baseStatuses: Record<string, TrainerInviteStatus> | null | undefined,
+  invites: VariantTrainerInvite[] | null | undefined,
+): TrainerInviteStatusMap {
+  const normalized: TrainerInviteStatusMap = {};
+  if (baseStatuses) {
+    Object.entries(baseStatuses).forEach(([rawId, status]) => {
+      const trainerId = normalizeTrainerInviteId(rawId);
+      if (!trainerId) return;
+      normalized[trainerId] = status;
+    });
+  }
+  if (invites) {
+    invites.forEach((invite) => {
+      const trainerId = normalizeTrainerInviteId(invite?.trainer_id ?? null);
+      if (!trainerId) return;
+      if (invite.status === 'PENDING' || invite.status === 'CONFIRMED' || invite.status === 'DECLINED') {
+        normalized[trainerId] = invite.status;
+      }
+    });
+  }
+  return normalized;
+}
+
+function buildVariantTrainerInviteStatusMap(
+  variant: VariantInfo,
+  trainerIds: readonly string[],
+): TrainerInviteStatusMap {
+  const merged = mergeTrainerInviteStatusSources(variant.trainer_invite_statuses, variant.trainer_invites);
+  return syncTrainerInviteStatusMap(merged, trainerIds);
+}
 
 type InviteStatusState = { sending: boolean; message: string | null; error: string | null };
 
@@ -1105,11 +1144,10 @@ export function VariantModal({
     setFormValues(nextValues);
     setInitialValues(nextValues);
     setSaveError(null);
-    const baseStatusMap = variant.trainer_invite_statuses ?? {};
-    const syncedStatusMap = syncTrainerInviteStatusMap(baseStatusMap, nextValues.trainer_ids);
-    setTrainerInviteStatusMap(syncedStatusMap);
-    setInitialTrainerInviteStatusMap(syncedStatusMap);
-    setTrainerInviteSummary(variant.trainer_invite_status ?? 'NOT_SENT');
+    const statusMap = buildVariantTrainerInviteStatusMap(variant, nextValues.trainer_ids);
+    setTrainerInviteStatusMap(statusMap);
+    setInitialTrainerInviteStatusMap(statusMap);
+    setTrainerInviteSummary(summarizeTrainerInviteStatus(statusMap));
     setInviteStatus({ sending: false, message: null, error: null });
     setSaveSuccess(null);
     setSelectedDealId(null);
@@ -1503,6 +1541,7 @@ export function VariantModal({
   );
 
   const hasPendingInviteTargets = trainerInviteDetails.some((item) => item.status === 'NOT_SENT');
+  const showInviteButton = hasPendingInviteTargets;
 
   const selectedUnits = useMemo(() => {
     if (!formValues.unidad_movil_ids.length) {
@@ -1831,13 +1870,10 @@ export function VariantModal({
       setFormValues(nextValues);
       setInitialValues(nextValues);
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
-      const updatedStatusMap = syncTrainerInviteStatusMap(
-        enhancedVariant.trainer_invite_statuses ?? {},
-        nextValues.trainer_ids,
-      );
+      const updatedStatusMap = buildVariantTrainerInviteStatusMap(enhancedVariant, nextValues.trainer_ids);
       setTrainerInviteStatusMap(updatedStatusMap);
       setInitialTrainerInviteStatusMap(updatedStatusMap);
-      setTrainerInviteSummary(enhancedVariant.trainer_invite_status ?? 'NOT_SENT');
+      setTrainerInviteSummary(summarizeTrainerInviteStatus(updatedStatusMap));
 
       if (closeAfter) {
         onHide();
@@ -2040,34 +2076,42 @@ export function VariantModal({
                           </div>
                         ))}
                       </div>
-                      <div className="mt-2 d-flex flex-column gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline-primary"
-                          disabled={inviteStatus.sending || !hasPendingInviteTargets}
-                          onClick={() => {
-                            void handleSendInvites();
-                          }}
-                        >
-                          {inviteStatus.sending ? (
-                            <>
-                              <Spinner animation="border" size="sm" role="status" className="me-2" />
-                              Enviando…
-                            </>
+                      {showInviteButton ? (
+                        <div className="mt-2 d-flex flex-column gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            disabled={inviteStatus.sending || !hasPendingInviteTargets}
+                            onClick={() => {
+                              void handleSendInvites();
+                            }}
+                          >
+                            {inviteStatus.sending ? (
+                              <>
+                                <Spinner animation="border" size="sm" role="status" className="me-2" />
+                                Enviando…
+                              </>
+                            ) : (
+                              'Enviar confirmación'
+                            )}
+                          </Button>
+                          {inviteStatus.error ? (
+                            <div className="text-danger small">{inviteStatus.error}</div>
+                          ) : inviteStatus.message ? (
+                            <div className="text-muted small">{inviteStatus.message}</div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="mt-2">
+                          {inviteStatus.error ? (
+                            <div className="text-danger small">{inviteStatus.error}</div>
                           ) : (
-                            'Enviar confirmación'
+                            <div className="text-muted small">
+                              {inviteStatus.message ?? 'Todos los formadores ya han recibido la invitación.'}
+                            </div>
                           )}
-                        </Button>
-                        {inviteStatus.error ? (
-                          <div className="text-danger small">{inviteStatus.error}</div>
-                        ) : inviteStatus.message ? (
-                          <div className="text-muted small">{inviteStatus.message}</div>
-                        ) : !hasPendingInviteTargets ? (
-                          <div className="text-muted small">
-                            Todos los formadores ya han recibido la invitación.
-                          </div>
-                        ) : null}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   ) : null}
                 </Col>
