@@ -58,6 +58,23 @@ describe('normalizeVariantFromResponse', () => {
     expect(variant.sala?.sala_id).toBe('88');
     expect(variant.id_woo).toBe('55');
   });
+
+  it('applies invite statuses to trainer status map', () => {
+    const variant = normalizeVariantFromResponse(
+      {
+        trainer_ids: ['t1', 't2'],
+        trainer_invite_statuses: { t1: 'NOT_SENT', t2: 'NOT_SENT' },
+        trainer_invites: [
+          { trainer_id: 't1', status: 'CONFIRMED', sent_at: null, responded_at: null },
+          { trainer_id: 't2', status: 'DECLINED', sent_at: null, responded_at: null },
+        ],
+      },
+      'fallback-id',
+    );
+
+    expect(variant.trainer_invite_statuses).toEqual({ t1: 'CONFIRMED', t2: 'DECLINED' });
+    expect(variant.trainer_invites).toHaveLength(2);
+  });
 });
 
 describe('normalizeProductFromResponse', () => {
