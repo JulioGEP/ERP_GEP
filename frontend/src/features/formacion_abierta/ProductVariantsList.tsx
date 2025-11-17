@@ -1503,6 +1503,14 @@ export function VariantModal({
   );
 
   const hasPendingInviteTargets = trainerInviteDetails.some((item) => item.status === 'NOT_SENT');
+  const inviteSummaryBadge =
+    TRAINER_INVITE_STATUS_BADGES[trainerInviteSummary] ?? TRAINER_INVITE_STATUS_BADGES.NOT_SENT;
+  const hasFinalTrainerResponse = trainerInviteSummary === 'CONFIRMED' || trainerInviteSummary === 'DECLINED';
+  const finalResponseMessage = hasFinalTrainerResponse
+    ? trainerInviteSummary === 'CONFIRMED'
+      ? 'El formador ha aceptado la formación. Hemos actualizado el estado automáticamente.'
+      : 'El formador ha rechazado la formación. Hemos actualizado el estado automáticamente.'
+    : null;
 
   const selectedUnits = useMemo(() => {
     if (!formValues.unidad_movil_ids.length) {
@@ -2041,31 +2049,40 @@ export function VariantModal({
                         ))}
                       </div>
                       <div className="mt-2 d-flex flex-column gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline-primary"
-                          disabled={inviteStatus.sending || !hasPendingInviteTargets}
-                          onClick={() => {
-                            void handleSendInvites();
-                          }}
-                        >
-                          {inviteStatus.sending ? (
-                            <>
-                              <Spinner animation="border" size="sm" role="status" className="me-2" />
-                              Enviando…
-                            </>
-                          ) : (
-                            'Enviar confirmación'
-                          )}
-                        </Button>
-                        {inviteStatus.error ? (
-                          <div className="text-danger small">{inviteStatus.error}</div>
-                        ) : inviteStatus.message ? (
-                          <div className="text-muted small">{inviteStatus.message}</div>
-                        ) : !hasPendingInviteTargets ? (
-                          <div className="text-muted small">
-                            Todos los formadores ya han recibido la invitación.
-                          </div>
+                        <div className="d-flex flex-wrap align-items-center gap-2">
+                          <Badge bg={inviteSummaryBadge.variant}>{inviteSummaryBadge.label}</Badge>
+                          {!hasFinalTrainerResponse ? (
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              disabled={inviteStatus.sending || !hasPendingInviteTargets}
+                              onClick={() => {
+                                void handleSendInvites();
+                              }}
+                            >
+                              {inviteStatus.sending ? (
+                                <>
+                                  <Spinner animation="border" size="sm" role="status" className="me-2" />
+                                  Enviando…
+                                </>
+                              ) : (
+                                'Enviar confirmación'
+                              )}
+                            </Button>
+                          ) : null}
+                        </div>
+                        {!hasFinalTrainerResponse ? (
+                          inviteStatus.error ? (
+                            <div className="text-danger small">{inviteStatus.error}</div>
+                          ) : inviteStatus.message ? (
+                            <div className="text-muted small">{inviteStatus.message}</div>
+                          ) : !hasPendingInviteTargets ? (
+                            <div className="text-muted small">
+                              Todos los formadores ya han recibido la invitación.
+                            </div>
+                          ) : null
+                        ) : finalResponseMessage ? (
+                          <div className="text-muted small">{finalResponseMessage}</div>
                         ) : null}
                       </div>
                     </div>
@@ -2415,33 +2432,77 @@ export default function ProductVariantsList() {
   const [activeProductConfig, setActiveProductConfig] = useState<ProductInfo | null>(null);
   const [activeVariantCreator, setActiveVariantCreator] = useState<ProductInfo | null>(null);
 
-  useEffect(() => {
-    let ignore = false;
+  const refreshInFlightRef = useRef(false);
 
-    (async () => {
-      setIsLoading(true);
-      setError(null);
+  const refreshProducts = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (refreshInFlightRef.current) {
+        return;
+      }
+      refreshInFlightRef.current = true;
+      const isBackground = options?.background ?? false;
+      if (!isBackground) {
+        setIsLoading(true);
+        setError(null);
+      }
       try {
         const data = await fetchProductsWithVariants();
-        if (!ignore) {
-          setProducts(data);
-        }
+        setProducts(data);
+        setActiveVariant((prev) => {
+          if (!prev) {
+            return prev;
+          }
+          const nextProduct = data.find((item) => item.id === prev.product.id);
+          if (!nextProduct) {
+            return prev;
+          }
+          const nextVariant = nextProduct.variants.find((item) => item.id === prev.variant.id);
+          if (!nextVariant) {
+            return prev;
+          }
+          return { product: nextProduct, variant: nextVariant };
+        });
       } catch (err) {
-        if (!ignore) {
-          const message = err instanceof ApiError ? err.message : 'Error inesperado al cargar las variantes.';
+        const message = err instanceof ApiError ? err.message : 'Error inesperado al cargar las variantes.';
+        if (isBackground) {
+          console.warn('[ProductVariantsList] background refresh failed', err);
+        } else {
           setError(message);
         }
       } finally {
-        if (!ignore) {
+        if (!isBackground) {
           setIsLoading(false);
         }
+        refreshInFlightRef.current = false;
       }
-    })();
+    },
+    [],
+  );
+
+  useEffect(() => {
+    void refreshProducts();
+  }, [refreshProducts]);
+
+  const hasPendingTrainerResponses = useMemo(() => {
+    return products.some((product) =>
+      product.variants.some((variant) => variant.trainer_invite_status === 'PENDING'),
+    );
+  }, [products]);
+
+  useEffect(() => {
+    if (!hasPendingTrainerResponses || typeof window === 'undefined') {
+      return undefined;
+    }
+
+    void refreshProducts({ background: true });
+    const intervalId = window.setInterval(() => {
+      void refreshProducts({ background: true });
+    }, 15000);
 
     return () => {
-      ignore = true;
+      window.clearInterval(intervalId);
     };
-  }, []);
+  }, [hasPendingTrainerResponses, refreshProducts]);
 
   useEffect(() => {
     const wooIdsToFetch = new Set<string>();
