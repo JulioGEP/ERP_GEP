@@ -335,7 +335,7 @@ async function sendVariantInviteEmail(params: {
     <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height:1.5; max-width:640px">
       <p>Hola ${escapeHtml(trainerName)},</p>
       <p>
-        Has sido asignado a la variante <strong>${escapeHtml(variant.name ?? 'Formación')}</strong>${productInfo}.
+        Has sido asignado a la formación abierta <strong>${escapeHtml(variant.name ?? 'Formación')}</strong>${productInfo}.
       </p>
       <ul>
         <li><strong>Fecha y hora:</strong> ${rangeHtml}</li>
@@ -349,12 +349,12 @@ async function sendVariantInviteEmail(params: {
       <p style="word-break:break-all;font-size:13px"><code>${escapeHtml(link)}</code></p>
     </div>
   `.trim();
-  const text = `Hola ${trainerName},\nHas sido asignado a la variante ${variant.name ?? 'Formación'}${
+  const text = `Hola ${trainerName},\nHas sido asignado a la formación abierta ${variant.name ?? 'Formación'}${
     variant.product_name ? ` del curso ${variant.product_name}` : ''
   }.\nFecha y hora: ${rangeText}.\nUbicación: ${variant.sede ?? 'Por confirmar'}.\nConfirma o rechaza en: ${link}`;
   await sendEmail({
     to: email,
-    subject: `Confirmación de variante: ${variant.name ?? 'Formación'}`,
+    subject: `Confirmación de formación abierta: ${variant.name ?? 'Formación'}`,
     html,
     text,
   });
@@ -369,7 +369,7 @@ async function sendDeclineNotification(params: {
   const html = `
     <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height:1.5; max-width:640px">
       <p>Hola ${escapeHtml(recipient.name ?? 'equipo')},</p>
-      <p>El formador <strong>${escapeHtml(trainerName)}</strong> ha rechazado la variante <strong>${escapeHtml(
+      <p>El formador <strong>${escapeHtml(trainerName)}</strong> ha rechazado la formación abierta <strong>${escapeHtml(
         variant.name ?? 'Formación',
       )}</strong>.</p>
       <ul>
@@ -377,7 +377,7 @@ async function sendDeclineNotification(params: {
       </ul>
     </div>
   `.trim();
-  const text = `Hola ${recipient.name ?? 'equipo'},\n${trainerName} ha rechazado la variante ${variant.name ?? 'Formación'}.`;
+  const text = `Hola ${recipient.name ?? 'equipo'},\n${trainerName} ha rechazado la formación abierta ${variant.name ?? 'Formación'}.`;
   await sendEmail({
     to: recipient.email,
     subject: `Invitación rechazada: ${variant.name ?? 'Formación'}`,
