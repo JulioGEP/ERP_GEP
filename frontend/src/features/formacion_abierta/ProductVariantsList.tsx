@@ -1067,6 +1067,11 @@ export function VariantModal({
   const trainerIdsRef = useRef<string[]>([]);
   const mountedRef = useRef(true);
   const hasUnsavedChangesRef = useRef(false);
+  const onVariantUpdatedRef = useRef(onVariantUpdated);
+
+  useEffect(() => {
+    onVariantUpdatedRef.current = onVariantUpdated;
+  }, [onVariantUpdated]);
 
   useEffect(() => {
     trainerIdsRef.current = formValues.trainer_ids;
@@ -1174,6 +1179,7 @@ export function VariantModal({
         if (!silent) {
           setVariantRefreshState({ loading: false, error: null });
         }
+        onVariantUpdatedRef.current?.(refreshed);
         return refreshed;
       } catch (error) {
         if (!mountedRef.current) {
