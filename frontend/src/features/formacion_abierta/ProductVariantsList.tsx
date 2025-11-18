@@ -47,6 +47,7 @@ import {
   createProductVariantsForProduct,
   deleteProductVariant,
   fetchDealsByVariation,
+  fetchProductVariant,
   fetchProductsWithVariants,
   sendVariantTrainerInvites,
   updateProductVariant,
@@ -142,10 +143,10 @@ const PUBLICATION_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 const TRAINER_INVITE_STATUS_BADGES: Record<TrainerInviteStatus, { label: string; variant: string }> = {
-  NOT_SENT: { label: 'Sin enviar el mail', variant: 'warning' },
+  NOT_SENT: { label: 'Sin enviar mail', variant: 'warning' },
   PENDING: { label: 'Mail enviado', variant: 'info' },
   CONFIRMED: { label: 'Aceptada', variant: 'success' },
-  DECLINED: { label: 'Denegada', variant: 'danger' },
+  DECLINED: { label: 'Rechazada', variant: 'danger' },
 };
 
 type InviteStatusState = { sending: boolean; message: string | null; error: string | null };
@@ -813,6 +814,10 @@ export function VariantModal({
   const [initialTrainerInviteStatusMap, setInitialTrainerInviteStatusMap] = useState<TrainerInviteStatusMap>({});
   const [trainerInviteSummary, setTrainerInviteSummary] = useState<TrainerInviteStatus>('NOT_SENT');
   const [inviteStatus, setInviteStatus] = useState<InviteStatusState>({ sending: false, message: null, error: null });
+  const [variantRefreshState, setVariantRefreshState] = useState<{ loading: boolean; error: string | null }>({
+    loading: false,
+    error: null,
+  });
   const totalDealStudents = useMemo(
     () => {
       if (!deals.length) {
@@ -1059,6 +1064,17 @@ export function VariantModal({
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitListOpen, setUnitListOpen] = useState(false);
   const [unitFilter, setUnitFilter] = useState('');
+  const trainerIdsRef = useRef<string[]>([]);
+  const mountedRef = useRef(true);
+  const hasUnsavedChangesRef = useRef(false);
+
+  useEffect(() => {
+    trainerIdsRef.current = formValues.trainer_ids;
+  }, [formValues.trainer_ids]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
 
   useEffect(() => {
     if (!variant) {
@@ -1098,6 +1114,7 @@ export function VariantModal({
       setInitialTrainerInviteStatusMap({});
       setTrainerInviteSummary('NOT_SENT');
       setInviteStatus({ sending: false, message: null, error: null });
+      setVariantRefreshState({ loading: false, error: null });
       return;
     }
 
@@ -1114,6 +1131,7 @@ export function VariantModal({
     setSaveSuccess(null);
     setSelectedDealId(null);
     setSelectedDealSummary(null);
+    setVariantRefreshState({ loading: false, error: null });
   }, [variant]);
 
   useEffect(() => {
@@ -1124,6 +1142,68 @@ export function VariantModal({
     setUnitFilter('');
     unitPointerInteractingRef.current = false;
   }, [variant]);
+
+  const loadVariantDetails = useCallback(
+    async (variantId: string, options?: { silent?: boolean; keepFormValues?: boolean }) => {
+      const normalizedId = String(variantId ?? '').trim();
+      if (!normalizedId) {
+        return null;
+      }
+      const { silent = false, keepFormValues = false } = options ?? {};
+      if (!silent && mountedRef.current) {
+        setVariantRefreshState({ loading: true, error: null });
+      }
+      try {
+        const refreshed = await fetchProductVariant(normalizedId);
+        if (!mountedRef.current) {
+          return refreshed;
+        }
+        const nextValues = variantToFormValues(refreshed);
+        const baseStatusMap = refreshed.trainer_invite_statuses ?? {};
+        const targetTrainerIds = trainerIdsRef.current.length
+          ? trainerIdsRef.current
+          : nextValues.trainer_ids;
+        const statusMap = syncTrainerInviteStatusMap(baseStatusMap, targetTrainerIds);
+        setTrainerInviteStatusMap(statusMap);
+        setTrainerInviteSummary(refreshed.trainer_invite_status ?? 'NOT_SENT');
+        if (!keepFormValues && !hasUnsavedChangesRef.current) {
+          setFormValues(nextValues);
+          setInitialValues(nextValues);
+          setInitialTrainerInviteStatusMap(statusMap);
+        }
+        if (!silent) {
+          setVariantRefreshState({ loading: false, error: null });
+        }
+        return refreshed;
+      } catch (error) {
+        if (!mountedRef.current) {
+          return null;
+        }
+        const message = error instanceof ApiError ? error.message : 'No se pudo actualizar el estado de la variante.';
+        if (!silent) {
+          setVariantRefreshState({ loading: false, error: message });
+        }
+        return null;
+      }
+    },
+    [
+      hasUnsavedChangesRef,
+      setFormValues,
+      setInitialValues,
+      setInitialTrainerInviteStatusMap,
+      setTrainerInviteStatusMap,
+      setTrainerInviteSummary,
+      setVariantRefreshState,
+    ],
+  );
+
+  useEffect(() => {
+    if (!variant?.id) {
+      setVariantRefreshState({ loading: false, error: null });
+      return;
+    }
+    void loadVariantDetails(variant.id);
+  }, [loadVariantDetails, variant?.id]);
 
   useEffect(() => {
     let ignore = false;
@@ -1629,6 +1709,8 @@ export function VariantModal({
       const message = parts.join('. ');
       const hasSuccess = sentCount > 0;
 
+      void loadVariantDetails(variantId, { silent: true, keepFormValues: true });
+
       setInviteStatus({
         sending: false,
         message,
@@ -1638,7 +1720,7 @@ export function VariantModal({
       const message = error instanceof ApiError ? error.message : 'No se pudo enviar la invitación.';
       setInviteStatus({ sending: false, message: null, error: message });
     }
-  }, [formValues.trainer_ids, hasPendingInviteTargets, variant]);
+  }, [formValues.trainer_ids, hasPendingInviteTargets, loadVariantDetails, variant]);
 
   const handleUnitToggle = (unitId: string, checked: boolean) => {
     setFormValues((prev) => {
@@ -1653,16 +1735,23 @@ export function VariantModal({
     setSaveSuccess(null);
   };
 
-  const isDirty =
-    formValues.price !== initialValues.price ||
-    formValues.stock !== initialValues.stock ||
-    formValues.stock_status !== initialValues.stock_status ||
-    formValues.status !== initialValues.status ||
-    formValues.sede !== initialValues.sede ||
-    formValues.date !== initialValues.date ||
-    !areStringArraysEqual(formValues.trainer_ids, initialValues.trainer_ids) ||
-    formValues.sala_id !== initialValues.sala_id ||
-    !areStringArraysEqual(formValues.unidad_movil_ids, initialValues.unidad_movil_ids);
+  const isDirty = useMemo(
+    () =>
+      formValues.price !== initialValues.price ||
+      formValues.stock !== initialValues.stock ||
+      formValues.stock_status !== initialValues.stock_status ||
+      formValues.status !== initialValues.status ||
+      formValues.sede !== initialValues.sede ||
+      formValues.date !== initialValues.date ||
+      !areStringArraysEqual(formValues.trainer_ids, initialValues.trainer_ids) ||
+      formValues.sala_id !== initialValues.sala_id ||
+      !areStringArraysEqual(formValues.unidad_movil_ids, initialValues.unidad_movil_ids),
+    [formValues, initialValues],
+  );
+
+  useEffect(() => {
+    hasUnsavedChangesRef.current = isDirty;
+  }, [isDirty]);
 
   const handleSave = async (closeAfter: boolean) => {
     if (!variant) return;
@@ -2030,13 +2119,18 @@ export function VariantModal({
                       </Collapse>
                     </div>
                   </Form.Group>
-                  {selectedTrainers.length ? (
-                    <div className="mt-2">
-                      <div className="d-flex flex-column gap-1">
-                        {trainerInviteDetails.map((item) => (
-                          <div key={item.key} className="d-flex align-items-center gap-2 small">
-                            <span>{item.label}</span>
-                            <Badge bg={item.badge.variant}>{item.badge.label}</Badge>
+                {selectedTrainers.length ? (
+                  <div className="mt-2">
+                    {variantRefreshState.loading ? (
+                      <div className="text-muted small">Actualizando confirmaciones…</div>
+                    ) : variantRefreshState.error ? (
+                      <div className="text-danger small">{variantRefreshState.error}</div>
+                    ) : null}
+                    <div className="d-flex flex-column gap-1">
+                      {trainerInviteDetails.map((item) => (
+                        <div key={item.key} className="d-flex align-items-center gap-2 small">
+                          <span>{item.label}</span>
+                          <Badge bg={item.badge.variant}>{item.badge.label}</Badge>
                           </div>
                         ))}
                       </div>

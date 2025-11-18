@@ -207,6 +207,25 @@ export async function updateProductVariant(
   return normalizeVariantFromResponse(json.variant, variantId);
 }
 
+export async function fetchProductVariant(variantId: string): Promise<VariantInfo> {
+  const normalizedId = String(variantId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'ID de variante requerido');
+  }
+
+  const json = await requestJson<VariantUpdateResponse>(
+    apiPath(`products-variants/${encodeURIComponent(normalizedId)}`),
+    { headers: { Accept: 'application/json' } },
+    { defaultErrorMessage: 'No se pudo cargar la variante.' },
+  );
+
+  if (!json.variant) {
+    throw new ApiError('NOT_FOUND', 'Variante no encontrada');
+  }
+
+  return normalizeVariantFromResponse(json.variant, normalizedId);
+}
+
 export async function fetchDealsByVariation(variationWooId: string): Promise<DealTag[]> {
   const json = await requestJson<DealsByVariationResponse>(
     apiPath(`deals?w_id_variation=${encodeURIComponent(variationWooId)}`),

@@ -1877,6 +1877,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         trainers: { select: { trainer_id: true, name: true, apellido: true } },
         salas: { select: { sala_id: true, name: true, sede: true } },
         unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
+        trainer_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
         created_at: true,
         updated_at: true,
       },
@@ -1922,6 +1923,48 @@ export const handler = createHttpHandler<any>(async (request) => {
   }
 
   if (method !== 'GET') return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
+
+  const variantId = parseVariantIdFromPath(request.path || '');
+  if (variantId) {
+    const variant = await prisma.variants.findUnique({
+      where: { id: variantId },
+      select: {
+        id: true,
+        id_woo: true,
+        id_padre: true,
+        name: true,
+        status: true,
+        price: true,
+        stock: true,
+        stock_status: true,
+        sede: true,
+        date: true,
+        trainer_id: true,
+        sala_id: true,
+        unidad_movil_id: true,
+        trainers: { select: { trainer_id: true, name: true, apellido: true } },
+        salas: { select: { sala_id: true, name: true, sede: true } },
+        unidades_moviles: { select: { unidad_id: true, name: true, matricula: true } },
+        trainer_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
+        created_at: true,
+        updated_at: true,
+      },
+    });
+    if (!variant) return errorResponse('NOT_FOUND', 'Variante no encontrada', 404);
+
+    const [trainerAssignments, unitAssignments] = await Promise.all([
+      fetchVariantTrainerAssignments(prisma, [variantId]),
+      fetchVariantUnitAssignments(prisma, [variantId]),
+    ]);
+
+    const enrichedVariant: VariantRecord = {
+      ...(variant as any),
+      trainer_links: trainerAssignments.get(variantId) ?? [],
+      unidad_links: unitAssignments.get(variantId) ?? [],
+    };
+
+    return successResponse({ variant: normalizeVariant(enrichedVariant) });
+  }
 
   const productsRaw = await findProducts(prisma);
   const products = productsRaw.map(normalizeProduct);
