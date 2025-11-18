@@ -187,14 +187,24 @@ export const handler = createHttpHandler(async (request) => {
     orderBy: [{ fecha_inicio_utc: 'asc' }],
   })) as SessionRecord[];
 
-  const pendingConfirmations = sessions.reduce((total, session) => {
+  const sessionInviteStatuses = new Map<string, ReturnType<typeof normalizeTrainerInviteStatus>>();
+  for (const session of sessions) {
     const invites = Array.isArray(session.trainer_session_invites)
       ? session.trainer_session_invites
       : [];
     const match = invites.find((invite) => toMaybeString(invite?.trainer_id) === trainerId);
     const status = match ? normalizeTrainerInviteStatus(match.status) : null;
-    return status === 'PENDING' ? total + 1 : total;
-  }, 0);
+    if (session.id) {
+      sessionInviteStatuses.set(session.id, status);
+    }
+  }
+
+  const pendingConfirmations = Array.from(sessionInviteStatuses.values()).reduce(
+    (total, status) => (status === 'PENDING' ? total + 1 : total),
+    0,
+  );
+
+  const acceptedSessions = sessions.filter((session) => sessionInviteStatuses.get(session.id) === 'CONFIRMED');
 
   const variantPrimaryRecords = (await prisma.variants.findMany({
     where: { trainer_id: trainer.trainer_id },
@@ -240,12 +250,12 @@ export const handler = createHttpHandler(async (request) => {
     }
   }
 
-  const companySessions = sessions.filter((session) => {
+  const companySessions = acceptedSessions.filter((session) => {
     const pipeline = normalizePipeline(session.deals?.pipeline_id ?? null);
     return pipeline !== null && PIPELINE_LABELS_COMPANY.includes(pipeline);
   }).length;
 
-  const gepServicesSessions = sessions.filter((session) => {
+  const gepServicesSessions = acceptedSessions.filter((session) => {
     const pipeline = normalizePipeline(session.deals?.pipeline_id ?? null);
     return pipeline !== null && PIPELINE_LABELS_GEP.includes(pipeline);
   }).length;
@@ -340,7 +350,7 @@ export const handler = createHttpHandler(async (request) => {
     }
   }
 
-  const sessionRows: TrainerDashboardSession[] = sessions.map((session) => {
+  const sessionRows: TrainerDashboardSession[] = acceptedSessions.map((session) => {
     const mobileUnits: TrainerDashboardSession['mobileUnits'] = [];
     for (const link of session.sesion_unidades ?? []) {
       const unit = link.unidades_moviles ?? null;
