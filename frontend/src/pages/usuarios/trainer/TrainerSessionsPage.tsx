@@ -130,6 +130,10 @@ function isSessionPending(session: TrainerSessionDetail): boolean {
   return session.trainerInviteStatus === 'PENDING';
 }
 
+function isVariantPending(variant: TrainerVariantDetail): boolean {
+  return variant.trainerInviteStatus === 'PENDING';
+}
+
 function formatTrainerName(trainer: TrainerSessionTrainer): string {
   const parts = [trainer.name ?? '', trainer.lastName ?? '']
     .map((value) => value.trim())
@@ -2981,7 +2985,10 @@ export default function TrainerSessionsPage() {
   }, [allDateEntries]);
 
   const hasPendingSessions = useMemo(
-    () => allDateEntries.some((entry) => entry.sessions.some(isSessionPending)),
+    () =>
+      allDateEntries.some(
+        (entry) => entry.sessions.some(isSessionPending) || entry.variants.some(isVariantPending),
+      ),
     [allDateEntries],
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);

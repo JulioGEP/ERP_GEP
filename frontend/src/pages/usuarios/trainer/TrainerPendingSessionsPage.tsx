@@ -5,12 +5,19 @@ import {
   fetchTrainerSessions,
   type TrainerSessionDetail,
   type TrainerSessionsDateEntry,
+  type TrainerVariantDetail,
 } from '../../../api/trainer-sessions';
 
 const QUERY_KEY = ['trainer', 'sessions'] as const;
 
 type PendingSessionRow = {
   session: TrainerSessionDetail;
+  dateEntry: TrainerSessionsDateEntry;
+  sortValue: number;
+};
+
+type PendingVariantRow = {
+  variant: TrainerVariantDetail;
   dateEntry: TrainerSessionsDateEntry;
   sortValue: number;
 };
@@ -54,6 +61,35 @@ function formatFallbackDate(value: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+function computeVariantSortValue(variant: TrainerVariantDetail, dateEntry: TrainerSessionsDateEntry): number {
+  const dateValue = variant.date ? new Date(variant.date) : null;
+  if (dateValue && !Number.isNaN(dateValue.getTime())) {
+    return dateValue.getTime();
+  }
+  const fallback = dateEntry.date ? new Date(`${dateEntry.date}T00:00:00Z`) : null;
+  if (fallback && !Number.isNaN(fallback.getTime())) {
+    return fallback.getTime();
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function formatVariantDate(
+  variant: TrainerVariantDetail,
+  dateEntry: TrainerSessionsDateEntry,
+): { label: string; tooltip: string } {
+  if (variant.date) {
+    const formatted = formatDatePart(variant.date, { dateStyle: 'full', timeZone: 'Europe/Madrid' });
+    if (formatted) {
+      return { label: formatted, tooltip: formatted };
+    }
+  }
+  const fallback = formatFallbackDate(dateEntry.date);
+  if (fallback) {
+    return { label: fallback, tooltip: fallback };
+  }
+  return { label: 'Pendiente de programar', tooltip: 'Pendiente de programar' };
 }
 
 function formatSessionDateRange(
@@ -129,7 +165,34 @@ export default function TrainerPendingSessionsPage() {
     });
   }, [sessionsQuery.data?.dates]);
 
-  const pendingCount = pendingSessions.length;
+  const pendingVariants = useMemo<PendingVariantRow[]>(() => {
+    const dates = sessionsQuery.data?.dates ?? [];
+    const rows: PendingVariantRow[] = [];
+    dates.forEach((dateEntry) => {
+      dateEntry.variants.forEach((variant) => {
+        if (variant.trainerInviteStatus === 'PENDING') {
+          rows.push({
+            variant,
+            dateEntry,
+            sortValue: computeVariantSortValue(variant, dateEntry),
+          });
+        }
+      });
+    });
+    return rows.sort((a, b) => {
+      if (a.sortValue === b.sortValue) {
+        return a.variant.productName?.localeCompare(b.variant.productName ?? '') ?? 0;
+      }
+      return a.sortValue - b.sortValue;
+    });
+  }, [sessionsQuery.data?.dates]);
+
+  const pendingCount = pendingSessions.length + pendingVariants.length;
+  const hasVariantEntries = useMemo(() => {
+    const dates = sessionsQuery.data?.dates ?? [];
+    return dates.some((entry) => entry.variants.length);
+  }, [sessionsQuery.data?.dates]);
+  const shouldShowVariantCard = hasVariantEntries || pendingVariants.length > 0;
 
   return (
     <Stack gap={4} className="trainer-pending-sessions-page">
@@ -186,72 +249,140 @@ export default function TrainerPendingSessionsPage() {
       ) : null}
 
       {!sessionsQuery.isLoading && !sessionsQuery.isError ? (
-        <Card className="shadow-sm border-0">
-          <Card.Body className="p-0">
-            {pendingSessions.length ? (
-              <div className="table-responsive">
-                <Table hover responsive className="mb-0">
-                  <thead className="text-uppercase small text-muted">
-                    <tr>
-                      <th className="fw-semibold">Fecha y hora</th>
-                      <th className="fw-semibold">Sesión</th>
-                      <th className="fw-semibold">Cliente</th>
-                      <th className="fw-semibold">Ubicación</th>
-                      <th className="fw-semibold text-end">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingSessions.map(({ session, dateEntry }) => {
-                      const dateDisplay = formatSessionDateRange(session, dateEntry);
-                      const inviteUrl = session.trainerInviteToken
-                        ? `/public/formadores/sesiones/${session.trainerInviteToken}`
-                        : null;
-                      return (
-                        <tr key={`${session.sessionId}-${session.trainerInviteToken ?? 'no-token'}`}>
-                          <td className="align-middle" title={dateDisplay.tooltip}>
-                            {dateDisplay.label}
-                          </td>
-                          <td className="align-middle">
-                            <div className="fw-semibold">
-                              {session.sessionTitle ?? 'Sesión'}
-                            </div>
-                            {session.formationName ? (
-                              <div className="text-muted small">{session.formationName}</div>
-                            ) : null}
-                          </td>
-                          <td className="align-middle">
-                            {session.organizationName ?? <span className="text-muted">—</span>}
-                          </td>
-                          <td className="align-middle">
-                            {session.address ?? <span className="text-muted">Pendiente</span>}
-                          </td>
-                          <td className="align-middle text-end">
-                            {inviteUrl ? (
-                              <Button
-                                href={inviteUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                size="sm"
-                              >
-                                Revisar invitación
-                              </Button>
-                            ) : (
-                              <span className="text-muted small">Token no disponible</span>
-                            )}
-                          </td>
+        <>
+          <Card className="shadow-sm border-0">
+            <Card.Body className="p-0">
+              {pendingSessions.length ? (
+                <div className="table-responsive">
+                  <Table hover responsive className="mb-0">
+                    <thead className="text-uppercase small text-muted">
+                      <tr>
+                        <th className="fw-semibold">Fecha y hora</th>
+                        <th className="fw-semibold">Sesión</th>
+                        <th className="fw-semibold">Cliente</th>
+                        <th className="fw-semibold">Ubicación</th>
+                        <th className="fw-semibold text-end">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingSessions.map(({ session, dateEntry }) => {
+                        const dateDisplay = formatSessionDateRange(session, dateEntry);
+                        const inviteUrl = session.trainerInviteToken
+                          ? `/public/formadores/sesiones/${session.trainerInviteToken}`
+                          : null;
+                        return (
+                          <tr key={`${session.sessionId}-${session.trainerInviteToken ?? 'no-token'}`}>
+                            <td className="align-middle" title={dateDisplay.tooltip}>
+                              {dateDisplay.label}
+                            </td>
+                            <td className="align-middle">
+                              <div className="fw-semibold">
+                                {session.sessionTitle ?? 'Sesión'}
+                              </div>
+                              {session.formationName ? (
+                                <div className="text-muted small">{session.formationName}</div>
+                              ) : null}
+                            </td>
+                            <td className="align-middle">
+                              {session.organizationName ?? <span className="text-muted">—</span>}
+                            </td>
+                            <td className="align-middle">
+                              {session.address ?? <span className="text-muted">Pendiente</span>}
+                            </td>
+                            <td className="align-middle text-end">
+                              {inviteUrl ? (
+                                <Button
+                                  href={inviteUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  size="sm"
+                                >
+                                  Revisar invitación
+                                </Button>
+                              ) : (
+                                <span className="text-muted small">Token no disponible</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="px-3 px-md-4 py-5 text-center text-muted">
+                  No tienes sesiones pendientes de confirmar.
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+
+          {shouldShowVariantCard ? (
+            <Card className="shadow-sm border-0">
+              <Card.Body className="p-0">
+                {pendingVariants.length ? (
+                  <div className="table-responsive">
+                    <Table hover responsive className="mb-0">
+                      <thead className="text-uppercase small text-muted">
+                        <tr>
+                          <th className="fw-semibold">Fecha</th>
+                          <th className="fw-semibold">Formación abierta</th>
+                          <th className="fw-semibold">Empresas</th>
+                          <th className="fw-semibold text-end">Alumnos</th>
+                          <th className="fw-semibold text-end">Acción</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </Table>
-              </div>
-            ) : (
-              <div className="px-3 px-md-4 py-5 text-center text-muted">
-                No tienes sesiones pendientes de confirmar.
-              </div>
-            )}
-          </Card.Body>
-        </Card>
+                      </thead>
+                      <tbody>
+                        {pendingVariants.map(({ variant, dateEntry }) => {
+                          const dateDisplay = formatVariantDate(variant, dateEntry);
+                          const organizations = variant.organizationNames.length
+                            ? variant.organizationNames.join(', ')
+                            : null;
+                          const inviteUrl = variant.trainerInviteToken
+                            ? `/public/formadores/variantes/${variant.trainerInviteToken}`
+                            : null;
+                          return (
+                            <tr key={`${variant.variantId}-${variant.trainerInviteToken ?? 'no-token'}`}>
+                              <td className="align-middle" title={dateDisplay.tooltip}>
+                                {dateDisplay.label}
+                              </td>
+                              <td className="align-middle">
+                                <div className="fw-semibold">{variant.productName ?? 'Variante'}</div>
+                                {variant.site ? <div className="text-muted small">{variant.site}</div> : null}
+                              </td>
+                              <td className="align-middle">
+                                {organizations ? organizations : <span className="text-muted">—</span>}
+                              </td>
+                              <td className="align-middle text-end">{variant.studentCount}</td>
+                              <td className="align-middle text-end">
+                                {inviteUrl ? (
+                                  <Button
+                                    href={inviteUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    size="sm"
+                                  >
+                                    Revisar invitación
+                                  </Button>
+                                ) : (
+                                  <span className="text-muted small">Token no disponible</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="px-3 px-md-4 py-5 text-center text-muted">
+                    No tienes formaciones abiertas pendientes de confirmar.
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          ) : null}
+        </>
       ) : null}
     </Stack>
   );
