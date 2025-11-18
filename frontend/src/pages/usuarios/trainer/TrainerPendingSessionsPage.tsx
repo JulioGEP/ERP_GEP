@@ -204,7 +204,9 @@ export default function TrainerPendingSessionsPage() {
                     {pendingSessions.map(({ session, dateEntry }) => {
                       const dateDisplay = formatSessionDateRange(session, dateEntry);
                       const inviteUrl = session.trainerInviteToken
-                        ? `/public/formadores/sesiones/${session.trainerInviteToken}`
+                        ? session.trainerInviteType === 'VARIANT'
+                          ? `/public/formadores/variantes/${session.trainerInviteToken}`
+                          : `/public/formadores/sesiones/${session.trainerInviteToken}`
                         : null;
                       return (
                         <tr key={`${session.sessionId}-${session.trainerInviteToken ?? 'no-token'}`}>

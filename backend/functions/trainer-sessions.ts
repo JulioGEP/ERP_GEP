@@ -3,6 +3,7 @@ import { createHttpHandler } from './_shared/http';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
+import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
 
 type SessionRecord = {
@@ -144,6 +145,24 @@ type SessionPayload = {
   companionTrainers: Array<{ trainerId: string; name: string | null; lastName: string | null }>;
   trainerInviteStatus: TrainerInviteStatus | null;
   trainerInviteToken: string | null;
+  trainerInviteType: 'SESSION' | 'VARIANT' | null;
+};
+
+type VariantInviteRecord = {
+  variant_id: string | null;
+  token: string | null;
+  variant: {
+    id: string | null;
+    name: string | null;
+    date: Date | string | null;
+    sede: string | null;
+    products: {
+      name: string | null;
+      code: string | null;
+      hora_inicio: Date | string | null;
+      hora_fin: Date | string | null;
+    } | null;
+  } | null;
 };
 
 type TrainerInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
@@ -214,6 +233,46 @@ function normalizeTrainerInviteStatus(value: unknown): TrainerInviteStatus | nul
     return normalized;
   }
   return null;
+}
+
+type TimeParts = { hour: number; minute: number };
+
+function parseInviteTimeParts(value: Date | string | null | undefined): TimeParts | null {
+  const formatted = formatTimeFromDb(value ?? null);
+  if (!formatted) return null;
+  const match = formatted.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number.parseInt(match[1], 10);
+  const minute = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function buildInviteDate(base: Date, time: TimeParts): Date {
+  const year = base.getUTCFullYear();
+  const month = base.getUTCMonth() + 1;
+  const day = base.getUTCDate();
+  return buildMadridDateTime({ year, month, day, hour: time.hour, minute: time.minute });
+}
+
+function computeVariantInviteRange(
+  variantDate: Date | string | null | undefined,
+  productTimes: { hora_inicio: Date | string | null; hora_fin: Date | string | null },
+): { start: Date; end: Date } | null {
+  if (!variantDate) return null;
+  const parsed = new Date(variantDate as any);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  const startTime = parseInviteTimeParts(productTimes.hora_inicio);
+  const endTime = parseInviteTimeParts(productTimes.hora_fin);
+  const startParts = startTime ?? { hour: 9, minute: 0 };
+  const endParts = endTime ?? (startTime ? { ...startTime } : { hour: 11, minute: 0 });
+  const start = buildInviteDate(parsed, startParts);
+  let end = buildInviteDate(parsed, endParts);
+  if (end.getTime() <= start.getTime()) {
+    end = new Date(start.getTime() + 60 * 60 * 1000);
+  }
+  return { start, end };
 }
 
 function sanitizeBigInt(value: unknown): string | null {
@@ -426,6 +485,7 @@ export const handler = createHttpHandler(async (request) => {
       });
       const trainerInviteStatus = inviteForTrainer ? normalizeTrainerInviteStatus(inviteForTrainer.status) : null;
       const trainerInviteToken = inviteForTrainer ? sanitizeString(inviteForTrainer.token ?? null) : null;
+      const trainerInviteType = trainerInviteToken ? 'SESSION' : null;
 
       const contactFirstName = sanitizeString(deal?.persons?.first_name ?? null);
       const contactLastName = sanitizeString(deal?.persons?.last_name ?? null);
@@ -480,10 +540,82 @@ export const handler = createHttpHandler(async (request) => {
           companionTrainers,
           trainerInviteStatus,
           trainerInviteToken,
+          trainerInviteType,
         },
       };
     })
     .filter((entry): entry is { dateKey: string; session: any } => entry !== null);
+
+  const variantInviteRecords = (await prisma.variant_trainer_invites.findMany({
+    where: { trainer_id: trainer.trainer_id, status: 'PENDING' },
+    select: {
+      variant_id: true,
+      token: true,
+      variant: {
+        select: {
+          id: true,
+          name: true,
+          date: true,
+          sede: true,
+          products: { select: { name: true, code: true, hora_inicio: true, hora_fin: true } },
+        },
+      },
+    },
+  })) as VariantInviteRecord[];
+
+  for (const invite of variantInviteRecords) {
+    const variant = invite.variant ?? null;
+    const variantId = sanitizeString(variant?.id ?? invite.variant_id ?? null);
+    const token = sanitizeString(invite.token ?? null);
+    if (!variantId || !token) continue;
+
+    const range = computeVariantInviteRange(variant?.date ?? null, {
+      hora_inicio: variant?.products?.hora_inicio ?? null,
+      hora_fin: variant?.products?.hora_fin ?? null,
+    });
+
+    const startDateIso = range?.start
+      ? toMadridISOString(range.start)
+      : toMadridISOString(variant?.date ?? null);
+    const endDateIso = range?.end ? toMadridISOString(range.end) : startDateIso;
+    const dateKey =
+      startDateIso?.slice(0, 10) ?? endDateIso?.slice(0, 10) ?? `variant:${variantId}`;
+
+    const sessionTitle =
+      sanitizeString(variant?.name ?? null) ??
+      sanitizeString(variant?.products?.name ?? null) ??
+      'Formación abierta';
+
+    sessionEntries.push({
+      dateKey,
+      session: {
+        sessionId: `variant:${variantId}`,
+        dealId: `variant:${variantId}`,
+        budgetNumber: null,
+        organizationName: null,
+        commercialName: null,
+        clientName: null,
+        clientPhone: null,
+        clientEmail: null,
+        sessionTitle,
+        formationName: sanitizeString(variant?.products?.name ?? null),
+        formationTemplate: null,
+        formationUrl: null,
+        address: sanitizeString(variant?.sede ?? null),
+        caes: { value: null, label: null },
+        fundae: { value: null, label: null },
+        startDate: startDateIso,
+        endDate: endDateIso,
+        mobileUnits: [],
+        isCompanyTraining: false,
+        isGepServices: false,
+        companionTrainers: [],
+        trainerInviteStatus: 'PENDING',
+        trainerInviteToken: token,
+        trainerInviteType: 'VARIANT',
+      },
+    });
+  }
 
   const variantIds = new Set<string>();
 
