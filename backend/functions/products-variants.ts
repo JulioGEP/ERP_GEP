@@ -1462,18 +1462,6 @@ function normalizeVariant(record: VariantRecord) {
     }
   }
 
-  const uniqueTrainerIds = Array.from(new Set([...trainerIdsFromLinks]));
-  const trimmedTrainerId = toTrimmed(record.trainer_id);
-  if (trimmedTrainerId && !uniqueTrainerIds.includes(trimmedTrainerId)) {
-    uniqueTrainerIds.unshift(trimmedTrainerId);
-  }
-
-  const trainerRecords = Array.from(trainerRecordsMap.values());
-  const primaryTrainerId = uniqueTrainerIds[0] ?? trimmedTrainerId ?? null;
-  const trainerDetail = primaryTrainerId
-    ? trainerRecords.find((item) => item.trainer_id === primaryTrainerId) ?? null
-    : null;
-
   const inviteRecords = Array.isArray(record.trainer_invites) ? record.trainer_invites : [];
   const inviteSummaries: Array<{
     trainer_id: string;
@@ -1481,22 +1469,49 @@ function normalizeVariant(record: VariantRecord) {
     sent_at: string | null;
     responded_at: string | null;
   }> = [];
-  const inviteStatusMap: Record<string, TrainerInviteSummaryStatus> = {};
-  for (const id of uniqueTrainerIds) {
-    if (id) {
-      inviteStatusMap[id] = 'NOT_SENT';
-    }
-  }
+  const inviteTrainerIds: string[] = [];
   for (const invite of inviteRecords) {
     const trainerId = toTrimmed((invite as any)?.trainer_id ?? null);
     const status = normalizeTrainerInviteStatus((invite as any)?.status ?? null);
     if (!trainerId || !status) continue;
+    inviteTrainerIds.push(trainerId);
     inviteSummaries.push({
       trainer_id: trainerId,
       status,
       sent_at: toMadridISOString((invite as any)?.sent_at ?? null),
       responded_at: toMadridISOString((invite as any)?.responded_at ?? null),
     });
+    if (!trainerRecordsMap.has(trainerId)) {
+      trainerRecordsMap.set(trainerId, {
+        trainer_id: trainerId,
+        name: null,
+        apellido: null,
+      });
+    }
+  }
+
+  const trimmedTrainerId = toTrimmed(record.trainer_id);
+  const uniqueTrainerIds = Array.from(
+    new Set([
+      ...trainerIdsFromLinks,
+      ...(trimmedTrainerId ? [trimmedTrainerId] : []),
+      ...inviteTrainerIds,
+    ]),
+  );
+
+  const trainerRecords = Array.from(trainerRecordsMap.values());
+  const primaryTrainerId = uniqueTrainerIds[0] ?? trimmedTrainerId ?? null;
+  const trainerDetail = primaryTrainerId
+    ? trainerRecords.find((item) => item.trainer_id === primaryTrainerId) ?? null
+    : null;
+
+  const inviteStatusMap: Record<string, TrainerInviteSummaryStatus> = {};
+  for (const id of uniqueTrainerIds) {
+    if (id) {
+      inviteStatusMap[id] = 'NOT_SENT';
+    }
+  }
+  for (const { trainer_id: trainerId, status } of inviteSummaries) {
     if (inviteStatusMap[trainerId] !== undefined) {
       inviteStatusMap[trainerId] = status;
     } else {
