@@ -63,11 +63,6 @@ export type VariantTrainerInviteResponse = {
   message?: string;
 };
 
-export type VariantTrainerInvitesFetchResponse = {
-  invites?: unknown;
-  message?: string;
-};
-
 export type SendVariantTrainerInvitesResult = {
   variant: {
     id: string;
@@ -107,13 +102,6 @@ export type VariantTrainerInvite = {
     start_at: string | null;
     end_at: string | null;
   };
-};
-
-export type VariantTrainerInviteSummary = {
-  trainer_id: string;
-  status: VariantTrainerInvite['status'];
-  sent_at: string | null;
-  responded_at: string | null;
 };
 
 function apiPath(path: string): string {
@@ -433,39 +421,4 @@ export async function respondVariantTrainerInvite(
   }
 
   return fetchVariantTrainerInvite(normalizedToken);
-}
-
-export async function fetchVariantTrainerInviteSummaries(
-  variantId: string,
-): Promise<VariantTrainerInviteSummary[]> {
-  const normalizedId = String(variantId ?? '').trim();
-  if (!normalizedId) {
-    throw new ApiError('VALIDATION_ERROR', 'variantId es obligatorio');
-  }
-
-  const response = await requestJson<VariantTrainerInvitesFetchResponse>(
-    apiPath(`variant-trainer-invites?variantId=${encodeURIComponent(normalizedId)}`),
-    { headers: { Accept: 'application/json' } },
-    { defaultErrorMessage: 'No se pudieron cargar las confirmaciones de formadores.' },
-  );
-
-  const invitesRaw = Array.isArray(response?.invites) ? (response.invites as unknown[]) : [];
-  const invites: VariantTrainerInviteSummary[] = invitesRaw
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return null;
-      }
-      const record = entry as Record<string, unknown>;
-      const trainerId = toTrimmed(record.trainer_id);
-      if (!trainerId) {
-        return null;
-      }
-      const status = toInviteStatus(record.status);
-      const sentAt = typeof record.sent_at === 'string' ? record.sent_at : null;
-      const respondedAt = typeof record.responded_at === 'string' ? record.responded_at : null;
-      return { trainer_id: trainerId, status, sent_at: sentAt, responded_at: respondedAt };
-    })
-    .filter((entry): entry is VariantTrainerInviteSummary => entry !== null);
-
-  return invites;
 }

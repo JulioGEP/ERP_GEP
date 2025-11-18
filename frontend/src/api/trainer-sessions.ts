@@ -69,8 +69,6 @@ export type TrainerVariantDetail = {
   organizationNames: string[];
   deals: TrainerVariantDeal[];
   students: TrainerVariantStudent[];
-  trainerInviteStatus: TrainerSessionInviteStatus | null;
-  trainerInviteToken: string | null;
 };
 
 export type TrainerSessionsDateEntry = {
@@ -335,16 +333,6 @@ function sanitizeVariant(value: unknown): TrainerVariantDetail | null {
     organizationNames,
     deals,
     students,
-    trainerInviteStatus: sanitizeTrainerInviteStatus(
-      (raw as { trainerInviteStatus?: unknown }).trainerInviteStatus ??
-        (raw as { trainer_invite_status?: unknown }).trainer_invite_status ??
-        null,
-    ),
-    trainerInviteToken: sanitizeString(
-      (raw as { trainerInviteToken?: unknown }).trainerInviteToken ??
-        (raw as { trainer_invite_token?: unknown }).trainer_invite_token ??
-        null,
-    ),
   } satisfies TrainerVariantDetail;
 }
 
