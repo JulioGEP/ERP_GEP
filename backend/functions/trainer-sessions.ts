@@ -165,6 +165,11 @@ type VariantInviteRecord = {
   } | null;
 };
 
+type VariantInviteStatusRecord = {
+  variant_id: unknown;
+  status: unknown;
+};
+
 type TrainerInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
 
 const PIPELINE_LABELS_COMPANY = [
@@ -617,6 +622,21 @@ export const handler = createHttpHandler(async (request) => {
     });
   }
 
+  const variantInviteStatusRecords = (await prisma.variant_trainer_invites.findMany({
+    where: { trainer_id: trainer.trainer_id },
+    select: { variant_id: true, status: true },
+  })) as VariantInviteStatusRecord[];
+
+  const confirmedVariantInviteIds = new Set<string>();
+  for (const invite of variantInviteStatusRecords) {
+    const variantId = sanitizeString(invite.variant_id);
+    if (!variantId) continue;
+    const status = normalizeTrainerInviteStatus(invite.status);
+    if (status === 'CONFIRMED') {
+      confirmedVariantInviteIds.add(variantId);
+    }
+  }
+
   const variantIds = new Set<string>();
 
   const primaryVariants = (await prisma.variants.findMany({
@@ -628,6 +648,10 @@ export const handler = createHttpHandler(async (request) => {
     if (variant.id) {
       variantIds.add(String(variant.id));
     }
+  });
+
+  confirmedVariantInviteIds.forEach((variantId) => {
+    variantIds.add(variantId);
   });
 
   try {
@@ -648,11 +672,15 @@ export const handler = createHttpHandler(async (request) => {
     }
   }
 
+  const eligibleVariantIds = Array.from(variantIds).filter((variantId) =>
+    confirmedVariantInviteIds.has(variantId),
+  );
+
   let variantEntries: Array<{ dateKey: string; variant: VariantPayload }> = [];
 
-  if (variantIds.size) {
+  if (eligibleVariantIds.length) {
     const variants = (await prisma.variants.findMany({
-      where: { id: { in: Array.from(variantIds) } },
+      where: { id: { in: eligibleVariantIds } },
       select: {
         id: true,
         id_woo: true,
