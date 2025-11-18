@@ -48,6 +48,11 @@ type VariantRecord = {
   id: string;
 };
 
+type VariantInviteRecord = {
+  variant_id: unknown;
+  status: unknown;
+};
+
 type VariantDetailRecord = {
   id: string;
   id_woo: unknown;
@@ -198,6 +203,25 @@ export const handler = createHttpHandler(async (request) => {
 
   const variantIds = new Set<string>(variantPrimaryRecords.map((variant) => variant.id));
 
+  const variantInviteRecords = (await prisma.variant_trainer_invites.findMany({
+    where: { trainer_id: trainer.trainer_id },
+    select: { variant_id: true, status: true },
+  })) as VariantInviteRecord[];
+
+  const confirmedVariantInviteIds = new Set<string>();
+  for (const invite of variantInviteRecords) {
+    const variantId = toMaybeString(invite.variant_id);
+    if (!variantId) continue;
+    const status = normalizeTrainerInviteStatus(invite.status);
+    if (status === 'CONFIRMED') {
+      confirmedVariantInviteIds.add(variantId);
+    }
+  }
+
+  confirmedVariantInviteIds.forEach((variantId) => {
+    variantIds.add(variantId);
+  });
+
   try {
     const rows = (await prisma.$queryRaw<{ variant_id: string }[]>`
       SELECT variant_id::text AS variant_id
@@ -226,15 +250,20 @@ export const handler = createHttpHandler(async (request) => {
     return pipeline !== null && PIPELINE_LABELS_GEP.includes(pipeline);
   }).length;
 
-  const openTrainingVariants = variantIds.size;
+  const eligibleVariantIds = Array.from(variantIds).filter((variantId) =>
+    confirmedVariantInviteIds.has(variantId),
+  );
+  const eligibleVariantIdSet = new Set(eligibleVariantIds);
+
+  const openTrainingVariants = eligibleVariantIdSet.size;
 
   const totalAssigned = companySessions + gepServicesSessions + openTrainingVariants;
 
   const variantDetails: TrainerDashboardVariant[] = [];
 
-  if (variantIds.size) {
+  if (eligibleVariantIdSet.size) {
     const variantRecords = (await prisma.variants.findMany({
-      where: { id: { in: Array.from(variantIds) } },
+      where: { id: { in: eligibleVariantIds } },
       orderBy: [{ date: 'asc' }, { name: 'asc' }],
       select: {
         id: true,
