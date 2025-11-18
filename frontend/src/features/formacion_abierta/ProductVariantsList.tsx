@@ -47,6 +47,7 @@ import {
   createProductVariantsForProduct,
   deleteProductVariant,
   fetchDealsByVariation,
+  fetchVariantTrainerInviteSummaries,
   fetchProductsWithVariants,
   sendVariantTrainerInvites,
   updateProductVariant,
@@ -1078,6 +1079,7 @@ export function VariantModal({
   const availabilityLoading = availabilityQuery.isLoading;
 
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
+  const trainerIdsSnapshotRef = useRef<string[]>([]);
   const trainerPointerInteractingRef = useRef(false);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const unitPointerInteractingRef = useRef(false);
@@ -1085,6 +1087,10 @@ export function VariantModal({
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitListOpen, setUnitListOpen] = useState(false);
   const [unitFilter, setUnitFilter] = useState('');
+
+  useEffect(() => {
+    trainerIdsSnapshotRef.current = formValues.trainer_ids;
+  }, [formValues.trainer_ids]);
 
   useEffect(() => {
     if (!variant) {
@@ -1149,6 +1155,49 @@ export function VariantModal({
     setUnitFilter('');
     unitPointerInteractingRef.current = false;
   }, [variant]);
+
+  useEffect(() => {
+    let ignore = false;
+    const variantId = variant?.id;
+    if (!variantId) {
+      return () => {
+        ignore = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const invites = await fetchVariantTrainerInviteSummaries(variantId);
+        if (ignore) {
+          return;
+        }
+        const trainerIds = trainerIdsSnapshotRef.current;
+        let updatedMap: TrainerInviteStatusMap | null = null;
+        setTrainerInviteStatusMap((current) => {
+          const synced = syncTrainerInviteStatusMap(current, trainerIds);
+          const next: TrainerInviteStatusMap = { ...synced };
+          invites.forEach((invite) => {
+            const trainerId = invite.trainer_id?.trim();
+            if (!trainerId) {
+              return;
+            }
+            next[trainerId] = invite.status;
+          });
+          updatedMap = next;
+          return next;
+        });
+        if (updatedMap) {
+          setTrainerInviteSummary(summarizeTrainerInviteStatus(updatedMap));
+        }
+      } catch (error) {
+        console.error('[ProductVariantsList] No se pudieron cargar las confirmaciones', error);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [variant?.id]);
 
   useEffect(() => {
     let ignore = false;
