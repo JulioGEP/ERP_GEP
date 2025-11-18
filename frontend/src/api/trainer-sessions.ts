@@ -14,6 +14,7 @@ export type TrainerSessionTrainer = {
 };
 
 export type TrainerSessionInviteStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED';
+export type TrainerSessionInviteType = 'SESSION' | 'VARIANT';
 
 export type TrainerSessionDetail = {
   sessionId: string;
@@ -39,6 +40,7 @@ export type TrainerSessionDetail = {
   companionTrainers: TrainerSessionTrainer[];
   trainerInviteStatus: TrainerSessionInviteStatus | null;
   trainerInviteToken: string | null;
+  trainerInviteType: TrainerSessionInviteType | null;
 };
 
 export type TrainerVariantDeal = {
@@ -123,6 +125,15 @@ function sanitizeTrainerInviteStatus(value: unknown): TrainerSessionInviteStatus
   if (typeof value !== 'string') return null;
   const normalized = value.trim().toUpperCase();
   if (normalized === 'PENDING' || normalized === 'CONFIRMED' || normalized === 'DECLINED') {
+    return normalized;
+  }
+  return null;
+}
+
+function sanitizeTrainerInviteType(value: unknown): TrainerSessionInviteType | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'SESSION' || normalized === 'VARIANT') {
     return normalized;
   }
   return null;
@@ -302,6 +313,7 @@ function sanitizeSession(value: unknown): TrainerSessionDetail | null {
     companionTrainers,
     trainerInviteStatus: sanitizeTrainerInviteStatus((raw as { trainerInviteStatus?: unknown }).trainerInviteStatus),
     trainerInviteToken: sanitizeString((raw as { trainerInviteToken?: unknown }).trainerInviteToken),
+    trainerInviteType: sanitizeTrainerInviteType((raw as { trainerInviteType?: unknown }).trainerInviteType),
   } satisfies TrainerSessionDetail;
 }
 
