@@ -77,6 +77,12 @@ type VariantDealRecord = {
   }> | null;
 };
 
+type VariantInviteRecord = {
+  variant_id: string | null;
+  status: string | null;
+  token: string | null;
+};
+
 type VariantDealPayload = {
   dealId: string;
   organizationName: string | null;
@@ -118,6 +124,8 @@ type VariantPayload = {
     organizationName: string | null;
     fundaeLabel: string | null;
   }>;
+  trainerInviteStatus: TrainerInviteStatus | null;
+  trainerInviteToken: string | null;
 };
 
 type SessionPayload = {
@@ -516,6 +524,30 @@ export const handler = createHttpHandler(async (request) => {
     }
   }
 
+  let variantInvites: VariantInviteRecord[] = [];
+  try {
+    variantInvites = (await prisma.variant_trainer_invites.findMany({
+      where: { trainer_id: trainer.trainer_id },
+      select: { variant_id: true, status: true, token: true },
+    })) as VariantInviteRecord[];
+  } catch (error) {
+    if (!isMissingRelationError(error, 'variant_trainer_invites')) {
+      throw error;
+    }
+  }
+
+  const variantInviteMap = new Map<string, { status: TrainerInviteStatus | null; token: string | null }>();
+
+  for (const invite of variantInvites) {
+    const variantId = sanitizeString(invite.variant_id);
+    if (!variantId) continue;
+    variantIds.add(variantId);
+    variantInviteMap.set(variantId, {
+      status: normalizeTrainerInviteStatus(invite.status),
+      token: sanitizeString(invite.token),
+    });
+  }
+
   let variantEntries: Array<{ dateKey: string; variant: VariantPayload }> = [];
 
   if (variantIds.size) {
@@ -635,6 +667,7 @@ export const handler = createHttpHandler(async (request) => {
           fundaeLabel: deal.fundaeLabel,
           studentCount: deal.studentCount,
         }));
+        const invite = variantInviteMap.get(variantId) ?? null;
         return {
           dateKey,
           variant: {
@@ -647,6 +680,8 @@ export const handler = createHttpHandler(async (request) => {
             organizationNames,
             deals: sanitizedDeals,
             students,
+            trainerInviteStatus: invite?.status ?? null,
+            trainerInviteToken: invite?.token ?? null,
           },
         };
       })
