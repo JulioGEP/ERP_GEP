@@ -217,11 +217,6 @@ type VariantInviteRecord = {
   } | null;
 };
 
-type VariantInviteSummaryRow = Pick<
-  VariantInviteRecord,
-  'trainer_id' | 'status' | 'sent_at' | 'responded_at'
->;
-
 type NormalizedInvite = {
   token: string;
   status: TrainerInviteStatus;
@@ -616,39 +611,6 @@ export const handler = createHttpHandler(async (request) => {
     }
   }
 
-  if (method === 'GET' && isBasePath(path)) {
-    const rawVariantId = request.query.variantId ?? request.query.variant_id ?? '';
-    const variantId = typeof rawVariantId === 'string' ? rawVariantId.trim() : '';
-    if (!variantId) {
-      return errorResponse('VALIDATION_ERROR', 'variantId es obligatorio', 400);
-    }
-
-    const auth = await requireAuth(request, prisma);
-    if ('error' in auth) {
-      return auth.error;
-    }
-
-    const invites: VariantInviteSummaryRow[] = await prisma.variant_trainer_invites.findMany({
-      where: { variant_id: variantId },
-      select: {
-        trainer_id: true,
-        status: true,
-        sent_at: true,
-        responded_at: true,
-      },
-      orderBy: { sent_at: 'desc' },
-    });
-
-    const normalized = invites.map((invite) => ({
-      trainer_id: invite.trainer_id ?? null,
-      status: normalizeInviteStatus(invite.status) ?? 'PENDING',
-      sent_at: toMadridISOString(invite.sent_at ?? null),
-      responded_at: toMadridISOString(invite.responded_at ?? null),
-    }));
-
-    return successResponse({ invites: normalized });
-  }
-
   if (method === 'POST' && isBasePath(path)) {
     const body = request.body && typeof request.body === 'object' ? (request.body as Record<string, unknown>) : {};
     const variantIdRaw = body.variantId ?? body.variant_id;
@@ -761,7 +723,6 @@ export const handler = createHttpHandler(async (request) => {
     const variantPayload = buildVariantPayload({
       id: variant.id,
       name: variant.name,
-      status: variant.status,
       date: variant.date,
       sede: variant.sede,
       products: variant.products,

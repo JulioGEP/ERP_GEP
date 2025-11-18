@@ -47,7 +47,6 @@ import {
   createProductVariantsForProduct,
   deleteProductVariant,
   fetchDealsByVariation,
-  fetchVariantTrainerInviteSummaries,
   fetchProductsWithVariants,
   sendVariantTrainerInvites,
   updateProductVariant,
@@ -1053,7 +1052,6 @@ export function VariantModal({
   const availabilityLoading = availabilityQuery.isLoading;
 
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
-  const trainerIdsSnapshotRef = useRef<string[]>([]);
   const trainerPointerInteractingRef = useRef(false);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const unitPointerInteractingRef = useRef(false);
@@ -1061,10 +1059,6 @@ export function VariantModal({
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitListOpen, setUnitListOpen] = useState(false);
   const [unitFilter, setUnitFilter] = useState('');
-
-  useEffect(() => {
-    trainerIdsSnapshotRef.current = formValues.trainer_ids;
-  }, [formValues.trainer_ids]);
 
   useEffect(() => {
     if (!variant) {
@@ -1130,49 +1124,6 @@ export function VariantModal({
     setUnitFilter('');
     unitPointerInteractingRef.current = false;
   }, [variant]);
-
-  useEffect(() => {
-    let ignore = false;
-    const variantId = variant?.id;
-    if (!variantId) {
-      return () => {
-        ignore = true;
-      };
-    }
-
-    (async () => {
-      try {
-        const invites = await fetchVariantTrainerInviteSummaries(variantId);
-        if (ignore) {
-          return;
-        }
-        const trainerIds = trainerIdsSnapshotRef.current;
-        let updatedMap: TrainerInviteStatusMap | null = null;
-        setTrainerInviteStatusMap((current) => {
-          const synced = syncTrainerInviteStatusMap(current, trainerIds);
-          const next: TrainerInviteStatusMap = { ...synced };
-          invites.forEach((invite) => {
-            const trainerId = invite.trainer_id?.trim();
-            if (!trainerId) {
-              return;
-            }
-            next[trainerId] = invite.status;
-          });
-          updatedMap = next;
-          return next;
-        });
-        if (updatedMap) {
-          setTrainerInviteSummary(summarizeTrainerInviteStatus(updatedMap));
-        }
-      } catch (error) {
-        console.error('[ProductVariantsList] No se pudieron cargar las confirmaciones', error);
-      }
-    })();
-
-    return () => {
-      ignore = true;
-    };
-  }, [variant?.id]);
 
   useEffect(() => {
     let ignore = false;
@@ -1552,17 +1503,6 @@ export function VariantModal({
   );
 
   const hasPendingInviteTargets = trainerInviteDetails.some((item) => item.status === 'NOT_SENT');
-  const hasFinalTrainerInviteResponse = trainerInviteSummary === 'CONFIRMED' || trainerInviteSummary === 'DECLINED';
-  const canSendTrainerInvites = hasPendingInviteTargets && !hasFinalTrainerInviteResponse;
-  const trainerInviteSummaryBadge =
-    trainerInviteSummary !== 'NOT_SENT'
-      ? TRAINER_INVITE_STATUS_BADGES[trainerInviteSummary] ?? null
-      : null;
-  const trainerInviteResponseMessage = hasFinalTrainerInviteResponse
-    ? trainerInviteSummary === 'CONFIRMED'
-      ? 'Esta variante ha sido aceptada por al menos un formador invitado.'
-      : 'Los formadores invitados han rechazado esta variante.'
-    : null;
 
   const selectedUnits = useMemo(() => {
     if (!formValues.unidad_movil_ids.length) {
@@ -2003,14 +1943,7 @@ export function VariantModal({
               <Row className="g-3">
                 <Col md={4}>
                   <Form.Group controlId="variantTrainer" className="mb-0">
-                    <Form.Label className="d-flex align-items-center gap-2">
-                      <span>Formadores</span>
-                      {trainerInviteSummaryBadge ? (
-                        <Badge bg={trainerInviteSummaryBadge.variant}>
-                          {trainerInviteSummaryBadge.label}
-                        </Badge>
-                      ) : null}
-                    </Form.Label>
+                    <Form.Label>Formadores</Form.Label>
                     <div ref={trainerFieldRef} className="session-multiselect">
                       <Form.Control
                         type="text"
@@ -2108,44 +2041,32 @@ export function VariantModal({
                         ))}
                       </div>
                       <div className="mt-2 d-flex flex-column gap-1">
-                        {hasFinalTrainerInviteResponse ? (
-                          <div
-                            className={`small fw-semibold ${
-                              trainerInviteSummary === 'CONFIRMED' ? 'text-success' : 'text-danger'
-                            }`}
-                          >
-                            {trainerInviteResponseMessage}
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          disabled={inviteStatus.sending || !hasPendingInviteTargets}
+                          onClick={() => {
+                            void handleSendInvites();
+                          }}
+                        >
+                          {inviteStatus.sending ? (
+                            <>
+                              <Spinner animation="border" size="sm" role="status" className="me-2" />
+                              Enviando…
+                            </>
+                          ) : (
+                            'Enviar confirmación'
+                          )}
+                        </Button>
+                        {inviteStatus.error ? (
+                          <div className="text-danger small">{inviteStatus.error}</div>
+                        ) : inviteStatus.message ? (
+                          <div className="text-muted small">{inviteStatus.message}</div>
+                        ) : !hasPendingInviteTargets ? (
+                          <div className="text-muted small">
+                            Todos los formadores ya han recibido la invitación.
                           </div>
-                        ) : (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline-primary"
-                              disabled={inviteStatus.sending || !canSendTrainerInvites}
-                              onClick={() => {
-                                void handleSendInvites();
-                              }}
-                            >
-                              {inviteStatus.sending ? (
-                                <>
-                                  <Spinner animation="border" size="sm" role="status" className="me-2" />
-                                  Enviando…
-                                </>
-                              ) : (
-                                'Enviar confirmación'
-                              )}
-                            </Button>
-                            {inviteStatus.error ? (
-                              <div className="text-danger small">{inviteStatus.error}</div>
-                            ) : inviteStatus.message ? (
-                              <div className="text-muted small">{inviteStatus.message}</div>
-                            ) : !hasPendingInviteTargets ? (
-                              <div className="text-muted small">
-                                Todos los formadores ya han recibido la invitación.
-                              </div>
-                            ) : null}
-                          </>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   ) : null}
@@ -2850,11 +2771,6 @@ export default function ProductVariantsList() {
                                                         !isLeadCountLoading && typeof leadsCount === 'number' && leadsCount > 0
                                                           ? 'primary'
                                                           : 'light';
-                                                      const inviteSummaryBadge =
-                                                        variant.trainer_invite_status &&
-                                                        variant.trainer_invite_status !== 'NOT_SENT'
-                                                          ? TRAINER_INVITE_STATUS_BADGES[variant.trainer_invite_status]
-                                                          : null;
 
                                                       return (
                                                         <ListGroup.Item
@@ -2893,15 +2809,11 @@ export default function ProductVariantsList() {
                                                                   )}
                                                                 </Badge>
                                                               ) : null}
-                                                              {inviteSummaryBadge ? (
-                                                                <Badge bg={inviteSummaryBadge.variant}>
-                                                                  {inviteSummaryBadge.label}
-                                                                </Badge>
-                                                              ) : variant.status ? (
+                                                              {variant.status && (
                                                                 <Badge bg={getStatusBadgeVariant(variant.status)}>
                                                                   {variant.status}
                                                                 </Badge>
-                                                              ) : null}
+                                                              )}
                                                               {variant.date && (
                                                                 <span className="text-muted small">{formatDate(variant.date)}</span>
                                                               )}

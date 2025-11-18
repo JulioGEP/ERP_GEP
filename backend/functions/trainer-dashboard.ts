@@ -58,11 +58,6 @@ type VariantDetailRecord = {
   unidades_moviles: { unidad_id: string | null; name: string | null; matricula: string | null } | null;
 };
 
-type VariantInviteRecord = {
-  variant_id: string | null;
-  status: string | null;
-};
-
 const PIPELINE_LABELS_COMPANY = [
   'formacion empresa',
   'formacion empresas',
@@ -187,7 +182,7 @@ export const handler = createHttpHandler(async (request) => {
     orderBy: [{ fecha_inicio_utc: 'asc' }],
   })) as SessionRecord[];
 
-  const pendingSessionInvites = sessions.reduce((total, session) => {
+  const pendingConfirmations = sessions.reduce((total, session) => {
     const invites = Array.isArray(session.trainer_session_invites)
       ? session.trainer_session_invites
       : [];
@@ -220,32 +215,6 @@ export const handler = createHttpHandler(async (request) => {
       throw error;
     }
   }
-
-  let variantInviteRecords: VariantInviteRecord[] = [];
-  try {
-    variantInviteRecords = (await prisma.variant_trainer_invites.findMany({
-      where: { trainer_id: trainer.trainer_id },
-      select: { variant_id: true, status: true },
-    })) as VariantInviteRecord[];
-  } catch (error) {
-    if (!isMissingRelationError(error, 'variant_trainer_invites')) {
-      throw error;
-    }
-  }
-
-  for (const invite of variantInviteRecords) {
-    const variantId = toMaybeString(invite.variant_id);
-    if (variantId) {
-      variantIds.add(variantId);
-    }
-  }
-
-  const pendingVariantInvites = variantInviteRecords.reduce((total, invite) => {
-    const status = normalizeTrainerInviteStatus(invite.status);
-    return status === 'PENDING' ? total + 1 : total;
-  }, 0);
-
-  const pendingConfirmations = pendingSessionInvites + pendingVariantInvites;
 
   const companySessions = sessions.filter((session) => {
     const pipeline = normalizePipeline(session.deals?.pipeline_id ?? null);
