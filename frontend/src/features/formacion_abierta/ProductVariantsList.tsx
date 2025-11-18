@@ -149,32 +149,6 @@ const TRAINER_INVITE_STATUS_BADGES: Record<TrainerInviteStatus, { label: string;
   DECLINED: { label: 'Denegada', variant: 'danger' },
 };
 
-function buildStatusMapFromVariant(
-  variant: VariantInfo | null,
-  trainerIds: readonly string[],
-): TrainerInviteStatusMap {
-  const baseMap = variant?.trainer_invite_statuses;
-  const syncedMap = syncTrainerInviteStatusMap(baseMap, trainerIds);
-  const invites = variant?.trainer_invites ?? [];
-  if (!invites.length) {
-    return syncedMap;
-  }
-
-  const nextMap: TrainerInviteStatusMap = { ...syncedMap };
-  for (const invite of invites) {
-    const trainerId = invite?.trainer_id?.trim();
-    if (!trainerId) continue;
-    const status = invite.status === 'CONFIRMED'
-      ? 'CONFIRMED'
-      : invite.status === 'DECLINED'
-        ? 'DECLINED'
-        : 'PENDING';
-    nextMap[trainerId] = status;
-  }
-
-  return nextMap;
-}
-
 type InviteStatusState = { sending: boolean; message: string | null; error: string | null };
 
 function getStatusBadgeVariant(status: string | null): string {
@@ -1137,10 +1111,11 @@ export function VariantModal({
     setFormValues(nextValues);
     setInitialValues(nextValues);
     setSaveError(null);
-    const statusMapFromVariant = buildStatusMapFromVariant(variant, nextValues.trainer_ids);
-    setTrainerInviteStatusMap(statusMapFromVariant);
-    setInitialTrainerInviteStatusMap(statusMapFromVariant);
-    setTrainerInviteSummary(summarizeTrainerInviteStatus(statusMapFromVariant));
+    const baseStatusMap = variant.trainer_invite_statuses ?? {};
+    const syncedStatusMap = syncTrainerInviteStatusMap(baseStatusMap, nextValues.trainer_ids);
+    setTrainerInviteStatusMap(syncedStatusMap);
+    setInitialTrainerInviteStatusMap(syncedStatusMap);
+    setTrainerInviteSummary(variant.trainer_invite_status ?? 'NOT_SENT');
     setInviteStatus({ sending: false, message: null, error: null });
     setSaveSuccess(null);
     setSelectedDealId(null);
@@ -1916,10 +1891,13 @@ export function VariantModal({
       setFormValues(nextValues);
       setInitialValues(nextValues);
       setSaveSuccess(closeAfter ? null : 'Variante actualizada correctamente.');
-      const updatedStatusMap = buildStatusMapFromVariant(enhancedVariant, nextValues.trainer_ids);
+      const updatedStatusMap = syncTrainerInviteStatusMap(
+        enhancedVariant.trainer_invite_statuses ?? {},
+        nextValues.trainer_ids,
+      );
       setTrainerInviteStatusMap(updatedStatusMap);
       setInitialTrainerInviteStatusMap(updatedStatusMap);
-      setTrainerInviteSummary(summarizeTrainerInviteStatus(updatedStatusMap));
+      setTrainerInviteSummary(enhancedVariant.trainer_invite_status ?? 'NOT_SENT');
 
       if (closeAfter) {
         onHide();
