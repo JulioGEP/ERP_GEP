@@ -68,8 +68,8 @@ function summarizeTrainerInviteStatus(
   if (!values.length) {
     return 'NOT_SENT';
   }
-  if (values.includes('DECLINED')) return 'DECLINED';
   if (values.includes('CONFIRMED')) return 'CONFIRMED';
+  if (values.includes('DECLINED')) return 'DECLINED';
   if (values.includes('PENDING')) return 'PENDING';
   return 'NOT_SENT';
 }
