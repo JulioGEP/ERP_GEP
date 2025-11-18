@@ -5,8 +5,10 @@ import { Alert, Button, Card, Spinner, Stack, Table } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { fetchTrainerDashboard } from '../../../api/trainer-dashboard';
 import type { TrainerDashboardResponse } from '../../../api/trainer-dashboard';
+import { fetchTrainerSessions } from '../../../api/trainer-sessions';
 
 const QUERY_KEY = ['trainer', 'dashboard'] as const;
+const TRAINER_SESSIONS_QUERY_KEY = ['trainer', 'sessions'] as const;
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat('es-ES').format(value);
@@ -78,9 +80,30 @@ export default function TrainerDashboardPage() {
     queryFn: () => fetchTrainerDashboard(),
     staleTime: 5 * 60 * 1000,
   });
+  const trainerSessionsQuery = useQuery({
+    queryKey: TRAINER_SESSIONS_QUERY_KEY,
+    queryFn: fetchTrainerSessions,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const updatedAt = useMemo(() => formatUpdatedAt(query.data?.generatedAt ?? null), [query.data?.generatedAt]);
-  const pendingConfirmations = query.data?.metrics.pendingConfirmations ?? 0;
+  const pendingConfirmationsFromSessions = useMemo(() => {
+    const dates = trainerSessionsQuery.data?.dates;
+    if (!dates) return null;
+    let count = 0;
+    dates.forEach((dateEntry) => {
+      dateEntry.sessions.forEach((session) => {
+        if (session.trainerInviteStatus === 'PENDING') {
+          count += 1;
+        }
+      });
+    });
+    return count;
+  }, [trainerSessionsQuery.data?.dates]);
+  const pendingConfirmationsFromDashboard = query.data?.metrics.pendingConfirmations;
+  const pendingConfirmationsNumber =
+    pendingConfirmationsFromSessions ?? (typeof pendingConfirmationsFromDashboard === 'number' ? pendingConfirmationsFromDashboard : null);
+  const pendingConfirmations = pendingConfirmationsNumber ?? 0;
 
   return (
     <Stack gap={4} className="trainer-dashboard">
@@ -117,7 +140,7 @@ export default function TrainerDashboardPage() {
                     onClick={() => navigate('/usuarios/trainer/pendientes')}
                     disabled={!query.data}
                   >
-                    Pendientes: {query.data ? formatNumber(pendingConfirmations) : '—'}
+                    Pendientes: {pendingConfirmationsNumber === null ? '—' : formatNumber(pendingConfirmationsNumber)}
                   </Button>
                 </div>
                 <div className="display-6 fw-bold text-primary">{formatNumber(query.data.metrics.totalAssigned)}</div>
