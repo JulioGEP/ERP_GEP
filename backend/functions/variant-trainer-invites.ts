@@ -723,6 +723,7 @@ export const handler = createHttpHandler(async (request) => {
     const variantPayload = buildVariantPayload({
       id: variant.id,
       name: variant.name,
+      status: variant.status,
       date: variant.date,
       sede: variant.sede,
       products: variant.products,
