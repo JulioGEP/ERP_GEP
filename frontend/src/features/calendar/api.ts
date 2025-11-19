@@ -265,34 +265,6 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
     }
   };
 
-  const resolveTrainerName = (record: any): string | null => {
-    return (
-      toOptionalString(
-        record?.name ??
-          record?.nombre ??
-          record?.trainer_name ??
-          record?.trainerName ??
-          record?.first_name ??
-          record?.firstName ??
-          record?.full_name ??
-          record?.fullName,
-      ) ?? null
-    );
-  };
-
-  const resolveTrainerLastName = (record: any): string | null => {
-    return (
-      toOptionalString(
-        record?.apellido ??
-          record?.apellidos ??
-          record?.trainer_last_name ??
-          record?.trainerLastName ??
-          record?.last_name ??
-          record?.lastName,
-      ) ?? null
-    );
-  };
-
   const registerTrainerRecord = (record: any) => {
     if (!record || typeof record !== 'object') {
       return;
@@ -304,8 +276,8 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
       if (!fallbackTrainerRecord) {
         fallbackTrainerRecord = {
           trainer_id: '',
-          name: resolveTrainerName(record),
-          apellido: resolveTrainerLastName(record),
+          name: toOptionalString(record?.name ?? record?.nombre),
+          apellido: toOptionalString(record?.apellido ?? record?.apellidos),
         };
       }
       return;
@@ -313,8 +285,8 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
     if (!trainerRecordsMap.has(trainerId)) {
       trainerRecordsMap.set(trainerId, {
         trainer_id: trainerId,
-        name: resolveTrainerName(record),
-        apellido: resolveTrainerLastName(record),
+        name: toOptionalString(record?.name ?? record?.nombre),
+        apellido: toOptionalString(record?.apellido ?? record?.apellidos),
       });
     }
     trainerIdSet.add(trainerId);
