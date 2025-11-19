@@ -49,6 +49,7 @@ import type { TemplatesCertificadosPageProps } from '../pages/recursos/Templates
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
+import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
@@ -102,6 +103,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
+      { key: 'Recursos/Confirmaciones', label: 'Confirmaciones', path: '/recursos/confirmaciones' },
       { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
     ],
   },
@@ -1334,6 +1336,10 @@ export default function AuthenticatedApp() {
     onNotify: pushToast,
   };
 
+  const recursosConfirmacionesPageProps: ConfirmacionesPageProps = {
+    onNotify: pushToast,
+  };
+
   const certificadosPageProps: CertificadosPageProps = {};
   const recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps = {};
   const usersPageProps: UsersPageProps = { onNotify: pushToast };
@@ -1460,6 +1466,7 @@ export default function AuthenticatedApp() {
             salasPageProps={salasPageProps}
             templatesCertificadosPageProps={templatesCertificadosPageProps}
             productosPageProps={productosPageProps}
+            recursosConfirmacionesPageProps={recursosConfirmacionesPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
             usersPageProps={usersPageProps}

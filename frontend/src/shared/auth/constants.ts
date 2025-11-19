@@ -11,6 +11,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/certificados',
     '/certificados/*',
     '/perfil',
+    '/recursos/confirmaciones',
   ],
   Logistica: [
     '/dashboard',
@@ -20,6 +21,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/recursos/unidades_moviles',
     '/recursos/salas',
     '/perfil',
+    '/recursos/confirmaciones',
   ],
   People: [
     '/dashboard',
@@ -28,6 +30,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/calendario/*',
     '/recursos/formadores_bomberos',
     '/perfil',
+    '/recursos/confirmaciones',
   ],
   Formador: ['/usuarios/trainer/*', '/perfil'],
 };
@@ -45,6 +48,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/recursos/formadores_bomberos',
   '/recursos/unidades_moviles',
   '/recursos/salas',
+  '/recursos/confirmaciones',
   '/certificados',
   '/certificados/templates_certificados',
   '/calendario/por_sesiones',
