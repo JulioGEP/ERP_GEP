@@ -1589,6 +1589,10 @@ export function VariantModal({
   );
 
   const hasPendingInviteTargets = trainerInviteDetails.some((item) => item.status === 'NOT_SENT');
+  const hasUnsavedTrainerChanges = useMemo(
+    () => !areStringArraysEqual(formValues.trainer_ids, initialValues.trainer_ids),
+    [formValues.trainer_ids, initialValues.trainer_ids],
+  );
 
   const selectedUnits = useMemo(() => {
     if (!formValues.unidad_movil_ids.length) {
@@ -1667,6 +1671,15 @@ export function VariantModal({
     const variantId = String(variant.id ?? '').trim();
     if (!variantId) return;
 
+    if (hasUnsavedTrainerChanges) {
+      setInviteStatus({
+        sending: false,
+        message: null,
+        error: 'Guarda la variante antes de enviar la confirmación.',
+      });
+      return;
+    }
+
     if (!hasPendingInviteTargets) {
       setInviteStatus({
         sending: false,
@@ -1726,7 +1739,13 @@ export function VariantModal({
       const message = error instanceof ApiError ? error.message : 'No se pudo enviar la invitación.';
       setInviteStatus({ sending: false, message: null, error: message });
     }
-  }, [formValues.trainer_ids, hasPendingInviteTargets, loadVariantDetails, variant]);
+  }, [
+    formValues.trainer_ids,
+    hasPendingInviteTargets,
+    hasUnsavedTrainerChanges,
+    loadVariantDetails,
+    variant,
+  ]);
 
   const handleUnitToggle = (unitId: string, checked: boolean) => {
     setFormValues((prev) => {
@@ -1762,6 +1781,11 @@ export function VariantModal({
   const handleSave = async (closeAfter: boolean) => {
     if (!variant) return;
     if (isSaving) return;
+
+    const variantId = String(variant.id ?? '').trim();
+    if (!variantId) {
+      return;
+    }
 
     const payload: VariantUpdatePayload = {};
 
@@ -1933,6 +1957,8 @@ export function VariantModal({
       setTrainerInviteStatusMap(updatedStatusMap);
       setInitialTrainerInviteStatusMap(updatedStatusMap);
       setTrainerInviteSummary(enhancedVariant.trainer_invite_status ?? 'NOT_SENT');
+
+      void loadVariantDetails(variantId, { keepFormValues: true });
 
       if (closeAfter) {
         onHide();
@@ -2144,7 +2170,9 @@ export function VariantModal({
                         <Button
                           size="sm"
                           variant="outline-primary"
-                          disabled={inviteStatus.sending || !hasPendingInviteTargets}
+                          disabled={
+                            inviteStatus.sending || !hasPendingInviteTargets || hasUnsavedTrainerChanges
+                          }
                           onClick={() => {
                             void handleSendInvites();
                           }}
@@ -2160,6 +2188,10 @@ export function VariantModal({
                         </Button>
                         {inviteStatus.error ? (
                           <div className="text-danger small">{inviteStatus.error}</div>
+                        ) : hasUnsavedTrainerChanges ? (
+                          <div className="text-muted small">
+                            Guarda los cambios de la variante antes de enviar la confirmación.
+                          </div>
                         ) : inviteStatus.message ? (
                           <div className="text-muted small">{inviteStatus.message}</div>
                         ) : !hasPendingInviteTargets ? (
