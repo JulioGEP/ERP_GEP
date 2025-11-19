@@ -100,10 +100,10 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     label: 'Recursos',
     children: [
       { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores_bomberos' },
+      { key: 'Recursos/Confirmaciones', label: 'Confirmaciones', path: '/recursos/confirmaciones' },
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
-      { key: 'Recursos/Confirmaciones', label: 'Confirmaciones', path: '/recursos/confirmaciones' },
       { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
     ],
   },
