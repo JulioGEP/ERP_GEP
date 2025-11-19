@@ -154,6 +154,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/reporting/horas_formadores',
       },
       {
+        key: 'Reporting/Comparativa',
+        label: 'Comparativa',
+        path: '/reporting/comparativa',
+      },
+      {
         key: 'Reporting/Logs',
         label: 'Logs',
         path: '/reporting/logs',
