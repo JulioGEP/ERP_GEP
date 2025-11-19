@@ -1090,6 +1090,7 @@ interface SessionsAccordionServicesProps {
   dealAddress: string | null;
   products: DealProduct[];
   onNotify?: (toast: ToastParams) => void;
+  highlightSessionId?: string | null;
 }
 
 export function SessionsAccordionServices({
@@ -1097,8 +1098,10 @@ export function SessionsAccordionServices({
   dealAddress,
   products,
   onNotify,
+  highlightSessionId,
 }: SessionsAccordionServicesProps) {
   const qc = useQueryClient();
+  const normalizedHighlightSessionId = useMemo(() => highlightSessionId?.trim() ?? null, [highlightSessionId]);
 
   const mapApplicableProduct = useCallback(
     (product: DealProduct & { id: string | number }): ApplicableProductInfo => ({
@@ -1914,7 +1917,9 @@ export function SessionsAccordionServices({
                         as="li"
                         action
                         value={displayIndex}
-                        className="session-list-item d-flex justify-content-between align-items-center gap-3"
+                        className={`session-list-item d-flex justify-content-between align-items-center gap-3${
+                          normalizedHighlightSessionId === session.id ? ' session-list-item-highlight' : ''
+                        }`}
                         onClick={() =>
                           void handleSelectSession({
                             sessionId: session.id,

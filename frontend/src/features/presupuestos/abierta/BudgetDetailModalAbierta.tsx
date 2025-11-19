@@ -109,6 +109,7 @@ interface Props {
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
   autoRefreshOnOpen?: boolean;
+  highlightSessionId?: string | null;
 }
 
 type BudgetFormValuesAbierta = {
@@ -378,7 +379,9 @@ export function BudgetDetailModalAbierta({
   onShowProductComment,
   onNotify,
   autoRefreshOnOpen = false,
+  highlightSessionId: _highlightSessionId = null,
 }: Props) {
+  void _highlightSessionId;
   const qc = useQueryClient();
   const { userId, userName } = useCurrentUserIdentity();
 
