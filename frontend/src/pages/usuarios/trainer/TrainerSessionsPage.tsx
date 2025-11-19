@@ -3095,7 +3095,7 @@ export default function TrainerSessionsPage() {
                 {selectedEntry ? (
                   <Col sm={12} md={3} className="text-md-start text-muted small">
                     {variantCount
-                      ? `También tienes ${variantCount} variante${variantCount === 1 ? '' : 's'} asignada${variantCount === 1 ? '' : 's'} en esta fecha.`
+                      ? `También tienes ${variantCount} ${variantCount === 1 ? 'formación abierta asignada' : 'formaciones abiertas asignadas'} en esta fecha.`
                       : 'Solo hay sesiones asignadas en esta fecha.'}
                   </Col>
                 ) : null}

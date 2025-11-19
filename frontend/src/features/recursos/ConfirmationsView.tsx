@@ -215,7 +215,7 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
 
           <section className="mt-4">
             <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <h2 className="h5 mb-0">Formación abierta (Variantes)</h2>
+              <h2 className="h5 mb-0">Formación abierta</h2>
               <Badge bg="warning" text="dark">
                 Pendientes: {summary.variants.pending}
               </Badge>
@@ -227,7 +227,7 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
                 <Table striped hover responsive className="align-middle">
                   <thead>
                     <tr>
-                      <th>Variante</th>
+                      <th>Formación Abierta</th>
                       <th>Formador</th>
                       <th>Estado</th>
                       <th>Formación</th>
