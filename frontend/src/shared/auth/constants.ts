@@ -61,5 +61,6 @@ export const DEFAULT_ROUTE_ORDER = [
   '/reporting/logs',
   '/reporting/costes_extra',
   '/reporting/horas_formadores',
+  '/reporting/comparativa',
   '/usuarios',
 ] as const;
