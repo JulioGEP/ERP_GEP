@@ -2118,6 +2118,7 @@ export function SessionsAccordionServices({
                   inviteStatusMap={inviteStatus}
                   onSendInvites={handleSendInvites}
                   onNotify={onNotify}
+                  hasUnsavedChanges={hasSessionChanges(activeSession.sessionId)}
                 />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
@@ -2164,6 +2165,7 @@ interface SessionEditorProps {
   inviteStatusMap: Record<string, { sending: boolean; message: string | null; error: string | null }>;
   onSendInvites: (sessionId: string) => void;
   onNotify?: (toast: ToastParams) => void;
+  hasUnsavedChanges: boolean;
 }
 
 function SessionEditor({
@@ -2182,6 +2184,7 @@ function SessionEditor({
   inviteStatusMap,
   onSendInvites,
   onNotify,
+  hasUnsavedChanges,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
@@ -2597,6 +2600,7 @@ function SessionEditor({
                   const inviteState = inviteStatusMap[form.id];
                   const isSending = inviteState?.sending ?? false;
                   const hasError = Boolean(inviteState?.error);
+                  const requiresSaveBeforeInvite = hasUnsavedChanges;
                   const message = inviteState?.message;
                   const errorMessage = inviteState?.error;
                   return (
@@ -2604,7 +2608,7 @@ function SessionEditor({
                       <Button
                         size="sm"
                         variant="outline-primary"
-                        disabled={isSending}
+                        disabled={isSending || requiresSaveBeforeInvite}
                         onClick={() => onSendInvites(form.id)}
                       >
                         {isSending ? (
@@ -2634,7 +2638,11 @@ function SessionEditor({
                           })}
                         </div>
                       ) : null}
-                      {hasError ? (
+                      {requiresSaveBeforeInvite ? (
+                        <div className="text-muted small mt-1">
+                          Guarda los cambios de la sesión antes de enviar la confirmación.
+                        </div>
+                      ) : hasError ? (
                         <div className="text-danger small mt-1">{errorMessage}</div>
                       ) : message ? (
                         <div className="text-muted small mt-1">{message}</div>
