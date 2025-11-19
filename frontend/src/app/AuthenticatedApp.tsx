@@ -627,6 +627,7 @@ export default function AuthenticatedApp() {
   const [autoRefreshBudgetId, setAutoRefreshBudgetId] = useState<string | null>(null);
   const [isCheckingExistingDeal, setIsCheckingExistingDeal] = useState(false);
   const [activeCalendarVariant, setActiveCalendarVariant] = useState<ActiveVariant | null>(null);
+  const [highlightedCalendarSessionId, setHighlightedCalendarSessionId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -1088,6 +1089,7 @@ export default function AuthenticatedApp() {
     // 👇 asegura string | null
     setSelectedBudgetId(budget.dealId ?? null);
     setAutoRefreshBudgetId(null);
+    setHighlightedCalendarSessionId(null);
   }, []);
 
   const handleDeleteBudget = useCallback(
@@ -1107,6 +1109,7 @@ export default function AuthenticatedApp() {
     setSelectedBudgetSummary(null);
     setSelectedBudgetId(null);
     setAutoRefreshBudgetId(null);
+    setHighlightedCalendarSessionId(null);
   }, []);
 
   const handleShowProductComment = useCallback((payload: ProductCommentPayload) => {
@@ -1239,6 +1242,7 @@ export default function AuthenticatedApp() {
 
         setSelectedBudgetSummary(summaryWithPipeline);
         setSelectedBudgetId(id);
+        setHighlightedCalendarSessionId(session.id?.trim() ?? null);
       })();
     },
     [pushToast, queryClient],
@@ -1356,6 +1360,7 @@ export default function AuthenticatedApp() {
     onShowProductComment: handleShowProductComment,
     onNotify: pushToast,
     autoRefreshOnOpen: !!selectedBudgetId && selectedBudgetId === autoRefreshBudgetId,
+    highlightSessionId: highlightedCalendarSessionId,
   };
 
   return (

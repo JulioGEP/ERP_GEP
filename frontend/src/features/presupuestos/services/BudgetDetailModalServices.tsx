@@ -102,6 +102,7 @@ interface Props {
   onShowProductComment?: (payload: { productName: string; comment: string }) => void;
   onNotify?: (toast: { variant: 'success' | 'danger' | 'info'; message: string }) => void;
   autoRefreshOnOpen?: boolean;
+  highlightSessionId?: string | null;
 }
 
 type BudgetFormValuesServices = {
@@ -171,6 +172,7 @@ export function BudgetDetailModalServices({
   onShowProductComment,
   onNotify,
   autoRefreshOnOpen: _autoRefreshOnOpen,
+  highlightSessionId,
 }: Props) {
   void _autoRefreshOnOpen;
   const qc = useQueryClient();
@@ -1171,6 +1173,7 @@ export function BudgetDetailModalServices({
                 dealAddress={defaultSessionAddress ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
+                highlightSessionId={highlightSessionId ?? null}
               />
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>

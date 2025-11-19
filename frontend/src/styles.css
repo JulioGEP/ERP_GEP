@@ -478,6 +478,15 @@ option.session-option-unavailable {
   transition: background-color 0.2s ease-in-out, transform 0.2s ease-in-out;
 }
 
+.session-list-item-highlight {
+  border-left: 4px solid var(--color-red);
+  background-color: rgba(232, 71, 77, 0.08);
+}
+
+.session-list-item-highlight .session-item-name .fw-semibold {
+  color: var(--color-red);
+}
+
 .session-list-item:hover {
   background-color: rgba(232, 71, 77, 0.06);
 }

@@ -1835,6 +1835,7 @@ interface SessionsAccordionEmpresasProps {
   dealSedeLabel: string | null;
   products: DealProduct[];
   onNotify?: (toast: ToastParams) => void;
+  highlightSessionId?: string | null;
 }
 
 export function SessionsAccordionEmpresas({
@@ -1843,6 +1844,7 @@ export function SessionsAccordionEmpresas({
   dealSedeLabel,
   products,
   onNotify,
+  highlightSessionId,
 }: SessionsAccordionEmpresasProps) {
   const qc = useQueryClient();
   const { applicableProducts, shouldShow, generationKey } = useApplicableDealProducts(products);
@@ -1851,6 +1853,7 @@ export function SessionsAccordionEmpresas({
   const [generationDone, setGenerationDone] = useState(false);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
+  const normalizedHighlightSessionId = useMemo(() => highlightSessionId?.trim() ?? null, [highlightSessionId]);
 
   const generateMutation = useMutation({
     mutationFn: (id: string) => generateSessionsFromDeal(id),
@@ -2641,7 +2644,9 @@ export function SessionsAccordionEmpresas({
                         as="li"
                         action
                         value={displayIndex}
-                        className="session-list-item d-flex justify-content-between align-items-center gap-3"
+                        className={`session-list-item d-flex justify-content-between align-items-center gap-3${
+                          normalizedHighlightSessionId === session.id ? ' session-list-item-highlight' : ''
+                        }`}
                         onClick={() =>
                           void handleSelectSession({
                             sessionId: session.id,
