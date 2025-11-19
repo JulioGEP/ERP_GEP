@@ -13,6 +13,7 @@ import type { TemplatesCertificadosPageProps } from '../pages/recursos/Templates
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
+import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext';
 
@@ -28,6 +29,7 @@ const UnidadesMovilesPage = lazy(() => import('../pages/recursos/UnidadesMoviles
 const SalasPage = lazy(() => import('../pages/recursos/SalasPage'));
 const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/TemplatesCertificadosPage'));
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
+const ConfirmacionesPage = lazy(() => import('../pages/recursos/ConfirmacionesPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
 const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/FormacionAbiertaPage'));
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
@@ -75,6 +77,7 @@ type AppRouterProps = {
   salasPageProps: SalasPageProps;
   templatesCertificadosPageProps: TemplatesCertificadosPageProps;
   productosPageProps: ProductosPageProps;
+  recursosConfirmacionesPageProps: ConfirmacionesPageProps;
   certificadosPageProps: CertificadosPageProps;
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
   usersPageProps: UsersPageProps;
@@ -95,6 +98,7 @@ export function AppRouter({
   salasPageProps,
   templatesCertificadosPageProps,
   productosPageProps,
+  recursosConfirmacionesPageProps,
   certificadosPageProps,
   recursosFormacionAbiertaPageProps,
   usersPageProps,
@@ -233,6 +237,15 @@ export function AppRouter({
         <Route
           path="/recursos/productos"
           element={<GuardedRoute path="/recursos/productos" element={<ProductosPage {...productosPageProps} />} />}
+        />
+        <Route
+          path="/recursos/confirmaciones"
+          element={
+            <GuardedRoute
+              path="/recursos/confirmaciones"
+              element={<ConfirmacionesPage {...recursosConfirmacionesPageProps} />}
+            />
+          }
         />
         <Route
           path="/recursos/formacion_abierta"
