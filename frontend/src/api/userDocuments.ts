@@ -3,11 +3,15 @@ import { requestJson } from './client';
 export type UserDocument = {
   id: string;
   user_id: string;
+  title: string | null;
   file_name: string;
   mime_type: string | null;
   file_size: number | null;
   created_at: string | null;
   download_url: string;
+  drive_folder_id: string | null;
+  drive_web_view_link: string | null;
+  drive_web_content_link: string | null;
 };
 
 export async function fetchUserDocuments(userId: string): Promise<UserDocument[]> {

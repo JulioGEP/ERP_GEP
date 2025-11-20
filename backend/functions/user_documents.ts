@@ -1,6 +1,7 @@
 // backend/functions/user_documents.ts
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { uploadUserDocumentToGoogleDrive } from './_shared/googleDrive';
 
 function parsePath(path: string | undefined | null) {
   const normalized = String(path || '');
@@ -21,10 +22,13 @@ function mapDocument(row: any) {
   return {
     id: String(row.id),
     user_id: String(row.user_id),
-    title,
+    title: title ?? null,
     file_name: row.file_name,
     mime_type: row.mime_type ?? null,
     file_size: row.file_size ?? null,
+    drive_folder_id: row.drive_folder_id ?? null,
+    drive_web_view_link: row.drive_web_view_link ?? null,
+    drive_web_content_link: row.drive_web_content_link ?? null,
     created_at: row.created_at ?? null,
     download_url: `/.netlify/functions/user_documents/${encodeURIComponent(String(row.id))}`,
   };
@@ -104,6 +108,13 @@ export const handler = async (event: any) => {
       return errorResponse('VALIDATION_ERROR', 'fileName y fileData son obligatorios', 400);
     }
 
+    const user = await prisma.users.findUnique({ where: { id: userId } });
+    if (!user) {
+      return errorResponse('NOT_FOUND', 'Usuario no encontrado', 404);
+    }
+
+    const resolvedTitle = title || fileName.replace(/\.[^.]+$/, '') || fileName;
+
     let buffer: Buffer;
     try {
       buffer = Buffer.from(fileDataBase64, 'base64');
@@ -111,18 +122,30 @@ export const handler = async (event: any) => {
       return errorResponse('VALIDATION_ERROR', 'fileData inválido', 400);
     }
 
+    const driveUpload = await uploadUserDocumentToGoogleDrive({
+      user,
+      title: resolvedTitle,
+      fileName,
+      mimeType,
+      data: buffer,
+    });
+
     const created = await prisma.user_documents.create({
       data: {
         user_id: userId,
+        title: resolvedTitle,
         file_name: fileName,
         mime_type: mimeType,
         file_size: buffer.byteLength,
+        drive_folder_id: driveUpload.driveFolderId,
+        drive_web_view_link: driveUpload.driveWebViewLink,
+        drive_web_content_link: driveUpload.driveFolderContentLink,
         file_data: buffer,
         created_at: new Date(),
       },
     });
 
-    return successResponse({ document: mapDocument({ ...created, title }) });
+    return successResponse({ document: mapDocument({ ...created, title: resolvedTitle }) });
   }
 
   return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);

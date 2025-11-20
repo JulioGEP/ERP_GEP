@@ -2560,3 +2560,119 @@ export async function deleteSessionDocumentFromGoogleDrive(params: {
 
   return { fileDeleted, sessionFolderDeleted };
 }
+
+export async function uploadUserDocumentToGoogleDrive(params: {
+  user: any;
+  title: string;
+  fileName: string;
+  mimeType?: string | null;
+  data: Buffer;
+  driveIdOverride?: string | null;
+  baseFolderName?: string | null;
+}): Promise<{
+  driveFileId: string;
+  driveFileName: string;
+  driveWebViewLink: string | null;
+  driveFolderId: string;
+  driveFolderWebViewLink: string | null;
+  driveFolderContentLink: string | null;
+}> {
+  const preferredDriveId = params.driveIdOverride?.trim();
+  const driveId =
+    preferredDriveId ||
+    process.env.USER_DOCUMENTS_DRIVE_ID?.trim() ||
+    resolveDriveSharedId() ||
+    '0AOXMlUY_16MGUk9PVA';
+
+  if (!driveId) {
+    throw new Error('Google Drive no está configurado (falta shared drive id)');
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error('Credenciales de Google Drive no configuradas');
+  }
+
+  const baseFolderName =
+    params.baseFolderName?.trim() ||
+    process.env.USER_DOCUMENTS_BASE_FOLDER_NAME?.trim() ||
+    'Equipo GEP Group';
+
+  const baseFolderId = await ensureFolder({
+    name: baseFolderName,
+    parentId: driveId,
+    driveId,
+  });
+
+  const userNamePieces: string[] = [];
+  if (params.user?.first_name) userNamePieces.push(String(params.user.first_name));
+  if (params.user?.last_name) userNamePieces.push(String(params.user.last_name));
+  if (!userNamePieces.length && params.user?.name) {
+    userNamePieces.push(String(params.user.name));
+  }
+  if (!userNamePieces.length && params.user?.email) {
+    userNamePieces.push(String(params.user.email));
+  }
+
+  const userFolderName =
+    sanitizeName(userNamePieces.join(' ').trim()) || sanitizeName(params.user?.id || '') || 'Usuario';
+
+  const userFolderId = await ensureUniqueSubfolder({
+    driveId,
+    parentId: baseFolderId,
+    folderName: userFolderName,
+    context: { userId: params.user?.id },
+  });
+
+  const titleFolderName = sanitizeName(params.title) || sanitizeName(params.fileName) || 'documento';
+  const titleFolderId = await ensureUniqueSubfolder({
+    driveId,
+    parentId: userFolderId,
+    folderName: titleFolderName,
+    context: { userId: params.user?.id, title: params.title },
+  });
+
+  const safeFileName = sanitizeName(params.fileName || 'documento') || 'documento';
+  const mimeType = params.mimeType?.trim() || 'application/octet-stream';
+  const uploadResult = await uploadFile({
+    driveId,
+    parentId: titleFolderId,
+    name: safeFileName,
+    mimeType,
+    data: params.data,
+  });
+
+  let webViewLink: string | null = uploadResult.webViewLink ?? null;
+  try {
+    webViewLink = (await ensureFilePublicWebViewLink(uploadResult.id)) ?? webViewLink;
+  } catch (permissionError) {
+    console.warn('[google-drive-sync] No se pudo generar enlace público del documento de usuario', {
+      userId: params.user?.id,
+      title: params.title,
+      fileName: params.fileName,
+      error: permissionError instanceof Error ? permissionError.message : String(permissionError),
+    });
+  }
+
+  let folderWebViewLink: string | null = null;
+  try {
+    folderWebViewLink = (await ensureFilePublicWebViewLink(titleFolderId)) ?? null;
+  } catch (permissionError) {
+    console.warn('[google-drive-sync] No se pudo generar enlace público de carpeta de documento de usuario', {
+      userId: params.user?.id,
+      title: params.title,
+      folderId: titleFolderId,
+      error: permissionError instanceof Error ? permissionError.message : String(permissionError),
+    });
+  }
+
+  const contentLink = `https://drive.google.com/uc?id=${uploadResult.id}&export=download`;
+
+  return {
+    driveFileId: uploadResult.id,
+    driveFileName: uploadResult.name,
+    driveWebViewLink: webViewLink,
+    driveFolderId: titleFolderId,
+    driveFolderWebViewLink: folderWebViewLink,
+    driveFolderContentLink: contentLink,
+  };
+}
