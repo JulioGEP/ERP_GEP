@@ -1,217 +1,146 @@
-# ERP GEP Monorepo
+# ERP GEP · Guía completa
 
-Plataforma interna para gestionar presupuestos, planificación de formaciones y recursos logísticos del grupo GEP. El repositorio agrupa un frontend en Vite/React y un backend de funciones serverless desplegadas en Netlify que comparten el mismo esquema de datos en PostgreSQL gestionado con Prisma.
+Este monorepo reúne el panel interno de GEP (frontend React) y el backend de funciones serverless (Netlify Functions) que exponen la API y tareas batch. El objetivo de esta guía es que cualquier persona pueda entender rápidamente qué hace la aplicación, cómo se estructura y cómo extenderla sin perder el contexto operativo.
 
-## Tabla de contenidos
-- [Visión general](#visión-general)
-- [Tecnologías principales](#tecnologías-principales)
-- [Estructura del repositorio](#estructura-del-repositorio)
-- [Backend: funciones y librerías compartidas](#backend-funciones-y-librerías-compartidas)
-- [Frontend: organización y flujo de la aplicación](#frontend-organización-y-flujo-de-la-aplicación)
+- [Arquitectura de alto nivel](#arquitectura-de-alto-nivel)
+- [Mapa de carpetas](#mapa-de-carpetas)
+- [Dominios de negocio y flujos](#dominios-de-negocio-y-flujos)
+- [Autenticación, roles y permisos](#autenticación-roles-y-permisos)
+- [Backend](#backend)
+- [Frontend](#frontend)
 - [Datos y Prisma](#datos-y-prisma)
-- [Audit Log](#audit-log)
-- [Integraciones externas](#integraciones-externas)
-- [Requisitos y configuración de entorno](#requisitos-y-configuración-de-entorno)
-- [Puesta en marcha local](#puesta-en-marcha-local)
-- [Scripts útiles](#scripts-útiles)
-- [Testing y calidad](#testing-y-calidad)
+- [Configuración de entorno](#configuración-de-entorno)
+- [Ejecución local](#ejecución-local)
+- [Scripts y comprobaciones](#scripts-y-comprobaciones)
 - [Despliegue](#despliegue)
-- [Onboarding y próximos pasos recomendados](#onboarding-y-próximos-pasos-recomendados)
+- [Cómo contribuir y extender el producto](#cómo-contribuir-y-extender-el-producto)
 
-## Visión general
-- **Monorepo**: frontend React (panel interno) + backend de funciones Netlify que sirven la API REST y tareas batch bajo demanda.
-- **Sincronización operativa**: los endpoints clave integran datos con Pipedrive, gestionan documentos en Google Drive/AWS S3 y orquestan reportes.
-- **Base de datos única**: Prisma modela deals, sesiones, alumnos, recursos y catálogos; ambos lados del monorepo consumen los mismos modelos.
-- **Flujo de despliegue**: Netlify ejecuta la compilación completa (`npm run netlify:build`), genera Prisma Client y sirve el frontend y las funciones serverless.
+## Arquitectura de alto nivel
+- **Monorepo Node.js**: un único `package.json` gestiona dependencias compartidas y scripts raíz (p. ej. generación del cliente Prisma).
+- **Backend serverless**: funciones TypeScript empaquetadas por Netlify (`backend/functions`) actúan como API REST y trabajos bajo demanda. Comparten librerías comunes en `_shared`/`_lib`.
+- **Frontend SPA**: React 18 + Vite con React Router v7 y React Query. El bundle se publica junto con las funciones en Netlify y consume la API vía los redirects `/api/*`.
+- **Base de datos**: PostgreSQL gestionado con Prisma; las funciones incluyen el cliente compilado en los artefactos para evitar instalaciones en frío.
+- **Integraciones externas**: Pipedrive (CRM), AWS S3 y Google Drive (documentos), OpenAI (informes), WooCommerce (catálogo de cursos).
 
-## Tecnologías principales
-| Capa | Tecnologías | Uso
-| --- | --- | --- |
-| Frontend | Vite, React 18, React Router v7, React Query v5, React-Bootstrap | UI operativa, navegación SPA y consumo de la API.
-| Backend | Netlify Functions (TypeScript) | Endpoints REST para deals, calendarios, recursos, documentos y reportes.
-| Datos | PostgreSQL (Neon) + Prisma ORM | Modelado de entidades y generación de cliente tipado.
-| Almacenamiento de ficheros | AWS S3 + Google Drive | Subida/descarga de documentos y sincronización con carpetas compartidas.
-| Integraciones | Pipedrive API, OpenAI API | Sincronización CRM y generación automática de informes.
-
-## Estructura del repositorio
+## Mapa de carpetas
 ```
-├── backend/
-│   ├── functions/           # Funciones Netlify agrupadas por dominio
-│   │   ├── _shared/         # Utilidades reutilizadas (Prisma, respuestas HTTP, mapeos…)
-│   │   ├── _lib/            # Inicialización de Prisma y helpers de bajo nivel
-│   │   ├── deals.ts         # CRUD y sincronización de deals con Pipedrive
-│   │   ├── deal_documents.ts# Gestión de documentos (S3, Google Drive, Pipedrive)
-│   │   ├── sessions.ts      # Gestión de sesiones y calendario
-│   │   ├── trainers.ts      # Catálogo de formadores
-│   │   ├── public-session-students.ts
-│   │   │                     # Portal público de alumnos con tokens y rate limiting
-│   │   ├── generateReport.ts# Generación de informes (OpenAI)
-│   │   └── ...              # Otros endpoints: notas, recursos, plantillas, etc.
-│   └── tsconfig.json        # Configuración TypeScript del backend
-├── frontend/
+├── backend/                  # Workspace de funciones Netlify
+│   ├── functions/
+│   │   ├── _lib/             # Bootstrap de Prisma y helpers de bajo nivel
+│   │   ├── _shared/          # Utilidades transversales (respuestas HTTP, Pipedrive, Drive…)
+│   │   ├── *.ts              # Una función = un endpoint (ver sección Backend)
+│   │   └── types/            # Tipos compartidos entre funciones
+│   └── tsconfig.json
+├── frontend/                 # Workspace del panel React
 │   ├── src/
-│   │   ├── App.tsx          # Layout global, navegación y modales de presupuestos
-│   │   ├── app/router.tsx   # Router principal con carga diferida de vistas
-│   │   ├── api/             # Cliente HTTP y wrappers de la API
-│   │   ├── features/        # Lógica de dominios (presupuestos, calendario…)
-│   │   ├── pages/           # Vistas de navegación
-│   │   └── public/          # Flujos públicos (gestión de alumnos)
-│   └── package.json         # Scripts y dependencias específicas del frontend
+│   │   ├── api/              # Cliente HTTP y adaptadores
+│   │   ├── app/              # Router y componentes de layout
+│   │   ├── features/         # Lógica por dominio (presupuestos, calendario, etc.)
+│   │   ├── pages/            # Páginas asociadas a rutas
+│   │   ├── public/           # Flujos públicos para alumnos
+│   │   └── shared/|utils/    # Hooks, helpers y componentes genéricos
+│   └── package.json
 ├── prisma/
-│   ├── schema.prisma        # Modelo de datos y migraciones
-│   └── seeds/               # (si aplica) semillas de datos
-├── scripts/
-│   ├── prisma-prune-binaries.mjs # Limpieza de binarios Prisma en CI/Netlify
-│   └── fix_trainer_uniques.sql   # SQL auxiliar para corregir datos
-├── backend.toml             # Configuración de funciones Netlify
-├── netlify.toml             # Configuración de build/despliegue
-├── package.json             # Scripts raíz y dependencias compartidas (@prisma/client, AWS SDK…)
-└── tsconfig.json            # Configuración TypeScript común
+│   ├── schema.prisma         # Modelo de datos único
+│   └── migrations/           # Migraciones generadas por Prisma (si existen)
+├── scripts/                  # Utilidades CLI (limpieza de Prisma, SQL puntual)
+├── backend.toml              # Build del workspace backend para Netlify
+├── netlify.toml              # Redirects y bundling final
+└── tsconfig.json             # Configuración TS en la raíz
 ```
 
-## Backend: funciones y librerías compartidas
-### Endpoints destacados
-- **`deals.ts`**: sincroniza deals con Pipedrive, controla los campos editables y normaliza productos (`deal_products`), notas y documentos antes de exponerlos al frontend.
-- **`deal_notes.ts`**: CRUD de notas de cada deal, respetando cabeceras `X-User-*` para auditar autores.
-- **`deal_documents.ts`**: centraliza la gestión de documentos (petición de URL firmada, subida manual, listado, descarga proxy desde Pipedrive o S3 y sincronización opcional con Google Drive).
-- **`sessions.ts` y `calendar-variants.ts`**: exponen la planificación de sesiones, permiten actualizar atributos operativos y agrupar la vista de calendario por recurso.
-- **`public-session-students.ts`**: API pública protegida por tokens y rate limiting para gestionar alumnos sin autenticación interna (alta/baja/edición, auditoría de IP y user-agent).
-- **`trainers.ts`, `rooms.ts`, `mobile-units.ts`, `products.ts`, `variant-*`**: catálogos maestros utilizados en el panel de recursos y en el calendario.
-- **`generateReport.ts`, `improveReport.ts`, `reportUpload.ts`, `reportPrefill.ts`**: generación y enriquecimiento de informes en distintos formatos apoyados en OpenAI y plantillas PDF.
-- **`woo_courses.ts` y `training-templates.ts`**: sincronizan catálogos externos (WooCommerce) y plantillas de certificados.
-- **`health.ts`**: endpoint de healthcheck utilizado por Netlify y monitorización.
+## Dominios de negocio y flujos
+- **Presupuestos (deals)**: importación y sincronización con Pipedrive, edición de datos internos, notas y documentos. La API vive en `backend/functions/deals.ts`, `deal_notes.ts` y `deal_documents.ts`. El frontend trabaja en `frontend/src/features/presupuestos` y páginas bajo `pages/presupuestos/*`.
+- **Planificación y calendario**: sesiones, recursos y vistas agrupadas por sesión, formador o unidad móvil. Funciones principales: `sessions.ts`, `calendar-variants.ts`, `resources-confirmations.ts`, `session_comments.ts`, `session_documents.ts`. La UI está en `pages/calendario/*` y `features/calendar`.
+- **Recursos**: catálogos de formadores, unidades móviles, salas, productos y variantes (`trainers.ts`, `rooms.ts`, `mobile-units.ts`, `products.ts`, `product-variants-create.ts`, `product-variant-settings.ts`, `variant-siblings.ts`, `products-variants.ts`). Las vistas están en `pages/recursos/*`.
+- **Portal público de alumnos**: enlaces públicos protegidos por token y rate limiting para alta/baja/edición de alumnos (`public-session-students.ts`, `alumnos.ts`, `session_public_links.ts`). El frontend dedicado está en `src/public/PublicSessionStudentsPage.tsx`.
+- **Informes y certificados**: generación/mejora de informes con OpenAI (`generateReport.ts`, `improveReport.ts`, `reportUpload.ts`, `reportPrefill.ts`) y gestión de plantillas/credenciales (`training-templates.ts`, `woo_courses.ts`). Las páginas están en `pages/informes/*` y `pages/certificados/*`.
+- **Panel de formadores**: dashboard y carga de informes desde el rol formador (`trainer-dashboard.ts`, `trainer-sessions.ts`, `trainer-session-time-logs.ts`, `trainer_documents.ts`, `trainer-availability.ts`). UI bajo `pages/usuarios/trainer/*`.
+- **Reporting interno**: endpoints de auditoría y reportes (`audit-events.ts`, `reporting-logs.ts`, `reporting-horas-formadores.ts`, `reporting-control-horario.ts`, `reporting-costes-extra.ts`) consumidos desde `pages/reporting/*` y `pages/dashboard/*`.
 
-### Librerías comunes (`backend/functions/_shared` y `_lib`)
-- **`prisma.ts` / `_lib/db.ts`**: inicialización singleton de Prisma Client con control de logs y fijación de la zona horaria de Madrid.
-- **`response.ts`**: fabrica respuestas consistentes (JSON + cabeceras CORS), reutilizado en todas las funciones.
-- **`pipedrive.ts`**: cliente ligero para consultar deals, notas, documentos y entidades relacionadas en Pipedrive.
-- **`mappers.ts` y `dealPayload.ts`**: normalización de árboles de deals antes de guardarlos en base de datos y utilidades de importación.
-- **`googleDrive.ts` y `drive.ts`**: gestión de carpetas/archivos en Google Drive utilizando credenciales de servicio y sincronización incremental.
-- **`timezone.ts` y `time.ts`**: conversión de fechas a zona horaria de Madrid para exponer datos coherentes en frontend y reportes.
-- **`sessions.ts`, `variant-resources.ts`, `variant-defaults.ts`**: helpers para componer sesiones, recursos y variaciones cuando se generan informes o se sincronizan plantillas.
+## Autenticación, roles y permisos
+- **Backend**: las funciones `/auth-*` manejan login/logout, sesión y reseteo de contraseña. Las rutas protegidas validan el usuario mediante cookies HttpOnly y, cuando procede, verifican permisos específicos.
+- **Frontend**: `AuthProvider` (`frontend/src/context/AuthContext.tsx`) mantiene el usuario, roles y permisos. `RequireAuth` y `GuardedRoute` bloquean vistas si el rol o el permiso de ruta no coincide. Las comprobaciones de permisos admiten comodines (`/calendario/*`).
 
-## Frontend: organización y flujo de la aplicación
-- **Punto de entrada**: `src/main.tsx` monta React Router y React Query, inicializando el contexto de la SPA.
-- **Layout global (`App.tsx`)**: dibuja la barra de navegación, coordina los modales de detalle de presupuesto (Empresas, Abierta, Servicios, Material), centraliza los toasts globales y mantiene en `localStorage` la última ruta activa.
-- **Router (`app/router.tsx`)**: carga lazy de todas las vistas (Presupuestos, Calendario, Recursos, Certificados, Informes) y maneja redirecciones legacy.
-- **Consumo de API (`api/client.ts`)**: resuelve automáticamente la URL base según entorno (localhost vs Netlify), encapsula errores (`ApiError`) y expone utilidades de normalización.
-- **Características clave**:
-  - `features/presupuestos/`: gestión completa de deals (importación desde Pipedrive, detalle, productos, notas, documentos).
-  - `features/calendar/`: vistas agrupadas por sesión, formador y unidad móvil, apoyadas en React Query.
-  - `pages/recursos/`: catálogos de recursos (formadores, unidades móviles, salas, productos, formación abierta).
-  - `pages/certificados/` y `pages/informes/`: workflows para plantillas de certificados y generación de informes.
-  - `public/PublicSessionStudentsPage.tsx`: interfaz ligera para los enlaces públicos de alumnos, compartiendo validaciones con el backend.
-- **Estilo y UI**: se apoya en Bootstrap 5 y componentes de `react-bootstrap`; los estilos globales viven en `styles.css`.
-- **Tests**: configurados con Vitest + Testing Library (`npm run test --workspace frontend`).
+### Roles habituales
+- **Admin/Operaciones**: acceso completo al panel, gestión de catálogos, presupuestos y calendario.
+- **Formador**: acceso restringido al dashboard de sesiones, carga de documentos y disponibilidad.
+- **Solo lectura**: rutas limitadas a consulta según el array de permisos devuelto por `/auth-session`.
+
+## Backend
+- **Patrón por función**: cada archivo `*.ts` en `backend/functions` expone un handler HTTP (event, context) con CORS unificado mediante `_shared/response.ts` y acceso a Prisma desde `_shared/prisma.ts` o `_lib/db.ts`.
+- **Integraciones**:
+  - `pipedrive.ts`: cliente ligero para deals/notas/documentos.
+  - `googleDrive.ts` y `drive.ts`: sincronización de carpetas/archivos y subida con credenciales de servicio.
+  - `timezone.ts`/`time.ts`: normalización de fechas a Europa/Madrid para API y reportes.
+- **Documentos**: `deal_documents.ts` gestiona URLs firmadas en S3, descargas proxy desde Pipedrive y sincronización opcional con Google Drive. `documents.ts` y `session_documents.ts` cubren otros flujos de ficheros.
+- **Calendario y recursos**: helpers en `_shared/sessions.ts`, `variant-resources.ts` y `variant-defaults.ts` componen sesiones, recursos y variaciones antes de exponerlas.
+- **Seguridad**: rate limiting en API pública (`public-session-students.ts`), validación de dominio permitido para autenticación y logging de auditoría (`audit-events.ts`, `_shared/audit-log`).
+- **Healthcheck**: `/api/health` redirige a `health.ts` para monitorización.
+
+## Frontend
+- **Entrada y layout**: `src/main.tsx` monta React Query y Router. `App.tsx` gestiona la navegación principal, los modales de presupuestos y la restauración de la última ruta en `localStorage`.
+- **Routing**: `src/app/router.tsx` declara todas las rutas protegidas. Las secciones principales son `/presupuestos/*`, `/calendario/*`, `/recursos/*`, `/certificados`, `/informes/*`, `/reporting/*`, `/usuarios/*` (incluido el subpanel de formadores) y `/perfil`.
+- **Consumo de API**: `api/client.ts` resuelve automáticamente la base URL (local vs Netlify), normaliza errores con `ApiError` y expone `getJson`/`postJson` reutilizados en features.
+- **Estado y datos**: React Query gestiona la cache de peticiones. Hooks en `shared` y `utils` encapsulan patrones comunes (formularios, toasts, validaciones).
+- **Estilos**: Bootstrap 5 + `react-bootstrap` con ajustes globales en `styles.css`.
+- **Testing**: Vitest + Testing Library (`npm run test --workspace frontend`).
 
 ## Datos y Prisma
-El esquema `prisma/schema.prisma` modela las entidades principales:
-- **Catálogo CRM**: `organizations`, `persons`, `deals`, `deal_products`, `deal_notes`, `deal_files`.
-- **Planificación**: `sessions`, `session_comments`, `session_documents`, `session_templates`, `session_resources`.
-- **Recursos**: `trainers`, `rooms`, `mobile_units`, `products`, `product_variants`, relaciones `variant_siblings` y ajustes específicos (`product_variant_settings`).
-- **Acceso público**: `tokens` (sustituye al antiguo `session_public_links`) con información de auditoría, caducidad y estado.
-- **Formación abierta y certificados**: tablas auxiliares para plantillas, cursos y variantes utilizadas en WooCommerce.
+- **Modelo**: `prisma/schema.prisma` define entidades de CRM (`organizations`, `persons`, `deals`, `deal_products`, `deal_notes`, `deal_files`), planificación (`sessions`, `session_resources`, `session_comments`, `session_documents`, `session_templates`), recursos (`trainers`, `rooms`, `mobile_units`, `products`, `product_variants`, `variant_siblings`, `product_variant_settings`), acceso público (`tokens`, `session_students`, `session_public_links`) y catálogos externos (WooCommerce, plantillas).
+- **Cliente**: el binario Prisma se incluye en el bundle de Netlify (`netlify.toml`/`backend.toml`). `npm run generate` produce el cliente tipado antes de compilar o ejecutar funciones.
 
-Prisma genera automáticamente el cliente tipado en `node_modules/.prisma/client` mediante `npm run generate` o durante el `postinstall` del proyecto.
+## Configuración de entorno
+Variables principales en un `.env` en la raíz (no versionado):
+- **Base de datos y autenticación**: `DATABASE_URL`, `ALLOWED_EMAIL_DOMAIN`, `DEFAULT_NOTE_AUTHOR`.
+- **Documentos**: `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY`, `GOOGLE_DRIVE_SHARED_DRIVE_ID`, `GOOGLE_DRIVE_BASE_FOLDER_NAME`.
+- **Integraciones**: `PIPEDRIVE_API_TOKEN`, `PIPEDRIVE_BASE_URL`, `WOO_API_KEY`, `WOO_API_SECRET`, `WOO_BASE_URL`.
+- **Portal público**: `PUBLIC_SESSION_RATE_LIMIT_WINDOW_MS`, `PUBLIC_SESSION_RATE_LIMIT_MAX_REQUESTS`.
+- **Informes**: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `REPORTS_ALLOWED_ORIGIN`.
 
-## Audit Log
-El backend incorpora una tabla de auditoría (`audit_log`) que registra las operaciones de negocio relevantes (por ejemplo, actualización de deals o creación de sesiones). Cada evento almacena quién ejecutó la acción, el tipo de entidad afectada y un snapshot JSON con los cambios más relevantes para poder reconstruir el historial.
-
-### Cómo registrar nuevas acciones
-- Importa el helper `logAudit` desde `backend/functions/_shared/audit-log` y llámalo después de completar la operación principal.
-- El helper recibe `userId`, `action`, `entityType`, `entityId`, `before` y `after` (JSON). Si la escritura del log falla, captura el error y no interrumpe la respuesta principal.
-- Usa `resolveUserIdFromEvent(event, prisma)` para extraer el usuario autenticado desde la cookie `erp_session` en funciones que todavía no utilizan `requireAuth`.
-- Limita los snapshots a los campos relevantes que hayan cambiado para mantener los registros compactos.
-
-## Integraciones externas
-- **Pipedrive API**: importación/sincronización de deals, notas y documentos (`deals.ts`, `deal_documents.ts`, `_shared/pipedrive.ts`).
-- **AWS S3**: almacenamiento de documentos internos con URLs firmadas y descargas (`deal_documents.ts`).
-- **Google Drive**: sincronización opcional de carpetas de cliente y subida de documentos (`_shared/googleDrive.ts`).
-- **OpenAI**: generación y mejora de informes (`generateReport.ts`, `improveReport.ts`).
-- **WooCommerce**: sincronización de cursos (`woo_courses.ts`).
-
-## Requisitos y configuración de entorno
-### Requisitos mínimos
-- Node.js >= 22.0.0 (>= 20.18.0 dentro del workspace frontend)
-- npm >= 10.8.0
-- Netlify CLI (opcional) para desarrollo local
-- Acceso a la base de datos PostgreSQL (Neon) y a los servicios externos (S3, Google Drive, Pipedrive, OpenAI)
-
-### Variables de entorno principales (`.env` en la raíz)
-**Base de datos y autenticación**
-- `DATABASE_URL` — cadena de conexión a PostgreSQL.
-- `ALLOWED_EMAIL_DOMAIN` — dominio permitido para logins internos.
-- `DEFAULT_NOTE_AUTHOR` — autor por defecto de notas importadas (opcional).
-
-**Almacenamiento de documentos**
-- `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` — credenciales de AWS S3.
-- `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY`, `GOOGLE_DRIVE_SHARED_DRIVE_ID`, `GOOGLE_DRIVE_BASE_FOLDER_NAME` — credenciales y configuración de Drive.
-
-**Integraciones CRM y catálogos**
-- `PIPEDRIVE_API_TOKEN`, `PIPEDRIVE_BASE_URL` (u otras credenciales necesarias).
-- `WOO_API_KEY`, `WOO_API_SECRET`, `WOO_BASE_URL` (si se sincronizan cursos).
-
-**Portal público de alumnos**
-- `PUBLIC_SESSION_RATE_LIMIT_WINDOW_MS`, `PUBLIC_SESSION_RATE_LIMIT_MAX_REQUESTS` — control de rate limiting (opcional).
-
-**Generación de informes**
-- `OPENAI_API_KEY`, `OPENAI_BASE_URL` (opcional, por defecto `https://api.openai.com/v1`).
-- `REPORTS_ALLOWED_ORIGIN` — origen permitido para CORS de informes.
-
-> 🔒 No versionar archivos `.env` ni credenciales. Compartirlas mediante los canales seguros del equipo.
-
-## Puesta en marcha local
-1. **Instalar dependencias**
+## Ejecución local
+1. **Instalar dependencias** (monorepo):
    ```bash
    npm install
    ```
-2. **Generar Prisma Client** (se ejecuta también en `postinstall`)
+2. **Generar Prisma Client** (también corre en `postinstall`):
    ```bash
    npm run generate
    ```
-3. **Inicializar datos básicos (opcional)** — revisar `scripts/init-db.mjs` si está disponible en tu entorno privado.
-   ```bash
-   npm run db:init
-   ```
-4. **Levantar frontend + backend con Netlify CLI** (puerto 8888)
+3. **Levantar entorno completo con Netlify CLI** (frontend + funciones proxied):
    ```bash
    npx netlify dev -p 8888
    ```
-   - El frontend queda accesible en `http://localhost:8888` y proxea las funciones en `/.netlify/functions/*`.
-   - Para trabajar solo con el frontend: `npm run dev --workspace frontend` (Vite en `http://localhost:5173`).
+   - UI: `http://localhost:8888`
+   - API: `http://localhost:8888/.netlify/functions/*` (o `/api/*` gracias a los redirects).
+4. **Trabajar solo con el frontend** (opcional):
+   ```bash
+   npm run dev --workspace frontend
+   ```
 
-## Scripts útiles
-| Comando | Descripción |
-| --- | --- |
-| `npm run clean` | Elimina dependencias locales y artefactos de Prisma.
-| `npm run typecheck:functions` | Type-check de todas las funciones Netlify.
-| `npm run build` | Compila el frontend (previo `npm run build:frontend`).
-| `npm run prisma:format` | Formatea `backend/prisma/schema.prisma` reutilizando la instalación local del workspace `backend` y evita accesos a registro externos.
-| `npm run prisma:prune` | Elimina binarios de Prisma sobrantes durante builds en Netlify/CI.
-| `npm run netlify:build` | Pipeline completo usado en Netlify (`generate` + prune + build).
-| `npm run test --workspace frontend` | Ejecuta tests de la SPA con Vitest.
-| `npm run typecheck --workspace frontend` | Comprueba tipos del frontend.
-
-## Testing y calidad
-- **Frontend**: `npm run test --workspace frontend` (Vitest) y `npm run typecheck --workspace frontend`.
-- **Backend**: `npm run typecheck:functions` para validar los tipos en todas las funciones.
-- **Linting/format**: el frontend incluye ESLint + Prettier (ejecutar manualmente desde el workspace si es necesario). Para formatear el esquema de Prisma usa `npm run prisma:format`, que invoca el binario ya instalado en el workspace `backend` y evita descargas con `npx`.
+## Scripts y comprobaciones
+Comandos más usados desde la raíz:
+- `npm run clean` — Limpia dependencias y artefactos de Prisma.
+- `npm run generate` — Genera cliente Prisma para backend/frontend.
+- `npm run build` — Compila el frontend (invoca `build:frontend`).
+- `npm run typecheck:functions` — Type-check de todas las funciones Netlify.
+- `npm run prisma:format` — Formatea `prisma/schema.prisma` usando el binario local del workspace backend.
+- `npm run prisma:prune` — Elimina binarios Prisma sobrantes en CI/Netlify.
+- `npm run netlify:build` — Pipeline de despliegue (generate + prune + build).
+- `npm run test --workspace frontend` — Tests de la SPA.
+- `npm run typecheck --workspace frontend` — Comprobación de tipos en frontend.
 
 ## Despliegue
-- Netlify ejecuta `npm run netlify:build`, genera Prisma Client, limpia binarios innecesarios y compila el frontend.
-- Las funciones se empaquetan automáticamente; `backend.toml` define rutas personalizadas, timeouts y bundling.
-- Los deploys se producen al fusionar en la rama principal. Para un despliegue manual se puede usar:
-  ```bash
-  netlify deploy
-  ```
+- Netlify ejecuta `npm run netlify:build`, incluye el cliente Prisma necesario y compila el bundle del frontend.
+- `netlify.toml` define redirects: `/api/*` → `/.netlify/functions/:splat`, rutas explícitas para `/auth/*` y healthcheck, y fallback SPA.
+- `backend.toml` fija el comando de build del workspace backend y los módulos externos incluidos en cada función.
 
-## Onboarding y próximos pasos recomendados
-1. **Reproducir el entorno local** siguiendo la guía anterior para familiarizarse con Netlify CLI, variables de entorno y comandos compartidos.
-2. **Explorar el flujo de Presupuestos**: revisar `frontend/src/features/presupuestos` junto con `backend/functions/deals.ts`, `deal_notes.ts` y `deal_documents.ts` para entender el ciclo completo de importación, edición y documentos.
-3. **Analizar el calendario y recursos**: estudiar `frontend/src/pages/calendario/*`, `backend/functions/sessions.ts`, `calendar-variants.ts` y los endpoints de catálogos (`trainers.ts`, `rooms.ts`, `mobile-units.ts`).
-4. **Revisar el portal público de alumnos**: comprender cómo `public/PublicSessionStudentsPage.tsx` interactúa con `backend/functions/public-session-students.ts` y las tablas `tokens` y `session_students`.
-5. **Entender la generación de informes**: examinar `backend/functions/generateReport.ts`, `improveReport.ts` y las plantillas relacionadas para extender reportes cuando sea necesario.
-6. **Consultar el esquema Prisma**: usar `prisma/schema.prisma` como referencia principal para cualquier cambio de datos y sincronizarlo con Pipedrive/Google Drive.
+## Cómo contribuir y extender el producto
+1. **Familiarízate con el dominio que quieres tocar**: revisa el par backend/frontend correspondiente (p. ej. presupuestos → `deals.ts` + `features/presupuestos`).
+2. **Añade lógica de negocio**: crea o modifica funciones en `backend/functions`. Usa `_shared/response.ts` para respuestas coherentes y `_shared/prisma.ts` para el cliente. Registra eventos críticos en el audit log si aplica.
+3. **Expone nuevos endpoints al frontend**: declara redirects en `netlify.toml` solo si necesitas rutas adicionales fuera del catch-all `/api/*`.
+4. **Integra en la UI**: añade páginas o componentes bajo `frontend/src/pages` o `frontend/src/features` y protégelos con `RequireAuth`/`GuardedRoute` si requieren permisos.
+5. **Datos**: modifica `prisma/schema.prisma`, genera migraciones y ejecuta `npm run generate`. Actualiza seeds o scripts si procede.
+6. **Prueba antes de subir**: ejecuta typechecks y, en frontend, tests de Vitest. Usa Netlify CLI para validar el flujo completo.
 
----
-¿Dudas? Puedes inspeccionar las funciones en `backend/functions/` y las vistas correspondientes en `frontend/src/` para localizar rápidamente la lógica relacionada.
+Con esta guía deberías poder navegar el código, comprender los flujos clave y iterar sobre la plataforma sin romper integraciones ni despliegues.
