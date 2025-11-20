@@ -73,7 +73,7 @@ import {
 import { isApiError } from '../../api';
 import { buildFieldTooltip } from '../../../../utils/fieldTooltip';
 import { formatSedeLabel } from '../../formatSedeLabel';
-import { useApplicableDealProducts } from '../../shared/useApplicableDealProducts';
+import { useApplicableDealProducts, type DefaultApplicableDealProduct } from '../../shared/useApplicableDealProducts';
 import {
   buildTrainerInviteStatusMapFromSession,
   setTrainerInviteStatusForIds,
@@ -86,6 +86,7 @@ import {
   type SessionDocumentsEventDetail,
 } from '../../../../utils/sessionDocumentsEvents';
 import { useCurrentUserIdentity } from '../../useCurrentUserIdentity';
+import { useTrainingTemplatePoints } from '../../../../hooks/useTrainingTemplatePoints';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -109,6 +110,8 @@ type DeleteDialogState = {
   counts: SessionCounts | null;
   error: string | null;
 };
+
+type ApplicableProductInfo = DefaultApplicableDealProduct & { template: string | null };
 
 const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
@@ -1847,7 +1850,38 @@ export function SessionsAccordionEmpresas({
   highlightSessionId,
 }: SessionsAccordionEmpresasProps) {
   const qc = useQueryClient();
-  const { applicableProducts, shouldShow, generationKey } = useApplicableDealProducts(products);
+  const mapApplicableProduct = useCallback(
+    (product: DealProduct & { id: string | number }): ApplicableProductInfo => ({
+      id: String(product.id),
+      name: product.name ?? null,
+      code: product.code ?? null,
+      quantity:
+        typeof product.quantity === 'number'
+          ? product.quantity
+          : product.quantity != null
+          ? Number(product.quantity)
+          : 0,
+      hours:
+        typeof product.hours === 'number'
+          ? product.hours
+          : product.hours != null
+          ? Number(product.hours)
+          : null,
+      template:
+        typeof product.template === 'string' && product.template.trim().length
+          ? product.template.trim()
+          : null,
+    }),
+    [],
+  );
+
+  const generationKeySelector = useCallback((product: ApplicableProductInfo) => product.id, []);
+
+  const { applicableProducts, shouldShow, generationKey } = useApplicableDealProducts(products, {
+    mapProduct: mapApplicableProduct,
+    generationKeySelector,
+    sortGenerationKey: true,
+  });
 
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationDone, setGenerationDone] = useState(false);
@@ -2507,6 +2541,19 @@ export function SessionsAccordionEmpresas({
       })()
     : null;
 
+  const activeProductTemplate = activeSession
+    ? (() => {
+        const directProduct = applicableProducts.find((product) => product.id === activeSession.productId);
+        if (directProduct?.template) {
+          return directProduct.template;
+        }
+        const fallbackProductId = sessionProductRef.current[activeSession.sessionId];
+        if (!fallbackProductId) return null;
+        const fallbackProduct = applicableProducts.find((product) => product.id === fallbackProductId);
+        return fallbackProduct?.template ?? null;
+      })()
+    : null;
+
   useEffect(() => {
     if (activeSession && !forms[activeSession.sessionId]) {
       setActiveSession(null);
@@ -2847,6 +2894,7 @@ export function SessionsAccordionEmpresas({
                   onSave={(options) => handleSaveSession(activeSession.sessionId, options)}
                   dealId={dealId}
                   productName={activeSession.productName}
+                  templateId={activeProductTemplate}
                   dealSede={normalizedDealSede}
                   inviteStatusMap={inviteStatus}
                   onSendInvites={handleSendInvites}
@@ -2895,6 +2943,7 @@ interface SessionEditorProps {
   onSave: (options?: { notifyOnSuccess?: boolean }) => Promise<boolean> | boolean;
   dealId: string;
   productName: string;
+  templateId: string | null;
   dealSede: string | null;
   inviteStatusMap: Record<string, { sending: boolean; message: string | null; error: string | null }>;
   onSendInvites: (sessionId: string) => void;
@@ -2915,6 +2964,7 @@ function SessionEditor({
   onSave,
   dealId,
   productName,
+  templateId,
   dealSede,
   inviteStatusMap,
   onSendInvites,
@@ -2930,6 +2980,7 @@ function SessionEditor({
   const trainerPointerInteractingRef = useRef(false);
   const unitPointerInteractingRef = useRef(false);
   const isInCompany = dealSede === 'In Company';
+  const trainingPoints = useTrainingTemplatePoints(templateId);
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
@@ -2991,17 +3042,20 @@ function SessionEditor({
   const handleCopyFundae = useCallback(async () => {
     const trainerDetails = selectedTrainers.map((trainer) => {
       const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
-      const dni = trainer.dni ?? 'DNI no disponible';
-      return `${label} - ${dni}`;
+      const dni = trainer.dni?.trim();
+      const dniLabel = dni?.length ? dni : 'DNI no disponible';
+      return `${label} - ${dniLabel}`;
     });
 
     const trainersText = trainerDetails.length ? trainerDetails.join(', ') : 'Sin formadores asignados';
     const formationLabel = productName?.trim() || '—';
+    const pointsLabel = trainingPoints?.trim() || '—';
     const payload = [
       `Formador o Formadores: ${trainersText}`,
       'Telefono: 935 646 346',
-      'Mail: formadores@gepgroup.es',
+      'Mail: formacion@gepgroup.es',
       `Formación: ${formationLabel}`,
+      `Puntos formación: ${pointsLabel}`,
     ].join('\n');
 
     try {
@@ -3013,7 +3067,7 @@ function SessionEditor({
     } catch (error) {
       onNotify?.({ variant: 'danger', message: 'No se pudieron copiar los datos de FUNDAE.' });
     }
-  }, [onNotify, productName, selectedTrainers]);
+  }, [onNotify, productName, selectedTrainers, trainingPoints]);
 
   const availabilityQuery = useQuery({
     queryKey: availabilityRange
