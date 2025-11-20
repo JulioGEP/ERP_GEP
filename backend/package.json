@@ -9,7 +9,7 @@
   },
   "scripts": {
     "generate": "prisma generate --schema prisma/schema.prisma",
-    "migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "migrate:deploy": "PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT=${PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT:-60000} prisma migrate deploy --schema prisma/schema.prisma",
     "prisma:prune": "node ../scripts/prisma-prune-binaries.mjs || true",
     "typecheck": "tsc -p tsconfig.json",
     "postinstall": "prisma generate --schema prisma/schema.prisma"
