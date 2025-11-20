@@ -7,6 +7,7 @@ import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import {
+  type AuthenticatedContext,
   getRoleDisplayValue,
   getRoleStorageValue,
   normalizeEmail,
@@ -148,7 +149,7 @@ async function syncTrainerForFormador(
 
 export const handler = createHttpHandler<any>(async (request) => {
   const prisma = getPrisma();
-  const auth = await requireAuth(request, prisma, { requireRoles: ['Admin'] });
+  const auth = await requireAuth(request, prisma);
 
   if ('error' in auth) {
     return auth.error;
@@ -156,15 +157,47 @@ export const handler = createHttpHandler<any>(async (request) => {
 
   switch (request.method) {
     case 'GET':
-      return handleList(request, prisma);
+      return handleGet(request, prisma, auth);
     case 'POST':
-      return handleCreate(request, prisma);
+      return handleCreate(request, prisma, auth);
     case 'PATCH':
-      return handleUpdate(request, prisma);
+      return handleUpdate(request, prisma, auth);
     default:
       return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
   }
 });
+
+function isAdmin(auth: AuthenticatedContext): boolean {
+  return normalizeRoleKey(auth.user.role) === 'admin';
+}
+
+async function handleGet(
+  request: any,
+  prisma: ReturnType<typeof getPrisma>,
+  auth: AuthenticatedContext,
+) {
+  const userId = parseUserId(request.path);
+
+  if (userId) {
+    if (!isAdmin(auth) && auth.user.id !== userId) {
+      return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
+    }
+
+    const user = await prisma.users.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      return errorResponse('NOT_FOUND', 'Usuario no encontrado', 404);
+    }
+
+    return successResponse({ user: serializeUser(user) });
+  }
+
+  if (!isAdmin(auth)) {
+    return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
+  }
+
+  return handleList(request, prisma);
+}
 
 async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
   try {
@@ -236,7 +269,15 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
   }
 }
 
-async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) {
+async function handleCreate(
+  request: any,
+  prisma: ReturnType<typeof getPrisma>,
+  auth: AuthenticatedContext,
+) {
+  if (!isAdmin(auth)) {
+    return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
+  }
+
   const firstName = sanitizeName(request.body?.firstName);
   const lastName = sanitizeName(request.body?.lastName);
   const email = normalizeEmail(request.body?.email);
@@ -302,7 +343,15 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
   }
 }
 
-async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) {
+async function handleUpdate(
+  request: any,
+  prisma: ReturnType<typeof getPrisma>,
+  auth: AuthenticatedContext,
+) {
+  if (!isAdmin(auth)) {
+    return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
+  }
+
   const userId = parseUserId(request.path);
   if (!userId) {
     return errorResponse('INVALID_ID', 'Identificador inválido', 400);
