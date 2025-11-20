@@ -1505,15 +1505,6 @@ export function BudgetDetailModalEmpresas({
                     >
                       Subir Documento
                     </Button>
-                    <Button
-                      variant="outline-secondary"
-                      href={driveFolderLink ?? undefined}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      disabled={!driveFolderLink}
-                    >
-                      Ir a G.Drive
-                    </Button>
                   </div>
                   {documents.length ? (
                     <ListGroup>
