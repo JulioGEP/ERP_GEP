@@ -62,6 +62,18 @@ export function CertificateTable({ rows, onRowsChange, disabled }: CertificateTa
     );
   };
 
+  const renderAptoStatus = (row: CertificateRow) => {
+    const isApto = Boolean(row.apto);
+    return (
+      <span
+        className={`badge ${isApto ? 'bg-success' : 'bg-danger'}`}
+        aria-label={isApto ? 'Alumno apto' : 'Alumno no apto'}
+      >
+        {isApto ? 'Apto' : 'No apto'}
+      </span>
+    );
+  };
+
   return (
     <div className="certificate-table-wrapper">
       <Table striped bordered hover responsive size="sm" className="certificate-table mb-0">
@@ -78,6 +90,7 @@ export function CertificateTable({ rows, onRowsChange, disabled }: CertificateTa
             <th>Cliente</th>
             <th>Formación</th>
             <th>Irata</th>
+            <th className="text-center">Apto</th>
             <th className="text-center">Cert.</th>
           </tr>
         </thead>
@@ -97,6 +110,9 @@ export function CertificateTable({ rows, onRowsChange, disabled }: CertificateTa
                 <td>{renderInput(row, 'cliente')}</td>
                 <td>{renderInput(row, 'formacion')}</td>
                 <td>{renderInput(row, 'irata')}</td>
+                <td className="text-center align-middle certificate-table-apto">
+                  {renderAptoStatus(row)}
+                </td>
                 <td className="text-center align-middle">
                   <Form.Check
                     type="checkbox"

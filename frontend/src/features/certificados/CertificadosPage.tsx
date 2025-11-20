@@ -1487,6 +1487,10 @@ export function CertificadosPage() {
     () => editableRows.filter((row) => row.certificado),
     [editableRows],
   );
+  const nonAptoRows = useMemo(
+    () => editableRows.filter((row) => !row.apto),
+    [editableRows],
+  );
   const incompleteRows = useMemo(
     () => editableRows.filter((row) => !isRowComplete(row)),
     [editableRows],
@@ -1502,6 +1506,7 @@ export function CertificadosPage() {
   const showAutoSelectedSession = sessions.length === 1 && selectedSession;
   const hasResults = editableRows.length > 0;
   const hasCertifiedRows = showCertifiedWarning && alreadyCertifiedRows.length > 0;
+  const hasNonAptoRows = nonAptoRows.length > 0;
   const hasVisibleStepProgress = generationSteps.some((step) => step.status !== 'pending');
   const isToolbarDisabled =
     !hasResults ||
@@ -1805,6 +1810,11 @@ export function CertificadosPage() {
                       );
                     })}
                   </div>
+                </Alert>
+              )}
+              {hasNonAptoRows && (
+                <Alert variant="danger" className="text-start mt-3">
+                  Hay alumnos no aptos.
                 </Alert>
               )}
               <CertificateTable
