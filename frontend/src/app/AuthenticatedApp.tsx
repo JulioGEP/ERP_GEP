@@ -171,6 +171,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     path: '/usuarios',
     children: [
       { key: 'Usuarios/Principal', label: 'Gestión de usuarios', path: '/usuarios' },
+      { key: 'Usuarios/Vacaciones', label: 'Vacaciones', path: '/usuarios/vacaciones' },
     ],
   },
 ];

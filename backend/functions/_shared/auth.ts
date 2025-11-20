@@ -39,6 +39,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/calendario/*',
     '/recursos/formadores_bomberos',
     '/recursos/confirmaciones',
+    '/usuarios/vacaciones',
   ],
   Formador: ['/usuarios/trainer/*', '/perfil'],
 };
