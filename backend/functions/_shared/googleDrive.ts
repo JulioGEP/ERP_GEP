@@ -2623,19 +2623,10 @@ export async function uploadUserDocumentToGoogleDrive(params: {
     context: { userId: params.user?.id },
   });
 
-  const titleFolderName = sanitizeName(params.title) || sanitizeName(params.fileName) || 'documento';
-  const titleFolderId = await ensureUniqueSubfolder({
-    driveId,
-    parentId: userFolderId,
-    folderName: titleFolderName,
-    context: { userId: params.user?.id, title: params.title },
-  });
-
   const safeFileName = sanitizeName(params.fileName || 'documento') || 'documento';
   const mimeType = params.mimeType?.trim() || 'application/octet-stream';
-  const uploadResult = await uploadFile({
-    driveId,
-    parentId: titleFolderId,
+  const uploadResult = await uploadBufferToDrive({
+    parentId: userFolderId,
     name: safeFileName,
     mimeType,
     data: params.data,
@@ -2653,25 +2644,24 @@ export async function uploadUserDocumentToGoogleDrive(params: {
     });
   }
 
+  const contentLink = `https://drive.google.com/uc?id=${uploadResult.id}&export=download`;
+
   let folderWebViewLink: string | null = null;
   try {
-    folderWebViewLink = (await ensureFilePublicWebViewLink(titleFolderId)) ?? null;
+    folderWebViewLink = (await ensureFilePublicWebViewLink(userFolderId)) ?? null;
   } catch (permissionError) {
-    console.warn('[google-drive-sync] No se pudo generar enlace público de carpeta de documento de usuario', {
+    console.warn('[google-drive-sync] No se pudo generar enlace público de carpeta de usuario', {
       userId: params.user?.id,
-      title: params.title,
-      folderId: titleFolderId,
+      folderId: userFolderId,
       error: permissionError instanceof Error ? permissionError.message : String(permissionError),
     });
   }
-
-  const contentLink = `https://drive.google.com/uc?id=${uploadResult.id}&export=download`;
 
   return {
     driveFileId: uploadResult.id,
     driveFileName: uploadResult.name,
     driveWebViewLink: webViewLink,
-    driveFolderId: titleFolderId,
+    driveFolderId: userFolderId,
     driveFolderWebViewLink: folderWebViewLink,
     driveFolderContentLink: contentLink,
   };
