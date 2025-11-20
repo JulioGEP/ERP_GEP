@@ -48,6 +48,24 @@ function sanitizeText(value: unknown): string | null {
   return text.length ? text : null;
 }
 
+function parseBankAccount(value: unknown): { parsed: string | null; valid: boolean } {
+  if (value === undefined || value === null) {
+    return { parsed: null, valid: true };
+  }
+
+  const text = String(value).trim();
+  if (!text.length) {
+    return { parsed: null, valid: true };
+  }
+
+  const digitsOnly = text.replace(/\s+/g, '');
+  if (!/^\d+$/.test(digitsOnly)) {
+    return { parsed: null, valid: false };
+  }
+
+  return { parsed: digitsOnly, valid: true };
+}
+
 function parseDateOnly(value: unknown): Date | null {
   if (!value) return null;
   const input = typeof value === 'string' ? value.trim() : String(value);
@@ -283,12 +301,16 @@ async function handleCreate(
   const email = normalizeEmail(request.body?.email);
   const roleInput = typeof request.body?.role === 'string' ? request.body.role.trim() : '';
   const active = request.body?.active === undefined ? true : Boolean(request.body.active);
-  const bankAccount = sanitizeText(request.body?.bankAccount);
+  const bankAccountResult = parseBankAccount(request.body?.bankAccount);
   const address = sanitizeText(request.body?.address);
   const startDate = parseDateOnly(request.body?.startDate);
 
   if (request.body?.startDate && !startDate) {
     return errorResponse('INVALID_INPUT', 'Fecha de alta inválida', 400);
+  }
+
+  if (!bankAccountResult.valid) {
+    return errorResponse('INVALID_INPUT', 'Cuenta bancaria inválida', 400);
   }
 
   if (!firstName || !lastName || !email || !roleInput.length) {
@@ -312,7 +334,7 @@ async function handleCreate(
           email,
           role: roleStorage,
           active,
-          bank_account: bankAccount,
+          bank_account: bankAccountResult.parsed,
           address,
           start_date: startDate ?? undefined,
           password_hash: passwordHash,
@@ -416,8 +438,11 @@ async function handleUpdate(
   }
 
   if ('bankAccount' in (request.body ?? {})) {
-    const bankAccount = sanitizeText(request.body?.bankAccount);
-    data.bank_account = bankAccount;
+    const bankAccountResult = parseBankAccount(request.body?.bankAccount);
+    if (!bankAccountResult.valid) {
+      return errorResponse('INVALID_INPUT', 'Cuenta bancaria inválida', 400);
+    }
+    data.bank_account = bankAccountResult.parsed;
     fieldsProvided += 1;
   }
 
