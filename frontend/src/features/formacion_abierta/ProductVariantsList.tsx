@@ -1488,6 +1488,7 @@ export function VariantModal({
         trainer_id: trainer.trainer_id,
         name: trainer.name,
         apellido: trainer.apellido ?? null,
+        dni: trainer.dni ?? null,
       });
     });
 
@@ -1507,6 +1508,7 @@ export function VariantModal({
             trainer_id: record.trainer_id,
             name: record.name ?? null,
             apellido: record.apellido ?? null,
+            dni: record.dni ?? null,
           });
         }
       });
@@ -1560,6 +1562,7 @@ export function VariantModal({
         trainer_id: trainerId,
         name: trainerId,
         apellido: null,
+        dni: null,
       },
     );
   }, [formValues.trainer_ids, trainerLookup]);
@@ -1641,6 +1644,40 @@ export function VariantModal({
 
   const trainerSummaryDisplay = trainerSummary || trainerDisplay;
   const unitSummaryDisplay = unitSummary || unitDisplay;
+
+  const formationLabel = useMemo(() => {
+    const label = (product?.name ?? product?.code ?? '').trim();
+    return label.length ? label : '—';
+  }, [product?.code, product?.name]);
+
+  const handleCopyFundae = useCallback(async () => {
+    const trainerDetails = selectedTrainers.map((trainer) => {
+      const labelParts = [trainer.name, trainer.apellido]
+        .filter((value) => value && value.trim().length)
+        .join(' ');
+      const label = labelParts.length ? labelParts : trainer.trainer_id;
+      const dni = trainer.dni ?? 'DNI no disponible';
+      return `${label} - ${dni}`;
+    });
+
+    const trainersText = trainerDetails.length ? trainerDetails.join(', ') : 'Sin formadores asignados';
+    const payload = [
+      `Formador o Formadores: ${trainersText}`,
+      'Telefono: 935 646 346',
+      'Mail: formadores@gepgroup.es',
+      `Formación: ${formationLabel}`,
+    ].join('\n');
+
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard API no disponible');
+      }
+      await navigator.clipboard.writeText(payload);
+      emitToast({ variant: 'success', message: 'Datos FUNDAE copiados al portapapeles.' });
+    } catch (error) {
+      emitToast({ variant: 'danger', message: 'No se pudieron copiar los datos de FUNDAE.' });
+    }
+  }, [formationLabel, selectedTrainers]);
 
   const handleTrainerToggle = (trainerId: string, checked: boolean) => {
     let nextIds: string[] = [];
@@ -1849,6 +1886,7 @@ export function VariantModal({
               trainer_id: catalogTrainer.trainer_id,
               name: catalogTrainer.name,
               apellido: catalogTrainer.apellido ?? null,
+              dni: catalogTrainer.dni ?? null,
             } satisfies VariantTrainerRecord;
           }
 
@@ -2166,7 +2204,8 @@ export function VariantModal({
                           </div>
                         ))}
                       </div>
-                      <div className="mt-2 d-flex flex-column gap-1">
+                    <div className="mt-2 d-flex flex-column gap-1">
+                      <div className="d-flex flex-wrap align-items-center gap-2">
                         <Button
                           size="sm"
                           variant="outline-primary"
@@ -2186,6 +2225,15 @@ export function VariantModal({
                             'Enviar confirmación'
                           )}
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          onClick={handleCopyFundae}
+                          disabled={inviteStatus.sending}
+                        >
+                          Copiar FUNDAE
+                        </Button>
+                      </div>
                         {inviteStatus.error ? (
                           <div className="text-danger small">{inviteStatus.error}</div>
                         ) : hasUnsavedTrainerChanges ? (

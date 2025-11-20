@@ -213,6 +213,7 @@ export type TrainerOption = {
   trainer_id: string;
   name: string;
   apellido: string | null;
+  dni: string | null;
   activo: boolean;
 };
 
@@ -1043,9 +1044,10 @@ function normalizeTrainerOption(raw: any): TrainerOption | null {
   const name = toStringValue(raw?.name) ?? null;
   if (!name) return null;
   const apellido = toStringValue(raw?.apellido);
+  const dni = toStringValue(raw?.dni);
   const activoValue = raw?.activo;
   const activo = activoValue === undefined ? true : Boolean(activoValue);
-  return { trainer_id, name, apellido: apellido ?? null, activo };
+  return { trainer_id, name, apellido: apellido ?? null, dni: dni ?? null, activo };
 }
 
 function normalizeRoomOption(raw: any): RoomOption | null {

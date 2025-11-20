@@ -87,13 +87,19 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     }
   });
 
-  const trainerRecordsMap = new Map<string, { trainer_id: string; name: string | null; apellido: string | null }>();
-  let fallbackTrainerRecord: { trainer_id: string; name: string | null; apellido: string | null } | null = null;
+  const trainerRecordsMap = new Map<
+    string,
+    { trainer_id: string; name: string | null; apellido: string | null; dni: string | null }
+  >();
+  let fallbackTrainerRecord:
+    | { trainer_id: string; name: string | null; apellido: string | null; dni: string | null }
+    | null = null;
 
   const registerTrainerRecord = (record: {
     trainer_id: string;
     name: string | null;
     apellido: string | null;
+    dni: string | null;
   }) => {
     if (record.trainer_id) {
       if (!trainerRecordsMap.has(record.trainer_id)) {
@@ -117,6 +123,7 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
       trainer_id: id ?? '',
       name: toTrimmedString((trainer as any).name),
       apellido: toTrimmedString((trainer as any).apellido),
+      dni: toTrimmedString((trainer as any).dni),
     });
   });
 
@@ -129,6 +136,7 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
       trainer_id: id ?? '',
       name: toTrimmedString(input.trainer.name),
       apellido: toTrimmedString(input.trainer.apellido),
+      dni: toTrimmedString((input.trainer as any).dni),
     });
   }
 

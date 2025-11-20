@@ -2846,6 +2846,7 @@ export function SessionsAccordionEmpresas({
                   onOpenMap={handleOpenMap}
                   onSave={(options) => handleSaveSession(activeSession.sessionId, options)}
                   dealId={dealId}
+                  productName={activeSession.productName}
                   dealSede={normalizedDealSede}
                   inviteStatusMap={inviteStatus}
                   onSendInvites={handleSendInvites}
@@ -2893,6 +2894,7 @@ interface SessionEditorProps {
   onOpenMap: (address: string) => void;
   onSave: (options?: { notifyOnSuccess?: boolean }) => Promise<boolean> | boolean;
   dealId: string;
+  productName: string;
   dealSede: string | null;
   inviteStatusMap: Record<string, { sending: boolean; message: string | null; error: string | null }>;
   onSendInvites: (sessionId: string) => void;
@@ -2912,6 +2914,7 @@ function SessionEditor({
   onOpenMap,
   onSave,
   dealId,
+  productName,
   dealSede,
   inviteStatusMap,
   onSendInvites,
@@ -2984,6 +2987,33 @@ function SessionEditor({
     () => buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local),
     [form.fecha_inicio_local, form.fecha_fin_local],
   );
+
+  const handleCopyFundae = useCallback(async () => {
+    const trainerDetails = selectedTrainers.map((trainer) => {
+      const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
+      const dni = trainer.dni ?? 'DNI no disponible';
+      return `${label} - ${dni}`;
+    });
+
+    const trainersText = trainerDetails.length ? trainerDetails.join(', ') : 'Sin formadores asignados';
+    const formationLabel = productName?.trim() || '—';
+    const payload = [
+      `Formador o Formadores: ${trainersText}`,
+      'Telefono: 935 646 346',
+      'Mail: formadores@gepgroup.es',
+      `Formación: ${formationLabel}`,
+    ].join('\n');
+
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard API no disponible');
+      }
+      await navigator.clipboard.writeText(payload);
+      onNotify?.({ variant: 'success', message: 'Datos FUNDAE copiados al portapapeles.' });
+    } catch (error) {
+      onNotify?.({ variant: 'danger', message: 'No se pudieron copiar los datos de FUNDAE.' });
+    }
+  }, [onNotify, productName, selectedTrainers]);
 
   const availabilityQuery = useQuery({
     queryKey: availabilityRange
@@ -3337,20 +3367,30 @@ function SessionEditor({
                   const errorMessage = inviteState?.error;
                   return (
                     <>
-                      <Button
-                        size="sm"
-                        variant="outline-primary"
-                        disabled={isSending || requiresSaveBeforeInvite}
-                        onClick={() => onSendInvites(form.id)}
-                      >
-                        {isSending ? (
-                          <>
-                            <Spinner animation="border" size="sm" className="me-2" role="status" /> Enviando…
-                          </>
-                        ) : (
-                          'Enviar confirmación'
-                        )}
-                      </Button>
+                      <div className="d-flex flex-wrap align-items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          disabled={isSending || requiresSaveBeforeInvite}
+                          onClick={() => onSendInvites(form.id)}
+                        >
+                          {isSending ? (
+                            <>
+                              <Spinner animation="border" size="sm" className="me-2" role="status" /> Enviando…
+                            </>
+                          ) : (
+                            'Enviar confirmación'
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          onClick={handleCopyFundae}
+                          disabled={isSending}
+                        >
+                          Copiar FUNDAE
+                        </Button>
+                      </div>
                       {selectedTrainers.length ? (
                         <div className="mt-2 d-flex flex-column gap-1">
                           {selectedTrainers.map((trainer) => {
