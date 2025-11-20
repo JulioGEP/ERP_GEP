@@ -1,7 +1,10 @@
 // backend/functions/user_documents.ts
 import { getPrisma } from './_shared/prisma';
 import { COMMON_HEADERS, errorResponse, preflightResponse, successResponse } from './_shared/response';
-import { uploadUserDocumentToGoogleDrive } from './_shared/googleDrive';
+import {
+  deleteUserDocumentFromGoogleDrive,
+  uploadUserDocumentToGoogleDrive,
+} from './_shared/googleDrive';
 
 function parsePath(path: string | undefined | null) {
   const normalized = String(path || '');
@@ -52,7 +55,7 @@ export const handler = async (event: any) => {
     const headers: Record<string, string> = {
       ...COMMON_HEADERS,
       'Content-Type': document.mime_type || 'application/octet-stream',
-      'Content-Disposition': `attachment; filename="${document.file_name}"`,
+      'Content-Disposition': `inline; filename="${document.file_name}"`,
     };
     if (typeof document.file_size === 'number') {
       headers['Content-Length'] = String(document.file_size);
@@ -146,6 +149,37 @@ export const handler = async (event: any) => {
     });
 
     return successResponse({ document: mapDocument({ ...created, title: resolvedTitle }) });
+  }
+
+  if (method === 'DELETE' && documentId) {
+    const existing = await prisma.user_documents.findUnique({ where: { id: documentId } });
+    if (!existing) {
+      return errorResponse('NOT_FOUND', 'Documento no encontrado', 404);
+    }
+
+    const user = await prisma.users.findUnique({ where: { id: existing.user_id } });
+
+    let driveDeleted = false;
+    try {
+      const driveResult = await deleteUserDocumentFromGoogleDrive({
+        user,
+        driveFileName: existing.file_name,
+        driveWebViewLink: existing.drive_web_view_link,
+        driveWebContentLink: existing.drive_web_content_link,
+        driveFolderId: existing.drive_folder_id,
+      });
+      driveDeleted = driveResult.fileDeleted;
+    } catch (err) {
+      console.warn('[user-documents] No se pudo eliminar documento en Drive', {
+        documentId,
+        userId: existing.user_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    await prisma.user_documents.delete({ where: { id: documentId } });
+
+    return successResponse({ deleted: true, documentId, drive_deleted: driveDeleted });
   }
 
   return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
