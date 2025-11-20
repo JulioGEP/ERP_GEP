@@ -9,6 +9,7 @@ import {
   Col,
   Form,
   Accordion,
+  InputGroup,
   Modal,
   Pagination,
   Row,
@@ -26,11 +27,19 @@ import {
   type UserSummary,
 } from '../../api/users';
 import {
+  fetchUserVacations,
+  saveUserVacationDay,
+  updateVacationAllowance,
+  type UserVacationsResponse,
+  type VacationType,
+} from '../../api/userVacations';
+import {
   deleteUserDocument,
   fetchUserDocuments,
   uploadUserDocument,
   type UserDocument,
 } from '../../api/userDocuments';
+import { VacationCalendar } from '../../components/vacations/VacationCalendar';
 
 const PAGE_SIZE = 10;
 const ROLE_OPTIONS = ['Admin', 'Comercial', 'Administracion', 'Logistica', 'People', 'Formador'] as const;
@@ -70,6 +79,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
+  const [vacationUser, setVacationUser] = useState<UserSummary | null>(null);
   const [includeTrainers, setIncludeTrainers] = useState(false);
   const [tableFilter, setTableFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -109,9 +119,17 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
     setShowModal(true);
   }, []);
 
+  const openVacations = useCallback((user: UserSummary) => {
+    setVacationUser(user);
+  }, []);
+
   const closeModal = useCallback(() => {
     setShowModal(false);
     setEditingUser(null);
+  }, []);
+
+  const closeVacationModal = useCallback(() => {
+    setVacationUser(null);
   }, []);
 
   const createMutation = useMutation({
@@ -339,6 +357,9 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
                           </td>
                           <td>
                             <div className="d-flex justify-content-end gap-2">
+                              <Button variant="outline-primary" size="sm" onClick={() => openVacations(user)}>
+                                Vacaciones
+                              </Button>
                               <Button variant="outline-secondary" size="sm" onClick={() => openEditModal(user)}>
                                 Editar
                               </Button>
@@ -382,6 +403,13 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
         onSubmit={handleModalSubmit}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
         initialValue={editingUser}
+      />
+
+      <VacationManagerModal
+        show={Boolean(vacationUser)}
+        user={vacationUser}
+        onHide={closeVacationModal}
+        onNotify={notify}
       />
     </div>
   );
@@ -697,6 +725,254 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
           </Button>
         </Modal.Footer>
       </Form>
+    </Modal>
+  );
+}
+
+type VacationManagerModalProps = {
+  show: boolean;
+  user: UserSummary | null;
+  onHide: () => void;
+  onNotify?: UsersPageProps['onNotify'];
+};
+
+const VACATION_TYPE_LABELS: Record<VacationType, string> = {
+  A: 'Ausencia legal',
+  F: 'Fiestas nacionales y autonómicas',
+  L: 'Festivos locales',
+  C: 'Día aniversario',
+  T: 'Teletrabajo',
+};
+
+const VACATION_TYPE_COLORS: Record<VacationType, string> = {
+  A: '#f59e0b',
+  F: '#0284c7',
+  L: '#65a30d',
+  C: '#e11d48',
+  T: '#7c3aed',
+};
+
+function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerModalProps) {
+  const queryClient = useQueryClient();
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<VacationType | ''>('');
+  const [allowanceInput, setAllowanceInput] = useState<number | ''>('');
+
+  const userId = user?.id ?? null;
+
+  const vacationsQuery = useQuery<UserVacationsResponse>({
+    queryKey: ['user-vacations', userId, year],
+    queryFn: () => fetchUserVacations(userId as string, year),
+    enabled: Boolean(show && userId),
+  });
+
+  useEffect(() => {
+    setSelectedDate(null);
+    setSelectedType('');
+    if (vacationsQuery.data?.allowance !== undefined) {
+      setAllowanceInput(vacationsQuery.data.allowance ?? '');
+    }
+  }, [vacationsQuery.data?.allowance, userId]);
+
+  useEffect(() => {
+    if (!show) {
+      setSelectedDate(null);
+      setSelectedType('');
+    }
+  }, [show]);
+
+  const dayMutation = useMutation({
+    mutationFn: (payload: { date: string; type: VacationType | '' }) =>
+      saveUserVacationDay({ ...payload, userId: userId as string }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['user-vacations', userId, year], data);
+      onNotify?.('success', 'Vacaciones actualizadas');
+    },
+    onError: (error: unknown) => {
+      const apiError = error instanceof ApiError ? error : null;
+      onNotify?.('danger', apiError?.message ?? 'No se pudo guardar el día.');
+    },
+  });
+
+  const allowanceMutation = useMutation({
+    mutationFn: () =>
+      updateVacationAllowance({
+        userId: userId as string,
+        year,
+        allowance: Number(allowanceInput || 0),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['user-vacations', userId, year], data);
+      onNotify?.('success', 'Balance actualizado');
+    },
+    onError: (error: unknown) => {
+      const apiError = error instanceof ApiError ? error : null;
+      onNotify?.('danger', apiError?.message ?? 'No se pudo actualizar el balance.');
+    },
+  });
+
+  const data = vacationsQuery.data;
+  const counts = data?.counts ?? { A: 0, F: 0, L: 0, C: 0, T: 0 };
+  const allowance = data?.allowance ?? null;
+  const enjoyed = data?.enjoyed ?? 0;
+  const remaining = data?.remaining ?? null;
+
+  const handleDayClick = (date: string, type: VacationType | '') => {
+    setSelectedDate(date);
+    setSelectedType(type || '');
+  };
+
+  const handleSaveDay = async () => {
+    if (!selectedDate || !userId) return;
+    await dayMutation.mutateAsync({ date: selectedDate, type: selectedType });
+  };
+
+  const handleClearDay = async () => {
+    if (!selectedDate || !userId) return;
+    await dayMutation.mutateAsync({ date: selectedDate, type: '' });
+    setSelectedType('');
+  };
+
+  const handleAllowanceSave = async () => {
+    if (!userId) return;
+    await allowanceMutation.mutateAsync();
+  };
+
+  const summaryItems = [
+    { label: 'Vacaciones', value: allowance ?? 'Sin definir' },
+    { label: 'Disfrutadas', value: enjoyed },
+    { label: 'Restantes', value: remaining ?? '—' },
+  ];
+
+  return (
+    <Modal show={show && Boolean(user)} onHide={onHide} size="xl" centered>
+      <Modal.Header closeButton>
+        <Modal.Title>
+          Vacaciones · {user ? `${user.firstName} ${user.lastName}` : ''}
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="d-grid gap-3">
+        <div className="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <Form.Label className="mb-0">Año</Form.Label>
+            <Form.Control
+              type="number"
+              value={year}
+              onChange={(event) => setYear(Number(event.target.value) || currentYear)}
+              style={{ maxWidth: '120px' }}
+            />
+            <Button
+              variant="outline-secondary"
+              onClick={() => vacationsQuery.refetch()}
+              disabled={!userId || vacationsQuery.isFetching}
+            >
+              {vacationsQuery.isFetching ? 'Actualizando…' : 'Actualizar'}
+            </Button>
+          </div>
+
+          <div className="d-flex gap-3 flex-wrap">
+            {summaryItems.map((item) => (
+              <div key={item.label} className="border rounded px-3 py-2">
+                <div className="text-muted small text-uppercase">{item.label}</div>
+                <div className="fw-semibold">{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="d-flex flex-column flex-lg-row gap-3 align-items-lg-end">
+          <Form.Group className="mb-0" style={{ maxWidth: '260px' }}>
+            <Form.Label>Balance de vacaciones</Form.Label>
+            <InputGroup>
+              <Form.Control
+                type="number"
+                value={allowanceInput}
+                onChange={(event) => setAllowanceInput(event.target.value ? Number(event.target.value) : '')}
+                min={0}
+              />
+              <Button onClick={handleAllowanceSave} disabled={allowanceMutation.isPending || !userId}>
+                {allowanceMutation.isPending ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </InputGroup>
+            <Form.Text className="text-muted">Define el total de días disponibles para el año.</Form.Text>
+          </Form.Group>
+
+          <div className="d-flex gap-2 align-items-center flex-wrap">
+            {Object.entries(VACATION_TYPE_LABELS).map(([key, label]) => (
+              <Badge key={key} bg="light" text="dark">
+                <span
+                  className="me-1"
+                  style={{
+                    display: 'inline-block',
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '999px',
+                    backgroundColor: VACATION_TYPE_COLORS[key as VacationType],
+                  }}
+                ></span>
+                {label} ({counts[key as VacationType] ?? 0})
+              </Badge>
+            ))}
+          </div>
+        </div>
+
+        {vacationsQuery.isError ? (
+          <Alert variant="danger">No se pudieron cargar las vacaciones.</Alert>
+        ) : null}
+
+        {vacationsQuery.isLoading ? (
+          <div className="d-flex align-items-center gap-2 text-muted">
+            <Spinner size="sm" animation="border" />
+            <span>Cargando calendario…</span>
+          </div>
+        ) : (
+          <VacationCalendar
+            year={year}
+            days={data?.days ?? []}
+            onDayClick={handleDayClick}
+            selectedDate={selectedDate}
+          />
+        )}
+
+        <div className="border rounded p-3 d-grid gap-3">
+          <div className="d-flex flex-column flex-md-row align-items-md-center gap-2 justify-content-between">
+            <div className="d-flex align-items-center gap-2">
+              <Form.Label className="mb-0">Día seleccionado</Form.Label>
+              <Form.Control value={selectedDate ?? 'Selecciona un día'} disabled style={{ maxWidth: '180px' }} />
+            </div>
+            <div className="d-flex align-items-center gap-2">
+              <Form.Select
+                value={selectedType}
+                onChange={(event) => setSelectedType(event.target.value as VacationType | '')}
+                style={{ minWidth: '240px' }}
+              >
+                <option value="">Sin marca</option>
+                {Object.entries(VACATION_TYPE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Form.Select>
+              <Button onClick={handleSaveDay} disabled={!selectedDate || dayMutation.isPending}>
+                {dayMutation.isPending ? 'Guardando…' : 'Guardar día'}
+              </Button>
+              <Button
+                variant="outline-secondary"
+                onClick={handleClearDay}
+                disabled={!selectedDate || dayMutation.isPending}
+              >
+                Borrar
+              </Button>
+            </div>
+          </div>
+          <p className="text-muted mb-0">
+            A, F, L y C se contabilizan como vacaciones disfrutadas. T permite seguir el teletrabajo sin restar
+            vacaciones.
+          </p>
+        </div>
+      </Modal.Body>
     </Modal>
   );
 }

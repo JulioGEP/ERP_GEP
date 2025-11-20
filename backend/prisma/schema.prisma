@@ -57,6 +57,32 @@ model user_documents {
   @@map("user_documents")
 }
 
+model user_vacation_days {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  date       DateTime @db.Date
+  type       String   @db.VarChar(1)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, date], map: "ux_user_vacation_days_user_date")
+}
+
+model user_vacation_balances {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id        String   @db.Uuid
+  year           Int
+  allowance_days Int      @default(0)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, year], map: "ux_user_vacation_balance_year")
+}
+
 model tokens {
   id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   session_id String    @db.Uuid
