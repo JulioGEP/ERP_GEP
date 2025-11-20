@@ -756,7 +756,8 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
   const queryClient = useQueryClient();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectionStart, setSelectionStart] = useState<string | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<VacationType | ''>('');
   const [allowanceInput, setAllowanceInput] = useState<number | ''>('');
 
@@ -769,7 +770,8 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
   });
 
   useEffect(() => {
-    setSelectedDate(null);
+    setSelectionStart(null);
+    setSelectionEnd(null);
     setSelectedType('');
     if (vacationsQuery.data?.allowance !== undefined) {
       setAllowanceInput(vacationsQuery.data.allowance ?? '');
@@ -778,7 +780,8 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
 
   useEffect(() => {
     if (!show) {
-      setSelectedDate(null);
+      setSelectionStart(null);
+      setSelectionEnd(null);
       setSelectedType('');
     }
   }, [show]);
@@ -819,19 +822,50 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
   const enjoyed = data?.enjoyed ?? 0;
   const remaining = data?.remaining ?? null;
 
+  const selectedDates = useMemo(() => {
+    if (!selectionStart) return [] as string[];
+
+    const startDate = new Date(`${selectionStart}T00:00:00Z`);
+    const endDate = new Date(`${(selectionEnd ?? selectionStart)}T00:00:00Z`);
+    const from = startDate <= endDate ? startDate : endDate;
+    const to = startDate <= endDate ? endDate : startDate;
+
+    const dates: string[] = [];
+    const current = new Date(from);
+    while (current <= to) {
+      dates.push(current.toISOString().slice(0, 10));
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    return dates;
+  }, [selectionEnd, selectionStart]);
+
   const handleDayClick = (date: string, type: VacationType | '') => {
-    setSelectedDate(date);
+    if (!selectionStart || selectionEnd) {
+      setSelectionStart(date);
+      setSelectionEnd(null);
+    } else if (date < selectionStart) {
+      setSelectionStart(date);
+      setSelectionEnd(selectionStart);
+    } else {
+      setSelectionEnd(date);
+    }
+
     setSelectedType(type || '');
   };
 
-  const handleSaveDay = async () => {
-    if (!selectedDate || !userId) return;
-    await dayMutation.mutateAsync({ date: selectedDate, type: selectedType });
+  const handleSaveDays = async () => {
+    if (!selectedDates.length || !userId) return;
+    for (const date of selectedDates) {
+      await dayMutation.mutateAsync({ date, type: selectedType });
+    }
   };
 
-  const handleClearDay = async () => {
-    if (!selectedDate || !userId) return;
-    await dayMutation.mutateAsync({ date: selectedDate, type: '' });
+  const handleClearDays = async () => {
+    if (!selectedDates.length || !userId) return;
+    for (const date of selectedDates) {
+      await dayMutation.mutateAsync({ date, type: '' });
+    }
     setSelectedType('');
   };
 
@@ -932,17 +966,32 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
             year={year}
             days={data?.days ?? []}
             onDayClick={handleDayClick}
-            selectedDate={selectedDate}
+            selectedDates={selectedDates}
           />
         )}
 
         <div className="border rounded p-3 d-grid gap-3">
           <div className="d-flex flex-column flex-md-row align-items-md-center gap-2 justify-content-between">
-            <div className="d-flex align-items-center gap-2">
-              <Form.Label className="mb-0">Día seleccionado</Form.Label>
-              <Form.Control value={selectedDate ?? 'Selecciona un día'} disabled style={{ maxWidth: '180px' }} />
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <Form.Label className="mb-0">Rango seleccionado</Form.Label>
+              <Form.Control
+                value={
+                  selectionStart
+                    ? selectionEnd
+                      ? `${selectionStart} – ${selectionEnd}`
+                      : `${selectionStart} · selecciona el último día`
+                    : 'Selecciona un día de inicio'
+                }
+                disabled
+                style={{ maxWidth: '260px' }}
+              />
+              {selectedDates.length ? (
+                <Badge bg="secondary" className="text-uppercase">
+                  {selectedDates.length} {selectedDates.length === 1 ? 'día' : 'días'}
+                </Badge>
+              ) : null}
             </div>
-            <div className="d-flex align-items-center gap-2">
+            <div className="d-flex align-items-center gap-2 flex-wrap">
               <Form.Select
                 value={selectedType}
                 onChange={(event) => setSelectedType(event.target.value as VacationType | '')}
@@ -955,13 +1004,13 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
                   </option>
                 ))}
               </Form.Select>
-              <Button onClick={handleSaveDay} disabled={!selectedDate || dayMutation.isPending}>
-                {dayMutation.isPending ? 'Guardando…' : 'Guardar día'}
+              <Button onClick={handleSaveDays} disabled={!selectedDates.length || dayMutation.isPending}>
+                {dayMutation.isPending ? 'Guardando…' : 'Guardar días'}
               </Button>
               <Button
                 variant="outline-secondary"
-                onClick={handleClearDay}
-                disabled={!selectedDate || dayMutation.isPending}
+                onClick={handleClearDays}
+                disabled={!selectedDates.length || dayMutation.isPending}
               >
                 Borrar
               </Button>
