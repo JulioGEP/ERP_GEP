@@ -575,7 +575,9 @@ model user_documents {
   user_id               String    @db.Uuid
   title                 String
   file_name             String
+  file_size             Int?
   mime_type             String?
+  file_data             Bytes?
   drive_file_id         String?
   drive_folder_id       String?
   drive_web_view_link   String?
