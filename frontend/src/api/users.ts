@@ -34,6 +34,13 @@ export type CreateUserPayload = {
 
 export type UpdateUserPayload = Partial<CreateUserPayload>;
 
+export async function fetchUserById(id: string): Promise<UserSummary> {
+  const response = await requestJson<{ user: UserSummary }>(`/users/${encodeURIComponent(id)}`, {
+    method: 'GET',
+  });
+  return response.user;
+}
+
 export async function fetchUsers(params: {
   page?: number;
   pageSize?: number;
