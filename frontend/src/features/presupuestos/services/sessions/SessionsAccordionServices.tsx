@@ -77,7 +77,6 @@ import {
   type SessionDocumentsEventDetail,
 } from '../../../../utils/sessionDocumentsEvents';
 import { useCurrentUserIdentity } from '../../useCurrentUserIdentity';
-import { useTrainingTemplatePoints } from '../../../../hooks/useTrainingTemplatePoints';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -2224,7 +2223,6 @@ function SessionEditor({
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const trainerPointerInteractingRef = useRef(false);
   const unitPointerInteractingRef = useRef(false);
-  const trainingPoints = useTrainingTemplatePoints(templateId);
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
@@ -2282,36 +2280,6 @@ function SessionEditor({
     () => buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local),
     [form.fecha_inicio_local, form.fecha_fin_local],
   );
-
-  const handleCopyFundae = useCallback(async () => {
-    const trainerDetails = selectedTrainers.map((trainer) => {
-      const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
-      const dni = trainer.dni?.trim();
-      const dniLabel = dni?.length ? dni : 'DNI no disponible';
-      return `${label} - ${dniLabel}`;
-    });
-
-    const trainersText = trainerDetails.length ? trainerDetails.join(', ') : 'Sin formadores asignados';
-    const formationLabel = productName?.trim() || '—';
-    const pointsLabel = trainingPoints?.trim() || '—';
-    const payload = [
-      `Formador o Formadores: ${trainersText}`,
-      'Telefono: 935 646 346',
-      'Mail: formacion@gepgroup.es',
-      `Formación: ${formationLabel}`,
-      `Puntos formación: ${pointsLabel}`,
-    ].join('\n');
-
-    try {
-      if (!navigator?.clipboard?.writeText) {
-        throw new Error('Clipboard API no disponible');
-      }
-      await navigator.clipboard.writeText(payload);
-      onNotify?.({ variant: 'success', message: 'Datos FUNDAE copiados al portapapeles.' });
-    } catch (error) {
-      onNotify?.({ variant: 'danger', message: 'No se pudieron copiar los datos de FUNDAE.' });
-    }
-  }, [onNotify, productName, selectedTrainers, trainingPoints]);
 
   const availabilityQuery = useQuery({
     queryKey: availabilityRange
@@ -2680,14 +2648,6 @@ function SessionEditor({
                           ) : (
                             'Enviar confirmación'
                           )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline-secondary"
-                          onClick={handleCopyFundae}
-                          disabled={isSending}
-                        >
-                          Copiar FUNDAE
                         </Button>
                       </div>
                       {selectedTrainers.length ? (
