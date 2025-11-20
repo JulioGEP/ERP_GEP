@@ -7,6 +7,7 @@ export type CalendarVariantProduct = {
   id_woo: string | null;
   name: string | null;
   code: string | null;
+  template: string | null;
   category: string | null;
   hora_inicio: string | null;
   hora_fin: string | null;
@@ -28,9 +29,9 @@ export type CalendarVariantDetails = {
   sede: string | null;
   date: string | null;
   trainer_id: string | null;
-  trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
+  trainer: { trainer_id: string; name: string | null; apellido: string | null; dni: string | null } | null;
   trainer_ids: string[];
-  trainers: Array<{ trainer_id: string; name: string | null; apellido: string | null }>;
+  trainers: Array<{ trainer_id: string; name: string | null; apellido: string | null; dni: string | null }>;
   sala_id: string | null;
   sala: { sala_id: string | null; name: string | null; sede: string | null } | null;
   unidad_movil_id: string | null;
@@ -228,6 +229,7 @@ function sanitizeVariantProduct(input: any): CalendarVariantProduct | null {
     id_woo: toOptionalString(input?.id_woo),
     name: toOptionalString(input?.name),
     code: toOptionalString(input?.code ?? input?.codigo),
+    template: resolveString(input?.template),
     category: toOptionalString(input?.category ?? input?.categoria),
     hora_inicio: resolveString(input?.hora_inicio ?? input?.horaInicio),
     hora_fin: resolveString(input?.hora_fin ?? input?.horaFin),
@@ -255,8 +257,13 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
   if (!id) return null;
 
   const trainerIdSet = new Set<string>();
-  const trainerRecordsMap = new Map<string, { trainer_id: string; name: string | null; apellido: string | null }>();
-  let fallbackTrainerRecord: { trainer_id: string; name: string | null; apellido: string | null } | null = null;
+  const trainerRecordsMap = new Map<
+    string,
+    { trainer_id: string; name: string | null; apellido: string | null; dni: string | null }
+  >();
+  let fallbackTrainerRecord:
+    | { trainer_id: string; name: string | null; apellido: string | null; dni: string | null }
+    | null = null;
 
   const registerTrainerId = (value: unknown) => {
     const normalized = toTrimmed(value);
@@ -278,6 +285,7 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
           trainer_id: '',
           name: toOptionalString(record?.name ?? record?.nombre),
           apellido: toOptionalString(record?.apellido ?? record?.apellidos),
+          dni: toOptionalString(record?.dni),
         };
       }
       return;
@@ -287,6 +295,7 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
         trainer_id: trainerId,
         name: toOptionalString(record?.name ?? record?.nombre),
         apellido: toOptionalString(record?.apellido ?? record?.apellidos),
+        dni: toOptionalString(record?.dni),
       });
     }
     trainerIdSet.add(trainerId);
@@ -313,13 +322,18 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
   }
 
   const orderedTrainerIds = Array.from(trainerIdSet);
-  const trainerRecords: Array<{ trainer_id: string; name: string | null; apellido: string | null }> = [];
+  const trainerRecords: Array<{
+    trainer_id: string;
+    name: string | null;
+    apellido: string | null;
+    dni: string | null;
+  }> = [];
   orderedTrainerIds.forEach((value) => {
     const record = trainerRecordsMap.get(value);
     if (record) {
       trainerRecords.push(record);
     } else {
-      trainerRecords.push({ trainer_id: value, name: null, apellido: null });
+      trainerRecords.push({ trainer_id: value, name: null, apellido: null, dni: null });
     }
   });
   trainerRecordsMap.forEach((record, key) => {

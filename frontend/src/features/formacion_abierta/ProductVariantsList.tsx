@@ -1927,6 +1927,7 @@ export function VariantModal({
             trainer_id: trainerId,
             name: trainerId,
             apellido: null,
+            dni: null,
           } satisfies VariantTrainerRecord;
         });
 

@@ -347,10 +347,12 @@ function mapCalendarVariantTrainer(
   if (!trainerId) {
     return null;
   }
+  const dni = 'dni' in record ? (record as { dni?: string | null }).dni ?? null : null;
   return {
     trainer_id: trainerId,
     name: record.name ?? null,
     apellido: record.apellido ?? null,
+    dni,
   };
 }
 
@@ -478,6 +480,7 @@ function createActiveVariantFromCalendarEvent(event: CalendarVariantEvent): Acti
     id_woo: sanitizeString(event.product.id_woo),
     name: event.product.name ?? null,
     code: event.product.code ?? null,
+    template: event.product.template ?? null,
     category: event.product.category ?? null,
     variants: [variantInfo],
     default_variant_start: event.product.default_variant_start,

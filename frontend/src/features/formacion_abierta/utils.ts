@@ -308,6 +308,7 @@ export function normalizeProductFromResponse(input: any): ProductInfo {
     id_woo: input?.id_woo != null ? String(input.id_woo) : null,
     name: input?.name ?? null,
     code: input?.code ?? null,
+    template: toTrimmedString(input?.template),
     category: input?.category ?? null,
     hora_inicio: input?.hora_inicio ?? null,
     hora_fin: input?.hora_fin ?? null,
