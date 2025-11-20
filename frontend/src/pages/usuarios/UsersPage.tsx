@@ -25,7 +25,12 @@ import {
   type UpdateUserPayload,
   type UserSummary,
 } from '../../api/users';
-import { fetchUserDocuments, uploadUserDocument, type UserDocument } from '../../api/userDocuments';
+import {
+  deleteUserDocument,
+  fetchUserDocuments,
+  uploadUserDocument,
+  type UserDocument,
+} from '../../api/userDocuments';
 
 const PAGE_SIZE = 10;
 const ROLE_OPTIONS = ['Admin', 'Comercial', 'Administracion', 'Logistica', 'People', 'Formador'] as const;
@@ -470,6 +475,20 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (documentId: string) => deleteUserDocument(documentId),
+    onSuccess: (_, documentId) => {
+      queryClient.setQueryData<UserDocument[] | undefined>(['user-documents', userId], (prev) =>
+        Array.isArray(prev) ? prev.filter((doc) => doc.id !== documentId) : prev,
+      );
+      setDocumentError(null);
+    },
+    onError: (error: unknown) => {
+      const apiError = error instanceof ApiError ? error : null;
+      setDocumentError(apiError?.message ?? 'No se pudo eliminar el documento.');
+    },
+  });
+
   const handleChange = (field: keyof UserFormValues, value: string | boolean) => {
     setValues((prev) => ({ ...prev, [field]: value }));
   };
@@ -495,6 +514,17 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
   };
 
   const title = initialValue ? 'Editar usuario' : 'Crear usuario';
+
+  const resolveDocumentUrl = (document: UserDocument) =>
+    document.drive_web_view_link ?? document.drive_web_content_link ?? document.download_url;
+
+  const handleDeleteDocument = (documentId: string) => {
+    const document = documents.find((item) => item.id === documentId);
+    const fileName = document?.file_name ?? 'el documento';
+    const confirmed = window.confirm(`¿Quieres eliminar ${fileName}?`);
+    if (!confirmed) return;
+    deleteMutation.mutate(documentId);
+  };
 
   return (
     <Modal show={show} onHide={onHide} backdrop="static" centered>
@@ -602,24 +632,36 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                     ) : documents.length ? (
                       <ListGroup>
                         {documents.map((doc) => (
-                          <ListGroup.Item key={doc.id} className="d-flex justify-content-between align-items-center">
-                            <div>
+                          <ListGroup.Item key={doc.id} className="d-flex justify-content-between align-items-center gap-3">
+                            <div className="me-auto">
                               <div className="fw-semibold">{doc.file_name}</div>
                               <div className="text-muted small">
                                 {doc.mime_type || 'Archivo'}
                                 {doc.file_size ? ` · ${formatFileSize(doc.file_size)}` : ''}
                               </div>
                             </div>
-                            <Button
-                              as="a"
-                              href={doc.download_url}
-                              variant="outline-primary"
-                              size="sm"
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Ver
-                            </Button>
+                            <div className="d-flex align-items-center gap-2">
+                              <Button
+                                as="a"
+                                href={resolveDocumentUrl(doc)}
+                                variant="outline-primary"
+                                size="sm"
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Ver
+                              </Button>
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                disabled={deleteMutation.isPending && deleteMutation.variables === doc.id}
+                                onClick={() => handleDeleteDocument(doc.id)}
+                              >
+                                {deleteMutation.isPending && deleteMutation.variables === doc.id
+                                  ? 'Eliminando…'
+                                  : 'Eliminar'}
+                              </Button>
+                            </div>
                           </ListGroup.Item>
                         ))}
                       </ListGroup>

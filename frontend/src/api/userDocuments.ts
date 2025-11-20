@@ -45,6 +45,14 @@ export async function uploadUserDocument(params: {
   return response.document;
 }
 
+export async function deleteUserDocument(documentId: string): Promise<void> {
+  await requestJson(
+    `/user_documents/${encodeURIComponent(documentId)}`,
+    { method: 'DELETE' },
+    { defaultErrorMessage: 'No se pudo eliminar el documento.' },
+  );
+}
+
 async function fileToBase64(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   let binary = '';

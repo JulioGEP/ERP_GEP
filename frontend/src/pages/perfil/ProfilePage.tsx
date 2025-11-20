@@ -169,7 +169,7 @@ export default function ProfilePage() {
                   </div>
                   <Button
                     as="a"
-                    href={doc.download_url}
+                    href={doc.drive_web_view_link ?? doc.drive_web_content_link ?? doc.download_url}
                     variant="outline-primary"
                     size="sm"
                     target="_blank"

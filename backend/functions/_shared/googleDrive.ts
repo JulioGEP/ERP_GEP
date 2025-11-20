@@ -2275,6 +2275,79 @@ export async function deleteTrainerDocumentFromGoogleDrive(params: {
   }
 }
 
+export async function deleteUserDocumentFromGoogleDrive(params: {
+  user?: any;
+  driveFileId?: string | null;
+  driveFileName?: string | null;
+  driveWebViewLink?: string | null;
+  driveWebContentLink?: string | null;
+  driveFolderId?: string | null;
+  driveIdOverride?: string | null;
+  baseFolderName?: string | null;
+}): Promise<{ fileDeleted: boolean }> {
+  const preferredDriveId = params.driveIdOverride?.trim();
+  const driveId =
+    preferredDriveId ||
+    process.env.USER_DOCUMENTS_DRIVE_ID?.trim() ||
+    resolveDriveSharedId() ||
+    '0AOXMlUY_16MGUk9PVA';
+
+  if (!driveId) {
+    throw new Error('Google Drive no está configurado (falta shared drive id)');
+  }
+
+  if (!getServiceAccount()) {
+    throw new Error('Credenciales de Google Drive no configuradas');
+  }
+
+  const baseFolderName =
+    params.baseFolderName?.trim() ||
+    process.env.USER_DOCUMENTS_BASE_FOLDER_NAME?.trim() ||
+    resolveDriveBaseFolderName();
+
+  let fileId = toNonEmptyString(params.driveFileId);
+  if (!fileId) {
+    fileId =
+      extractDriveFileId(params.driveWebViewLink) || extractDriveFileId(params.driveWebContentLink);
+  }
+
+  if (!fileId && params.driveFolderId && params.driveFileName) {
+    const baseFolderId = await findFolder({ name: baseFolderName, parentId: driveId, driveId });
+    if (baseFolderId) {
+      try {
+        fileId = await findFileIdInFolder({
+          folderId: params.driveFolderId,
+          driveId,
+          name: params.driveFileName,
+        });
+      } catch (err) {
+        console.warn('[google-drive-sync] Error buscando documento de usuario por nombre', {
+          userId: params.user?.id,
+          folderId: params.driveFolderId,
+          fileName: params.driveFileName,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  if (!fileId) {
+    return { fileDeleted: false };
+  }
+
+  try {
+    await driveDelete(fileId);
+    return { fileDeleted: true };
+  } catch (err) {
+    console.warn('[google-drive-sync] No se pudo eliminar documento de usuario en Drive', {
+      userId: params.user?.id,
+      fileId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { fileDeleted: false };
+  }
+}
+
 export async function getTrainerFolderWebViewLink(params: {
   trainer: any;
   createIfMissing?: boolean;
