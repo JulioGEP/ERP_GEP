@@ -19,8 +19,8 @@ export type VariantInfo = {
   date: string | null;
   trainer_id: string | null;
   trainer_ids: string[];
-  trainer: { trainer_id: string; name: string | null; apellido: string | null } | null;
-  trainers: Array<{ trainer_id: string; name: string | null; apellido: string | null }>;
+  trainer: { trainer_id: string; name: string | null; apellido: string | null; dni: string | null } | null;
+  trainers: Array<{ trainer_id: string; name: string | null; apellido: string | null; dni: string | null }>;
   trainer_invite_status: TrainerInviteStatus;
   trainer_invite_statuses: Record<string, TrainerInviteStatus>;
   trainer_invites: VariantTrainerInvite[];
