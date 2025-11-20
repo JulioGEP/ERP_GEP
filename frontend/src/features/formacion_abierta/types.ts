@@ -49,6 +49,7 @@ export type ProductInfo = ProductDefaults & {
   id_woo: string | null;
   name: string | null;
   code: string | null;
+  template: string | null;
   category: string | null;
   variants: VariantInfo[];
 };

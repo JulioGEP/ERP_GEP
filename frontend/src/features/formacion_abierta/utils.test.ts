@@ -162,6 +162,7 @@ describe('findDealProductPriceForProduct', () => {
       id_woo: null,
       name: 'Curso A',
       code: 'CA',
+      template: null,
       category: null,
       hora_inicio: null,
       hora_fin: null,
