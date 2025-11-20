@@ -56,6 +56,7 @@ type UserFormValues = {
   active: boolean;
   bankAccount: string;
   address: string;
+  position: string;
   startDate: string;
 };
 
@@ -63,11 +64,11 @@ type UsersListResponse = { total: number; page: number; pageSize: number; users:
 
 export default function UsersPage({ onNotify }: UsersPageProps) {
   const notify = useCallback(
-    (variant: 'success' | 'danger' | 'info' | 'warning', message: string) => {
+    (payload: { variant: 'success' | 'danger' | 'info' | 'warning'; message: string }) => {
       if (onNotify) {
-        onNotify({ variant, message });
+        onNotify(payload);
       } else {
-        console.log(`[users:${variant}]`, message);
+        console.log(`[users:${payload.variant}]`, payload.message);
       }
     },
     [onNotify],
@@ -135,28 +136,28 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const createMutation = useMutation({
     mutationFn: (payload: CreateUserPayload) => createUser(payload),
     onSuccess: () => {
-      notify('success', 'Usuario creado correctamente');
+      notify({ variant: 'success', message: 'Usuario creado correctamente' });
       void queryClient.invalidateQueries({ queryKey: ['users'] });
       closeModal();
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
       const message = apiError?.message ?? 'No se pudo crear el usuario.';
-      notify('danger', message);
+      notify({ variant: 'danger', message });
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateUserPayload }) => updateUser(id, payload),
     onSuccess: () => {
-      notify('success', 'Usuario actualizado correctamente');
+      notify({ variant: 'success', message: 'Usuario actualizado correctamente' });
       void queryClient.invalidateQueries({ queryKey: ['users'] });
       closeModal();
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
       const message = apiError?.message ?? 'No se pudo actualizar el usuario.';
-      notify('danger', message);
+      notify({ variant: 'danger', message });
     },
   });
 
@@ -166,6 +167,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
         ...values,
         bankAccount: values.bankAccount.trim(),
         address: values.address.trim(),
+        position: values.position.trim(),
         startDate: values.startDate.trim(),
       };
       if (editingUser) {
@@ -175,6 +177,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
             ...normalizedPayload,
             bankAccount: normalizedPayload.bankAccount || null,
             address: normalizedPayload.address || null,
+            position: normalizedPayload.position || null,
             startDate: normalizedPayload.startDate || null,
           },
         });
@@ -183,6 +186,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
           ...normalizedPayload,
           bankAccount: normalizedPayload.bankAccount || null,
           address: normalizedPayload.address || null,
+          position: normalizedPayload.position || null,
           startDate: normalizedPayload.startDate || null,
         });
       }
@@ -436,6 +440,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
           active: initialValue.active,
           bankAccount: initialValue.bankAccount ?? '',
           address: initialValue.address ?? '',
+          position: initialValue.position ?? '',
           startDate: initialValue.startDate ? initialValue.startDate.slice(0, 10) : '',
         }
       : {
@@ -446,6 +451,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
           active: true,
           bankAccount: '',
           address: '',
+          position: '',
           startDate: '',
         },
   );
@@ -460,6 +466,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
         active: initialValue.active,
         bankAccount: initialValue.bankAccount ?? '',
         address: initialValue.address ?? '',
+        position: initialValue.position ?? '',
         startDate: initialValue.startDate ? initialValue.startDate.slice(0, 10) : '',
       });
     } else {
@@ -471,6 +478,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
         active: true,
         bankAccount: '',
         address: '',
+        position: '',
         startDate: '',
       });
     }
@@ -609,6 +617,16 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
               value={values.address}
               onChange={(event) => handleChange('address', event.target.value)}
               disabled={isSubmitting}
+            />
+          </Form.Group>
+          <Form.Group controlId="user-position">
+            <Form.Label>Posición</Form.Label>
+            <Form.Control
+              type="text"
+              value={values.position}
+              onChange={(event) => handleChange('position', event.target.value)}
+              disabled={isSubmitting}
+              placeholder="Ejemplo: Responsable de logística"
             />
           </Form.Group>
           <Form.Group controlId="user-start-date">
@@ -791,11 +809,11 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
       saveUserVacationDay({ ...payload, userId: userId as string }),
     onSuccess: (data) => {
       queryClient.setQueryData(['user-vacations', userId, year], data);
-      onNotify?.('success', 'Vacaciones actualizadas');
+      onNotify?.({ variant: 'success', message: 'Vacaciones actualizadas' });
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
-      onNotify?.('danger', apiError?.message ?? 'No se pudo guardar el día.');
+      onNotify?.({ variant: 'danger', message: apiError?.message ?? 'No se pudo guardar el día.' });
     },
   });
 
@@ -808,11 +826,11 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(['user-vacations', userId, year], data);
-      onNotify?.('success', 'Balance actualizado');
+      onNotify?.({ variant: 'success', message: 'Balance actualizado' });
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
-      onNotify?.('danger', apiError?.message ?? 'No se pudo actualizar el balance.');
+      onNotify?.({ variant: 'danger', message: apiError?.message ?? 'No se pudo actualizar el balance.' });
     },
   });
 

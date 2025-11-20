@@ -24,6 +24,7 @@ model users {
   name                String?
   bank_account        String?
   address             String?
+  position            String?   @db.VarChar(191)
   start_date          DateTime? @db.Date
   reset_token         String?
   reset_token_expires DateTime? @db.Timestamptz(6)

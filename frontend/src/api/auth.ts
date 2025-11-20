@@ -7,6 +7,7 @@ export type AuthUser = {
   email: string;
   role: string;
   active: boolean;
+  position?: string | null;
 };
 
 export type AuthResponse = {

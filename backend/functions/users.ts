@@ -30,6 +30,7 @@ function serializeUser(user: any) {
     active: user.active,
     bankAccount: user.bank_account,
     address: user.address,
+    position: user.position,
     startDate: user.start_date,
     createdAt: user.created_at,
     updatedAt: user.updated_at,
@@ -303,6 +304,7 @@ async function handleCreate(
   const active = request.body?.active === undefined ? true : Boolean(request.body.active);
   const bankAccountResult = parseBankAccount(request.body?.bankAccount);
   const address = sanitizeText(request.body?.address);
+  const position = sanitizeText(request.body?.position);
   const startDate = parseDateOnly(request.body?.startDate);
 
   if (request.body?.startDate && !startDate) {
@@ -336,6 +338,7 @@ async function handleCreate(
           active,
           bank_account: bankAccountResult.parsed,
           address,
+          position,
           start_date: startDate ?? undefined,
           password_hash: passwordHash,
           password_algo: 'bcrypt',
@@ -387,6 +390,7 @@ async function handleUpdate(
     active?: boolean;
     bank_account?: string | null;
     address?: string | null;
+    position?: string | null;
     start_date?: Date | null;
   };
 
@@ -449,6 +453,12 @@ async function handleUpdate(
   if ('address' in (request.body ?? {})) {
     const address = sanitizeText(request.body?.address);
     data.address = address;
+    fieldsProvided += 1;
+  }
+
+  if ('position' in (request.body ?? {})) {
+    const position = sanitizeText(request.body?.position);
+    data.position = position;
     fieldsProvided += 1;
   }
 

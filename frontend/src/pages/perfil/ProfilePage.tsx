@@ -23,6 +23,7 @@ type ProfileUser = {
   active: boolean;
   bankAccount?: string | null;
   address?: string | null;
+  position?: string | null;
   startDate?: string | null;
 };
 
@@ -193,6 +194,7 @@ export default function ProfilePage() {
     { label: 'Rol', value: userDetails?.role ?? null },
     { label: 'Cuenta bancaria', value: userDetails?.bankAccount ?? null },
     { label: 'Dirección', value: userDetails?.address ?? null },
+    { label: 'Posición', value: userDetails?.position ?? null },
     { label: 'Fecha alta', value: formattedStartDate },
   ];
 
