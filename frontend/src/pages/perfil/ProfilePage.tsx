@@ -1,10 +1,17 @@
 import { FormEvent, useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Col, Form, InputGroup, ListGroup, Row, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Col, Form, InputGroup, ListGroup, Row, Spinner } from 'react-bootstrap';
 import { changePassword } from '../../api/auth';
 import { ApiError } from '../../api/client';
 import { fetchUserDocuments } from '../../api/userDocuments';
 import { fetchUserById } from '../../api/users';
+import {
+  fetchUserVacations,
+  sendVacationRequest,
+  type UserVacationsResponse,
+  type VacationType,
+} from '../../api/userVacations';
+import { VacationCalendar } from '../../components/vacations/VacationCalendar';
 import { useAuth } from '../../context/AuthContext';
 
 type ProfileUser = {
@@ -19,6 +26,22 @@ type ProfileUser = {
   startDate?: string | null;
 };
 
+const VACATION_LABELS: Record<VacationType, string> = {
+  A: 'Ausencia legal',
+  F: 'Fiestas nacionales y autonómicas',
+  L: 'Festivos locales',
+  C: 'Día aniversario',
+  T: 'Teletrabajo',
+};
+
+const VACATION_COLORS: Record<VacationType, string> = {
+  A: '#f59e0b',
+  F: '#0284c7',
+  L: '#65a30d',
+  C: '#e11d48',
+  T: '#7c3aed',
+};
+
 export default function ProfilePage() {
   const { user } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
@@ -29,6 +52,12 @@ export default function ProfilePage() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [vacationYear, setVacationYear] = useState(new Date().getFullYear());
+  const [vacationRequestMessage, setVacationRequestMessage] = useState<string | null>(null);
+  const [vacationRequestError, setVacationRequestError] = useState<string | null>(null);
+  const [vacationStart, setVacationStart] = useState('');
+  const [vacationEnd, setVacationEnd] = useState('');
+  const [vacationNotes, setVacationNotes] = useState('');
 
   const profileQuery = useQuery<ProfileUser | undefined>({
     queryKey: ['profile', user?.id],
@@ -49,6 +78,15 @@ export default function ProfilePage() {
     enabled: !!user?.id,
   });
 
+  const vacationsQuery = useQuery<UserVacationsResponse>({
+    queryKey: ['user-vacations-profile', user?.id, vacationYear],
+    queryFn: async () => {
+      if (!user?.id) throw new Error('Usuario no encontrado');
+      return fetchUserVacations(user.id, vacationYear);
+    },
+    enabled: !!user?.id,
+  });
+
   const mutation = useMutation({
     mutationFn: () => changePassword(currentPassword, newPassword),
     onSuccess: (response) => {
@@ -62,6 +100,22 @@ export default function ProfilePage() {
       const apiError = error instanceof ApiError ? error : null;
       setErrorMessage(apiError?.message ?? 'No se pudo actualizar la contraseña.');
       setSuccessMessage(null);
+    },
+  });
+
+  const vacationRequestMutation = useMutation({
+    mutationFn: () => sendVacationRequest({ startDate: vacationStart, endDate: vacationEnd, notes: vacationNotes }),
+    onSuccess: (response) => {
+      setVacationRequestMessage(response.message || 'Petición enviada correctamente.');
+      setVacationRequestError(null);
+      setVacationStart('');
+      setVacationEnd('');
+      setVacationNotes('');
+    },
+    onError: (error: unknown) => {
+      const apiError = error instanceof ApiError ? error : null;
+      setVacationRequestError(apiError?.message ?? 'No se pudo enviar la petición.');
+      setVacationRequestMessage(null);
     },
   });
 
@@ -79,6 +133,30 @@ export default function ProfilePage() {
       await mutation.mutateAsync();
     },
     [canSubmit, mutation],
+  );
+
+  const canRequestVacation =
+    Boolean(vacationStart && vacationEnd) && !vacationRequestMutation.isPending && Boolean(user?.email);
+
+  const handleVacationRequest = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setVacationRequestMessage(null);
+      setVacationRequestError(null);
+
+      if (!vacationStart || !vacationEnd) {
+        setVacationRequestError('Selecciona las fechas de inicio y fin.');
+        return;
+      }
+
+      if (new Date(vacationStart) > new Date(vacationEnd)) {
+        setVacationRequestError('La fecha de inicio debe ser anterior o igual a la de fin.');
+        return;
+      }
+
+      await vacationRequestMutation.mutateAsync();
+    },
+    [vacationEnd, vacationRequestMutation, vacationStart],
   );
 
   const userDetails = useMemo<ProfileUser | null>(() => {
@@ -100,6 +178,14 @@ export default function ProfilePage() {
   }, [userDetails?.startDate]);
 
   const documents = documentsQuery.data ?? [];
+
+  const vacationData = vacationsQuery.data;
+  const vacationCounts = vacationData?.counts ?? { A: 0, F: 0, L: 0, C: 0, T: 0 };
+  const vacationSummary = [
+    { label: 'Vacaciones', value: vacationData?.allowance ?? 'Sin definir' },
+    { label: 'Disfrutadas', value: vacationData?.enjoyed ?? 0 },
+    { label: 'Restantes', value: vacationData?.remaining ?? '—' },
+  ];
 
   const personalInfoItems: Array<{ label: string; value: string | null }> = [
     { label: 'Nombre', value: displayName },
@@ -183,6 +269,116 @@ export default function ProfilePage() {
           ) : (
             <p className="text-muted mb-0">No hay documentos disponibles.</p>
           )}
+        </Card.Body>
+      </Card>
+
+      <Card className="shadow-sm">
+        <Card.Body className="d-grid gap-4">
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <h2 className="h5 fw-bold mb-1">Vacaciones y teletrabajo</h2>
+              <p className="text-muted mb-0">Consulta tu calendario anual y el balance disponible.</p>
+            </div>
+            <div className="d-flex align-items-center gap-2">
+              <Form.Label className="mb-0">Año</Form.Label>
+              <Form.Control
+                type="number"
+                value={vacationYear}
+                onChange={(event) => setVacationYear(Number(event.target.value) || new Date().getFullYear())}
+                style={{ maxWidth: '120px' }}
+              />
+              <Button
+                variant="outline-secondary"
+                onClick={() => vacationsQuery.refetch()}
+                disabled={vacationsQuery.isFetching}
+              >
+                {vacationsQuery.isFetching ? 'Actualizando…' : 'Actualizar'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="d-flex gap-3 flex-wrap">
+            {vacationSummary.map((item) => (
+              <div key={item.label} className="border rounded px-3 py-2">
+                <div className="text-muted small text-uppercase">{item.label}</div>
+                <div className="fw-semibold">{item.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="d-flex flex-wrap gap-2 align-items-center">
+            {Object.entries(VACATION_LABELS).map(([key, label]) => (
+              <Badge key={key} bg="light" text="dark">
+                <span
+                  className="me-1"
+                  style={{
+                    display: 'inline-block',
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '999px',
+                    backgroundColor: VACATION_COLORS[key as VacationType],
+                  }}
+                ></span>
+                {label} ({vacationCounts[key as VacationType] ?? 0})
+              </Badge>
+            ))}
+          </div>
+
+          {vacationsQuery.isError ? <Alert variant="danger">No se pudo cargar el calendario.</Alert> : null}
+
+          {vacationsQuery.isLoading ? (
+            <div className="d-flex align-items-center gap-2 text-muted">
+              <Spinner size="sm" animation="border" />
+              <span>Cargando calendario…</span>
+            </div>
+          ) : (
+            <VacationCalendar year={vacationYear} days={vacationData?.days ?? []} readOnly />
+          )}
+
+          <div className="border-top pt-3">
+            <h3 className="h6 fw-bold mb-2">Petición de vacaciones</h3>
+            <p className="text-muted mb-3">
+              Selecciona el rango de fechas y enviaremos una petición a People. El correo se enviará a julio.garcia.becerra@gmail.com con tu email en copia.
+            </p>
+            {vacationRequestMessage ? <Alert variant="success">{vacationRequestMessage}</Alert> : null}
+            {vacationRequestError ? <Alert variant="danger">{vacationRequestError}</Alert> : null}
+            <Form onSubmit={handleVacationRequest} className="d-grid gap-3">
+              <Row className="g-3">
+                <Col xs={12} md={4}>
+                  <Form.Label>Inicio</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={vacationStart}
+                    onChange={(event) => setVacationStart(event.target.value)}
+                    required
+                  />
+                </Col>
+                <Col xs={12} md={4}>
+                  <Form.Label>Fin</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={vacationEnd}
+                    onChange={(event) => setVacationEnd(event.target.value)}
+                    required
+                  />
+                </Col>
+                <Col xs={12} md={4}>
+                  <Form.Label>Notas (opcional)</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={vacationNotes}
+                    placeholder="Añade comentarios"
+                    onChange={(event) => setVacationNotes(event.target.value)}
+                  />
+                </Col>
+              </Row>
+              <div className="d-flex justify-content-end">
+                <Button type="submit" disabled={!canRequestVacation}>
+                  {vacationRequestMutation.isPending ? 'Enviando…' : 'Solicitar vacaciones'}
+                </Button>
+              </div>
+            </Form>
+          </div>
         </Card.Body>
       </Card>
 
