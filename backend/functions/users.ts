@@ -30,7 +30,7 @@ function serializeUser(user: any) {
     active: user.active,
     bankAccount: user.bank_account,
     address: user.address,
-    startDate: user.start_date,
+    startDate: user.signup_date,
     createdAt: user.created_at,
     updatedAt: user.updated_at,
   };
@@ -314,7 +314,7 @@ async function handleCreate(
           active,
           bank_account: bankAccount,
           address,
-          start_date: startDate ?? undefined,
+          signup_date: startDate ?? undefined,
           password_hash: passwordHash,
           password_algo: 'bcrypt',
           password_updated_at: now,
@@ -365,7 +365,7 @@ async function handleUpdate(
     active?: boolean;
     bank_account?: string | null;
     address?: string | null;
-    start_date?: Date | null;
+    signup_date?: Date | null;
   };
 
   const data: UserUpdateData = {};
@@ -432,7 +432,7 @@ async function handleUpdate(
     if (request.body?.startDate && !startDate) {
       return errorResponse('INVALID_INPUT', 'Fecha de alta inválida', 400);
     }
-    data.start_date = startDate;
+    data.signup_date = startDate;
     fieldsProvided += 1;
   }
 
