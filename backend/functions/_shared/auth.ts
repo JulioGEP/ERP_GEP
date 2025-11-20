@@ -145,6 +145,7 @@ export type UserRecord = {
   email: string;
   role: string;
   active: boolean;
+  position?: string | null;
   password_hash?: string | null;
   password_algo?: string | null;
   password_updated_at?: Date | null;

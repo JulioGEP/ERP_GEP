@@ -16,6 +16,7 @@ function serializeUser(user: any) {
     email: user.email,
     role: getRoleDisplayValue(user.role) ?? user.role,
     active: user.active,
+    position: user.position,
   };
 }
 

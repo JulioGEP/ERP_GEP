@@ -17,6 +17,7 @@ type User = {
   email: string;
   role: string;
   active: boolean;
+  position?: string | null;
 };
 
 type SessionPayload = {
