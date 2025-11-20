@@ -28,6 +28,7 @@ export type VacationSummaryUser = {
   remaining: number | null;
   counts: Record<VacationType, number>;
   upcomingDates: string[];
+  days: UserVacationDay[];
   lastUpdated: string | null;
 };
 

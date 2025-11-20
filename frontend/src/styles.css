@@ -1354,3 +1354,25 @@ option.session-option-unavailable {
 .vacation-calendar .vacation-day.type-T .day-type {
   background: #7c3aed;
 }
+
+.vacations-calendar-modal .modal-body {
+  max-height: 80vh;
+}
+
+.vacation-summary-calendar-table th,
+.vacation-summary-calendar-table td {
+  font-size: 12px;
+  padding: 6px;
+}
+
+.vacation-summary-calendar-table .vacation-calendar-cell {
+  min-width: 34px;
+  font-weight: 700;
+  text-align: center;
+  border-color: #e5e7eb;
+}
+
+.vacation-summary-calendar-table .vacation-calendar-cell:not([style*='background-color:']) {
+  background-color: #f8f9fa;
+  color: #6c757d;
+}
