@@ -32,9 +32,11 @@ model users {
   // relación recíproca 1:1 (FK vive en trainers.user_id)
   trainer trainers?
 
-  auth_sessions auth_sessions[]
-  audit_logs    audit_logs[]
-  documents     user_documents[]
+  auth_sessions     auth_sessions[]
+  audit_logs        audit_logs[]
+  documents         user_documents[]
+  vacation_days     user_vacation_days[]
+  vacation_balances user_vacation_balances[]
 }
 
 model user_documents {
