@@ -416,7 +416,7 @@ export function BudgetDetailModalEmpresas({
   };
 
   const getDocumentHref = (doc: DealDocument): string | null => {
-    const rawLink = doc.drive_web_view_link ?? '';
+    const rawLink = doc.drive_web_view_link ?? doc.url ?? '';
     const trimmed = rawLink.trim();
     return trimmed.length ? trimmed : null;
   };
@@ -619,6 +619,8 @@ export function BudgetDetailModalEmpresas({
       const link =
         typeof document.drive_web_view_link === 'string'
           ? document.drive_web_view_link.trim()
+          : typeof document.url === 'string'
+          ? document.url.trim()
           : '';
       if (!link.length) continue;
 
