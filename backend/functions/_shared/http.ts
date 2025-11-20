@@ -236,6 +236,12 @@ export function createHttpHandler<TBody = unknown>(handler: HttpHandler<TBody>) 
         rawUrl: event.rawUrl ?? null,
         reason: 'missing_or_invalid_client_header',
       });
+
+      return errorResponse(
+        'FORBIDDEN',
+        'Cliente no autorizado para acceder al backend',
+        403,
+      );
     }
 
     try {

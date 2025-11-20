@@ -36,7 +36,10 @@ describe('createHttpHandler', () => {
       {
         httpMethod: 'POST',
         path: '/test',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          'x-erp-client': 'frontend',
+        },
         body: '{"hello":"world"}',
       } as any,
       {} as any,
@@ -58,6 +61,7 @@ describe('createHttpHandler', () => {
       {
         httpMethod: 'POST',
         path: '/base64',
+        headers: { 'x-erp-client': 'frontend' },
         body: Buffer.from('{"foo":123}', 'utf8').toString('base64'),
         isBase64Encoded: true,
       } as any,
@@ -75,6 +79,7 @@ describe('createHttpHandler', () => {
       {
         httpMethod: 'POST',
         path: '/invalid',
+        headers: { 'x-erp-client': 'frontend' },
         body: '{"foo"',
       } as any,
       {} as any,
@@ -97,6 +102,7 @@ describe('createHttpHandler', () => {
       {
         httpMethod: 'GET',
         path: '/error',
+        headers: { 'x-erp-client': 'frontend' },
       } as any,
       {} as any,
     );
@@ -107,5 +113,36 @@ describe('createHttpHandler', () => {
     const parsed = JSON.parse(responseBody || '{}');
     assert.equal(parsed.error_code, 'UNEXPECTED_ERROR');
     assert.equal(parsed.ok, false);
+  });
+});
+
+describe('createHttpHandler – trusted client validation', () => {
+  it('rejects requests without trusted header or origin', async () => {
+    const handler = createHttpHandler(async () => successResponse({ ok: true }));
+
+    const response = await handler(
+      {
+        httpMethod: 'GET',
+        path: '/untrusted',
+      } as any,
+      {} as any,
+    );
+
+    assert.equal(response.statusCode, 403);
+  });
+
+  it('allows requests that include the trusted client header', async () => {
+    const handler = createHttpHandler(async () => successResponse({ ok: true }));
+
+    const response = await handler(
+      {
+        httpMethod: 'GET',
+        path: '/trusted',
+        headers: { 'x-erp-client': 'frontend' },
+      } as any,
+      {} as any,
+    );
+
+    assert.equal(response.statusCode, 200);
   });
 });

@@ -1,12 +1,16 @@
 // backend/functions/session_public_links.ts
 import { randomBytes } from 'crypto';
 import { validate as isUUID } from 'uuid';
+import { requireAuth } from './_shared/auth';
+import { logAudit } from './_shared/audit-log';
+import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
 
 const DEFAULT_TTL_HOURS = Number(process.env.PUBLIC_SESSION_LINK_TTL_HOURS ?? 24 * 30);
 const MAX_TOKEN_LENGTH = 128;
+const ALLOWED_ROLES = ['Admin', 'Administracion', 'Logistica', 'People'] as const;
 
 function normalizeDealId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -55,9 +59,13 @@ function readHeader(headers: Record<string, unknown>, name: string): string | nu
 
 function buildPublicUrl(event: any, token: string): string {
   const headers = event?.headers ?? {};
-  const protoHeader = readHeader(headers, 'x-forwarded-proto') || readHeader(headers, 'x-forwarded-protocol');
+  const protoHeader =
+    readHeader(headers, 'x-forwarded-proto') || readHeader(headers, 'x-forwarded-protocol');
   const hostHeader = readHeader(headers, 'host');
-  const protocol = typeof protoHeader === 'string' && protoHeader.trim().length ? protoHeader.split(',')[0].trim() : 'https';
+  const protocol =
+    typeof protoHeader === 'string' && protoHeader.trim().length
+      ? protoHeader.split(',')[0].trim()
+      : 'https';
   const host = typeof hostHeader === 'string' && hostHeader.trim().length ? hostHeader.trim() : '';
   const base = host ? `${protocol}://${host}` : '';
   return `${base}${buildPublicPath(token)}`;
@@ -146,186 +154,205 @@ async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: st
   });
 }
 
-export const handler = async (event: any) => {
-  try {
-    if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse();
-    }
-
-    const method = event.httpMethod ?? 'GET';
-    const prisma = getPrisma();
-
-    if (method === 'GET') {
-      const params = event.queryStringParameters || {};
-      const dealId =
-        normalizeDealId(params.deal_id) ||
-        normalizeDealId(params.dealId) ||
-        normalizeDealId(params.dealID);
-      const sessionId =
-        normalizeDealId(params.session_id) ||
-        normalizeDealId(params.sesion_id) ||
-        normalizeDealId(params.sessionId) ||
-        normalizeDealId(params.sesionId);
-
-      if (!dealId) {
-        return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
-      }
-      if (!sessionId || !isUUID(sessionId)) {
-        return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
-      }
-
-      const sesiones = await prisma.sesiones.findUnique({
-        where: { id: sessionId },
-        select: { id: true, deal_id: true },
-      });
-
-      if (!sesiones || sesiones.deal_id !== dealId) {
-        return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
-      }
-
-      const link = await getActiveLink(prisma, sessionId);
-      if (!link) {
-        return successResponse({ link: null });
-      }
-
-      return successResponse({ link: mapLinkForResponse(link, event) });
-    }
-
-    if (method === 'POST') {
-      if (!event.body) {
-        return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
-      }
-
-      let payload: any = {};
-      try {
-        payload = JSON.parse(event.body || '{}');
-      } catch {
-        return errorResponse('VALIDATION_ERROR', 'Body JSON inválido', 400);
-      }
-      const dealId = normalizeDealId(payload.deal_id);
-      const sessionId =
-        normalizeDealId(payload.session_id) ||
-        normalizeDealId(payload.sesion_id) ||
-        normalizeDealId(payload.sessionId) ||
-        normalizeDealId(payload.sesionId);
-      const forceRegenerate =
-        normalizeBoolean(payload.regenerate) ||
-        normalizeBoolean(payload.force) ||
-        normalizeBoolean(payload.forceRegenerate);
-      const ttlHours = Number(payload.ttl_hours ?? payload.ttlHours ?? payload.ttl) || DEFAULT_TTL_HOURS;
-
-      if (!dealId) {
-        return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
-      }
-      if (!sessionId || !isUUID(sessionId)) {
-        return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
-      }
-
-      const sesiones = await prisma.sesiones.findUnique({
-        where: { id: sessionId },
-        select: { id: true, deal_id: true },
-      });
-
-      if (!sesiones || sesiones.deal_id !== dealId) {
-        return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
-      }
-
-      const activeLink = await getActiveLink(prisma, sessionId);
-      if (activeLink && !forceRegenerate) {
-        return successResponse({ link: mapLinkForResponse(activeLink, event) });
-      }
-
-      const now = nowInMadridDate();
-      const ip = truncateValue(extractClientIp(event), 255);
-      const userAgent = truncateValue(extractUserAgent(event), 1024);
-
-      await prisma.tokens.updateMany({
-        where: { session_id: sessionId, active: true },
-        data: { active: false },
-      });
-
-      const token = generateToken();
-      const expiresAt = computeExpiration(ttlHours);
-
-      const created = await prisma.tokens.create({
-        data: {
-          session_id: sessionId,
-          token,
-          created_at: now,
-          expires_at: expiresAt,
-          active: true,
-          ip_created: ip,
-          user_agent: userAgent,
-        },
-        include: { sesiones: { select: { id: true, deal_id: true } } },
-      });
-
-      return successResponse({ link: mapLinkForResponse(created, event) }, 201);
-    }
-
-    if (method === 'DELETE') {
-      const params = event.queryStringParameters || {};
-      const dealId =
-        normalizeDealId(params.deal_id) ||
-        normalizeDealId(params.dealId) ||
-        normalizeDealId(params.dealID);
-      const sessionId =
-        normalizeDealId(params.session_id) ||
-        normalizeDealId(params.sesion_id) ||
-        normalizeDealId(params.sessionId) ||
-        normalizeDealId(params.sesionId);
-      const tokenId =
-        normalizeDealId(params.token_id) ||
-        normalizeDealId(params.tokenId) ||
-        normalizeDealId(params.id);
-      const tokenValue = normalizeToken(params.token);
-
-      if (!dealId) {
-        return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
-      }
-      if (!sessionId || !isUUID(sessionId)) {
-        return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
-      }
-
-      const sesiones = await prisma.sesiones.findUnique({
-        where: { id: sessionId },
-        select: { id: true, deal_id: true },
-      });
-
-      if (!sesiones || sesiones.deal_id !== dealId) {
-        return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
-      }
-
-      const where: Record<string, any> = { session_id: sessionId };
-      if (tokenId) {
-        where.id = tokenId;
-      }
-      if (tokenValue) {
-        where.token = tokenValue;
-      }
-
-      const existing = await prisma.tokens.findFirst({
-        where: tokenId || tokenValue ? where : { ...where, active: true },
-        orderBy: { created_at: 'desc' },
-      });
-
-      if (!existing) {
-        return successResponse({ deleted: false });
-      }
-
-      const now = nowInMadridDate();
-
-      const updated = await prisma.tokens.update({
-        where: { id: existing.id },
-        data: { active: false, expires_at: now },
-      });
-
-      return successResponse({ deleted: true, token_id: updated.id });
-    }
-
-    return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
-  } catch (error: any) {
-    const message = error?.message || 'Unexpected error';
-    return errorResponse('UNEXPECTED', message, 500);
+export const handler = createHttpHandler(async (request) => {
+  if (request.method === 'OPTIONS') {
+    return preflightResponse();
   }
-};
+
+  const prisma = getPrisma();
+  const auth = await requireAuth(request, prisma, { requireRoles: ALLOWED_ROLES });
+  if ('error' in auth) {
+    return auth.error;
+  }
+
+  const event = request.event;
+
+  if (request.method === 'GET') {
+    const params = request.query || {};
+    const dealId =
+      normalizeDealId(params.deal_id) ||
+      normalizeDealId(params.dealId) ||
+      normalizeDealId(params.dealID);
+    const sessionId =
+      normalizeDealId(params.session_id) ||
+      normalizeDealId(params.sesion_id) ||
+      normalizeDealId(params.sessionId) ||
+      normalizeDealId(params.sesionId);
+
+    if (!dealId) {
+      return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
+    }
+    if (!sessionId || !isUUID(sessionId)) {
+      return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
+    }
+
+    const sesiones = await prisma.sesiones.findUnique({
+      where: { id: sessionId },
+      select: { id: true, deal_id: true },
+    });
+
+    if (!sesiones || sesiones.deal_id !== dealId) {
+      return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
+    }
+
+    const link = await getActiveLink(prisma, sessionId);
+    if (!link) {
+      return successResponse({ link: null });
+    }
+
+    return successResponse({ link: mapLinkForResponse(link, event) });
+  }
+
+  if (request.method === 'POST') {
+    const payload: any = request.body || {};
+    const dealId = normalizeDealId(payload.deal_id);
+    const sessionId =
+      normalizeDealId(payload.session_id) ||
+      normalizeDealId(payload.sesion_id) ||
+      normalizeDealId(payload.sessionId) ||
+      normalizeDealId(payload.sesionId);
+    const forceRegenerate =
+      normalizeBoolean(payload.regenerate) ||
+      normalizeBoolean(payload.force) ||
+      normalizeBoolean(payload.forceRegenerate);
+    const ttlHours = Number(payload.ttl_hours ?? payload.ttlHours ?? payload.ttl) || DEFAULT_TTL_HOURS;
+
+    if (!dealId) {
+      return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
+    }
+    if (!sessionId || !isUUID(sessionId)) {
+      return errorResponse('VALIDATION_ERROR', 'session_id inválido (UUID requerido)', 400);
+    }
+
+    const sesiones = await prisma.sesiones.findUnique({
+      where: { id: sessionId },
+      select: { id: true, deal_id: true },
+    });
+
+    if (!sesiones || sesiones.deal_id !== dealId) {
+      return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
+    }
+
+    const activeLink = await getActiveLink(prisma, sessionId);
+    if (activeLink && !forceRegenerate) {
+      return successResponse({ link: mapLinkForResponse(activeLink, event) });
+    }
+
+    const now = nowInMadridDate();
+    const ip = truncateValue(extractClientIp(event), 255);
+    const userAgent = truncateValue(extractUserAgent(event), 1024);
+
+    await prisma.tokens.updateMany({
+      where: { session_id: sessionId, active: true },
+      data: { active: false },
+    });
+
+    const token = generateToken();
+    const expiresAt = computeExpiration(ttlHours);
+
+    const created = await prisma.tokens.create({
+      data: {
+        session_id: sessionId,
+        token,
+        created_at: now,
+        expires_at: expiresAt,
+        active: true,
+        ip_created: ip,
+        user_agent: userAgent,
+      },
+      include: { sesiones: { select: { id: true, deal_id: true } } },
+    });
+
+    await logAudit({
+      userId: auth.user.id,
+      action: 'session_public_link.created',
+      entityType: 'session_public_link',
+      entityId: created.id,
+      before: null,
+      after: {
+        deal_id: dealId,
+        session_id: sessionId,
+        token: created.token,
+        expires_at: created.expires_at?.toISOString() ?? null,
+        ip,
+      },
+    });
+
+    return successResponse({ link: mapLinkForResponse(created, event) }, 201);
+  }
+
+  if (request.method === 'DELETE') {
+    const params = request.query || {};
+    const dealId =
+      normalizeDealId(params.deal_id) ||
+      normalizeDealId(params.dealId) ||
+      normalizeDealId(params.dealID);
+    const sessionId =
+      normalizeDealId(params.session_id) ||
+      normalizeDealId(params.sesion_id) ||
+      normalizeDealId(params.sessionId) ||
+      normalizeDealId(params.sesionId);
+    const tokenId =
+      normalizeDealId(params.token_id) ||
+      normalizeDealId(params.tokenId) ||
+      normalizeDealId(params.id);
+    const tokenValue = normalizeToken(params.token);
+
+    if (!dealId) {
+      return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
+    }
+    if (!sessionId || !isUUID(sessionId)) {
+      return errorResponse('SESSION_ID_INVALID', 'session_id inválido (UUID requerido)', 400);
+    }
+
+    const sesiones = await prisma.sesiones.findUnique({
+      where: { id: sessionId },
+      select: { id: true, deal_id: true },
+    });
+
+    if (!sesiones || sesiones.deal_id !== dealId) {
+      return errorResponse('NOT_FOUND', 'Sesión no encontrada para el deal', 404);
+    }
+
+    const where: Record<string, any> = { session_id: sessionId };
+    if (tokenId) {
+      where.id = tokenId;
+    }
+    if (tokenValue) {
+      where.token = tokenValue;
+    }
+
+    const existing = await prisma.tokens.findFirst({
+      where: tokenId || tokenValue ? where : { ...where, active: true },
+      orderBy: { created_at: 'desc' },
+    });
+
+    if (!existing) {
+      return successResponse({ deleted: false });
+    }
+
+    const now = nowInMadridDate();
+
+    const updated = await prisma.tokens.update({
+      where: { id: existing.id },
+      data: { active: false, expires_at: now },
+    });
+
+    await logAudit({
+      userId: auth.user.id,
+      action: 'session_public_link.revoked',
+      entityType: 'session_public_link',
+      entityId: updated.id,
+      before: {
+        deal_id: dealId,
+        session_id: sessionId,
+        token: existing.token,
+      },
+      after: { revoked_at: now.toISOString() },
+    });
+
+    return successResponse({ deleted: true, token_id: updated.id });
+  }
+
+  return errorResponse('NOT_IMPLEMENTED', 'Ruta o método no soportado', 404);
+});
