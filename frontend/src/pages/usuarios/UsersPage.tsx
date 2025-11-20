@@ -567,7 +567,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
             <Form.Label>Cuenta bancaria</Form.Label>
             <Form.Control
               type="text"
-              inputMode="numeric"
               value={values.bankAccount}
               onChange={(event) => handleChange('bankAccount', event.target.value)}
               disabled={isSubmitting}

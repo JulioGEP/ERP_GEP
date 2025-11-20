@@ -58,12 +58,12 @@ function parseBankAccount(value: unknown): { parsed: string | null; valid: boole
     return { parsed: null, valid: true };
   }
 
-  const digitsOnly = text.replace(/\s+/g, '');
-  if (!/^\d+$/.test(digitsOnly)) {
+  const normalized = text.replace(/[\s-]+/g, '').toUpperCase();
+  if (!/^[A-Z0-9]+$/.test(normalized)) {
     return { parsed: null, valid: false };
   }
 
-  return { parsed: digitsOnly, valid: true };
+  return { parsed: normalized, valid: true };
 }
 
 function parseDateOnly(value: unknown): Date | null {
