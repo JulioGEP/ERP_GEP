@@ -56,6 +56,10 @@ export default function UsersVacationsPage() {
     return [...(summaryQuery.data?.users ?? [])].sort((a, b) => a.fullName.localeCompare(b.fullName));
   }, [summaryQuery.data?.users]);
 
+  const selectedCalendarUsers = useMemo(() => {
+    return users.filter((user) => selectedUsers.includes(user.userId));
+  }, [selectedUsers, users]);
+
   const userDayMap = useMemo(() => {
     const map = new Map<string, Map<string, VacationType>>();
     for (const user of users) {
@@ -174,7 +178,7 @@ export default function UsersVacationsPage() {
               variant="outline-primary"
               size="sm"
               onClick={() => setShowCalendar(true)}
-              disabled={!users.length}
+              disabled={!selectedCalendarUsers.length}
             >
               Ver calendario
             </Button>
@@ -262,7 +266,7 @@ export default function UsersVacationsPage() {
       <VacationsCalendarModal
         show={showCalendar}
         onHide={() => setShowCalendar(false)}
-        users={users}
+        users={selectedCalendarUsers}
         year={summaryYear}
         userDayMap={userDayMap}
       />
