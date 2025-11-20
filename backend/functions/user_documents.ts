@@ -20,6 +20,7 @@ function mapDocument(row: any) {
   return {
     id: String(row.id),
     user_id: String(row.user_id),
+    title: row.title,
     file_name: row.file_name,
     mime_type: row.mime_type ?? null,
     file_size: row.file_size ?? null,
@@ -92,12 +93,14 @@ export const handler = async (event: any) => {
       return errorResponse('VALIDATION_ERROR', 'userId es obligatorio', 400);
     }
 
+    const title =
+      toStringOrNull(payload.title) || toStringOrNull(payload.fileName ?? payload.file_name);
     const fileName = toStringOrNull(payload.fileName ?? payload.file_name);
     const mimeType = toStringOrNull(payload.mimeType ?? payload.mime_type);
     const fileDataBase64 = toStringOrNull(payload.fileData ?? payload.file_data);
 
-    if (!fileName || !fileDataBase64) {
-      return errorResponse('VALIDATION_ERROR', 'fileName y fileData son obligatorios', 400);
+    if (!title || !fileName || !fileDataBase64) {
+      return errorResponse('VALIDATION_ERROR', 'title, fileName y fileData son obligatorios', 400);
     }
 
     let buffer: Buffer;
@@ -110,6 +113,7 @@ export const handler = async (event: any) => {
     const created = await prisma.user_documents.create({
       data: {
         user_id: userId,
+        title,
         file_name: fileName,
         mime_type: mimeType,
         file_size: buffer.byteLength,
