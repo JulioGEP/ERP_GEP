@@ -539,6 +539,7 @@ export function normalizeTrainerOption(raw: any): TrainerOption | null {
     trainer_id,
     name,
     apellido: toStringValue(raw?.apellido) ?? null,
+    dni: toStringValue(raw?.dni) ?? null,
     activo: raw?.activo === undefined ? true : Boolean(raw.activo),
   } satisfies TrainerOption;
 }

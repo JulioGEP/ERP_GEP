@@ -366,6 +366,14 @@ export const handler = createHttpHandler<any>(async (request) => {
     if (method === 'GET' && !trainerIdFromPath) {
       const trainers = await prisma.trainers.findMany({
         orderBy: [{ name: 'asc' }, { apellido: 'asc' }],
+        select: {
+          trainer_id: true,
+          name: true,
+          apellido: true,
+          email: true,
+          dni: true,
+          activo: true,
+        },
       });
       return successResponse({
         trainers: trainers.map((trainer: TrainerRecord) => normalizeTrainer(trainer)),
