@@ -146,6 +146,7 @@ export type TrainerOption = {
   trainer_id: string;
   name: string;
   apellido: string | null;
+  dni: string | null;
   activo: boolean;
 };
 
