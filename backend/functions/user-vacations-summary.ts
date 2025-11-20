@@ -83,6 +83,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       remaining,
       counts,
       upcomingDates,
+      days: normalizedDays,
       lastUpdated: normalizedDays.at(-1)?.date ?? null,
     };
   });
