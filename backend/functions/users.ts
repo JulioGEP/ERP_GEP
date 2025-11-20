@@ -27,6 +27,9 @@ function serializeUser(user: any) {
     email: user.email,
     role: getRoleDisplayValue(user.role) ?? user.role,
     active: user.active,
+    bankAccount: user.bank_account,
+    address: user.address,
+    startDate: user.start_date,
     createdAt: user.created_at,
     updatedAt: user.updated_at,
   };
@@ -36,6 +39,22 @@ function sanitizeName(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
+}
+
+function sanitizeText(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
+function parseDateOnly(value: unknown): Date | null {
+  if (!value) return null;
+  const input = typeof value === 'string' ? value.trim() : String(value);
+  if (!input.length) return null;
+  const normalized = input.includes('T') ? input.split('T')[0] : input;
+  const result = new Date(`${normalized}T00:00:00Z`);
+  if (Number.isNaN(result.getTime())) return null;
+  return result;
 }
 
 function parseUserId(path: string): string | null {
@@ -223,6 +242,13 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
   const email = normalizeEmail(request.body?.email);
   const roleInput = typeof request.body?.role === 'string' ? request.body.role.trim() : '';
   const active = request.body?.active === undefined ? true : Boolean(request.body.active);
+  const bankAccount = sanitizeText(request.body?.bankAccount);
+  const address = sanitizeText(request.body?.address);
+  const startDate = parseDateOnly(request.body?.startDate);
+
+  if (request.body?.startDate && !startDate) {
+    return errorResponse('INVALID_INPUT', 'Fecha de alta inválida', 400);
+  }
 
   if (!firstName || !lastName || !email || !roleInput.length) {
     return errorResponse('INVALID_INPUT', 'Todos los campos son obligatorios', 400);
@@ -245,6 +271,9 @@ async function handleCreate(request: any, prisma: ReturnType<typeof getPrisma>) 
           email,
           role: roleStorage,
           active,
+          bank_account: bankAccount,
+          address,
+          start_date: startDate ?? undefined,
           password_hash: passwordHash,
           password_algo: 'bcrypt',
           password_updated_at: now,
@@ -285,10 +314,14 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
     email?: string;
     role?: string;
     active?: boolean;
+    bank_account?: string | null;
+    address?: string | null;
+    start_date?: Date | null;
   };
 
   const data: UserUpdateData = {};
   let activeProvided = false;
+  let fieldsProvided = 0;
 
   if ('firstName' in (request.body ?? {})) {
     const firstName = sanitizeName(request.body?.firstName);
@@ -296,6 +329,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
       return errorResponse('INVALID_INPUT', 'Nombre inválido', 400);
     }
     data.first_name = firstName;
+    fieldsProvided += 1;
   }
 
   if ('lastName' in (request.body ?? {})) {
@@ -304,6 +338,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
       return errorResponse('INVALID_INPUT', 'Apellido inválido', 400);
     }
     data.last_name = lastName;
+    fieldsProvided += 1;
   }
 
   if ('email' in (request.body ?? {})) {
@@ -312,6 +347,7 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
       return errorResponse('INVALID_INPUT', 'Email inválido', 400);
     }
     data.email = email;
+    fieldsProvided += 1;
   }
 
   if ('role' in (request.body ?? {})) {
@@ -321,14 +357,37 @@ async function handleUpdate(request: any, prisma: ReturnType<typeof getPrisma>) 
       return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
     }
     data.role = roleStorage;
+    fieldsProvided += 1;
   }
 
   if ('active' in (request.body ?? {})) {
     data.active = Boolean(request.body?.active);
     activeProvided = true;
+    fieldsProvided += 1;
   }
 
-  if (Object.keys(data).length === 0) {
+  if ('bankAccount' in (request.body ?? {})) {
+    const bankAccount = sanitizeText(request.body?.bankAccount);
+    data.bank_account = bankAccount;
+    fieldsProvided += 1;
+  }
+
+  if ('address' in (request.body ?? {})) {
+    const address = sanitizeText(request.body?.address);
+    data.address = address;
+    fieldsProvided += 1;
+  }
+
+  if ('startDate' in (request.body ?? {})) {
+    const startDate = parseDateOnly(request.body?.startDate);
+    if (request.body?.startDate && !startDate) {
+      return errorResponse('INVALID_INPUT', 'Fecha de alta inválida', 400);
+    }
+    data.start_date = startDate;
+    fieldsProvided += 1;
+  }
+
+  if (Object.keys(data).length === 0 || fieldsProvided === 0) {
     return errorResponse('NO_UPDATES', 'No se enviaron cambios', 400);
   }
 

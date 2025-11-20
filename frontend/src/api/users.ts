@@ -7,6 +7,9 @@ export type UserSummary = {
   email: string;
   role: string;
   active: boolean;
+  bankAccount: string | null;
+  address: string | null;
+  startDate: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -24,6 +27,9 @@ export type CreateUserPayload = {
   email: string;
   role: string;
   active: boolean;
+  bankAccount?: string | null;
+  address?: string | null;
+  startDate?: string | null;
 };
 
 export type UpdateUserPayload = Partial<CreateUserPayload>;

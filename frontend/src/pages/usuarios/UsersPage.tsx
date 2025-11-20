@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   Alert,
@@ -8,11 +8,13 @@ import {
   Card,
   Col,
   Form,
+  Accordion,
   Modal,
   Pagination,
   Row,
   Spinner,
   Table,
+  ListGroup,
 } from 'react-bootstrap';
 import { ApiError } from '../../api/client';
 import {
@@ -23,6 +25,7 @@ import {
   type UpdateUserPayload,
   type UserSummary,
 } from '../../api/users';
+import { fetchUserDocuments, uploadUserDocument, type UserDocument } from '../../api/userDocuments';
 
 const PAGE_SIZE = 10;
 const ROLE_OPTIONS = ['Admin', 'Comercial', 'Administracion', 'Logistica', 'People', 'Formador'] as const;
@@ -37,6 +40,9 @@ type UserFormValues = {
   email: string;
   role: string;
   active: boolean;
+  bankAccount: string;
+  address: string;
+  startDate: string;
 };
 
 type UsersListResponse = { total: number; page: number; pageSize: number; users: UserSummary[] };
@@ -133,13 +139,29 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
 
   const handleModalSubmit = useCallback(
     async (values: UserFormValues) => {
+      const normalizedPayload: UserFormValues = {
+        ...values,
+        bankAccount: values.bankAccount.trim(),
+        address: values.address.trim(),
+        startDate: values.startDate.trim(),
+      };
       if (editingUser) {
         await updateMutation.mutateAsync({
           id: editingUser.id,
-          payload: values,
+          payload: {
+            ...normalizedPayload,
+            bankAccount: normalizedPayload.bankAccount || null,
+            address: normalizedPayload.address || null,
+            startDate: normalizedPayload.startDate || null,
+          },
         });
       } else {
-        await createMutation.mutateAsync(values);
+        await createMutation.mutateAsync({
+          ...normalizedPayload,
+          bankAccount: normalizedPayload.bankAccount || null,
+          address: normalizedPayload.address || null,
+          startDate: normalizedPayload.startDate || null,
+        });
       }
     },
     [createMutation, editingUser, updateMutation],
@@ -369,6 +391,8 @@ type UserFormModalProps = {
 };
 
 function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: UserFormModalProps) {
+  const queryClient = useQueryClient();
+  const userId = initialValue?.id ?? null;
   const [values, setValues] = useState<UserFormValues>(() =>
     initialValue
       ? {
@@ -377,8 +401,20 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
           email: initialValue.email,
           role: initialValue.role,
           active: initialValue.active,
+          bankAccount: initialValue.bankAccount ?? '',
+          address: initialValue.address ?? '',
+          startDate: initialValue.startDate ? initialValue.startDate.slice(0, 10) : '',
         }
-      : { firstName: '', lastName: '', email: '', role: ROLE_OPTIONS[0], active: true },
+      : {
+          firstName: '',
+          lastName: '',
+          email: '',
+          role: ROLE_OPTIONS[0],
+          active: true,
+          bankAccount: '',
+          address: '',
+          startDate: '',
+        },
   );
 
   useEffect(() => {
@@ -389,11 +425,50 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
         email: initialValue.email,
         role: initialValue.role,
         active: initialValue.active,
+        bankAccount: initialValue.bankAccount ?? '',
+        address: initialValue.address ?? '',
+        startDate: initialValue.startDate ? initialValue.startDate.slice(0, 10) : '',
       });
     } else {
-      setValues({ firstName: '', lastName: '', email: '', role: ROLE_OPTIONS[0], active: true });
+      setValues({
+        firstName: '',
+        lastName: '',
+        email: '',
+        role: ROLE_OPTIONS[0],
+        active: true,
+        bankAccount: '',
+        address: '',
+        startDate: '',
+      });
     }
   }, [initialValue]);
+
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const documentInputRef = useRef<HTMLInputElement | null>(null);
+
+  const documentsQuery = useQuery<UserDocument[]>({
+    queryKey: ['user-documents', userId],
+    queryFn: async () => fetchUserDocuments(userId as string),
+    enabled: Boolean(userId && show),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => uploadUserDocument({ userId: userId as string, file }),
+    onSuccess: (document) => {
+      queryClient.setQueryData<UserDocument[] | undefined>(['user-documents', userId], (prev) => [
+        document,
+        ...(Array.isArray(prev) ? prev : []),
+      ]);
+      setDocumentError(null);
+      if (documentInputRef.current) {
+        documentInputRef.current.value = '';
+      }
+    },
+    onError: (error: unknown) => {
+      const apiError = error instanceof ApiError ? error : null;
+      setDocumentError(apiError?.message ?? 'No se pudo subir el documento.');
+    },
+  });
 
   const handleChange = (field: keyof UserFormValues, value: string | boolean) => {
     setValues((prev) => ({ ...prev, [field]: value }));
@@ -402,6 +477,21 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await onSubmit(values);
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !userId) return;
+    uploadMutation.mutate(file);
+  };
+
+  const documents = documentsQuery.data ?? [];
+
+  const formatFileSize = (size: number | null) => {
+    if (!size) return '';
+    const kb = size / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    return `${(kb / 1024).toFixed(1)} MB`;
   };
 
   const title = initialValue ? 'Editar usuario' : 'Crear usuario';
@@ -443,6 +533,36 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
               disabled={isSubmitting}
             />
           </Form.Group>
+          <Form.Group controlId="user-bank-account">
+            <Form.Label>Cuenta bancaria</Form.Label>
+            <Form.Control
+              type="text"
+              inputMode="numeric"
+              value={values.bankAccount}
+              onChange={(event) => handleChange('bankAccount', event.target.value)}
+              disabled={isSubmitting}
+              placeholder="IBAN o número de cuenta"
+            />
+          </Form.Group>
+          <Form.Group controlId="user-address">
+            <Form.Label>Dirección</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={2}
+              value={values.address}
+              onChange={(event) => handleChange('address', event.target.value)}
+              disabled={isSubmitting}
+            />
+          </Form.Group>
+          <Form.Group controlId="user-start-date">
+            <Form.Label>Fecha Alta</Form.Label>
+            <Form.Control
+              type="date"
+              value={values.startDate}
+              onChange={(event) => handleChange('startDate', event.target.value)}
+              disabled={isSubmitting}
+            />
+          </Form.Group>
           <Form.Group controlId="user-role">
             <Form.Label>Rol</Form.Label>
             <Form.Select
@@ -465,6 +585,67 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
             onChange={(event) => handleChange('active', event.target.checked)}
             disabled={isSubmitting}
           />
+          <Accordion defaultActiveKey="documents">
+            <Accordion.Item eventKey="documents">
+              <Accordion.Header>Documentos</Accordion.Header>
+              <Accordion.Body className="d-grid gap-3">
+                {!initialValue ? (
+                  <p className="text-muted mb-0">Guarda el usuario para gestionar sus documentos.</p>
+                ) : (
+                  <>
+                    {documentError ? <Alert variant="danger">{documentError}</Alert> : null}
+                    {documentsQuery.isLoading ? (
+                      <div className="d-flex align-items-center gap-2">
+                        <Spinner size="sm" animation="border" />
+                        <span>Cargando documentos…</span>
+                      </div>
+                    ) : documents.length ? (
+                      <ListGroup>
+                        {documents.map((doc) => (
+                          <ListGroup.Item key={doc.id} className="d-flex justify-content-between align-items-center">
+                            <div>
+                              <div className="fw-semibold">{doc.file_name}</div>
+                              <div className="text-muted small">
+                                {doc.mime_type || 'Archivo'}
+                                {doc.file_size ? ` · ${formatFileSize(doc.file_size)}` : ''}
+                              </div>
+                            </div>
+                            <Button
+                              as="a"
+                              href={doc.download_url}
+                              variant="outline-primary"
+                              size="sm"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Ver
+                            </Button>
+                          </ListGroup.Item>
+                        ))}
+                      </ListGroup>
+                    ) : (
+                      <p className="text-muted mb-0">No hay documentos disponibles.</p>
+                    )}
+                    <Form.Group controlId="user-documents-upload" className="mb-0">
+                      <Form.Label className="fw-semibold">Subir documento</Form.Label>
+                      <Form.Control
+                        type="file"
+                        onChange={handleFileChange}
+                        disabled={uploadMutation.isPending}
+                        ref={documentInputRef}
+                      />
+                      {uploadMutation.isPending ? (
+                        <div className="d-flex align-items-center gap-2 mt-2 text-muted">
+                          <Spinner size="sm" animation="border" />
+                          <span>Subiendo…</span>
+                        </div>
+                      ) : null}
+                    </Form.Group>
+                  </>
+                )}
+              </Accordion.Body>
+            </Accordion.Item>
+          </Accordion>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="outline-secondary" onClick={onHide} disabled={isSubmitting}>
