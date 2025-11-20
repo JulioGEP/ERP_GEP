@@ -8,7 +8,7 @@ export type VacationCalendarProps = {
   year: number;
   days: UserVacationDay[];
   onDayClick?: (date: string, type: VacationType | '') => void;
-  selectedDate?: string | null;
+  selectedDates?: string[];
   readOnly?: boolean;
 };
 
@@ -17,7 +17,7 @@ function buildDate(year: number, monthIndex: number, day: number): string {
   return iso.slice(0, 10);
 }
 
-export function VacationCalendar({ year, days, onDayClick, selectedDate, readOnly }: VacationCalendarProps) {
+export function VacationCalendar({ year, days, onDayClick, selectedDates = [], readOnly }: VacationCalendarProps) {
   const daysMap = new Map<string, VacationType>();
   for (const day of days) {
     daysMap.set(day.date, day.type);
@@ -67,7 +67,7 @@ export function VacationCalendar({ year, days, onDayClick, selectedDate, readOnl
                     return <div key={`empty-${index}`} className="vacation-day empty" aria-hidden />;
                   }
 
-                  const isSelected = selectedDate === cell.date;
+                  const isSelected = selectedDates.includes(cell.date as string);
                   const typeClass = cell.type ? `type-${cell.type}` : '';
 
                   return (
