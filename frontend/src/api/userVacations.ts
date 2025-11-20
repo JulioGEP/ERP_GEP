@@ -18,6 +18,25 @@ export type UserVacationsResponse = {
   updatedDate?: string;
 };
 
+export type VacationSummaryUser = {
+  userId: string;
+  fullName: string;
+  role: string;
+  active: boolean;
+  allowance: number | null;
+  enjoyed: number;
+  remaining: number | null;
+  counts: Record<VacationType, number>;
+  upcomingDates: string[];
+  lastUpdated: string | null;
+};
+
+export type VacationSummaryResponse = {
+  year: number;
+  generatedAt: string;
+  users: VacationSummaryUser[];
+};
+
 export async function fetchUserVacations(userId: string, year?: number): Promise<UserVacationsResponse> {
   const searchParams = new URLSearchParams({ userId });
   if (year) searchParams.set('year', String(year));
@@ -46,4 +65,23 @@ export async function sendVacationRequest(payload: {
   notes?: string;
 }): Promise<{ message: string }> {
   return postJson<{ message: string }>('/vacation-requests', payload);
+}
+
+export async function fetchVacationsSummary(year?: number): Promise<VacationSummaryResponse> {
+  const searchParams = new URLSearchParams();
+  if (year) searchParams.set('year', String(year));
+  const query = searchParams.toString();
+  const url = query.length ? `/user-vacations-summary?${query}` : '/user-vacations-summary';
+  return getJson<VacationSummaryResponse>(url);
+}
+
+export async function applyBulkVacationDay(payload: {
+  date: string;
+  type: VacationType;
+  userIds: string[];
+}): Promise<{ date: string; updated: Array<UserVacationsResponse & { userId: string }> }> {
+  return postJson<{ date: string; updated: Array<UserVacationsResponse & { userId: string }> }>(
+    '/user-vacations-bulk',
+    payload,
+  );
 }
