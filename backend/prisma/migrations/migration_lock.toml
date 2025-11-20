@@ -1,0 +1,2 @@
+# Generated manually to support Prisma migrate deploy
+provider = "postgresql"

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "generate": "prisma generate --schema prisma/schema.prisma",
+    "migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "prisma:prune": "node ../scripts/prisma-prune-binaries.mjs || true",
     "typecheck": "tsc -p tsconfig.json",
     "postinstall": "prisma generate --schema prisma/schema.prisma"
