@@ -549,6 +549,10 @@ model users {
   email               String    @unique
   role                String
   active              Boolean   @default(true)
+  bank_account        Decimal?  @db.Decimal(34, 0)
+  address             String?
+  signup_date         DateTime? @db.Date
+  drive_folder_id     String?
   password_hash       String?
   password_algo       String?
   password_updated_at DateTime? @db.Timestamptz(6)
@@ -561,8 +565,28 @@ model users {
 
   auth_sessions auth_sessions[]
   trainer       trainers?
+  documents     user_documents[]
 
   @@map("users")
+}
+
+model user_documents {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id               String    @db.Uuid
+  title                 String
+  file_name             String
+  mime_type             String?
+  drive_file_id         String?
+  drive_folder_id       String?
+  drive_web_view_link   String?
+  drive_web_content_link String?
+  created_at            DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id], map: "idx_user_documents_user_id")
+  @@map("user_documents")
 }
 
 model auth_sessions {
