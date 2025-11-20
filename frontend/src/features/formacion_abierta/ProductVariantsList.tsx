@@ -27,6 +27,7 @@ import {
 
 import { ApiError } from '../../api/client';
 import type { SessionStudent } from '../../api/sessions.types';
+import { useTrainingTemplatePoints } from '../../hooks/useTrainingTemplatePoints';
 import {
   fetchActiveTrainers,
   fetchMobileUnitsCatalog,
@@ -1650,22 +1651,32 @@ export function VariantModal({
     return label.length ? label : '—';
   }, [product?.code, product?.name]);
 
+  const templateId = useMemo(() => {
+    const raw = typeof product?.template === 'string' ? product.template.trim() : '';
+    return raw.length ? raw : null;
+  }, [product?.template]);
+
+  const trainingPoints = useTrainingTemplatePoints(templateId);
+
   const handleCopyFundae = useCallback(async () => {
     const trainerDetails = selectedTrainers.map((trainer) => {
       const labelParts = [trainer.name, trainer.apellido]
         .filter((value) => value && value.trim().length)
         .join(' ');
       const label = labelParts.length ? labelParts : trainer.trainer_id;
-      const dni = trainer.dni ?? 'DNI no disponible';
-      return `${label} - ${dni}`;
+      const dni = trainer.dni?.trim();
+      const dniLabel = dni?.length ? dni : 'DNI no disponible';
+      return `${label} - ${dniLabel}`;
     });
 
     const trainersText = trainerDetails.length ? trainerDetails.join(', ') : 'Sin formadores asignados';
+    const pointsLabel = trainingPoints?.trim() || '—';
     const payload = [
       `Formador o Formadores: ${trainersText}`,
       'Telefono: 935 646 346',
-      'Mail: formadores@gepgroup.es',
+      'Mail: formacion@gepgroup.es',
       `Formación: ${formationLabel}`,
+      `Puntos formación: ${pointsLabel}`,
     ].join('\n');
 
     try {
@@ -1677,7 +1688,7 @@ export function VariantModal({
     } catch (error) {
       emitToast({ variant: 'danger', message: 'No se pudieron copiar los datos de FUNDAE.' });
     }
-  }, [formationLabel, selectedTrainers]);
+  }, [formationLabel, selectedTrainers, trainingPoints]);
 
   const handleTrainerToggle = (trainerId: string, checked: boolean) => {
     let nextIds: string[] = [];

@@ -77,6 +77,7 @@ import {
   type SessionDocumentsEventDetail,
 } from '../../../../utils/sessionDocumentsEvents';
 import { useCurrentUserIdentity } from '../../useCurrentUserIdentity';
+import { useTrainingTemplatePoints } from '../../../../hooks/useTrainingTemplatePoints';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -825,6 +826,7 @@ type ApplicableProductInfo = {
   name: string | null;
   code: string | null;
   hours: number | null;
+  template: string | null;
 };
 
 function isApplicableProduct(product: DealProduct): product is DealProduct & { id: string } {
@@ -1113,6 +1115,10 @@ export function SessionsAccordionServices({
           ? product.quantity
           : product.quantity != null
           ? Number(product.quantity)
+          : null,
+      template:
+        typeof product.template === 'string' && product.template.trim().length
+          ? product.template.trim()
           : null,
     }),
     [],
@@ -1781,6 +1787,19 @@ export function SessionsAccordionServices({
       })()
     : null;
 
+  const activeProductTemplate = activeSession
+    ? (() => {
+        const directProduct = applicableProducts.find((product) => product.id === activeSession.productId);
+        if (directProduct?.template) {
+          return directProduct.template;
+        }
+        const fallbackProductId = sessionProductRef.current[activeSession.sessionId];
+        if (!fallbackProductId) return null;
+        const fallbackProduct = applicableProducts.find((product) => product.id === fallbackProductId);
+        return fallbackProduct?.template ?? null;
+      })()
+    : null;
+
   useEffect(() => {
     if (activeSession && !forms[activeSession.sessionId]) {
       setActiveSession(null);
@@ -2120,6 +2139,7 @@ export function SessionsAccordionServices({
                   onSave={(options) => handleSaveSession(activeSession.sessionId, options)}
                   dealId={dealId}
                   productName={activeSession.productName}
+                  templateId={activeProductTemplate}
                   isInCompany
                   inviteStatusMap={inviteStatus}
                   onSendInvites={handleSendInvites}
@@ -2168,6 +2188,7 @@ interface SessionEditorProps {
   onSave: (options?: { notifyOnSuccess?: boolean }) => Promise<boolean> | boolean;
   dealId: string;
   productName: string;
+  templateId: string | null;
   isInCompany: boolean;
   inviteStatusMap: Record<string, { sending: boolean; message: string | null; error: string | null }>;
   onSendInvites: (sessionId: string) => void;
@@ -2188,6 +2209,7 @@ function SessionEditor({
   onSave,
   dealId,
   productName,
+  templateId,
   isInCompany,
   inviteStatusMap,
   onSendInvites,
@@ -2202,6 +2224,7 @@ function SessionEditor({
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const trainerPointerInteractingRef = useRef(false);
   const unitPointerInteractingRef = useRef(false);
+  const trainingPoints = useTrainingTemplatePoints(templateId);
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
@@ -2263,17 +2286,20 @@ function SessionEditor({
   const handleCopyFundae = useCallback(async () => {
     const trainerDetails = selectedTrainers.map((trainer) => {
       const label = `${trainer.name}${trainer.apellido ? ` ${trainer.apellido}` : ''}`;
-      const dni = trainer.dni ?? 'DNI no disponible';
-      return `${label} - ${dni}`;
+      const dni = trainer.dni?.trim();
+      const dniLabel = dni?.length ? dni : 'DNI no disponible';
+      return `${label} - ${dniLabel}`;
     });
 
     const trainersText = trainerDetails.length ? trainerDetails.join(', ') : 'Sin formadores asignados';
     const formationLabel = productName?.trim() || '—';
+    const pointsLabel = trainingPoints?.trim() || '—';
     const payload = [
       `Formador o Formadores: ${trainersText}`,
       'Telefono: 935 646 346',
-      'Mail: formadores@gepgroup.es',
+      'Mail: formacion@gepgroup.es',
       `Formación: ${formationLabel}`,
+      `Puntos formación: ${pointsLabel}`,
     ].join('\n');
 
     try {
@@ -2285,7 +2311,7 @@ function SessionEditor({
     } catch (error) {
       onNotify?.({ variant: 'danger', message: 'No se pudieron copiar los datos de FUNDAE.' });
     }
-  }, [onNotify, productName, selectedTrainers]);
+  }, [onNotify, productName, selectedTrainers, trainingPoints]);
 
   const availabilityQuery = useQuery({
     queryKey: availabilityRange
