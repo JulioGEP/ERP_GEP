@@ -15,7 +15,7 @@
     "build": "npm run build:frontend",
     "prebuild:frontend": "if [ ! -x frontend/node_modules/.bin/vite ]; then npm install --prefer-offline --include=dev --include-workspace-root --workspaces; fi",
     "build:frontend": "npm run build --workspace frontend",
-    "netlify:build": "npm run -w backend generate && npm run -w backend prisma:prune && npm run build",
+    "netlify:build": "npm run -w backend migrate:deploy && npm run -w backend generate && npm run -w backend prisma:prune && npm run build",
     "dev": "echo \"Dev local: usa 'npx netlify dev -p 8888' si tienes Netlify CLI disponible\"",
     "prisma:format": "backend/node_modules/.bin/prisma format --schema backend/prisma/schema.prisma",
     "prisma:generate": "npm run -w backend generate",
