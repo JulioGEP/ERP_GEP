@@ -63,10 +63,14 @@ const SESSION_ESTADO_OPTIONS = Object.entries(SESSION_ESTADO_LABELS).map(([value
   label,
 }));
 
+const COMPANY_FILTER_KEY = 'deal_organization_name';
+const EXCLUDED_COMPANY_FILTER_KEY = 'exclude_deal_organization_name';
+
 const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_id', label: 'Presupuesto' },
   { key: 'deal_title', label: 'Título del Presupuesto' },
-  { key: 'deal_organization_name', label: 'Empresa' },
+  { key: COMPANY_FILTER_KEY, label: 'Empresa' },
+  { key: EXCLUDED_COMPANY_FILTER_KEY, label: 'Ocultar empresa' },
   { key: 'deal_pipeline_id', label: 'Negocio' },
   { key: 'deal_training_address', label: 'Dirección de formación' },
   { key: 'deal_sede_label', label: 'Sede' },
@@ -104,6 +108,8 @@ const CALENDAR_SELECT_FILTER_KEYS = new Set<string>([
   'trainer',
   'unit',
   'room',
+  COMPANY_FILTER_KEY,
+  EXCLUDED_COMPANY_FILTER_KEY,
 ]);
 
 const CALENDAR_DYNAMIC_SELECT_KEYS = new Set<string>(
@@ -480,7 +486,9 @@ function isSessionPendingCompletion(session: CalendarSession): boolean {
 const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSession) => string> = {
   deal_id: (session) => safeString(session.dealId),
   deal_title: (session) => safeString(session.dealTitle ?? ''),
-  deal_organization_name: (session) =>
+  [COMPANY_FILTER_KEY]: (session) =>
+    safeString(session.dealOrganizationName ?? session.dealTitle ?? ''),
+  [EXCLUDED_COMPANY_FILTER_KEY]: (session) =>
     safeString(session.dealOrganizationName ?? session.dealTitle ?? ''),
   deal_pipeline_id: (session) => safeString(session.dealPipelineId ?? ''),
   deal_training_address: (session) => safeString(session.dealAddress ?? session.direccion ?? ''),
@@ -514,7 +522,9 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
 const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVariantEvent) => string> = {
   deal_id: (variant) => joinVariantDealValues(variant, (deal) => deal.id),
   deal_title: (variant) => joinVariantDealValues(variant, (deal) => deal.title),
-  deal_organization_name: (variant) =>
+  [COMPANY_FILTER_KEY]: (variant) =>
+    joinVariantDealValues(variant, (deal) => deal.organizationName ?? deal.title),
+  [EXCLUDED_COMPANY_FILTER_KEY]: (variant) =>
     joinVariantDealValues(variant, (deal) => deal.organizationName ?? deal.title),
   deal_pipeline_id: (variant) => joinVariantDealValues(variant, (deal) => deal.pipelineId),
   deal_training_address: (variant) => {
@@ -710,19 +720,28 @@ function applyCalendarFilters(
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
       filterEntries.every(([key, value]) => {
+        const isExclusionFilter = key === EXCLUDED_COMPANY_FILTER_KEY;
+        const targetKey = isExclusionFilter ? COMPANY_FILTER_KEY : key;
+        const targetValue = row.normalized[targetKey] ?? '';
         const parts = splitFilterValue(value);
+        if (isExclusionFilter) {
+          if (!parts.length) return true;
+          return parts.every((part) => {
+            const normalizedPart = normalizeText(safeString(part));
+            if (!normalizedPart.length) return true;
+            return !targetValue.includes(normalizedPart);
+          });
+        }
         if (parts.length > 1) {
           return parts.some((part) => {
             const normalizedPart = normalizeText(safeString(part));
             if (!normalizedPart.length) return false;
-            const targetValue = row.normalized[key] ?? '';
             return targetValue.includes(normalizedPart);
           });
         }
         const normalizedValue = normalizeText(safeString(value));
         if (!normalizedValue.length) return true;
-        const target = row.normalized[key] ?? '';
-        return target.includes(normalizedValue);
+        return targetValue.includes(normalizedValue);
       }),
     );
   }
@@ -1035,6 +1054,11 @@ export function CalendarView({
       accumulator.get(key)?.add(trimmed);
     };
 
+    const addCompanyValue = (value: string | null | undefined) => {
+      addValue(COMPANY_FILTER_KEY, value);
+      addValue(EXCLUDED_COMPANY_FILTER_KEY, value);
+    };
+
     sessions.forEach((session) => {
       addValue('deal_pipeline_id', session.dealPipelineId);
       addValue('deal_sede_label', session.dealSedeLabel);
@@ -1042,6 +1066,7 @@ export function CalendarView({
       addValue('deal_fundae_label', session.dealFundaeLabel);
       addValue('deal_hotel_label', session.dealHotelLabel);
       addValue('deal_transporte', session.dealTransporte);
+      addCompanyValue(session.dealOrganizationName ?? session.dealTitle ?? '');
       session.trainers.forEach((trainer) => addValue('trainer', formatResourceName(trainer)));
       session.units.forEach((unit) => addValue('unit', formatResourceName(unit)));
       if (session.room) {
@@ -1055,6 +1080,7 @@ export function CalendarView({
         addValue('deal_sede_label', variant.variant.sede ?? '');
 
         variant.deals.forEach((deal) => {
+          addCompanyValue(deal.organizationName ?? deal.title ?? '');
           addValue('deal_pipeline_id', deal.pipelineId);
           addValue('deal_training_address', deal.trainingAddress);
           addValue('deal_sede_label', deal.sedeLabel);
@@ -1113,6 +1139,24 @@ export function CalendarView({
   const calendarFilterDefinitions = useMemo<FilterDefinition[]>(
     () =>
       CALENDAR_FILTER_DEFINITIONS.map((definition) => {
+        if (definition.key === COMPANY_FILTER_KEY) {
+          return {
+            ...definition,
+            type: 'select',
+            options: selectOptionsByKey[COMPANY_FILTER_KEY] ?? [],
+            placeholder: definition.placeholder ?? 'Selecciona una empresa',
+          } satisfies FilterDefinition;
+        }
+
+        if (definition.key === EXCLUDED_COMPANY_FILTER_KEY) {
+          return {
+            ...definition,
+            type: 'select',
+            options: selectOptionsByKey[EXCLUDED_COMPANY_FILTER_KEY] ?? [],
+            placeholder: definition.placeholder ?? 'Selecciona empresas a ocultar',
+          } satisfies FilterDefinition;
+        }
+
         if (definition.key === 'product_name') {
           return {
             ...definition,
