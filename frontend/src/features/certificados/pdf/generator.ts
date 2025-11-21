@@ -2,6 +2,7 @@ import type { Content, StyleDictionary, TDocumentDefinitions } from 'pdfmake/int
 import { getPdfMakeInstance } from '../lib/pdf/pdfmake-initializer';
 import { loadCertificateTemplateBytes } from '../lib/pdf/template-loader';
 import { loadPdfLib } from '../lib/pdf/pdf-lib-loader';
+import { base64ToUint8Array, uint8ArrayToBase64 } from '../../../utils/base64';
 
 export interface CertificateStudentData {
   nombre: string;
@@ -355,64 +356,6 @@ function formatHours(value: number): string {
     return value.toLocaleString('es-ES', { maximumFractionDigits: 2, useGrouping: false });
   }
   return String(value);
-}
-
-function base64ToUint8Array(base64: string): Uint8Array {
-  if (typeof base64 !== 'string' || base64.length === 0) {
-    return new Uint8Array();
-  }
-
-  if (typeof atob === 'function') {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes;
-  }
-
-  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
-    const binary = window.atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes;
-  }
-
-  if (typeof Buffer !== 'undefined') {
-    return Uint8Array.from(Buffer.from(base64, 'base64'));
-  }
-
-  throw new Error('No se puede decodificar datos base64 en este entorno.');
-}
-
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  if (!(bytes instanceof Uint8Array)) {
-    return '';
-  }
-
-  const chunkSize = 0x8000;
-  let binary = '';
-
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const chunk = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  if (typeof btoa === 'function') {
-    return btoa(binary);
-  }
-
-  if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
-    return window.btoa(binary);
-  }
-
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(bytes).toString('base64');
-  }
-
-  throw new Error('No se puede codificar datos base64 en este entorno.');
 }
 
 const PROVINCE_NAMES = new Set(
