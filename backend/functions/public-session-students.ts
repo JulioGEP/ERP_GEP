@@ -1,7 +1,12 @@
 // backend/functions/public-session-students.ts
 import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
-import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import {
+  ensureCors,
+  errorResponse,
+  preflightResponse,
+  successResponse,
+} from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
 
 const RATE_LIMIT_WINDOW_MS = Number(process.env.PUBLIC_SESSION_RATE_LIMIT_WINDOW_MS ?? 60_000);
@@ -196,9 +201,14 @@ function normalizeToken(value: unknown): string | null {
 }
 
 export const handler = async (event: any) => {
+  const corsCheck = ensureCors(event);
+  if (typeof corsCheck !== 'string') {
+    return corsCheck;
+  }
+
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse();
+      return preflightResponse(corsCheck);
     }
 
     const { studentId } = parsePath(event.path || '');

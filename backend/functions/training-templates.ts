@@ -3,7 +3,12 @@ import { Buffer } from 'node:buffer';
 import { PrismaClient } from '@prisma/client';
 
 import { getPrisma } from './_shared/prisma';
-import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import {
+  ensureCors,
+  errorResponse,
+  preflightResponse,
+  successResponse,
+} from './_shared/response';
 
 const CUSTOM_TEMPLATE_PREFIX = 'custom-';
 const DEFAULT_TEMPLATE_PREFIX = 'default-';
@@ -323,9 +328,14 @@ async function handleDeleteTemplate(event: any) {
 }
 
 export const handler = async (event: any) => {
+  const corsCheck = ensureCors(event);
+  if (typeof corsCheck !== 'string') {
+    return corsCheck;
+  }
+
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse();
+      return preflightResponse(corsCheck);
     }
 
     if (event.httpMethod === 'GET') {

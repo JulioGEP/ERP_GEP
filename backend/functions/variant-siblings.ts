@@ -2,7 +2,12 @@
 import type { Handler } from '@netlify/functions';
 
 import { getPrisma } from './_shared/prisma';
-import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import {
+  ensureCors,
+  errorResponse,
+  preflightResponse,
+  successResponse,
+} from './_shared/response';
 
 function toTrimmed(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
@@ -28,8 +33,13 @@ function normalizeDate(value: Date | string | null | undefined): string | null {
 }
 
 export const handler: Handler = async (event) => {
+  const corsCheck = ensureCors(event as any);
+  if (typeof corsCheck !== 'string') {
+    return corsCheck;
+  }
+
   if (event.httpMethod === 'OPTIONS') {
-    return preflightResponse();
+    return preflightResponse(corsCheck);
   }
 
   if (event.httpMethod !== 'GET') {

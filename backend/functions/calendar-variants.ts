@@ -3,7 +3,12 @@ import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { ensureMadridTimezone, toMadridISOString } from './_shared/timezone';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
-import { errorResponse, preflightResponse, successResponse } from './_shared/response';
+import {
+  ensureCors,
+  errorResponse,
+  preflightResponse,
+  successResponse,
+} from './_shared/response';
 import { isVariantResourceColumnError, setVariantResourceColumnsSupport } from './_shared/variant-resources';
 
 /** ====== Tipos de respuesta ====== */
@@ -401,9 +406,14 @@ function toMaybeString(value: unknown): string | null {
 
 /** ====== Handler ====== */
 export const handler = async (event: any) => {
+  const corsCheck = ensureCors(event);
+  if (typeof corsCheck !== 'string') {
+    return corsCheck;
+  }
+
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse();
+      return preflightResponse(corsCheck);
     }
 
     if (event.httpMethod !== 'GET') {

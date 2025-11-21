@@ -3,6 +3,7 @@ import type { HandlerEvent, HandlerContext } from '@netlify/functions';
 import {
   COMMON_HEADERS,
   errorResponse,
+  ensureCors,
   preflightResponse,
   successResponse,
 } from './response';
@@ -201,9 +202,14 @@ export function createHttpHandler<TBody = unknown>(handler: HttpHandler<TBody>) 
     event: NetlifyHandlerEvent,
     context: NetlifyHandlerContext,
   ) {
+    const corsCheck = ensureCors(event);
+    if (typeof corsCheck !== 'string') {
+      return corsCheck;
+    }
+
     const method = String(event.httpMethod || 'GET').toUpperCase();
     if (method === 'OPTIONS') {
-      return preflightResponse();
+      return preflightResponse(corsCheck);
     }
 
     const decodedBody = decodeBody(event);
