@@ -1,6 +1,6 @@
 // backend/functions/reportPrefill.ts
 import { getPrisma } from './_shared/prisma'
-import { ensureCors, successResponse, errorResponse, preflightResponse } from './_shared/response'
+import { successResponse, errorResponse, preflightResponse } from './_shared/response'
 import { toMadridISOString } from './_shared/timezone'
 import { compareSessionsForOrder, formatSessionLabel, toStringOrNull } from './_shared/sessions'
 
@@ -48,14 +48,9 @@ const mapSession = (session: RawSession, index: number): NormalizedSession | nul
 }
 
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event)
-  if (typeof corsCheck !== 'string') {
-    return corsCheck
-  }
-
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse(corsCheck)
+      return preflightResponse()
     }
 
     if (event.httpMethod !== 'POST') {

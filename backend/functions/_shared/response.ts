@@ -1,90 +1,14 @@
 // backend/functions/_shared/response.ts
 import { randomUUID } from 'crypto';
 
-const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '*')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
-const BASE_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id, X-User-Name, X-ERP-Client',
-  'Access-Control-Allow-Credentials': 'true',
-  'Content-Type': 'application/json',
-};
+const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
 
 export const COMMON_HEADERS: Record<string, string> = {
-  ...BASE_HEADERS,
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+  'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-User-Id, X-User-Name, X-ERP-Client',
+  'Content-Type': 'application/json',
 };
-
-function resolveAllowedOrigin(originHeader?: string): string | null {
-  if (ALLOWED_ORIGINS.includes('*')) {
-    return originHeader ?? '*';
-  }
-
-  if (!originHeader) return null;
-
-  const normalized = originHeader.toLowerCase();
-  const match = ALLOWED_ORIGINS.find((origin) => origin.toLowerCase() === normalized);
-  return match ? originHeader : null;
-}
-
-export function resolveRequestOrigin(headers: unknown): string | undefined {
-  if (!headers || typeof headers !== 'object') return undefined;
-
-  const origin = (headers as Record<string, unknown>).origin ??
-    (headers as Record<string, unknown>).Origin;
-
-  return typeof origin === 'string' && origin.length ? origin : undefined;
-}
-
-let currentAllowedOrigin: string | null = resolveAllowedOrigin(undefined);
-
-function applyCorsOrigin(originHeader?: string): string | null {
-  const allowedOrigin = resolveAllowedOrigin(originHeader);
-  currentAllowedOrigin = allowedOrigin;
-
-  if (allowedOrigin) {
-    COMMON_HEADERS['Access-Control-Allow-Origin'] = allowedOrigin;
-  } else {
-    delete COMMON_HEADERS['Access-Control-Allow-Origin'];
-  }
-
-  return allowedOrigin;
-}
-
-export function ensureCors(event: { headers?: unknown } | null | undefined) {
-  const allowedOrigin = applyCorsOrigin(resolveRequestOrigin(event?.headers));
-  if (!allowedOrigin) {
-    return forbiddenOriginResponse();
-  }
-
-  return allowedOrigin;
-}
-
-function responseHeaders(originOverride?: string) {
-  const allowedOrigin = originOverride
-    ? applyCorsOrigin(originOverride)
-    : currentAllowedOrigin ?? applyCorsOrigin(undefined);
-
-  if (!allowedOrigin) return null;
-
-  return { ...COMMON_HEADERS };
-}
-
-function forbiddenOriginResponse() {
-  return {
-    statusCode: 403,
-    headers: { ...BASE_HEADERS },
-    body: safeStringify({
-      ok: false,
-      error_code: 'FORBIDDEN_ORIGIN',
-      message: 'Origen no permitido',
-      requestId: randomUUID(),
-    }),
-  };
-}
 
 // Serializador seguro: convierte BigInt a string
 function safeStringify(payload: unknown): string {
@@ -97,12 +21,9 @@ function safeStringify(payload: unknown): string {
  * Respuesta de éxito estándar
  */
 export function successResponse(body: any = {}, statusCode = 200) {
-  const headers = responseHeaders();
-  if (!headers) return forbiddenOriginResponse();
-
   return {
     statusCode,
-    headers,
+    headers: COMMON_HEADERS,
     body: safeStringify({ ok: true, ...body }),
   };
 }
@@ -115,12 +36,9 @@ export function errorResponse(
   message: string,
   statusCode = 400
 ) {
-  const headers = responseHeaders();
-  if (!headers) return forbiddenOriginResponse();
-
   return {
     statusCode,
-    headers,
+    headers: COMMON_HEADERS,
     body: safeStringify({
       ok: false,
       error_code: code,
@@ -133,9 +51,6 @@ export function errorResponse(
 /**
  * Respuesta para preflight OPTIONS
  */
-export function preflightResponse(originHeader?: string) {
-  const headers = responseHeaders(originHeader);
-  if (!headers) return forbiddenOriginResponse();
-
-  return { statusCode: 204, headers, body: '' };
+export function preflightResponse() {
+  return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
 }

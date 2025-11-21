@@ -2,12 +2,7 @@ import { Prisma } from '@prisma/client';
 import { Decimal, PrismaClientKnownRequestError, PrismaClientUnknownRequestError } from '@prisma/client/runtime/library';
 
 import { getPrisma } from './_shared/prisma';
-import {
-  ensureCors,
-  errorResponse,
-  preflightResponse,
-  successResponse,
-} from './_shared/response';
+import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { formatTimeFromDb, parseHHMMToDate } from './_shared/time';
 import { toMadridISOString } from './_shared/timezone';
 import { mapApiStockStatusToDbValue, mapDbStockStatusToApiValue } from './_shared/variant-defaults';
@@ -285,14 +280,9 @@ function buildUpdateData(params: {
 }
 
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse(corsCheck);
+      return preflightResponse();
     }
 
     const prisma = getPrisma();

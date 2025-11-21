@@ -2,7 +2,6 @@
 import { getPrisma } from './_shared/prisma';
 import {
   COMMON_HEADERS,
-  ensureCors,
   errorResponse,
   preflightResponse,
   successResponse,
@@ -123,14 +122,9 @@ function toBufferFromBase64(contentBase64: string): Buffer {
 }
 
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse(corsCheck);
+      return preflightResponse();
     }
 
     const prisma = getPrisma();

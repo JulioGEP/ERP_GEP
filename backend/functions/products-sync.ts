@@ -1,12 +1,7 @@
 // backend/functions/products-sync.ts
 import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
-import {
-  ensureCors,
-  errorResponse,
-  preflightResponse,
-  successResponse,
-} from './_shared/response';
+import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { extractProductCatalogAttributes, listAllProducts } from './_shared/pipedrive';
 
 const CATEGORY_FILTER = 'formación';
@@ -39,14 +34,9 @@ type ProductInput = {
 };
 
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse(corsCheck);
+      return preflightResponse();
     }
 
     if (event.httpMethod !== 'POST') {

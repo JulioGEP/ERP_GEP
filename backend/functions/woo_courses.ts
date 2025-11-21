@@ -3,12 +3,7 @@ import type { Prisma } from '@prisma/client';
 import type { Decimal } from '@prisma/client/runtime/library';
 
 import { getPrisma } from './_shared/prisma';
-import {
-  ensureCors,
-  errorResponse,
-  preflightResponse,
-  successResponse,
-} from './_shared/response';
+import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 
 type Event = {
   httpMethod: string;
@@ -894,14 +889,9 @@ async function syncAllProducts(): Promise<SyncResult> {
 }
 
 export const handler = async (event: Event) => {
-  const corsCheck = ensureCors(event as any);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse(corsCheck);
+      return preflightResponse();
     }
 
     if (event.httpMethod !== 'POST') {

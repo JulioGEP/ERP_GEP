@@ -1,12 +1,6 @@
 // backend/functions/user_documents.ts
 import { getPrisma } from './_shared/prisma';
-import {
-  COMMON_HEADERS,
-  ensureCors,
-  errorResponse,
-  preflightResponse,
-  successResponse,
-} from './_shared/response';
+import { COMMON_HEADERS, errorResponse, preflightResponse, successResponse } from './_shared/response';
 import {
   deleteUserDocumentFromGoogleDrive,
   uploadUserDocumentToGoogleDrive,
@@ -44,13 +38,8 @@ function mapDocument(row: any) {
 }
 
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   if (event.httpMethod === 'OPTIONS') {
-    return preflightResponse(corsCheck);
+    return preflightResponse();
   }
 
   const prisma = getPrisma();
