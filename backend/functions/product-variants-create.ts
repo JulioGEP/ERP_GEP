@@ -5,12 +5,7 @@
 import { Decimal } from '@prisma/client/runtime/library';
 
 import { getPrisma } from './_shared/prisma';
-import {
-  ensureCors,
-  errorResponse,
-  preflightResponse,
-  successResponse,
-} from './_shared/response';
+import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
 import { getWooStockStatusFromDb } from './_shared/variant-defaults';
 
@@ -478,14 +473,9 @@ function normalizeExistingKey(sede: string | null | undefined, date: Date | stri
 }
 
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse(corsCheck);
+      return preflightResponse();
     }
 
     if (event.httpMethod !== 'POST') {

@@ -1,12 +1,7 @@
 // backend/functions/mobile-units.ts
 import { randomUUID } from 'crypto';
 import { getPrisma } from './_shared/prisma';
-import {
-  ensureCors,
-  errorResponse,
-  preflightResponse,
-  successResponse,
-} from './_shared/response';
+import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { toMadridISOString } from './_shared/timezone';
 
 type MobileUnitRecord = {
@@ -219,14 +214,9 @@ function handleKnownPrismaError(error: unknown) {
 }
 
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse(corsCheck);
+      return preflightResponse();
     }
 
     const prisma = getPrisma();

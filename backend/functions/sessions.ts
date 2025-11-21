@@ -3,12 +3,7 @@ import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { logAudit, resolveUserIdFromEvent, type JsonValue } from './_shared/audit-log';
-import {
-  ensureCors,
-  errorResponse,
-  preflightResponse,
-  successResponse,
-} from './_shared/response';
+import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { buildMadridDateTime, formatTimeFromDb } from './_shared/time';
 import { isTrustedClient, logSuspiciousRequest } from './_shared/security';
 import {
@@ -896,13 +891,8 @@ export const __test__ = {
 };
 
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   try {
-    if (event.httpMethod === 'OPTIONS') return preflightResponse(corsCheck);
+    if (event.httpMethod === 'OPTIONS') return preflightResponse();
 
     const prisma = getPrisma();
     const method = event.httpMethod;

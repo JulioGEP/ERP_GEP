@@ -6,7 +6,6 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { getPrisma } from './_shared/prisma';
 import {
   COMMON_HEADERS,
-  ensureCors,
   errorResponse,
   preflightResponse,
   successResponse,
@@ -202,14 +201,9 @@ function mapSessionFile(row: any): SessionFileRecord {
 
 }
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse(corsCheck);
+      return preflightResponse();
     }
 
     const method = event.httpMethod;

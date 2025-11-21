@@ -1,7 +1,7 @@
 // backend/functions/session_comments.ts
 import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
-import { ensureCors, errorResponse, preflightResponse, successResponse } from './_shared/response';
+import { COMMON_HEADERS, errorResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
 
 const DEFAULT_AUTHOR = process.env.DEFAULT_NOTE_AUTHOR || 'erp_user';
@@ -66,14 +66,9 @@ function parseCommentId(value: string | null) {
 }
 
 export const handler = async (event: any) => {
-  const corsCheck = ensureCors(event);
-  if (typeof corsCheck !== 'string') {
-    return corsCheck;
-  }
-
   try {
     if (event.httpMethod === 'OPTIONS') {
-      return preflightResponse(corsCheck);
+      return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
     }
 
     const { sessionId, commentId } = parsePath(event.path || '');
