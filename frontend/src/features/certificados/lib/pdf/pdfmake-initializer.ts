@@ -1,4 +1,5 @@
 import pdfMake from 'pdfmake/build/pdfmake';
+import { arrayBufferToBase64 } from '../../../../utils/base64';
 
 const CERTIFICATE_ASSETS_BASE_PATH = '/certificados/';
 
@@ -10,25 +11,6 @@ const CERTIFICATE_FONT_FILES = {
 } as const;
 
 let initializationPromise: Promise<typeof pdfMake> | undefined;
-
-// ---- helpers ---------------------------------------------------------------
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-  let binary = '';
-
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  if (typeof btoa === 'function') return btoa(binary);
-  if (typeof window !== 'undefined' && typeof window.btoa === 'function') return window.btoa(binary);
-  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64');
-
-  throw new Error('No se puede convertir el buffer a base64 en este entorno.');
-}
 
 async function loadFontIntoVfs(fileName: string): Promise<void> {
   const response = await fetch(`${CERTIFICATE_ASSETS_BASE_PATH}${fileName}`);
