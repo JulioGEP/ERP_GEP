@@ -22,6 +22,7 @@ import { studentsFromNotes } from "./_shared/studentsFromNotes";
 import type { StudentIdentifier } from "./_shared/studentsFromNotes";
 import { logAudit, resolveUserIdFromEvent, type JsonValue } from "./_shared/audit-log";
 import { isTrustedClient, logSuspiciousRequest } from "./_shared/security";
+import { ZodError, z } from "zod";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -39,47 +40,131 @@ const EDITABLE_FIELDS = new Set([
   "a_fecha",
 ]);
 
-const BOOLEAN_EDITABLE_FIELDS = new Set([
-  "caes_val",
-  "fundae_val",
-  "hotel_val",
-  "transporte_val",
-  "po_val",
-]);
+const dealIdValueSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) return undefined;
+    const normalized = String(value).trim();
+    return normalized;
+  },
+  z.string().min(1, "dealId requerido"),
+);
+
+const pathDealIdSchema = z
+  .string()
+  .optional()
+  .transform((path) => {
+    if (!path) return null;
+    const match = String(path).match(/\/deals\/([^/?#]+)/i);
+    return match ? decodeURIComponent(match[1]) : null;
+  })
+  .refine((value) => value === null || value.length > 0, { message: "id de ruta inválido" });
+
+const dealQuerySchema = z.object({
+  dealId: dealIdValueSchema.optional(),
+});
+
+const importBodySchema = z
+  .object({
+    dealId: dealIdValueSchema.optional(),
+    id: dealIdValueSchema.optional(),
+    deal_id: dealIdValueSchema.optional(),
+  })
+  .partial();
+
+const wIdVariationSchema = z
+  .union([z.string(), z.number(), z.null()])
+  .transform((value) => {
+    if (value === null) return null;
+    const normalized = String(value).trim();
+    return normalized.length ? normalized : null;
+  });
+
+const trainingDateSchema = z
+  .union([z.string(), z.number(), z.date(), z.null()])
+  .transform((value) => {
+    if (value === null) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new Error("Fecha de formación inválida");
+    }
+    return date;
+  });
+
+const dealsEditableSchema = z
+  .object({
+    sede_label: z.string().nullable().optional(),
+    training_address_label: z.string().nullable().optional(),
+    training_address: z.string().nullable().optional(),
+    caes_label: z.string().nullable().optional(),
+    caes_val: z.boolean().optional(),
+    fundae_label: z.string().nullable().optional(),
+    fundae_val: z.boolean().optional(),
+    hotel_label: z.string().nullable().optional(),
+    hotel_val: z.boolean().optional(),
+    transporte_val: z.boolean().optional(),
+    po_val: z.boolean().optional(),
+    w_id_variation: wIdVariationSchema.optional(),
+    a_fecha: trainingDateSchema.optional(),
+  })
+  .strict();
+
+const productHoursSchema = z
+  .preprocess((value) => {
+    if (value === null || value === undefined || value === "") return null;
+    if (typeof value === "number" || typeof value === "string") {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed) || parsed < 0) return value;
+      return Math.round(parsed);
+    }
+    return value;
+  }, z.number().int().nonnegative().nullable());
+
+const nullableTrimmedStringSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) return null;
+    const trimmed = String(value).trim();
+    return trimmed.length ? trimmed : null;
+  },
+  z.string().nullable(),
+);
+
+const productPatchSchema = z.object({
+  id: z
+    .union([z.string(), z.number()])
+    .transform((value) => String(value).trim())
+    .refine((value) => value.length > 0, { message: "id de producto requerido" }),
+  hours: productHoursSchema.optional(),
+  comments: nullableTrimmedStringSchema.optional(),
+  product_comments: nullableTrimmedStringSchema.optional(),
+});
+
+const patchBodySchema = z.object({
+  deals: dealsEditableSchema.optional(),
+  products: z.array(productPatchSchema).optional(),
+});
+
+type ImportBody = z.infer<typeof importBodySchema>;
+type PatchBody = z.infer<typeof patchBodySchema>;
 
 const DEAL_NOT_WON_ERROR_CODE = "DEAL_NOT_WON";
 const DEAL_NOT_WON_ERROR_MESSAGE = "Este negocio no está Ganado, no lo podemos subir";
 
 /* -------------------- Helpers -------------------- */
-function parsePathId(path: any): string | null {
-  if (!path) return null;
-  // admite .../deals/:id
-  const m = String(path).match(/\/deals\/([^/?#]+)/i);
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
 function normalizeProductId(raw: any): string | null {
   if (raw === null || raw === undefined) return null;
   const id = String(raw).trim();
   return id.length ? id : null;
 }
 
-function parseProductHours(raw: any): { ok: boolean; value: number | null } {
-  if (raw === null || raw === undefined || raw === "") {
-    return { ok: true, value: null };
+function formatValidationError(error: unknown): string {
+  if (error instanceof ZodError) {
+    return error.issues
+      .map((issue) => issue.message || issue.path.join("."))
+      .filter(Boolean)
+      .join("; ");
   }
-  if (typeof raw === "number") {
-    if (!Number.isFinite(raw) || raw < 0) return { ok: false, value: null };
-    return { ok: true, value: Math.round(raw) };
-  }
-  if (typeof raw === "string") {
-    const trimmed = raw.trim();
-    if (!trimmed.length) return { ok: true, value: null };
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed) || parsed < 0) return { ok: false, value: null };
-    return { ok: true, value: Math.round(parsed) };
-  }
-  return { ok: false, value: null };
+  if (error instanceof Error) return error.message;
+  return "Payload inválido";
 }
 
 function normalizePipelineLabelValue(value: unknown): string | null {
@@ -926,6 +1011,15 @@ export const handler = async (event: any) => {
     const method = event.httpMethod;
     const path = event.path || "";
 
+    let pathDealId: string | null;
+    let queryDealId: string | undefined;
+    try {
+      pathDealId = pathDealIdSchema.parse(path);
+      ({ dealId: queryDealId } = dealQuerySchema.parse(event.queryStringParameters ?? {}));
+    } catch (validationError) {
+      return errorResponse("VALIDATION_ERROR", formatValidationError(validationError), 400);
+    }
+
     if (!isTrustedClient(event.headers)) {
       await logSuspiciousRequest({
         event,
@@ -941,17 +1035,28 @@ export const handler = async (event: any) => {
     const qsId = event.queryStringParameters?.dealId
       ? String(event.queryStringParameters.dealId).trim()
       : null;
-    const dealIdStr = parsePathId(path) ?? (qsId && qsId.length ? qsId : null);
-    const dealId = dealIdStr !== null ? String(dealIdStr) : null;
+    const dealId = pathDealId ?? (qsId && qsId.length ? qsId : queryDealId ?? null);
 
     /* ------------ IMPORT: POST/GET /.netlify/functions/deals/import ------------ */
     if (
       (method === "POST" && path.endsWith("/deals/import")) ||
       (method === "GET" && path.endsWith("/deals/import"))
     ) {
-      const body = event.body ? JSON.parse(event.body) : {};
+      let parsedBody: ImportBody;
+      try {
+        const rawBody = event.body ? JSON.parse(event.body) : {};
+        parsedBody = importBodySchema.parse(rawBody);
+      } catch (validationError) {
+        return errorResponse("VALIDATION_ERROR", formatValidationError(validationError), 400);
+      }
+
       const incomingId =
-        body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
+        parsedBody.dealId ??
+        parsedBody.id ??
+        parsedBody.deal_id ??
+        queryDealId ??
+        pathDealId ??
+        null;
       if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
 
       const incomingIdStr = String(incomingId ?? "").trim();
@@ -1193,13 +1298,22 @@ export const handler = async (event: any) => {
     /* ---------------- PATCH (campos editables) ---------------- */
     if (method === "PATCH" && dealId !== null) {
       if (!event.body) return errorResponse("VALIDATION_ERROR", "Body requerido", 400);
+      let parsedBody: PatchBody;
+      try {
+        const rawBody = event.body ? JSON.parse(event.body) : {};
+        parsedBody = patchBodySchema.parse(rawBody);
+      } catch (validationError) {
+        return errorResponse("VALIDATION_ERROR", formatValidationError(validationError), 400);
+      }
 
-      const body = JSON.parse(event.body || "{}");
       const patch: Record<string, any> = {};
 
-      if (body.deals && typeof body.deals === "object") {
-        for (const k of Object.keys(body.deals)) {
-          if (EDITABLE_FIELDS.has(k)) patch[k] = body.deals[k];
+      if (parsedBody.deals && typeof parsedBody.deals === "object") {
+        for (const [key, value] of Object.entries(parsedBody.deals)) {
+          if (!EDITABLE_FIELDS.has(key)) continue;
+          if (value !== undefined) {
+            patch[key] = value;
+          }
         }
       }
 
@@ -1209,69 +1323,21 @@ export const handler = async (event: any) => {
         delete patch.training_address_label;
       }
 
-      if (Object.prototype.hasOwnProperty.call(patch, "w_id_variation")) {
-        const raw = patch.w_id_variation;
-        if (raw === null || raw === undefined || raw === "") {
-          patch.w_id_variation = null;
-        } else {
-          const normalized = typeof raw === "string" ? raw.trim() : String(raw).trim();
-          patch.w_id_variation = normalized.length ? normalized : null;
-        }
-      }
-
-      if (Object.prototype.hasOwnProperty.call(patch, "a_fecha")) {
-        const rawDate = patch.a_fecha;
-        if (rawDate === null || rawDate === undefined || rawDate === "") {
-          patch.a_fecha = null;
-        } else {
-          const parsed = new Date(rawDate);
-          if (Number.isNaN(parsed.getTime())) {
-            return errorResponse("VALIDATION_ERROR", "Fecha de formación inválida", 400);
-          }
-          patch.a_fecha = parsed;
-        }
-      }
-
-      for (const field of BOOLEAN_EDITABLE_FIELDS) {
-        if (!Object.prototype.hasOwnProperty.call(patch, field)) continue;
-        if (typeof patch[field] !== "boolean") {
-          return errorResponse(
-            "VALIDATION_ERROR",
-            `El campo ${field} debe ser booleano`,
-            400,
-          );
-        }
-      }
-
       const productPatches: Array<{ id: string; data: Record<string, any> }> = [];
-      if (Array.isArray(body.products)) {
-        for (const entry of body.products) {
-          if (!entry || typeof entry !== "object") continue;
-          const rawId = (entry as any).id ?? (entry as any).product_id;
-          const productId = normalizeProductId(rawId);
+      if (Array.isArray(parsedBody.products)) {
+        for (const entry of parsedBody.products) {
+          const productId = normalizeProductId(entry.id);
           if (!productId) continue;
 
           const data: Record<string, any> = {};
 
-          if (Object.prototype.hasOwnProperty.call(entry, "hours")) {
-            const { ok, value } = parseProductHours((entry as any).hours);
-            if (!ok) {
-              return errorResponse("VALIDATION_ERROR", "hours inválido para producto", 400);
-            }
-            data.hours = value;
+          if (Object.prototype.hasOwnProperty.call(entry, "hours") && entry.hours !== undefined) {
+            data.hours = entry.hours;
           }
 
-          if (
-            Object.prototype.hasOwnProperty.call(entry, "comments") ||
-            Object.prototype.hasOwnProperty.call(entry, "product_comments")
-          ) {
-            const rawComment = (entry as any).comments ?? (entry as any).product_comments;
-            if (rawComment === null || rawComment === undefined) {
-              data.product_comments = null;
-            } else {
-              const commentStr = String(rawComment).trim();
-              data.product_comments = commentStr.length ? commentStr : null;
-            }
+          const comment = entry.comments ?? entry.product_comments;
+          if (comment !== undefined) {
+            data.product_comments = comment;
           }
 
           if (Object.keys(data).length) {
