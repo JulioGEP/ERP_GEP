@@ -34,6 +34,24 @@ function normalizeHeaders(
   return normalized;
 }
 
+function extractHost(value: string | undefined): string | null {
+  if (!value || !value.trim()) return null;
+  const trimmed = value.trim();
+
+  // Si el header ya viene en formato host:port, normalizamos directamente
+  const bareHost = trimmed.replace(/\s+/g, '');
+  if (!bareHost.includes('://')) {
+    return bareHost.toLowerCase();
+  }
+
+  try {
+    const url = new URL(trimmed);
+    return url.host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 function resolveClientIpFromHeaders(
   event: EventLike,
   headers: Record<string, string>,
@@ -72,7 +90,25 @@ export function isTrustedClient(
     return true;
   }
 
-  return hasTrustedFrontendReferer(normalized);
+  if (hasTrustedFrontendReferer(normalized)) {
+    return true;
+  }
+
+  // Fallback: permitir peticiones con mismo host (p. ej. nuevos dominios o entornos locales)
+  return hasSameSiteHost(normalized);
+}
+
+function hasSameSiteHost(headers: Record<string, string>): boolean {
+  const host = extractHost(headers['host']);
+  if (!host) return false;
+
+  // En local dejamos pasar localhost y loopback aunque falte la cabecera X-ERP-Client
+  if (host.startsWith('localhost') || host.startsWith('127.0.0.1')) {
+    return true;
+  }
+
+  const originHost = extractHost(headers['origin']) ?? extractHost(headers['referer']);
+  return Boolean(originHost && originHost === host);
 }
 
 function resolveTrustedFrontendHosts(): string[] {
