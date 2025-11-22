@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Badge, Card, Col, Form, Row, Spinner } from 'react-bootstrap';
+import { Badge, Button, Card, Col, Form, Row, Spinner } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
 import {
   fetchComparativaDashboard,
@@ -16,6 +16,60 @@ const METRIC_CONFIG: { key: string; label: string }[] = [
 
 function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function startOfIsoWeek(date: Date) {
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  return addDays(date, diff);
+}
+
+function buildWeekRange(reference: Date) {
+  const start = startOfIsoWeek(reference);
+  const end = addDays(start, 6);
+
+  return {
+    startDate: formatDate(start),
+    endDate: formatDate(end),
+  } as const;
+}
+
+function buildMonthRange(reference: Date) {
+  const start = new Date(reference.getFullYear(), reference.getMonth(), 1);
+  const end = new Date(reference.getFullYear(), reference.getMonth() + 1, 0);
+
+  return {
+    startDate: formatDate(start),
+    endDate: formatDate(end),
+  } as const;
+}
+
+function buildQuarterRange(reference: Date) {
+  const quarter = Math.floor(reference.getMonth() / 3);
+  const startMonth = quarter * 3;
+  const start = new Date(reference.getFullYear(), startMonth, 1);
+  const end = new Date(reference.getFullYear(), startMonth + 3, 0);
+
+  return {
+    startDate: formatDate(start),
+    endDate: formatDate(end),
+  } as const;
+}
+
+function buildYearRange(reference: Date) {
+  const start = new Date(reference.getFullYear(), 0, 1);
+  const end = new Date(reference.getFullYear(), 12, 0);
+
+  return {
+    startDate: formatDate(start),
+    endDate: formatDate(end),
+  } as const;
 }
 
 function toPreviousYearDate(value: string) {
@@ -64,6 +118,20 @@ export default function ComparativaDashboardPage() {
     previousPeriod: buildComparisonPeriod(today),
     granularity: 'isoWeek',
   });
+
+  const quickRanges = useMemo(
+    () => [
+      { label: 'Semana actual', range: buildWeekRange(today) },
+      { label: 'Semana pasada', range: buildWeekRange(addDays(today, -7)) },
+      { label: 'Mes actual', range: buildMonthRange(today) },
+      { label: 'Mes pasado', range: buildMonthRange(new Date(today.getFullYear(), today.getMonth() - 1, 1)) },
+      { label: 'Trimestre actual', range: buildQuarterRange(today) },
+      { label: 'Trimestre pasado', range: buildQuarterRange(new Date(today.getFullYear(), today.getMonth() - 3, 1)) },
+      { label: 'Año actual', range: buildYearRange(today) },
+      { label: 'Año pasado', range: buildYearRange(new Date(today.getFullYear() - 1, today.getMonth(), today.getDate())) },
+    ],
+    [today],
+  );
 
   const appliedFilters = useMemo(() => filters, [filters]);
 
@@ -138,6 +206,17 @@ export default function ComparativaDashboardPage() {
         })}
       </div>
     );
+  };
+
+  const applyQuickRange = (range: { startDate: string; endDate: string }) => {
+    setFilters((prev) => ({
+      ...prev,
+      currentPeriod: range,
+      previousPeriod: {
+        startDate: toPreviousYearDate(range.startDate),
+        endDate: toPreviousYearDate(range.endDate),
+      },
+    }));
   };
 
   const renderMetric = (kpi: ComparativaKpi) => {
@@ -225,6 +304,19 @@ export default function ComparativaDashboardPage() {
 
       <Card className="shadow-sm">
         <Card.Body>
+          <div className="d-flex flex-wrap gap-2 mb-3">
+            {quickRanges.map((item) => (
+              <Button
+                key={item.label}
+                size="sm"
+                variant="outline-primary"
+                onClick={() => applyQuickRange(item.range)}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+
           <Row className="g-3">
             <Col xs={12} md={6}>
               <div className="fw-semibold mb-2">Fechas</div>
