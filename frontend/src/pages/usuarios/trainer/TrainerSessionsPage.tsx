@@ -1420,18 +1420,6 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                       </Button>
                     </div>
                   </Form>
-                  {reportLink ? (
-                    <div className="d-flex justify-content-start">
-                      <Button
-                        as={Link as any}
-                        to={reportLink.to}
-                        state={reportLink.state}
-                        variant="primary"
-                      >
-                        {reportLink.label}
-                      </Button>
-                    </div>
-                  ) : null}
                 </div>
               </Col>
 
@@ -1633,6 +1621,30 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
                 </div>
               </Col>
             </Row>
+            {reportLink ? (
+              <Row className="g-4">
+                <Col xs={12}>
+                  <div className="trainer-session-section h-100 d-flex flex-column gap-3">
+                    <div>
+                      <h5 className="fw-semibold mb-1">Genera el informe de la sesión</h5>
+                      <p className="text-muted mb-2 small">
+                        Completa el informe y comparte los detalles con el equipo del ERP.
+                      </p>
+                    </div>
+                    <div className="d-flex justify-content-start">
+                      <Button
+                        as={Link as any}
+                        to={reportLink.to}
+                        state={reportLink.state}
+                        variant="primary"
+                      >
+                        {reportLink.label}
+                      </Button>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+            ) : null}
           </div>
         </Stack>
       </Card.Body>
