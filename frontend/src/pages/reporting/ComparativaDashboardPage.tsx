@@ -325,12 +325,12 @@ export default function ComparativaDashboardPage() {
   };
 
   const buildBinarySlices = (mix: ComparativaBinaryMix | undefined) => {
-    if (!mix) return [] as { label: string; percentage: number }[];
+    if (!mix) return [] as { label: string; percentage: number; value: number }[];
     const total = mix.yes + mix.no;
     if (total === 0) return [];
     return [
-      { label: 'Sí', percentage: (mix.yes / total) * 100 },
-      { label: 'No', percentage: (mix.no / total) * 100 },
+      { label: 'Sí', percentage: (mix.yes / total) * 100, value: mix.yes },
+      { label: 'No', percentage: (mix.no / total) * 100, value: mix.no },
     ];
   };
 
@@ -572,7 +572,7 @@ export default function ComparativaDashboardPage() {
     return dashboardQuery.data?.trends.find((item) => item.metric === metric) ?? placeholder;
   };
 
-  const renderDonutChart = (slices: { label: string; percentage: number }[]) => {
+  const renderDonutChart = (slices: { label: string; percentage: number; value: number }[]) => {
     if (slices.length === 0) {
       return <div className="text-muted small">Sin datos</div>;
     }
@@ -609,7 +609,7 @@ export default function ComparativaDashboardPage() {
             {percentageFormatter.format(slices[0].percentage)}%
           </text>
           <text x="50%" y="62%" textAnchor="middle" className="text-muted" fontSize={10} dominantBaseline="middle">
-            Sí
+            Sí · {numberFormatter.format(slices[0].value)}
           </text>
         </svg>
 
@@ -620,7 +620,9 @@ export default function ComparativaDashboardPage() {
                 style={{ width: 14, height: 14, borderRadius: 3, display: 'inline-block', backgroundColor: colors[index] }}
               />
               <span className="text-muted">{slice.label}</span>
-              <span className="fw-semibold">{percentageFormatter.format(slice.percentage)}%</span>
+              <span className="fw-semibold">
+                {percentageFormatter.format(slice.percentage)}% · {numberFormatter.format(slice.value)}
+              </span>
             </div>
           ))}
         </div>
