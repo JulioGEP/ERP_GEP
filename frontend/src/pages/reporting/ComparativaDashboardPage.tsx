@@ -160,6 +160,30 @@ export default function ComparativaDashboardPage() {
     [],
   );
 
+  const dateDisplayFormatter = useMemo(
+    () => new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    [],
+  );
+
+  const formatDateLabel = (value?: string) => {
+    if (!value) return '';
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+
+    return dateDisplayFormatter.format(parsed);
+  };
+
+  const formatRangeLabel = (start?: string, end?: string) => {
+    const startLabel = formatDateLabel(start);
+    const endLabel = formatDateLabel(end);
+
+    if (!startLabel && !endLabel) return '';
+    if (!startLabel || !endLabel) return startLabel || endLabel;
+
+    return `${startLabel} - ${endLabel}`;
+  };
+
   const handleDateChange = (
     period: 'currentPeriod' | 'previousPeriod',
     key: 'startDate' | 'endDate',
@@ -229,6 +253,10 @@ export default function ComparativaDashboardPage() {
       : (diff / kpi.lastYearValue) * 100;
     const diffPercentageLabel = `${diffPercentage >= 0 ? '+' : ''}${percentageFormatter.format(diffPercentage)}%`;
     const deltaVariant = diffPercentage >= 0 ? 'success' : 'danger';
+    const comparativaRangeLabel = formatRangeLabel(
+      appliedFilters.previousPeriod.startDate,
+      appliedFilters.previousPeriod.endDate,
+    );
 
     return (
       <Card className="h-100 shadow-sm">
@@ -244,7 +272,11 @@ export default function ComparativaDashboardPage() {
 
           <div>
             <div className="fs-3 fw-semibold">{currentValue}</div>
-            <div className="text-muted">Comparativa: {comparativaValue} ({diffLabel})</div>
+            <div className="text-muted">
+              Comparativa
+              {comparativaRangeLabel ? ` (${comparativaRangeLabel})` : ''}
+              : {comparativaValue} ({diffLabel})
+            </div>
           </div>
 
           <div>
