@@ -8,6 +8,9 @@
   # Aumentamos el timeout de bloqueo para Prisma en builds de Netlify; el pooler de Neon
   # puede tardar más de 10s en dar el advisory lock y fallaba el deploy (P1002).
   PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT = "60000"
+  # El engine de esquema también coge advisory locks al generar Prisma Client; evitamos
+  # que Netlify falle si tarda más de 10s en obtenerlo.
+  PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT = "60000"
 
 [functions]
   directory = "backend/functions"
