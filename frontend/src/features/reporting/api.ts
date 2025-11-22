@@ -356,10 +356,6 @@ export type ComparativaFilters = {
   costCenterId?: string;
   trainingType?: string;
   serviceType?: string;
-  channel?: string;
-  funnel?: string;
-  includeCancellations?: boolean;
-  includeNoShow?: boolean;
 };
 
 export type ComparativaKpi = {
@@ -469,10 +465,6 @@ export async function fetchComparativaDashboard(
   if (filters.costCenterId) params.set('costCenterId', filters.costCenterId);
   if (filters.trainingType) params.set('trainingType', filters.trainingType);
   if (filters.serviceType) params.set('serviceType', filters.serviceType);
-  if (filters.channel) params.set('channel', filters.channel);
-  if (filters.funnel) params.set('funnel', filters.funnel);
-  if (filters.includeCancellations) params.set('includeCancellations', 'true');
-  if (filters.includeNoShow) params.set('includeNoShow', 'true');
 
   const query = params.toString();
   const url = query.length

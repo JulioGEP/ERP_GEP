@@ -43,20 +43,6 @@ const SERVICE_TYPE_OPTIONS = [
   { value: 'consultoria', label: 'Consultoría' },
 ];
 
-const CHANNEL_OPTIONS = [
-  { value: '', label: 'Todos los canales' },
-  { value: 'online', label: 'Online' },
-  { value: 'presencial', label: 'Presencial' },
-  { value: 'hibrido', label: 'Híbrido' },
-];
-
-const FUNNEL_OPTIONS = [
-  { value: '', label: 'Todos los pasos del funnel' },
-  { value: 'captacion', label: 'Captación' },
-  { value: 'evaluacion', label: 'Evaluación' },
-  { value: 'conversion', label: 'Conversión' },
-];
-
 const BREAKDOWN_CONFIG = [
   {
     dimension: 'formacionEmpresaSite' as const,
@@ -952,53 +938,6 @@ export default function ComparativaDashboardPage() {
                   </option>
                 ))}
               </Form.Select>
-            </Col>
-
-            <Col xs={12} md={6} lg={2}>
-              <Form.Label className="small text-muted mb-1">Canal</Form.Label>
-              <Form.Select
-                size="sm"
-                value={filters.channel ?? ''}
-                onChange={(event) => handleSelectorChange('channel', event.target.value)}
-              >
-                {CHANNEL_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Form.Select>
-            </Col>
-
-            <Col xs={12} md={6} lg={2}>
-              <Form.Label className="small text-muted mb-1">Funnel</Form.Label>
-              <Form.Select
-                size="sm"
-                value={filters.funnel ?? ''}
-                onChange={(event) => handleSelectorChange('funnel', event.target.value)}
-              >
-                {FUNNEL_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Form.Select>
-            </Col>
-
-            <Col xs={12} md={6} lg={2}>
-              <Form.Check
-                type="switch"
-                id="comparativa-cancellations"
-                label={<span className="small">Incluir cancelaciones</span>}
-                checked={Boolean(filters.includeCancellations)}
-                onChange={(event) => handleSelectorChange('includeCancellations', event.target.checked)}
-              />
-              <Form.Check
-                type="switch"
-                id="comparativa-no-show"
-                label={<span className="small">Incluir no-show</span>}
-                checked={Boolean(filters.includeNoShow)}
-                onChange={(event) => handleSelectorChange('includeNoShow', event.target.checked)}
-              />
             </Col>
           </Row>
         </Card.Body>
