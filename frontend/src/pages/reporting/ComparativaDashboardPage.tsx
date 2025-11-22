@@ -646,8 +646,11 @@ export default function ComparativaDashboardPage() {
     title: string,
     category: string,
     emptyMessage: string,
+    options?: { columnLabel?: string; description?: string },
   ) => {
     const items = getRankingByCategory(category);
+    const columnLabel = options?.columnLabel ?? 'Producto';
+    const description = options?.description ?? 'Top productos en el rango seleccionado';
     const MAX_VISIBLE_ITEMS = 5;
     const RANKING_ROW_HEIGHT = 56;
     const RANKING_HEADER_HEIGHT = 48;
@@ -657,14 +660,14 @@ export default function ComparativaDashboardPage() {
         <Card.Body className="d-flex flex-column gap-3">
           <div>
             <Card.Title as="h6" className="mb-1">{title}</Card.Title>
-            <div className="text-muted small">Top productos en el rango seleccionado</div>
+            <div className="text-muted small">{description}</div>
           </div>
 
           <div className="table-responsive" style={{ maxHeight: rankingTableMaxHeight, overflowY: 'auto' }}>
             <table className="table align-middle mb-0">
               <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bs-body-bg)', zIndex: 1 }}>
                 <tr>
-                  <th className="text-muted small">Producto</th>
+                  <th className="text-muted small">{columnLabel}</th>
                   <th className="text-muted small text-end">Actual</th>
                   <th className="text-muted small text-end">Comparativa</th>
                   <th className="text-muted small text-end">Diferencia</th>
@@ -804,6 +807,33 @@ export default function ComparativaDashboardPage() {
               'Productos más usados · Formación Abierta',
               'formacionAbierta',
               'Sin productos registrados en el rango',
+            )}
+          </Col>
+        </Row>
+
+        <Row className="g-3">
+          <Col xs={12} lg={4}>
+            {renderRankingTable(
+              'Formadores Frecuentes · Formación Empresa',
+              'formacionEmpresaTrainers',
+              'Sin formadores registrados en el rango',
+              { columnLabel: 'Formador', description: 'Top formadores en el rango seleccionado' },
+            )}
+          </Col>
+          <Col xs={12} lg={4}>
+            {renderRankingTable(
+              'Formadores Frecuentes · GEP Services',
+              'gepServicesTrainers',
+              'Sin formadores registrados en el rango',
+              { columnLabel: 'Formador', description: 'Top formadores en el rango seleccionado' },
+            )}
+          </Col>
+          <Col xs={12} lg={4}>
+            {renderRankingTable(
+              'Formadores Frecuentes · Formación Abierta',
+              'formacionAbiertaTrainers',
+              'Sin formadores registrados en el rango',
+              { columnLabel: 'Formador', description: 'Top formadores en el rango seleccionado' },
             )}
           </Col>
         </Row>
