@@ -435,7 +435,7 @@ function buildComparativaDashboardFallback(): ComparativaDashboardResponse {
   const highlights: ComparativaKpi[] = [
     {
       key: 'gepServicesSessions',
-      label: 'Sumatorio de sesiones de GEP Services',
+      label: 'GEP Services',
       unit: 'number',
       value: 148,
       lastYearValue: 132,
@@ -444,7 +444,7 @@ function buildComparativaDashboardFallback(): ComparativaDashboardResponse {
     },
     {
       key: 'formacionEmpresaSessions',
-      label: 'Sumatorio de sesiones de Formacion Empresa',
+      label: 'Formacion Empresa',
       unit: 'number',
       value: 96,
       lastYearValue: 84,
@@ -453,7 +453,7 @@ function buildComparativaDashboardFallback(): ComparativaDashboardResponse {
     },
     {
       key: 'formacionAbiertaVariantesSessions',
-      label: 'Sumatorio de sesiones de Formación abierta (Variantes)',
+      label: 'Formación Abierta',
       unit: 'number',
       value: 62,
       lastYearValue: 58,
