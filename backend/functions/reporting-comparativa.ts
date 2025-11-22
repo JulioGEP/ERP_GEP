@@ -70,6 +70,16 @@ function buildIsoWeekKey(year: number, week: number): string {
   return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
+function isoWeekToDate(isoYear: number, isoWeek: number): Date {
+  const simple = new Date(Date.UTC(isoYear, 0, 1 + (isoWeek - 1) * 7));
+  const dayOfWeek = simple.getUTCDay();
+  const isoWeekStart = new Date(simple);
+  const diff = dayOfWeek <= 4 ? dayOfWeek - 1 : dayOfWeek - 8;
+  isoWeekStart.setUTCDate(simple.getUTCDate() - diff);
+  isoWeekStart.setUTCHours(0, 0, 0, 0);
+  return isoWeekStart;
+}
+
 function countByIsoWeek(dates: Date[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const date of dates) {
@@ -347,8 +357,11 @@ export const handler = createHttpHandler(async (request) => {
     },
   } as const;
 
-  const weeklyWindow = enumerateIsoWeeks(currentStart, currentEnd);
-  const previousWeeklyWindow = enumerateIsoWeeks(previousStart, previousEnd);
+  const unifiedStart = startOfISOWeek(currentStart < previousStart ? currentStart : previousStart);
+  const unifiedEnd = currentEnd > previousEnd ? currentEnd : previousEnd;
+  const weeklyWindow = enumerateIsoWeeks(unifiedStart, unifiedEnd);
+  const currentRangeStart = startOfISOWeek(currentStart);
+  const previousRangeStart = startOfISOWeek(previousStart);
 
   const gepCurrentCounts = countByIsoWeek(gepCurrentDates);
   const gepPreviousCounts = countByIsoWeek(gepPreviousDates);
@@ -407,17 +420,19 @@ export const handler = createHttpHandler(async (request) => {
   ) => ({
     metric,
     label,
-    points: weeklyWindow.map((week, index) => {
-      const previousWeek = previousWeeklyWindow[index];
+    points: weeklyWindow.map((week) => {
+      const weekStart = isoWeekToDate(week.isoYear, week.isoWeek);
+      const weekKey = buildIsoWeekKey(week.isoYear, week.isoWeek);
+
+      const isCurrentRange = weekStart >= currentRangeStart && weekStart <= currentEnd;
+      const isPreviousRange = weekStart >= previousRangeStart && weekStart <= previousEnd;
 
       return {
         periodLabel: week.label,
         isoYear: week.isoYear,
         isoWeek: week.isoWeek,
-        currentValue: currentCounts.get(buildIsoWeekKey(week.isoYear, week.isoWeek)) ?? 0,
-        previousValue: previousWeek
-          ? previousCounts.get(buildIsoWeekKey(previousWeek.isoYear, previousWeek.isoWeek)) ?? 0
-          : 0,
+        currentValue: isCurrentRange ? currentCounts.get(weekKey) ?? 0 : 0,
+        previousValue: isPreviousRange ? previousCounts.get(weekKey) ?? 0 : 0,
       };
     }),
   });
