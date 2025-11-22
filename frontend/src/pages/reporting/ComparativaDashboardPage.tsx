@@ -648,6 +648,10 @@ export default function ComparativaDashboardPage() {
     emptyMessage: string,
   ) => {
     const items = getRankingByCategory(category);
+    const MAX_VISIBLE_ITEMS = 5;
+    const RANKING_ROW_HEIGHT = 56;
+    const RANKING_HEADER_HEIGHT = 48;
+    const rankingTableMaxHeight = RANKING_HEADER_HEIGHT + MAX_VISIBLE_ITEMS * RANKING_ROW_HEIGHT;
     return (
       <Card className="h-100 shadow-sm">
         <Card.Body className="d-flex flex-column gap-3">
@@ -656,9 +660,9 @@ export default function ComparativaDashboardPage() {
             <div className="text-muted small">Top productos en el rango seleccionado</div>
           </div>
 
-          <div className="table-responsive">
+          <div className="table-responsive" style={{ maxHeight: rankingTableMaxHeight, overflowY: 'auto' }}>
             <table className="table align-middle mb-0">
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bs-body-bg)', zIndex: 1 }}>
                 <tr>
                   <th className="text-muted small">Producto</th>
                   <th className="text-muted small text-end">Actual</th>
