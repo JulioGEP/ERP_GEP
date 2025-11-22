@@ -139,6 +139,50 @@ function buildProductRanking(
     .map((item, index) => ({ ...item, rank: index + 1 }));
 }
 
+function getTrainerLabel(name: string | null | undefined): string {
+  const trimmedName = name?.trim();
+  if (trimmedName) return trimmedName;
+  return 'Sin formador';
+}
+
+function normalizeTrainerEntries(
+  trainers: Array<{ trainer: { name: string | null } | null }> | null | undefined,
+): Array<{ trainerName: string | null }> {
+  if (!trainers || trainers.length === 0) return [{ trainerName: null }];
+  return trainers.map((trainer) => ({ trainerName: trainer.trainer?.name ?? null }));
+}
+
+function buildTrainerRanking(
+  currentItems: Array<{ trainerName: string | null }>,
+  previousItems: Array<{ trainerName: string | null }>,
+  category: string,
+) {
+  const currentCounts = new Map<string, number>();
+  const previousCounts = new Map<string, number>();
+
+  for (const item of currentItems) {
+    const label = getTrainerLabel(item.trainerName);
+    currentCounts.set(label, (currentCounts.get(label) ?? 0) + 1);
+  }
+
+  for (const item of previousItems) {
+    const label = getTrainerLabel(item.trainerName);
+    previousCounts.set(label, (previousCounts.get(label) ?? 0) + 1);
+  }
+
+  const labels = new Set<string>([...currentCounts.keys(), ...previousCounts.keys()]);
+
+  return Array.from(labels)
+    .map((label) => ({
+      category,
+      label,
+      currentValue: currentCounts.get(label) ?? 0,
+      previousValue: previousCounts.get(label) ?? 0,
+    }))
+    .sort((a, b) => b.currentValue - a.currentValue || a.label.localeCompare(b.label))
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+}
+
 type SessionRow = {
   fecha_inicio_utc: Date | null;
   deals: {
@@ -153,6 +197,11 @@ type SessionRow = {
     name: string | null;
     code: string | null;
   } | null;
+  trainers: Array<{
+    trainer: {
+      name: string | null;
+    } | null;
+  }>;
 };
 
 type VariantRow = {
@@ -161,6 +210,9 @@ type VariantRow = {
   products: {
     name: string | null;
     code: string | null;
+  } | null;
+  trainer: {
+    name: string | null;
   } | null;
 };
 
@@ -275,6 +327,11 @@ export const handler = createHttpHandler(async (request) => {
           select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
         },
         deal_products: { select: { name: true, code: true } },
+        trainers: {
+          select: {
+            trainer: { select: { name: true } },
+          },
+        },
       },
     }) as Promise<SessionRow[]>,
     prisma.sesiones.findMany({
@@ -287,15 +344,30 @@ export const handler = createHttpHandler(async (request) => {
           select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
         },
         deal_products: { select: { name: true, code: true } },
+        trainers: {
+          select: {
+            trainer: { select: { name: true } },
+          },
+        },
       },
     }) as Promise<SessionRow[]>,
     prisma.variants.findMany({
       where: { date: { gte: currentStart, lt: currentEndExclusive } },
-      select: { date: true, sede: true, products: { select: { name: true, code: true } } },
+      select: {
+        date: true,
+        sede: true,
+        products: { select: { name: true, code: true } },
+        trainer: { select: { name: true } },
+      },
     }) as Promise<VariantRow[]>,
     prisma.variants.findMany({
       where: { date: { gte: previousStart, lt: previousEndExclusive } },
-      select: { date: true, sede: true, products: { select: { name: true, code: true } } },
+      select: {
+        date: true,
+        sede: true,
+        products: { select: { name: true, code: true } },
+        trainer: { select: { name: true } },
+      },
     }) as Promise<VariantRow[]>,
   ]);
 
@@ -457,10 +529,43 @@ export const handler = createHttpHandler(async (request) => {
     ...previousVariants.map((variant) => ({ productName: variant.products?.name ?? null, productCode: variant.products?.code ?? null })),
   ];
 
+  const formacionEmpresaCurrentTrainers = currentSessions
+    .filter((session) => classifySession(session) === 'formacionEmpresa')
+    .flatMap((session) => normalizeTrainerEntries(session.trainers));
+
+  const formacionEmpresaPreviousTrainers = previousSessions
+    .filter((session) => classifySession(session) === 'formacionEmpresa')
+    .flatMap((session) => normalizeTrainerEntries(session.trainers));
+
+  const gepServicesCurrentTrainers = currentSessions
+    .filter((session) => classifySession(session) === 'gepServices')
+    .flatMap((session) => normalizeTrainerEntries(session.trainers));
+
+  const gepServicesPreviousTrainers = previousSessions
+    .filter((session) => classifySession(session) === 'gepServices')
+    .flatMap((session) => normalizeTrainerEntries(session.trainers));
+
+  const formacionAbiertaCurrentTrainers = [
+    ...currentSessions
+      .filter((session) => classifySession(session) === 'formacionAbierta')
+      .flatMap((session) => normalizeTrainerEntries(session.trainers)),
+    ...currentVariants.map((variant) => ({ trainerName: variant.trainer?.name ?? null })),
+  ];
+
+  const formacionAbiertaPreviousTrainers = [
+    ...previousSessions
+      .filter((session) => classifySession(session) === 'formacionAbierta')
+      .flatMap((session) => normalizeTrainerEntries(session.trainers)),
+    ...previousVariants.map((variant) => ({ trainerName: variant.trainer?.name ?? null })),
+  ];
+
   const ranking = [
     ...buildProductRanking(formacionEmpresaCurrentProducts, formacionEmpresaPreviousProducts, 'formacionEmpresa'),
     ...buildProductRanking(gepServicesCurrentProducts, gepServicesPreviousProducts, 'gepServices'),
     ...buildProductRanking(formacionAbiertaCurrentProducts, formacionAbiertaPreviousProducts, 'formacionAbierta'),
+    ...buildTrainerRanking(formacionEmpresaCurrentTrainers, formacionEmpresaPreviousTrainers, 'formacionEmpresaTrainers'),
+    ...buildTrainerRanking(gepServicesCurrentTrainers, gepServicesPreviousTrainers, 'gepServicesTrainers'),
+    ...buildTrainerRanking(formacionAbiertaCurrentTrainers, formacionAbiertaPreviousTrainers, 'formacionAbiertaTrainers'),
   ];
 
   const highlights = [
