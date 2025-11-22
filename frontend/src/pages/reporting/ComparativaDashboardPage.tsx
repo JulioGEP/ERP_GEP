@@ -334,6 +334,17 @@ export default function ComparativaDashboardPage() {
     ];
   };
 
+  const getBinaryMix = (key: ComparativaBinaryMix['key']): ComparativaBinaryMix => {
+    const placeholder: ComparativaBinaryMix = {
+      key,
+      label: METRIC_CONFIG.find((item) => item.key === key)?.label ?? '',
+      yes: 0,
+      no: 0,
+    };
+
+    return dashboardQuery.data?.binaryMixes.find((item) => item.key === key) ?? placeholder;
+  };
+
   const renderMetric = (kpi: ComparativaKpi) => {
     const comparativaValue = numberFormatter.format(kpi.lastYearValue);
     const currentValue = numberFormatter.format(kpi.value);
