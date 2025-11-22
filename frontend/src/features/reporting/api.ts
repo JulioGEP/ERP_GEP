@@ -409,6 +409,17 @@ export type ComparativaDonutSlice = {
   percentage: number;
 };
 
+export type ComparativaBinaryMix = {
+  key:
+    | 'formacionEmpresaFundae'
+    | 'formacionEmpresaCaes'
+    | 'formacionEmpresaHotel'
+    | 'gepServicesCaes';
+  label: string;
+  yes: number;
+  no: number;
+};
+
 export type ComparativaHeatmapCell = {
   site: string;
   isoWeek: number;
@@ -437,6 +448,7 @@ export type ComparativaDashboardResponse = {
   trends: ComparativaTrend[];
   breakdowns: ComparativaBreakdown[];
   revenueMix: ComparativaDonutSlice[];
+  binaryMixes: ComparativaBinaryMix[];
   heatmap: ComparativaHeatmapCell[];
   funnel: ComparativaFunnelStage[];
   ranking: ComparativaRankingRow[];

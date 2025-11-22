@@ -6,6 +6,7 @@ import {
   fetchComparativaDashboard,
   type ComparativaFilters,
   type ComparativaKpi,
+  type ComparativaBinaryMix,
   type ComparativaTrend,
 } from '../../features/reporting/api';
 
@@ -296,6 +297,16 @@ export default function ComparativaDashboardPage() {
     return dashboardQuery.data?.breakdowns.filter((item) => item.dimension === dimension) ?? [];
   };
 
+  const buildBinarySlices = (mix: ComparativaBinaryMix | undefined) => {
+    if (!mix) return [] as { label: string; percentage: number }[];
+    const total = mix.yes + mix.no;
+    if (total === 0) return [];
+    return [
+      { label: 'Sí', percentage: (mix.yes / total) * 100 },
+      { label: 'No', percentage: (mix.no / total) * 100 },
+    ];
+  };
+
   const renderMetric = (kpi: ComparativaKpi) => {
     const comparativaValue = numberFormatter.format(kpi.lastYearValue);
     const currentValue = numberFormatter.format(kpi.value);
@@ -401,6 +412,11 @@ export default function ComparativaDashboardPage() {
       sparkline: Array(12).fill(0),
     };
     return dashboardQuery.data?.highlights.find((item) => item.key === key) ?? placeholder;
+  };
+
+  const getBinaryMix = (key: ComparativaBinaryMix['key']): ComparativaBinaryMix => {
+    const placeholder: ComparativaBinaryMix = { key, label: '', yes: 0, no: 0 };
+    return dashboardQuery.data?.binaryMixes.find((item) => item.key === key) ?? placeholder;
   };
 
   const renderWeeklyComparisonChart = (points: ComparativaTrend['points']) => {
@@ -518,6 +534,62 @@ export default function ComparativaDashboardPage() {
   const getTrendData = (metric: ComparativaTrend['metric']) => {
     const placeholder: ComparativaTrend = { metric, label: '', points: [] } as ComparativaTrend;
     return dashboardQuery.data?.trends.find((item) => item.metric === metric) ?? placeholder;
+  };
+
+  const renderDonutChart = (slices: { label: string; percentage: number }[]) => {
+    if (slices.length === 0) {
+      return <div className="text-muted small">Sin datos</div>;
+    }
+
+    const radius = 44;
+    const circumference = 2 * Math.PI * radius;
+    let offset = 0;
+    const colors = ['#0d6efd', '#adb5bd'];
+
+    return (
+      <div className="d-flex align-items-center gap-3">
+        <svg width={120} height={120} viewBox="0 0 120 120" role="img" aria-label="Distribución sí/no">
+          <g transform="rotate(-90 60 60)">
+            {slices.map((slice, index) => {
+              const dash = (slice.percentage / 100) * circumference;
+              const circle = (
+                <circle
+                  key={`${slice.label}-${index}`}
+                  cx="60"
+                  cy="60"
+                  r={radius}
+                  fill="transparent"
+                  stroke={colors[index]}
+                  strokeWidth={16}
+                  strokeDasharray={`${dash} ${circumference - dash}`}
+                  strokeDashoffset={-offset}
+                />
+              );
+              offset += dash;
+              return circle;
+            })}
+          </g>
+          <text x="50%" y="52%" textAnchor="middle" className="fw-semibold" fontSize={16} dominantBaseline="middle">
+            {percentageFormatter.format(slices[0].percentage)}%
+          </text>
+          <text x="50%" y="62%" textAnchor="middle" className="text-muted" fontSize={10} dominantBaseline="middle">
+            Sí
+          </text>
+        </svg>
+
+        <div className="d-flex flex-column gap-1 small">
+          {slices.map((slice, index) => (
+            <div key={`${slice.label}-${index}`} className="d-flex align-items-center gap-2">
+              <span
+                style={{ width: 14, height: 14, borderRadius: 3, display: 'inline-block', backgroundColor: colors[index] }}
+              />
+              <span className="text-muted">{slice.label}</span>
+              <span className="fw-semibold">{percentageFormatter.format(slice.percentage)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   const renderWeeklyTrendCard = (
@@ -641,6 +713,35 @@ export default function ComparativaDashboardPage() {
               'gepServicesSessions',
             )}
           </Col>
+        </Row>
+
+        <Row className="g-3">
+          {[ 
+            { key: 'formacionEmpresaFundae', description: 'Sesiones con FUNDAE sí/no' },
+            { key: 'formacionEmpresaCaes', description: 'Sesiones con CAES sí/no' },
+            { key: 'formacionEmpresaHotel', description: 'Sesiones con Hotel sí/no' },
+            { key: 'gepServicesCaes', description: 'Sesiones con CAES sí/no' },
+          ].map((item) => {
+            const mix = getBinaryMix(item.key as ComparativaBinaryMix['key']);
+            const slices = buildBinarySlices(mix);
+
+            return (
+              <Col xs={12} md={6} lg={3} key={item.key}>
+                <Card className="h-100 shadow-sm">
+                  <Card.Body className="d-flex flex-column gap-3">
+                    <div>
+                      <Card.Title as="h6" className="mb-1">
+                        {mix.label || 'Sin etiqueta'}
+                      </Card.Title>
+                      <div className="text-muted small">{item.description}</div>
+                    </div>
+
+                    {renderDonutChart(slices)}
+                  </Card.Body>
+                </Card>
+              </Col>
+            );
+          })}
         </Row>
 
         <Row className="g-3">
