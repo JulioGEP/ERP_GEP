@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Badge, Button, Card, Col, Collapse, Form, ListGroup, Row, Spinner } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
@@ -330,6 +330,17 @@ export default function ComparativaDashboardPage() {
     [],
   );
 
+  const formatPercentageDifference = useCallback(
+    (current: number, previous: number) => {
+      if (previous === 0) return '0%';
+
+      const diff = current - previous;
+      const percentage = (diff / previous) * 100;
+      return `${percentage >= 0 ? '+' : ''}${percentageFormatter.format(percentage)}%`;
+    },
+    [percentageFormatter],
+  );
+
   const siteOptions = dashboardQuery.data?.filterOptions.sites ?? [];
   const trainingTypeOptions = dashboardQuery.data?.filterOptions.trainingTypes ?? [];
   const comercialOptions = dashboardQuery.data?.filterOptions.comerciales ?? [];
@@ -514,6 +525,7 @@ export default function ComparativaDashboardPage() {
                 {items.map((item) => {
                   const diff = item.current - item.previous;
                   const diffLabel = `${diff >= 0 ? '+' : ''}${numberFormatter.format(diff)}`;
+                  const percentageLabel = formatPercentageDifference(item.current, item.previous);
                   const badgeVariant = diff > 0 ? 'success' : diff < 0 ? 'danger' : 'secondary';
 
                   return (
@@ -522,7 +534,10 @@ export default function ComparativaDashboardPage() {
                       <td className="text-end fw-semibold">{numberFormatter.format(item.current)}</td>
                       <td className="text-end">{numberFormatter.format(item.previous)}</td>
                       <td className="text-end">
-                        <Badge bg={badgeVariant}>{diffLabel}</Badge>
+                        <div className="d-flex align-items-center justify-content-end gap-2">
+                          <Badge bg={badgeVariant}>{diffLabel}</Badge>
+                          <span className="text-muted small">{percentageLabel}</span>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -794,6 +809,7 @@ export default function ComparativaDashboardPage() {
                   const diff = item.currentValue - item.previousValue;
                   const badgeVariant = diff > 0 ? 'success' : diff < 0 ? 'danger' : 'secondary';
                   const diffLabel = `${diff >= 0 ? '+' : ''}${numberFormatter.format(diff)}`;
+                  const percentageLabel = formatPercentageDifference(item.currentValue, item.previousValue);
 
                   return (
                     <tr key={`${category}-${item.label}`}>
@@ -801,7 +817,10 @@ export default function ComparativaDashboardPage() {
                       <td className="text-end fw-semibold">{numberFormatter.format(item.currentValue)}</td>
                       <td className="text-end">{numberFormatter.format(item.previousValue)}</td>
                       <td className="text-end">
-                        <Badge bg={badgeVariant}>{diffLabel}</Badge>
+                        <div className="d-flex align-items-center justify-content-end gap-2">
+                          <Badge bg={badgeVariant}>{diffLabel}</Badge>
+                          <span className="text-muted small">{percentageLabel}</span>
+                        </div>
                       </td>
                     </tr>
                   );
