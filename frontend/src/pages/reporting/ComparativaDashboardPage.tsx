@@ -36,13 +36,6 @@ const TRAINING_TYPE_OPTIONS = [
   { value: 'formacionAbierta', label: 'Formación Abierta' },
 ];
 
-const SERVICE_TYPE_OPTIONS = [
-  { value: '', label: 'Todos los tipos de servicio' },
-  { value: 'preventivo', label: 'Preventivo' },
-  { value: 'correctivo', label: 'Correctivo' },
-  { value: 'consultoria', label: 'Consultoría' },
-];
-
 const BREAKDOWN_CONFIG = [
   {
     dimension: 'formacionEmpresaSite' as const,
@@ -844,9 +837,9 @@ export default function ComparativaDashboardPage() {
   return (
     <div className="p-3">
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-        <div>
-          <h4 className="mb-1">Comparativa</h4>
-          <div className="text-muted">Revisa la evolución semanal de sesiones y su comparación</div>
+        <div className="d-flex align-items-center gap-2">
+          <h4 className="mb-0">Comparativa</h4>
+          <div className="text-muted">Elige fechas y compara</div>
         </div>
       </div>
 
@@ -959,20 +952,6 @@ export default function ComparativaDashboardPage() {
               </Form.Select>
             </Col>
 
-            <Col xs={12} md={6} lg={2}>
-              <Form.Label className="small text-muted mb-1">Tipo de servicio</Form.Label>
-              <Form.Select
-                size="sm"
-                value={filters.serviceType ?? ''}
-                onChange={(event) => handleSelectorChange('serviceType', event.target.value)}
-              >
-                {SERVICE_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Form.Select>
-            </Col>
           </Row>
         </Card.Body>
       </Card>
