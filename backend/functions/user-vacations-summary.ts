@@ -30,7 +30,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     return successResponse({ year, generatedAt: new Date().toISOString(), users: [] });
   }
 
-  const userIds = users.map((user) => user.id);
+  const userIds = users.map((user: (typeof users)[number]) => user.id);
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year + 1, 0, 1));
 
@@ -44,7 +44,9 @@ export const handler = createHttpHandler<any>(async (request) => {
     }),
   ]);
 
-  const balanceMap = new Map(balances.map((balance) => [balance.user_id, balance]));
+  const balanceMap = new Map<string, (typeof balances)[number]>(
+    balances.map((balance: (typeof balances)[number]) => [balance.user_id, balance]),
+  );
   const daysByUser = new Map<string, typeof days>();
 
   for (const day of days) {
@@ -54,11 +56,11 @@ export const handler = createHttpHandler<any>(async (request) => {
   }
 
   const todayIso = formatDateOnly(new Date());
-  const userSummaries = users.map((user) => {
+  const userSummaries = users.map((user: (typeof users)[number]) => {
     const userDays = daysByUser.get(user.id) ?? [];
     const counts: Record<'A' | 'F' | 'L' | 'C' | 'T', number> = { A: 0, F: 0, L: 0, C: 0, T: 0 };
 
-    const normalizedDays = userDays.map((day) => {
+    const normalizedDays = userDays.map((day: (typeof userDays)[number]) => {
       const key = day.type as keyof typeof counts;
       if (counts[key] !== undefined) counts[key] += 1;
       return { date: formatDateOnly(day.date), type: day.type };
@@ -69,9 +71,9 @@ export const handler = createHttpHandler<any>(async (request) => {
     const remaining = allowance !== null ? allowance - enjoyed : null;
 
     const upcomingDates = normalizedDays
-      .filter((day) => day.date >= todayIso)
+      .filter((day: (typeof normalizedDays)[number]) => day.date >= todayIso)
       .slice(0, 5)
-      .map((day) => day.date);
+      .map((day: (typeof normalizedDays)[number]) => day.date);
 
     return {
       userId: user.id,

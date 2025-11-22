@@ -73,6 +73,6 @@ export async function buildVacationPayload(
     enjoyed,
     remaining,
     counts,
-    days: days.map((day) => ({ date: formatDateOnly(day.date), type: day.type })),
+    days: days.map((day: typeof days[number]) => ({ date: formatDateOnly(day.date), type: day.type })),
   };
 }
