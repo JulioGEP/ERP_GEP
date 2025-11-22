@@ -15,6 +15,47 @@ const METRIC_CONFIG: { key: string; label: string }[] = [
   { key: 'formacionAbiertaVariantesSessions', label: 'Formación Abierta' },
 ];
 
+const SITE_OPTIONS = [
+  { value: '', label: 'Todas las sedes' },
+  { value: 'madrid', label: 'Madrid' },
+  { value: 'barcelona', label: 'Barcelona' },
+  { value: 'online', label: 'Online' },
+];
+
+const COST_CENTER_OPTIONS = [
+  { value: '', label: 'Todos los centros de coste' },
+  { value: 'gep', label: 'GEP' },
+  { value: 'formacion', label: 'Formación' },
+  { value: 'servicios', label: 'Servicios' },
+];
+
+const TRAINING_TYPE_OPTIONS = [
+  { value: '', label: 'Todos los tipos de formación' },
+  { value: 'formacionEmpresa', label: 'Formación Empresa' },
+  { value: 'formacionAbierta', label: 'Formación Abierta' },
+];
+
+const SERVICE_TYPE_OPTIONS = [
+  { value: '', label: 'Todos los tipos de servicio' },
+  { value: 'preventivo', label: 'Preventivo' },
+  { value: 'correctivo', label: 'Correctivo' },
+  { value: 'consultoria', label: 'Consultoría' },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: '', label: 'Todos los canales' },
+  { value: 'online', label: 'Online' },
+  { value: 'presencial', label: 'Presencial' },
+  { value: 'hibrido', label: 'Híbrido' },
+];
+
+const FUNNEL_OPTIONS = [
+  { value: '', label: 'Todos los pasos del funnel' },
+  { value: 'captacion', label: 'Captación' },
+  { value: 'evaluacion', label: 'Evaluación' },
+  { value: 'conversion', label: 'Conversión' },
+];
+
 const BREAKDOWN_CONFIG = [
   {
     dimension: 'formacionEmpresaSite' as const,
@@ -239,6 +280,13 @@ export default function ComparativaDashboardPage() {
         startDate: toPreviousYearDate(range.startDate),
         endDate: toPreviousYearDate(range.endDate),
       },
+    }));
+  };
+
+  const handleSelectorChange = (key: keyof Omit<ComparativaFilters, 'currentPeriod' | 'previousPeriod' | 'granularity'>, value: string | boolean) => {
+    setFilters((prev) => ({
+      ...prev,
+      [key]: typeof value === 'string' && value === '' ? undefined : value,
     }));
   };
 
@@ -640,8 +688,8 @@ export default function ComparativaDashboardPage() {
       </div>
 
       <Card className="shadow-sm">
-        <Card.Body>
-          <div className="d-flex flex-wrap gap-2 mb-3">
+        <Card.Body className="pb-3">
+          <div className="d-flex flex-wrap gap-2 mb-2">
             {quickRanges.map((item) => (
               <Button
                 key={item.label}
@@ -654,22 +702,24 @@ export default function ComparativaDashboardPage() {
             ))}
           </div>
 
-          <Row className="g-3">
-            <Col xs={12} md={6}>
-              <div className="fw-semibold mb-2">Fechas</div>
-              <Row className="g-2">
+          <Row className="g-2 align-items-end">
+            <Col xs={12} md={6} lg={3}>
+              <div className="fw-semibold mb-1 small text-uppercase text-muted">Fechas</div>
+              <Row className="g-1">
                 <Col>
-                  <Form.Label className="small text-muted">Fecha inicio</Form.Label>
+                  <Form.Label className="small text-muted mb-1">Inicio</Form.Label>
                   <Form.Control
                     type="date"
+                    size="sm"
                     value={filters.currentPeriod.startDate}
                     onChange={(event) => handleDateChange('currentPeriod', 'startDate', event.target.value)}
                   />
                 </Col>
                 <Col>
-                  <Form.Label className="small text-muted">Fecha fin</Form.Label>
+                  <Form.Label className="small text-muted mb-1">Fin</Form.Label>
                   <Form.Control
                     type="date"
+                    size="sm"
                     value={filters.currentPeriod.endDate}
                     onChange={(event) => handleDateChange('currentPeriod', 'endDate', event.target.value)}
                   />
@@ -677,26 +727,135 @@ export default function ComparativaDashboardPage() {
               </Row>
             </Col>
 
-            <Col xs={12} md={6}>
-              <div className="fw-semibold mb-2">Comparativa</div>
-              <Row className="g-2">
+            <Col xs={12} md={6} lg={3}>
+              <div className="fw-semibold mb-1 small text-uppercase text-muted">Comparativa</div>
+              <Row className="g-1">
                 <Col>
-                  <Form.Label className="small text-muted">Fecha inicio</Form.Label>
+                  <Form.Label className="small text-muted mb-1">Inicio</Form.Label>
                   <Form.Control
                     type="date"
+                    size="sm"
                     value={filters.previousPeriod.startDate}
                     onChange={(event) => handleDateChange('previousPeriod', 'startDate', event.target.value)}
                   />
                 </Col>
                 <Col>
-                  <Form.Label className="small text-muted">Fecha fin</Form.Label>
+                  <Form.Label className="small text-muted mb-1">Fin</Form.Label>
                   <Form.Control
                     type="date"
+                    size="sm"
                     value={filters.previousPeriod.endDate}
                     onChange={(event) => handleDateChange('previousPeriod', 'endDate', event.target.value)}
                   />
                 </Col>
               </Row>
+            </Col>
+
+            <Col xs={12} md={6} lg={2}>
+              <Form.Label className="small text-muted mb-1">Sede</Form.Label>
+              <Form.Select
+                size="sm"
+                value={filters.siteId ?? ''}
+                onChange={(event) => handleSelectorChange('siteId', event.target.value)}
+              >
+                {SITE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+
+            <Col xs={12} md={6} lg={2}>
+              <Form.Label className="small text-muted mb-1">Centro de coste</Form.Label>
+              <Form.Select
+                size="sm"
+                value={filters.costCenterId ?? ''}
+                onChange={(event) => handleSelectorChange('costCenterId', event.target.value)}
+              >
+                {COST_CENTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+
+            <Col xs={12} md={6} lg={2}>
+              <Form.Label className="small text-muted mb-1">Tipo de formación</Form.Label>
+              <Form.Select
+                size="sm"
+                value={filters.trainingType ?? ''}
+                onChange={(event) => handleSelectorChange('trainingType', event.target.value)}
+              >
+                {TRAINING_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+
+            <Col xs={12} md={6} lg={2}>
+              <Form.Label className="small text-muted mb-1">Tipo de servicio</Form.Label>
+              <Form.Select
+                size="sm"
+                value={filters.serviceType ?? ''}
+                onChange={(event) => handleSelectorChange('serviceType', event.target.value)}
+              >
+                {SERVICE_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+
+            <Col xs={12} md={6} lg={2}>
+              <Form.Label className="small text-muted mb-1">Canal</Form.Label>
+              <Form.Select
+                size="sm"
+                value={filters.channel ?? ''}
+                onChange={(event) => handleSelectorChange('channel', event.target.value)}
+              >
+                {CHANNEL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+
+            <Col xs={12} md={6} lg={2}>
+              <Form.Label className="small text-muted mb-1">Funnel</Form.Label>
+              <Form.Select
+                size="sm"
+                value={filters.funnel ?? ''}
+                onChange={(event) => handleSelectorChange('funnel', event.target.value)}
+              >
+                {FUNNEL_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Form.Select>
+            </Col>
+
+            <Col xs={12} md={6} lg={2}>
+              <Form.Check
+                type="switch"
+                id="comparativa-cancellations"
+                label={<span className="small">Incluir cancelaciones</span>}
+                checked={Boolean(filters.includeCancellations)}
+                onChange={(event) => handleSelectorChange('includeCancellations', event.target.checked)}
+              />
+              <Form.Check
+                type="switch"
+                id="comparativa-no-show"
+                label={<span className="small">Incluir no-show</span>}
+                checked={Boolean(filters.includeNoShow)}
+                onChange={(event) => handleSelectorChange('includeNoShow', event.target.checked)}
+              />
             </Col>
           </Row>
         </Card.Body>
