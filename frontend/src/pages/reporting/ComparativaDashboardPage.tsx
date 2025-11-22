@@ -222,13 +222,13 @@ export default function ComparativaDashboardPage() {
   const renderMetric = (kpi: ComparativaKpi) => {
     const comparativaValue = numberFormatter.format(kpi.lastYearValue);
     const currentValue = numberFormatter.format(kpi.value);
-    const diff = kpi.value - kpi.lastYearValue;
-    const diffLabel = `${diff >= 0 ? '+' : ''}${numberFormatter.format(diff)}`;
-    const diffPercentage = kpi.lastYearValue === 0
+    const absoluteDifference = kpi.value - kpi.lastYearValue;
+    const absoluteDifferenceLabel = `${absoluteDifference >= 0 ? '+' : ''}${numberFormatter.format(absoluteDifference)}`;
+    const percentageDifference = kpi.lastYearValue === 0
       ? 0
-      : (diff / kpi.lastYearValue) * 100;
-    const diffPercentageLabel = `${diffPercentage >= 0 ? '+' : ''}${percentageFormatter.format(diffPercentage)}%`;
-    const deltaVariant = diffPercentage >= 0 ? 'success' : 'danger';
+      : (absoluteDifference / kpi.lastYearValue) * 100;
+    const percentageDifferenceLabel = `${percentageDifference >= 0 ? '+' : ''}${percentageFormatter.format(percentageDifference)}%`;
+    const deltaVariant = percentageDifference > 0 ? 'success' : percentageDifference < 0 ? 'danger' : 'secondary';
 
     return (
       <Card className="h-100 shadow-sm">
@@ -238,13 +238,14 @@ export default function ComparativaDashboardPage() {
               {kpi.label}
             </Card.Title>
             <Badge bg={deltaVariant} pill>
-              {diffPercentageLabel} vs comparativa
+              {percentageDifferenceLabel}
             </Badge>
           </div>
 
           <div>
             <div className="fs-3 fw-semibold">{currentValue}</div>
-            <div className="text-muted">Comparativa: {comparativaValue} ({diffLabel})</div>
+            <div className="text-muted">Comparativa: {comparativaValue}</div>
+            <div className="text-muted">Diferencia absoluta: {absoluteDifferenceLabel}</div>
           </div>
 
           <div>
