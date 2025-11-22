@@ -211,7 +211,7 @@ type VariantRow = {
     name: string | null;
     code: string | null;
   } | null;
-  trainer: {
+  trainers: {
     name: string | null;
   } | null;
 };
@@ -357,7 +357,7 @@ export const handler = createHttpHandler(async (request) => {
         date: true,
         sede: true,
         products: { select: { name: true, code: true } },
-        trainer: { select: { name: true } },
+        trainers: { select: { name: true } },
       },
     }) as Promise<VariantRow[]>,
     prisma.variants.findMany({
@@ -366,7 +366,7 @@ export const handler = createHttpHandler(async (request) => {
         date: true,
         sede: true,
         products: { select: { name: true, code: true } },
-        trainer: { select: { name: true } },
+        trainers: { select: { name: true } },
       },
     }) as Promise<VariantRow[]>,
   ]);
@@ -549,14 +549,14 @@ export const handler = createHttpHandler(async (request) => {
     ...currentSessions
       .filter((session) => classifySession(session) === 'formacionAbierta')
       .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers)),
-    ...currentVariants.map((variant) => ({ trainerName: variant.trainer?.name ?? null })),
+    ...currentVariants.map((variant) => ({ trainerName: variant.trainers?.name ?? null })),
   ];
 
   const formacionAbiertaPreviousTrainers = [
     ...previousSessions
       .filter((session) => classifySession(session) === 'formacionAbierta')
       .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers)),
-    ...previousVariants.map((variant) => ({ trainerName: variant.trainer?.name ?? null })),
+    ...previousVariants.map((variant) => ({ trainerName: variant.trainers?.name ?? null })),
   ];
 
   const ranking = [
