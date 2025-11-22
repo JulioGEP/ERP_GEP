@@ -137,6 +137,28 @@ function buildYearRange(reference: Date) {
   } as const;
 }
 
+function formatDisplayDate(value: string) {
+  if (!value) return '';
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(parsed);
+}
+
+function formatDisplayRange(range: { startDate: string; endDate: string }) {
+  const start = formatDisplayDate(range.startDate);
+  const end = formatDisplayDate(range.endDate);
+
+  if (start && start === end) return start;
+  if (start && end) return `${start} - ${end}`;
+  return start || end || '';
+}
+
 function toPreviousYearDate(value: string) {
   if (!value) return '';
 
@@ -183,6 +205,11 @@ export default function ComparativaDashboardPage() {
     previousPeriod: buildComparisonPeriod(today),
     granularity: 'isoWeek',
   });
+
+  const comparisonRangeLabel = useMemo(
+    () => formatDisplayRange(filters.previousPeriod),
+    [filters.previousPeriod],
+  );
 
   const quickRanges = useMemo(
     () => [
@@ -414,12 +441,10 @@ export default function ComparativaDashboardPage() {
     return dashboardQuery.data?.highlights.find((item) => item.key === key) ?? placeholder;
   };
 
-  const getBinaryMix = (key: ComparativaBinaryMix['key']): ComparativaBinaryMix => {
-    const placeholder: ComparativaBinaryMix = { key, label: '', yes: 0, no: 0 };
-    return dashboardQuery.data?.binaryMixes.find((item) => item.key === key) ?? placeholder;
-  };
-
-  const renderWeeklyComparisonChart = (points: ComparativaTrend['points']) => {
+  const renderWeeklyComparisonChart = (
+    points: ComparativaTrend['points'],
+    comparisonLabel: string,
+  ) => {
     if (points.length === 0) {
       return <div className="text-muted small">Sin datos para mostrar</div>;
     }
@@ -524,7 +549,7 @@ export default function ComparativaDashboardPage() {
             <span
               style={{ width: 14, height: 14, borderRadius: 999, display: 'inline-block', backgroundColor: '#198754' }}
             />
-            2024 (línea)
+            {comparisonLabel ? `Comparativa (${comparisonLabel})` : 'Comparativa (línea)'}
           </span>
         </div>
       </div>
@@ -608,7 +633,7 @@ export default function ComparativaDashboardPage() {
             <div className="text-muted small">{description}</div>
           </div>
 
-          {renderWeeklyComparisonChart(trend.points)}
+          {renderWeeklyComparisonChart(trend.points, comparisonRangeLabel)}
         </Card.Body>
       </Card>
     );
@@ -690,6 +715,10 @@ export default function ComparativaDashboardPage() {
       return <div className="text-danger">{errorMessage}</div>;
     }
 
+    const comparisonDescription = comparisonRangeLabel
+      ? `Comparativa del periodo frente al rango ${comparisonRangeLabel}`
+      : 'Comparativa del periodo frente al rango seleccionado';
+
     return (
       <div className="d-flex flex-column gap-4 mt-3">
         <Row xs={1} md={2} lg={3} className="g-3">
@@ -702,14 +731,14 @@ export default function ComparativaDashboardPage() {
           <Col xs={12} lg={6}>
             {renderWeeklyTrendCard(
               'Formación Empresa por semana ISO',
-              'Comparativa del periodo frente al año 2024',
+              comparisonDescription,
               'formacionEmpresaSessions',
             )}
           </Col>
           <Col xs={12} lg={6}>
             {renderWeeklyTrendCard(
               'GEP Services por semana ISO',
-              'Comparativa del periodo frente al año 2024',
+              comparisonDescription,
               'gepServicesSessions',
             )}
           </Col>
