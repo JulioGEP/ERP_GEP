@@ -18,6 +18,16 @@ function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function toPreviousYearDate(value: string) {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  date.setFullYear(date.getFullYear() - 1);
+  return formatDate(date);
+}
+
 function buildInitialPeriod(today: Date, weeksBack: number) {
   const start = new Date(today);
   start.setDate(start.getDate() - weeksBack * 7 + 1);
@@ -90,13 +100,24 @@ export default function ComparativaDashboardPage() {
     key: 'startDate' | 'endDate',
     value: string,
   ) => {
-    setFilters((prev) => ({
-      ...prev,
-      [period]: {
-        ...prev[period],
-        [key]: value,
-      },
-    }));
+    setFilters((prev) => {
+      const updated: ComparativaFilters = {
+        ...prev,
+        [period]: {
+          ...prev[period],
+          [key]: value,
+        },
+      };
+
+      if (period === 'currentPeriod') {
+        updated.previousPeriod = {
+          ...prev.previousPeriod,
+          [key]: toPreviousYearDate(value),
+        };
+      }
+
+      return updated;
+    });
   };
 
   const renderSparkline = (points: number[]) => {
