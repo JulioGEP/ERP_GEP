@@ -263,11 +263,8 @@ export const handler = createHttpHandler(async (request) => {
 
   const currentEndExclusive = addDays(currentEnd, 1);
   const previousEndExclusive = addDays(previousEnd, 1);
-  const baselineYear = 2024;
-  const baselineStart = new Date(Date.UTC(baselineYear, 0, 1));
-  const baselineEndExclusive = new Date(Date.UTC(baselineYear + 1, 0, 1));
 
-  const [currentSessions, previousSessions, currentVariants, previousVariants, baselineSessions] = await Promise.all([
+  const [currentSessions, previousSessions, currentVariants, previousVariants] = await Promise.all([
     prisma.sesiones.findMany({
       where: {
         fecha_inicio_utc: { gte: currentStart, lt: currentEndExclusive },
@@ -300,31 +297,23 @@ export const handler = createHttpHandler(async (request) => {
       where: { date: { gte: previousStart, lt: previousEndExclusive } },
       select: { date: true, sede: true, products: { select: { name: true, code: true } } },
     }) as Promise<VariantRow[]>,
-    prisma.sesiones.findMany({
-      where: { fecha_inicio_utc: { gte: baselineStart, lt: baselineEndExclusive } },
-      select: {
-        fecha_inicio_utc: true,
-        deals: {
-          select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
-        },
-        deal_products: { select: { name: true, code: true } },
-      },
-    }) as Promise<SessionRow[]>,
   ]);
 
   const weeks = 12;
 
   const gepCurrentDates = toDateList(currentSessions, (row) => classifySession(row as SessionRow) === 'gepServices');
-  const gepPrevious = toDateList(previousSessions, (row) => classifySession(row as SessionRow) === 'gepServices').length;
+  const gepPreviousDates = toDateList(previousSessions, (row) => classifySession(row as SessionRow) === 'gepServices');
+  const gepPrevious = gepPreviousDates.length;
 
   const formacionEmpresaCurrentDates = toDateList(
     currentSessions,
     (row) => classifySession(row as SessionRow) === 'formacionEmpresa',
   );
-  const formacionEmpresaPrevious = toDateList(
+  const formacionEmpresaPreviousDates = toDateList(
     previousSessions,
     (row) => classifySession(row as SessionRow) === 'formacionEmpresa',
-  ).length;
+  );
+  const formacionEmpresaPrevious = formacionEmpresaPreviousDates.length;
 
   const formacionAbiertaCurrentDates = [
     ...toDateList(currentSessions, (row) => classifySession(row as SessionRow) === 'formacionAbierta'),
@@ -359,16 +348,13 @@ export const handler = createHttpHandler(async (request) => {
   } as const;
 
   const weeklyWindow = enumerateIsoWeeks(currentStart, currentEnd);
+  const previousWeeklyWindow = enumerateIsoWeeks(previousStart, previousEnd);
 
-  const gepBaselineCounts = countByIsoWeek(
-    toDateList(baselineSessions, (row) => classifySession(row as SessionRow) === 'gepServices'),
-  );
   const gepCurrentCounts = countByIsoWeek(gepCurrentDates);
+  const gepPreviousCounts = countByIsoWeek(gepPreviousDates);
 
-  const formacionEmpresaBaselineCounts = countByIsoWeek(
-    toDateList(baselineSessions, (row) => classifySession(row as SessionRow) === 'formacionEmpresa'),
-  );
   const formacionEmpresaCurrentCounts = countByIsoWeek(formacionEmpresaCurrentDates);
+  const formacionEmpresaPreviousCounts = countByIsoWeek(formacionEmpresaPreviousDates);
 
   const formacionEmpresaSiteCurrentCounts = new Map<string, number>();
   const formacionEmpresaSitePreviousCounts = new Map<string, number>();
@@ -417,22 +403,28 @@ export const handler = createHttpHandler(async (request) => {
     label: string,
     metric: 'formacionEmpresaSessions' | 'gepServicesSessions',
     currentCounts: Map<string, number>,
-    baselineCounts: Map<string, number>,
+    previousCounts: Map<string, number>,
   ) => ({
     metric,
     label,
-    points: weeklyWindow.map((week) => ({
-      periodLabel: week.label,
-      isoYear: week.isoYear,
-      isoWeek: week.isoWeek,
-      currentValue: currentCounts.get(buildIsoWeekKey(week.isoYear, week.isoWeek)) ?? 0,
-      previousValue: baselineCounts.get(buildIsoWeekKey(baselineYear, week.isoWeek)) ?? 0,
-    })),
+    points: weeklyWindow.map((week, index) => {
+      const previousWeek = previousWeeklyWindow[index];
+
+      return {
+        periodLabel: week.label,
+        isoYear: week.isoYear,
+        isoWeek: week.isoWeek,
+        currentValue: currentCounts.get(buildIsoWeekKey(week.isoYear, week.isoWeek)) ?? 0,
+        previousValue: previousWeek
+          ? previousCounts.get(buildIsoWeekKey(previousWeek.isoYear, previousWeek.isoWeek)) ?? 0
+          : 0,
+      };
+    }),
   });
 
   const trends = [
-    buildWeeklyTrend('Formación Empresa vs 2024', 'formacionEmpresaSessions', formacionEmpresaCurrentCounts, formacionEmpresaBaselineCounts),
-    buildWeeklyTrend('GEP Services vs 2024', 'gepServicesSessions', gepCurrentCounts, gepBaselineCounts),
+    buildWeeklyTrend('Formación Empresa vs comparativa', 'formacionEmpresaSessions', formacionEmpresaCurrentCounts, formacionEmpresaPreviousCounts),
+    buildWeeklyTrend('GEP Services vs comparativa', 'gepServicesSessions', gepCurrentCounts, gepPreviousCounts),
   ];
 
   const formacionEmpresaCurrentProducts = currentSessions
