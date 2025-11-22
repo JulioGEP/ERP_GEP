@@ -28,22 +28,21 @@ function toPreviousYearDate(value: string) {
   return formatDate(date);
 }
 
-function buildInitialPeriod(today: Date, weeksBack: number) {
+function buildInitialPeriod(today: Date) {
   const start = new Date(today);
-  start.setDate(start.getDate() - weeksBack * 7 + 1);
+  start.setDate(1);
+
+  const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
   return {
     startDate: formatDate(start),
-    endDate: formatDate(today),
+    endDate: formatDate(end),
   } as const;
 }
 
-function buildComparisonPeriod(today: Date, weeksBack: number) {
-  const start = new Date(today);
-  start.setFullYear(start.getFullYear() - 1);
-  start.setDate(start.getDate() - weeksBack * 7 + 1);
-
-  const end = new Date(today);
-  end.setFullYear(end.getFullYear() - 1);
+function buildComparisonPeriod(today: Date) {
+  const start = new Date(today.getFullYear() - 1, today.getMonth(), 1);
+  const end = new Date(today.getFullYear() - 1, today.getMonth() + 1, 0);
 
   return {
     startDate: formatDate(start),
@@ -60,11 +59,9 @@ function normalizeSparkline(points?: number[]) {
 
 export default function ComparativaDashboardPage() {
   const today = useMemo(() => new Date(), []);
-  const initialWeeks = 12;
-
   const [filters, setFilters] = useState<ComparativaFilters>({
-    currentPeriod: buildInitialPeriod(today, initialWeeks),
-    previousPeriod: buildComparisonPeriod(today, initialWeeks),
+    currentPeriod: buildInitialPeriod(today),
+    previousPeriod: buildComparisonPeriod(today),
     granularity: 'isoWeek',
   });
 
