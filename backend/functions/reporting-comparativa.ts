@@ -146,10 +146,10 @@ function getTrainerLabel(name: string | null | undefined): string {
 }
 
 function normalizeTrainerEntries(
-  trainers: Array<{ trainer: { name: string | null } | null }> | null | undefined,
+  trainers: Array<{ trainers: { name: string | null } | null }> | null | undefined,
 ): Array<{ trainerName: string | null }> {
   if (!trainers || trainers.length === 0) return [{ trainerName: null }];
-  return trainers.map((trainer) => ({ trainerName: trainer.trainer?.name ?? null }));
+  return trainers.map((trainer) => ({ trainerName: trainer.trainers?.name ?? null }));
 }
 
 function buildTrainerRanking(
@@ -197,8 +197,8 @@ type SessionRow = {
     name: string | null;
     code: string | null;
   } | null;
-  trainers: Array<{
-    trainer: {
+  sesion_trainers: Array<{
+    trainers: {
       name: string | null;
     } | null;
   }>;
@@ -327,9 +327,9 @@ export const handler = createHttpHandler(async (request) => {
           select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
         },
         deal_products: { select: { name: true, code: true } },
-        trainers: {
+        sesion_trainers: {
           select: {
-            trainer: { select: { name: true } },
+            trainers: { select: { name: true } },
           },
         },
       },
@@ -344,9 +344,9 @@ export const handler = createHttpHandler(async (request) => {
           select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
         },
         deal_products: { select: { name: true, code: true } },
-        trainers: {
+        sesion_trainers: {
           select: {
-            trainer: { select: { name: true } },
+            trainers: { select: { name: true } },
           },
         },
       },
@@ -531,31 +531,31 @@ export const handler = createHttpHandler(async (request) => {
 
   const formacionEmpresaCurrentTrainers = currentSessions
     .filter((session) => classifySession(session) === 'formacionEmpresa')
-    .flatMap((session) => normalizeTrainerEntries(session.trainers));
+    .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers));
 
   const formacionEmpresaPreviousTrainers = previousSessions
     .filter((session) => classifySession(session) === 'formacionEmpresa')
-    .flatMap((session) => normalizeTrainerEntries(session.trainers));
+    .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers));
 
   const gepServicesCurrentTrainers = currentSessions
     .filter((session) => classifySession(session) === 'gepServices')
-    .flatMap((session) => normalizeTrainerEntries(session.trainers));
+    .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers));
 
   const gepServicesPreviousTrainers = previousSessions
     .filter((session) => classifySession(session) === 'gepServices')
-    .flatMap((session) => normalizeTrainerEntries(session.trainers));
+    .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers));
 
   const formacionAbiertaCurrentTrainers = [
     ...currentSessions
       .filter((session) => classifySession(session) === 'formacionAbierta')
-      .flatMap((session) => normalizeTrainerEntries(session.trainers)),
+      .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers)),
     ...currentVariants.map((variant) => ({ trainerName: variant.trainer?.name ?? null })),
   ];
 
   const formacionAbiertaPreviousTrainers = [
     ...previousSessions
       .filter((session) => classifySession(session) === 'formacionAbierta')
-      .flatMap((session) => normalizeTrainerEntries(session.trainers)),
+      .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers)),
     ...previousVariants.map((variant) => ({ trainerName: variant.trainer?.name ?? null })),
   ];
 
