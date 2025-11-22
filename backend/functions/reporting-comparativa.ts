@@ -66,6 +66,79 @@ function isoWeekKey(value: Date): string {
   return `${year}-W${String(week).padStart(2, '0')}`;
 }
 
+function buildIsoWeekKey(year: number, week: number): string {
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
+function countByIsoWeek(dates: Date[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const date of dates) {
+    const key = isoWeekKey(date);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function enumerateIsoWeeks(start: Date, end: Date) {
+  const weeks: Array<{ isoWeek: number; isoYear: number; label: string }> = [];
+  let cursor = startOfISOWeek(start);
+
+  while (cursor <= end) {
+    const isoWeek = getISOWeek(cursor);
+    const isoYear = getISOWeekYear(cursor);
+    weeks.push({
+      isoWeek,
+      isoYear,
+      label: `${isoYear}-W${String(isoWeek).padStart(2, '0')}`,
+    });
+    cursor = addDays(cursor, 7);
+  }
+
+  return weeks;
+}
+
+function getProductLabel(
+  name: string | null | undefined,
+  code: string | null | undefined,
+): string {
+  const trimmedName = name?.trim();
+  if (trimmedName) return trimmedName;
+  const trimmedCode = code?.trim();
+  if (trimmedCode) return trimmedCode;
+  return 'Sin producto';
+}
+
+function buildProductRanking(
+  currentItems: Array<{ productName: string | null; productCode: string | null }>,
+  previousItems: Array<{ productName: string | null; productCode: string | null }>,
+  category: string,
+) {
+  const currentCounts = new Map<string, number>();
+  const previousCounts = new Map<string, number>();
+
+  for (const item of currentItems) {
+    const label = getProductLabel(item.productName, item.productCode);
+    currentCounts.set(label, (currentCounts.get(label) ?? 0) + 1);
+  }
+
+  for (const item of previousItems) {
+    const label = getProductLabel(item.productName, item.productCode);
+    previousCounts.set(label, (previousCounts.get(label) ?? 0) + 1);
+  }
+
+  const labels = new Set<string>([...currentCounts.keys(), ...previousCounts.keys()]);
+
+  return Array.from(labels)
+    .map((label) => ({
+      category,
+      label,
+      currentValue: currentCounts.get(label) ?? 0,
+      previousValue: previousCounts.get(label) ?? 0,
+    }))
+    .sort((a, b) => b.currentValue - a.currentValue || a.label.localeCompare(b.label))
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+}
+
 type SessionRow = {
   fecha_inicio_utc: Date | null;
   deals: {
@@ -73,9 +146,20 @@ type SessionRow = {
     sede_label: string | null;
     tipo_servicio: string | null;
   } | null;
+  deal_products: {
+    name: string | null;
+    code: string | null;
+  } | null;
 };
 
-type VariantRow = { date: Date | string | null; sede: string | null };
+type VariantRow = {
+  date: Date | string | null;
+  sede: string | null;
+  products: {
+    name: string | null;
+    code: string | null;
+  } | null;
+};
 
 function normalizePipelineLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
@@ -176,8 +260,11 @@ export const handler = createHttpHandler(async (request) => {
 
   const currentEndExclusive = addDays(currentEnd, 1);
   const previousEndExclusive = addDays(previousEnd, 1);
+  const baselineYear = 2024;
+  const baselineStart = new Date(Date.UTC(baselineYear, 0, 1));
+  const baselineEndExclusive = new Date(Date.UTC(baselineYear + 1, 0, 1));
 
-  const [currentSessions, previousSessions, currentVariants, previousVariants] = await Promise.all([
+  const [currentSessions, previousSessions, currentVariants, previousVariants, baselineSessions] = await Promise.all([
     prisma.sesiones.findMany({
       where: {
         fecha_inicio_utc: { gte: currentStart, lt: currentEndExclusive },
@@ -185,6 +272,7 @@ export const handler = createHttpHandler(async (request) => {
       select: {
         fecha_inicio_utc: true,
         deals: { select: { pipeline_id: true, sede_label: true, tipo_servicio: true } },
+        deal_products: { select: { name: true, code: true } },
       },
     }) as Promise<SessionRow[]>,
     prisma.sesiones.findMany({
@@ -194,16 +282,25 @@ export const handler = createHttpHandler(async (request) => {
       select: {
         fecha_inicio_utc: true,
         deals: { select: { pipeline_id: true, sede_label: true, tipo_servicio: true } },
+        deal_products: { select: { name: true, code: true } },
       },
     }) as Promise<SessionRow[]>,
     prisma.variants.findMany({
       where: { date: { gte: currentStart, lt: currentEndExclusive } },
-      select: { date: true, sede: true },
+      select: { date: true, sede: true, products: { select: { name: true, code: true } } },
     }) as Promise<VariantRow[]>,
     prisma.variants.findMany({
       where: { date: { gte: previousStart, lt: previousEndExclusive } },
-      select: { date: true, sede: true },
+      select: { date: true, sede: true, products: { select: { name: true, code: true } } },
     }) as Promise<VariantRow[]>,
+    prisma.sesiones.findMany({
+      where: { fecha_inicio_utc: { gte: baselineStart, lt: baselineEndExclusive } },
+      select: {
+        fecha_inicio_utc: true,
+        deals: { select: { pipeline_id: true, sede_label: true, tipo_servicio: true } },
+        deal_products: { select: { name: true, code: true } },
+      },
+    }) as Promise<SessionRow[]>,
   ]);
 
   const weeks = 12;
@@ -227,6 +324,18 @@ export const handler = createHttpHandler(async (request) => {
   const formacionAbiertaPrevious =
     toDateList(previousSessions, (row) => classifySession(row as SessionRow) === 'formacionAbierta').length +
     toDateList(previousVariants, () => true).length;
+
+  const weeklyWindow = enumerateIsoWeeks(currentStart, currentEnd);
+
+  const gepBaselineCounts = countByIsoWeek(
+    toDateList(baselineSessions, (row) => classifySession(row as SessionRow) === 'gepServices'),
+  );
+  const gepCurrentCounts = countByIsoWeek(gepCurrentDates);
+
+  const formacionEmpresaBaselineCounts = countByIsoWeek(
+    toDateList(baselineSessions, (row) => classifySession(row as SessionRow) === 'formacionEmpresa'),
+  );
+  const formacionEmpresaCurrentCounts = countByIsoWeek(formacionEmpresaCurrentDates);
 
   const formacionEmpresaSiteCurrentCounts = new Map<string, number>();
   const formacionEmpresaSitePreviousCounts = new Map<string, number>();
@@ -271,6 +380,64 @@ export const handler = createHttpHandler(async (request) => {
     gepServicesTypePreviousCounts.set(type, (gepServicesTypePreviousCounts.get(type) ?? 0) + 1);
   }
 
+  const buildWeeklyTrend = (
+    label: string,
+    metric: 'formacionEmpresaSessions' | 'gepServicesSessions',
+    currentCounts: Map<string, number>,
+    baselineCounts: Map<string, number>,
+  ) => ({
+    metric,
+    label,
+    points: weeklyWindow.map((week) => ({
+      periodLabel: week.label,
+      isoYear: week.isoYear,
+      isoWeek: week.isoWeek,
+      currentValue: currentCounts.get(buildIsoWeekKey(week.isoYear, week.isoWeek)) ?? 0,
+      previousValue: baselineCounts.get(buildIsoWeekKey(baselineYear, week.isoWeek)) ?? 0,
+    })),
+  });
+
+  const trends = [
+    buildWeeklyTrend('Formación Empresa vs 2024', 'formacionEmpresaSessions', formacionEmpresaCurrentCounts, formacionEmpresaBaselineCounts),
+    buildWeeklyTrend('GEP Services vs 2024', 'gepServicesSessions', gepCurrentCounts, gepBaselineCounts),
+  ];
+
+  const formacionEmpresaCurrentProducts = currentSessions
+    .filter((session) => classifySession(session) === 'formacionEmpresa')
+    .map((session) => ({ productName: session.deal_products?.name ?? null, productCode: session.deal_products?.code ?? null }));
+
+  const formacionEmpresaPreviousProducts = previousSessions
+    .filter((session) => classifySession(session) === 'formacionEmpresa')
+    .map((session) => ({ productName: session.deal_products?.name ?? null, productCode: session.deal_products?.code ?? null }));
+
+  const gepServicesCurrentProducts = currentSessions
+    .filter((session) => classifySession(session) === 'gepServices')
+    .map((session) => ({ productName: session.deal_products?.name ?? null, productCode: session.deal_products?.code ?? null }));
+
+  const gepServicesPreviousProducts = previousSessions
+    .filter((session) => classifySession(session) === 'gepServices')
+    .map((session) => ({ productName: session.deal_products?.name ?? null, productCode: session.deal_products?.code ?? null }));
+
+  const formacionAbiertaCurrentProducts = [
+    ...currentSessions
+      .filter((session) => classifySession(session) === 'formacionAbierta')
+      .map((session) => ({ productName: session.deal_products?.name ?? null, productCode: session.deal_products?.code ?? null })),
+    ...currentVariants.map((variant) => ({ productName: variant.products?.name ?? null, productCode: variant.products?.code ?? null })),
+  ];
+
+  const formacionAbiertaPreviousProducts = [
+    ...previousSessions
+      .filter((session) => classifySession(session) === 'formacionAbierta')
+      .map((session) => ({ productName: session.deal_products?.name ?? null, productCode: session.deal_products?.code ?? null })),
+    ...previousVariants.map((variant) => ({ productName: variant.products?.name ?? null, productCode: variant.products?.code ?? null })),
+  ];
+
+  const ranking = [
+    ...buildProductRanking(formacionEmpresaCurrentProducts, formacionEmpresaPreviousProducts, 'formacionEmpresa'),
+    ...buildProductRanking(gepServicesCurrentProducts, gepServicesPreviousProducts, 'gepServices'),
+    ...buildProductRanking(formacionAbiertaCurrentProducts, formacionAbiertaPreviousProducts, 'formacionAbierta'),
+  ];
+
   const highlights = [
     {
       key: 'gepServicesSessions',
@@ -309,7 +476,7 @@ export const handler = createHttpHandler(async (request) => {
 
   return successResponse({
     highlights,
-    trends: [],
+    trends,
     breakdowns: [
       ...mergeCounts(formacionEmpresaSiteCurrentCounts, formacionEmpresaSitePreviousCounts, 'formacionEmpresaSite'),
       ...mergeCounts(formacionAbiertaSiteCurrentCounts, formacionAbiertaSitePreviousCounts, 'formacionAbiertaSite'),
@@ -318,7 +485,7 @@ export const handler = createHttpHandler(async (request) => {
     revenueMix: [],
     heatmap: [],
     funnel: [],
-    ranking: [],
+    ranking,
   });
 });
 

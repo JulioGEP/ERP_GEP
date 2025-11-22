@@ -6,6 +6,7 @@ import {
   fetchComparativaDashboard,
   type ComparativaFilters,
   type ComparativaKpi,
+  type ComparativaTrend,
 } from '../../features/reporting/api';
 
 const METRIC_CONFIG: { key: string; label: string }[] = [
@@ -354,6 +355,205 @@ export default function ComparativaDashboardPage() {
     return dashboardQuery.data?.highlights.find((item) => item.key === key) ?? placeholder;
   };
 
+  const renderWeeklyComparisonChart = (points: ComparativaTrend['points']) => {
+    if (points.length === 0) {
+      return <div className="text-muted small">Sin datos para mostrar</div>;
+    }
+
+    const chartWidth = 760;
+    const chartHeight = 260;
+    const paddingX = 56;
+    const paddingY = 28;
+    const innerWidth = chartWidth - paddingX * 2;
+    const innerHeight = chartHeight - paddingY * 2;
+    const xStep = points.length > 1 ? innerWidth / (points.length - 1) : 0;
+    const barWidth = points.length > 1 ? Math.min(36, innerWidth / points.length / 1.4) : 32;
+    const maxValue = Math.max(1, ...points.flatMap((point) => [point.currentValue, point.previousValue]));
+
+    const toX = (index: number) => paddingX + xStep * index;
+    const toY = (value: number) => paddingY + innerHeight - (value / maxValue) * innerHeight;
+
+    const linePath = points
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${toX(index).toFixed(1)} ${toY(point.previousValue).toFixed(1)}`)
+      .join(' ');
+
+    const yTicks = Array.from({ length: 5 }, (_, index) => Math.round((maxValue * index) / 4));
+
+    return (
+      <div className="w-100">
+        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-100" role="img" aria-label="Evolución semanal">
+          <g>
+            {yTicks.map((tick) => {
+              const y = toY(tick);
+              return (
+                <g key={tick}>
+                  <line x1={paddingX} x2={paddingX + innerWidth} y1={y} y2={y} stroke="#e9ecef" strokeWidth={1} />
+                  <text x={paddingX - 8} y={y + 4} textAnchor="end" className="text-muted" fontSize={10}>
+                    {numberFormatter.format(tick)}
+                  </text>
+                </g>
+              );
+            })}
+
+            {points.map((point, index) => {
+              const x = toX(index) - barWidth / 2;
+              const barHeight = innerHeight - (point.currentValue / maxValue) * innerHeight;
+              const barY = paddingY + barHeight;
+              return (
+                <rect
+                  key={`${point.periodLabel}-bar`}
+                  x={x}
+                  y={barY}
+                  width={barWidth}
+                  height={innerHeight - barHeight}
+                  rx={6}
+                  fill="url(#barGradient)"
+                />
+              );
+            })}
+
+            {linePath && (
+              <>
+                <path d={linePath} fill="none" stroke="#198754" strokeWidth={2} />
+                {points.map((point, index) => (
+                  <circle
+                    key={`${point.periodLabel}-dot`}
+                    cx={toX(index)}
+                    cy={toY(point.previousValue)}
+                    r={4}
+                    fill="#198754"
+                    stroke="#fff"
+                    strokeWidth={1.5}
+                  />
+                ))}
+              </>
+            )}
+
+            {points.map((point, index) => (
+              <text
+                key={`${point.periodLabel}-label`}
+                x={toX(index)}
+                y={chartHeight - 6}
+                textAnchor="middle"
+                className="text-muted"
+                fontSize={10}
+              >
+                W{point.isoWeek}
+              </text>
+            ))}
+          </g>
+
+          <defs>
+            <linearGradient id="barGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#0d6efd" stopOpacity="0.9" />
+              <stop offset="100%" stopColor="#6ea8fe" stopOpacity="0.8" />
+            </linearGradient>
+          </defs>
+        </svg>
+
+        <div className="d-flex align-items-center gap-3 mt-2 small text-muted">
+          <span className="d-inline-flex align-items-center gap-1">
+            <span style={{ width: 14, height: 14, backgroundColor: '#0d6efd', borderRadius: 2, display: 'inline-block' }} />
+            Periodo seleccionado
+          </span>
+          <span className="d-inline-flex align-items-center gap-1">
+            <span
+              style={{ width: 14, height: 14, borderRadius: 999, display: 'inline-block', backgroundColor: '#198754' }}
+            />
+            2024 (línea)
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  const getTrendData = (metric: ComparativaTrend['metric']) => {
+    const placeholder: ComparativaTrend = { metric, label: '', points: [] } as ComparativaTrend;
+    return dashboardQuery.data?.trends.find((item) => item.metric === metric) ?? placeholder;
+  };
+
+  const renderWeeklyTrendCard = (
+    title: string,
+    description: string,
+    metric: ComparativaTrend['metric'],
+  ) => {
+    const trend = getTrendData(metric);
+    return (
+      <Card className="h-100 shadow-sm">
+        <Card.Body className="d-flex flex-column gap-3">
+          <div>
+            <Card.Title as="h6" className="mb-1">
+              {title}
+            </Card.Title>
+            <div className="text-muted small">{description}</div>
+          </div>
+
+          {renderWeeklyComparisonChart(trend.points)}
+        </Card.Body>
+      </Card>
+    );
+  };
+
+  const getRankingByCategory = (category: string) => {
+    return dashboardQuery.data?.ranking.filter((item) => item.category === category) ?? [];
+  };
+
+  const renderRankingTable = (
+    title: string,
+    category: string,
+    emptyMessage: string,
+  ) => {
+    const items = getRankingByCategory(category);
+    return (
+      <Card className="h-100 shadow-sm">
+        <Card.Body className="d-flex flex-column gap-3">
+          <div>
+            <Card.Title as="h6" className="mb-1">{title}</Card.Title>
+            <div className="text-muted small">Top productos en el rango seleccionado</div>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th className="text-muted small">Producto</th>
+                  <th className="text-muted small text-end">Actual</th>
+                  <th className="text-muted small text-end">Comparativa</th>
+                  <th className="text-muted small text-end">Diferencia</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="text-muted small py-3">
+                      {emptyMessage}
+                    </td>
+                  </tr>
+                )}
+                {items.map((item) => {
+                  const diff = item.currentValue - item.previousValue;
+                  const badgeVariant = diff > 0 ? 'success' : diff < 0 ? 'danger' : 'secondary';
+                  const diffLabel = `${diff >= 0 ? '+' : ''}${numberFormatter.format(diff)}`;
+
+                  return (
+                    <tr key={`${category}-${item.label}`}>
+                      <td className="small">{item.label}</td>
+                      <td className="text-end fw-semibold">{numberFormatter.format(item.currentValue)}</td>
+                      <td className="text-end">{numberFormatter.format(item.previousValue)}</td>
+                      <td className="text-end">
+                        <Badge bg={badgeVariant}>{diffLabel}</Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card.Body>
+      </Card>
+    );
+  };
+
   const renderContent = () => {
     if (dashboardQuery.isLoading) {
       return (
@@ -379,11 +579,52 @@ export default function ComparativaDashboardPage() {
         </Row>
 
         <Row className="g-3">
+          <Col xs={12} lg={6}>
+            {renderWeeklyTrendCard(
+              'Formación Empresa por semana ISO',
+              'Comparativa del periodo frente al año 2024',
+              'formacionEmpresaSessions',
+            )}
+          </Col>
+          <Col xs={12} lg={6}>
+            {renderWeeklyTrendCard(
+              'GEP Services por semana ISO',
+              'Comparativa del periodo frente al año 2024',
+              'gepServicesSessions',
+            )}
+          </Col>
+        </Row>
+
+        <Row className="g-3">
           {BREAKDOWN_CONFIG.map((item) => (
             <Col xs={12} md={6} key={item.dimension}>
               {renderBreakdownCard(item)}
             </Col>
           ))}
+        </Row>
+
+        <Row className="g-3">
+          <Col xs={12} lg={4}>
+            {renderRankingTable(
+              'Productos más usados · Formación Empresa',
+              'formacionEmpresa',
+              'Sin productos registrados en el rango',
+            )}
+          </Col>
+          <Col xs={12} lg={4}>
+            {renderRankingTable(
+              'Productos más usados · GEP Services',
+              'gepServices',
+              'Sin productos registrados en el rango',
+            )}
+          </Col>
+          <Col xs={12} lg={4}>
+            {renderRankingTable(
+              'Productos más usados · Formación Abierta',
+              'formacionAbierta',
+              'Sin productos registrados en el rango',
+            )}
+          </Col>
         </Row>
       </div>
     );

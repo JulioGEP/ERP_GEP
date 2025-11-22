@@ -381,7 +381,12 @@ export type ComparativaTrendPoint = {
 };
 
 export type ComparativaTrend = {
-  metric: 'sessions' | 'revenue' | 'enrollments';
+  metric:
+    | 'sessions'
+    | 'revenue'
+    | 'enrollments'
+    | 'formacionEmpresaSessions'
+    | 'gepServicesSessions';
   label: string;
   points: ComparativaTrendPoint[];
 };
