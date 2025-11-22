@@ -431,52 +431,6 @@ export type ComparativaDashboardResponse = {
   ranking: ComparativaRankingRow[];
 };
 
-function buildComparativaDashboardFallback(): ComparativaDashboardResponse {
-  const highlights: ComparativaKpi[] = [
-    {
-      key: 'gepServicesSessions',
-      label: 'Sumatorio de sesiones de GEP Services',
-      unit: 'number',
-      value: 148,
-      lastYearValue: 132,
-      deltaPercentage: 12.1,
-      sparkline: [9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-    },
-    {
-      key: 'formacionEmpresaSessions',
-      label: 'Sumatorio de sesiones de Formacion Empresa',
-      unit: 'number',
-      value: 96,
-      lastYearValue: 84,
-      deltaPercentage: 14.29,
-      sparkline: [6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12],
-    },
-    {
-      key: 'formacionAbiertaVariantesSessions',
-      label: 'Sumatorio de sesiones de Formación abierta (Variantes)',
-      unit: 'number',
-      value: 62,
-      lastYearValue: 58,
-      deltaPercentage: 6.9,
-      sparkline: [4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8],
-    },
-  ];
-
-  const trends: ComparativaTrend[] = [];
-
-  const breakdowns: ComparativaBreakdown[] = [];
-
-  const revenueMix: ComparativaDonutSlice[] = [];
-
-  const heatmap: ComparativaHeatmapCell[] = [];
-
-  const funnel: ComparativaFunnelStage[] = [];
-
-  const ranking: ComparativaRankingRow[] = [];
-
-  return { highlights, trends, breakdowns, revenueMix, heatmap, funnel, ranking } satisfies ComparativaDashboardResponse;
-}
-
 export async function fetchComparativaDashboard(
   filters: ComparativaFilters,
 ): Promise<ComparativaDashboardResponse> {
@@ -502,10 +456,5 @@ export async function fetchComparativaDashboard(
     ? `/reporting-comparativa/dashboard?${query}`
     : '/reporting-comparativa/dashboard';
 
-  try {
-    return await getJson<ComparativaDashboardResponse>(url);
-  } catch (error) {
-    console.warn('Fallo al recuperar la comparativa, se devuelve placeholder', error);
-    return buildComparativaDashboardFallback();
-  }
+  return getJson<ComparativaDashboardResponse>(url);
 }
