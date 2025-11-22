@@ -9,9 +9,9 @@ import {
 } from '../../features/reporting/api';
 
 const METRIC_CONFIG: { key: string; label: string }[] = [
-  { key: 'gepServicesSessions', label: 'Sumatorio de sesiones de GEP Services' },
-  { key: 'formacionEmpresaSessions', label: 'Sumatorio de sesiones de Formacion Empresa' },
-  { key: 'formacionAbiertaVariantesSessions', label: 'Sumatorio de sesiones de Formación abierta (Variantes)' },
+  { key: 'gepServicesSessions', label: 'GEP Services' },
+  { key: 'formacionEmpresaSessions', label: 'Formacion Empresa' },
+  { key: 'formacionAbiertaVariantesSessions', label: 'Formación Abierta' },
 ];
 
 function formatDate(date: Date) {
