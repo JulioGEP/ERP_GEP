@@ -434,119 +434,45 @@ export type ComparativaDashboardResponse = {
 function buildComparativaDashboardFallback(): ComparativaDashboardResponse {
   const highlights: ComparativaKpi[] = [
     {
-      key: 'sessions',
-      label: 'Sesiones impartidas',
+      key: 'gepServicesSessions',
+      label: 'Sumatorio de sesiones de GEP Services',
       unit: 'number',
       value: 148,
       lastYearValue: 132,
       deltaPercentage: 12.1,
-      sparkline: [10, 12, 14, 13, 16, 18, 20, 19, 22, 21],
+      sparkline: [9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
     },
     {
-      key: 'revenue',
-      label: 'Ingresos (€)',
-      unit: 'currency',
-      value: 186000,
-      lastYearValue: 171500,
-      deltaPercentage: 8.47,
-      sparkline: [14000, 15000, 15500, 16000, 17000, 18500, 19000, 21000, 22000, 23000],
-    },
-    {
-      key: 'enrollments',
-      label: 'Inscritos',
+      key: 'formacionEmpresaSessions',
+      label: 'Sumatorio de sesiones de Formacion Empresa',
       unit: 'number',
-      value: 2150,
-      lastYearValue: 1890,
-      deltaPercentage: 13.76,
-      sparkline: [150, 160, 170, 180, 190, 205, 210, 225, 235, 240],
+      value: 96,
+      lastYearValue: 84,
+      deltaPercentage: 14.29,
+      sparkline: [6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12],
     },
     {
-      key: 'attendance',
-      label: 'Asistencia efectiva',
-      unit: 'percentage',
-      value: 91.5,
-      lastYearValue: 88.2,
-      deltaPercentage: 3.3,
-      sparkline: [87, 87.5, 88, 88.5, 89.2, 90, 90.5, 90.8, 91, 91.5],
+      key: 'formacionAbiertaVariantesSessions',
+      label: 'Sumatorio de sesiones de Formación abierta (Variantes)',
+      unit: 'number',
+      value: 62,
+      lastYearValue: 58,
+      deltaPercentage: 6.9,
+      sparkline: [4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8],
     },
   ];
 
-  const trends: ComparativaTrend[] = [
-    {
-      metric: 'sessions',
-      label: 'Sesiones programadas',
-      points: [
-        { periodLabel: '2024-W01', isoYear: 2024, isoWeek: 1, currentValue: 12, previousValue: 10 },
-        { periodLabel: '2024-W02', isoYear: 2024, isoWeek: 2, currentValue: 14, previousValue: 11 },
-        { periodLabel: '2024-W03', isoYear: 2024, isoWeek: 3, currentValue: 15, previousValue: 12 },
-        { periodLabel: '2024-W04', isoYear: 2024, isoWeek: 4, currentValue: 16, previousValue: 13 },
-      ],
-    },
-    {
-      metric: 'revenue',
-      label: 'Ingresos facturados',
-      points: [
-        { periodLabel: '2024-W01', isoYear: 2024, isoWeek: 1, currentValue: 15000, previousValue: 14200 },
-        { periodLabel: '2024-W02', isoYear: 2024, isoWeek: 2, currentValue: 16500, previousValue: 15000 },
-        { periodLabel: '2024-W03', isoYear: 2024, isoWeek: 3, currentValue: 17000, previousValue: 15300 },
-        { periodLabel: '2024-W04', isoYear: 2024, isoWeek: 4, currentValue: 18200, previousValue: 16000 },
-      ],
-    },
-    {
-      metric: 'enrollments',
-      label: 'Inscritos confirmados',
-      points: [
-        { periodLabel: '2024-W01', isoYear: 2024, isoWeek: 1, currentValue: 180, previousValue: 165 },
-        { periodLabel: '2024-W02', isoYear: 2024, isoWeek: 2, currentValue: 190, previousValue: 172 },
-        { periodLabel: '2024-W03', isoYear: 2024, isoWeek: 3, currentValue: 195, previousValue: 176 },
-        { periodLabel: '2024-W04', isoYear: 2024, isoWeek: 4, currentValue: 210, previousValue: 185 },
-      ],
-    },
-  ];
+  const trends: ComparativaTrend[] = [];
 
-  const breakdowns: ComparativaBreakdown[] = [
-    { dimension: 'site', label: 'Madrid', current: 45, previous: 38 },
-    { dimension: 'site', label: 'Barcelona', current: 38, previous: 35 },
-    { dimension: 'site', label: 'Valencia', current: 22, previous: 19 },
-    { dimension: 'service', label: 'Formación in-company', current: 54, previous: 49 },
-    { dimension: 'service', label: 'E-learning', current: 32, previous: 27 },
-    { dimension: 'service', label: 'Prevención', current: 18, previous: 14 },
-    { dimension: 'channel', label: 'Ventas directas', current: 60, previous: 52 },
-    { dimension: 'channel', label: 'Partners', current: 25, previous: 24 },
-    { dimension: 'channel', label: 'Marketplace', current: 15, previous: 12 },
-  ];
+  const breakdowns: ComparativaBreakdown[] = [];
 
-  const revenueMix: ComparativaDonutSlice[] = [
-    { label: 'In-company', percentage: 42 },
-    { label: 'E-learning', percentage: 28 },
-    { label: 'Formación abierta', percentage: 18 },
-    { label: 'Preventivo', percentage: 12 },
-  ];
+  const revenueMix: ComparativaDonutSlice[] = [];
 
-  const heatmap: ComparativaHeatmapCell[] = [
-    { site: 'Madrid', isoWeek: 1, isoYear: 2024, utilization: 82 },
-    { site: 'Madrid', isoWeek: 2, isoYear: 2024, utilization: 78 },
-    { site: 'Barcelona', isoWeek: 1, isoYear: 2024, utilization: 74 },
-    { site: 'Barcelona', isoWeek: 2, isoYear: 2024, utilization: 71 },
-    { site: 'Valencia', isoWeek: 1, isoYear: 2024, utilization: 63 },
-    { site: 'Valencia', isoWeek: 2, isoYear: 2024, utilization: 66 },
-  ];
+  const heatmap: ComparativaHeatmapCell[] = [];
 
-  const funnel: ComparativaFunnelStage[] = [
-    { name: 'Leads', current: 1200, previous: 1100, conversionRate: 100 },
-    { name: 'Oportunidades', current: 620, previous: 590, conversionRate: 51.7 },
-    { name: 'Propuestas', current: 400, previous: 360, conversionRate: 64.5 },
-    { name: 'Inscripciones', current: 260, previous: 230, conversionRate: 65 },
-    { name: 'Asistencias', current: 238, previous: 205, conversionRate: 91.5 },
-  ];
+  const funnel: ComparativaFunnelStage[] = [];
 
-  const ranking: ComparativaRankingRow[] = [
-    { rank: 1, label: 'Curso de prevención avanzada', category: 'Curso', currentValue: 52000, previousValue: 47000, conversionRate: 64 },
-    { rank: 2, label: 'Madrid', category: 'Sede', currentValue: 45000, previousValue: 41000, conversionRate: 67 },
-    { rank: 3, label: 'Canal partners', category: 'Canal', currentValue: 38000, previousValue: 33000, conversionRate: 58 },
-    { rank: 4, label: 'Barcelona', category: 'Sede', currentValue: 34000, previousValue: 32000, conversionRate: 62 },
-    { rank: 5, label: 'Formación abierta', category: 'Servicio', currentValue: 31000, previousValue: 28000, conversionRate: 55 },
-  ];
+  const ranking: ComparativaRankingRow[] = [];
 
   return { highlights, trends, breakdowns, revenueMix, heatmap, funnel, ranking } satisfies ComparativaDashboardResponse;
 }
