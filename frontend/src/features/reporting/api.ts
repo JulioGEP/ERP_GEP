@@ -502,10 +502,5 @@ export async function fetchComparativaDashboard(
     ? `/reporting-comparativa/dashboard?${query}`
     : '/reporting-comparativa/dashboard';
 
-  try {
-    return await getJson<ComparativaDashboardResponse>(url);
-  } catch (error) {
-    console.warn('Fallo al recuperar la comparativa, se devuelve placeholder', error);
-    return buildComparativaDashboardFallback();
-  }
+  return getJson<ComparativaDashboardResponse>(url);
 }
