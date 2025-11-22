@@ -14,6 +14,24 @@ const METRIC_CONFIG: { key: string; label: string }[] = [
   { key: 'formacionAbiertaVariantesSessions', label: 'Formación Abierta' },
 ];
 
+const BREAKDOWN_CONFIG = [
+  {
+    dimension: 'formacionEmpresaSite' as const,
+    title: 'Formaciones Empresa por sedes',
+    description: 'Sumatorio de sesiones por sede',
+  },
+  {
+    dimension: 'formacionAbiertaSite' as const,
+    title: 'Formaciones Abierta por sedes',
+    description: 'Sumatorio de variantes por sede',
+  },
+  {
+    dimension: 'gepServicesType' as const,
+    title: 'GEP Services por tipo de servicio',
+    description: 'Sumatorio de sesiones por tipo de servicio',
+  },
+];
+
 function formatDate(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -223,6 +241,12 @@ export default function ComparativaDashboardPage() {
     }));
   };
 
+  const getBreakdownItems = (
+    dimension: (typeof BREAKDOWN_CONFIG)[number]['dimension'],
+  ) => {
+    return dashboardQuery.data?.breakdowns.filter((item) => item.dimension === dimension) ?? [];
+  };
+
   const renderMetric = (kpi: ComparativaKpi) => {
     const comparativaValue = numberFormatter.format(kpi.lastYearValue);
     const currentValue = numberFormatter.format(kpi.value);
@@ -261,6 +285,63 @@ export default function ComparativaDashboardPage() {
     );
   };
 
+  const renderBreakdownCard = (
+    config: (typeof BREAKDOWN_CONFIG)[number],
+  ) => {
+    const items = getBreakdownItems(config.dimension);
+
+    return (
+      <Card className="h-100 shadow-sm">
+        <Card.Body className="d-flex flex-column gap-3">
+          <div>
+            <Card.Title as="h6" className="mb-1">
+              {config.title}
+            </Card.Title>
+            <div className="text-muted small">{config.description}</div>
+          </div>
+
+          <div className="table-responsive">
+            <table className="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th className="text-muted small">Etiqueta</th>
+                  <th className="text-muted small text-end">Actual</th>
+                  <th className="text-muted small text-end">Comparativa</th>
+                  <th className="text-muted small text-end">Diferencia</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="text-muted small py-3">
+                      Sin datos para el periodo seleccionado
+                    </td>
+                  </tr>
+                )}
+                {items.map((item) => {
+                  const diff = item.current - item.previous;
+                  const diffLabel = `${diff >= 0 ? '+' : ''}${numberFormatter.format(diff)}`;
+                  const badgeVariant = diff > 0 ? 'success' : diff < 0 ? 'danger' : 'secondary';
+
+                  return (
+                    <tr key={item.label}>
+                      <td className="small">{item.label}</td>
+                      <td className="text-end fw-semibold">{numberFormatter.format(item.current)}</td>
+                      <td className="text-end">{numberFormatter.format(item.previous)}</td>
+                      <td className="text-end">
+                        <Badge bg={badgeVariant}>{diffLabel}</Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card.Body>
+      </Card>
+    );
+  };
+
   const getMetricData = (key: string): ComparativaKpi => {
     const placeholder: ComparativaKpi = {
       key,
@@ -290,11 +371,21 @@ export default function ComparativaDashboardPage() {
     }
 
     return (
-      <Row xs={1} md={2} lg={3} className="g-3 mt-3">
-        {METRIC_CONFIG.map((metric) => (
-          <Col key={metric.key}>{renderMetric(getMetricData(metric.key))}</Col>
-        ))}
-      </Row>
+      <div className="d-flex flex-column gap-4 mt-3">
+        <Row xs={1} md={2} lg={3} className="g-3">
+          {METRIC_CONFIG.map((metric) => (
+            <Col key={metric.key}>{renderMetric(getMetricData(metric.key))}</Col>
+          ))}
+        </Row>
+
+        <Row className="g-3">
+          {BREAKDOWN_CONFIG.map((item) => (
+            <Col xs={12} md={6} key={item.dimension}>
+              {renderBreakdownCard(item)}
+            </Col>
+          ))}
+        </Row>
+      </div>
     );
   };
 

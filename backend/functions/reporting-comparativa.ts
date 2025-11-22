@@ -68,10 +68,14 @@ function isoWeekKey(value: Date): string {
 
 type SessionRow = {
   fecha_inicio_utc: Date | null;
-  deals: { pipeline_id: string | null } | null;
+  deals: {
+    pipeline_id: string | null;
+    sede_label: string | null;
+    tipo_servicio: string | null;
+  } | null;
 };
 
-type VariantRow = { date: Date | string | null };
+type VariantRow = { date: Date | string | null; sede: string | null };
 
 function normalizePipelineLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
@@ -130,6 +134,22 @@ function computeDeltaPercentage(current: number, previous: number): number {
   return (diff / previous) * 100;
 }
 
+function mergeCounts(
+  currentCounts: Map<string, number>,
+  previousCounts: Map<string, number>,
+  dimension: 'formacionEmpresaSite' | 'formacionAbiertaSite' | 'gepServicesType',
+) {
+  const labels = new Set<string>([...currentCounts.keys(), ...previousCounts.keys()]);
+  return Array.from(labels)
+    .map((label) => ({
+      dimension,
+      label,
+      current: currentCounts.get(label) ?? 0,
+      previous: previousCounts.get(label) ?? 0,
+    }))
+    .sort((a, b) => b.current - a.current || a.label.localeCompare(b.label));
+}
+
 export const handler = createHttpHandler(async (request) => {
   if (request.method === 'OPTIONS') {
     return successResponse();
@@ -162,21 +182,27 @@ export const handler = createHttpHandler(async (request) => {
       where: {
         fecha_inicio_utc: { gte: currentStart, lt: currentEndExclusive },
       },
-      select: { fecha_inicio_utc: true, deals: { select: { pipeline_id: true } } },
+      select: {
+        fecha_inicio_utc: true,
+        deals: { select: { pipeline_id: true, sede_label: true, tipo_servicio: true } },
+      },
     }) as Promise<SessionRow[]>,
     prisma.sesiones.findMany({
       where: {
         fecha_inicio_utc: { gte: previousStart, lt: previousEndExclusive },
       },
-      select: { fecha_inicio_utc: true, deals: { select: { pipeline_id: true } } },
+      select: {
+        fecha_inicio_utc: true,
+        deals: { select: { pipeline_id: true, sede_label: true, tipo_servicio: true } },
+      },
     }) as Promise<SessionRow[]>,
     prisma.variants.findMany({
       where: { date: { gte: currentStart, lt: currentEndExclusive } },
-      select: { date: true },
+      select: { date: true, sede: true },
     }) as Promise<VariantRow[]>,
     prisma.variants.findMany({
       where: { date: { gte: previousStart, lt: previousEndExclusive } },
-      select: { date: true },
+      select: { date: true, sede: true },
     }) as Promise<VariantRow[]>,
   ]);
 
@@ -201,6 +227,49 @@ export const handler = createHttpHandler(async (request) => {
   const formacionAbiertaPrevious =
     toDateList(previousSessions, (row) => classifySession(row as SessionRow) === 'formacionAbierta').length +
     toDateList(previousVariants, () => true).length;
+
+  const formacionEmpresaSiteCurrentCounts = new Map<string, number>();
+  const formacionEmpresaSitePreviousCounts = new Map<string, number>();
+
+  for (const session of currentSessions) {
+    if (classifySession(session) !== 'formacionEmpresa') continue;
+    const site = session.deals?.sede_label?.trim() || 'Sin sede';
+    formacionEmpresaSiteCurrentCounts.set(site, (formacionEmpresaSiteCurrentCounts.get(site) ?? 0) + 1);
+  }
+
+  for (const session of previousSessions) {
+    if (classifySession(session) !== 'formacionEmpresa') continue;
+    const site = session.deals?.sede_label?.trim() || 'Sin sede';
+    formacionEmpresaSitePreviousCounts.set(site, (formacionEmpresaSitePreviousCounts.get(site) ?? 0) + 1);
+  }
+
+  const formacionAbiertaSiteCurrentCounts = new Map<string, number>();
+  const formacionAbiertaSitePreviousCounts = new Map<string, number>();
+
+  for (const variant of currentVariants) {
+    const site = (variant.sede ?? '').trim() || 'Sin sede';
+    formacionAbiertaSiteCurrentCounts.set(site, (formacionAbiertaSiteCurrentCounts.get(site) ?? 0) + 1);
+  }
+
+  for (const variant of previousVariants) {
+    const site = (variant.sede ?? '').trim() || 'Sin sede';
+    formacionAbiertaSitePreviousCounts.set(site, (formacionAbiertaSitePreviousCounts.get(site) ?? 0) + 1);
+  }
+
+  const gepServicesTypeCurrentCounts = new Map<string, number>();
+  const gepServicesTypePreviousCounts = new Map<string, number>();
+
+  for (const session of currentSessions) {
+    if (classifySession(session) !== 'gepServices') continue;
+    const type = session.deals?.tipo_servicio?.trim() || 'Sin tipo de servicio';
+    gepServicesTypeCurrentCounts.set(type, (gepServicesTypeCurrentCounts.get(type) ?? 0) + 1);
+  }
+
+  for (const session of previousSessions) {
+    if (classifySession(session) !== 'gepServices') continue;
+    const type = session.deals?.tipo_servicio?.trim() || 'Sin tipo de servicio';
+    gepServicesTypePreviousCounts.set(type, (gepServicesTypePreviousCounts.get(type) ?? 0) + 1);
+  }
 
   const highlights = [
     {
@@ -241,7 +310,11 @@ export const handler = createHttpHandler(async (request) => {
   return successResponse({
     highlights,
     trends: [],
-    breakdowns: [],
+    breakdowns: [
+      ...mergeCounts(formacionEmpresaSiteCurrentCounts, formacionEmpresaSitePreviousCounts, 'formacionEmpresaSite'),
+      ...mergeCounts(formacionAbiertaSiteCurrentCounts, formacionAbiertaSitePreviousCounts, 'formacionAbiertaSite'),
+      ...mergeCounts(gepServicesTypeCurrentCounts, gepServicesTypePreviousCounts, 'gepServicesType'),
+    ],
     revenueMix: [],
     heatmap: [],
     funnel: [],
