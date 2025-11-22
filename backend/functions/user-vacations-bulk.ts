@@ -1,4 +1,6 @@
 // backend/functions/user-vacations-bulk.ts
+import type { Prisma } from '@prisma/client';
+
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
@@ -44,7 +46,7 @@ export const handler = createHttpHandler<any>(async (request) => {
   const dateOnly = formatDateOnly(dateInput);
   const year = dateInput.getUTCFullYear();
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     for (const userId of userIds) {
       await tx.user_vacation_days.upsert({
         where: { user_id_date: { user_id: userId, date: dateInput } },
