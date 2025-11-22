@@ -255,6 +255,17 @@ function normalizeSparkline(points?: number[]) {
   return [...padding, ...points];
 }
 
+function formatListLabel(values?: string[], emptyLabel = 'Todos'): string {
+  if (!values || values.length === 0) return emptyLabel;
+  return values.join(', ');
+}
+
+const GRANULARITY_LABELS: Record<ComparativaFilters['granularity'], string> = {
+  day: 'Diaria',
+  isoWeek: 'Semanal',
+  month: 'Mensual',
+};
+
 export default function ComparativaDashboardPage() {
   const today = useMemo(() => new Date(), []);
   const [filters, setFilters] = useState<ComparativaFilters>({
@@ -1033,6 +1044,24 @@ export default function ComparativaDashboardPage() {
             </Col>
 
           </Row>
+
+          <div className="d-flex flex-wrap align-items-center gap-2 mt-3">
+            <div className="fw-semibold small text-muted text-uppercase me-1">Filtros aplicados</div>
+
+            {[
+              { label: 'Periodo actual', value: formatDisplayRange(filters.currentPeriod) },
+              { label: 'Comparativa', value: formatDisplayRange(filters.previousPeriod) },
+              { label: 'Granularidad', value: GRANULARITY_LABELS[filters.granularity] },
+              { label: 'Sede', value: formatListLabel(filters.siteIds) },
+              { label: 'Comerciales', value: formatListLabel(filters.comerciales) },
+              { label: 'Tipo de formación', value: formatListLabel(filters.trainingTypes) },
+            ].map((item) => (
+              <Badge key={item.label} bg="light" text="dark" className="border fw-normal">
+                <span className="text-muted">{item.label}: </span>
+                <span className="fw-semibold text-dark">{item.value || '-'}</span>
+              </Badge>
+            ))}
+          </div>
         </Card.Body>
       </Card>
 
