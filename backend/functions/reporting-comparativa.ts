@@ -145,6 +145,9 @@ type SessionRow = {
     pipeline_id: string | null;
     sede_label: string | null;
     tipo_servicio: string | null;
+    fundae_val: boolean | null;
+    caes_val: boolean | null;
+    hotel_val: boolean | null;
   } | null;
   deal_products: {
     name: string | null;
@@ -271,7 +274,9 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         fecha_inicio_utc: true,
-        deals: { select: { pipeline_id: true, sede_label: true, tipo_servicio: true } },
+        deals: {
+          select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
+        },
         deal_products: { select: { name: true, code: true } },
       },
     }) as Promise<SessionRow[]>,
@@ -281,7 +286,9 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         fecha_inicio_utc: true,
-        deals: { select: { pipeline_id: true, sede_label: true, tipo_servicio: true } },
+        deals: {
+          select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
+        },
         deal_products: { select: { name: true, code: true } },
       },
     }) as Promise<SessionRow[]>,
@@ -297,7 +304,9 @@ export const handler = createHttpHandler(async (request) => {
       where: { fecha_inicio_utc: { gte: baselineStart, lt: baselineEndExclusive } },
       select: {
         fecha_inicio_utc: true,
-        deals: { select: { pipeline_id: true, sede_label: true, tipo_servicio: true } },
+        deals: {
+          select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
+        },
         deal_products: { select: { name: true, code: true } },
       },
     }) as Promise<SessionRow[]>,
@@ -324,6 +333,30 @@ export const handler = createHttpHandler(async (request) => {
   const formacionAbiertaPrevious =
     toDateList(previousSessions, (row) => classifySession(row as SessionRow) === 'formacionAbierta').length +
     toDateList(previousVariants, () => true).length;
+
+  const toBoolean = (value: boolean | null | undefined) => Boolean(value);
+
+  const formacionEmpresaSessions = currentSessions.filter((session) => classifySession(session) === 'formacionEmpresa');
+  const gepServicesSessions = currentSessions.filter((session) => classifySession(session) === 'gepServices');
+
+  const binaryMixes = {
+    formacionEmpresaFundae: {
+      yes: formacionEmpresaSessions.filter((session) => toBoolean(session.deals?.fundae_val)).length,
+      no: formacionEmpresaSessions.filter((session) => !toBoolean(session.deals?.fundae_val)).length,
+    },
+    formacionEmpresaCaes: {
+      yes: formacionEmpresaSessions.filter((session) => toBoolean(session.deals?.caes_val)).length,
+      no: formacionEmpresaSessions.filter((session) => !toBoolean(session.deals?.caes_val)).length,
+    },
+    formacionEmpresaHotel: {
+      yes: formacionEmpresaSessions.filter((session) => toBoolean(session.deals?.hotel_val)).length,
+      no: formacionEmpresaSessions.filter((session) => !toBoolean(session.deals?.hotel_val)).length,
+    },
+    gepServicesCaes: {
+      yes: gepServicesSessions.filter((session) => toBoolean(session.deals?.caes_val)).length,
+      no: gepServicesSessions.filter((session) => !toBoolean(session.deals?.caes_val)).length,
+    },
+  } as const;
 
   const weeklyWindow = enumerateIsoWeeks(currentStart, currentEnd);
 
@@ -483,6 +516,32 @@ export const handler = createHttpHandler(async (request) => {
       ...mergeCounts(gepServicesTypeCurrentCounts, gepServicesTypePreviousCounts, 'gepServicesType'),
     ],
     revenueMix: [],
+    binaryMixes: [
+      {
+        key: 'formacionEmpresaFundae',
+        label: 'Formación Empresa · FUNDAE',
+        yes: binaryMixes.formacionEmpresaFundae.yes,
+        no: binaryMixes.formacionEmpresaFundae.no,
+      },
+      {
+        key: 'formacionEmpresaCaes',
+        label: 'Formación Empresa · CAES',
+        yes: binaryMixes.formacionEmpresaCaes.yes,
+        no: binaryMixes.formacionEmpresaCaes.no,
+      },
+      {
+        key: 'formacionEmpresaHotel',
+        label: 'Formación Empresa · Hotel',
+        yes: binaryMixes.formacionEmpresaHotel.yes,
+        no: binaryMixes.formacionEmpresaHotel.no,
+      },
+      {
+        key: 'gepServicesCaes',
+        label: 'GEP Services · CAES',
+        yes: binaryMixes.gepServicesCaes.yes,
+        no: binaryMixes.gepServicesCaes.no,
+      },
+    ],
     heatmap: [],
     funnel: [],
     ranking,
