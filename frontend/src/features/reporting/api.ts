@@ -387,7 +387,13 @@ export type ComparativaTrend = {
 };
 
 export type ComparativaBreakdown = {
-  dimension: 'site' | 'service' | 'channel';
+  dimension:
+    | 'site'
+    | 'service'
+    | 'channel'
+    | 'formacionEmpresaSite'
+    | 'formacionAbiertaSite'
+    | 'gepServicesType';
   label: string;
   current: number;
   previous: number;
