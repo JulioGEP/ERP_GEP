@@ -57,6 +57,7 @@ import {
   type UpdateSessionStudentInput,
 } from '../../../features/presupuestos/api/students.api';
 import type { SessionComment, SessionStudent } from '../../../api/sessions.types';
+import type { ReportDraft, ReportSessionInfo } from '../../../features/informes/ReportsFlow';
 import { useCurrentUserIdentity } from '../../../features/presupuestos/useCurrentUserIdentity';
 import { fetchDealDetail, uploadManualDocument, deleteDocument } from '../../../features/presupuestos/api/deals.api';
 import type { DealDocument, DealNote } from '../../../types/deal';
@@ -167,6 +168,63 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     : null;
   const isGepServices = session.isGepServices;
   const isCompanyTraining = session.isCompanyTraining;
+
+  const reportType = useMemo(() => {
+    if (isCompanyTraining) return 'formacion' as const;
+    if (isGepServices) {
+      const template = (session.formationTemplate ?? '').trim().toLowerCase();
+      if (template.includes('simulacro')) return 'simulacro' as const;
+      if (template.includes('ebro')) return 'preventivo-ebro' as const;
+      return 'preventivo' as const;
+    }
+    return null;
+  }, [isCompanyTraining, isGepServices, session.formationTemplate]);
+
+  const reportPrefill = useMemo<Partial<ReportDraft> | null>(() => {
+    if (!reportType) return null;
+
+    const sessionInfo: ReportSessionInfo = {
+      id: session.sessionId,
+      number: session.budgetNumber,
+      nombre: session.formationName ?? session.sessionTitle ?? null,
+      direccion: session.address ?? null,
+      fecha: session.startDate ?? null,
+      label: session.sessionTitle ?? session.formationName ?? null,
+    };
+
+    const datos: Record<string, string> = {};
+    if (session.organizationName) datos.cliente = session.organizationName;
+    if (session.address) datos.sede = session.address;
+    if (session.clientName) datos.contacto = session.clientName;
+    if (session.commercialName) datos.comercial = session.commercialName;
+    if (userName) datos.formadorNombre = userName;
+    if (session.startDate) datos.fecha = session.startDate;
+    if (session.formationName) datos.formacionTitulo = session.formationName;
+
+    return {
+      dealId: session.dealId,
+      datos,
+      session: sessionInfo,
+      sessionOptions: [sessionInfo],
+    } satisfies Partial<ReportDraft>;
+  }, [reportType, session.address, session.budgetNumber, session.clientName, session.commercialName, session.dealId, session.formationName, session.sessionId, session.sessionTitle, session.startDate, session.organizationName, userName]);
+
+  const reportLink = useMemo(() => {
+    if (!reportType || !reportPrefill) return null;
+    const pathSegment = reportType === 'preventivo-ebro' ? 'recurso_preventivo_ebro' : reportType;
+    const label =
+      reportType === 'formacion'
+        ? 'Generar informe de formación'
+        : reportType === 'simulacro'
+        ? 'Generar informe de simulacro'
+        : 'Generar informe de servicios';
+
+    return {
+      to: `/usuarios/trainer/informes/${pathSegment}`,
+      label,
+      state: { reportPrefill },
+    } as const;
+  }, [reportPrefill, reportType]);
 
   const timeLogQuery = useQuery<TrainerSessionTimeLog | null>({
     queryKey: ['trainer', 'session', session.sessionId, 'time-log'],
@@ -897,6 +955,13 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     <Card className="shadow-sm border-0">
       <Card.Body>
         <Stack gap={4}>
+          {reportLink ? (
+            <div className="d-flex justify-content-end">
+              <Button as={Link} to={reportLink.to} state={reportLink.state} variant="primary">
+                {reportLink.label}
+              </Button>
+            </div>
+          ) : null}
           <Stack gap={3}>
             <div className="row g-4">
               <InfoField className="col-12 col-md-6 col-xl-3" label="Presupuesto">
