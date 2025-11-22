@@ -1,7 +1,7 @@
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Badge, Button, Card, Col, Form, Row, Spinner } from 'react-bootstrap';
+import { Badge, Button, Card, Col, Collapse, Form, ListGroup, Row, Spinner } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
 import {
   fetchComparativaDashboard,
@@ -95,6 +95,103 @@ function buildYearRange(reference: Date) {
     startDate: formatDate(start),
     endDate: formatDate(end),
   } as const;
+}
+
+type FilterMultiSelectProps = {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+};
+
+function FilterMultiSelect({ label, options, selected, onChange, placeholder = '-' }: FilterMultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) return options;
+    return options.filter((option) => option.toLowerCase().includes(normalized));
+  }, [options, search]);
+
+  const summary = selected.length ? selected.join(', ') : placeholder;
+
+  const toggleOption = (option: string, checked: boolean) => {
+    const values = new Set(selected);
+    if (checked) {
+      values.add(option);
+    } else {
+      values.delete(option);
+    }
+    onChange(Array.from(values));
+  };
+
+  return (
+    <div ref={containerRef} className="session-multiselect">
+      <Form.Label className="small text-muted mb-1">{label}</Form.Label>
+      <Form.Control
+        type="text"
+        size="sm"
+        readOnly
+        placeholder={placeholder}
+        value={summary}
+        className="session-multiselect-summary"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        onFocus={() => setOpen(true)}
+      />
+
+      <Collapse in={open}>
+        <div className="session-multiselect-panel mt-2">
+          <Form.Control
+            type="search"
+            size="sm"
+            placeholder="Buscar"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="mb-2"
+          />
+
+          <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
+            <ListGroup variant="flush">
+              {filteredOptions.map((option) => {
+                const id = `${label}-${option}`.replace(/\s+/g, '-').toLowerCase();
+                const checked = selected.includes(option);
+                return (
+                  <ListGroup.Item key={option} className="py-1">
+                    <Form.Check
+                      type="checkbox"
+                      id={id}
+                      label={option}
+                      checked={checked}
+                      onChange={(event) => toggleOption(option, event.target.checked)}
+                    />
+                  </ListGroup.Item>
+                );
+              })}
+
+              {filteredOptions.length === 0 && (
+                <ListGroup.Item className="text-muted small">Sin opciones disponibles</ListGroup.Item>
+              )}
+            </ListGroup>
+          </div>
+        </div>
+      </Collapse>
+    </div>
+  );
 }
 
 function formatDisplayDate(value: string) {
@@ -296,16 +393,6 @@ export default function ComparativaDashboardPage() {
       ...prev,
       [key]: values.length ? values : undefined,
     }));
-  };
-
-  const handleSelectChangeEvent = (
-    key: keyof Pick<ComparativaFilters, 'siteIds' | 'trainingTypes' | 'comerciales'>,
-    event: React.ChangeEvent<HTMLSelectElement>,
-  ) => {
-    const selectedValues = Array.from(event.target.selectedOptions)
-      .map((option) => option.value)
-      .filter(Boolean);
-    handleMultiSelectorChange(key, selectedValues);
   };
 
   const getBreakdownItems = (
@@ -919,51 +1006,30 @@ export default function ComparativaDashboardPage() {
             </Col>
 
             <Col xs={12} md={6} lg={2}>
-              <Form.Label className="small text-muted mb-1">Sede</Form.Label>
-              <Form.Select
-                multiple
-                size="sm"
-                value={filters.siteIds ?? []}
-                onChange={(event) => handleSelectChangeEvent('siteIds', event)}
-              >
-                {siteOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </Form.Select>
+              <FilterMultiSelect
+                label="Sede"
+                options={siteOptions}
+                selected={filters.siteIds ?? []}
+                onChange={(values) => handleMultiSelectorChange('siteIds', values)}
+              />
             </Col>
 
             <Col xs={12} md={6} lg={2}>
-              <Form.Label className="small text-muted mb-1">Comerciales</Form.Label>
-              <Form.Select
-                multiple
-                size="sm"
-                value={filters.comerciales ?? []}
-                onChange={(event) => handleSelectChangeEvent('comerciales', event)}
-              >
-                {comercialOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </Form.Select>
+              <FilterMultiSelect
+                label="Comerciales"
+                options={comercialOptions}
+                selected={filters.comerciales ?? []}
+                onChange={(values) => handleMultiSelectorChange('comerciales', values)}
+              />
             </Col>
 
             <Col xs={12} md={6} lg={2}>
-              <Form.Label className="small text-muted mb-1">Tipo de formación</Form.Label>
-              <Form.Select
-                multiple
-                size="sm"
-                value={filters.trainingTypes ?? []}
-                onChange={(event) => handleSelectChangeEvent('trainingTypes', event)}
-              >
-                {trainingTypeOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </Form.Select>
+              <FilterMultiSelect
+                label="Tipo de formación"
+                options={trainingTypeOptions}
+                selected={filters.trainingTypes ?? []}
+                onChange={(values) => handleMultiSelectorChange('trainingTypes', values)}
+              />
             </Col>
 
           </Row>
