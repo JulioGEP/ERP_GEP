@@ -955,13 +955,6 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
     <Card className="shadow-sm border-0">
       <Card.Body>
         <Stack gap={4}>
-          {reportLink ? (
-            <div className="d-flex justify-content-end">
-              <Button as={Link} to={reportLink.to} state={reportLink.state} variant="primary">
-                {reportLink.label}
-              </Button>
-            </div>
-          ) : null}
           <Stack gap={3}>
             <div className="row g-4">
               <InfoField className="col-12 col-md-6 col-xl-3" label="Presupuesto">
@@ -1283,343 +1276,364 @@ function SessionDetailCard({ session }: SessionDetailCardProps) {
             </div>
           ) : null}
 
-          <Row className="g-4">
-            <Col xs={12} xl={6}>
-              <div>
-                <h5 className="fw-semibold mb-3">Comentarios</h5>
-                {commentError ? <Alert variant="danger">{commentError}</Alert> : null}
-                {commentsQuery.isError ? (
-                  <Alert variant="danger">No se pudieron cargar los comentarios.</Alert>
-                ) : null}
-                {commentsQuery.isLoading ? (
-                  <div className="d-flex align-items-center gap-2">
-                    <Spinner animation="border" size="sm" />
-                    <span>Cargando comentarios…</span>
+          <div className="trainer-session-actions p-4 rounded-3">
+            <Row className="g-4">
+              <Col xs={12} xl={6}>
+                <div className="trainer-session-section h-100 d-flex flex-column gap-3">
+                  <div>
+                    <h5 className="fw-semibold mb-1">Comentarios</h5>
+                    <p className="text-muted mb-2 small">
+                      Añade comentarios o revisa los mensajes compartidos para esta sesión.
+                    </p>
                   </div>
-                ) : (
-                  <Stack gap={3} className="mb-3">
-                    {filteredComments.length ? (
-                      filteredComments.map((comment) => {
-                        const author = (comment.author ?? '—').trim();
-                        const authorLower = author.toLowerCase();
-                        const canEdit =
-                          Boolean(authorLower.length) && authorLower === normalizedUserName;
-                        const isEditing = editingCommentId === comment.id;
-                        const isSaving =
-                          savingCommentId === comment.id && updateCommentMutation.isPending;
-                        const isDeleting =
-                          deletingCommentId === comment.id && deleteCommentMutation.isPending;
-                        const createdLabel = comment.created_at
-                          ? formatDateTime(comment.created_at)
-                          : '—';
-                        const updatedLabel =
-                          comment.updated_at && comment.updated_at !== comment.created_at
-                            ? formatDateTime(comment.updated_at)
-                            : null;
-                        const displayContent = comment.content?.trim().length
-                          ? comment.content
-                          : '—';
+                  {commentError ? <Alert variant="danger">{commentError}</Alert> : null}
+                  {commentsQuery.isError ? (
+                    <Alert variant="danger">No se pudieron cargar los comentarios.</Alert>
+                  ) : null}
+                  {commentsQuery.isLoading ? (
+                    <div className="d-flex align-items-center gap-2">
+                      <Spinner animation="border" size="sm" />
+                      <span>Cargando comentarios…</span>
+                    </div>
+                  ) : (
+                    <Stack gap={3} className="mb-3">
+                      {filteredComments.length ? (
+                        filteredComments.map((comment) => {
+                          const author = (comment.author ?? '—').trim();
+                          const authorLower = author.toLowerCase();
+                          const canEdit =
+                            Boolean(authorLower.length) && authorLower === normalizedUserName;
+                          const isEditing = editingCommentId === comment.id;
+                          const isSaving =
+                            savingCommentId === comment.id && updateCommentMutation.isPending;
+                          const isDeleting =
+                            deletingCommentId === comment.id && deleteCommentMutation.isPending;
+                          const createdLabel = comment.created_at
+                            ? formatDateTime(comment.created_at)
+                            : '—';
+                          const updatedLabel =
+                            comment.updated_at && comment.updated_at !== comment.created_at
+                              ? formatDateTime(comment.updated_at)
+                              : null;
+                          const displayContent = comment.content?.trim().length
+                            ? comment.content
+                            : '—';
 
-                        return (
-                          <Card key={comment.id} className="border-0 bg-light">
-                            <Card.Body>
-                              <div className="text-muted small mb-2">
-                                {author.length ? author : '—'} · {createdLabel}
-                                {updatedLabel ? (
-                                  <span className="ms-2">Actualizado: {updatedLabel}</span>
-                                ) : null}
-                              </div>
-                              {isEditing ? (
-                                <Stack gap={2}>
-                                  <Form.Control
-                                    as="textarea"
-                                    rows={3}
-                                    value={editingCommentContent}
-                                    onChange={(event) => setEditingCommentContent(event.target.value)}
-                                    disabled={isSaving}
-                                  />
-                                  <div className="d-flex justify-content-end gap-2">
-                                    <Button
-                                      variant="outline-secondary"
-                                      size="sm"
-                                      onClick={cancelEditingComment}
+                          return (
+                            <Card key={comment.id} className="border-0 bg-light">
+                              <Card.Body>
+                                <div className="text-muted small mb-2">
+                                  {author.length ? author : '—'} · {createdLabel}
+                                  {updatedLabel ? (
+                                    <span className="ms-2">Actualizado: {updatedLabel}</span>
+                                  ) : null}
+                                </div>
+                                {isEditing ? (
+                                  <Stack gap={2}>
+                                    <Form.Control
+                                      as="textarea"
+                                      rows={3}
+                                      value={editingCommentContent}
+                                      onChange={(event) => setEditingCommentContent(event.target.value)}
                                       disabled={isSaving}
-                                    >
-                                      Cancelar
-                                    </Button>
-                                    <Button
-                                      variant="primary"
-                                      size="sm"
-                                      onClick={() => handleCommentSave(comment)}
-                                      disabled={
-                                        isSaving || !editingCommentContent.trim().length
-                                      }
-                                    >
-                                      {isSaving ? (
-                                        <Spinner animation="border" size="sm" role="status" />
-                                      ) : (
-                                        'Guardar'
-                                      )}
-                                    </Button>
-                                  </div>
-                                </Stack>
-                              ) : (
-                                <Stack gap={2}>
-                                  <p className="mb-0 text-break" style={{ whiteSpace: 'pre-line' }}>
-                                    {displayContent}
-                                  </p>
-                                  {canEdit ? (
-                                    <div className="d-flex flex-wrap gap-2">
+                                    />
+                                    <div className="d-flex justify-content-end gap-2">
                                       <Button
-                                        variant="outline-primary"
+                                        variant="outline-secondary"
                                         size="sm"
-                                        onClick={() => startEditingComment(comment)}
-                                        disabled={isDeleting}
+                                        onClick={cancelEditingComment}
+                                        disabled={isSaving}
                                       >
-                                        Editar
+                                        Cancelar
                                       </Button>
                                       <Button
-                                        variant="outline-danger"
+                                        variant="primary"
                                         size="sm"
-                                        onClick={() => handleCommentDelete(comment)}
-                                        disabled={isDeleting}
+                                        onClick={() => handleCommentSave(comment)}
+                                        disabled={isSaving}
                                       >
-                                        {isDeleting ? (
+                                        {isSaving ? (
                                           <Spinner animation="border" size="sm" role="status" />
                                         ) : (
-                                          'Eliminar'
+                                          'Guardar'
                                         )}
                                       </Button>
                                     </div>
-                                  ) : null}
-                                </Stack>
-                              )}
-                            </Card.Body>
-                          </Card>
-                        );
-                      })
-                    ) : (
-                      <p className="text-muted mb-0">No hay comentarios compartidos.</p>
-                    )}
-                  </Stack>
-                )}
-                <Form onSubmit={handleCommentSubmit} className="d-grid gap-3">
-                  <Form.Group controlId={`trainer-session-${session.sessionId}-comment`}>
-                    <Form.Label>Nuevo comentario</Form.Label>
-                    <Form.Control
-                      as="textarea"
-                      rows={3}
-                      value={commentContent}
-                      onChange={(event) => setCommentContent(event.target.value)}
-                      placeholder="Escribe un comentario para el equipo del ERP"
-                      disabled={commentMutation.isPending}
-                      required
-                    />
-                  </Form.Group>
-                  <div>
-                    <Button
-                      type="submit"
-                      disabled={commentMutation.isPending || !commentContent.trim().length}
-                    >
-                      {commentMutation.isPending ? 'Guardando…' : 'Añadir comentario'}
-                    </Button>
-                  </div>
-                </Form>
-              </div>
-            </Col>
-
-            <Col xs={12} xl={6}>
-              <div>
-                <h5 className="fw-semibold mb-3">Documentos</h5>
-                {documentError ? <Alert variant="danger">{documentError}</Alert> : null}
-                {documentsQuery.isError ? (
-                  <Alert variant="danger">No se pudieron cargar los documentos.</Alert>
-                ) : null}
-                {documentsQuery.isLoading ? (
-                  <div className="d-flex align-items-center gap-2">
-                    <Spinner animation="border" size="sm" />
-                    <span>Cargando documentos…</span>
-                  </div>
-                ) : (
-                  <Stack gap={2} className="mb-3">
-                    {sharedDocuments.length ? (
-                      sharedDocuments.map((doc) => {
-                        const canDeleteDoc = trainerDocumentIdSet.has(doc.id);
-                        const isDeletingDoc =
-                          deletingDocumentId === doc.id && deleteDocumentMutation.isPending;
-                        return (
-                          <div
-                            key={doc.id}
-                            className={`d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2 ${
-                              doc.trainer_expense ? 'rounded border border-warning-subtle bg-warning-subtle p-2' : ''
-                            }`}
-                          >
-                            <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2 flex-grow-1">
-                              {doc.drive_web_view_link ? (
-                                <a
-                                  href={doc.drive_web_view_link}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="fw-semibold text-break text-decoration-none"
-                                >
-                                  {doc.drive_file_name ?? 'Documento'}
-                                </a>
-                              ) : (
-                                <span className="fw-semibold text-break">
-                                  {doc.drive_file_name ?? 'Documento'}
-                                </span>
-                              )}
-                              {doc.trainer_expense ? (
-                                <Badge bg="warning" text="dark" className="text-uppercase fw-semibold">
-                                  Gasto
-                                </Badge>
-                              ) : null}
-                            </div>
-                            <span className="text-muted small">
-                              {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
-                            </span>
-                            <div className="d-flex align-items-center gap-2">
-                              {canDeleteDoc ? (
-                                <Button
-                                  variant="outline-danger"
-                                  size="sm"
-                                  onClick={() => handleDocumentDelete(doc.id)}
-                                  disabled={isDeletingDoc}
-                                >
-                                  {isDeletingDoc ? (
-                                    <Spinner animation="border" size="sm" role="status" />
-                                  ) : (
-                                    'Eliminar'
-                                  )}
-                                </Button>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <p className="text-muted mb-0">No hay documentos compartidos.</p>
-                    )}
-                  </Stack>
-                )}
-                <Form.Group
-                  controlId={`trainer-session-${session.sessionId}-documents`}
-                  className="d-grid gap-2"
-                >
-                  <Form.Label>Subir documentos</Form.Label>
-                  <Form.Check
-                    type="checkbox"
-                    id={`trainer-session-${session.sessionId}-documents-expense`}
-                    label={
-                      <>
-                        ¿Gasto?
-                        <span className="text-muted ms-2">
-                          Si el archivo es un gasto, antes de subirlo marca la casilla
-                        </span>
-                      </>
-                    }
-                    checked={isExpense}
-                    onChange={(event) => setIsExpense(event.target.checked)}
-                    disabled={documentMutation.isPending}
-                  />
-                  <Form.Control
-                    type="file"
-                    multiple
-                    onChange={handleDocumentUpload}
-                    ref={documentInputRef}
-                    disabled={documentMutation.isPending}
-                  />
-                  <div className="text-muted small">
-                    Los documentos se compartirán automáticamente con el equipo del ERP.
-                    {isExpense
-                      ? ` Se subirán a la carpeta "${TRAINER_EXPENSE_FOLDER_NAME}" y se añadirá tu nombre al archivo.`
-                      : null}
-                  </div>
-                  {documentMutation.isPending ? (
-                    <div className="d-flex align-items-center gap-2 text-muted small">
-                      <Spinner animation="border" size="sm" role="status" />
-                      <span>Subiendo documentos…</span>
+                                  </Stack>
+                                ) : (
+                                  <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-2">
+                                    <div className="text-break">{displayContent}</div>
+                                    {canEdit ? (
+                                      <div className="d-flex gap-2">
+                                        <Button
+                                          variant="outline-secondary"
+                                          size="sm"
+                                          onClick={() => startEditingComment(comment)}
+                                          disabled={isDeleting}
+                                        >
+                                          Editar
+                                        </Button>
+                                        <Button
+                                          variant="outline-danger"
+                                          size="sm"
+                                          onClick={() => handleCommentDelete(comment)}
+                                          disabled={isDeleting}
+                                        >
+                                          {isDeleting ? (
+                                            <Spinner animation="border" size="sm" role="status" />
+                                          ) : (
+                                            'Eliminar'
+                                          )}
+                                        </Button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                )}
+                              </Card.Body>
+                            </Card>
+                          );
+                        })
+                      ) : (
+                        <p className="text-muted mb-0">No hay comentarios compartidos.</p>
+                      )}
+                    </Stack>
+                  )}
+                  <Form onSubmit={handleCommentSubmit} className="d-grid gap-3">
+                    <Form.Group controlId={`trainer-session-${session.sessionId}-comment`}>
+                      <Form.Label>Nuevo comentario</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={commentContent}
+                        onChange={(event) => setCommentContent(event.target.value)}
+                        placeholder="Escribe un comentario para el equipo del ERP"
+                        disabled={commentMutation.isPending}
+                        required
+                      />
+                    </Form.Group>
+                    <div>
+                      <Button
+                        type="submit"
+                        disabled={commentMutation.isPending || !commentContent.trim().length}
+                      >
+                        {commentMutation.isPending ? 'Guardando…' : 'Añadir comentario'}
+                      </Button>
+                    </div>
+                  </Form>
+                  {reportLink ? (
+                    <div className="d-flex justify-content-start">
+                      <Button
+                        as={Link as any}
+                        to={reportLink.to}
+                        state={reportLink.state}
+                        variant="primary"
+                      >
+                        {reportLink.label}
+                      </Button>
                     </div>
                   ) : null}
-                </Form.Group>
-                <div className="mt-4">
-                  <h5 className="fw-semibold mb-2">Fichar sesión</h5>
-                  {timeLogLoadErrorMessage ? (
-                    <Alert variant="danger">{timeLogLoadErrorMessage}</Alert>
+                </div>
+              </Col>
+
+              <Col xs={12} xl={6}>
+                <div className="trainer-session-section h-100 d-flex flex-column gap-3">
+                  <div>
+                    <h5 className="fw-semibold mb-1">Documentos</h5>
+                    <p className="text-muted mb-2 small">
+                      Comparte documentos relevantes con el equipo del ERP y marca los gastos cuando corresponda.
+                    </p>
+                  </div>
+                  {documentError ? <Alert variant="danger">{documentError}</Alert> : null}
+                  {documentsQuery.isError ? (
+                    <Alert variant="danger">No se pudieron cargar los documentos.</Alert>
                   ) : null}
-                  {timeLogError ? <Alert variant="danger">{timeLogError}</Alert> : null}
-                  {timeLogSuccess ? (
-                    <Alert variant="success">Registro horario guardado correctamente.</Alert>
-                  ) : null}
-                  {timeLogQuery.isLoading ? (
+                  {documentsQuery.isLoading ? (
                     <div className="d-flex align-items-center gap-2">
                       <Spinner animation="border" size="sm" />
-                      <span>Cargando registro horario…</span>
+                      <span>Cargando documentos…</span>
                     </div>
                   ) : (
-                    <Form onSubmit={handleTimeLogSubmit} className="d-grid gap-3">
-                      <Row className="g-3">
-                        <Col xs={12} sm={6}>
-                          <Form.Group
-                            controlId={`trainer-session-${session.sessionId}-time-entry`}
-                          >
-                            <Form.Label>Hora de entrada</Form.Label>
-                            <Form.Control
-                              type="datetime-local"
-                              value={timeLogEntryValue}
-                              onChange={(event) => setTimeLogEntryValue(event.target.value)}
-                              disabled={saveTimeLogMutation.isPending}
-                              required
-                            />
-                          </Form.Group>
-                        </Col>
-                        <Col xs={12} sm={6}>
-                          <Form.Group
-                            controlId={`trainer-session-${session.sessionId}-time-exit`}
-                          >
-                            <Form.Label>Hora de salida</Form.Label>
-                            <Form.Control
-                              type="datetime-local"
-                              value={timeLogExitValue}
-                              onChange={(event) => setTimeLogExitValue(event.target.value)}
-                              disabled={saveTimeLogMutation.isPending}
-                              required
-                            />
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                      <div className="d-flex justify-content-end">
-                        <Button
-                          type="submit"
-                          disabled={saveTimeLogMutation.isPending}
-                          style={
-                            hasExistingTimeLog
-                              ? {
-                                  backgroundColor: '#F5C147',
-                                  borderColor: '#F5C147',
-                                  color: '#212529',
-                                }
-                              : undefined
-                          }
-                        >
-                          {saveTimeLogMutation.isPending
-                            ? 'Guardando…'
-                            : hasExistingTimeLog
-                            ? 'Modificar'
-                            : 'Guardar registro'}
-                        </Button>
-                      </div>
-                      {formattedTimeLogUpdated ? (
-                        <div className="text-muted small">
-                          Última actualización: {formattedTimeLogUpdated}
-                        </div>
-                      ) : null}
-                    </Form>
+                    <Stack gap={2} className="mb-3">
+                      {sharedDocuments.length ? (
+                        sharedDocuments.map((doc) => {
+                          const canDeleteDoc = trainerDocumentIdSet.has(doc.id);
+                          const isDeletingDoc =
+                            deletingDocumentId === doc.id && deleteDocumentMutation.isPending;
+                          return (
+                            <div
+                              key={doc.id}
+                              className={`d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2 ${
+                                doc.trainer_expense ? 'rounded border border-warning-subtle bg-warning-subtle p-2' : ''
+                              }`}
+                            >
+                              <div className="d-flex flex-column flex-md-row align-items-start align-items-md-center gap-2 flex-grow-1">
+                                {doc.drive_web_view_link ? (
+                                  <a
+                                    href={doc.drive_web_view_link}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="fw-semibold text-break text-decoration-none"
+                                  >
+                                    {doc.drive_file_name ?? 'Documento'}
+                                  </a>
+                                ) : (
+                                  <span className="fw-semibold text-break">
+                                    {doc.drive_file_name ?? 'Documento'}
+                                  </span>
+                                )}
+                                {doc.trainer_expense ? (
+                                  <Badge bg="warning" text="dark" className="text-uppercase fw-semibold">
+                                    Gasto
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              <span className="text-muted small">
+                                {doc.added_at ? formatDateTime(doc.added_at) : 'Sin fecha'}
+                              </span>
+                              <div className="d-flex align-items-center gap-2">
+                                {canDeleteDoc ? (
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => handleDocumentDelete(doc.id)}
+                                    disabled={isDeletingDoc}
+                                  >
+                                    {isDeletingDoc ? (
+                                      <Spinner animation="border" size="sm" role="status" />
+                                    ) : (
+                                      'Eliminar'
+                                    )}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-muted mb-0">No hay documentos compartidos.</p>
+                      )}
+                    </Stack>
                   )}
+                  <Form.Group
+                    controlId={`trainer-session-${session.sessionId}-documents`}
+                    className="d-grid gap-2"
+                  >
+                    <Form.Label>Subir documentos</Form.Label>
+                    <Form.Check
+                      type="checkbox"
+                      id={`trainer-session-${session.sessionId}-documents-expense`}
+                      label={
+                        <>
+                          ¿Gasto?
+                          <span className="text-muted ms-2">
+                            Si el archivo es un gasto, antes de subirlo marca la casilla
+                          </span>
+                        </>
+                      }
+                      checked={isExpense}
+                      onChange={(event) => setIsExpense(event.target.checked)}
+                      disabled={documentMutation.isPending}
+                    />
+                    <Form.Control
+                      type="file"
+                      multiple
+                      onChange={handleDocumentUpload}
+                      ref={documentInputRef}
+                      className="trainer-file-input"
+                      disabled={documentMutation.isPending}
+                    />
+                    <div className="text-muted small">
+                      Los documentos se compartirán automáticamente con el equipo del ERP.
+                      {isExpense
+                        ? ` Se subirán a la carpeta "${TRAINER_EXPENSE_FOLDER_NAME}" y se añadirá tu nombre al archivo.`
+                        : null}
+                    </div>
+                    {documentMutation.isPending ? (
+                      <div className="d-flex align-items-center gap-2 text-muted small">
+                        <Spinner animation="border" size="sm" role="status" />
+                        <span>Subiendo documentos…</span>
+                      </div>
+                    ) : null}
+                  </Form.Group>
+                  <div className="trainer-session-section mt-2">
+                    <h5 className="fw-semibold mb-2">Fichar sesión</h5>
+                    {timeLogLoadErrorMessage ? (
+                      <Alert variant="danger">{timeLogLoadErrorMessage}</Alert>
+                    ) : null}
+                    {timeLogError ? <Alert variant="danger">{timeLogError}</Alert> : null}
+                    {timeLogSuccess ? (
+                      <Alert variant="success">Registro horario guardado correctamente.</Alert>
+                    ) : null}
+                    {timeLogQuery.isLoading ? (
+                      <div className="d-flex align-items-center gap-2">
+                        <Spinner animation="border" size="sm" />
+                        <span>Cargando registro horario…</span>
+                      </div>
+                    ) : (
+                      <Form onSubmit={handleTimeLogSubmit} className="d-grid gap-3">
+                        <Row className="g-3">
+                          <Col xs={12} sm={6}>
+                            <Form.Group
+                              controlId={`trainer-session-${session.sessionId}-time-entry`}
+                            >
+                              <Form.Label>Hora de entrada</Form.Label>
+                              <Form.Control
+                                type="datetime-local"
+                                value={timeLogEntryValue}
+                                onChange={(event) => setTimeLogEntryValue(event.target.value)}
+                                disabled={saveTimeLogMutation.isPending}
+                                required
+                              />
+                            </Form.Group>
+                          </Col>
+                          <Col xs={12} sm={6}>
+                            <Form.Group
+                              controlId={`trainer-session-${session.sessionId}-time-exit`}
+                            >
+                              <Form.Label>Hora de salida</Form.Label>
+                              <Form.Control
+                                type="datetime-local"
+                                value={timeLogExitValue}
+                                onChange={(event) => setTimeLogExitValue(event.target.value)}
+                                disabled={saveTimeLogMutation.isPending}
+                                required
+                              />
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <div className="d-flex justify-content-end">
+                          <Button
+                            type="submit"
+                            disabled={saveTimeLogMutation.isPending}
+                            style={
+                              hasExistingTimeLog
+                                ? {
+                                    backgroundColor: '#F5C147',
+                                    borderColor: '#F5C147',
+                                    color: '#212529',
+                                  }
+                                : undefined
+                            }
+                          >
+                            {saveTimeLogMutation.isPending
+                              ? 'Guardando…'
+                              : hasExistingTimeLog
+                              ? 'Modificar'
+                              : 'Guardar registro'}
+                          </Button>
+                        </div>
+                        {formattedTimeLogUpdated ? (
+                          <div className="text-muted small">
+                            Última actualización: {formattedTimeLogUpdated}
+                          </div>
+                        ) : null}
+                      </Form>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </Col>
-          </Row>
+              </Col>
+            </Row>
+          </div>
         </Stack>
       </Card.Body>
     </Card>
