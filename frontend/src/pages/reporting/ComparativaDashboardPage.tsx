@@ -255,17 +255,6 @@ function normalizeSparkline(points?: number[]) {
   return [...padding, ...points];
 }
 
-function formatListLabel(values?: string[], emptyLabel = 'Todos'): string {
-  if (!values || values.length === 0) return emptyLabel;
-  return values.join(', ');
-}
-
-const GRANULARITY_LABELS: Record<ComparativaFilters['granularity'], string> = {
-  day: 'Diaria',
-  isoWeek: 'Semanal',
-  month: 'Mensual',
-};
-
 export default function ComparativaDashboardPage() {
   const today = useMemo(() => new Date(), []);
   const [filters, setFilters] = useState<ComparativaFilters>({
@@ -294,6 +283,24 @@ export default function ComparativaDashboardPage() {
   );
 
   const appliedFilters = useMemo(() => filters, [filters]);
+
+  const appliedFilterBadges = useMemo(() => {
+    const badges: { label: string; value: string }[] = [];
+
+    if (filters.siteIds?.length) {
+      badges.push({ label: 'Sede', value: filters.siteIds.join(', ') });
+    }
+
+    if (filters.comerciales?.length) {
+      badges.push({ label: 'Comerciales', value: filters.comerciales.join(', ') });
+    }
+
+    if (filters.trainingTypes?.length) {
+      badges.push({ label: 'Tipo de formación', value: filters.trainingTypes.join(', ') });
+    }
+
+    return badges;
+  }, [filters.comerciales, filters.siteIds, filters.trainingTypes]);
 
   const dashboardQuery = useQuery({
     queryKey: [
@@ -1048,19 +1055,16 @@ export default function ComparativaDashboardPage() {
           <div className="d-flex flex-wrap align-items-center gap-2 mt-3">
             <div className="fw-semibold small text-muted text-uppercase me-1">Filtros aplicados</div>
 
-            {[
-              { label: 'Periodo actual', value: formatDisplayRange(filters.currentPeriod) },
-              { label: 'Comparativa', value: formatDisplayRange(filters.previousPeriod) },
-              { label: 'Granularidad', value: GRANULARITY_LABELS[filters.granularity] },
-              { label: 'Sede', value: formatListLabel(filters.siteIds) },
-              { label: 'Comerciales', value: formatListLabel(filters.comerciales) },
-              { label: 'Tipo de formación', value: formatListLabel(filters.trainingTypes) },
-            ].map((item) => (
-              <Badge key={item.label} bg="light" text="dark" className="border fw-normal">
-                <span className="text-muted">{item.label}: </span>
-                <span className="fw-semibold text-dark">{item.value || '-'}</span>
-              </Badge>
-            ))}
+            {appliedFilterBadges.length === 0 ? (
+              <div className="text-muted small">Sin filtros adicionales</div>
+            ) : (
+              appliedFilterBadges.map((item) => (
+                <Badge key={item.label} bg="light" text="dark" className="border fw-normal">
+                  <span className="text-muted">{item.label}: </span>
+                  <span className="fw-semibold text-dark">{item.value}</span>
+                </Badge>
+              ))
+            )}
           </div>
         </Card.Body>
       </Card>
