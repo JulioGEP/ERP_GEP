@@ -781,7 +781,7 @@ export default function ComparativaDashboardPage() {
 
         <Row className="g-3">
           {BREAKDOWN_CONFIG.map((item) => (
-            <Col xs={12} md={6} key={item.dimension}>
+            <Col xs={12} md={6} lg={4} key={item.dimension}>
               {renderBreakdownCard(item)}
             </Col>
           ))}
