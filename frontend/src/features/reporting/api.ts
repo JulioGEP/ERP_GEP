@@ -352,9 +352,9 @@ export type ComparativaFilters = {
   currentPeriod: ComparativaPeriod;
   previousPeriod: ComparativaPeriod;
   granularity: 'day' | 'isoWeek' | 'month';
-  siteId?: string;
-  costCenterId?: string;
-  trainingType?: string;
+  siteIds?: string[];
+  trainingTypes?: string[];
+  comerciales?: string[];
   serviceType?: string;
 };
 
@@ -448,6 +448,11 @@ export type ComparativaDashboardResponse = {
   heatmap: ComparativaHeatmapCell[];
   funnel: ComparativaFunnelStage[];
   ranking: ComparativaRankingRow[];
+  filterOptions: {
+    sites: string[];
+    trainingTypes: string[];
+    comerciales: string[];
+  };
 };
 
 export async function fetchComparativaDashboard(
@@ -461,9 +466,9 @@ export async function fetchComparativaDashboard(
   params.set('previousEndDate', filters.previousPeriod.endDate);
   params.set('granularity', filters.granularity);
 
-  if (filters.siteId) params.set('siteId', filters.siteId);
-  if (filters.costCenterId) params.set('costCenterId', filters.costCenterId);
-  if (filters.trainingType) params.set('trainingType', filters.trainingType);
+  filters.siteIds?.forEach((siteId) => params.append('siteId', siteId));
+  filters.trainingTypes?.forEach((trainingType) => params.append('trainingType', trainingType));
+  filters.comerciales?.forEach((comercial) => params.append('comercial', comercial));
   if (filters.serviceType) params.set('serviceType', filters.serviceType);
 
   const query = params.toString();

@@ -192,6 +192,7 @@ type SessionRow = {
     fundae_val: boolean | null;
     caes_val: boolean | null;
     hotel_val: boolean | null;
+    comercial: string | null;
   } | null;
   deal_products: {
     name: string | null;
@@ -221,6 +222,16 @@ function normalizePipelineLabel(value: string | null | undefined): string | null
   const trimmed = String(value).trim();
   if (!trimmed.length) return null;
   return trimmed.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function parseStringArrayParam(value: string | string[] | undefined): string[] | undefined {
+  if (!value) return undefined;
+  const items = Array.isArray(value) ? value : String(value).split(',');
+  const normalized = items
+    .map((item) => item?.trim())
+    .filter((item): item is string => Boolean(item));
+
+  return normalized.length ? normalized : undefined;
 }
 
 function classifySession(row: SessionRow): 'gepServices' | 'formacionEmpresa' | 'formacionAbierta' | null {
@@ -316,15 +327,42 @@ export const handler = createHttpHandler(async (request) => {
   const currentEndExclusive = addDays(currentEnd, 1);
   const previousEndExclusive = addDays(previousEnd, 1);
 
+  const siteFilters =
+    parseStringArrayParam(request.query.siteId ?? request.query.siteIds) ??
+    parseStringArrayParam(request.multiValueQueryStringParameters?.siteId);
+  const trainingTypes =
+    parseStringArrayParam(request.query.trainingType ?? request.query.trainingTypes) ??
+    parseStringArrayParam(request.multiValueQueryStringParameters?.trainingType);
+  const comerciales =
+    parseStringArrayParam(request.query.comercial ?? request.query.comerciales ?? request.query.costCenterId) ??
+    parseStringArrayParam(
+      request.multiValueQueryStringParameters?.comercial ??
+        request.multiValueQueryStringParameters?.comerciales ??
+        request.multiValueQueryStringParameters?.costCenterId,
+    );
+
   const [currentSessions, previousSessions, currentVariants, previousVariants] = await Promise.all([
     prisma.sesiones.findMany({
       where: {
         fecha_inicio_utc: { gte: currentStart, lt: currentEndExclusive },
+        deals: {
+          ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
+          ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
+          ...(comerciales ? { comercial: { in: comerciales } } : {}),
+        },
       },
       select: {
         fecha_inicio_utc: true,
         deals: {
-          select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
+          select: {
+            pipeline_id: true,
+            sede_label: true,
+            tipo_servicio: true,
+            fundae_val: true,
+            caes_val: true,
+            hotel_val: true,
+            comercial: true,
+          },
         },
         deal_products: { select: { name: true, code: true } },
         sesion_trainers: {
@@ -337,11 +375,24 @@ export const handler = createHttpHandler(async (request) => {
     prisma.sesiones.findMany({
       where: {
         fecha_inicio_utc: { gte: previousStart, lt: previousEndExclusive },
+        deals: {
+          ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
+          ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
+          ...(comerciales ? { comercial: { in: comerciales } } : {}),
+        },
       },
       select: {
         fecha_inicio_utc: true,
         deals: {
-          select: { pipeline_id: true, sede_label: true, tipo_servicio: true, fundae_val: true, caes_val: true, hotel_val: true },
+          select: {
+            pipeline_id: true,
+            sede_label: true,
+            tipo_servicio: true,
+            fundae_val: true,
+            caes_val: true,
+            hotel_val: true,
+            comercial: true,
+          },
         },
         deal_products: { select: { name: true, code: true } },
         sesion_trainers: {
@@ -352,7 +403,10 @@ export const handler = createHttpHandler(async (request) => {
       },
     }) as Promise<SessionRow[]>,
     prisma.variants.findMany({
-      where: { date: { gte: currentStart, lt: currentEndExclusive } },
+      where: {
+        date: { gte: currentStart, lt: currentEndExclusive },
+        ...(siteFilters ? { sede: { in: siteFilters } } : {}),
+      },
       select: {
         date: true,
         sede: true,
@@ -361,7 +415,10 @@ export const handler = createHttpHandler(async (request) => {
       },
     }) as Promise<VariantRow[]>,
     prisma.variants.findMany({
-      where: { date: { gte: previousStart, lt: previousEndExclusive } },
+      where: {
+        date: { gte: previousStart, lt: previousEndExclusive },
+        ...(siteFilters ? { sede: { in: siteFilters } } : {}),
+      },
       select: {
         date: true,
         sede: true,
@@ -604,6 +661,35 @@ export const handler = createHttpHandler(async (request) => {
     },
   ];
 
+  const [dealSites, variantSites, pipelineOptions, comercialOptions] = await Promise.all([
+    prisma.deals.findMany({ distinct: ['sede_label'], select: { sede_label: true } }),
+    prisma.variants.findMany({ distinct: ['sede'], select: { sede: true } }),
+    prisma.deals.findMany({ distinct: ['pipeline_id'], select: { pipeline_id: true } }),
+    prisma.deals.findMany({ distinct: ['comercial'], select: { comercial: true } }),
+  ]);
+
+  const siteOptionSet = new Set<string>();
+  for (const item of dealSites) {
+    const label = item.sede_label?.trim();
+    if (label) siteOptionSet.add(label);
+  }
+  for (const item of variantSites) {
+    const label = item.sede?.trim();
+    if (label) siteOptionSet.add(label);
+  }
+
+  const filterOptions = {
+    sites: Array.from(siteOptionSet).sort((a, b) => a.localeCompare(b)),
+    trainingTypes: pipelineOptions
+      .map((item) => item.pipeline_id?.trim())
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => a.localeCompare(b)),
+    comerciales: comercialOptions
+      .map((item) => item.comercial?.trim())
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => a.localeCompare(b)),
+  } as const;
+
   return successResponse({
     highlights,
     trends,
@@ -642,6 +728,7 @@ export const handler = createHttpHandler(async (request) => {
     heatmap: [],
     funnel: [],
     ranking,
+    filterOptions,
   });
 });
 

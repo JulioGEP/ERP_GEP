@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useMemo, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Badge, Button, Card, Col, Form, Row, Spinner } from 'react-bootstrap';
@@ -14,26 +15,6 @@ const METRIC_CONFIG: { key: string; label: string }[] = [
   { key: 'gepServicesSessions', label: 'GEP Services' },
   { key: 'formacionEmpresaSessions', label: 'Formacion Empresa' },
   { key: 'formacionAbiertaVariantesSessions', label: 'Formación Abierta' },
-];
-
-const SITE_OPTIONS = [
-  { value: '', label: 'Todas las sedes' },
-  { value: 'madrid', label: 'Madrid' },
-  { value: 'barcelona', label: 'Barcelona' },
-  { value: 'online', label: 'Online' },
-];
-
-const COST_CENTER_OPTIONS = [
-  { value: '', label: 'Todos los centros de coste' },
-  { value: 'gep', label: 'GEP' },
-  { value: 'formacion', label: 'Formación' },
-  { value: 'servicios', label: 'Servicios' },
-];
-
-const TRAINING_TYPE_OPTIONS = [
-  { value: '', label: 'Todos los tipos de formación' },
-  { value: 'formacionEmpresa', label: 'Formación Empresa' },
-  { value: 'formacionAbierta', label: 'Formación Abierta' },
 ];
 
 const BREAKDOWN_CONFIG = [
@@ -215,6 +196,9 @@ export default function ComparativaDashboardPage() {
       appliedFilters.previousPeriod.startDate,
       appliedFilters.previousPeriod.endDate,
       appliedFilters.granularity,
+      appliedFilters.siteIds?.join(',') ?? '',
+      appliedFilters.trainingTypes?.join(',') ?? '',
+      appliedFilters.comerciales?.join(',') ?? '',
     ],
     queryFn: () => fetchComparativaDashboard(appliedFilters),
     placeholderData: keepPreviousData,
@@ -230,6 +214,10 @@ export default function ComparativaDashboardPage() {
     () => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2, minimumFractionDigits: 1 }),
     [],
   );
+
+  const siteOptions = dashboardQuery.data?.filterOptions.sites ?? [];
+  const trainingTypeOptions = dashboardQuery.data?.filterOptions.trainingTypes ?? [];
+  const comercialOptions = dashboardQuery.data?.filterOptions.comerciales ?? [];
 
   const handleDateChange = (
     period: 'currentPeriod' | 'previousPeriod',
@@ -290,11 +278,34 @@ export default function ComparativaDashboardPage() {
     }));
   };
 
-  const handleSelectorChange = (key: keyof Omit<ComparativaFilters, 'currentPeriod' | 'previousPeriod' | 'granularity'>, value: string | boolean) => {
+  const handleSelectorChange = (
+    key: keyof Omit<ComparativaFilters, 'currentPeriod' | 'previousPeriod' | 'granularity'>,
+    value: string | boolean,
+  ) => {
     setFilters((prev) => ({
       ...prev,
       [key]: typeof value === 'string' && value === '' ? undefined : value,
     }));
+  };
+
+  const handleMultiSelectorChange = (
+    key: keyof Pick<ComparativaFilters, 'siteIds' | 'trainingTypes' | 'comerciales'>,
+    values: string[],
+  ) => {
+    setFilters((prev) => ({
+      ...prev,
+      [key]: values.length ? values : undefined,
+    }));
+  };
+
+  const handleSelectChangeEvent = (
+    key: keyof Pick<ComparativaFilters, 'siteIds' | 'trainingTypes' | 'comerciales'>,
+    event: React.ChangeEvent<HTMLSelectElement>,
+  ) => {
+    const selectedValues = Array.from(event.target.selectedOptions)
+      .map((option) => option.value)
+      .filter(Boolean);
+    handleMultiSelectorChange(key, selectedValues);
   };
 
   const getBreakdownItems = (
@@ -910,28 +921,30 @@ export default function ComparativaDashboardPage() {
             <Col xs={12} md={6} lg={2}>
               <Form.Label className="small text-muted mb-1">Sede</Form.Label>
               <Form.Select
+                multiple
                 size="sm"
-                value={filters.siteId ?? ''}
-                onChange={(event) => handleSelectorChange('siteId', event.target.value)}
+                value={filters.siteIds ?? []}
+                onChange={(event) => handleSelectChangeEvent('siteIds', event)}
               >
-                {SITE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {siteOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
                   </option>
                 ))}
               </Form.Select>
             </Col>
 
             <Col xs={12} md={6} lg={2}>
-              <Form.Label className="small text-muted mb-1">Centro de coste</Form.Label>
+              <Form.Label className="small text-muted mb-1">Comerciales</Form.Label>
               <Form.Select
+                multiple
                 size="sm"
-                value={filters.costCenterId ?? ''}
-                onChange={(event) => handleSelectorChange('costCenterId', event.target.value)}
+                value={filters.comerciales ?? []}
+                onChange={(event) => handleSelectChangeEvent('comerciales', event)}
               >
-                {COST_CENTER_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {comercialOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
                   </option>
                 ))}
               </Form.Select>
@@ -940,13 +953,14 @@ export default function ComparativaDashboardPage() {
             <Col xs={12} md={6} lg={2}>
               <Form.Label className="small text-muted mb-1">Tipo de formación</Form.Label>
               <Form.Select
+                multiple
                 size="sm"
-                value={filters.trainingType ?? ''}
-                onChange={(event) => handleSelectorChange('trainingType', event.target.value)}
+                value={filters.trainingTypes ?? []}
+                onChange={(event) => handleSelectChangeEvent('trainingTypes', event)}
               >
-                {TRAINING_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {trainingTypeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
                   </option>
                 ))}
               </Form.Select>
