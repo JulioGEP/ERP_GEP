@@ -104,7 +104,7 @@ export function MaterialsBudgetsPage({
                 <th scope="col">Empresa</th>
                 <th scope="col">Producto</th>
                 <th scope="col">Proveedores</th>
-                <th scope="col">Fecha estimada de entrega</th>
+                <th scope="col">Estimada de Entrega</th>
               </tr>
             </thead>
             <tbody>
