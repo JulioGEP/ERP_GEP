@@ -3,7 +3,10 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
-import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
+import type {
+  MaterialsBudgetsPageProps,
+  MaterialsPendingProductsPageProps,
+} from '../pages/materiales';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
@@ -23,6 +26,9 @@ const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const AllBudgetsPage = lazy(() => import('../pages/presupuestos/AllBudgetsPage'));
 const UnworkedBudgetsPage = lazy(() => import('../pages/presupuestos/UnworkedBudgetsPage'));
 const MaterialsBudgetsPage = lazy(() => import('../pages/materiales/MaterialsBudgetsPage'));
+const MaterialsPendingProductsPage = lazy(
+  () => import('../pages/materiales/MaterialsPendingProductsPage'),
+);
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
 const PorUnidadMovilPage = lazy(() => import('../pages/calendario/PorUnidadMovilPage'));
 const PorFormadorPage = lazy(() => import('../pages/calendario/PorFormadorPage'));
@@ -74,6 +80,7 @@ type AppRouterProps = {
   allBudgetsPageProps: AllBudgetsPageProps;
   unworkedBudgetsPageProps: UnworkedBudgetsPageProps;
   materialsBudgetsPageProps: MaterialsBudgetsPageProps;
+  materialsPendingProductsPageProps: MaterialsPendingProductsPageProps;
   porSesionesPageProps: PorSesionesPageProps;
   porUnidadMovilPageProps: PorUnidadMovilPageProps;
   porFormadorPageProps: PorFormadorPageProps;
@@ -96,6 +103,7 @@ export function AppRouter({
   allBudgetsPageProps,
   unworkedBudgetsPageProps,
   materialsBudgetsPageProps,
+  materialsPendingProductsPageProps,
   porSesionesPageProps,
   porUnidadMovilPageProps,
   porFormadorPageProps,
@@ -168,6 +176,16 @@ export function AppRouter({
         <Route
           path="/materiales/todos"
           element={<GuardedRoute path="/materiales/todos" element={<MaterialsBudgetsPage {...materialsBudgetsPageProps} />} />}
+        />
+
+        <Route
+          path="/materiales/pendientes"
+          element={
+            <GuardedRoute
+              path="/materiales/pendientes"
+              element={<MaterialsPendingProductsPage {...materialsPendingProductsPageProps} />}
+            />
+          }
         />
 
         <Route
