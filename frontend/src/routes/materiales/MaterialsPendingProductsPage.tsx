@@ -19,6 +19,7 @@ type PendingProductRow = {
   organizationName: string;
   productName: string;
   quantityLabel: string;
+  supplier: string;
   estimatedDelivery: string;
 };
 
@@ -49,6 +50,20 @@ function formatQuantity(quantity: number | string | null | undefined): string {
   return new Intl.NumberFormat('es-ES').format(numericQuantity);
 }
 
+function getSupplierLabel(budget: DealSummary): string {
+  const supplier = budget.proveedor ?? budget.proveedores;
+  const cleaned = supplier?.trim();
+  return cleaned && cleaned.length > 0 ? cleaned : '—';
+}
+
+function getEstimatedDeliveryValue(budget: DealSummary): string | null | undefined {
+  return (
+    budget.fecha_estimada_entrega_material ??
+    // Compatibilidad con posibles campos sin sufijo
+    (budget as DealSummary & { fecha_estimada_entrega?: string | null }).fecha_estimada_entrega
+  );
+}
+
 function formatEstimatedDelivery(dateIso: string | null | undefined): string {
   if (!dateIso) return '—';
   const parsed = new Date(dateIso);
@@ -62,7 +77,7 @@ function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
   return filteredBudgets.flatMap((budget, budgetIndex) => {
     const budgetId = getBudgetId(budget);
     const organizationName = getOrganizationName(budget);
-    const estimatedDelivery = formatEstimatedDelivery(budget.fecha_estimada_entrega_material);
+    const estimatedDelivery = formatEstimatedDelivery(getEstimatedDeliveryValue(budget));
     const products = Array.isArray(budget.products) ? budget.products : [];
 
     return products.map((product, productIndex) => ({
@@ -72,6 +87,7 @@ function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
       organizationName,
       productName: getProductName(product),
       quantityLabel: formatQuantity(product?.quantity),
+      supplier: getSupplierLabel(budget),
       estimatedDelivery,
     }));
   });
@@ -120,21 +136,22 @@ export function MaterialsPendingProductsPage({
               <tr>
                 <th scope="col">Presupuesto</th>
                 <th scope="col">Empresa</th>
+                <th scope="col">Proveedor</th>
                 <th scope="col">Producto</th>
                 <th scope="col">Cantidad</th>
-                <th scope="col">Estimada de entrega</th>
+                <th scope="col">Entrega</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-4">
+                  <td colSpan={6} className="text-center py-4">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : !hasRows ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-4 text-muted">
+                  <td colSpan={6} className="text-center py-4 text-muted">
                     No hay productos pendientes del embudo Material.
                   </td>
                 </tr>
@@ -149,6 +166,7 @@ export function MaterialsPendingProductsPage({
                   >
                     <td className="fw-semibold">{row.budgetId ? `#${row.budgetId}` : '—'}</td>
                     <td>{row.organizationName}</td>
+                    <td>{row.supplier}</td>
                     <td>{row.productName}</td>
                     <td>{row.quantityLabel}</td>
                     <td>{row.estimatedDelivery}</td>

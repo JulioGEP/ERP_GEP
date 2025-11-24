@@ -559,6 +559,7 @@ function normalizeDealSummary(row: Json): DealSummary {
     po_val: toBoolean(row?.po_val),
     tipo_servicio: toStringValue(row?.tipo_servicio) ?? null,
     mail_invoice: toStringValue(row?.mail_invoice) ?? null,
+    proveedor: toStringValue(row?.proveedor ?? (row as any)?.deals?.proveedor) ?? null,
     proveedores: toStringValue(row?.proveedores ?? (row as any)?.deals?.proveedores) ?? null,
     observaciones: toStringValue(row?.observaciones) ?? null,
     fecha_estimada_entrega_material:
@@ -630,6 +631,7 @@ function normalizeDealDetail(raw: Json): DealDetail {
     po_val: toBoolean(raw.po_val),
     tipo_servicio: toStringValue(raw.tipo_servicio) ?? null,
     mail_invoice: toStringValue(raw.mail_invoice) ?? null,
+    proveedor: toStringValue(raw.proveedor ?? (raw as any)?.deals?.proveedor) ?? null,
     proveedores: toStringValue(raw.proveedores ?? (raw as any)?.deals?.proveedores) ?? null,
     observaciones: toStringValue(raw.observaciones) ?? null,
     fecha_estimada_entrega_material:
