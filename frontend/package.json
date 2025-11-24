@@ -14,7 +14,7 @@
     "build": "vite build",
     "preview": "vite preview --port 5173",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node scripts/test.mjs",
     "guard:no-ellipsis": "bash ../scripts/guard-no-ellipsis.sh",
     "prebuild": "npm run guard:no-ellipsis",
     "prenetlify:build": "npm run guard:no-ellipsis"
