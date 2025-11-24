@@ -20,6 +20,11 @@ const KEY_FUNDAE = "245d60d4d18aec40ba888998ef92e5d00e494583";
 const KEY_HOTEL  = "c3a6daf8eb5b4e59c3c07cda8e01f43439101269";
 const KEY_TRANSPORTE    = "30dccde5faa7c09a3b380f8597d4f9acfe403877";
 const KEY_PO            = "9cf8ccb7ef293494974f98ddbc72ec726486310e";
+const KEY_PROVEEDORES = "76f421f696ee2d38e9b8f2f5d708a3dfada6dd26";
+const KEY_OBSERVACIONES = "21c64e05e77f65e39f91942dadff9cda10e1a713";
+const KEY_FECHA_ESTIMADA_ENTREGA_MATERIAL = "cd18e5dd60c35d1127befc644316fac59ca47194";
+const KEY_DIRECCION_ENVIO = "c82df445d3f11aa21f199db69184d4742b48a6a4";
+const KEY_FORMA_PAGO_MATERIAL = "155285b48c2c0c03c8b54c1ee7e9e01286025454";
 const KEY_TIPO_SERVICIO = "1d78d202448ee549a86e0881ec06f3ff7842c5ea";
 const KEY_MAIL_INVOICE  = "8b0652b56fd17d4547149f1ae26b1b74b527eaf0";
 const KEY_A_FECHA       = "98f072a788090ac2ae52017daaf9618c3a189033";
@@ -195,6 +200,10 @@ export async function resolveDealCustomLabels(deal: any) {
   const fTransporte = findFieldDef(dealFields, KEY_TRANSPORTE);
   const fTipoServicio = findFieldDef(dealFields, KEY_TIPO_SERVICIO);
   const fModoReserva = findFieldDef(dealFields, KEY_MODO_RESERVA);
+  const fProveedores = findFieldDef(dealFields, KEY_PROVEEDORES);
+  const fObservaciones = findFieldDef(dealFields, KEY_OBSERVACIONES);
+  const fDireccionEnvio = findFieldDef(dealFields, KEY_DIRECCION_ENVIO);
+  const fFormaPagoMaterial = findFieldDef(dealFields, KEY_FORMA_PAGO_MATERIAL);
 
   // Dirección (no es options): prioriza *_formatted_address
   const trainingAddress = resolveAddressFromDeal(deal, KEY_TRAINING_ADDRESS_BASE);
@@ -242,6 +251,22 @@ export async function resolveDealCustomLabels(deal: any) {
     ? optionLabelOf(fModoReserva, modoReservaRaw) ?? toNullableString(modoReservaRaw)
     : toNullableString(modoReservaRaw);
 
+  const proveedoresLabel = fProveedores
+    ? optionLabelOf(fProveedores, deal?.[fProveedores.key]) ?? null
+    : toNullableString(deal?.[KEY_PROVEEDORES]);
+  const observaciones = fObservaciones
+    ? optionLabelOf(fObservaciones, deal?.[fObservaciones.key]) ?? null
+    : toNullableString(deal?.[KEY_OBSERVACIONES]);
+  const fechaEstimadaEntregaMaterial = toNullableString(
+    deal?.[KEY_FECHA_ESTIMADA_ENTREGA_MATERIAL],
+  );
+  const direccionEnvio = fDireccionEnvio
+    ? optionLabelOf(fDireccionEnvio, deal?.[fDireccionEnvio.key]) ?? null
+    : toNullableString(deal?.[KEY_DIRECCION_ENVIO]);
+  const formaPagoMaterial = fFormaPagoMaterial
+    ? optionLabelOf(fFormaPagoMaterial, deal?.[fFormaPagoMaterial.key]) ?? null
+    : toNullableString(deal?.[KEY_FORMA_PAGO_MATERIAL]);
+
   return {
     trainingAddress,
     sedeLabel,
@@ -257,6 +282,11 @@ export async function resolveDealCustomLabels(deal: any) {
     wIdVariation,
     presuHolded,
     modoReserva: modoReservaLabel,
+    proveedoresLabel,
+    observaciones,
+    fechaEstimadaEntregaMaterial,
+    direccionEnvio,
+    formaPagoMaterial,
   };
 }
 
@@ -298,6 +328,11 @@ export async function mapAndUpsertDealTree({
     wIdVariation,
     presuHolded,
     modoReserva,
+    proveedoresLabel,
+    observaciones,
+    fechaEstimadaEntregaMaterial,
+    direccionEnvio,
+    formaPagoMaterial,
   } =
     await resolveDealCustomLabels(deal);
 
@@ -363,6 +398,11 @@ export async function mapAndUpsertDealTree({
       po: poValue ?? null,
       tipo_servicio: tipoServicioLabel ?? null,
       mail_invoice: mailInvoice ?? null,
+      proveedores: proveedoresLabel ?? null,
+      observaciones: observaciones ?? null,
+      fecha_estimada_entrega_material: fechaEstimadaEntregaMaterial ?? null,
+      direccion_envio: direccionEnvio ?? null,
+      forma_pago_material: formaPagoMaterial ?? null,
       comercial: ownerName ?? null,
       a_fecha: aFecha ?? null,
       w_id_variation: wIdVariation ?? null,
@@ -383,6 +423,14 @@ export async function mapAndUpsertDealTree({
       po: poValue ?? null,
       tipo_servicio: tipoServicioLabel ?? null,
       mail_invoice: mailInvoice ?? null,
+      proveedores: keep(current?.proveedores, proveedoresLabel),
+      observaciones: keep(current?.observaciones, observaciones),
+      fecha_estimada_entrega_material: keep(
+        current?.fecha_estimada_entrega_material,
+        fechaEstimadaEntregaMaterial,
+      ),
+      direccion_envio: keep(current?.direccion_envio, direccionEnvio),
+      forma_pago_material: keep(current?.forma_pago_material, formaPagoMaterial),
       comercial: ownerName ?? null,
       a_fecha: aFecha ?? null,
       w_id_variation: wIdVariation ?? null,

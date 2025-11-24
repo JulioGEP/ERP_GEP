@@ -32,6 +32,11 @@ export type DealEditablePatch = {
   hotel_val?: boolean;
   transporte_val?: boolean;
   po_val?: boolean;
+  proveedores?: string | null;
+  observaciones?: string | null;
+  fecha_estimada_entrega_material?: string | null;
+  direccion_envio?: string | null;
+  forma_pago_material?: string | null;
   comercial?: string | null;
   w_id_variation?: string | null;
   a_fecha?: string | null;
