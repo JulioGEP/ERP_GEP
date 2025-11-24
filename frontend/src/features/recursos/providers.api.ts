@@ -134,6 +134,17 @@ export async function fetchProviders(): Promise<Provider[]> {
   return rows.map((row) => normalizeProvider(row));
 }
 
+export async function createProvider(payload: ProviderPayload): Promise<Provider> {
+  const body = buildRequestBody(payload);
+  const json = (await requestJson(`${API_BASE}/providers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })) as ProviderMutationResponse;
+
+  return normalizeProvider(json.provider);
+}
+
 export async function updateProvider(providerId: string, payload: ProviderPayload): Promise<Provider> {
   if (!providerId) {
     throw new ApiError('VALIDATION_ERROR', 'provider_id requerido para actualizar');

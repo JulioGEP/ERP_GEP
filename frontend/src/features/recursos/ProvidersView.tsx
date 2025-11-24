@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ProviderModal, type ProviderFormValues } from './ProviderModal';
-import { fetchProviders, updateProvider, type ProviderPayload } from './providers.api';
+import { createProvider, fetchProviders, updateProvider, type ProviderPayload } from './providers.api';
 import type { Provider } from '../../types/provider';
 import { ApiError } from '../../api/client';
 import { useDataTable } from '../../hooks/useDataTable';
@@ -53,6 +53,19 @@ export function ProvidersView({ onNotify }: ProvidersViewProps) {
     refetchOnReconnect: false,
   });
 
+  const createMutation = useMutation({
+    mutationFn: (payload: ProviderPayload) => createProvider(payload),
+    onSuccess: (provider) => {
+      onNotify({ variant: 'success', message: `Proveedor "${provider.nombre_fiscal}" creado correctamente.` });
+      setShowModal(false);
+      setSelectedProvider(null);
+      queryClient.invalidateQueries({ queryKey: ['providers'] });
+    },
+    onError: (error: unknown) => {
+      onNotify({ variant: 'danger', message: formatError(error) });
+    },
+  });
+
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: ProviderPayload }) => updateProvider(id, payload),
     onSuccess: (provider) => {
@@ -69,7 +82,7 @@ export function ProvidersView({ onNotify }: ProvidersViewProps) {
   const providers: Provider[] = providersQuery.data ?? [];
   const isLoading = providersQuery.isLoading;
   const isFetching = providersQuery.isFetching && !providersQuery.isLoading;
-  const isSaving = updateMutation.isPending;
+  const isSaving = updateMutation.isPending || createMutation.isPending;
   const errorMessage = providersQuery.error ? formatError(providersQuery.error) : null;
 
   const getSortValue = useCallback((provider: Provider, column: string) => {
@@ -109,9 +122,12 @@ export function ProvidersView({ onNotify }: ProvidersViewProps) {
   };
 
   const handleSubmit = (values: ProviderFormValues) => {
-    if (!selectedProvider) return;
     const payload = buildPayload(values);
-    updateMutation.mutate({ id: selectedProvider.provider_id, payload });
+    if (selectedProvider) {
+      updateMutation.mutate({ id: selectedProvider.provider_id, payload });
+    } else {
+      createMutation.mutate(payload);
+    }
   };
 
   const subtitle = useMemo(
@@ -128,6 +144,16 @@ export function ProvidersView({ onNotify }: ProvidersViewProps) {
         </div>
         <div className="d-flex align-items-center gap-3">
           {isFetching || isSaving ? <Spinner animation="border" role="status" size="sm" className="me-1" /> : null}
+          <Button
+            variant="primary"
+            onClick={() => {
+              setSelectedProvider(null);
+              setShowModal(true);
+            }}
+            disabled={isSaving}
+          >
+            Añadir
+          </Button>
           <Button variant="outline-primary" onClick={() => providersQuery.refetch()} disabled={isFetching || isSaving}>
             Actualizar
           </Button>
