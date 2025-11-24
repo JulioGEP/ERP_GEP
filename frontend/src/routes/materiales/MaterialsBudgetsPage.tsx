@@ -48,14 +48,16 @@ function formatEstimatedDelivery(dateIso: string | null | undefined): string {
   return parsed.toLocaleDateString('es-ES');
 }
 
-const MATERIAL_PIPELINES = new Set(['materiales', 'material']);
+export const MATERIAL_PIPELINE_KEYS = new Set(['materiales', 'material']);
+
+export function isMaterialPipeline(budget: DealSummary): boolean {
+  const labelKey = normalizePipelineKey(budget.pipeline_label);
+  const idKey = normalizePipelineKey(budget.pipeline_id);
+  return MATERIAL_PIPELINE_KEYS.has(labelKey) || MATERIAL_PIPELINE_KEYS.has(idKey);
+}
 
 function filterMaterialsBudgets(budgets: DealSummary[]): DealSummary[] {
-  return budgets.filter((budget) => {
-    const labelKey = normalizePipelineKey(budget.pipeline_label);
-    const idKey = normalizePipelineKey(budget.pipeline_id);
-    return MATERIAL_PIPELINES.has(labelKey) || MATERIAL_PIPELINES.has(idKey);
-  });
+  return budgets.filter((budget) => isMaterialPipeline(budget));
 }
 
 export function MaterialsBudgetsPage({

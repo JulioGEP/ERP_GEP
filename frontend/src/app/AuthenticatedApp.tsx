@@ -40,6 +40,7 @@ import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
 import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
+import { isMaterialPipeline } from '../routes/materiales/MaterialsBudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
@@ -956,12 +957,7 @@ export default function AuthenticatedApp() {
   const allBudgets = allBudgetsQuery.data ?? [];
   const isRefreshingAllBudgets = allBudgetsQuery.isFetching && !allBudgetsQuery.isLoading;
   const materialsBudgets = useMemo(
-    () =>
-      allBudgets.filter((budget) => {
-        const labelKey = normalizePipelineKey(budget.pipeline_label);
-        const idKey = normalizePipelineKey(budget.pipeline_id);
-        return labelKey === 'materiales' || idKey === 'materiales';
-      }),
+    () => allBudgets.filter((budget) => isMaterialPipeline(budget)),
     [allBudgets],
   );
 
