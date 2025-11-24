@@ -1250,7 +1250,7 @@ export const handler = async (event: any) => {
 
       const [comentarios, documentos, alumnos, tokens] = await prisma.$transaction([
         prisma.sesiones_comentarios.count({ where: { sesion_id: sessionIdFromPath } }),
-        prisma.sesion_files.count({ where: { sesion_id: sessionIdFromPath } }),
+        prisma.session_files.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.alumnos.count({ where: { sesion_id: sessionIdFromPath } }),
         prisma.tokens.count({ where: { session_id: sessionIdFromPath, active: true } }),
       ]);
