@@ -15,6 +15,7 @@ import type { UnidadesMovilesPageProps } from '../pages/recursos/UnidadesMoviles
 import type { SalasPageProps } from '../pages/recursos/SalasPage';
 import type { TemplatesCertificadosPageProps } from '../pages/recursos/TemplatesCertificadosPage';
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
+import type { ProveedoresPageProps } from '../pages/recursos/ProveedoresPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
@@ -37,6 +38,7 @@ const UnidadesMovilesPage = lazy(() => import('../pages/recursos/UnidadesMoviles
 const SalasPage = lazy(() => import('../pages/recursos/SalasPage'));
 const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/TemplatesCertificadosPage'));
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
+const ProveedoresPage = lazy(() => import('../pages/recursos/ProveedoresPage'));
 const ConfirmacionesPage = lazy(() => import('../pages/recursos/ConfirmacionesPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
 const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/FormacionAbiertaPage'));
@@ -87,6 +89,7 @@ type AppRouterProps = {
   formadoresBomberosPageProps: FormadoresBomberosPageProps;
   unidadesMovilesPageProps: UnidadesMovilesPageProps;
   salasPageProps: SalasPageProps;
+  proveedoresPageProps: ProveedoresPageProps;
   templatesCertificadosPageProps: TemplatesCertificadosPageProps;
   productosPageProps: ProductosPageProps;
   recursosConfirmacionesPageProps: ConfirmacionesPageProps;
@@ -110,6 +113,7 @@ export function AppRouter({
   formadoresBomberosPageProps,
   unidadesMovilesPageProps,
   salasPageProps,
+  proveedoresPageProps,
   templatesCertificadosPageProps,
   productosPageProps,
   recursosConfirmacionesPageProps,
@@ -255,6 +259,15 @@ export function AppRouter({
         <Route
           path="/recursos/salas"
           element={<GuardedRoute path="/recursos/salas" element={<SalasPage {...salasPageProps} />} />}
+        />
+        <Route
+          path="/recursos/proveedores"
+          element={
+            <GuardedRoute
+              path="/recursos/proveedores"
+              element={<ProveedoresPage {...proveedoresPageProps} />}
+            />
+          }
         />
         <Route
           path="/certificados/templates_certificados"
