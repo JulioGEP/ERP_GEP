@@ -4,7 +4,7 @@ import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { extractProductCatalogAttributes, listAllProducts } from './_shared/pipedrive';
 
-const CATEGORY_FILTER = 'formación';
+const CATEGORY_FILTER = 'productos';
 const TYPE_FIELD_HASH = '5bad94030bb7917c186f3238fb2cd8f7a91cf30b';
 
 function normalizeText(value: unknown): string | null {
