@@ -254,15 +254,16 @@ export async function resolveDealCustomLabels(deal: any) {
   const proveedoresLabel = fProveedores
     ? optionLabelOf(fProveedores, deal?.[fProveedores.key]) ?? null
     : toNullableString(deal?.[KEY_PROVEEDORES]);
-  const observaciones = fObservaciones
-    ? optionLabelOf(fObservaciones, deal?.[fObservaciones.key]) ?? null
-    : toNullableString(deal?.[KEY_OBSERVACIONES]);
+  const observaciones = toNullableString(
+    deal?.[fObservaciones?.key ?? KEY_OBSERVACIONES],
+  );
   const fechaEstimadaEntregaMaterial = toNullableString(
     deal?.[KEY_FECHA_ESTIMADA_ENTREGA_MATERIAL],
   );
-  const direccionEnvio = fDireccionEnvio
-    ? optionLabelOf(fDireccionEnvio, deal?.[fDireccionEnvio.key]) ?? null
-    : toNullableString(deal?.[KEY_DIRECCION_ENVIO]);
+  const direccionEnvio = resolveAddressFromDeal(
+    deal,
+    fDireccionEnvio?.key ?? KEY_DIRECCION_ENVIO,
+  );
   const formaPagoMaterial = fFormaPagoMaterial
     ? optionLabelOf(fFormaPagoMaterial, deal?.[fFormaPagoMaterial.key]) ?? null
     : toNullableString(deal?.[KEY_FORMA_PAGO_MATERIAL]);
