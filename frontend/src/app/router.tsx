@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
+import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
@@ -21,6 +22,7 @@ const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const AllBudgetsPage = lazy(() => import('../pages/presupuestos/AllBudgetsPage'));
 const UnworkedBudgetsPage = lazy(() => import('../pages/presupuestos/UnworkedBudgetsPage'));
+const MaterialsBudgetsPage = lazy(() => import('../pages/materiales/MaterialsBudgetsPage'));
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
 const PorUnidadMovilPage = lazy(() => import('../pages/calendario/PorUnidadMovilPage'));
 const PorFormadorPage = lazy(() => import('../pages/calendario/PorFormadorPage'));
@@ -71,6 +73,7 @@ type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
   allBudgetsPageProps: AllBudgetsPageProps;
   unworkedBudgetsPageProps: UnworkedBudgetsPageProps;
+  materialsBudgetsPageProps: MaterialsBudgetsPageProps;
   porSesionesPageProps: PorSesionesPageProps;
   porUnidadMovilPageProps: PorUnidadMovilPageProps;
   porFormadorPageProps: PorFormadorPageProps;
@@ -92,6 +95,7 @@ export function AppRouter({
   budgetsPageProps,
   allBudgetsPageProps,
   unworkedBudgetsPageProps,
+  materialsBudgetsPageProps,
   porSesionesPageProps,
   porUnidadMovilPageProps,
   porFormadorPageProps,
@@ -157,6 +161,13 @@ export function AppRouter({
               element={<BudgetsPage {...budgetsPageProps} />}
             />
           }
+        />
+
+        <Route path="/materiales" element={<Navigate to="/materiales/todos" replace />} />
+
+        <Route
+          path="/materiales/todos"
+          element={<GuardedRoute path="/materiales/todos" element={<MaterialsBudgetsPage {...materialsBudgetsPageProps} />} />}
         />
 
         <Route

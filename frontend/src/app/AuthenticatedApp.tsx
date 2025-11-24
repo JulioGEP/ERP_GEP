@@ -39,6 +39,7 @@ import { hasPendingExternalFollowUp } from './utils/budgetFollowUp';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
+import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
@@ -85,6 +86,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Presupuestos/SinTrabajar', label: 'Sin trabajar', path: '/presupuestos/sintrabajar' },
       { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
     ],
+  },
+  {
+    key: 'Materiales',
+    label: 'Materiales',
+    children: [{ key: 'Materiales/Todos', label: 'Todos', path: '/materiales/todos' }],
   },
   {
     key: 'Calendario',
@@ -626,6 +632,7 @@ export default function AuthenticatedApp() {
   const isBudgetsRoute = location.pathname.startsWith('/presupuestos');
   const isBudgetsTodosRoute = location.pathname.startsWith('/presupuestos/todos');
   const isBudgetsSinTrabajarRoute = location.pathname.startsWith('/presupuestos/sintrabajar');
+  const isMaterialsRoute = location.pathname.startsWith('/materiales');
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
@@ -667,7 +674,7 @@ export default function AuthenticatedApp() {
     refetchInterval: false,
     retry: 0,
     staleTime: Infinity,
-    enabled: isBudgetsTodosRoute || isBudgetsSinTrabajarRoute,
+    enabled: isBudgetsTodosRoute || isBudgetsSinTrabajarRoute || isMaterialsRoute,
   });
 
   const pendingPlanningBudgets = useMemo(() => {
@@ -948,6 +955,15 @@ export default function AuthenticatedApp() {
 
   const allBudgets = allBudgetsQuery.data ?? [];
   const isRefreshingAllBudgets = allBudgetsQuery.isFetching && !allBudgetsQuery.isLoading;
+  const materialsBudgets = useMemo(
+    () =>
+      allBudgets.filter((budget) => {
+        const labelKey = normalizePipelineKey(budget.pipeline_label);
+        const idKey = normalizePipelineKey(budget.pipeline_id);
+        return labelKey === 'materiales' || idKey === 'materiales';
+      }),
+    [allBudgets],
+  );
 
   const unworkedBudgets = useMemo(
     () => allBudgets.filter((budget) => hasPendingExternalFollowUp(budget)),
@@ -1307,6 +1323,15 @@ export default function AuthenticatedApp() {
     canImport: canImportBudgets,
   };
 
+  const materialsBudgetsPageProps: MaterialsBudgetsPageProps = {
+    budgets: materialsBudgets,
+    isLoading: allBudgetsQuery.isLoading,
+    isFetching: isRefreshingAllBudgets,
+    error: allBudgetsQuery.error ?? null,
+    onRetry: () => allBudgetsQuery.refetch(),
+    onSelect: handleSelectBudget,
+  };
+
   const calendarSessionsPageProps: PorSesionesPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
@@ -1467,6 +1492,7 @@ export default function AuthenticatedApp() {
             budgetsPageProps={budgetsPageProps}
             allBudgetsPageProps={allBudgetsPageProps}
             unworkedBudgetsPageProps={unworkedBudgetsPageProps}
+            materialsBudgetsPageProps={materialsBudgetsPageProps}
             porSesionesPageProps={calendarSessionsPageProps}
             porUnidadMovilPageProps={calendarUnitsPageProps}
             porFormadorPageProps={calendarTrainersPageProps}
