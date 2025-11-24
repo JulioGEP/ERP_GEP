@@ -1504,7 +1504,7 @@ if (method === 'GET') {
         const finalEstado = forceEstadoBorrador ? 'BORRADOR' : autoEstado;
 
         // Construimos un unchecked create para evitar el XOR con relaciones anidadas
-        const createData: Record<string, unknown> = {
+        const createData: Prisma.sesionesUncheckedCreateInput = {
           id: randomUUID(),
           deal_id: deal.deal_id,
           deal_product_id: product.id,
