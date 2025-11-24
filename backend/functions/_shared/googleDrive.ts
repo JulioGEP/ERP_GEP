@@ -2918,7 +2918,7 @@ export async function importGoogleDriveDocumentsIntoErp(): Promise<{
                 if (nested.mimeType === "application/vnd.google-apps.folder") continue;
                 const extension = (nested.name || "").split(".").pop() || "bin";
                 const driveFileName = nested.name ?? nested.id;
-                await prisma.sesion_files.upsert({
+                await prisma.session_files.upsert({
                   where: {
                     sesion_id_drive_file_name: {
                       sesion_id: session.id,
@@ -2948,7 +2948,7 @@ export async function importGoogleDriveDocumentsIntoErp(): Promise<{
 
             const extension = (sessionFile.name || "").split(".").pop() || "bin";
             const driveFileName = sessionFile.name ?? sessionFile.id;
-            await prisma.sesion_files.upsert({
+            await prisma.session_files.upsert({
               where: {
                 sesion_id_drive_file_name: {
                   sesion_id: session.id,
