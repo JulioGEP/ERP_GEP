@@ -9,6 +9,7 @@ export type Product = {
   type: string | null;
   template: string | null;
   url_formacion: string | null;
+  provider_ids: number[];
   active: boolean;
   created_at: string | null;
   updated_at: string | null;
