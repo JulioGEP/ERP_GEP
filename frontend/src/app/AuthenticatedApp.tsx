@@ -51,6 +51,7 @@ import type { SalasPageProps } from '../pages/recursos/SalasPage';
 import type { ProveedoresPageProps } from '../pages/recursos/ProveedoresPage';
 import type { TemplatesCertificadosPageProps } from '../pages/recursos/TemplatesCertificadosPage';
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
+import type { StockPageProps } from '../pages/recursos/StockPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
@@ -116,6 +117,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Formaciones', label: 'Formaciones', path: '/recursos/formaciones' },
+      { key: 'Recursos/Stock', label: 'Stock', path: '/recursos/stock' },
       { key: 'Recursos/Proveedores', label: 'Proveedores', path: '/recursos/proveedores' },
       { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
     ],
@@ -1388,6 +1390,10 @@ export default function AuthenticatedApp() {
     onNotify: pushToast,
   };
 
+  const stockPageProps: StockPageProps = {
+    onNotify: pushToast,
+  };
+
   const recursosConfirmacionesPageProps: ConfirmacionesPageProps = {
     onNotify: pushToast,
   };
@@ -1521,6 +1527,7 @@ export default function AuthenticatedApp() {
             proveedoresPageProps={proveedoresPageProps}
             templatesCertificadosPageProps={templatesCertificadosPageProps}
             productosPageProps={productosPageProps}
+            stockPageProps={stockPageProps}
             recursosConfirmacionesPageProps={recursosConfirmacionesPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}

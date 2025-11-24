@@ -17,6 +17,7 @@ type ProductRecord = {
   type: string | null;
   template: string | null;
   url_formacion: string | null;
+  provider_ids: number[] | bigint[] | null;
   active: boolean;
   created_at: Date | string | null;
   updated_at: Date | string | null;
@@ -47,6 +48,9 @@ function normalizeProduct(record: ProductRecord) {
     type: record.type ?? null,
     template: record.template ?? null,
     url_formacion: record.url_formacion ?? null,
+    provider_ids: Array.isArray(record.provider_ids)
+      ? record.provider_ids.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+      : [],
     active: Boolean(record.active),
     created_at: toMadridISOString(record.created_at),
     updated_at: toMadridISOString(record.updated_at),
@@ -134,6 +138,38 @@ function buildUpdateData(body: any) {
           error: errorResponse('VALIDATION_ERROR', 'El campo id_woo debe ser un número entero válido', 400),
         } as const;
       }
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'provider_ids')) {
+    const rawValue = body.provider_ids;
+    if (rawValue == null) {
+      data.provider_ids = [];
+      hasChanges = true;
+    } else if (Array.isArray(rawValue)) {
+      const parsed = rawValue
+        .map((value) =>
+          typeof value === 'bigint'
+            ? Number(value)
+            : typeof value === 'number'
+            ? value
+            : Number(String(value).trim()),
+        )
+        .filter((value) => Number.isInteger(value));
+
+      if (parsed.length !== rawValue.length) {
+        return {
+          error: errorResponse('VALIDATION_ERROR', 'Todos los proveedores deben ser enteros válidos', 400),
+        } as const;
+      }
+
+      const uniqueSorted = Array.from(new Set(parsed)).sort((a, b) => a - b);
+      data.provider_ids = uniqueSorted;
+      hasChanges = true;
+    } else {
+      return {
+        error: errorResponse('VALIDATION_ERROR', 'provider_ids debe ser un array', 400),
+      } as const;
     }
   }
 

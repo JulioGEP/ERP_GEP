@@ -7,6 +7,7 @@ export type ProductUpdatePayload = {
   url_formacion?: string | null;
   active?: boolean | null;
   id_woo?: number | null;
+  provider_ids?: number[] | null;
 };
 
 export type ProductSyncSummary = {
@@ -72,6 +73,11 @@ function normalizeProduct(row: any): Product {
     type: row.type == null ? null : String(row.type),
     template: row.template == null ? null : String(row.template),
     url_formacion: row.url_formacion == null ? null : String(row.url_formacion),
+    provider_ids: Array.isArray(row.provider_ids)
+      ? row.provider_ids
+          .map((value: any) => Number(value))
+          .filter((value: number) => Number.isInteger(value))
+      : [],
     active: Boolean(row.active ?? true),
     created_at: createdAt,
     updated_at: updatedAt,
@@ -95,6 +101,19 @@ function buildUpdateBody(payload: ProductUpdatePayload): Record<string, any> {
 
   if ('id_woo' in payload) {
     body.id_woo = toNullableNumber(payload.id_woo);
+  }
+
+  if ('provider_ids' in payload) {
+    if (payload.provider_ids == null) {
+      body.provider_ids = [];
+    } else if (Array.isArray(payload.provider_ids)) {
+      const parsed = payload.provider_ids
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value));
+      body.provider_ids = parsed;
+    } else {
+      throw new ApiError('VALIDATION_ERROR', 'provider_ids debe ser un array de números');
+    }
   }
 
   return body;
