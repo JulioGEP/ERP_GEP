@@ -130,14 +130,14 @@ export const handler = createHttpHandler<any>(async (request) => {
     }
 
     try {
-      record = await prisma.session_files.create({
+      record = await prisma.sesion_files.create({
         data: createPayload,
       })
     } catch (error: any) {
       const errorCode = error?.code ?? (typeof error === 'object' ? (error as any)?.code : null)
       if (errorCode === 'P2002') {
         try {
-          const updateResult = await prisma.session_files.updateMany({
+          const updateResult = await prisma.sesion_files.updateMany({
   where: {
     sesion_id: sessionId,
     drive_file_name: uploadResult.driveFileName,
@@ -155,7 +155,7 @@ export const handler = createHttpHandler<any>(async (request) => {
 
 if (updateResult.count > 0) {
   // recuperamos el registro para devolverlo en la respuesta
-  record = await prisma.session_files.findFirst({
+  record = await prisma.sesion_files.findFirst({
     where: { sesion_id: sessionId, drive_file_name: uploadResult.driveFileName },
   })
 }

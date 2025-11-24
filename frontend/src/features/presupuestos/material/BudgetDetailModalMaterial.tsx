@@ -39,7 +39,6 @@ import { SessionsAccordionMaterial } from './sessions/SessionsAccordionMaterial'
 import type { DealEditablePatch, DealProductEditablePatch } from '../api';
 import type { DealDetail, DealDetailViewModel, DealDocument, DealSummary } from '../../../types/deal';
 import { buildFieldTooltip } from '../../../utils/fieldTooltip';
-import { postJson } from '../../../api/client';
 import {
   FOLLOW_UP_FIELDS,
   isAffirmativeLabel,
@@ -325,24 +324,6 @@ export function BudgetDetailModalMaterial({
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const syncDocumentsMutation = useMutation({
-    mutationFn: () => postJson('/google-drive-sync'),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: detailQueryKey });
-      if (onNotify) {
-        onNotify({ variant: 'success', message: 'Sincronización de Drive completada' });
-      }
-    },
-    onError: (error: unknown) => {
-      const message = isApiError(error)
-        ? error.message
-        : 'No se pudo sincronizar documentos con Google Drive.';
-
-      if (onNotify) {
-        onNotify({ variant: 'danger', message });
-      }
-    },
-  });
 
   const isFollowUpFieldLoading = (field: FollowUpFieldKey) =>
     followUpLoading && followUpPendingField === field;
@@ -432,7 +413,6 @@ export function BudgetDetailModalMaterial({
   };
 
   const canUploadDocument = Boolean(deal?.deal_id);
-  const canSyncDocuments = Boolean(deal?.deal_id);
 
   const openUploadDialog = () => {
     if (!canUploadDocument) return;
@@ -1453,21 +1433,6 @@ export function BudgetDetailModalMaterial({
                       Subir Documento
                     </Button>
                     <Button
-                      type="button"
-                      variant="outline-primary"
-                      onClick={() => syncDocumentsMutation.mutate()}
-                      disabled={!canSyncDocuments || syncDocumentsMutation.isPending}
-                    >
-                      {syncDocumentsMutation.isPending ? (
-                        <>
-                          <Spinner as="span" animation="border" size="sm" role="status" className="me-2" />
-                          Sincronizando...
-                        </>
-                      ) : (
-                        'Syncro'
-                      )}
-                    </Button>
-                    <Button
                       variant="outline-secondary"
                       href={driveFolderLink ?? undefined}
                       target="_blank"
@@ -1477,13 +1442,6 @@ export function BudgetDetailModalMaterial({
                       Ir a G.Drive
                     </Button>
                   </div>
-                  {syncDocumentsMutation.isError ? (
-                    <Alert variant="danger">
-                      {isApiError(syncDocumentsMutation.error)
-                        ? syncDocumentsMutation.error.message
-                        : 'No se pudo sincronizar documentos con Google Drive.'}
-                    </Alert>
-                  ) : null}
                   {documents.length ? (
                     <ListGroup>
                       {documents.map((d) => {

@@ -229,7 +229,7 @@ export const handler = async (event: any) => {
       const sessionDriveUrl = normalizeDriveUrl(session?.drive_url ?? null);
 
       const files = await withTrainerExpenseSupport(prisma, () =>
-        prisma.session_files.findMany({
+        prisma.sesion_files.findMany({
           where: { deal_id: dealId, sesion_id: sessionId },
           orderBy: { added_at: 'desc' },
         }),
@@ -420,7 +420,7 @@ export const handler = async (event: any) => {
 
         const id = randomUUID();
         const created = await withTrainerExpenseSupport(prisma, () =>
-          prisma.session_files.create({
+          prisma.sesion_files.create({
             data: {
               id,
               deal_id: dealId,
@@ -474,14 +474,14 @@ export const handler = async (event: any) => {
       );
 
       const existing = await withTrainerExpenseSupport(prisma, () =>
-        prisma.session_files.findUnique({ where: { id: docId } }),
+        prisma.sesion_files.findUnique({ where: { id: docId } }),
       );
       if (!existing || existing.deal_id !== dealId || existing.sesion_id !== sessionId) {
         return errorResponse('NOT_FOUND', 'Documento no encontrado', 404);
       }
 
       const updated = await withTrainerExpenseSupport(prisma, () =>
-        prisma.session_files.update({
+        prisma.sesion_files.update({
           where: { id: docId },
           data: {
             compartir_formador: compartirFormador,
@@ -522,7 +522,7 @@ export const handler = async (event: any) => {
       }
 
       const existing = await withTrainerExpenseSupport(prisma, () =>
-        prisma.session_files.findUnique({ where: { id: docId } }),
+        prisma.sesion_files.findUnique({ where: { id: docId } }),
       );
       if (!existing || existing.deal_id !== dealId || existing.sesion_id !== sessionId) {
         return errorResponse('NOT_FOUND', 'Documento no encontrado', 404);
@@ -539,7 +539,7 @@ export const handler = async (event: any) => {
       const sessionNumber = await resolveSessionNumber(prisma, session);
       const sessionName = toStringOrNull(session?.nombre_cache) ?? `Sesión ${sessionNumber}`;
 
-      const remainingCount = await prisma.session_files.count({
+      const remainingCount = await prisma.sesion_files.count({
         where: {
           deal_id: dealId,
           sesion_id: sessionId,
@@ -565,7 +565,7 @@ export const handler = async (event: any) => {
       }
 
       await withTrainerExpenseSupport(prisma, () =>
-        prisma.session_files.delete({ where: { id: docId } }),
+        prisma.sesion_files.delete({ where: { id: docId } }),
       );
 
       return successResponse({ ok: true });
