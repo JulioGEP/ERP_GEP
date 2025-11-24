@@ -1146,7 +1146,7 @@ export function BudgetDetailModalMaterial({
                 />
               </Col>
               <Col md={4}>
-                <Form.Label>Fecha Estimada Entrega Material</Form.Label>
+                <Form.Label>Estimada de Entrega</Form.Label>
                 <Form.Control
                   value={form.fecha_estimada_entrega_material}
                   onChange={(e) =>
@@ -1156,14 +1156,6 @@ export function BudgetDetailModalMaterial({
                 />
               </Col>
               <Col md={4}>
-                <Form.Label>Forma de Pago Material</Form.Label>
-                <Form.Control
-                  value={form.forma_pago_material}
-                  onChange={(e) => updateForm('forma_pago_material', e.target.value)}
-                  title={buildFieldTooltip(form.forma_pago_material)}
-                />
-              </Col>
-              <Col md={6}>
                 <Form.Label>Dirección de Envío</Form.Label>
                 <Form.Control
                   value={form.direccion_envio}
@@ -1171,7 +1163,7 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(form.direccion_envio)}
                 />
               </Col>
-              <Col md={6}>
+              <Col md={12}>
                 <Form.Label>Observaciones</Form.Label>
                 <Form.Control
                   as="textarea"
@@ -1181,7 +1173,6 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(form.observaciones)}
                 />
               </Col>
-              <div className="w-100 d-none d-md-block" />
               <Col md={2} className="budget-field-wide">
                 <div className="d-flex justify-content-between align-items-center gap-2">
                   <Form.Label className="mb-0">PO</Form.Label>
@@ -1199,6 +1190,14 @@ export function BudgetDetailModalMaterial({
                   value={displayOrDash(deal.mail_invoice ?? null)}
                   readOnly
                   title={buildFieldTooltip(deal.mail_invoice ?? null)}
+                />
+              </Col>
+              <Col md={4} className="budget-field-wide ms-md-auto">
+                <Form.Label>Forma de Pago Material</Form.Label>
+                <Form.Control
+                  value={form.forma_pago_material}
+                  onChange={(e) => updateForm('forma_pago_material', e.target.value)}
+                  title={buildFieldTooltip(form.forma_pago_material)}
                 />
               </Col>
             </Row>
