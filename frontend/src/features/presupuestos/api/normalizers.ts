@@ -279,9 +279,11 @@ export function normalizeDealSummary(row: Json): DealSummary {
     po: toStringValue(row?.po) ?? null,
     po_val: toBoolean(row?.po_val),
     comercial: toStringValue(row?.comercial) ?? null,
-    proveedores: toStringValue(row?.proveedores) ?? null,
+    proveedores: toStringValue(row?.proveedores ?? (row as any)?.deals?.proveedores) ?? null,
     observaciones: toStringValue(row?.observaciones) ?? null,
-    fecha_estimada_entrega_material: toStringValue(row?.fecha_estimada_entrega_material) ?? null,
+    fecha_estimada_entrega_material:
+      toStringValue(row?.fecha_estimada_entrega_material ?? (row as any)?.deals?.fecha_estimada_entrega_material) ??
+      null,
     direccion_envio: toStringValue(row?.direccion_envio) ?? null,
     forma_pago_material: toStringValue(row?.forma_pago_material) ?? null,
     presu_holded: toStringValue(row?.presu_holded) ?? null,
@@ -356,9 +358,12 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     comercial: toStringValue(raw?.comercial) ?? null,
     w_id_variation: toStringValue(raw?.w_id_variation) ?? null,
     a_fecha: toStringValue(raw?.a_fecha) ?? null,
-    proveedores: toStringValue(raw?.proveedores) ?? null,
+    proveedores: toStringValue(raw?.proveedores ?? (raw as any)?.deals?.proveedores) ?? null,
     observaciones: toStringValue(raw?.observaciones) ?? null,
-    fecha_estimada_entrega_material: toStringValue(raw?.fecha_estimada_entrega_material) ?? null,
+    fecha_estimada_entrega_material:
+      toStringValue(
+        raw?.fecha_estimada_entrega_material ?? (raw as any)?.deals?.fecha_estimada_entrega_material,
+      ) ?? null,
     direccion_envio: toStringValue(raw?.direccion_envio) ?? null,
     forma_pago_material: toStringValue(raw?.forma_pago_material) ?? null,
     modo_reserva: toStringValue(raw?.modo_reserva) ?? null,
