@@ -71,6 +71,18 @@ function formatEstimatedDelivery(dateIso: string | null | undefined): string {
   return parsed.toLocaleDateString('es-ES');
 }
 
+function isShippingExpense(product: DealProduct | null | undefined): boolean {
+  const rawLabel = (product?.name ?? product?.code ?? '').trim();
+  if (!rawLabel) return false;
+
+  const normalizedLabel = rawLabel
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return normalizedLabel.includes('gastos de envio');
+}
+
 function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
   const filteredBudgets = budgets.filter((budget) => isMaterialPipeline(budget));
 
@@ -78,7 +90,9 @@ function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
     const budgetId = getBudgetId(budget);
     const organizationName = getOrganizationName(budget);
     const estimatedDelivery = formatEstimatedDelivery(getEstimatedDeliveryValue(budget));
-    const products = Array.isArray(budget.products) ? budget.products : [];
+    const products = (Array.isArray(budget.products) ? budget.products : []).filter(
+      (product) => !isShippingExpense(product),
+    );
 
     return products.map((product, productIndex) => ({
       key: product?.id?.trim?.() || `${budgetId ?? 'budget'}-product-${budgetIndex}-${productIndex}`,
