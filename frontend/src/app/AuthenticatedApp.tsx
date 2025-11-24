@@ -48,6 +48,7 @@ import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
 import type { FormadoresBomberosPageProps } from '../pages/recursos/FormadoresBomberosPage';
 import type { UnidadesMovilesPageProps } from '../pages/recursos/UnidadesMovilesPage';
 import type { SalasPageProps } from '../pages/recursos/SalasPage';
+import type { ProveedoresPageProps } from '../pages/recursos/ProveedoresPage';
 import type { TemplatesCertificadosPageProps } from '../pages/recursos/TemplatesCertificadosPage';
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
@@ -115,6 +116,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Formaciones', label: 'Formaciones', path: '/recursos/formaciones' },
+      { key: 'Recursos/Proveedores', label: 'Proveedores', path: '/recursos/proveedores' },
       { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
     ],
   },
@@ -1374,6 +1376,10 @@ export default function AuthenticatedApp() {
     onNotify: pushToast,
   };
 
+  const proveedoresPageProps: ProveedoresPageProps = {
+    onNotify: pushToast,
+  };
+
   const templatesCertificadosPageProps: TemplatesCertificadosPageProps = {
     onNotify: pushToast,
   };
@@ -1512,6 +1518,7 @@ export default function AuthenticatedApp() {
             formadoresBomberosPageProps={formadoresBomberosPageProps}
             unidadesMovilesPageProps={unidadesMovilesPageProps}
             salasPageProps={salasPageProps}
+            proveedoresPageProps={proveedoresPageProps}
             templatesCertificadosPageProps={templatesCertificadosPageProps}
             productosPageProps={productosPageProps}
             recursosConfirmacionesPageProps={recursosConfirmacionesPageProps}
