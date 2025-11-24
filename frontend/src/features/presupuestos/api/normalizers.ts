@@ -279,6 +279,7 @@ export function normalizeDealSummary(row: Json): DealSummary {
     po: toStringValue(row?.po) ?? null,
     po_val: toBoolean(row?.po_val),
     comercial: toStringValue(row?.comercial) ?? null,
+    proveedor: toStringValue(row?.proveedor ?? (row as any)?.deals?.proveedor) ?? null,
     proveedores: toStringValue(row?.proveedores ?? (row as any)?.deals?.proveedores) ?? null,
     observaciones: toStringValue(row?.observaciones) ?? null,
     fecha_estimada_entrega_material:
@@ -358,6 +359,7 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     comercial: toStringValue(raw?.comercial) ?? null,
     w_id_variation: toStringValue(raw?.w_id_variation) ?? null,
     a_fecha: toStringValue(raw?.a_fecha) ?? null,
+    proveedor: toStringValue(raw?.proveedor ?? (raw as any)?.deals?.proveedor) ?? null,
     proveedores: toStringValue(raw?.proveedores ?? (raw as any)?.deals?.proveedores) ?? null,
     observaciones: toStringValue(raw?.observaciones) ?? null,
     fecha_estimada_entrega_material:
