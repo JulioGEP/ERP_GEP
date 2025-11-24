@@ -3016,7 +3016,7 @@ export async function importGoogleDriveDocumentsIntoErp(): Promise<{
     });
 
     for (const trainerFolder of trainerFolders) {
-      const matchedTrainer = trainers.find((trainer) => {
+      const matchedTrainer = trainers.find((trainer: { trainer_id: string; name: string | null; apellido: string | null }) => {
         const { preferredName, legacyNames } = resolveTrainerFolderNames(trainer);
         const candidate = sanitizeName(trainerFolder.name || "");
         return candidate === preferredName || legacyNames.includes(candidate);

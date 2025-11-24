@@ -329,16 +329,16 @@ export const handler = createHttpHandler(async (request) => {
 
   const siteFilters =
     parseStringArrayParam(request.query.siteId ?? request.query.siteIds) ??
-    parseStringArrayParam(request.multiValueQueryStringParameters?.siteId);
+    parseStringArrayParam(request.event.multiValueQueryStringParameters?.siteId);
   const trainingTypes =
     parseStringArrayParam(request.query.trainingType ?? request.query.trainingTypes) ??
-    parseStringArrayParam(request.multiValueQueryStringParameters?.trainingType);
+    parseStringArrayParam(request.event.multiValueQueryStringParameters?.trainingType);
   const comerciales =
     parseStringArrayParam(request.query.comercial ?? request.query.comerciales ?? request.query.costCenterId) ??
     parseStringArrayParam(
-      request.multiValueQueryStringParameters?.comercial ??
-        request.multiValueQueryStringParameters?.comerciales ??
-        request.multiValueQueryStringParameters?.costCenterId,
+      request.event.multiValueQueryStringParameters?.comercial ??
+        request.event.multiValueQueryStringParameters?.comerciales ??
+        request.event.multiValueQueryStringParameters?.costCenterId,
     );
 
   const [currentSessions, previousSessions, currentVariants, previousVariants] = await Promise.all([
@@ -661,7 +661,12 @@ export const handler = createHttpHandler(async (request) => {
     },
   ];
 
-  const [dealSites, variantSites, pipelineOptions, comercialOptions] = await Promise.all([
+  const [dealSites, variantSites, pipelineOptions, comercialOptions]: [
+    { sede_label: string | null }[],
+    { sede: string | null }[],
+    { pipeline_id: string | null }[],
+    { comercial: string | null }[],
+  ] = await Promise.all([
     prisma.deals.findMany({ distinct: ['sede_label'], select: { sede_label: true } }),
     prisma.variants.findMany({ distinct: ['sede'], select: { sede: true } }),
     prisma.deals.findMany({ distinct: ['pipeline_id'], select: { pipeline_id: true } }),
