@@ -40,6 +40,7 @@ import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
 import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
+import type { MaterialsPendingProductsPageProps } from '../pages/materiales/MaterialsPendingProductsPage';
 import { isMaterialPipeline } from '../routes/materiales/MaterialsBudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
@@ -91,7 +92,10 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
   {
     key: 'Materiales',
     label: 'Materiales',
-    children: [{ key: 'Materiales/Todos', label: 'Todos', path: '/materiales/todos' }],
+    children: [
+      { key: 'Materiales/Todos', label: 'Todos', path: '/materiales/todos' },
+      { key: 'Materiales/Pendientes', label: 'Pendientes', path: '/materiales/pendientes' },
+    ],
   },
   {
     key: 'Calendario',
@@ -1328,6 +1332,15 @@ export default function AuthenticatedApp() {
     onSelect: handleSelectBudget,
   };
 
+  const materialsPendingProductsPageProps: MaterialsPendingProductsPageProps = {
+    budgets: materialsBudgets,
+    isLoading: allBudgetsQuery.isLoading,
+    isFetching: isRefreshingAllBudgets,
+    error: allBudgetsQuery.error ?? null,
+    onRetry: () => allBudgetsQuery.refetch(),
+    onSelect: handleSelectBudget,
+  };
+
   const calendarSessionsPageProps: PorSesionesPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
@@ -1489,6 +1502,7 @@ export default function AuthenticatedApp() {
             allBudgetsPageProps={allBudgetsPageProps}
             unworkedBudgetsPageProps={unworkedBudgetsPageProps}
             materialsBudgetsPageProps={materialsBudgetsPageProps}
+            materialsPendingProductsPageProps={materialsPendingProductsPageProps}
             porSesionesPageProps={calendarSessionsPageProps}
             porUnidadMovilPageProps={calendarUnitsPageProps}
             porFormadorPageProps={calendarTrainersPageProps}
