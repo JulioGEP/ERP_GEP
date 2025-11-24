@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
@@ -22,8 +22,10 @@ type PendingProductRow = {
   organizationName: string;
   productName: string;
   quantityLabel: string;
+  quantityValue: number | null;
   supplier: string;
   estimatedDelivery: string;
+  estimatedDeliveryValue: number | null;
 };
 
 function getBudgetId(budget: DealSummary): string | null {
@@ -53,6 +55,12 @@ function formatQuantity(quantity: number | string | null | undefined): string {
   return new Intl.NumberFormat('es-ES').format(numericQuantity);
 }
 
+function getQuantityValue(quantity: number | string | null | undefined): number | null {
+  if (quantity === null || quantity === undefined) return null;
+  const numericQuantity = typeof quantity === 'string' ? Number(quantity) : quantity;
+  return Number.isFinite(numericQuantity) ? numericQuantity : null;
+}
+
 function getSupplierLabel(budget: DealSummary): string {
   const supplier = budget.proveedor ?? budget.proveedores;
   const cleaned = supplier?.trim();
@@ -72,6 +80,12 @@ function formatEstimatedDelivery(dateIso: string | null | undefined): string {
   const parsed = new Date(dateIso);
   if (Number.isNaN(parsed.getTime())) return '—';
   return parsed.toLocaleDateString('es-ES');
+}
+
+function getEstimatedDeliveryTimestamp(dateIso: string | null | undefined): number | null {
+  if (!dateIso) return null;
+  const parsed = new Date(dateIso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
 }
 
 function isShippingExpense(product: DealProduct | null | undefined): boolean {
@@ -104,10 +118,66 @@ function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
       organizationName,
       productName: getProductName(product),
       quantityLabel: formatQuantity(product?.quantity),
+      quantityValue: getQuantityValue(product?.quantity),
       supplier: getSupplierLabel(budget),
       estimatedDelivery,
+      estimatedDeliveryValue: getEstimatedDeliveryTimestamp(getEstimatedDeliveryValue(budget)),
     }));
   });
+}
+
+type SortableColumn =
+  | 'budgetId'
+  | 'organizationName'
+  | 'supplier'
+  | 'productName'
+  | 'quantity'
+  | 'estimatedDelivery';
+
+type SortDirection = 'asc' | 'desc';
+
+type SortConfig = { key: SortableColumn; direction: SortDirection } | null;
+
+function getSortableValue(row: PendingProductRow, key: SortableColumn): string | number | null {
+  switch (key) {
+    case 'budgetId':
+      return row.budgetId ? row.budgetId.toLowerCase() : null;
+    case 'organizationName':
+      return row.organizationName.toLowerCase();
+    case 'supplier':
+      return row.supplier.toLowerCase();
+    case 'productName':
+      return row.productName.toLowerCase();
+    case 'quantity':
+      return row.quantityValue;
+    case 'estimatedDelivery':
+      return row.estimatedDeliveryValue;
+    default:
+      return null;
+  }
+}
+
+function compareNullableValues(
+  a: string | number | null,
+  b: string | number | null,
+  direction: SortDirection,
+): number {
+  if (a === b) return 0;
+  if (a === null || a === undefined) return 1;
+  if (b === null || b === undefined) return -1;
+
+  const multiplier = direction === 'asc' ? 1 : -1;
+
+  if (typeof a === 'number' && typeof b === 'number') {
+    return (a - b) * multiplier;
+  }
+
+  return a.toString().localeCompare(b.toString(), 'es', { sensitivity: 'base' }) * multiplier;
+}
+
+function getSortIndicator(sortConfig: SortConfig, key: SortableColumn) {
+  if (!sortConfig || sortConfig.key !== key) return null;
+  return sortConfig.direction === 'asc' ? '▲' : '▼';
 }
 
 export function MaterialsPendingProductsPage({
@@ -122,8 +192,35 @@ export function MaterialsPendingProductsPage({
   canImport,
 }: MaterialsPendingProductsPageProps) {
   const pendingProducts = useMemo(() => buildPendingProducts(budgets), [budgets]);
+  const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
+
+  const sortedProducts = useMemo(() => {
+    if (!sortConfig) return pendingProducts;
+
+    const { key, direction } = sortConfig;
+    const rows = [...pendingProducts];
+
+    rows.sort((a, b) => {
+      const valueA = getSortableValue(a, key);
+      const valueB = getSortableValue(b, key);
+
+      return compareNullableValues(valueA, valueB, direction);
+    });
+
+    return rows;
+  }, [pendingProducts, sortConfig]);
+
+  const handleSort = (key: SortableColumn) => {
+    setSortConfig((current) => {
+      if (!current || current.key !== key) {
+        return { key, direction: 'asc' };
+      }
+
+      return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+    });
+  };
 
   return (
     <div className="d-grid gap-4">
@@ -161,12 +258,60 @@ export function MaterialsPendingProductsPage({
           <Table hover className="mb-0">
             <thead>
               <tr>
-                <th scope="col">Presupuesto</th>
-                <th scope="col">Empresa</th>
-                <th scope="col">Proveedor</th>
-                <th scope="col">Producto</th>
-                <th scope="col">Cantidad</th>
-                <th scope="col">Entrega</th>
+                <th scope="col">
+                  <button
+                    type="button"
+                    className="btn btn-link text-body p-0 text-decoration-none d-inline-flex align-items-center gap-1"
+                    onClick={() => handleSort('budgetId')}
+                  >
+                    Presupuesto {getSortIndicator(sortConfig, 'budgetId')}
+                  </button>
+                </th>
+                <th scope="col">
+                  <button
+                    type="button"
+                    className="btn btn-link text-body p-0 text-decoration-none d-inline-flex align-items-center gap-1"
+                    onClick={() => handleSort('organizationName')}
+                  >
+                    Empresa {getSortIndicator(sortConfig, 'organizationName')}
+                  </button>
+                </th>
+                <th scope="col">
+                  <button
+                    type="button"
+                    className="btn btn-link text-body p-0 text-decoration-none d-inline-flex align-items-center gap-1"
+                    onClick={() => handleSort('supplier')}
+                  >
+                    Proveedor {getSortIndicator(sortConfig, 'supplier')}
+                  </button>
+                </th>
+                <th scope="col">
+                  <button
+                    type="button"
+                    className="btn btn-link text-body p-0 text-decoration-none d-inline-flex align-items-center gap-1"
+                    onClick={() => handleSort('productName')}
+                  >
+                    Producto {getSortIndicator(sortConfig, 'productName')}
+                  </button>
+                </th>
+                <th scope="col">
+                  <button
+                    type="button"
+                    className="btn btn-link text-body p-0 text-decoration-none d-inline-flex align-items-center gap-1"
+                    onClick={() => handleSort('quantity')}
+                  >
+                    Cantidad {getSortIndicator(sortConfig, 'quantity')}
+                  </button>
+                </th>
+                <th scope="col">
+                  <button
+                    type="button"
+                    className="btn btn-link text-body p-0 text-decoration-none d-inline-flex align-items-center gap-1"
+                    onClick={() => handleSort('estimatedDelivery')}
+                  >
+                    Entrega {getSortIndicator(sortConfig, 'estimatedDelivery')}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -183,7 +328,7 @@ export function MaterialsPendingProductsPage({
                   </td>
                 </tr>
               ) : (
-                pendingProducts.map((row, index) => (
+                sortedProducts.map((row, index) => (
                   <tr
                     key={row.key || `pending-product-${index}`}
                     role="button"
