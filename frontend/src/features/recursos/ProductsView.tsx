@@ -939,7 +939,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
               <Spinner animation="border" role="status" size="sm" />
             )}
             <Button onClick={handleSync} disabled={isSyncing} variant="primary">
-              Actualizar Productos
+              Actualizar Formaciones
             </Button>
           </div>
         </div>
@@ -983,7 +983,7 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
               ) : products.length === 0 ? (
                 <tr>
                   <td colSpan={columnsCount} className="py-5 text-center text-muted">
-                    No hay productos disponibles. Pulsa "Actualizar Productos" para sincronizar.
+                    No hay productos disponibles. Pulsa "Actualizar Formaciones" para sincronizar.
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
