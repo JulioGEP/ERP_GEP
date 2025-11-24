@@ -623,7 +623,17 @@ export function BudgetDetailModalMaterial({
 
   const dealSedeLabel = formatSedeLabel(detailView.sedeLabel ?? null);
 
-  const trainingProducts = useMemo(() => detailProducts, [detailProducts]);
+  const trainingProducts = useMemo(
+    () =>
+      detailProducts.filter((product) => {
+        const code = product?.code ?? '';
+        const type = product?.type ?? null;
+
+        if (typeof type === 'string' && type.toUpperCase() === 'EXTRA') return false;
+        return typeof code === 'string' ? !code.toLowerCase().startsWith('ext-') : true;
+      }),
+    [detailProducts]
+  );
 
   const initialProductHours = useMemo(() => {
     const map: Record<string, string> = {};
@@ -1129,7 +1139,7 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(form.direccion_envio)}
                 />
               </Col>
-              <Col md={4} className="budget-field-wide">
+              <Col md={4}>
                 <div className="d-flex justify-content-between align-items-center gap-2">
                   <Form.Label className="mb-0">PO</Form.Label>
                   {renderFollowUpBlock('po_val')}
@@ -1140,7 +1150,7 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(deal.po ?? null)}
                 />
               </Col>
-              <Col md={4} className="budget-field-wide">
+              <Col md={4}>
                 <Form.Label>Mail Factura</Form.Label>
                 <Form.Control
                   value={displayOrDash(deal.mail_invoice ?? null)}
@@ -1148,7 +1158,7 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(deal.mail_invoice ?? null)}
                 />
               </Col>
-              <Col md={4} className="budget-field-wide">
+              <Col md={4}>
                 <Form.Label>Forma de Pago Material</Form.Label>
                 <Form.Control
                   value={form.forma_pago_material}
