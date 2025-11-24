@@ -1,6 +1,6 @@
 // backend/functions/users.ts
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import type { Prisma } from '@prisma/client';
+import { $Enums, type Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
@@ -334,7 +334,7 @@ async function handleCreate(
           first_name: firstName,
           last_name: lastName,
           email,
-          role: roleStorage,
+          role: roleStorage as $Enums.erp_role,
           active,
           bank_account: bankAccountResult.parsed,
           address,
@@ -386,7 +386,7 @@ async function handleUpdate(
     first_name?: string;
     last_name?: string;
     email?: string;
-    role?: string;
+    role?: $Enums.erp_role;
     active?: boolean;
     bank_account?: string | null;
     address?: string | null;
@@ -431,7 +431,7 @@ async function handleUpdate(
     if (!roleStorage) {
       return errorResponse('INVALID_ROLE', 'Rol inválido', 400);
     }
-    data.role = roleStorage;
+    data.role = roleStorage as $Enums.erp_role;
     fieldsProvided += 1;
   }
 

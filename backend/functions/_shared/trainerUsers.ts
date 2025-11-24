@@ -1,6 +1,7 @@
 // backend/functions/_shared/trainerUsers.ts
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
+import { erp_role } from '@prisma/client';
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 const DEFAULT_PASSWORD = '123456';
@@ -23,11 +24,11 @@ export async function syncUserForTrainer(
 ): Promise<string | null> {
   if (!trainer.email) return null;
 
-  const userPayload = {
+  const userPayload: Prisma.usersUpdateInput = {
     first_name: trainer.name,
     last_name: trainer.apellido ?? '',
     email: trainer.email,
-    role: 'Formador',
+    role: erp_role.Formador,
     active: Boolean(trainer.activo),
     updated_at: new Date(),
   };
@@ -69,7 +70,7 @@ export async function syncUserForTrainer(
           first_name: trainer.name,
           last_name: trainer.apellido ?? '',
           email: trainer.email,
-          role: 'Formador',
+          role: erp_role.Formador,
           active: Boolean(trainer.activo),
           password_hash: passwordHash,
           password_algo: 'bcrypt',

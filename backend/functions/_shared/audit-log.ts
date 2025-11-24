@@ -1,5 +1,5 @@
 // backend/functions/_shared/audit-log.ts
-import type { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { getPrisma } from './prisma';
 import { parseCookies, SESSION_COOKIE_NAME } from './auth';
 
@@ -17,14 +17,7 @@ export type JsonValue =
 export type JsonArray = JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };
 
-type AuditLogCreatePayload = {
-  action: string;
-  entity_type: string;
-  entity_id: string;
-  user_id: string | null;
-  before?: JsonValue | null;
-  after?: JsonValue | null;
-};
+type AuditLogCreatePayload = Prisma.audit_logsUncheckedCreateInput;
 
 export type LogAuditParams = {
   userId?: string | null;
@@ -55,10 +48,10 @@ export async function logAudit({
   };
 
   if (before !== undefined) {
-    payload.before = before ?? null;
+    payload.before = before === null ? Prisma.JsonNull : (before as Prisma.InputJsonValue);
   }
   if (after !== undefined) {
-    payload.after = after ?? null;
+    payload.after = after === null ? Prisma.JsonNull : (after as Prisma.InputJsonValue);
   }
 
   try {

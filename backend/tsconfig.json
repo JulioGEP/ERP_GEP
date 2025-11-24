@@ -11,6 +11,9 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
     "baseUrl": ".",
+    "paths": {
+      "@prisma/client": ["./node_modules/@prisma/client"]
+    },
     "outDir": "dist",
     "allowJs": false,
     "checkJs": false

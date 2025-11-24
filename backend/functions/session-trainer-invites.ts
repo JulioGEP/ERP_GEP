@@ -455,6 +455,7 @@ export const handler = createHttpHandler(async (request) => {
               fecha_inicio_utc: true,
               fecha_fin_utc: true,
               direccion: true,
+              estado: true,
               deal_id: true,
               deals: {
                 select: {
@@ -468,6 +469,21 @@ export const handler = createHttpHandler(async (request) => {
                 select: {
                   name: true,
                   code: true,
+                },
+              },
+              sesion_trainers: {
+                select: {
+                  trainer_id: true,
+                  trainers: {
+                    select: {
+                      trainer_id: true,
+                      name: true,
+                      apellido: true,
+                      email: true,
+                      activo: true,
+                      user_id: true,
+                    },
+                  },
                 },
               },
             },
@@ -510,6 +526,7 @@ export const handler = createHttpHandler(async (request) => {
               fecha_inicio_utc: true,
               fecha_fin_utc: true,
               direccion: true,
+              estado: true,
               deal_id: true,
               deals: {
                 select: {
@@ -523,6 +540,21 @@ export const handler = createHttpHandler(async (request) => {
                 select: {
                   name: true,
                   code: true,
+                },
+              },
+              sesion_trainers: {
+                select: {
+                  trainer_id: true,
+                  trainers: {
+                    select: {
+                      trainer_id: true,
+                      name: true,
+                      apellido: true,
+                      email: true,
+                      activo: true,
+                      user_id: true,
+                    },
+                  },
                 },
               },
             },
@@ -566,6 +598,7 @@ export const handler = createHttpHandler(async (request) => {
                 fecha_inicio_utc: true,
                 fecha_fin_utc: true,
                 direccion: true,
+                estado: true,
                 deal_id: true,
                 deals: {
                   select: {
@@ -579,6 +612,21 @@ export const handler = createHttpHandler(async (request) => {
                   select: {
                     name: true,
                     code: true,
+                  },
+                },
+                sesion_trainers: {
+                  select: {
+                    trainer_id: true,
+                    trainers: {
+                      select: {
+                        trainer_id: true,
+                        name: true,
+                        apellido: true,
+                        email: true,
+                        activo: true,
+                        user_id: true,
+                      },
+                    },
                   },
                 },
               },
@@ -629,6 +677,7 @@ export const handler = createHttpHandler(async (request) => {
                 fecha_inicio_utc: true,
                 fecha_fin_utc: true,
                 direccion: true,
+                estado: true,
                 deal_id: true,
                 deals: {
                   select: {
@@ -642,6 +691,21 @@ export const handler = createHttpHandler(async (request) => {
                   select: {
                     name: true,
                     code: true,
+                  },
+                },
+                sesion_trainers: {
+                  select: {
+                    trainer_id: true,
+                    trainers: {
+                      select: {
+                        trainer_id: true,
+                        name: true,
+                        apellido: true,
+                        email: true,
+                        activo: true,
+                        user_id: true,
+                      },
+                    },
                   },
                 },
               },
