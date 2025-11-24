@@ -1184,17 +1184,20 @@ export function BudgetDetailModalMaterial({
                 <thead>
                   <tr>
                     <th>Material</th>
+                    <th style={{ width: 120 }}>Cantidad</th>
                     <th style={{ width: 189 }}>Comentarios</th>
                   </tr>
                 </thead>
                 <tbody>
                   {trainingProducts.map((product, index) => {
                     const productLabel = displayOrDash(product?.name ?? product?.code ?? '');
+                    const quantityDisplay = displayOrDash(product?.quantity ?? null);
                     const commentText = (product?.comments ?? '').trim();
                     const commentPreview = buildCommentPreview(commentText);
                     return (
                       <tr key={product?.id ?? `${product?.name ?? 'producto'}-${index}`}>
                         <td>{productLabel}</td>
+                        <td style={{ width: 120 }}>{quantityDisplay}</td>
                         <td style={{ width: 189 }}>
                           {commentPreview ? (
                             <Button
