@@ -1140,8 +1140,8 @@ export function BudgetDetailModalMaterial({
                 />
               </Col>
               <Col md={4}>
-                <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
-                  <Form.Label>PO</Form.Label>
+                <div className="d-flex justify-content-between align-items-center gap-2">
+                  <Form.Label className="mb-0">PO</Form.Label>
                   {renderFollowUpBlock('po_val')}
                 </div>
                 <Form.Control
