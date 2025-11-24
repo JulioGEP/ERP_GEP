@@ -643,14 +643,7 @@ export function BudgetDetailModalMaterial({
 
   const dealSedeLabel = formatSedeLabel(detailView.sedeLabel ?? null);
 
-  const trainingProducts = useMemo(
-    () =>
-      detailProducts.filter((product) => {
-        const code = product?.code ?? '';
-        return typeof code === 'string' ? !code.toLowerCase().startsWith('ext-') : true;
-      }),
-    [detailProducts]
-  );
+  const trainingProducts = useMemo(() => detailProducts, [detailProducts]);
 
   const initialProductHours = useMemo(() => {
     const map: Record<string, string> = {};
@@ -708,13 +701,6 @@ export function BudgetDetailModalMaterial({
     if (value === null || value === undefined) return '—';
     const trimmed = String(value).trim();
     return trimmed.length ? trimmed : '—';
-  };
-
-  const handleHoursChange = (productId: string, value: string) => {
-    if (!trainingProductIds.has(productId)) return;
-    if (value === '' || /^\d+$/.test(value)) {
-      setProductHours((current) => ({ ...current, [productId]: value }));
-    }
   };
 
   const handleOpenProductComment = (product: DealDetailViewModel['products'][number]) => {
@@ -1163,17 +1149,7 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(form.direccion_envio)}
                 />
               </Col>
-              <Col md={12}>
-                <Form.Label>Observaciones</Form.Label>
-                <Form.Control
-                  as="textarea"
-                  rows={2}
-                  value={form.observaciones}
-                  onChange={(e) => updateForm('observaciones', e.target.value)}
-                  title={buildFieldTooltip(form.observaciones)}
-                />
-              </Col>
-              <Col md={2} className="budget-field-wide">
+              <Col md={4} className="budget-field-wide">
                 <div className="d-flex justify-content-between align-items-center gap-2">
                   <Form.Label className="mb-0">PO</Form.Label>
                   {renderFollowUpBlock('po_val')}
@@ -1184,7 +1160,7 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(deal.po ?? null)}
                 />
               </Col>
-              <Col md={2} className="budget-field-wide">
+              <Col md={4} className="budget-field-wide">
                 <Form.Label>Mail Factura</Form.Label>
                 <Form.Control
                   value={displayOrDash(deal.mail_invoice ?? null)}
@@ -1192,12 +1168,22 @@ export function BudgetDetailModalMaterial({
                   title={buildFieldTooltip(deal.mail_invoice ?? null)}
                 />
               </Col>
-              <Col md={4} className="budget-field-wide ms-md-auto">
+              <Col md={4} className="budget-field-wide">
                 <Form.Label>Forma de Pago Material</Form.Label>
                 <Form.Control
                   value={form.forma_pago_material}
                   onChange={(e) => updateForm('forma_pago_material', e.target.value)}
                   title={buildFieldTooltip(form.forma_pago_material)}
+                />
+              </Col>
+              <Col md={12}>
+                <Form.Label>Observaciones</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={2}
+                  value={form.observaciones}
+                  onChange={(e) => updateForm('observaciones', e.target.value)}
+                  title={buildFieldTooltip(form.observaciones)}
                 />
               </Col>
             </Row>
@@ -1207,42 +1193,18 @@ export function BudgetDetailModalMaterial({
               <Table size="sm" bordered responsive className="mb-4">
                 <thead>
                   <tr>
-                    <th>Formación</th>
-                    <th style={{ width: 60 }}>Horas</th>
+                    <th>Material</th>
                     <th style={{ width: 189 }}>Comentarios</th>
                   </tr>
                 </thead>
                 <tbody>
                   {trainingProducts.map((product, index) => {
-                    const productId = product?.id != null ? String(product.id) : null;
                     const productLabel = displayOrDash(product?.name ?? product?.code ?? '');
-                    const isEditable = !!productId && trainingProductIds.has(productId);
-                    const hoursValue = isEditable
-                      ? productHours[productId] ?? ''
-                      : formatInitialHours(product?.hours ?? null);
                     const commentText = (product?.comments ?? '').trim();
                     const commentPreview = buildCommentPreview(commentText);
                     return (
                       <tr key={product?.id ?? `${product?.name ?? 'producto'}-${index}`}>
                         <td>{productLabel}</td>
-                        <td style={{ width: 60 }}>
-                          {isEditable ? (
-                            <Form.Control
-                              type="text"
-                              size="sm"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={hoursValue}
-                              placeholder="0"
-                              onChange={(event) => handleHoursChange(productId!, event.target.value)}
-                              className="text-center"
-                              aria-label={`Horas de ${productLabel}`}
-                              title={buildFieldTooltip(hoursValue)}
-                            />
-                          ) : (
-                            <span className="text-muted">{displayOrDash(product?.hours ?? null)}</span>
-                          )}
-                        </td>
                         <td style={{ width: 189 }}>
                           {commentPreview ? (
                             <Button
@@ -1270,7 +1232,7 @@ export function BudgetDetailModalMaterial({
                 </tbody>
               </Table>
             ) : (
-              <p className="text-muted small mb-4">No hay formaciones asociadas.</p>
+              <p className="text-muted small mb-4">No hay materiales asociados.</p>
             )}
             <Accordion
               activeKey={openSections}
