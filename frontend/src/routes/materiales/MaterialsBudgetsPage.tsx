@@ -48,11 +48,13 @@ function formatEstimatedDelivery(dateIso: string | null | undefined): string {
   return parsed.toLocaleDateString('es-ES');
 }
 
+const MATERIAL_PIPELINES = new Set(['materiales', 'material']);
+
 function filterMaterialsBudgets(budgets: DealSummary[]): DealSummary[] {
   return budgets.filter((budget) => {
     const labelKey = normalizePipelineKey(budget.pipeline_label);
     const idKey = normalizePipelineKey(budget.pipeline_id);
-    return labelKey === 'materiales' || idKey === 'materiales';
+    return MATERIAL_PIPELINES.has(labelKey) || MATERIAL_PIPELINES.has(idKey);
   });
 }
 
