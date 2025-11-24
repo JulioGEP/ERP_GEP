@@ -102,6 +102,11 @@ export interface DealSummary {
   po_val?: boolean | null;
   tipo_servicio?: string | null;
   mail_invoice?: string | null;
+  proveedores?: string | null;
+  observaciones?: string | null;
+  fecha_estimada_entrega_material?: string | null;
+  direccion_envio?: string | null;
+  forma_pago_material?: string | null;
 
   comercial?: string | null;
   a_fecha?: string | null;
@@ -143,6 +148,11 @@ export interface DealDetail {
   po_val?: boolean | null;
   tipo_servicio?: string | null;
   mail_invoice?: string | null;
+  proveedores?: string | null;
+  observaciones?: string | null;
+  fecha_estimada_entrega_material?: string | null;
+  direccion_envio?: string | null;
+  forma_pago_material?: string | null;
 
   comercial?: string | null;
   a_fecha?: string | null;

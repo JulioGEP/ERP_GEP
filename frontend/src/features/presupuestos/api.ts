@@ -559,6 +559,11 @@ function normalizeDealSummary(row: Json): DealSummary {
     po_val: toBoolean(row?.po_val),
     tipo_servicio: toStringValue(row?.tipo_servicio) ?? null,
     mail_invoice: toStringValue(row?.mail_invoice) ?? null,
+    proveedores: toStringValue(row?.proveedores) ?? null,
+    observaciones: toStringValue(row?.observaciones) ?? null,
+    fecha_estimada_entrega_material: toStringValue(row?.fecha_estimada_entrega_material) ?? null,
+    direccion_envio: toStringValue(row?.direccion_envio) ?? null,
+    forma_pago_material: toStringValue(row?.forma_pago_material) ?? null,
     comercial: toStringValue(row?.comercial) ?? null,
     a_fecha: toStringValue(row?.a_fecha) ?? null,
     w_id_variation: toStringValue(row?.w_id_variation) ?? null,
@@ -623,6 +628,11 @@ function normalizeDealDetail(raw: Json): DealDetail {
     po_val: toBoolean(raw.po_val),
     tipo_servicio: toStringValue(raw.tipo_servicio) ?? null,
     mail_invoice: toStringValue(raw.mail_invoice) ?? null,
+    proveedores: toStringValue(raw.proveedores) ?? null,
+    observaciones: toStringValue(raw.observaciones) ?? null,
+    fecha_estimada_entrega_material: toStringValue(raw.fecha_estimada_entrega_material) ?? null,
+    direccion_envio: toStringValue(raw.direccion_envio) ?? null,
+    forma_pago_material: toStringValue(raw.forma_pago_material) ?? null,
 
     hours: toNumber(raw.hours) ?? null,
 
@@ -1271,6 +1281,11 @@ export type DealEditablePatch = {
   hotel_val?: boolean;
   transporte_val?: boolean;
   po_val?: boolean;
+  proveedores?: string | null;
+  observaciones?: string | null;
+  fecha_estimada_entrega_material?: string | null;
+  direccion_envio?: string | null;
+  forma_pago_material?: string | null;
   comercial?: string | null;
   w_id_variation?: string | null;
   a_fecha?: string | null;

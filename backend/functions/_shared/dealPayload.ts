@@ -149,6 +149,14 @@ export function buildDealPayloadFromRecord(record: any) {
     caes_label: toNullableString(record.caes_label) ?? toNullableString(record.caesLabel),
     fundae_label: toNullableString(record.fundae_label) ?? toNullableString(record.fundaeLabel),
     hotel_label: toNullableString(record.hotel_label) ?? toNullableString(record.hotelLabel),
+    proveedores:
+      toNullableString(record.proveedores) ?? toNullableString(record.proveedoresLabel),
+    observaciones: toNullableString(record.observaciones),
+    fecha_estimada_entrega_material: toNullableString(
+      record.fecha_estimada_entrega_material ?? record.fechaEstimadaEntregaMaterial,
+    ),
+    direccion_envio: toNullableString(record.direccion_envio ?? record.direccionEnvio),
+    forma_pago_material: toNullableString(record.forma_pago_material ?? record.formaPagoMaterial),
 
     prodextra: prodExtra,
     prodextra_names: extraNames,

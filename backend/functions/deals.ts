@@ -35,6 +35,11 @@ const EDITABLE_FIELDS = new Set([
   "hotel_val",
   "transporte_val",
   "po_val",
+  "proveedores",
+  "observaciones",
+  "fecha_estimada_entrega_material",
+  "direccion_envio",
+  "forma_pago_material",
   "w_id_variation",
   "a_fecha",
 ]);

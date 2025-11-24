@@ -187,6 +187,11 @@ model deals {
   po                   String?                @db.VarChar(191)
   tipo_servicio        String?                @db.VarChar(50)
   mail_invoice         String?                @db.VarChar(255)
+  proveedores          String?
+  observaciones        String?
+  fecha_estimada_entrega_material String?
+  direccion_envio      String?
+  forma_pago_material  String?
   comercial            String?
   a_fecha              DateTime?              @db.Timestamp(6)
   w_id_variation       String?

@@ -108,11 +108,11 @@ interface Props {
 }
 
 type BudgetFormValuesMaterial = {
-  sede_label: string;
-  training_address: string; // <- schema vigente
-  caes_label: string;
-  fundae_label: string;
-  hotel_label: string;
+  proveedores: string;
+  observaciones: string;
+  fecha_estimada_entrega_material: string;
+  direccion_envio: string;
+  forma_pago_material: string;
 };
 
 type DealNoteView = DealDetailViewModel['notes'][number];
@@ -300,8 +300,6 @@ export function BudgetDetailModalMaterial({
   const [form, setForm] = useState<BudgetFormValuesMaterial | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showMapModal, setShowMapModal] = useState(false);
-  const [mapAddress, setMapAddress] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<string[]>([]);
   const [newNoteContent, setNewNoteContent] = useState('');
   const [creatingNote, setCreatingNote] = useState(false);
@@ -361,11 +359,11 @@ export function BudgetDetailModalMaterial({
   ): string | null => {
     switch (source) {
       case 'caes_label':
-        return form?.caes_label ?? deal?.caes_label ?? summary?.caes_label ?? null;
+        return deal?.caes_label ?? summary?.caes_label ?? null;
       case 'fundae_label':
-        return form?.fundae_label ?? deal?.fundae_label ?? summary?.fundae_label ?? null;
+        return deal?.fundae_label ?? summary?.fundae_label ?? null;
       case 'hotel_label':
-        return form?.hotel_label ?? deal?.hotel_label ?? summary?.hotel_label ?? null;
+        return deal?.hotel_label ?? summary?.hotel_label ?? null;
       case 'transporte':
         return deal?.transporte ?? summary?.transporte ?? null;
       case 'po':
@@ -580,23 +578,23 @@ export function BudgetDetailModalMaterial({
     setForm((current) => (current ? { ...current, [field]: value } : current));
   };
 
-  // Inicializa solo los campos editables (schema con training_address)
+  // Inicializa solo los campos editables
   useEffect(() => {
     if (deal) {
       setForm({
-        sede_label: deal.sede_label ?? '',
-        training_address: deal.training_address ?? '', // <- aquí
-        caes_label: deal.caes_label ?? '',
-        fundae_label: deal.fundae_label ?? '',
-        hotel_label: deal.hotel_label ?? ''
+        proveedores: deal.proveedores ?? '',
+        observaciones: deal.observaciones ?? '',
+        fecha_estimada_entrega_material: deal.fecha_estimada_entrega_material ?? '',
+        direccion_envio: deal.direccion_envio ?? '',
+        forma_pago_material: deal.forma_pago_material ?? ''
       });
     } else if (summary) {
       setForm({
-        sede_label: summary.sede_label ?? '',
-        training_address: summary.training_address ?? '', // <- aquí
-        caes_label: summary.caes_label ?? '',
-        fundae_label: summary.fundae_label ?? '',
-        hotel_label: summary.hotel_label ?? ''
+        proveedores: summary.proveedores ?? '',
+        observaciones: summary.observaciones ?? '',
+        fecha_estimada_entrega_material: summary.fecha_estimada_entrega_material ?? '',
+        direccion_envio: summary.direccion_envio ?? '',
+        forma_pago_material: summary.forma_pago_material ?? ''
       });
     } else {
       setForm(null);
@@ -612,11 +610,11 @@ export function BudgetDetailModalMaterial({
     const source = deal ?? summary;
     if (!source) return null;
     return {
-      sede_label: source.sede_label ?? '',
-      training_address: source.training_address ?? '', // <- aquí
-      caes_label: source.caes_label ?? '',
-      fundae_label: source.fundae_label ?? '',
-      hotel_label: source.hotel_label ?? ''
+      proveedores: source.proveedores ?? '',
+      observaciones: source.observaciones ?? '',
+      fecha_estimada_entrega_material: source.fecha_estimada_entrega_material ?? '',
+      direccion_envio: source.direccion_envio ?? '',
+      forma_pago_material: source.forma_pago_material ?? ''
     };
   }, [deal, summary]);
 
@@ -641,16 +639,9 @@ export function BudgetDetailModalMaterial({
     return null;
   }, [documents]);
 
-  const defaultSessionAddress =
-    form?.training_address?.trim()?.length
-      ? form.training_address
-      : deal?.training_address ?? summary?.training_address ?? null;
+  const defaultSessionAddress = detailView.trainingAddress ?? null;
 
-  const rawDealSedeLabel =
-    form?.sede_label?.trim()?.length
-      ? form.sede_label
-      : detailView.sedeLabel ?? null;
-  const dealSedeLabel = formatSedeLabel(rawDealSedeLabel);
+  const dealSedeLabel = formatSedeLabel(detailView.sedeLabel ?? null);
 
   const trainingProducts = useMemo(
     () =>
@@ -860,29 +851,6 @@ export function BudgetDetailModalMaterial({
     setViewingNote(null);
   };
 
-  const normalizeAffirmative = (value?: string | number | null) => {
-    if (value === null || value === undefined) return '';
-    const raw = String(value).trim().toLowerCase();
-    return raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  };
-
-  const isAffirmative = (value?: string | number | null) => normalizeAffirmative(value) === 'si';
-
-  const affirmativeBorder = (value?: string | number | null) =>
-    isAffirmative(value) ? { borderColor: '#e4032d' } : undefined;
-
-  const handleOpenMap = () => {
-    const address = form?.training_address?.trim();
-    if (!address) return;
-    setMapAddress(address);
-    setShowMapModal(true);
-  };
-
-  const handleCloseMap = () => {
-    setShowMapModal(false);
-    setMapAddress(null);
-  };
-
   const handleAccordionSelect = (eventKey: string | string[] | null | undefined) => {
     if (eventKey === null || eventKey === undefined) {
       setOpenSections([]);
@@ -917,20 +885,29 @@ export function BudgetDetailModalMaterial({
       return trimmed.length ? trimmed : null;
     };
 
-    if (normalizeString(form?.sede_label) !== normalizeString(initialEditable?.sede_label)) {
-      patch.sede_label = toNullableString(form?.sede_label);
+    if (normalizeString(form?.proveedores) !== normalizeString(initialEditable?.proveedores)) {
+      patch.proveedores = toNullableString(form?.proveedores);
     }
-    if (normalizeString(form?.training_address) !== normalizeString(initialEditable?.training_address)) {
-      patch.training_address = toNullableString(form?.training_address); // <- schema correcto
+    if (
+      normalizeString(form?.observaciones) !== normalizeString(initialEditable?.observaciones)
+    ) {
+      patch.observaciones = toNullableString(form?.observaciones);
     }
-    if (normalizeString(form?.caes_label) !== normalizeString(initialEditable?.caes_label)) {
-      patch.caes_label = toNullableString(form?.caes_label);
+    if (
+      normalizeString(form?.fecha_estimada_entrega_material) !==
+      normalizeString(initialEditable?.fecha_estimada_entrega_material)
+    ) {
+      patch.fecha_estimada_entrega_material = toNullableString(
+        form?.fecha_estimada_entrega_material,
+      );
     }
-    if (normalizeString(form?.fundae_label) !== normalizeString(initialEditable?.fundae_label)) {
-      patch.fundae_label = toNullableString(form?.fundae_label);
+    if (normalizeString(form?.direccion_envio) !== normalizeString(initialEditable?.direccion_envio)) {
+      patch.direccion_envio = toNullableString(form?.direccion_envio);
     }
-    if (normalizeString(form?.hotel_label) !== normalizeString(initialEditable?.hotel_label)) {
-      patch.hotel_label = toNullableString(form?.hotel_label);
+    if (
+      normalizeString(form?.forma_pago_material) !== normalizeString(initialEditable?.forma_pago_material)
+    ) {
+      patch.forma_pago_material = toNullableString(form?.forma_pago_material);
     }
 
     const productPatches: DealProductEditablePatch[] = [];
@@ -1161,77 +1138,47 @@ export function BudgetDetailModalMaterial({
             {/* Editables */}
             <Row className="g-3">
               <Col md={4}>
-                <Form.Label>Sede</Form.Label>
+                <Form.Label>Proveedores</Form.Label>
                 <Form.Control
-                  value={formatSedeLabel(form.sede_label) ?? ''}
-                  onChange={(e) => updateForm('sede_label', e.target.value)}
-                  title={buildFieldTooltip(form.sede_label)}
+                  value={form.proveedores}
+                  onChange={(e) => updateForm('proveedores', e.target.value)}
+                  title={buildFieldTooltip(form.proveedores)}
                 />
               </Col>
-              <Col md={8}>
-                <Form.Label>Dirección</Form.Label>
-                <div className="d-flex gap-2 align-items-start">
-                  <Form.Control
-                    className="flex-grow-1"
-                    value={form.training_address}
-                    onChange={(e) => updateForm('training_address', e.target.value)}
-                    title={buildFieldTooltip(form.training_address)}
-                  />
-                  <Button
-                    variant="outline-primary"
-                    onClick={handleOpenMap}
-                    disabled={!form.training_address?.trim()}
-                  >
-                    Ver
-                  </Button>
-                </div>
-              </Col>
-              <Col md={2} className="budget-field-narrow">
-                <div className="d-flex justify-content-between align-items-center gap-2">
-                  <Form.Label className="mb-0">CAES</Form.Label>
-                  {renderFollowUpBlock('caes_val')}
-                </div>
+              <Col md={4}>
+                <Form.Label>Fecha Estimada Entrega Material</Form.Label>
                 <Form.Control
-                  value={form.caes_label}
-                  onChange={(e) => updateForm('caes_label', e.target.value)}
-                  style={affirmativeBorder(form.caes_label)}
-                  title={buildFieldTooltip(form.caes_label)}
+                  value={form.fecha_estimada_entrega_material}
+                  onChange={(e) =>
+                    updateForm('fecha_estimada_entrega_material', e.target.value)
+                  }
+                  title={buildFieldTooltip(form.fecha_estimada_entrega_material)}
                 />
               </Col>
-              <Col md={2} className="budget-field-narrow">
-                <div className="d-flex justify-content-between align-items-center gap-2">
-                  <Form.Label className="mb-0">FUNDAE</Form.Label>
-                  {renderFollowUpBlock('fundae_val')}
-                </div>
+              <Col md={4}>
+                <Form.Label>Forma de Pago Material</Form.Label>
                 <Form.Control
-                  value={form.fundae_label}
-                  onChange={(e) => updateForm('fundae_label', e.target.value)}
-                  style={affirmativeBorder(form.fundae_label)}
-                  title={buildFieldTooltip(form.fundae_label)}
+                  value={form.forma_pago_material}
+                  onChange={(e) => updateForm('forma_pago_material', e.target.value)}
+                  title={buildFieldTooltip(form.forma_pago_material)}
                 />
               </Col>
-              <Col md={2} className="budget-field-narrow">
-                <div className="d-flex justify-content-between align-items-center gap-2">
-                  <Form.Label className="mb-0">Hotel</Form.Label>
-                  {renderFollowUpBlock('hotel_val')}
-                </div>
+              <Col md={6}>
+                <Form.Label>Dirección de Envío</Form.Label>
                 <Form.Control
-                  value={form.hotel_label}
-                  onChange={(e) => updateForm('hotel_label', e.target.value)}
-                  style={affirmativeBorder(form.hotel_label)}
-                  title={buildFieldTooltip(form.hotel_label)}
+                  value={form.direccion_envio}
+                  onChange={(e) => updateForm('direccion_envio', e.target.value)}
+                  title={buildFieldTooltip(form.direccion_envio)}
                 />
               </Col>
-              <Col md={2}>
-                <div className="d-flex justify-content-between align-items-center gap-2">
-                  <Form.Label className="mb-0">Transporte</Form.Label>
-                  {renderFollowUpBlock('transporte_val')}
-                </div>
+              <Col md={6}>
+                <Form.Label>Observaciones</Form.Label>
                 <Form.Control
-                  value={displayOrDash(deal.transporte ?? null)}
-                  readOnly
-                  style={affirmativeBorder(deal.transporte ?? null)}
-                  title={buildFieldTooltip(deal.transporte ?? null)}
+                  as="textarea"
+                  rows={2}
+                  value={form.observaciones}
+                  onChange={(e) => updateForm('observaciones', e.target.value)}
+                  title={buildFieldTooltip(form.observaciones)}
                 />
               </Col>
               <div className="w-100 d-none d-md-block" />
@@ -1827,25 +1774,6 @@ export function BudgetDetailModalMaterial({
           Salir sin guardar
         </Button>
       </Modal.Footer>
-    </Modal>
-
-    <Modal show={showMapModal} onHide={handleCloseMap} size="lg" centered>
-      <Modal.Header closeButton>
-        <Modal.Title>Ubicación</Modal.Title>
-      </Modal.Header>
-      <Modal.Body>
-        {mapAddress ? (
-          <div className="ratio ratio-16x9">
-            <iframe
-              src={`https://www.google.com/maps?q=${encodeURIComponent(mapAddress)}&output=embed`}
-              title={`Mapa de ${mapAddress}`}
-              allowFullScreen
-            />
-          </div>
-        ) : (
-          <p className="text-muted mb-0">No se ha especificado una dirección.</p>
-        )}
-      </Modal.Body>
     </Modal>
   </>
   );
