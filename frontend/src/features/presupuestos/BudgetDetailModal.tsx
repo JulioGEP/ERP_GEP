@@ -320,7 +320,7 @@ export function BudgetDetailModal({
   const [isDragActive, setIsDragActive] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const syncDocumentsMutation = useMutation({
-    mutationFn: () => postJson('/api/google-drive-sync'),
+    mutationFn: () => postJson('/google-drive-sync'),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: detailQueryKey });
       if (onNotify) {
