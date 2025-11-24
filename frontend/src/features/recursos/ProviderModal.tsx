@@ -55,7 +55,7 @@ export function ProviderModal({ show, initialData, isSaving, onClose, onSubmit }
     }
   }, [show, initialData]);
 
-  const modalTitle = useMemo(() => 'Editar proveedor', []);
+  const modalTitle = useMemo(() => (initialData ? 'Editar proveedor' : 'Nuevo proveedor'), [initialData]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
