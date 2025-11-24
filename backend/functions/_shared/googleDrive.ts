@@ -2917,21 +2917,26 @@ export async function importGoogleDriveDocumentsIntoErp(): Promise<{
               for (const nested of nestedFiles) {
                 if (nested.mimeType === "application/vnd.google-apps.folder") continue;
                 const extension = (nested.name || "").split(".").pop() || "bin";
+                const driveFileName = nested.name ?? nested.id;
                 await prisma.sesion_files.upsert({
-                  where: { id: nested.id },
+                  where: {
+                    sesion_id_drive_file_name: {
+                      sesion_id: session.id,
+                      drive_file_name: driveFileName,
+                    },
+                  },
                   create: {
-                    id: nested.id,
                     deal_id: deal.deal_id,
                     sesion_id: session.id,
                     file_type: extension,
                     compartir_formador: false,
-                    drive_file_name: nested.name ?? nested.id,
+                    drive_file_name: driveFileName,
                     drive_web_view_link: buildDriveFileWebViewLink(nested),
                     added_at: nested.modifiedTime ? new Date(nested.modifiedTime) : new Date(),
                   },
                   update: {
                     file_type: extension,
-                    drive_file_name: nested.name ?? nested.id,
+                    drive_file_name: driveFileName,
                     drive_web_view_link: buildDriveFileWebViewLink(nested),
                     updated_at: new Date(),
                   },
@@ -2942,21 +2947,26 @@ export async function importGoogleDriveDocumentsIntoErp(): Promise<{
             }
 
             const extension = (sessionFile.name || "").split(".").pop() || "bin";
+            const driveFileName = sessionFile.name ?? sessionFile.id;
             await prisma.sesion_files.upsert({
-              where: { id: sessionFile.id },
+              where: {
+                sesion_id_drive_file_name: {
+                  sesion_id: session.id,
+                  drive_file_name: driveFileName,
+                },
+              },
               create: {
-                id: sessionFile.id,
                 deal_id: deal.deal_id,
                 sesion_id: session.id,
                 file_type: extension,
                 compartir_formador: false,
-                drive_file_name: sessionFile.name ?? sessionFile.id,
+                drive_file_name: driveFileName,
                 drive_web_view_link: buildDriveFileWebViewLink(sessionFile),
                 added_at: sessionFile.modifiedTime ? new Date(sessionFile.modifiedTime) : new Date(),
               },
               update: {
                 file_type: extension,
-                drive_file_name: sessionFile.name ?? sessionFile.id,
+                drive_file_name: driveFileName,
                 drive_web_view_link: buildDriveFileWebViewLink(sessionFile),
                 updated_at: new Date(),
               },
