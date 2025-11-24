@@ -266,9 +266,10 @@ export function AppRouter({
           }
         />
         <Route
-          path="/recursos/productos"
-          element={<GuardedRoute path="/recursos/productos" element={<ProductosPage {...productosPageProps} />} />}
+          path="/recursos/formaciones"
+          element={<GuardedRoute path="/recursos/formaciones" element={<ProductosPage {...productosPageProps} />} />}
         />
+        <Route path="/recursos/productos" element={<Navigate to="/recursos/formaciones" replace />} />
         <Route
           path="/recursos/confirmaciones"
           element={

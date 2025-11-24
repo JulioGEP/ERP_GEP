@@ -114,7 +114,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Confirmaciones', label: 'Confirmaciones', path: '/recursos/confirmaciones' },
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
-      { key: 'Recursos/Productos', label: 'Productos', path: '/recursos/productos' },
+      { key: 'Recursos/Formaciones', label: 'Formaciones', path: '/recursos/formaciones' },
       { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
     ],
   },
