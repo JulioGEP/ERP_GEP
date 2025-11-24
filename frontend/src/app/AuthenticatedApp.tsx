@@ -1339,6 +1339,9 @@ export default function AuthenticatedApp() {
     error: allBudgetsQuery.error ?? null,
     onRetry: () => allBudgetsQuery.refetch(),
     onSelect: handleSelectBudget,
+    onOpenImportModal: handleOpenImportModal,
+    isImporting: importMutation.isPending,
+    canImport: canImportBudgets,
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {

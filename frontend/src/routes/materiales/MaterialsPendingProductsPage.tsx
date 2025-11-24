@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Alert, Spinner, Table } from 'react-bootstrap';
+import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
@@ -10,6 +10,9 @@ export type MaterialsPendingProductsPageProps = {
   error: unknown;
   onRetry: () => void;
   onSelect: (budget: DealSummary) => void;
+  onOpenImportModal: () => void;
+  isImporting: boolean;
+  canImport: boolean;
 };
 
 type PendingProductRow = {
@@ -114,6 +117,9 @@ export function MaterialsPendingProductsPage({
   error,
   onRetry,
   onSelect,
+  onOpenImportModal,
+  isImporting,
+  canImport,
 }: MaterialsPendingProductsPageProps) {
   const pendingProducts = useMemo(() => buildPendingProducts(budgets), [budgets]);
   const hasError = !!error;
@@ -126,7 +132,14 @@ export function MaterialsPendingProductsPage({
           <h1 className="h3 fw-bold mb-0">Materiales · Pendientes</h1>
           <p className="text-muted mb-0">Productos de presupuestos del embudo Material</p>
         </div>
-        {(isLoading || isFetching) && <Spinner animation="border" role="status" size="sm" />}
+        <div className="d-flex align-items-center gap-3">
+          {(isLoading || isFetching || isImporting) && <Spinner animation="border" role="status" size="sm" />}
+          {canImport && (
+            <Button size="lg" onClick={onOpenImportModal} disabled={isImporting}>
+              Importar presupuesto
+            </Button>
+          )}
+        </div>
       </section>
 
       {hasError ? (
