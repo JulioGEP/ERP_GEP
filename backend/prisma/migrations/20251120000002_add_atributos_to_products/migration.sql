@@ -1,0 +1,3 @@
+-- Placeholder migration.
+-- The atributos field and related product defaults were applied directly in production.
+-- This file ensures Prisma can mark the migration as applied during automated deploys.
