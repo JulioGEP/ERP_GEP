@@ -50,10 +50,14 @@ function formatEstimatedDelivery(dateIso: string | null | undefined): string {
 
 export const MATERIAL_PIPELINE_KEYS = new Set(['materiales', 'material']);
 
+function isMaterialPipelineKey(value: unknown): boolean {
+  const normalized = normalizePipelineKey(value);
+  if (!normalized) return false;
+  return MATERIAL_PIPELINE_KEYS.has(normalized) || normalized.includes('material');
+}
+
 export function isMaterialPipeline(budget: DealSummary): boolean {
-  const labelKey = normalizePipelineKey(budget.pipeline_label);
-  const idKey = normalizePipelineKey(budget.pipeline_id);
-  return MATERIAL_PIPELINE_KEYS.has(labelKey) || MATERIAL_PIPELINE_KEYS.has(idKey);
+  return isMaterialPipelineKey(budget.pipeline_label) || isMaterialPipelineKey(budget.pipeline_id);
 }
 
 function filterMaterialsBudgets(budgets: DealSummary[]): DealSummary[] {
