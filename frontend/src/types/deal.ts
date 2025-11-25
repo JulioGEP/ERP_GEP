@@ -37,6 +37,8 @@ export interface DealProduct {
   name?: string | null;
   code?: string | null;
 
+  almacen_stock?: number | null;
+
   quantity?: number | null; // decimal en DB, se normaliza a number en API
   price?: number | null;    // decimal en DB, se normaliza a number en API
 

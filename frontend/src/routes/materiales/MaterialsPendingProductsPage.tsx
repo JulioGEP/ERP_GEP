@@ -23,6 +23,8 @@ type PendingProductRow = {
   productName: string;
   quantityLabel: string;
   quantityValue: number | null;
+  stockLabel: string;
+  stockValue: number | null;
   supplier: string;
   estimatedDelivery: string;
   estimatedDeliveryValue: number | null;
@@ -127,6 +129,8 @@ function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
       productName: getProductName(product),
       quantityLabel: formatQuantity(product?.quantity),
       quantityValue: getQuantityValue(product?.quantity),
+      stockLabel: formatQuantity(product?.almacen_stock),
+      stockValue: getQuantityValue(product?.almacen_stock),
       supplier: getSupplierLabel(budget),
       estimatedDelivery,
       estimatedDeliveryValue: getEstimatedDeliveryTimestamp(getEstimatedDeliveryValue(budget)),
@@ -215,7 +219,10 @@ export function MaterialsPendingProductsPage({
   const toggleProductSelection = (row: PendingProductRow) => {
     setSelectedProducts((current) => {
       const { key } = row;
-      const hasStock = (row.quantityValue ?? 0) > 0;
+      const hasStock =
+        row.stockValue != null && row.quantityValue != null
+          ? row.stockValue >= row.quantityValue
+          : (row.stockValue ?? 0) > 0;
 
       if (current[key]) {
         const updated = { ...current };
@@ -490,6 +497,7 @@ export function MaterialsPendingProductsPage({
                   <th>Producto</th>
                   <th>Proveedor</th>
                   <th>Cantidad</th>
+                  <th>Stock</th>
                   <th>Acción</th>
                 </tr>
               </thead>
@@ -502,6 +510,7 @@ export function MaterialsPendingProductsPage({
                     </td>
                     <td>{row.supplier}</td>
                     <td>{row.quantityLabel}</td>
+                    <td>{row.stockLabel}</td>
                     <td>
                       <div className="d-flex flex-column gap-2">
                         <Form.Check
