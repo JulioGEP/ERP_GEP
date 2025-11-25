@@ -1513,7 +1513,6 @@ export const handler = async (event: any) => {
               code: true,
               quantity: true,
               price: true,
-              almacen_stock: true,
               type: true,
               hours: true,
               created_at: true,
@@ -1682,7 +1681,6 @@ export const handler = async (event: any) => {
               code: true,
               quantity: true,
               price: true,
-              almacen_stock: true,
               type: true,
               hours: true,
               created_at: true,
@@ -1743,7 +1741,6 @@ export const handler = async (event: any) => {
               code: true,
               quantity: true,
               price: true,
-              almacen_stock: true,
               type: true,
               hours: true, // hours existe en deal_products
               created_at: true,
@@ -1811,7 +1808,6 @@ export const handler = async (event: any) => {
               code: true,
               quantity: true,
               price: true,
-              almacen_stock: true,
               type: true,
               hours: true,
               product_comments: true,
@@ -1848,25 +1844,17 @@ export const handler = async (event: any) => {
 
       const dealsRaw = await Promise.all(
         rowsRaw.map(async (row: any) => {
-          try {
-            const mapped = mapDealForApi(normalizeDealRelations(row));
-            if (!mapped) {
-              return null;
-            }
-
-            const withPipeline = await ensureDealPipelineLabel(mapped, {
-              pipelineId: row?.pipeline_id ?? null,
-              pipelineLabel: (row as any)?.pipeline_label ?? null,
-            });
-
-            return withPipeline;
-          } catch (error) {
-            console.error("[deals] Failed to map deal row", {
-              error,
-              dealId: row?.deal_id ?? null,
-            });
+          const mapped = mapDealForApi(normalizeDealRelations(row));
+          if (!mapped) {
             return null;
           }
+
+          const withPipeline = await ensureDealPipelineLabel(mapped, {
+            pipelineId: row?.pipeline_id ?? null,
+            pipelineLabel: (row as any)?.pipeline_label ?? null,
+          });
+
+          return withPipeline;
         }),
       );
 

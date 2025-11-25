@@ -117,7 +117,6 @@ export function normalizeProducts(
         code: toStringValue(item.code) ?? null,
         quantity: toNumber(item.quantity),
         price: toNumber(item.price),
-        almacen_stock: toNumber(item.almacen_stock),
         type: item.type ?? null,
         hours: typeof item.hours === 'number' ? item.hours : toNumber(item.hours) ?? null,
         comments: toStringValue(item.product_comments ?? item.comments),

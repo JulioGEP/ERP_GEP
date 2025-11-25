@@ -296,7 +296,6 @@ model deal_products {
   updated_at       DateTime   @default(now()) @db.Timestamptz(6)
   type             String?
   hours            Decimal?   @db.Decimal(10, 0)
-  almacen_stock    Int?
   product_comments String?
   category         String?
   deals            deals?     @relation(fields: [deal_id], references: [deal_id], onDelete: Cascade, map: "deal_products_deal_fk")
