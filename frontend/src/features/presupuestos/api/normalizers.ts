@@ -154,6 +154,14 @@ export function normalizeProducts(
         template: toStringValue(item.template) ?? null,
       };
 
+      const rawProductStock =
+        item.product_stock ?? item.product?.product_stock ?? item.products?.product_stock;
+
+      const hasProductStockField =
+        Object.prototype.hasOwnProperty.call(item, 'product_stock') ||
+        Object.prototype.hasOwnProperty.call(item.product ?? {}, 'product_stock') ||
+        Object.prototype.hasOwnProperty.call(item.products ?? {}, 'product_stock');
+
       if (hasProductStockField) {
         product.product_stock =
           typeof rawProductStock === 'number'
