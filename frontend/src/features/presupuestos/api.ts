@@ -1,4 +1,8 @@
 // frontend/src/features/presupuestos/api.ts
+import {
+  MATERIAL_DEAL_STATUSES,
+  type MaterialDealStatus,
+} from "../../types/deal";
 import type {
   DealDetail,
   DealDetailViewModel,
@@ -7,8 +11,6 @@ import type {
   DealSummarySession,
   DealDocument,
   DealNote,
-  MATERIAL_DEAL_STATUSES,
-  type MaterialDealStatus,
 } from "../../types/deal";
 import { blobOrFileToBase64 } from "../../utils/base64";
 

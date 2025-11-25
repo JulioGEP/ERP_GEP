@@ -1,11 +1,13 @@
+import {
+  MATERIAL_DEAL_STATUSES,
+  type MaterialDealStatus,
+} from '../../../types/deal';
 import type {
   DealDetail,
   DealDetailViewModel,
   DealDocument,
   DealNote,
   DealProduct,
-  MATERIAL_DEAL_STATUSES,
-  type MaterialDealStatus,
   DealSummary,
   DealSummarySession,
 } from '../../../types/deal';
