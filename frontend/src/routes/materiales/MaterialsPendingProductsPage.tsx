@@ -58,17 +58,34 @@ function getProductName(product: DealProduct | null | undefined): string {
   return '—';
 }
 
+function parseNumericValue(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+
+  const direct = Number(trimmed);
+  if (Number.isFinite(direct)) return direct;
+
+  const match = trimmed.match(/[-+]?\d+(?:[.,]\d+)?/);
+  if (!match) return null;
+
+  const parsed = Number(match[0].replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function formatQuantity(quantity: number | string | null | undefined): string {
-  if (quantity === null || quantity === undefined) return '—';
-  const numericQuantity = typeof quantity === 'string' ? Number(quantity) : quantity;
-  if (!Number.isFinite(numericQuantity)) return '—';
+  const numericQuantity = parseNumericValue(quantity);
+  if (numericQuantity === null) return '—';
   return new Intl.NumberFormat('es-ES').format(numericQuantity);
 }
 
 function getQuantityValue(quantity: number | string | null | undefined): number | null {
-  if (quantity === null || quantity === undefined) return null;
-  const numericQuantity = typeof quantity === 'string' ? Number(quantity) : quantity;
-  return Number.isFinite(numericQuantity) ? numericQuantity : null;
+  return parseNumericValue(quantity);
 }
 
 function getSupplierLabel(budget: DealSummary): string {
