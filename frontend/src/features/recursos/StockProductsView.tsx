@@ -7,6 +7,9 @@ import type { Provider } from '../../types/provider';
 import { fetchProducts, syncProducts, updateProduct } from './products.api';
 import { fetchProviders } from './providers.api';
 import { ApiError } from '../../api/client';
+import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
+import { splitFilterValue } from '../../components/table/filterUtils';
+import { useTableFilterState } from '../../hooks/useTableFilterState';
 
 export type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -58,6 +61,103 @@ function sumAttributeStock(atributos: ProductAttribute[]): number {
   return atributos.reduce((total, item) => total + (Number.isFinite(item.cantidad) ? item.cantidad : 0), 0);
 }
 
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+}
+
+type StockFilterRow = {
+  product: Product;
+  values: Record<string, string>;
+  normalized: Record<string, string>;
+  search: string;
+  providerIds: Set<number>;
+};
+
+const STOCK_FILTER_KEYS = ['id_pipe', 'name', 'code', 'category', 'attributes', 'stock', 'providers'];
+
+function createStockFilterRow(product: Product, providers: Provider[]): StockFilterRow {
+  const providerNames = mapProviderNames(product.provider_ids, providers);
+  const attributeStock = product.atributos.length ? sumAttributeStock(product.atributos) : null;
+  const attributeText = product.atributos
+    .map((atributo) => `${atributo.nombre} ${atributo.valor} ${atributo.cantidad}`)
+    .join(' ');
+
+  const providerIds = new Set<number>((product.provider_ids ?? []).map((id) => Number(id)));
+
+  const values: Record<string, string> = {
+    id_pipe: product.id_pipe ?? '',
+    name: product.name ?? '',
+    code: product.code ?? '',
+    category: product.category ?? '',
+    attributes: attributeText,
+    stock: attributeStock != null ? String(attributeStock) : product.almacen_stock != null ? String(product.almacen_stock) : '',
+    providers: providerNames.join(', '),
+  };
+
+  const normalized: Record<string, string> = {};
+  STOCK_FILTER_KEYS.forEach((key) => {
+    normalized[key] = normalizeText(values[key] ?? '');
+  });
+
+  const search = STOCK_FILTER_KEYS.map((key) => normalized[key]).join(' ');
+
+  return {
+    product,
+    values,
+    normalized,
+    search,
+    providerIds,
+  };
+}
+
+function applyStockFilters(
+  rows: StockFilterRow[],
+  filters: Record<string, string>,
+  search: string,
+): StockFilterRow[] {
+  const entries = Object.entries(filters).filter(([, value]) => value.trim().length);
+  let filtered = rows;
+
+  if (entries.length) {
+    filtered = filtered.filter((row) =>
+      entries.every(([key, value]) => {
+        if (key === 'providers') {
+          const selected = splitFilterValue(value)
+            .map((item) => Number(item))
+            .filter((item) => Number.isFinite(item));
+          if (!selected.length) return true;
+          return selected.some((providerId) => row.providerIds.has(providerId));
+        }
+
+        const target = row.normalized[key] ?? '';
+        const parts = splitFilterValue(value);
+
+        if (parts.length > 1) {
+          return parts.some((part) => {
+            const normalizedPart = normalizeText(part);
+            if (!normalizedPart.length) return false;
+            return target.includes(normalizedPart);
+          });
+        }
+
+        const normalizedValue = normalizeText(value);
+        if (!normalizedValue.length) return true;
+        return target.includes(normalizedValue);
+      }),
+    );
+  }
+
+  const normalizedSearch = normalizeText(search);
+  if (!normalizedSearch.length) {
+    return filtered;
+  }
+
+  return filtered.filter((row) => row.search.includes(normalizedSearch));
+}
+
 export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const queryClient = useQueryClient();
   const [draftSelections, setDraftSelections] = useState<Record<string, number[]>>({});
@@ -66,6 +166,16 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const [attributeEditor, setAttributeEditor] = useState<AttributeEditorState | null>(null);
   const [attributeError, setAttributeError] = useState<string | null>(null);
   const providerDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const {
+    filters: activeFilters,
+    searchValue,
+    setSearchValue,
+    setFilterValue,
+    clearFilter,
+    clearAllFilters,
+    setFiltersAndSearch,
+  } = useTableFilterState({ tableKey: 'stock-products' });
 
   const productsQuery = useQuery<Product[], ApiError>({
     queryKey: ['products'],
@@ -136,7 +246,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const productsError = productsQuery.error || providersQuery.error;
   const errorMessage = productsError ? formatErrorMessage(productsError) : null;
 
-  const filteredProducts = useMemo(
+  const filteredProductsByCategory = useMemo(
     () => products.filter((product) => normalizeCategory(product.category) === 'productos'),
     [products],
   );
@@ -145,8 +255,47 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     return providers
       .slice()
       .sort((a, b) => a.nombre_fiscal.localeCompare(b.nombre_fiscal, 'es', { sensitivity: 'base' }))
-      .map((provider) => ({ value: Number(provider.provider_id), label: provider.nombre_fiscal }));
+      .map((provider) => ({ value: String(provider.provider_id), label: provider.nombre_fiscal }));
   }, [providers]);
+
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () => [
+      { key: 'id_pipe', label: 'ID de Pipedrive' },
+      { key: 'name', label: 'Nombre' },
+      { key: 'code', label: 'Código' },
+      { key: 'category', label: 'Categoría' },
+      { key: 'attributes', label: 'Atributos' },
+      { key: 'stock', label: 'Stock total', type: 'number' },
+      { key: 'providers', label: 'Proveedor', type: 'select', options: providerOptions },
+    ],
+    [providerOptions],
+  );
+
+  const filterRows = useMemo(
+    () => filteredProductsByCategory.map((product) => createStockFilterRow(product, providers)),
+    [filteredProductsByCategory, providers],
+  );
+
+  const filteredRows = useMemo(
+    () => applyStockFilters(filterRows, activeFilters, searchValue),
+    [activeFilters, filterRows, searchValue],
+  );
+
+  const visibleProducts = useMemo(() => filteredRows.map((row) => row.product), [filteredRows]);
+
+  const hasActiveFilters = useMemo(() => {
+    if (searchValue.trim().length) return true;
+    return Object.values(activeFilters).some((value) => value.trim().length);
+  }, [activeFilters, searchValue]);
+
+  const handleSearchChange = useCallback((value: string) => setSearchValue(value), [setSearchValue]);
+
+  const handleFilterChange = useCallback(
+    (key: string, value: string) => {
+      setFilterValue(key, value);
+    },
+    [setFilterValue],
+  );
 
   const handleProviderBlur = useCallback(
     (product: Product) => {
@@ -171,13 +320,13 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
       const targetId = productId ?? openProviderMenuId;
       if (!targetId) return;
 
-      const targetProduct = filteredProducts.find((item) => item.id === targetId);
+      const targetProduct = visibleProducts.find((item) => item.id === targetId);
       if (targetProduct) {
         handleProviderBlur(targetProduct);
       }
       setOpenProviderMenuId(null);
     },
-    [filteredProducts, handleProviderBlur, openProviderMenuId],
+    [visibleProducts, handleProviderBlur, openProviderMenuId],
   );
 
   useEffect(() => {
@@ -352,16 +501,35 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
 
   return (
     <div className="d-grid gap-4">
-      <section className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
-        <div>
-          <h1 className="h3 fw-bold mb-1">Stock</h1>
-          <p className="text-muted mb-0">{subtitle}</p>
-        </div>
-        <div className="d-flex align-items-center gap-3 flex-wrap">
-          {isFetching || isSaving ? <Spinner animation="border" role="status" size="sm" /> : null}
-          <Button variant="primary" onClick={() => syncMutation.mutate()} disabled={isSaving}>
-            Actualizar Stock
-          </Button>
+      <section className="d-grid gap-3">
+        <div className="d-flex flex-column flex-lg-row align-items-lg-start justify-content-between gap-3">
+          <div className="d-flex flex-column gap-2 flex-grow-1">
+            <div className="d-flex flex-wrap align-items-center gap-3">
+              <h1 className="h3 fw-bold mb-0">Stock</h1>
+              <div className="flex-grow-1" style={{ minWidth: 260 }}>
+                <FilterToolbar
+                  filters={filterDefinitions}
+                  activeFilters={activeFilters}
+                  searchValue={searchValue}
+                  onSearchChange={handleSearchChange}
+                  onFilterChange={handleFilterChange}
+                  onRemoveFilter={clearFilter}
+                  onClearAll={clearAllFilters}
+                  resultCount={visibleProducts.length}
+                  isServerBusy={isFetching}
+                  viewStorageKey="stock-products-table"
+                  onApplyFilterState={({ filters, searchValue }) => setFiltersAndSearch(filters, searchValue)}
+                />
+              </div>
+            </div>
+            <p className="text-muted mb-0">{subtitle}</p>
+          </div>
+          <div className="d-flex align-items-center gap-3 flex-wrap justify-content-lg-end">
+            {isFetching || isSaving ? <Spinner animation="border" role="status" size="sm" /> : null}
+            <Button variant="primary" onClick={() => syncMutation.mutate()} disabled={isSaving}>
+              Actualizar Stock
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -406,14 +574,16 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
-              ) : filteredProducts.length === 0 ? (
+              ) : visibleProducts.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-5 text-center text-muted">
-                    No hay productos disponibles. Pulsa "Actualizar Stock" para sincronizar.
+                    {hasActiveFilters
+                      ? 'No hay resultados para los filtros seleccionados.'
+                      : 'No hay productos disponibles. Pulsa "Actualizar Stock" para sincronizar.'}
                   </td>
                 </tr>
               ) : (
-                filteredProducts.map((product) => {
+                visibleProducts.map((product) => {
                   const providerIds = draftSelections[product.id] ?? product.provider_ids;
                   const providerNames = mapProviderNames(providerIds, providers);
                   const atributos = product.atributos ?? [];
@@ -507,7 +677,8 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                               style={{ maxHeight: 240, overflowY: 'auto' }}
                             >
                               {providerOptions.map((option, index) => {
-                                const isSelected = providerIds.includes(option.value);
+                                const optionValue = Number(option.value);
+                                const isSelected = providerIds.includes(optionValue);
                                 const optionId = `product-provider-${product.id}-${option.value}`;
                                 return (
                                   <Form.Check
@@ -516,7 +687,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                                     type="checkbox"
                                     label={option.label}
                                     checked={isSelected}
-                                    onChange={() => handleProviderToggle(product, option.value)}
+                                    onChange={() => handleProviderToggle(product, optionValue)}
                                     className={index !== providerOptions.length - 1 ? 'mb-2' : undefined}
                                     disabled={updateMutation.isPending}
                                     role="option"
