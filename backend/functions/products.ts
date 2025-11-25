@@ -17,6 +17,7 @@ type ProductRecord = {
   type: string | null;
   template: string | null;
   url_formacion: string | null;
+  almacen_stock: number | bigint | null;
   provider_ids: number[] | bigint[] | null;
   active: boolean;
   created_at: Date | string | null;
@@ -48,6 +49,10 @@ function normalizeProduct(record: ProductRecord) {
     type: record.type ?? null,
     template: record.template ?? null,
     url_formacion: record.url_formacion ?? null,
+    almacen_stock:
+      record.almacen_stock === null || record.almacen_stock === undefined
+        ? null
+        : Number(record.almacen_stock),
     provider_ids: Array.isArray(record.provider_ids)
       ? record.provider_ids.map((value) => Number(value)).filter((value) => Number.isFinite(value))
       : [],
@@ -138,6 +143,35 @@ function buildUpdateData(body: any) {
           error: errorResponse('VALIDATION_ERROR', 'El campo id_woo debe ser un número entero válido', 400),
         } as const;
       }
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'almacen_stock')) {
+    const rawValue = body.almacen_stock;
+
+    if (rawValue === '' || rawValue === null || rawValue === undefined) {
+      data.almacen_stock = null;
+      hasChanges = true;
+    } else if (typeof rawValue === 'bigint') {
+      data.almacen_stock = Number(rawValue);
+      hasChanges = true;
+    } else {
+      const text = String(rawValue).trim();
+      if (!/^[-+]?\d+$/.test(text)) {
+        return {
+          error: errorResponse('VALIDATION_ERROR', 'El campo almacen_stock debe ser un número entero válido', 400),
+        } as const;
+      }
+
+      const parsed = Number(text);
+      if (!Number.isSafeInteger(parsed)) {
+        return {
+          error: errorResponse('VALIDATION_ERROR', 'El campo almacen_stock debe ser un número entero válido', 400),
+        } as const;
+      }
+
+      data.almacen_stock = parsed;
+      hasChanges = true;
     }
   }
 

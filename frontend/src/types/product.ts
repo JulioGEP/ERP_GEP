@@ -9,6 +9,7 @@ export type Product = {
   type: string | null;
   template: string | null;
   url_formacion: string | null;
+  almacen_stock: number | null;
   provider_ids: number[];
   active: boolean;
   created_at: string | null;
