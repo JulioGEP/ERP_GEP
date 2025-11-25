@@ -77,6 +77,13 @@ type StockFilterRow = {
 };
 
 const STOCK_FILTER_KEYS = ['id_pipe', 'name', 'code', 'category', 'attributes', 'stock', 'providers'];
+const STOCK_SORT_KEYS = ['id_pipe', 'name', 'code', 'category', 'attributes', 'stock', 'providers'] as const;
+type StockSortKey = (typeof STOCK_SORT_KEYS)[number];
+
+type SortConfig = {
+  key: StockSortKey;
+  direction: 'asc' | 'desc';
+};
 
 function createStockFilterRow(product: Product, providers: Provider[]): StockFilterRow {
   const providerNames = mapProviderNames(product.provider_ids, providers);
@@ -158,6 +165,24 @@ function applyStockFilters(
   return filtered.filter((row) => row.search.includes(normalizedSearch));
 }
 
+function getStockValue(product: Product): number {
+  const atributosStock = product.atributos.length ? sumAttributeStock(product.atributos) : null;
+  const almacenStock = Number.isFinite(product.almacen_stock) ? Number(product.almacen_stock) : null;
+  if (Number.isFinite(atributosStock)) return atributosStock ?? 0;
+  if (almacenStock != null) return almacenStock;
+  return 0;
+}
+
+function compareText(a: string, b: string, direction: SortConfig['direction']): number {
+  const result = a.localeCompare(b, 'es', { sensitivity: 'base' });
+  return direction === 'asc' ? result : -result;
+}
+
+function compareNumbers(a: number, b: number, direction: SortConfig['direction']): number {
+  const result = a - b;
+  return direction === 'asc' ? result : -result;
+}
+
 export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const queryClient = useQueryClient();
   const [draftSelections, setDraftSelections] = useState<Record<string, number[]>>({});
@@ -165,6 +190,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const [openProviderMenuId, setOpenProviderMenuId] = useState<string | null>(null);
   const [attributeEditor, setAttributeEditor] = useState<AttributeEditorState | null>(null);
   const [attributeError, setAttributeError] = useState<string | null>(null);
+  const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const providerDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const {
@@ -281,7 +307,34 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     [activeFilters, filterRows, searchValue],
   );
 
-  const visibleProducts = useMemo(() => filteredRows.map((row) => row.product), [filteredRows]);
+  const sortedRows = useMemo(() => {
+    if (!sortConfig) return filteredRows;
+
+    const sorted = filteredRows.slice();
+    sorted.sort((a, b) => {
+      const { key, direction } = sortConfig;
+
+      if (key === 'stock') {
+        return compareNumbers(getStockValue(a.product), getStockValue(b.product), direction);
+      }
+
+      if (key === 'id_pipe') {
+        const aId = Number(a.product.id_pipe);
+        const bId = Number(b.product.id_pipe);
+        if (Number.isFinite(aId) && Number.isFinite(bId)) {
+          return compareNumbers(aId, bId, direction);
+        }
+      }
+
+      const valueA = a.values[key] ?? '';
+      const valueB = b.values[key] ?? '';
+      return compareText(valueA, valueB, direction);
+    });
+
+    return sorted;
+  }, [filteredRows, sortConfig]);
+
+  const visibleProducts = useMemo(() => sortedRows.map((row) => row.product), [sortedRows]);
 
   const hasActiveFilters = useMemo(() => {
     if (searchValue.trim().length) return true;
@@ -295,6 +348,40 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
       setFilterValue(key, value);
     },
     [setFilterValue],
+  );
+
+  const handleSortChange = useCallback((key: StockSortKey) => {
+    setSortConfig((previous) => {
+      if (previous?.key === key) {
+        return { key, direction: previous.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'desc' };
+    });
+  }, []);
+
+  const getSortIndicator = useCallback(
+    (key: StockSortKey) => {
+      if (sortConfig?.key !== key) return '↕';
+      return sortConfig.direction === 'asc' ? '↑' : '↓';
+    },
+    [sortConfig],
+  );
+
+  const renderHeaderButton = useCallback(
+    (label: string, key: StockSortKey) => (
+      <button
+        type="button"
+        className="btn btn-link p-0 text-decoration-none d-inline-flex align-items-center gap-1 text-reset"
+        onClick={() => handleSortChange(key)}
+      >
+        <span className="fw-semibold">{label}</span>
+        <span aria-hidden="true" className="small text-muted">
+          {getSortIndicator(key)}
+        </span>
+        <span className="visually-hidden">Ordenar</span>
+      </button>
+    ),
+    [getSortIndicator, handleSortChange],
   );
 
   const handleProviderBlur = useCallback(
@@ -549,25 +636,25 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
             <thead className="text-muted text-uppercase small">
               <tr>
                 <th scope="col" style={{ minWidth: 130 }}>
-                  <span className="fw-semibold">Id de Pipedrive</span>
+                  {renderHeaderButton('Id de Pipedrive', 'id_pipe')}
                 </th>
                 <th scope="col" style={{ minWidth: 220 }}>
-                  <span className="fw-semibold">Nombre</span>
+                  {renderHeaderButton('Nombre', 'name')}
                 </th>
                 <th scope="col" style={{ minWidth: 140 }}>
-                  <span className="fw-semibold">Código</span>
+                  {renderHeaderButton('Código', 'code')}
                 </th>
                 <th scope="col" style={{ minWidth: 140 }}>
-                  <span className="fw-semibold">Categoría</span>
+                  {renderHeaderButton('Categoría', 'category')}
                 </th>
                 <th scope="col" style={{ minWidth: 220 }}>
-                  <span className="fw-semibold">Atributos</span>
+                  {renderHeaderButton('Atributos', 'attributes')}
                 </th>
                 <th scope="col" style={{ minWidth: 180 }}>
-                  <span className="fw-semibold">Stock en almacén</span>
+                  {renderHeaderButton('Stock en almacén', 'stock')}
                 </th>
                 <th scope="col" style={{ minWidth: 260 }}>
-                  <span className="fw-semibold">Proveedor</span>
+                  {renderHeaderButton('Proveedor', 'providers')}
                 </th>
               </tr>
             </thead>
