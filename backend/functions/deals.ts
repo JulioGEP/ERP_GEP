@@ -35,6 +35,7 @@ const EDITABLE_FIELDS = new Set([
   "hotel_val",
   "transporte_val",
   "po_val",
+  "estado_material",
   "proveedores",
   "observaciones",
   "fecha_estimada_entrega_material",
@@ -103,6 +104,12 @@ function normalizeLabelForComparison(value: unknown): string | null {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function isMaterialPipelineLabel(value: unknown): boolean {
+  const normalized = normalizeLabelForComparison(value);
+  if (!normalized) return false;
+  return normalized === "material" || normalized === "materiales";
 }
 
 function isFormacionAbiertaPipeline(value: unknown): boolean {
@@ -1477,6 +1484,7 @@ export const handler = async (event: any) => {
           deal_id: true,
           title: true,
           pipeline_id: true,
+          estado_material: true,
           sede_label: true,
           training_address: true,
           caes_label: true,
@@ -1630,6 +1638,7 @@ export const handler = async (event: any) => {
           deal_id: true,
           title: true,
           pipeline_id: true,
+          estado_material: true,
           sede_label: true,
           training_address: true,
           caes_label: true,
@@ -1704,6 +1713,7 @@ export const handler = async (event: any) => {
           deal_id: true,
           title: true,
           pipeline_id: true,
+          estado_material: true,
           sede_label: true,
           training_address: true,
           caes_label: true,
@@ -1766,6 +1776,7 @@ export const handler = async (event: any) => {
           deal_id: true,
           title: true,
           pipeline_id: true,
+          estado_material: true,
           training_address: true,
           sede_label: true,
           caes_label: true,

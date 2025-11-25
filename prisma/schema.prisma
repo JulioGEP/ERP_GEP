@@ -59,6 +59,7 @@ model deals {
   org_id           String?
   pipeline_id      String?
   pipeline_label   String?
+  estado_material  String?   @db.VarChar(100)
   training_address String?
   sede_label       String?
   caes_val         Boolean   @default(false)

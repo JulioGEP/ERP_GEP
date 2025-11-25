@@ -7,6 +7,8 @@ import type {
   DealSummarySession,
   DealDocument,
   DealNote,
+  MATERIAL_DEAL_STATUSES,
+  type MaterialDealStatus,
 } from "../../types/deal";
 import { blobOrFileToBase64 } from "../../utils/base64";
 
@@ -320,6 +322,32 @@ function toBoolean(value: unknown): boolean {
   return value === true;
 }
 
+function normalizeMaterialKey(value: unknown): string {
+  const label = toStringValue(value);
+  if (!label) return '';
+  return label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+const MATERIAL_PIPELINE_KEYS = new Set(['material', 'materiales']);
+
+function normalizeMaterialStatus(value: unknown): MaterialDealStatus | null {
+  const normalized = normalizeMaterialKey(value);
+  if (!normalized) return null;
+
+  for (const status of MATERIAL_DEAL_STATUSES) {
+    if (normalizeMaterialKey(status) === normalized) {
+      return status;
+    }
+  }
+
+  return null;
+}
+
 function pickNonEmptyString(
   ...values: Array<string | null | undefined>
 ): string | null {
@@ -534,16 +562,25 @@ function normalizeDealSummary(row: Json): DealSummary {
 
   const studentNames = normalizeDealStudentNames(row?.students ?? null);
 
+  const pipelineLabel = toStringValue(row?.pipeline_label) ?? null;
+  const pipelineId = toStringValue(row?.pipeline_id) ?? toStringValue(row?.deal_pipeline_id) ?? null;
+
+  const isMaterialPipeline =
+    MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineLabel)) ||
+    MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineId));
+
+  const estadoMaterialRaw = row?.estado_material ?? (row as any)?.deals?.estado_material;
+  const estadoMaterial =
+    normalizeMaterialStatus(estadoMaterialRaw) || (isMaterialPipeline ? 'Pedidos confirmados' : null);
+
   const summary: DealSummary = {
     deal_id: resolvedDealId,
     dealId: resolvedDealId, // compat
     title,
 
-    pipeline_label: toStringValue(row?.pipeline_label) ?? null,
-    pipeline_id:
-      toStringValue(row?.pipeline_id) ??
-      toStringValue(row?.deal_pipeline_id) ??
-      null,
+    pipeline_label: pipelineLabel,
+    pipeline_id: pipelineId,
+    estado_material: estadoMaterial,
     training_address: toStringValue(row?.training_address) ?? null,
 
     sede_label: toStringValue(row?.sede_label) ?? null,
@@ -598,15 +635,24 @@ function normalizeDealDetail(raw: Json): DealDetail {
     throw new ApiError("INVALID_DEAL_DETAIL", "Detalle del presupuesto no disponible");
   }
 
+  const pipelineLabel = toStringValue(raw.pipeline_label) ?? null;
+  const pipelineId = toStringValue(raw.pipeline_id) ?? toStringValue(raw.deal_pipeline_id) ?? null;
+
+  const isMaterialPipeline =
+    MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineLabel)) ||
+    MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineId));
+
+  const estadoMaterialRaw = raw?.estado_material ?? (raw as any)?.deals?.estado_material;
+  const estadoMaterial =
+    normalizeMaterialStatus(estadoMaterialRaw) || (isMaterialPipeline ? 'Pedidos confirmados' : null);
+
   const detail: DealDetail = {
     deal_id: detailId,
     title: toStringValue(raw.title ?? raw.deal_title) ?? null,
 
-    pipeline_label: toStringValue(raw.pipeline_label) ?? null,
-    pipeline_id:
-      toStringValue(raw.pipeline_id) ??
-      toStringValue(raw.deal_pipeline_id) ??
-      null,
+    pipeline_label: pipelineLabel,
+    pipeline_id: pipelineId,
+    estado_material: estadoMaterial,
     training_address:
       toStringValue(raw.training_address) ?? null,
 
@@ -1293,6 +1339,7 @@ export type DealEditablePatch = {
   fecha_estimada_entrega_material?: string | null;
   direccion_envio?: string | null;
   forma_pago_material?: string | null;
+  estado_material?: MaterialDealStatus | null;
   comercial?: string | null;
   w_id_variation?: string | null;
   a_fecha?: string | null;

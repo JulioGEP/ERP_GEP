@@ -78,6 +78,22 @@ function toNullableString(val: any): string | null {
   return null;
 }
 
+function normalizePipelineLabel(value: unknown): string | null {
+  const label = toNullableString(value);
+  if (!label) return null;
+  return label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function isMaterialPipelineLabel(value: unknown): boolean {
+  const normalized = normalizePipelineLabel(value);
+  return normalized === "material" || normalized === "materiales";
+}
+
 function toBooleanOrNull(val: any): boolean | null {
   if (val === null || val === undefined || val === "") return null;
   if (typeof val === "boolean") return val;
@@ -381,6 +397,9 @@ export async function mapAndUpsertDealTree({
   const keep = <T>(prev: T | null | undefined, incoming: T | null | undefined) =>
     incoming !== null && incoming !== undefined ? incoming : prev ?? null;
 
+  const isMaterialDeal = isMaterialPipelineLabel(pipelineLabel);
+  const materialStatus = isMaterialDeal ? current?.estado_material ?? "Pedidos confirmados" : null;
+
   // 5) Upsert deal (sin 'hours' en deals)
   const orgIdForDeal = org?.id != null ? String(org.id) : null;
 
@@ -390,6 +409,7 @@ export async function mapAndUpsertDealTree({
       deal_id: String(deal.id),
       title: deal?.title ?? "—",
       pipeline_id: pipelineLabel ?? null,
+      estado_material: materialStatus,
       training_address: trainingAddress ?? null,
       sede_label: sedeLabel ?? null,
       caes_label: caesLabel ?? null,
@@ -415,6 +435,7 @@ export async function mapAndUpsertDealTree({
     update: {
       title: deal?.title ?? "—",
       pipeline_id: pipelineLabel ?? null,
+      estado_material: materialStatus,
       training_address: keep(current?.training_address, trainingAddress),
       sede_label: keep(current?.sede_label, sedeLabel),
       caes_label: keep(current?.caes_label, caesLabel),

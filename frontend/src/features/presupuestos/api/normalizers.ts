@@ -4,6 +4,8 @@ import type {
   DealDocument,
   DealNote,
   DealProduct,
+  MATERIAL_DEAL_STATUSES,
+  type MaterialDealStatus,
   DealSummary,
   DealSummarySession,
 } from '../../../types/deal';
@@ -46,6 +48,32 @@ function isHttpUrl(value: unknown): boolean {
 
 function toBoolean(value: unknown): boolean {
   return value === true;
+}
+
+function normalizeMaterialKey(value: unknown): string {
+  const label = toStringValue(value);
+  if (!label) return '';
+  return label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+const MATERIAL_PIPELINE_KEYS = new Set(['material', 'materiales']);
+
+function normalizeMaterialStatus(value: unknown): MaterialDealStatus | null {
+  const normalized = normalizeMaterialKey(value);
+  if (!normalized) return null;
+
+  for (const status of MATERIAL_DEAL_STATUSES) {
+    if (normalizeMaterialKey(status) === normalized) {
+      return status;
+    }
+  }
+
+  return null;
 }
 
 function toSiNoLabel(value: unknown): DealDetail['transporte'] {
@@ -242,6 +270,14 @@ export function normalizeDealSummary(row: Json): DealSummary {
   const products = normalizeProducts(row?.products ?? row?.line_items ?? []);
   const pipelineLabel = toStringValue(row?.pipeline_label ?? row?.pipelineLabel);
 
+  const isMaterialPipeline =
+    MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineLabel)) ||
+    MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(row?.pipeline_id));
+
+  const estadoMaterialRaw = row?.estado_material ?? (row as any)?.deals?.estado_material;
+  const estadoMaterial =
+    normalizeMaterialStatus(estadoMaterialRaw) || (isMaterialPipeline ? 'Pedidos confirmados' : null);
+
   const rawSessions = Array.isArray(row?.sessions)
     ? row.sessions
     : Array.isArray(row?.sesiones)
@@ -262,6 +298,7 @@ export function normalizeDealSummary(row: Json): DealSummary {
     person,
     pipeline_id: toStringValue(row?.pipeline_id) ?? null,
     pipeline_label: pipelineLabel ?? null,
+    estado_material: estadoMaterial,
     training_address: toStringValue(row?.training_address) ?? null,
     products: products.products,
     productNames: products.productNames,
@@ -308,6 +345,14 @@ export function normalizeDealDetail(raw: Json): DealDetail {
   const trainingAddress =
     toStringValue(raw?.training_address ?? raw?.trainingAddress ?? raw?.training?.address) ?? null;
 
+  const isMaterialPipeline =
+    MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineLabel)) ||
+    MATERIAL_PIPELINE_KEYS.has(normalizeMaterialKey(pipelineId));
+
+  const estadoMaterialRaw = raw?.estado_material ?? (raw as any)?.deals?.estado_material;
+  const estadoMaterial =
+    normalizeMaterialStatus(estadoMaterialRaw) || (isMaterialPipeline ? 'Pedidos confirmados' : null);
+
   const notesSource = Array.isArray(raw?.notes)
     ? (raw.notes as unknown[])
     : Array.isArray((raw as { deal_notes?: unknown })?.deal_notes)
@@ -344,6 +389,7 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     hours: toNumber(raw?.hours),
     pipeline_label: pipelineLabel,
     pipeline_id: pipelineId,
+    estado_material: estadoMaterial,
     training_address: trainingAddress,
     sede_label: toStringValue(raw?.sede_label) ?? null,
     caes_label: toStringValue(raw?.caes_label) ?? null,

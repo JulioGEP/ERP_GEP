@@ -4,6 +4,7 @@ import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
 import type {
+  MaterialsBoardPageProps,
   MaterialsBudgetsPageProps,
   MaterialsPendingProductsPageProps,
 } from '../pages/materiales';
@@ -28,6 +29,7 @@ const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const AllBudgetsPage = lazy(() => import('../pages/presupuestos/AllBudgetsPage'));
 const UnworkedBudgetsPage = lazy(() => import('../pages/presupuestos/UnworkedBudgetsPage'));
 const MaterialsBudgetsPage = lazy(() => import('../pages/materiales/MaterialsBudgetsPage'));
+const MaterialsBoardPage = lazy(() => import('../pages/materiales/MaterialsBoardPage'));
 const MaterialsPendingProductsPage = lazy(
   () => import('../pages/materiales/MaterialsPendingProductsPage'),
 );
@@ -83,6 +85,7 @@ type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
   allBudgetsPageProps: AllBudgetsPageProps;
   unworkedBudgetsPageProps: UnworkedBudgetsPageProps;
+  materialsBoardPageProps: MaterialsBoardPageProps;
   materialsBudgetsPageProps: MaterialsBudgetsPageProps;
   materialsPendingProductsPageProps: MaterialsPendingProductsPageProps;
   porSesionesPageProps: PorSesionesPageProps;
@@ -108,6 +111,7 @@ export function AppRouter({
   budgetsPageProps,
   allBudgetsPageProps,
   unworkedBudgetsPageProps,
+  materialsBoardPageProps,
   materialsBudgetsPageProps,
   materialsPendingProductsPageProps,
   porSesionesPageProps,
@@ -175,6 +179,16 @@ export function AppRouter({
             <GuardedRoute
               path="/presupuestos/sinplanificar"
               element={<BudgetsPage {...budgetsPageProps} />}
+            />
+          }
+        />
+
+        <Route
+          path="/materiales/tablero"
+          element={
+            <GuardedRoute
+              path="/materiales/tablero"
+              element={<MaterialsBoardPage {...materialsBoardPageProps} />}
             />
           }
         />

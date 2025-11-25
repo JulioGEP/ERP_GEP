@@ -39,6 +39,7 @@ import { hasPendingExternalFollowUp } from './utils/budgetFollowUp';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
+import type { MaterialsBoardPageProps } from '../pages/materiales/MaterialsBoardPage';
 import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
 import type { MaterialsPendingProductsPageProps } from '../pages/materiales/MaterialsPendingProductsPage';
 import { isMaterialPipeline } from '../routes/materiales/MaterialsBudgetsPage';
@@ -95,6 +96,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     key: 'Materiales',
     label: 'Materiales',
     children: [
+      { key: 'Materiales/Tablero', label: 'Tablero', path: '/materiales/tablero' },
       { key: 'Materiales/Todos', label: 'Todos', path: '/materiales/todos' },
       { key: 'Materiales/Pendientes', label: 'Pendientes', path: '/materiales/pendientes' },
     ],
@@ -1327,6 +1329,15 @@ export default function AuthenticatedApp() {
     canImport: canImportBudgets,
   };
 
+  const materialsBoardPageProps: MaterialsBoardPageProps = {
+    budgets: materialsBudgets,
+    isLoading: allBudgetsQuery.isLoading,
+    isFetching: isRefreshingAllBudgets,
+    error: allBudgetsQuery.error ?? null,
+    onRetry: () => allBudgetsQuery.refetch(),
+    onSelect: handleSelectBudget,
+  };
+
   const materialsBudgetsPageProps: MaterialsBudgetsPageProps = {
     budgets: materialsBudgets,
     isLoading: allBudgetsQuery.isLoading,
@@ -1518,6 +1529,7 @@ export default function AuthenticatedApp() {
             unworkedBudgetsPageProps={unworkedBudgetsPageProps}
             materialsBudgetsPageProps={materialsBudgetsPageProps}
             materialsPendingProductsPageProps={materialsPendingProductsPageProps}
+            materialsBoardPageProps={materialsBoardPageProps}
             porSesionesPageProps={calendarSessionsPageProps}
             porUnidadMovilPageProps={calendarUnitsPageProps}
             porFormadorPageProps={calendarTrainersPageProps}
