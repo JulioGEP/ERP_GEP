@@ -582,7 +582,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
               </Alert>
             ) : null}
             {attributeEditor?.atributos.map((atributo, index) => (
-              <div key={`${index}-${atributo.nombre}-${atributo.valor}`} className="border rounded-3 p-3 d-grid gap-2">
+              <div key={index} className="border rounded-3 p-3 d-grid gap-2">
                 <div className="d-flex flex-column flex-lg-row gap-3">
                   <Form.Group className="flex-grow-1">
                     <Form.Label className="small mb-1">Nombre del atributo</Form.Label>
@@ -618,7 +618,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                     variant="outline-danger"
                     size="sm"
                     onClick={() => handleRemoveAttributeRow(index)}
-                    disabled={updateMutation.isPending || attributeEditor.atributos.length <= 1}
+                    disabled={updateMutation.isPending}
                   >
                     Eliminar
                   </Button>
