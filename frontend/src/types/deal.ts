@@ -34,10 +34,13 @@ export interface DealProduct {
   id?: string | null;
   deal_id?: string | null;
 
+  id_pipe?: string | null;
+
   name?: string | null;
   code?: string | null;
 
   almacen_stock?: number | null;
+  product_stock?: number | null;
 
   quantity?: number | null; // decimal en DB, se normaliza a number en API
   price?: number | null;    // decimal en DB, se normaliza a number en API
