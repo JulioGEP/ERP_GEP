@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Button, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
@@ -26,6 +26,14 @@ type PendingProductRow = {
   supplier: string;
   estimatedDelivery: string;
   estimatedDeliveryValue: number | null;
+};
+
+type ProductHandling = 'stock' | 'supplier';
+
+type SelectedProduct = {
+  row: PendingProductRow;
+  handling: ProductHandling;
+  hasStock: boolean;
 };
 
 function getBudgetId(budget: DealSummary): string | null {
@@ -193,8 +201,100 @@ export function MaterialsPendingProductsPage({
 }: MaterialsPendingProductsPageProps) {
   const pendingProducts = useMemo(() => buildPendingProducts(budgets), [budgets]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
+  const [selectedProducts, setSelectedProducts] = useState<Record<string, SelectedProduct>>({});
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [nextOrderNumber, setNextOrderNumber] = useState(101);
+  const [currentOrderNumber, setCurrentOrderNumber] = useState<number | null>(null);
+  const [ccInput, setCcInput] = useState('');
+  const [extraCc, setExtraCc] = useState<string[]>([]);
+  const [mailSent, setMailSent] = useState(false);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
+
+  const toggleProductSelection = (row: PendingProductRow) => {
+    setSelectedProducts((current) => {
+      const { key } = row;
+      const hasStock = (row.quantityValue ?? 0) > 0;
+
+      if (current[key]) {
+        const updated = { ...current };
+        delete updated[key];
+        return updated;
+      }
+
+      return {
+        ...current,
+        [key]: {
+          row,
+          handling: hasStock ? 'stock' : 'supplier',
+          hasStock,
+        },
+      };
+    });
+  };
+
+  const selectedList = useMemo(() => Object.values(selectedProducts), [selectedProducts]);
+
+  const handleHandlingChange = (key: string, handling: ProductHandling) => {
+    setSelectedProducts((current) => {
+      const existing = current[key];
+      if (!existing) return current;
+
+      return {
+        ...current,
+        [key]: { ...existing, handling },
+      };
+    });
+  };
+
+  const openOrderModal = () => {
+    if (!selectedList.length) return;
+    setCurrentOrderNumber(nextOrderNumber);
+    setShowOrderModal(true);
+    setMailSent(false);
+    setCcInput('');
+    setExtraCc([]);
+  };
+
+  const closeOrderModal = () => {
+    setShowOrderModal(false);
+    setShowEmailModal(false);
+  };
+
+  const openEmailModal = () => {
+    setShowEmailModal(true);
+  };
+
+  const closeEmailModal = () => {
+    setShowEmailModal(false);
+  };
+
+  const handleSendEmail = () => {
+    setMailSent(true);
+    closeEmailModal();
+    closeOrderModal();
+    setNextOrderNumber((value) => value + 1);
+    setSelectedProducts({});
+  };
+
+  const handleAddCc = () => {
+    const trimmed = ccInput.trim();
+    if (!trimmed) return;
+    setExtraCc((current) => [...current, trimmed]);
+    setCcInput('');
+  };
+
+  const defaultCommercialEmail = selectedList[0]?.row.budget.person?.email || 'comercial@gepgroup.es';
+
+  const mailBody = selectedList
+    .map(
+      ({ row, handling }) =>
+        `• ${row.productName} — Cantidad: ${row.quantityLabel} — Acción: ${
+          handling === 'stock' ? 'Descontar de stock' : 'Pedido a proveedor'
+        }`,
+    )
+    .join('\n');
 
   const sortedProducts = useMemo(() => {
     if (!sortConfig) return pendingProducts;
@@ -230,6 +330,14 @@ export function MaterialsPendingProductsPage({
           <p className="text-muted mb-0">Productos de presupuestos del embudo Material</p>
         </div>
         <div className="d-flex align-items-center gap-3">
+          <Button
+            size="lg"
+            variant="primary"
+            disabled={!selectedList.length}
+            onClick={openOrderModal}
+          >
+            Crear pedido
+          </Button>
           {(isLoading || isFetching || isImporting) && <Spinner animation="border" role="status" size="sm" />}
           {canImport && (
             <Button size="lg" onClick={onOpenImportModal} disabled={isImporting}>
@@ -258,6 +366,7 @@ export function MaterialsPendingProductsPage({
           <Table hover className="mb-0">
             <thead>
               <tr>
+                <th scope="col">Seleccionar</th>
                 <th scope="col">
                   <button
                     type="button"
@@ -317,13 +426,13 @@ export function MaterialsPendingProductsPage({
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-4">
+                  <td colSpan={7} className="text-center py-4">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : !hasRows ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-4 text-muted">
+                  <td colSpan={7} className="text-center py-4 text-muted">
                     No hay productos pendientes del embudo Material.
                   </td>
                 </tr>
@@ -336,6 +445,14 @@ export function MaterialsPendingProductsPage({
                     onClick={() => onSelect(row.budget)}
                     style={{ cursor: 'pointer' }}
                   >
+                    <td onClick={(event) => event.stopPropagation()}>
+                      <Form.Check
+                        type="checkbox"
+                        checked={Boolean(selectedProducts[row.key])}
+                        onChange={() => toggleProductSelection(row)}
+                        aria-label={`Seleccionar ${row.productName}`}
+                      />
+                    </td>
                     <td className="fw-semibold">{row.budgetId ? `#${row.budgetId}` : '—'}</td>
                     <td>{row.organizationName}</td>
                     <td>{row.supplier}</td>
@@ -355,6 +472,144 @@ export function MaterialsPendingProductsPage({
           </div>
         ) : null}
       </div>
+
+      <Modal show={showOrderModal} onHide={closeOrderModal} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>
+            Pedido #{currentOrderNumber ?? nextOrderNumber}
+            {mailSent ? <Badge bg="success" className="ms-2">Email enviado</Badge> : null}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-grid gap-3">
+          <p className="mb-0 text-muted">Selecciona cómo gestionar cada producto.</p>
+
+          <div className="table-responsive border rounded-3">
+            <Table hover className="mb-0 align-middle">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Proveedor</th>
+                  <th>Cantidad</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedList.map(({ row, handling, hasStock }) => (
+                  <tr key={row.key}>
+                    <td>
+                      <div className="fw-semibold">{row.productName}</div>
+                      <div className="text-muted small">Presupuesto #{row.budgetId ?? '—'}</div>
+                    </td>
+                    <td>{row.supplier}</td>
+                    <td>{row.quantityLabel}</td>
+                    <td>
+                      <div className="d-flex flex-column gap-2">
+                        <Form.Check
+                          type="radio"
+                          id={`${row.key}-stock`}
+                          name={`${row.key}-handling`}
+                          label="Descontar de stock"
+                          disabled={!hasStock}
+                          checked={handling === 'stock' && hasStock}
+                          onChange={() => handleHandlingChange(row.key, 'stock')}
+                        />
+                        <Form.Check
+                          type="radio"
+                          id={`${row.key}-supplier`}
+                          name={`${row.key}-handling`}
+                          label="Pedido a proveedor"
+                          checked={handling === 'supplier'}
+                          onChange={() => handleHandlingChange(row.key, 'supplier')}
+                        />
+                        {!hasStock && <div className="small text-muted">Sin stock disponible.</div>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+
+          <div className="d-flex justify-content-between align-items-center">
+            <div className="text-muted small">
+              Número de pedido generado automáticamente a partir de 101.
+            </div>
+            <div className="d-flex gap-2">
+              <Button variant="outline-secondary" onClick={closeOrderModal}>
+                Cancelar
+              </Button>
+              <Button variant="primary" onClick={openEmailModal}>
+                Generar mail a proveedor
+              </Button>
+            </div>
+          </div>
+        </Modal.Body>
+      </Modal>
+
+      <Modal show={showEmailModal} onHide={closeEmailModal} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Simular envío de email</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-grid gap-3">
+          <Form.Group>
+            <Form.Label>Para</Form.Label>
+            <Form.Control type="email" value="proveedores.mail_contacto" readOnly />
+          </Form.Group>
+
+          <Form.Group>
+            <Form.Label>CC</Form.Label>
+            <div className="d-flex flex-wrap gap-2 mb-2">
+              <Badge bg="secondary">{defaultCommercialEmail}</Badge>
+              {extraCc.map((cc) => (
+                <Badge bg="info" key={cc}>
+                  {cc}
+                </Badge>
+              ))}
+            </div>
+            <div className="d-flex gap-2">
+              <Form.Control
+                type="email"
+                value={ccInput}
+                placeholder="Añadir correo en copia"
+                onChange={(event) => setCcInput(event.target.value)}
+              />
+              <Button variant="outline-primary" onClick={handleAddCc}>
+                Añadir CC
+              </Button>
+            </div>
+          </Form.Group>
+
+          <Form.Group>
+            <Form.Label>Asunto</Form.Label>
+            <Form.Control
+              type="text"
+              readOnly
+              value={`${currentOrderNumber ?? nextOrderNumber} Nuevo Pedido de GEP Group para ${
+                selectedList[0]?.row.supplier || 'Proveedor'
+              }`}
+            />
+          </Form.Group>
+
+          <Form.Group>
+            <Form.Label>Mensaje</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={6}
+              readOnly
+              value={`Resumen de productos:\n${mailBody}\n\nPor favor, indícanos fechas estimadas de entrega.`}
+            />
+          </Form.Group>
+
+          <div className="d-flex justify-content-end gap-2">
+            <Button variant="outline-secondary" onClick={closeEmailModal}>
+              Cancelar
+            </Button>
+            <Button variant="success" onClick={handleSendEmail}>
+              Enviar desde erp@gepgroup.es
+            </Button>
+          </div>
+        </Modal.Body>
+      </Modal>
     </div>
   );
 }
