@@ -1848,17 +1848,25 @@ export const handler = async (event: any) => {
 
       const dealsRaw = await Promise.all(
         rowsRaw.map(async (row: any) => {
-          const mapped = mapDealForApi(normalizeDealRelations(row));
-          if (!mapped) {
+          try {
+            const mapped = mapDealForApi(normalizeDealRelations(row));
+            if (!mapped) {
+              return null;
+            }
+
+            const withPipeline = await ensureDealPipelineLabel(mapped, {
+              pipelineId: row?.pipeline_id ?? null,
+              pipelineLabel: (row as any)?.pipeline_label ?? null,
+            });
+
+            return withPipeline;
+          } catch (error) {
+            console.error("[deals] Failed to map deal row", {
+              error,
+              dealId: row?.deal_id ?? null,
+            });
             return null;
           }
-
-          const withPipeline = await ensureDealPipelineLabel(mapped, {
-            pipelineId: row?.pipeline_id ?? null,
-            pipelineLabel: (row as any)?.pipeline_label ?? null,
-          });
-
-          return withPipeline;
         }),
       );
 
