@@ -110,26 +110,12 @@ export function normalizeProducts(
     if (entry && typeof entry === 'object') {
       const item = entry as Record<string, any>;
 
-      const rawProductStock = item.product_stock;
-      const hasProductStockField = Object.prototype.hasOwnProperty.call(item, 'product_stock');
-      const rawStock =
-        rawProductStock ??
-        item.almacen_stock ??
-        item.product?.almacen_stock ??
-        item.products?.almacen_stock;
-
       const product: DealProduct = {
         id: item.id ?? null,
         deal_id: item.deal_id ?? null,
         id_pipe: toStringValue(item.id_pipe ?? item.product?.id_pipe ?? item.products?.id_pipe) ?? null,
         name: toStringValue(item.name) ?? null,
         code: toStringValue(item.code) ?? null,
-        almacen_stock:
-          typeof rawStock === 'number'
-            ? rawStock
-            : typeof rawStock === 'string'
-            ? toNumber(rawStock)
-            : toNumber(rawStock ?? null),
         quantity: toNumber(item.quantity),
         price: toNumber(item.price),
         type: item.type ?? null,
