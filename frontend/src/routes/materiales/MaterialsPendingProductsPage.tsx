@@ -24,6 +24,7 @@ type PendingProductRow = {
   organizationName: string;
   productName: string;
   productId: string | null;
+  productPipeId: string | null;
   productCode: string | null;
   quantityLabel: string;
   quantityValue: number | null;
@@ -122,6 +123,7 @@ function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
       organizationName,
       productName: getProductName(product),
       productId: product?.id?.trim?.() ?? null,
+      productPipeId: (product as any)?.id_pipe?.toString?.()?.trim?.() ?? null,
       productCode: product?.code?.trim?.() ?? null,
       quantityLabel: formatQuantity(product?.quantity),
       quantityValue: getQuantityValue(product?.quantity),
@@ -174,6 +176,7 @@ function normalizeProductKey(value: string | null | undefined): string | null {
 function getRowProductKey(row: PendingProductRow): string | null {
   return (
     normalizeProductKey(row.productId) ||
+    normalizeProductKey(row.productPipeId) ||
     normalizeProductKey(row.productCode) ||
     normalizeProductKey(row.productName)
   );
@@ -230,10 +233,12 @@ export function MaterialsPendingProductsPage({
     for (const product of productsQuery.data) {
       const stock = product.almacen_stock ?? null;
       const idKey = normalizeProductKey(product.id);
+      const pipeIdKey = normalizeProductKey(product.id_pipe);
       const codeKey = normalizeProductKey(product.code);
       const nameKey = normalizeProductKey(product.name);
 
       if (idKey) map.set(idKey, stock);
+      if (pipeIdKey) map.set(pipeIdKey, stock);
       if (codeKey) map.set(codeKey, stock);
       if (nameKey) map.set(nameKey, stock);
     }
