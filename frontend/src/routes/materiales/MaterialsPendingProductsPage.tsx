@@ -123,7 +123,9 @@ function isShippingExpense(product: DealProduct | null | undefined): boolean {
 }
 
 function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
-  const filteredBudgets = budgets.filter((budget) => isMaterialPipeline(budget));
+  const filteredBudgets = (Array.isArray(budgets) ? budgets : []).filter((budget) =>
+    isMaterialPipeline(budget),
+  );
 
   return filteredBudgets.flatMap((budget, budgetIndex) => {
     const budgetId = getBudgetId(budget);
@@ -219,10 +221,10 @@ export function MaterialsPendingProductsPage({
   isImporting,
   canImport,
 }: MaterialsPendingProductsPageProps) {
-  const pendingProducts = useMemo(() => buildPendingProducts(budgets), [budgets]);
+  const pendingProducts = useMemo(() => buildPendingProducts(budgets ?? []), [budgets]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
-  const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
+  const hasError = !!error && !isLoading && !hasRows;
 
   const sortedProducts = useMemo(() => {
     if (!sortConfig) return pendingProducts;
