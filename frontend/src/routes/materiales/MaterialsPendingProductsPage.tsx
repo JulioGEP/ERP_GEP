@@ -1,6 +1,7 @@
 import type { SVGProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
+import { isApiError } from '../../api/client';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
@@ -131,6 +132,34 @@ function formatEstimatedDelivery(dateIso: string | null | undefined): string {
   const parsed = new Date(dateIso);
   if (Number.isNaN(parsed.getTime())) return '—';
   return parsed.toLocaleDateString('es-ES');
+}
+
+function buildErrorDetails(error: unknown): string[] {
+  if (!error) return [];
+
+  if (isApiError(error)) {
+    const details = [`${error.message} (código: ${error.code})`];
+
+    if (error.status) {
+      details.push(`Estado HTTP: ${error.status}`);
+    }
+
+    return details;
+  }
+
+  if (error instanceof Error) {
+    return [error.message];
+  }
+
+  if (typeof error === 'string') {
+    return [error];
+  }
+
+  try {
+    return [`Error inesperado: ${JSON.stringify(error)}`];
+  } catch {
+    return ['Error inesperado: no se pudo serializar el detalle.'];
+  }
 }
 
 function getEstimatedDeliveryTimestamp(dateIso: string | null | undefined): number | null {
@@ -265,6 +294,7 @@ export function MaterialsPendingProductsPage({
   const [logisticsCcEmails, setLogisticsCcEmails] = useState<string[]>([defaultCommercialEmail]);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
+  const errorDetails = useMemo(() => buildErrorDetails(error), [error]);
 
   const quantityTotalsByPipeId = useMemo(() => {
     const totals = new Map<string, number>();
@@ -591,7 +621,19 @@ export function MaterialsPendingProductsPage({
           <div className="d-flex align-items-center justify-content-between gap-3 flex-wrap">
             <div>
               <h2 className="h6 mb-1">Error al cargar los productos pendientes</h2>
-              <p className="mb-0">No se pudieron obtener los productos. Inténtalo de nuevo.</p>
+              <p className="mb-2">No se pudieron obtener los productos. Inténtalo de nuevo.</p>
+              {errorDetails.length ? (
+                <div className="bg-light border rounded-3 p-2">
+                  <p className="fw-semibold small text-danger mb-1">Detalle técnico:</p>
+                  <ul className="mb-0 small">
+                    {errorDetails.map((detail, index) => (
+                      <li key={index}>
+                        <code>{detail}</code>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
             <button className="btn btn-outline-danger" onClick={onRetry} type="button">
               Reintentar
