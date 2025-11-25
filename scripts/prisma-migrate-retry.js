@@ -13,6 +13,30 @@ const env = {
 };
 
 const backendDir = path.join(__dirname, '..', 'backend');
+const failedMigration = '20251120000002_add_atributos_to_products';
+
+console.log(`Attempting to resolve failed migration "${failedMigration}" (if present)...`);
+const resolveResult = spawnSync(
+  'npx',
+  [
+    'prisma',
+    'migrate',
+    'resolve',
+    '--applied',
+    failedMigration,
+    '--schema',
+    'prisma/schema.prisma',
+  ],
+  { cwd: backendDir, env, stdio: 'inherit' }
+);
+
+if (resolveResult.status === 0) {
+  console.log(`Migration "${failedMigration}" marked as applied.`);
+} else {
+  console.warn(
+    `Could not mark migration "${failedMigration}" as applied (it may already be resolved); continuing with deploy.`
+  );
+}
 
 for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
   console.log(`Prisma migrate deploy (attempt ${attempt}/${MAX_ATTEMPTS})...`);
