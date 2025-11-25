@@ -1,4 +1,10 @@
 // frontend/src/types/product.ts
+export type ProductAttribute = {
+  nombre: string;
+  valor: string;
+  cantidad: number;
+};
+
 export type Product = {
   id: string;
   id_pipe: string;
@@ -9,6 +15,7 @@ export type Product = {
   type: string | null;
   template: string | null;
   url_formacion: string | null;
+  atributos: ProductAttribute[];
   almacen_stock: number | null;
   provider_ids: number[];
   active: boolean;

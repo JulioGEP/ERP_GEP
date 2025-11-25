@@ -139,6 +139,7 @@ model products {
   type                   String?
   template               String?
   url_formacion          String?
+  atributos              Json?
   active                 Boolean?   @default(true)
   created_at             DateTime?  @default(now()) @db.Timestamp(6)
   updated_at             DateTime?  @default(now()) @updatedAt @db.Timestamp(6)

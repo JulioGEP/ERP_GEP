@@ -1,8 +1,8 @@
 // frontend/src/features/recursos/StockProductsView.tsx
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Alert, Badge, Button, Form, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Product } from '../../types/product';
+import type { Product, ProductAttribute } from '../../types/product';
 import type { Provider } from '../../types/provider';
 import { fetchProducts, syncProducts, updateProduct } from './products.api';
 import { fetchProviders } from './providers.api';
@@ -11,6 +11,12 @@ import { ApiError } from '../../api/client';
 export type ToastParams = {
   variant: 'success' | 'danger' | 'info';
   message: string;
+};
+
+type AttributeEditorState = {
+  productId: string;
+  productName: string;
+  atributos: ProductAttribute[];
 };
 
 export type StockProductsViewProps = {
@@ -48,11 +54,17 @@ function normalizeCategory(category: Product['category']): string {
   return (category ?? '').trim().toLowerCase();
 }
 
+function sumAttributeStock(atributos: ProductAttribute[]): number {
+  return atributos.reduce((total, item) => total + (Number.isFinite(item.cantidad) ? item.cantidad : 0), 0);
+}
+
 export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const queryClient = useQueryClient();
   const [draftSelections, setDraftSelections] = useState<Record<string, number[]>>({});
   const [draftStocks, setDraftStocks] = useState<Record<string, string>>({});
   const [openProviderMenuId, setOpenProviderMenuId] = useState<string | null>(null);
+  const [attributeEditor, setAttributeEditor] = useState<AttributeEditorState | null>(null);
+  const [attributeError, setAttributeError] = useState<string | null>(null);
   const providerDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const productsQuery = useQuery<Product[], ApiError>({
@@ -74,12 +86,14 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
       id,
       providerIds,
       almacenStock,
+      atributos,
     }: {
       id: string;
       providerIds?: number[];
       almacenStock?: number | null;
+      atributos?: ProductAttribute[] | null;
     }) =>
-      updateProduct(id, { provider_ids: providerIds, almacen_stock: almacenStock }),
+      updateProduct(id, { provider_ids: providerIds, almacen_stock: almacenStock, atributos }),
     onSuccess: (product) => {
       onNotify({ variant: 'success', message: 'Producto actualizado correctamente.' });
       queryClient.setQueryData<Product[] | undefined>(['products'], (current) => {
@@ -196,6 +210,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   };
 
   const handleStockBlur = (product: Product) => {
+    if (product.atributos.length) return;
     if (!(product.id in draftStocks)) return;
 
     const value = draftStocks[product.id].trim();
@@ -214,6 +229,11 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     [],
   );
 
+  const attributeEditorTotal = useMemo(
+    () => (attributeEditor ? sumAttributeStock(attributeEditor.atributos) : 0),
+    [attributeEditor],
+  );
+
   const handleProviderInputKeyDown = (product: Product, event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -230,6 +250,104 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
       closeProviderMenu(openProviderMenuId);
     }
     setOpenProviderMenuId(product.id);
+  };
+
+  const handleOpenAttributeEditor = (product: Product) => {
+    setAttributeError(null);
+    setAttributeEditor({
+      productId: product.id,
+      productName: product.name ?? product.code ?? 'Producto sin nombre',
+      atributos: product.atributos.length
+        ? product.atributos.map((item) => ({ ...item }))
+        : [{ nombre: '', valor: '', cantidad: 0 }],
+    });
+  };
+
+  const handleCloseAttributeEditor = () => {
+    if (updateMutation.isPending) return;
+    setAttributeEditor(null);
+    setAttributeError(null);
+  };
+
+  const updateAttributeRow = (index: number, field: keyof ProductAttribute, value: string) => {
+    setAttributeEditor((prev) => {
+      if (!prev) return prev;
+      const next = prev.atributos.slice();
+      const current = next[index] ?? { nombre: '', valor: '', cantidad: 0 };
+
+      if (field === 'cantidad') {
+        const numericValue = value === '' ? 0 : Number(value);
+        next[index] = {
+          ...current,
+          cantidad: Number.isFinite(numericValue) ? Math.max(0, Math.trunc(numericValue)) : 0,
+        };
+      } else {
+        next[index] = { ...current, [field]: value } as ProductAttribute;
+      }
+
+      return { ...prev, atributos: next };
+    });
+  };
+
+  const handleRemoveAttributeRow = (index: number) => {
+    setAttributeEditor((prev) => {
+      if (!prev) return prev;
+      const next = prev.atributos.filter((_, position) => position !== index);
+      return { ...prev, atributos: next.length ? next : [{ nombre: '', valor: '', cantidad: 0 }] };
+    });
+  };
+
+  const handleAddAttributeRow = () => {
+    setAttributeEditor((prev) => {
+      if (!prev) return prev;
+      return { ...prev, atributos: [...prev.atributos, { nombre: '', valor: '', cantidad: 0 }] };
+    });
+  };
+
+  const handleSaveAttributes = () => {
+    if (!attributeEditor) return;
+
+    const normalized = attributeEditor.atributos
+      .map((item) => ({
+        nombre: item.nombre.trim(),
+        valor: item.valor.trim(),
+        cantidad: Number.isFinite(item.cantidad) ? Math.trunc(item.cantidad) : 0,
+      }))
+      .filter((item) => item.nombre || item.valor || item.cantidad);
+
+    if (normalized.length === 0) {
+      updateMutation.mutate(
+        { id: attributeEditor.productId, atributos: [] },
+        {
+          onSuccess: () => {
+            handleCloseAttributeEditor();
+          },
+        },
+      );
+      return;
+    }
+
+    const hasInvalidName = normalized.some((item) => !item.nombre || !item.valor);
+    const hasInvalidQuantity = normalized.some((item) => !Number.isSafeInteger(item.cantidad) || item.cantidad < 0);
+
+    if (hasInvalidName) {
+      setAttributeError('Completa el nombre y el valor de cada atributo.');
+      return;
+    }
+
+    if (hasInvalidQuantity) {
+      setAttributeError('La cantidad debe ser un número entero mayor o igual que 0.');
+      return;
+    }
+
+    updateMutation.mutate(
+      { id: attributeEditor.productId, atributos: normalized },
+      {
+        onSuccess: () => {
+          handleCloseAttributeEditor();
+        },
+      },
+    );
   };
 
   return (
@@ -270,6 +388,9 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                 <th scope="col" style={{ minWidth: 140 }}>
                   <span className="fw-semibold">Categoría</span>
                 </th>
+                <th scope="col" style={{ minWidth: 220 }}>
+                  <span className="fw-semibold">Atributos</span>
+                </th>
                 <th scope="col" style={{ minWidth: 180 }}>
                   <span className="fw-semibold">Stock en almacén</span>
                 </th>
@@ -281,13 +402,13 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="py-5 text-center">
+                  <td colSpan={7} className="py-5 text-center">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-5 text-center text-muted">
+                  <td colSpan={7} className="py-5 text-center text-muted">
                     No hay productos disponibles. Pulsa "Actualizar Stock" para sincronizar.
                   </td>
                 </tr>
@@ -295,7 +416,12 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                 filteredProducts.map((product) => {
                   const providerIds = draftSelections[product.id] ?? product.provider_ids;
                   const providerNames = mapProviderNames(providerIds, providers);
-                  const stockValue = draftStocks[product.id] ?? (product.almacen_stock ?? '').toString();
+                  const atributos = product.atributos ?? [];
+                  const hasAtributos = atributos.length > 0;
+                  const attributeStock = hasAtributos ? sumAttributeStock(atributos) : null;
+                  const stockValue = hasAtributos
+                    ? String(attributeStock ?? product.almacen_stock ?? 0)
+                    : draftStocks[product.id] ?? (product.almacen_stock ?? '').toString();
 
                   return (
                     <tr key={product.id}>
@@ -303,6 +429,39 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                       <td className="fw-semibold">{product.name || '—'}</td>
                       <td>{product.code || '—'}</td>
                       <td>{product.category || '—'}</td>
+                      <td>
+                        <div className="d-grid gap-2">
+                          <Button
+                            variant={hasAtributos ? 'outline-primary' : 'outline-secondary'}
+                            size="sm"
+                            onClick={() => handleOpenAttributeEditor(product)}
+                            disabled={isSaving}
+                          >
+                            {hasAtributos ? 'Editar atributos' : 'Añadir atributos'}
+                          </Button>
+                          {hasAtributos ? (
+                            <div className="d-grid gap-1">
+                              {atributos.map((atributo, index) => (
+                                <div
+                                  key={`${atributo.nombre}-${atributo.valor}-${index}`}
+                                  className="d-flex align-items-center justify-content-between gap-2"
+                                >
+                                  <span className="small text-muted text-wrap">{`${atributo.nombre} - ${atributo.valor}`}</span>
+                                  <Badge bg="secondary" text="dark">
+                                    {atributo.cantidad}
+                                  </Badge>
+                                </div>
+                              ))}
+                              <div className="d-flex justify-content-between align-items-center small fw-semibold">
+                                <span>Total unidades</span>
+                                <span>{attributeStock ?? 0}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-muted small">Sin atributos configurados</span>
+                          )}
+                        </div>
+                      </td>
                       <td style={{ maxWidth: 180 }}>
                         <Form.Control
                           type="number"
@@ -310,9 +469,13 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                           size="sm"
                           onChange={(event) => handleStockChange(product.id, event.target.value)}
                           onBlur={() => handleStockBlur(product)}
-                          disabled={updateMutation.isPending}
+                          readOnly={hasAtributos}
+                          disabled={updateMutation.isPending || hasAtributos}
                           aria-label={`Stock en almacén para ${product.name ?? product.code ?? 'producto'}`}
                         />
+                        {hasAtributos ? (
+                          <div className="text-muted small mt-1">Stock calculado a partir de los atributos.</div>
+                        ) : null}
                       </td>
                       <td>
                         <div
@@ -402,6 +565,83 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
           </Table>
         </div>
       </div>
+
+      <Modal show={Boolean(attributeEditor)} onHide={handleCloseAttributeEditor} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Atributos de {attributeEditor?.productName}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="d-grid gap-3">
+            <p className="mb-0 text-muted small">
+              Define combinaciones de atributos con su cantidad. El stock total se calculará sumando todas las cantidades
+              indicadas.
+            </p>
+            {attributeError ? (
+              <Alert variant="danger" className="mb-0">
+                {attributeError}
+              </Alert>
+            ) : null}
+            {attributeEditor?.atributos.map((atributo, index) => (
+              <div key={`${index}-${atributo.nombre}-${atributo.valor}`} className="border rounded-3 p-3 d-grid gap-2">
+                <div className="d-flex flex-column flex-lg-row gap-3">
+                  <Form.Group className="flex-grow-1">
+                    <Form.Label className="small mb-1">Nombre del atributo</Form.Label>
+                    <Form.Control
+                      value={atributo.nombre}
+                      onChange={(event) => updateAttributeRow(index, 'nombre', event.target.value)}
+                      placeholder="Ej.: Talla"
+                      disabled={updateMutation.isPending}
+                    />
+                  </Form.Group>
+                  <Form.Group className="flex-grow-1">
+                    <Form.Label className="small mb-1">Valor</Form.Label>
+                    <Form.Control
+                      value={atributo.valor}
+                      onChange={(event) => updateAttributeRow(index, 'valor', event.target.value)}
+                      placeholder="Ej.: L"
+                      disabled={updateMutation.isPending}
+                    />
+                  </Form.Group>
+                  <Form.Group style={{ minWidth: 160 }}>
+                    <Form.Label className="small mb-1">Cantidad</Form.Label>
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      value={atributo.cantidad.toString()}
+                      onChange={(event) => updateAttributeRow(index, 'cantidad', event.target.value)}
+                      disabled={updateMutation.isPending}
+                    />
+                  </Form.Group>
+                </div>
+                <div className="d-flex justify-content-end">
+                  <Button
+                    variant="outline-danger"
+                    size="sm"
+                    onClick={() => handleRemoveAttributeRow(index)}
+                    disabled={updateMutation.isPending || attributeEditor.atributos.length <= 1}
+                  >
+                    Eliminar
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
+              <Button variant="outline-primary" size="sm" onClick={handleAddAttributeRow} disabled={updateMutation.isPending}>
+                Añadir atributo
+              </Button>
+              <div className="fw-semibold">Unidades totales: {attributeEditorTotal}</div>
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={handleCloseAttributeEditor} disabled={updateMutation.isPending}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={handleSaveAttributes} disabled={updateMutation.isPending}>
+            Guardar
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }
