@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
+import { fetchProducts } from '../../features/recursos/products.api';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
@@ -21,6 +23,8 @@ type PendingProductRow = {
   budgetId: string | null;
   organizationName: string;
   productName: string;
+  productId: string | null;
+  productCode: string | null;
   quantityLabel: string;
   quantityValue: number | null;
   supplier: string;
@@ -117,6 +121,8 @@ function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
       budgetId,
       organizationName,
       productName: getProductName(product),
+      productId: product?.id?.trim?.() ?? null,
+      productCode: product?.code?.trim?.() ?? null,
       quantityLabel: formatQuantity(product?.quantity),
       quantityValue: getQuantityValue(product?.quantity),
       supplier: getSupplierLabel(budget),
@@ -132,6 +138,7 @@ type SortableColumn =
   | 'supplier'
   | 'productName'
   | 'quantity'
+  | 'stock'
   | 'estimatedDelivery';
 
 type SortDirection = 'asc' | 'desc';
@@ -152,9 +159,24 @@ function getSortableValue(row: PendingProductRow, key: SortableColumn): string |
       return row.quantityValue;
     case 'estimatedDelivery':
       return row.estimatedDeliveryValue;
+    case 'stock':
+      return null;
     default:
       return null;
   }
+}
+
+function normalizeProductKey(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized ? normalized : null;
+}
+
+function getRowProductKey(row: PendingProductRow): string | null {
+  return (
+    normalizeProductKey(row.productId) ||
+    normalizeProductKey(row.productCode) ||
+    normalizeProductKey(row.productName)
+  );
 }
 
 function compareNullableValues(
@@ -192,9 +214,57 @@ export function MaterialsPendingProductsPage({
   canImport,
 }: MaterialsPendingProductsPageProps) {
   const pendingProducts = useMemo(() => buildPendingProducts(budgets), [budgets]);
+  const productsQuery = useQuery({
+    queryKey: ['products', 'stock'],
+    queryFn: fetchProducts,
+    staleTime: 5 * 60 * 1000,
+  });
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
+
+  const productStockMap = useMemo(() => {
+    const map = new Map<string, number | null>();
+    if (!productsQuery.data) return map;
+
+    for (const product of productsQuery.data) {
+      const stock = product.almacen_stock ?? null;
+      const idKey = normalizeProductKey(product.id);
+      const codeKey = normalizeProductKey(product.code);
+      const nameKey = normalizeProductKey(product.name);
+
+      if (idKey) map.set(idKey, stock);
+      if (codeKey) map.set(codeKey, stock);
+      if (nameKey) map.set(nameKey, stock);
+    }
+
+    return map;
+  }, [productsQuery.data]);
+
+  const productDemandMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of pendingProducts) {
+      const key = getRowProductKey(row);
+      if (!key || row.quantityValue == null) continue;
+
+      map.set(key, (map.get(key) ?? 0) + row.quantityValue);
+    }
+    return map;
+  }, [pendingProducts]);
+
+  const getRowStockStatus = (row: PendingProductRow) => {
+    const key = getRowProductKey(row);
+    if (!key) return { stock: null, demand: null, hasEnough: null } as const;
+
+    const stock = productStockMap.get(key) ?? null;
+    const demand = productDemandMap.get(key) ?? null;
+
+    if (stock === null || demand === null) {
+      return { stock, demand, hasEnough: null } as const;
+    }
+
+    return { stock, demand, hasEnough: stock >= demand } as const;
+  };
 
   const sortedProducts = useMemo(() => {
     if (!sortConfig) return pendingProducts;
@@ -203,8 +273,8 @@ export function MaterialsPendingProductsPage({
     const rows = [...pendingProducts];
 
     rows.sort((a, b) => {
-      const valueA = getSortableValue(a, key);
-      const valueB = getSortableValue(b, key);
+      const valueA = key === 'stock' ? getRowStockStatus(a).stock : getSortableValue(a, key);
+      const valueB = key === 'stock' ? getRowStockStatus(b).stock : getSortableValue(b, key);
 
       return compareNullableValues(valueA, valueB, direction);
     });
@@ -307,6 +377,15 @@ export function MaterialsPendingProductsPage({
                   <button
                     type="button"
                     className="btn btn-link text-body p-0 text-decoration-none d-inline-flex align-items-center gap-1"
+                    onClick={() => handleSort('stock')}
+                  >
+                    Stock
+                  </button>
+                </th>
+                <th scope="col">
+                  <button
+                    type="button"
+                    className="btn btn-link text-body p-0 text-decoration-none d-inline-flex align-items-center gap-1"
                     onClick={() => handleSort('estimatedDelivery')}
                   >
                     Entrega {getSortIndicator(sortConfig, 'estimatedDelivery')}
@@ -317,13 +396,13 @@ export function MaterialsPendingProductsPage({
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-4">
+                  <td colSpan={7} className="text-center py-4">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : !hasRows ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-4 text-muted">
+                  <td colSpan={7} className="text-center py-4 text-muted">
                     No hay productos pendientes del embudo Material.
                   </td>
                 </tr>
@@ -336,12 +415,27 @@ export function MaterialsPendingProductsPage({
                     onClick={() => onSelect(row.budget)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <td className="fw-semibold">{row.budgetId ? `#${row.budgetId}` : '—'}</td>
-                    <td>{row.organizationName}</td>
-                    <td>{row.supplier}</td>
-                    <td>{row.productName}</td>
-                    <td>{row.quantityLabel}</td>
-                    <td>{row.estimatedDelivery}</td>
+                    {(() => {
+                      const { stock, hasEnough } = getRowStockStatus(row);
+                      const quantityClass =
+                        hasEnough === null
+                          ? ''
+                          : hasEnough
+                          ? 'text-success fw-semibold'
+                          : 'text-danger fw-semibold';
+
+                      return (
+                        <>
+                          <td className="fw-semibold">{row.budgetId ? `#${row.budgetId}` : '—'}</td>
+                          <td>{row.organizationName}</td>
+                          <td>{row.supplier}</td>
+                          <td>{row.productName}</td>
+                          <td className={quantityClass}>{row.quantityLabel}</td>
+                          <td>{formatQuantity(stock)}</td>
+                          <td>{row.estimatedDelivery}</td>
+                        </>
+                      );
+                    })()}
                   </tr>
                 ))
               )}
