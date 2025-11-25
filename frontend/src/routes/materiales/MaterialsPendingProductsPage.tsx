@@ -654,10 +654,7 @@ export function MaterialsPendingProductsPage({
             </Table>
           </div>
 
-          <div className="d-flex justify-content-between align-items-center">
-            <div className="text-muted small">
-              Número de pedido generado automáticamente a partir de 101.
-            </div>
+          <div className="d-flex justify-content-end align-items-center">
             <div className="d-flex gap-2">
               <Button variant="outline-secondary" onClick={closeOrderModal}>
                 Cancelar
