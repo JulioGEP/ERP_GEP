@@ -67,12 +67,15 @@ function normalizeProduct(row: any): Product {
 
   const atributos = Array.isArray(row.atributos)
     ? row.atributos
-        .map((value: any) => ({
+        .map((value: any): ProductAttribute => ({
           nombre: typeof value?.nombre === 'string' ? value.nombre.trim() : '',
           valor: typeof value?.valor === 'string' ? value.valor.trim() : '',
           cantidad: Number.isFinite(Number(value?.cantidad)) ? Math.trunc(Number(value.cantidad)) : 0,
         }))
-        .filter((item) => item.nombre && item.valor && Number.isSafeInteger(item.cantidad) && item.cantidad >= 0)
+        .filter(
+          (item: ProductAttribute) =>
+            item.nombre && item.valor && Number.isSafeInteger(item.cantidad) && item.cantidad >= 0,
+        )
     : [];
 
   return {
