@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
@@ -229,6 +229,7 @@ export function MaterialsPendingProductsPage({
   const [currentOrderNumber, setCurrentOrderNumber] = useState<number | null>(null);
   const [ccInput, setCcInput] = useState('');
   const [extraCc, setExtraCc] = useState<string[]>([]);
+  const [toEmail, setToEmail] = useState('');
   const [mailSent, setMailSent] = useState(false);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
@@ -259,6 +260,34 @@ export function MaterialsPendingProductsPage({
   };
 
   const selectedList = useMemo(() => Object.values(selectedProducts), [selectedProducts]);
+
+  const primaryBudget = selectedList[0]?.row.budget;
+  const supplierInfo =
+    (primaryBudget as DealSummary & {
+      proveedores?: { mail_contacto?: string | null; nombre_contacto?: string | null; contact_name?: string | null };
+      mail_contacto?: string | null;
+      proveedor_contacto?: string | null;
+      contacto_proveedor?: string | null;
+    })?.proveedores ?? null;
+
+  const supplierContactEmail =
+    supplierInfo?.mail_contacto ??
+    (primaryBudget as { mail_contacto?: string | null } | undefined)?.mail_contacto ??
+    '';
+
+  const supplierContactName =
+    supplierInfo?.nombre_contacto ??
+    supplierInfo?.contact_name ??
+    (primaryBudget as { proveedor_contacto?: string | null } | undefined)?.proveedor_contacto ??
+    (primaryBudget as { contacto_proveedor?: string | null } | undefined)?.contacto_proveedor ??
+    selectedList[0]?.row.supplier ??
+    'proveedor';
+
+  useEffect(() => {
+    if (showEmailModal) {
+      setToEmail(supplierContactEmail || '');
+    }
+  }, [showEmailModal, supplierContactEmail]);
 
   const handleSelectAll = () => {
     const allSelected = pendingProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
@@ -304,6 +333,7 @@ export function MaterialsPendingProductsPage({
   const closeOrderModal = () => {
     setShowOrderModal(false);
     setShowEmailModal(false);
+    setToEmail('');
   };
 
   const openEmailModal = () => {
@@ -329,16 +359,15 @@ export function MaterialsPendingProductsPage({
     setCcInput('');
   };
 
-  const defaultCommercialEmail = selectedList[0]?.row.budget.person?.email || 'comercial@gepgroup.es';
+  const defaultCommercialEmail = 'sales@gepgroup.es';
 
-  const mailBody = selectedList
-    .map(
-      ({ row, handling }) =>
-        `• ${row.productName} — Cantidad: ${row.quantityLabel} — Acción: ${
-          handling === 'stock' ? 'Descontar de stock' : 'Pedido a proveedor'
-        }`,
-    )
+  const supplierName = selectedList[0]?.row.supplier || 'irudek';
+
+  const productLines = selectedList
+    .map(({ row }) => `- ${row.productName} ${row.quantityLabel}`)
     .join('\n');
+
+  const emailBody = `Hola ${supplierContactName}\n\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${productLines}\n\nDime si tienes disponibilidad y Por favor, indícanos fechas estimadas de entrega.\n\nMuchas gracias de antemano.\n\nEquipo de GEP Group.`;
 
   const sortedProducts = useMemo(() => {
     if (!sortConfig) return pendingProducts;
@@ -619,7 +648,12 @@ export function MaterialsPendingProductsPage({
         <Modal.Body className="d-grid gap-3">
           <Form.Group>
             <Form.Label>Para</Form.Label>
-            <Form.Control type="email" value="proveedores.mail_contacto" readOnly />
+            <Form.Control
+              type="email"
+              value={toEmail}
+              placeholder="Correo de contacto del proveedor"
+              onChange={(event) => setToEmail(event.target.value)}
+            />
           </Form.Group>
 
           <Form.Group>
@@ -650,9 +684,7 @@ export function MaterialsPendingProductsPage({
             <Form.Control
               type="text"
               readOnly
-              value={`${currentOrderNumber ?? nextOrderNumber} Nuevo Pedido de GEP Group para ${
-                selectedList[0]?.row.supplier || 'Proveedor'
-              }`}
+              value={`Nuevo Pedido de GEP Group con Nº ${currentOrderNumber ?? nextOrderNumber} para ${supplierName}`}
             />
           </Form.Group>
 
@@ -662,7 +694,7 @@ export function MaterialsPendingProductsPage({
               as="textarea"
               rows={6}
               readOnly
-              value={`Resumen de productos:\n${mailBody}\n\nPor favor, indícanos fechas estimadas de entrega.`}
+              value={emailBody}
             />
           </Form.Group>
 
