@@ -1,3 +1,4 @@
+import type { SVGProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import type { DealProduct, DealSummary } from '../../types/deal';
@@ -37,6 +38,26 @@ type SelectedProduct = {
   handling: ProductHandling;
   hasStock: boolean;
 };
+
+type IconProps = SVGProps<SVGSVGElement>;
+
+function CheckSquareIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false" {...props}>
+      <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z" />
+      <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l1.094 1.093z" />
+    </svg>
+  );
+}
+
+function DashSquareIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false" {...props}>
+      <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z" />
+      <path d="M5 8a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5A.5.5 0 0 1 5 8" />
+    </svg>
+  );
+}
 
 function getBudgetId(budget: DealSummary): string | null {
   const fallbackId = budget.dealId ?? budget.deal_id;
@@ -441,23 +462,31 @@ export function MaterialsPendingProductsPage({
               <tr>
                 <th scope="col" className="align-middle">
                   <div className="d-flex align-items-center gap-2 flex-wrap">
-                    <span>Seleccionar</span>
-                    <Button
-                      size="sm"
-                      variant="outline-primary"
-                      onClick={handleSelectAll}
-                      disabled={!hasRows}
-                    >
-                      Seleccionar todo
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline-secondary"
-                      onClick={handleDeselectAll}
-                      disabled={!selectedList.length}
-                    >
-                      Deseleccionar todo
-                    </Button>
+                    <span className="fw-semibold">Seleccionar</span>
+                    <div className="btn-group" role="group" aria-label="Acciones de selección">
+                      <Button
+                        size="sm"
+                        variant="outline-primary"
+                        onClick={handleSelectAll}
+                        disabled={!hasRows}
+                        className="p-1 d-inline-flex align-items-center justify-content-center"
+                        title="Seleccionar todo"
+                        aria-label="Seleccionar todo"
+                      >
+                        <CheckSquareIcon width={18} height={18} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline-secondary"
+                        onClick={handleDeselectAll}
+                        disabled={!selectedList.length}
+                        className="p-1 d-inline-flex align-items-center justify-content-center"
+                        title="Deseleccionar todo"
+                        aria-label="Deseleccionar todo"
+                      >
+                        <DashSquareIcon width={18} height={18} />
+                      </Button>
+                    </div>
                   </div>
                 </th>
                 <th scope="col">
