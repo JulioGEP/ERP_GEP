@@ -301,7 +301,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     (product: Product) => {
       const selection = draftSelections[product.id];
       if (!selection) return;
-      updateMutation.mutate({ id: product.id, providerIds: selection });
+      updateMutation.mutate({ id: product.id, providerIds: selection, atributos: product.atributos });
     },
     [draftSelections, updateMutation],
   );
@@ -459,6 +459,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const handleSaveAttributes = () => {
     if (!attributeEditor) return;
 
+    const currentProduct = products.find((item) => item.id === attributeEditor.productId);
     const normalized = attributeEditor.atributos
       .map((item) => ({
         nombre: item.nombre.trim(),
@@ -469,7 +470,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
 
     if (normalized.length === 0) {
       updateMutation.mutate(
-        { id: attributeEditor.productId, atributos: [] },
+        { id: attributeEditor.productId, atributos: [], providerIds: currentProduct?.provider_ids },
         {
           onSuccess: () => {
             handleCloseAttributeEditor();
@@ -493,7 +494,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     }
 
     updateMutation.mutate(
-      { id: attributeEditor.productId, atributos: normalized },
+      { id: attributeEditor.productId, atributos: normalized, providerIds: currentProduct?.provider_ids },
       {
         onSuccess: () => {
           handleCloseAttributeEditor();
