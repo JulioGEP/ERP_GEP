@@ -1,6 +1,6 @@
 // frontend/src/features/recursos/products.api.ts
 import { ApiError, requestJson } from '../../api/client';
-import type { Product } from '../../types/product';
+import type { Product, ProductAttribute } from '../../types/product';
 
 export type ProductUpdatePayload = {
   template?: string | null;
@@ -9,6 +9,7 @@ export type ProductUpdatePayload = {
   id_woo?: number | null;
   provider_ids?: number[] | null;
   almacen_stock?: number | null;
+  atributos?: ProductAttribute[] | null;
 };
 
 export type ProductSyncSummary = {
@@ -64,6 +65,16 @@ function normalizeProduct(row: any): Product {
   const createdAt = row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at ?? null;
   const updatedAt = row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at ?? null;
 
+  const atributos = Array.isArray(row.atributos)
+    ? row.atributos
+        .map((value: any) => ({
+          nombre: typeof value?.nombre === 'string' ? value.nombre.trim() : '',
+          valor: typeof value?.valor === 'string' ? value.valor.trim() : '',
+          cantidad: Number.isFinite(Number(value?.cantidad)) ? Math.trunc(Number(value.cantidad)) : 0,
+        }))
+        .filter((item) => item.nombre && item.valor && Number.isSafeInteger(item.cantidad) && item.cantidad >= 0)
+    : [];
+
   return {
     id: String(row.id ?? ''),
     id_pipe: String(row.id_pipe ?? ''),
@@ -74,6 +85,7 @@ function normalizeProduct(row: any): Product {
     type: row.type == null ? null : String(row.type),
     template: row.template == null ? null : String(row.template),
     url_formacion: row.url_formacion == null ? null : String(row.url_formacion),
+    atributos,
     almacen_stock:
       typeof row.almacen_stock === 'number'
         ? row.almacen_stock
@@ -132,6 +144,24 @@ function buildUpdateBody(payload: ProductUpdatePayload): Record<string, any> {
       body.almacen_stock = Math.trunc(payload.almacen_stock);
     } else {
       throw new ApiError('VALIDATION_ERROR', 'almacen_stock debe ser un número válido');
+    }
+  }
+
+  if ('atributos' in payload) {
+    if (payload.atributos == null) {
+      body.atributos = [];
+    } else if (Array.isArray(payload.atributos)) {
+      const sanitized = payload.atributos
+        .map((item) => ({
+          nombre: String(item.nombre ?? '').trim(),
+          valor: String(item.valor ?? '').trim(),
+          cantidad: Math.trunc(Number(item.cantidad ?? 0)),
+        }))
+        .filter((item) => item.nombre && item.valor && Number.isSafeInteger(item.cantidad) && item.cantidad >= 0);
+
+      body.atributos = sanitized;
+    } else {
+      throw new ApiError('VALIDATION_ERROR', 'atributos debe ser un array de objetos');
     }
   }
 

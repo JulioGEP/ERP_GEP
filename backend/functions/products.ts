@@ -17,6 +17,7 @@ type ProductRecord = {
   type: string | null;
   template: string | null;
   url_formacion: string | null;
+  atributos: any[] | null;
   almacen_stock: number | bigint | null;
   provider_ids: number[] | bigint[] | null;
   active: boolean;
@@ -37,6 +38,26 @@ function toNullableTrimmedString(value: unknown): string | null {
 }
 
 function normalizeProduct(record: ProductRecord) {
+  const atributos = Array.isArray(record.atributos)
+    ? record.atributos
+        .map((item: any) => ({
+          nombre: toNullableTrimmedString(item?.nombre),
+          valor: toNullableTrimmedString(item?.valor),
+          cantidad:
+            item?.cantidad === null || item?.cantidad === undefined || Number.isNaN(Number(item.cantidad))
+              ? null
+              : Number(item.cantidad),
+        }))
+        .filter(
+          (item) =>
+            item.nombre !== null &&
+            item.valor !== null &&
+            item.cantidad !== null &&
+            Number.isSafeInteger(item.cantidad) &&
+            item.cantidad >= 0,
+        )
+    : [];
+
   return {
     id: record.id,
     id_pipe: record.id_pipe,
@@ -49,6 +70,7 @@ function normalizeProduct(record: ProductRecord) {
     type: record.type ?? null,
     template: record.template ?? null,
     url_formacion: record.url_formacion ?? null,
+    atributos,
     almacen_stock:
       record.almacen_stock === null || record.almacen_stock === undefined
         ? null
@@ -175,6 +197,56 @@ function buildUpdateData(body: any) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, 'atributos')) {
+    const rawValue = body.atributos;
+
+    if (rawValue == null) {
+      data.atributos = [];
+      data.almacen_stock = null;
+      hasChanges = true;
+    } else if (Array.isArray(rawValue)) {
+      const parsed = [] as { nombre: string; valor: string; cantidad: number }[];
+
+      for (const item of rawValue) {
+        if (!item || typeof item !== 'object') {
+          return {
+            error: errorResponse('VALIDATION_ERROR', 'Cada atributo debe ser un objeto con nombre, valor y cantidad', 400),
+          } as const;
+        }
+
+        const nombre = toNullableTrimmedString((item as any).nombre);
+        const valor = toNullableTrimmedString((item as any).valor);
+        const cantidadValue = (item as any).cantidad;
+        const cantidad =
+          cantidadValue === null || cantidadValue === undefined || cantidadValue === ''
+            ? 0
+            : Number(cantidadValue);
+
+        if (!nombre || !valor) {
+          return {
+            error: errorResponse('VALIDATION_ERROR', 'Cada atributo debe incluir nombre y valor', 400),
+          } as const;
+        }
+
+        if (!Number.isFinite(cantidad) || !Number.isSafeInteger(Math.trunc(cantidad)) || cantidad < 0) {
+          return {
+            error: errorResponse('VALIDATION_ERROR', 'La cantidad de cada atributo debe ser un entero mayor o igual a 0', 400),
+          } as const;
+        }
+
+        parsed.push({ nombre, valor, cantidad: Math.trunc(cantidad) });
+      }
+
+      data.atributos = parsed;
+      data.almacen_stock = parsed.length ? parsed.reduce((sum, item) => sum + item.cantidad, 0) : null;
+      hasChanges = true;
+    } else {
+      return {
+        error: errorResponse('VALIDATION_ERROR', 'atributos debe ser un array de objetos', 400),
+      } as const;
+    }
+  }
+
   if (Object.prototype.hasOwnProperty.call(body, 'provider_ids')) {
     const rawValue = body.provider_ids;
     if (rawValue == null) {
@@ -225,9 +297,9 @@ export const handler = createHttpHandler<any>(async (request) => {
   const productId = parseProductIdFromPath(path);
 
   if (method === 'GET' && !productId) {
-      const products = await prisma.products.findMany({
-        orderBy: [{ name: 'asc' }],
-      });
+    const products = await prisma.products.findMany({
+      orderBy: [{ name: 'asc' }],
+    });
 
     return successResponse({
       products: products.map((product: any) => normalizeProduct(product as any)),
