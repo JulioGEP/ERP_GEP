@@ -299,6 +299,25 @@ export const handler = createHttpHandler<any>(async (request) => {
   if (method === 'GET' && !productId) {
     const products = await prisma.products.findMany({
       orderBy: [{ name: 'asc' }],
+      select: {
+        id: true,
+        id_pipe: true,
+        id_woo: true,
+        name: true,
+        code: true,
+        category: true,
+        hora_inicio: true,
+        hora_fin: true,
+        type: true,
+        template: true,
+        url_formacion: true,
+        atributos: true,
+        almacen_stock: true,
+        provider_ids: true,
+        active: true,
+        created_at: true,
+        updated_at: true,
+      },
     });
 
     return successResponse({
