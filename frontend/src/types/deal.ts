@@ -40,6 +40,8 @@ export interface DealProduct {
   quantity?: number | null; // decimal en DB, se normaliza a number en API
   price?: number | null;    // decimal en DB, se normaliza a number en API
 
+  almacen_stock?: number | null;
+
   type?: DealProductType;   // enum existente
 
   // NUEVOS (según migración)
