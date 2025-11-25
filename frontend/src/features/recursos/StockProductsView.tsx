@@ -465,7 +465,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
         valor: item.valor.trim(),
         cantidad: Number.isFinite(item.cantidad) ? Math.trunc(item.cantidad) : 0,
       }))
-      .filter((item) => item.nombre || item.valor || item.cantidad);
+      .filter((item) => item.nombre.length > 0 || item.valor.length > 0 || item.cantidad !== 0);
 
     if (normalized.length === 0) {
       updateMutation.mutate(
