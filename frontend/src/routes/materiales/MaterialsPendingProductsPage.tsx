@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Alert, Button, Spinner, Table } from 'react-bootstrap';
 import { fetchProducts } from '../../features/recursos/products.api';
-import { fetchProviders } from '../../features/recursos/providers.api';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
@@ -146,6 +145,27 @@ type SortDirection = 'asc' | 'desc';
 
 type SortConfig = { key: SortableColumn; direction: SortDirection } | null;
 
+function getSortableValue(row: PendingProductRow, key: SortableColumn): string | number | null {
+  switch (key) {
+    case 'budgetId':
+      return row.budgetId ? row.budgetId.toLowerCase() : null;
+    case 'organizationName':
+      return row.organizationName.toLowerCase();
+    case 'supplier':
+      return row.supplier.toLowerCase();
+    case 'productName':
+      return row.productName.toLowerCase();
+    case 'quantity':
+      return row.quantityValue;
+    case 'estimatedDelivery':
+      return row.estimatedDeliveryValue;
+    case 'stock':
+      return null;
+    default:
+      return null;
+  }
+}
+
 function normalizeProductKey(value: string | null | undefined): string | null {
   const normalized = value?.trim().toLowerCase();
   return normalized ? normalized : null;
@@ -199,63 +219,27 @@ export function MaterialsPendingProductsPage({
     queryFn: fetchProducts,
     staleTime: 5 * 60 * 1000,
   });
-  const providersQuery = useQuery({
-    queryKey: ['providers'],
-    queryFn: fetchProviders,
-    staleTime: 5 * 60 * 1000,
-  });
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
 
-  const providerNameMap = useMemo(() => {
-    const map = new Map<number, string>();
-    if (!providersQuery.data) return map;
-
-    for (const provider of providersQuery.data) {
-      const id = Number(provider.provider_id);
-      const name = provider.nombre_fiscal?.trim();
-
-      if (Number.isFinite(id) && name) {
-        map.set(id, name);
-      }
-    }
-
-    return map;
-  }, [providersQuery.data]);
-
-  const productInfoMap = useMemo(() => {
-    const map = new Map<string, { stock: number | null; providerNames: string[] }>();
+  const productStockMap = useMemo(() => {
+    const map = new Map<string, number | null>();
     if (!productsQuery.data) return map;
 
     for (const product of productsQuery.data) {
       const stock = product.almacen_stock ?? null;
-      const providerNames = (product.provider_ids ?? [])
-        .map((id) => providerNameMap.get(Number(id)))
-        .filter((name): name is string => Boolean(name))
-        .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
-
       const idKey = normalizeProductKey(product.id);
-      const idPipeKey = normalizeProductKey(product.id_pipe);
       const codeKey = normalizeProductKey(product.code);
       const nameKey = normalizeProductKey(product.name);
-      const info = { stock, providerNames };
 
-      if (idKey) map.set(idKey, info);
-      if (idPipeKey) map.set(idPipeKey, info);
-      if (codeKey) map.set(codeKey, info);
-      if (nameKey) map.set(nameKey, info);
+      if (idKey) map.set(idKey, stock);
+      if (codeKey) map.set(codeKey, stock);
+      if (nameKey) map.set(nameKey, stock);
     }
 
     return map;
-  }, [productsQuery.data, providerNameMap]);
-
-  const getRowProductInfo = (row: PendingProductRow) => {
-    const key = getRowProductKey(row);
-    if (!key) return { stock: null, providerNames: [] as string[] } as const;
-
-    return productInfoMap.get(key) ?? { stock: null, providerNames: [] };
-  };
+  }, [productsQuery.data]);
 
   const productDemandMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -272,7 +256,7 @@ export function MaterialsPendingProductsPage({
     const key = getRowProductKey(row);
     if (!key) return { stock: null, demand: null, hasEnough: null } as const;
 
-    const { stock } = getRowProductInfo(row);
+    const stock = productStockMap.get(key) ?? null;
     const demand = productDemandMap.get(key) ?? null;
 
     if (stock === null || demand === null) {
@@ -282,14 +266,6 @@ export function MaterialsPendingProductsPage({
     return { stock, demand, hasEnough: stock >= demand } as const;
   };
 
-  const getSupplierLabel = (row: PendingProductRow) => {
-    const { providerNames } = getRowProductInfo(row);
-    if (providerNames.length) return providerNames.join(', ');
-
-    const fallback = row.supplier.trim();
-    return fallback.length ? fallback : '—';
-  };
-
   const sortedProducts = useMemo(() => {
     if (!sortConfig) return pendingProducts;
 
@@ -297,53 +273,14 @@ export function MaterialsPendingProductsPage({
     const rows = [...pendingProducts];
 
     rows.sort((a, b) => {
-      const valueA = (() => {
-        switch (key) {
-          case 'budgetId':
-            return a.budgetId ? a.budgetId.toLowerCase() : null;
-          case 'organizationName':
-            return a.organizationName.toLowerCase();
-          case 'supplier':
-            return getSupplierLabel(a).toLowerCase();
-          case 'productName':
-            return a.productName.toLowerCase();
-          case 'quantity':
-            return a.quantityValue;
-          case 'estimatedDelivery':
-            return a.estimatedDeliveryValue;
-          case 'stock':
-            return getRowStockStatus(a).stock;
-          default:
-            return null;
-        }
-      })();
-
-      const valueB = (() => {
-        switch (key) {
-          case 'budgetId':
-            return b.budgetId ? b.budgetId.toLowerCase() : null;
-          case 'organizationName':
-            return b.organizationName.toLowerCase();
-          case 'supplier':
-            return getSupplierLabel(b).toLowerCase();
-          case 'productName':
-            return b.productName.toLowerCase();
-          case 'quantity':
-            return b.quantityValue;
-          case 'estimatedDelivery':
-            return b.estimatedDeliveryValue;
-          case 'stock':
-            return getRowStockStatus(b).stock;
-          default:
-            return null;
-        }
-      })();
+      const valueA = key === 'stock' ? getRowStockStatus(a).stock : getSortableValue(a, key);
+      const valueB = key === 'stock' ? getRowStockStatus(b).stock : getSortableValue(b, key);
 
       return compareNullableValues(valueA, valueB, direction);
     });
 
     return rows;
-  }, [pendingProducts, sortConfig, productDemandMap, productInfoMap]);
+  }, [pendingProducts, sortConfig]);
 
   const handleSort = (key: SortableColumn) => {
     setSortConfig((current) => {
@@ -491,7 +428,7 @@ export function MaterialsPendingProductsPage({
                         <>
                           <td className="fw-semibold">{row.budgetId ? `#${row.budgetId}` : '—'}</td>
                           <td>{row.organizationName}</td>
-                          <td>{getSupplierLabel(row)}</td>
+                          <td>{row.supplier}</td>
                           <td>{row.productName}</td>
                           <td className={quantityClass}>{row.quantityLabel}</td>
                           <td>{formatQuantity(stock)}</td>
