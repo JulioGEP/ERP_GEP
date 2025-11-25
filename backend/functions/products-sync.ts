@@ -4,7 +4,6 @@ import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { extractProductCatalogAttributes, listAllProducts } from './_shared/pipedrive';
 
-const CATEGORY_FILTER = 'productos';
 const TYPE_FIELD_HASH = '5bad94030bb7917c186f3238fb2cd8f7a91cf30b';
 
 function normalizeText(value: unknown): string | null {
@@ -16,11 +15,6 @@ function normalizeText(value: unknown): string | null {
 function normaliseCategory(value: string | null | undefined) {
   if (!value) return null;
   return value.trim();
-}
-
-function isMatchingCategory(value: string | null | undefined) {
-  if (!value) return false;
-  return value.trim().toLowerCase() === CATEGORY_FILTER;
 }
 
 /* ---------- Tipos auxiliares ---------- */
@@ -54,7 +48,6 @@ export const handler = async (event: any) => {
 
       const attributes = await extractProductCatalogAttributes(raw);
       const categoryLabel = normaliseCategory(attributes.category ?? normalizeText(raw?.category));
-      if (!isMatchingCategory(categoryLabel)) continue;
 
       const typeFromAttributes = normalizeText(attributes.type);
       const typeRawValue = normalizeText((raw as any)?.[TYPE_FIELD_HASH]);
