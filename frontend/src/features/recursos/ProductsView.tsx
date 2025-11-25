@@ -107,6 +107,10 @@ function normalizeText(value: string): string {
     .toLowerCase();
 }
 
+function normalizeCategory(category: Product['category']): string {
+  return (category ?? '').trim().toLowerCase();
+}
+
 type ProductFilterRow = {
   product: Product;
   values: Record<string, string>;
@@ -371,7 +375,10 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     },
   });
 
-  const products = productsQuery.data ?? [];
+  const products = useMemo(
+    () => (productsQuery.data ?? []).filter((product) => normalizeCategory(product.category) === 'formación'),
+    [productsQuery.data],
+  );
   const isLoading = productsQuery.isLoading;
   const isFetching = productsQuery.isFetching && !productsQuery.isLoading;
   const errorMessage = productsQuery.error ? resolveErrorMessage(productsQuery.error) : null;

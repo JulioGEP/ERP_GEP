@@ -44,6 +44,10 @@ function mapProviderNames(providerIds: number[], providers: Provider[]): string[
     .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
 }
 
+function normalizeCategory(category: Product['category']): string {
+  return (category ?? '').trim().toLowerCase();
+}
+
 export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const queryClient = useQueryClient();
   const [draftSelections, setDraftSelections] = useState<Record<string, number[]>>({});
@@ -104,7 +108,10 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const productsError = productsQuery.error || providersQuery.error;
   const errorMessage = productsError ? formatErrorMessage(productsError) : null;
 
-  const filteredProducts = useMemo(() => products, [products]);
+  const filteredProducts = useMemo(
+    () => products.filter((product) => normalizeCategory(product.category) === 'productos'),
+    [products],
+  );
 
   const providerOptions = useMemo(() => {
     return providers
