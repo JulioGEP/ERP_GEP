@@ -176,11 +176,8 @@ type ProductListPage = {
   additional_data?: { pagination?: PaginationInfo };
 };
 
-export async function listAllProducts(params: { limit?: number } = {}) {
-  const pageSizeRaw = params.limit ?? 500;
-  const pageSize = Number.isFinite(pageSizeRaw)
-    ? Math.max(1, Math.min(500, Number(pageSizeRaw)))
-    : 500;
+export async function listAllProducts() {
+  const pageSize = 500;
 
   const items: any[] = [];
   let start = 0;
