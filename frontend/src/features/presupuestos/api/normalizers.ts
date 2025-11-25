@@ -173,23 +173,6 @@ export function normalizeProducts(
             : toNumber(rawProductStock ?? null);
       }
 
-      const rawAlmacenStock =
-        item.almacen_stock ?? item.product?.almacen_stock ?? item.products?.almacen_stock;
-
-      const hasAlmacenStockField =
-        Object.prototype.hasOwnProperty.call(item, 'almacen_stock') ||
-        Object.prototype.hasOwnProperty.call(item.product ?? {}, 'almacen_stock') ||
-        Object.prototype.hasOwnProperty.call(item.products ?? {}, 'almacen_stock');
-
-      if (hasAlmacenStockField) {
-        product.almacen_stock =
-          typeof rawAlmacenStock === 'number'
-            ? rawAlmacenStock
-            : typeof rawAlmacenStock === 'string'
-            ? toNumber(rawAlmacenStock)
-            : toNumber(rawAlmacenStock ?? null);
-      }
-
       products.push(product);
 
       const label = toStringValue(product.name ?? product.code);
