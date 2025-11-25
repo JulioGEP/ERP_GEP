@@ -2,6 +2,25 @@
 
 import type { SessionEstado } from '../api/sessions.types';
 
+export type MaterialDealStatus =
+  | 'Pedidos confirmados'
+  | 'Pendiente de compra a proveedores'
+  | 'En espera proveedor'
+  | 'Mercancía en tránsito'
+  | 'Recepción parcial'
+  | 'Listos para preparar'
+  | 'Enviados al cliente';
+
+export const MATERIAL_DEAL_STATUSES: readonly MaterialDealStatus[] = [
+  'Pedidos confirmados',
+  'Pendiente de compra a proveedores',
+  'En espera proveedor',
+  'Mercancía en tránsito',
+  'Recepción parcial',
+  'Listos para preparar',
+  'Enviados al cliente',
+] as const;
+
 /* ======================
  * Tipos base (DB / API)
  * ====================== */
@@ -92,6 +111,7 @@ export interface DealSummary {
 
   pipeline_label?: string | null;     // label (no ID)
   pipeline_id?: string | null;        // identificador numérico/string del pipeline
+  estado_material?: MaterialDealStatus | null;
   training_address?: string | null;   // <-- schema vigente
 
   sede_label?: string | null;
@@ -139,6 +159,7 @@ export interface DealDetail {
 
   pipeline_label?: string | null;     // label (no ID)
   pipeline_id?: string | null;        // identificador del pipeline
+  estado_material?: MaterialDealStatus | null;
   training_address?: string | null;   // <-- schema vigente
 
   sede_label?: string | null;

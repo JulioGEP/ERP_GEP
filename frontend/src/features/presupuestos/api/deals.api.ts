@@ -6,6 +6,7 @@ import type {
   DealSummarySession,
   DealDocument,
   DealNote,
+  type MaterialDealStatus,
 } from '../../../types/deal';
 import { ApiError, requestJson, toStringValue } from '../../../api/client';
 import { splitFilterValue } from '../../../components/table/filterUtils';
@@ -37,6 +38,7 @@ export type DealEditablePatch = {
   fecha_estimada_entrega_material?: string | null;
   direccion_envio?: string | null;
   forma_pago_material?: string | null;
+  estado_material?: MaterialDealStatus | null;
   comercial?: string | null;
   w_id_variation?: string | null;
   a_fecha?: string | null;

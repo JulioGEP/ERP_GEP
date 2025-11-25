@@ -121,6 +121,7 @@ export function buildDealPayloadFromRecord(record: any) {
     // Metadatos del deal
     title: toNullableString(record.title),
     pipeline_id: toNullableString(record.trainingType) ?? toNullableString(record.pipeline_id),
+    estado_material: toNullableString(record.estado_material ?? record.estadoMaterial),
 
     comercial:
       toNullableString(record.comercial) ??
