@@ -170,7 +170,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       },
       {
         key: 'Reporting/Comparativa',
-        label: 'Comparativa',
+        label: 'Comparativa Formaciones y Servicios',
         path: '/reporting/comparativa',
       },
       {
