@@ -11,7 +11,7 @@
     "generate": "PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT=${PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT:-60000} prisma generate --schema prisma/schema.prisma",
     "migrate:deploy": "node ../scripts/prisma-migrate-retry.js",
     "prisma:prune": "node ../scripts/prisma-prune-binaries.mjs || true",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "npm run generate && tsc -p tsconfig.json",
     "postinstall": "prisma generate --schema prisma/schema.prisma"
   },
   "dependencies": {
