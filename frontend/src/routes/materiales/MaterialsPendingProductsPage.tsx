@@ -236,6 +236,26 @@ export function MaterialsPendingProductsPage({
 
   const selectedList = useMemo(() => Object.values(selectedProducts), [selectedProducts]);
 
+  const handleSelectAll = () => {
+    const allSelected = pendingProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
+      const hasStock = (row.quantityValue ?? 0) > 0;
+
+      acc[row.key] = {
+        row,
+        handling: hasStock ? 'stock' : 'supplier',
+        hasStock,
+      };
+
+      return acc;
+    }, {});
+
+    setSelectedProducts(allSelected);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedProducts({});
+  };
+
   const handleHandlingChange = (key: string, handling: ProductHandling) => {
     setSelectedProducts((current) => {
       const existing = current[key];
@@ -366,7 +386,27 @@ export function MaterialsPendingProductsPage({
           <Table hover className="mb-0">
             <thead>
               <tr>
-                <th scope="col">Seleccionar</th>
+                <th scope="col" className="align-middle">
+                  <div className="d-flex align-items-center gap-2 flex-wrap">
+                    <span>Seleccionar</span>
+                    <Button
+                      size="sm"
+                      variant="outline-primary"
+                      onClick={handleSelectAll}
+                      disabled={!hasRows}
+                    >
+                      Seleccionar todo
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline-secondary"
+                      onClick={handleDeselectAll}
+                      disabled={!selectedList.length}
+                    >
+                      Deseleccionar todo
+                    </Button>
+                  </div>
+                </th>
                 <th scope="col">
                   <button
                     type="button"
