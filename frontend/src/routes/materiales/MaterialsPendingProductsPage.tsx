@@ -460,9 +460,9 @@ export function MaterialsPendingProductsPage({
           <Table hover className="mb-0">
             <thead>
               <tr>
-                <th scope="col" className="align-middle">
-                  <div className="d-flex align-items-center gap-2 flex-wrap">
-                    <span className="fw-semibold">Seleccionar</span>
+                <th scope="col" className="align-middle text-nowrap" style={{ width: '1%' }}>
+                  <div className="d-flex align-items-center gap-1 flex-wrap justify-content-center">
+                    <span className="visually-hidden">Seleccionar</span>
                     <div className="btn-group" role="group" aria-label="Acciones de selección">
                       <Button
                         size="sm"
@@ -567,7 +567,11 @@ export function MaterialsPendingProductsPage({
                     onClick={() => onSelect(row.budget)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <td onClick={(event) => event.stopPropagation()}>
+                    <td
+                      onClick={(event) => event.stopPropagation()}
+                      className="text-center"
+                      style={{ width: '1%' }}
+                    >
                       <Form.Check
                         type="checkbox"
                         checked={Boolean(selectedProducts[row.key])}
