@@ -973,7 +973,7 @@ export default function ComparativaDashboardPage() {
     <div className="p-3">
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
         <div className="d-flex align-items-center gap-2">
-          <h4 className="mb-0">Comparativa</h4>
+          <h4 className="mb-0">Comparativa Formaciones y Servicios</h4>
           <div className="text-muted">Elige fechas y compara</div>
         </div>
       </div>
