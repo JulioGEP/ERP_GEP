@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/StockProductsView.tsx
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product, ProductAttribute } from '../../types/product';
@@ -234,7 +234,10 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     [attributeEditor],
   );
 
-  const handleProviderInputKeyDown = (product: Product, event: KeyboardEvent<HTMLInputElement>) => {
+  const handleProviderInputKeyDown = (
+    product: Product,
+    event: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       setOpenProviderMenuId(product.id);
