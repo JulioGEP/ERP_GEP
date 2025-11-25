@@ -102,9 +102,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const productsError = productsQuery.error || providersQuery.error;
   const errorMessage = productsError ? formatErrorMessage(productsError) : null;
 
-  const filteredProducts = useMemo(() => {
-    return products.filter((product) => (product.category ?? '').toLowerCase() === 'productos');
-  }, [products]);
+  const filteredProducts = useMemo(() => products, [products]);
 
   const providerOptions = useMemo(() => {
     return providers
@@ -185,7 +183,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
               ) : filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-5 text-center text-muted">
-                    No hay productos de la categoría "productos". Pulsa "Actualizar Stock" para sincronizar.
+                    No hay productos disponibles. Pulsa "Actualizar Stock" para sincronizar.
                   </td>
                 </tr>
               ) : (
