@@ -21,11 +21,13 @@ type PendingProductRow = {
   budget: DealSummary;
   budgetId: string | null;
   organizationName: string;
+  idPipe: string | null;
   productName: string;
   quantityLabel: string;
   quantityValue: number | null;
   stockLabel: string;
   stockValue: number | null;
+  missingProductStockField: boolean;
   supplier: string;
   estimatedDelivery: string;
   estimatedDeliveryValue: number | null;
@@ -165,11 +167,13 @@ function buildPendingProducts(budgets: DealSummary[]): PendingProductRow[] {
       budget,
       budgetId,
       organizationName,
+      idPipe: product?.id_pipe ?? product?.code ?? null,
       productName: getProductName(product),
       quantityLabel: formatQuantity(product?.quantity),
       quantityValue: getQuantityValue(product?.quantity),
-      stockLabel: formatQuantity(product?.almacen_stock),
-      stockValue: getQuantityValue(product?.almacen_stock),
+      stockLabel: formatQuantity(product?.product_stock ?? product?.almacen_stock),
+      stockValue: getQuantityValue(product?.product_stock ?? product?.almacen_stock),
+      missingProductStockField: !(product && Object.prototype.hasOwnProperty.call(product, 'product_stock')),
       supplier: getSupplierLabel(budget),
       estimatedDelivery,
       estimatedDeliveryValue: getEstimatedDeliveryTimestamp(getEstimatedDeliveryValue(budget)),
@@ -261,6 +265,43 @@ export function MaterialsPendingProductsPage({
   const [logisticsCcEmails, setLogisticsCcEmails] = useState<string[]>([defaultCommercialEmail]);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
+
+  const quantityTotalsByPipeId = useMemo(() => {
+    const totals = new Map<string, number>();
+
+    pendingProducts.forEach((row) => {
+      const idPipe = row.idPipe?.trim();
+      const quantity = row.quantityValue ?? 0;
+      if (!idPipe) return;
+
+      const current = totals.get(idPipe) ?? 0;
+      totals.set(idPipe, current + quantity);
+    });
+
+    return totals;
+  }, [pendingProducts]);
+
+  const hasMissingProductStock = useMemo(
+    () => pendingProducts.some((row) => row.missingProductStockField),
+    [pendingProducts],
+  );
+
+  if (hasMissingProductStock) {
+    throw new Error('El endpoint de materiales pendientes no devuelve product_stock.');
+  }
+
+  const getTotalQuantityForRow = (row: PendingProductRow) => {
+    if (row.idPipe) {
+      return quantityTotalsByPipeId.get(row.idPipe) ?? row.quantityValue ?? 0;
+    }
+
+    return row.quantityValue ?? 0;
+  };
+
+  const hasSufficientStock = (row: PendingProductRow) => {
+    if (row.stockValue == null) return false;
+    return getTotalQuantityForRow(row) <= row.stockValue;
+  };
 
   const getDefaultStockUsage = (row: PendingProductRow) => {
     const stockValue = row.stockValue ?? 0;
@@ -629,6 +670,7 @@ export function MaterialsPendingProductsPage({
                     Producto {getSortIndicator(sortConfig, 'productName')}
                   </button>
                 </th>
+                <th scope="col">Stock</th>
                 <th scope="col">
                   <button
                     type="button"
@@ -652,13 +694,13 @@ export function MaterialsPendingProductsPage({
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-4">
+                  <td colSpan={8} className="text-center py-4">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : !hasRows ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-4 text-muted">
+                  <td colSpan={8} className="text-center py-4 text-muted">
                     No hay productos pendientes del embudo Material.
                   </td>
                 </tr>
@@ -687,7 +729,10 @@ export function MaterialsPendingProductsPage({
                     <td>{row.organizationName}</td>
                     <td>{row.supplier}</td>
                     <td>{row.productName}</td>
-                    <td>{row.quantityLabel}</td>
+                    <td>{row.stockLabel}</td>
+                    <td className={hasSufficientStock(row) ? 'text-success fw-semibold' : 'text-danger fw-semibold'}>
+                      {row.quantityLabel}
+                    </td>
                     <td>{row.estimatedDelivery}</td>
                   </tr>
                 ))
@@ -733,12 +778,14 @@ export function MaterialsPendingProductsPage({
 
                   return (
                     <tr key={row.key}>
-                      <td>
-                        <div className="fw-semibold">{row.productName}</div>
-                        <div className="text-muted small">Presupuesto #{row.budgetId ?? '—'}</div>
-                      </td>
-                    <td>{row.supplier}</td>
-                    <td>{row.quantityLabel}</td>
+                    <td>
+                      <div className="fw-semibold">{row.productName}</div>
+                      <div className="text-muted small">Presupuesto #{row.budgetId ?? '—'}</div>
+                    </td>
+                  <td>{row.supplier}</td>
+                    <td className={hasSufficientStock(row) ? 'text-success fw-semibold' : 'text-danger fw-semibold'}>
+                      {row.quantityLabel}
+                    </td>
                     <td>{row.stockLabel}</td>
                     <td>
                       <div className="d-flex flex-column gap-2">

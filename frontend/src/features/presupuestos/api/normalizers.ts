@@ -113,6 +113,7 @@ export function normalizeProducts(
       const product: DealProduct = {
         id: item.id ?? null,
         deal_id: item.deal_id ?? null,
+        id_pipe: toStringValue(item.id_pipe ?? item.product?.id_pipe ?? item.products?.id_pipe) ?? null,
         name: toStringValue(item.name) ?? null,
         code: toStringValue(item.code) ?? null,
         quantity: toNumber(item.quantity),
@@ -124,6 +125,15 @@ export function normalizeProducts(
         categoryLabel: toStringValue(item.categoryLabel),
         template: toStringValue(item.template) ?? null,
       };
+
+      if (hasProductStockField) {
+        product.product_stock =
+          typeof rawProductStock === 'number'
+            ? rawProductStock
+            : typeof rawProductStock === 'string'
+            ? toNumber(rawProductStock)
+            : toNumber(rawProductStock ?? null);
+      }
 
       products.push(product);
 

@@ -604,6 +604,54 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
   return out as T;
 }
 
+async function buildProductStockMap(
+  prisma: PrismaClient,
+  deals: Array<{ deal_products?: Array<{ code?: string | null }> }>,
+) {
+  const productPipeIds = new Set<string>();
+
+  for (const deal of deals) {
+    for (const product of deal.deal_products ?? []) {
+      const productId = normalizeProductId(product?.code);
+      if (productId) {
+        productPipeIds.add(productId);
+      }
+    }
+  }
+
+  if (!productPipeIds.size) return new Map<string, number | null>();
+
+  const rows = await prisma.products.findMany({
+    where: { id_pipe: { in: Array.from(productPipeIds) } },
+    select: { id_pipe: true, almacen_stock: true },
+  });
+
+  return new Map<string, number | null>(
+    rows.map((row) => [String(row.id_pipe), row.almacen_stock == null ? null : Number(row.almacen_stock)]),
+  );
+}
+
+function attachProductStockToDeal<T extends Record<string, any>>(
+  deal: T | null,
+  stockMap: Map<string, number | null>,
+): T | null {
+  if (!deal || !Array.isArray((deal as any).products)) return deal;
+
+  const enrichedProducts = (deal as any).products.map((product: any) => {
+    const pipeId = normalizeProductId(product?.code ?? product?.id_pipe ?? null);
+    const stock = pipeId ? stockMap.get(pipeId) ?? null : null;
+
+    return {
+      ...product,
+      id_pipe: pipeId ?? product?.id_pipe ?? null,
+      product_stock: stock,
+      almacen_stock: product?.almacen_stock ?? stock ?? null,
+    };
+  });
+
+  return { ...(deal as any), products: enrichedProducts } as T;
+}
+
 function toNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") {
@@ -1017,7 +1065,8 @@ export const handler = async (event: any) => {
             });
           }
         }
-        const deal = mapDealForApi(dealRaw);
+        const stockMap = await buildProductStockMap(prisma, dealRaw ? [dealRaw] : []);
+        const deal = attachProductStockToDeal(mapDealForApi(dealRaw), stockMap);
 
         try {
           const auditUserId = await resolveUserIdFromEvent(event, prisma);
@@ -1116,7 +1165,11 @@ export const handler = async (event: any) => {
         };
       }
 
-      const deal = mapDealForApi(dealWithTemplates);
+      const stockMap = await buildProductStockMap(
+        prisma,
+        dealWithTemplates ? [dealWithTemplates] : [],
+      );
+      const deal = attachProductStockToDeal(mapDealForApi(dealWithTemplates), stockMap);
       const sedeLabels = parseSedeLabels(dealRaw?.sede_label ?? null);
       const dealProducts = (dealWithTemplates.deal_products ?? []).map((product: any) => ({
         name: typeof product?.name === "string" ? product.name : null,
@@ -1450,7 +1503,8 @@ export const handler = async (event: any) => {
       });
 
       const normalizedUpdated = normalizeDealRelations(updatedRaw);
-      const deal = mapDealForApi(normalizedUpdated);
+      const stockMap = await buildProductStockMap(prisma, updatedRaw ? [updatedRaw] : []);
+      const deal = attachProductStockToDeal(mapDealForApi(normalizedUpdated), stockMap);
       const dealWithPipelineLabel = deal
         ? await ensureDealPipelineLabel(deal, {
             pipelineId: updatedRaw?.pipeline_id ?? null,
@@ -1539,8 +1593,13 @@ export const handler = async (event: any) => {
         orderBy: { created_at: "desc" },
       });
 
+      const stockMap = await buildProductStockMap(prisma, rowsRaw as any[]);
+
       const deals = rowsRaw.map((row: any) => {
-        const mapped = mapDealForApi(normalizeDealRelations(row));
+        const mapped = attachProductStockToDeal(
+          mapDealForApi(normalizeDealRelations(row)),
+          stockMap,
+        );
         if (!mapped) return mapped;
 
         const studentsCountRaw = row?._count?.alumnos;
@@ -1692,7 +1751,11 @@ export const handler = async (event: any) => {
 
       const rowsRaw = await prisma.deals.findMany(query);
 
-      const deals = rowsRaw.map((row: any) => mapDealForApi(normalizeDealRelations(row)));
+      const stockMap = await buildProductStockMap(prisma, rowsRaw as any[]);
+
+      const deals = rowsRaw.map((row: any) =>
+        attachProductStockToDeal(mapDealForApi(normalizeDealRelations(row)), stockMap),
+      );
       return successResponse({ deals });
     }
 
@@ -1755,7 +1818,11 @@ export const handler = async (event: any) => {
         orderBy: { created_at: "desc" },
       });
 
-      const deals = rowsRaw.map((r: any) => mapDealForApi(normalizeDealRelations(r)));
+      const stockMap = await buildProductStockMap(prisma, rowsRaw as any[]);
+
+      const deals = rowsRaw.map((r: any) =>
+        attachProductStockToDeal(mapDealForApi(normalizeDealRelations(r)), stockMap),
+      );
       return successResponse({ deals });
     }
 
@@ -1842,9 +1909,14 @@ export const handler = async (event: any) => {
         orderBy: { created_at: "desc" },
       });
 
+      const stockMap = await buildProductStockMap(prisma, rowsRaw as any[]);
+
       const dealsRaw = await Promise.all(
         rowsRaw.map(async (row: any) => {
-          const mapped = mapDealForApi(normalizeDealRelations(row));
+          const mapped = attachProductStockToDeal(
+            mapDealForApi(normalizeDealRelations(row)),
+            stockMap,
+          );
           if (!mapped) {
             return null;
           }
