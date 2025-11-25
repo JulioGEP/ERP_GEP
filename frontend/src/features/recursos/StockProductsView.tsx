@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/StockProductsView.tsx
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Alert, Badge, Button, Form, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product } from '../../types/product';
@@ -47,6 +47,8 @@ function mapProviderNames(providerIds: number[], providers: Provider[]): string[
 export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const queryClient = useQueryClient();
   const [draftSelections, setDraftSelections] = useState<Record<string, number[]>>({});
+  const [openProviderMenuId, setOpenProviderMenuId] = useState<string | null>(null);
+  const providerDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const productsQuery = useQuery<Product[], ApiError>({
     queryKey: ['products'],
@@ -113,24 +115,85 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
       .map((provider) => ({ value: Number(provider.provider_id), label: provider.nombre_fiscal }));
   }, [providers]);
 
-  const handleProviderChange = (product: Product, event: ChangeEvent<HTMLSelectElement>) => {
-    const selectedValues = Array.from(event.target.selectedOptions)
-      .map((option) => Number(option.value))
-      .filter((value) => Number.isInteger(value));
+  const handleProviderBlur = useCallback(
+    (product: Product) => {
+      const selection = draftSelections[product.id];
+      if (!selection) return;
+      updateMutation.mutate({ id: product.id, providerIds: selection });
+    },
+    [draftSelections, updateMutation],
+  );
 
-    setDraftSelections((prev) => ({ ...prev, [product.id]: selectedValues }));
+  const handleProviderToggle = (product: Product, providerId: number) => {
+    const currentSelection = draftSelections[product.id] ?? product.provider_ids;
+    const nextSelection = currentSelection.includes(providerId)
+      ? currentSelection.filter((id) => id !== providerId)
+      : [...currentSelection, providerId];
+
+    setDraftSelections((prev) => ({ ...prev, [product.id]: nextSelection }));
   };
 
-  const handleProviderBlur = (product: Product) => {
-    const selection = draftSelections[product.id];
-    if (!selection) return;
-    updateMutation.mutate({ id: product.id, providerIds: selection });
-  };
+  const closeProviderMenu = useCallback(
+    (productId?: string) => {
+      const targetId = productId ?? openProviderMenuId;
+      if (!targetId) return;
+
+      const targetProduct = filteredProducts.find((item) => item.id === targetId);
+      if (targetProduct) {
+        handleProviderBlur(targetProduct);
+      }
+      setOpenProviderMenuId(null);
+    },
+    [filteredProducts, handleProviderBlur, openProviderMenuId],
+  );
+
+  useEffect(() => {
+    if (!openProviderMenuId) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const container = providerDropdownRefs.current[openProviderMenuId];
+      if (container && !container.contains(event.target as Node)) {
+        closeProviderMenu(openProviderMenuId);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeProviderMenu(openProviderMenuId);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [closeProviderMenu, openProviderMenuId]);
 
   const subtitle = useMemo(
     () => 'Consulta el stock de productos importados desde Pipedrive y asigna proveedores.',
     [],
   );
+
+  const handleProviderInputKeyDown = (product: Product, event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setOpenProviderMenuId(product.id);
+    }
+
+    if (event.key === 'Escape') {
+      closeProviderMenu(product.id);
+    }
+  };
+
+  const handleOpenProviderMenu = (product: Product) => {
+    if (openProviderMenuId && openProviderMenuId !== product.id) {
+      closeProviderMenu(openProviderMenuId);
+    }
+    setOpenProviderMenuId(product.id);
+  };
 
   return (
     <div className="d-grid gap-4">
@@ -200,22 +263,72 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                       <td>{product.code || '—'}</td>
                       <td>{product.category || '—'}</td>
                       <td>
-                        <div className="d-grid gap-2">
-                          <Form.Select
-                            multiple
+                        <div
+                          className="d-grid gap-2 position-relative"
+                          ref={(node) => {
+                            providerDropdownRefs.current[product.id] = node;
+                          }}
+                        >
+                          <Form.Control
+                            type="text"
+                            value={providerNames.join(', ')}
+                            placeholder="Selecciona uno o varios proveedores"
+                            readOnly
                             size="sm"
-                            value={providerIds.map((value) => String(value))}
-                            onChange={(event) => handleProviderChange(product, event)}
-                            onBlur={() => handleProviderBlur(product)}
+                            onClick={() => handleOpenProviderMenu(product)}
+                            onFocus={() => handleOpenProviderMenu(product)}
+                            onKeyDown={(event) => handleProviderInputKeyDown(product, event)}
                             disabled={updateMutation.isPending}
+                            aria-haspopup="listbox"
+                            aria-expanded={openProviderMenuId === product.id}
+                            role="combobox"
                             aria-label={`Seleccionar proveedores para ${product.name ?? product.code ?? 'producto'}`}
-                          >
-                            {providerOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </Form.Select>
+                          />
+                          {openProviderMenuId === product.id ? (
+                            <div
+                              className="dropdown-menu show w-100 p-3 shadow"
+                              role="listbox"
+                              aria-multiselectable="true"
+                              style={{ maxHeight: 240, overflowY: 'auto' }}
+                            >
+                              {providerOptions.map((option, index) => {
+                                const isSelected = providerIds.includes(option.value);
+                                const optionId = `product-provider-${product.id}-${option.value}`;
+                                return (
+                                  <Form.Check
+                                    key={option.value}
+                                    id={optionId}
+                                    type="checkbox"
+                                    label={option.label}
+                                    checked={isSelected}
+                                    onChange={() => handleProviderToggle(product, option.value)}
+                                    className={index !== providerOptions.length - 1 ? 'mb-2' : undefined}
+                                    disabled={updateMutation.isPending}
+                                    role="option"
+                                    aria-selected={isSelected}
+                                  />
+                                );
+                              })}
+                              <div className="mt-3 d-flex gap-2 justify-content-end">
+                                <Button
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  onClick={() => setOpenProviderMenuId(null)}
+                                  disabled={updateMutation.isPending}
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => closeProviderMenu(product.id)}
+                                  disabled={updateMutation.isPending}
+                                >
+                                  Guardar selección
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="d-flex flex-wrap gap-2">
                             {providerNames.length ? (
                               providerNames.map((name) => (
