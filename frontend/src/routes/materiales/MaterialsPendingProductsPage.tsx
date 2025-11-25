@@ -248,8 +248,9 @@ export function MaterialsPendingProductsPage({
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [nextOrderNumber, setNextOrderNumber] = useState(101);
   const [currentOrderNumber, setCurrentOrderNumber] = useState<number | null>(null);
+  const defaultCommercialEmail = 'sales@gepgroup.es';
   const [ccInput, setCcInput] = useState('');
-  const [extraCc, setExtraCc] = useState<string[]>([]);
+  const [ccEmails, setCcEmails] = useState<string[]>([defaultCommercialEmail]);
   const [toEmail, setToEmail] = useState('');
   const [mailSent, setMailSent] = useState(false);
   const hasError = !!error;
@@ -348,7 +349,7 @@ export function MaterialsPendingProductsPage({
     setShowOrderModal(true);
     setMailSent(false);
     setCcInput('');
-    setExtraCc([]);
+    setCcEmails([defaultCommercialEmail]);
   };
 
   const closeOrderModal = () => {
@@ -376,11 +377,13 @@ export function MaterialsPendingProductsPage({
   const handleAddCc = () => {
     const trimmed = ccInput.trim();
     if (!trimmed) return;
-    setExtraCc((current) => [...current, trimmed]);
+    setCcEmails((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
     setCcInput('');
   };
 
-  const defaultCommercialEmail = 'sales@gepgroup.es';
+  const handleRemoveCc = (cc: string) => {
+    setCcEmails((current) => current.filter((email) => email !== cc));
+  };
 
   const supplierName = selectedList[0]?.row.supplier || 'irudek';
 
@@ -388,7 +391,7 @@ export function MaterialsPendingProductsPage({
     .map(({ row }) => `- ${row.productName} ${row.quantityLabel}`)
     .join('\n');
 
-  const emailBody = `Hola ${supplierContactName}\n\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${productLines}\n\nDime si tienes disponibilidad y Por favor, indícanos fechas estimadas de entrega.\n\nMuchas gracias de antemano.\n\nEquipo de GEP Group.`;
+  const emailBody = `Hola ${supplierContactName}\n\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${productLines}\n\nDime si tienes disponibilidad y por favor, indícanos fechas estimadas de entrega.\n\nMuchas gracias de antemano.\n\nEquipo de GEP Group.`;
 
   const sortedProducts = useMemo(() => {
     if (!sortConfig) return pendingProducts;
@@ -676,7 +679,7 @@ export function MaterialsPendingProductsPage({
 
       <Modal show={showEmailModal} onHide={closeEmailModal} size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Simular envío de email</Modal.Title>
+          <Modal.Title>Envío de email a proveedores</Modal.Title>
         </Modal.Header>
         <Modal.Body className="d-grid gap-3">
           <Form.Group>
@@ -692,10 +695,18 @@ export function MaterialsPendingProductsPage({
           <Form.Group>
             <Form.Label>CC</Form.Label>
             <div className="d-flex flex-wrap gap-2 mb-2">
-              <Badge bg="secondary">{defaultCommercialEmail}</Badge>
-              {extraCc.map((cc) => (
-                <Badge bg="info" key={cc}>
-                  {cc}
+              {ccEmails.map((cc) => (
+                <Badge bg="secondary" key={cc} className="d-inline-flex align-items-center gap-2">
+                  <span>{cc}</span>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="p-0 text-white"
+                    onClick={() => handleRemoveCc(cc)}
+                    aria-label={`Eliminar ${cc} de CC`}
+                  >
+                    ×
+                  </Button>
                 </Badge>
               ))}
             </div>
