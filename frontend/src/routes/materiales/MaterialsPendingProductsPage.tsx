@@ -230,10 +230,12 @@ export function MaterialsPendingProductsPage({
     for (const product of productsQuery.data) {
       const stock = product.almacen_stock ?? null;
       const idKey = normalizeProductKey(product.id);
+      const idPipeKey = normalizeProductKey(product.id_pipe);
       const codeKey = normalizeProductKey(product.code);
       const nameKey = normalizeProductKey(product.name);
 
       if (idKey) map.set(idKey, stock);
+      if (idPipeKey) map.set(idPipeKey, stock);
       if (codeKey) map.set(codeKey, stock);
       if (nameKey) map.set(nameKey, stock);
     }
