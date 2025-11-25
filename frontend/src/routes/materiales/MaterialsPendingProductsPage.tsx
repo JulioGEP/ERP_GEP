@@ -37,6 +37,7 @@ type SelectedProduct = {
   row: PendingProductRow;
   handling: ProductHandling;
   hasStock: boolean;
+  stockUsage: number;
 };
 
 type IconProps = SVGProps<SVGSVGElement>;
@@ -253,16 +254,24 @@ export function MaterialsPendingProductsPage({
   const [ccEmails, setCcEmails] = useState<string[]>([defaultCommercialEmail]);
   const [toEmail, setToEmail] = useState('');
   const [mailSent, setMailSent] = useState(false);
+  const defaultLogisticsEmail = 'logistica@gepgroup.es';
+  const [logisticsToInput, setLogisticsToInput] = useState('');
+  const [logisticsToEmails, setLogisticsToEmails] = useState<string[]>([defaultLogisticsEmail]);
+  const [logisticsCcInput, setLogisticsCcInput] = useState('');
+  const [logisticsCcEmails, setLogisticsCcEmails] = useState<string[]>([defaultCommercialEmail]);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
+
+  const getDefaultStockUsage = (row: PendingProductRow) => {
+    const stockValue = row.stockValue ?? 0;
+    const quantityValue = row.quantityValue ?? 0;
+    return Math.max(0, Math.min(stockValue, quantityValue));
+  };
 
   const toggleProductSelection = (row: PendingProductRow) => {
     setSelectedProducts((current) => {
       const { key } = row;
-      const hasStock =
-        row.stockValue != null && row.quantityValue != null
-          ? row.stockValue >= row.quantityValue
-          : (row.stockValue ?? 0) > 0;
+      const hasStock = (row.stockValue ?? 0) > 0;
 
       if (current[key]) {
         const updated = { ...current };
@@ -276,6 +285,7 @@ export function MaterialsPendingProductsPage({
           row,
           handling: hasStock ? 'stock' : 'supplier',
           hasStock,
+          stockUsage: hasStock ? getDefaultStockUsage(row) : 0,
         },
       };
     });
@@ -313,12 +323,13 @@ export function MaterialsPendingProductsPage({
 
   const handleSelectAll = () => {
     const allSelected = pendingProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
-      const hasStock = (row.quantityValue ?? 0) > 0;
+      const hasStock = (row.stockValue ?? 0) > 0;
 
       acc[row.key] = {
         row,
         handling: hasStock ? 'stock' : 'supplier',
         hasStock,
+        stockUsage: hasStock ? getDefaultStockUsage(row) : 0,
       };
 
       return acc;
@@ -336,9 +347,33 @@ export function MaterialsPendingProductsPage({
       const existing = current[key];
       if (!existing) return current;
 
+      const nextStockUsage =
+        handling === 'stock'
+          ? existing.stockUsage || getDefaultStockUsage(existing.row)
+          : 0;
+
       return {
         ...current,
-        [key]: { ...existing, handling },
+        [key]: { ...existing, handling, stockUsage: nextStockUsage },
+      };
+    });
+  };
+
+  const handleStockUsageChange = (key: string, value: number) => {
+    setSelectedProducts((current) => {
+      const existing = current[key];
+      if (!existing) return current;
+
+      const maxStock = Math.min(existing.row.stockValue ?? 0, existing.row.quantityValue ?? 0);
+      const sanitizedValue = Number.isFinite(value) ? Math.max(0, Math.min(maxStock, value)) : 0;
+
+      return {
+        ...current,
+        [key]: {
+          ...existing,
+          handling: 'stock',
+          stockUsage: sanitizedValue,
+        },
       };
     });
   };
@@ -350,6 +385,10 @@ export function MaterialsPendingProductsPage({
     setMailSent(false);
     setCcInput('');
     setCcEmails([defaultCommercialEmail]);
+    setLogisticsToInput('');
+    setLogisticsToEmails([defaultLogisticsEmail]);
+    setLogisticsCcInput('');
+    setLogisticsCcEmails([defaultCommercialEmail]);
   };
 
   const closeOrderModal = () => {
@@ -385,13 +424,75 @@ export function MaterialsPendingProductsPage({
     setCcEmails((current) => current.filter((email) => email !== cc));
   };
 
+  const handleAddLogisticsTo = () => {
+    const trimmed = logisticsToInput.trim();
+    if (!trimmed) return;
+    setLogisticsToEmails((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+    setLogisticsToInput('');
+  };
+
+  const handleRemoveLogisticsTo = (email: string) => {
+    setLogisticsToEmails((current) => current.filter((item) => item !== email));
+  };
+
+  const handleAddLogisticsCc = () => {
+    const trimmed = logisticsCcInput.trim();
+    if (!trimmed) return;
+    setLogisticsCcEmails((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+    setLogisticsCcInput('');
+  };
+
+  const handleRemoveLogisticsCc = (email: string) => {
+    setLogisticsCcEmails((current) => current.filter((item) => item !== email));
+  };
+
   const supplierName = selectedList[0]?.row.supplier || 'irudek';
 
-  const productLines = selectedList
-    .map(({ row }) => `- ${row.productName} ${row.quantityLabel}`)
+  const productRequests = selectedList.map(({ row, handling, stockUsage }) => {
+    const totalQuantity = row.quantityValue ?? 0;
+    const usedStock = handling === 'stock' ? stockUsage ?? 0 : 0;
+    const supplierQuantity = Math.max(totalQuantity - usedStock, 0);
+
+    return {
+      productName: row.productName,
+      supplierQuantity,
+      stockQuantity: usedStock,
+      totalLabel: row.quantityLabel,
+    };
+  });
+
+  const supplierProductLines = productRequests
+    .filter((product) => product.supplierQuantity > 0)
+    .map((product) => `- ${product.productName} ${formatQuantity(product.supplierQuantity)}`)
     .join('\n');
 
-  const emailBody = `Hola ${supplierContactName}\n\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${productLines}\n\nDime si tienes disponibilidad y por favor, indícanos fechas estimadas de entrega.\n\nMuchas gracias de antemano.\n\nEquipo de GEP Group.`;
+  const emailBody = `Hola ${supplierContactName}\n\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${
+    supplierProductLines || '- Sin productos para pedir (se cubrirá con stock disponible).'
+  }\n\nDime si tienes disponibilidad y por favor, indícanos fechas estimadas de entrega.\n\nMuchas gracias de antemano.\n\nEquipo de GEP Group.`;
+
+  const hasStockUsage = productRequests.some((product) => product.stockQuantity > 0);
+
+  const logisticsProductLines = productRequests
+    .filter((product) => product.stockQuantity > 0)
+    .map((product) => `- ${product.productName} ${formatQuantity(product.stockQuantity)}`)
+    .join('\n');
+
+  const contactFullName = [primaryBudget?.person?.first_name, primaryBudget?.person?.last_name]
+    .filter(Boolean)
+    .join(' ');
+
+  const budgetIdForSubject = primaryBudget?.deal_id ?? primaryBudget?.dealId ?? selectedList[0]?.row.budgetId ?? '—';
+  const logisticsSubject = `Uso de stock para prespuesto ${budgetIdForSubject}`;
+
+  const logisticsEmailBody = `Hola Logistica\n\nEl comercial asignado de este presupuesto es "${
+    primaryBudget?.comercial ?? '—'
+  }"\nNecesito utilizar inventario para enviar a cliente. \n${
+    logisticsProductLines || '- Sin productos para descontar de stock.'
+  }\n\nTenemos que enviarlos a la dirección ${
+    primaryBudget?.direccion_envio ?? '—'
+  } a nombre de "${contactFullName || '—'}" de la empresa "${
+    primaryBudget?.organization?.name ?? '—'
+  }"\n\nEl telefono de contacto es "${primaryBudget?.person?.phone ?? '—'}"\n\n¡Gracias!`;
 
   const sortedProducts = useMemo(() => {
     if (!sortConfig) return pendingProducts;
@@ -624,12 +725,18 @@ export function MaterialsPendingProductsPage({
                 </tr>
               </thead>
               <tbody>
-                {selectedList.map(({ row, handling, hasStock }) => (
-                  <tr key={row.key}>
-                    <td>
-                      <div className="fw-semibold">{row.productName}</div>
-                      <div className="text-muted small">Presupuesto #{row.budgetId ?? '—'}</div>
-                    </td>
+                {selectedList.map(({ row, handling, hasStock, stockUsage }) => {
+                  const remainingForSupplier = Math.max(
+                    (row.quantityValue ?? 0) - (handling === 'stock' ? stockUsage : 0),
+                    0,
+                  );
+
+                  return (
+                    <tr key={row.key}>
+                      <td>
+                        <div className="fw-semibold">{row.productName}</div>
+                        <div className="text-muted small">Presupuesto #{row.budgetId ?? '—'}</div>
+                      </td>
                     <td>{row.supplier}</td>
                     <td>{row.quantityLabel}</td>
                     <td>{row.stockLabel}</td>
@@ -644,6 +751,30 @@ export function MaterialsPendingProductsPage({
                           checked={handling === 'stock' && hasStock}
                           onChange={() => handleHandlingChange(row.key, 'stock')}
                         />
+                        {hasStock ? (
+                          <div className="d-flex flex-column gap-1 ps-3">
+                            <div className="d-flex align-items-center gap-2 flex-wrap">
+                              <Form.Label className="mb-0">Unidades de stock a usar</Form.Label>
+                              <Form.Control
+                                type="number"
+                                min={0}
+                                max={row.stockValue ?? undefined}
+                                value={handling === 'stock' ? stockUsage : 0}
+                                disabled={handling !== 'stock'}
+                                onChange={(event) =>
+                                  handleStockUsageChange(row.key, Number(event.target.value))
+                                }
+                                style={{ maxWidth: 160 }}
+                              />
+                              <span className="small text-muted">
+                                Máx: {formatQuantity(Math.min(row.stockValue ?? 0, row.quantityValue ?? 0))}
+                              </span>
+                            </div>
+                            <div className="small text-muted">
+                              Se pedirán {formatQuantity(remainingForSupplier)} unidades al proveedor.
+                            </div>
+                          </div>
+                        ) : null}
                         <Form.Check
                           type="radio"
                           id={`${row.key}-supplier`}
@@ -656,7 +787,8 @@ export function MaterialsPendingProductsPage({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </Table>
           </div>
@@ -676,75 +808,151 @@ export function MaterialsPendingProductsPage({
 
       <Modal show={showEmailModal} onHide={closeEmailModal} size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Envío de email a proveedores</Modal.Title>
+          <Modal.Title>Envío de emails</Modal.Title>
         </Modal.Header>
-        <Modal.Body className="d-grid gap-3">
-          <Form.Group>
-            <Form.Label>Para</Form.Label>
-            <Form.Control
-              type="email"
-              value={toEmail}
-              placeholder="Correo de contacto del proveedor"
-              onChange={(event) => setToEmail(event.target.value)}
-            />
-          </Form.Group>
-
-          <Form.Group>
-            <Form.Label>CC</Form.Label>
-            <div className="d-flex flex-wrap gap-2 mb-2">
-              {ccEmails.map((cc) => (
-                <Badge bg="secondary" key={cc} className="d-inline-flex align-items-center gap-2">
-                  <span>{cc}</span>
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="p-0 text-white"
-                    onClick={() => handleRemoveCc(cc)}
-                    aria-label={`Eliminar ${cc} de CC`}
-                  >
-                    ×
-                  </Button>
-                </Badge>
-              ))}
-            </div>
-            <div className="d-flex gap-2">
+        <Modal.Body className="d-grid gap-4">
+          <div className="d-grid gap-3">
+            <h5 className="mb-0">Email a proveedor</h5>
+            <Form.Group>
+              <Form.Label>Para</Form.Label>
               <Form.Control
                 type="email"
-                value={ccInput}
-                placeholder="Añadir correo en copia"
-                onChange={(event) => setCcInput(event.target.value)}
+                value={toEmail}
+                placeholder="Correo de contacto del proveedor"
+                onChange={(event) => setToEmail(event.target.value)}
               />
-              <Button variant="outline-primary" onClick={handleAddCc}>
-                Añadir CC
-              </Button>
+            </Form.Group>
+
+            <Form.Group>
+              <Form.Label>CC</Form.Label>
+              <div className="d-flex flex-wrap gap-2 mb-2">
+                {ccEmails.map((cc) => (
+                  <Badge bg="secondary" key={cc} className="d-inline-flex align-items-center gap-2">
+                    <span>{cc}</span>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="p-0 text-white"
+                      onClick={() => handleRemoveCc(cc)}
+                      aria-label={`Eliminar ${cc} de CC`}
+                    >
+                      ×
+                    </Button>
+                  </Badge>
+                ))}
+              </div>
+              <div className="d-flex gap-2">
+                <Form.Control
+                  type="email"
+                  value={ccInput}
+                  placeholder="Añadir correo en copia"
+                  onChange={(event) => setCcInput(event.target.value)}
+                />
+                <Button variant="outline-primary" onClick={handleAddCc}>
+                  Añadir CC
+                </Button>
+              </div>
+            </Form.Group>
+
+            <Form.Group>
+              <Form.Label>Asunto</Form.Label>
+              <Form.Control
+                type="text"
+                readOnly
+                value={`Nuevo Pedido de GEP Group con Nº ${currentOrderNumber ?? nextOrderNumber} para ${supplierName}`}
+              />
+            </Form.Group>
+
+            <Form.Group>
+              <Form.Label>Mensaje</Form.Label>
+              <Form.Control as="textarea" rows={6} readOnly value={emailBody} />
+            </Form.Group>
+          </div>
+
+          {hasStockUsage ? (
+            <div className="d-grid gap-3 border-top pt-3">
+              <h5 className="mb-0">Email a Logística</h5>
+
+              <Form.Group>
+                <Form.Label>Para</Form.Label>
+                <div className="d-flex flex-wrap gap-2 mb-2">
+                  {logisticsToEmails.map((email) => (
+                    <Badge bg="secondary" key={email} className="d-inline-flex align-items-center gap-2">
+                      <span>{email}</span>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-white"
+                        onClick={() => handleRemoveLogisticsTo(email)}
+                        aria-label={`Eliminar ${email} de Para`}
+                      >
+                        ×
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="d-flex gap-2">
+                  <Form.Control
+                    type="email"
+                    value={logisticsToInput}
+                    placeholder="Añadir correo de logística"
+                    onChange={(event) => setLogisticsToInput(event.target.value)}
+                  />
+                  <Button variant="outline-primary" onClick={handleAddLogisticsTo}>
+                    Añadir correo
+                  </Button>
+                </div>
+              </Form.Group>
+
+              <Form.Group>
+                <Form.Label>CC</Form.Label>
+                <div className="d-flex flex-wrap gap-2 mb-2">
+                  {logisticsCcEmails.map((email) => (
+                    <Badge bg="secondary" key={email} className="d-inline-flex align-items-center gap-2">
+                      <span>{email}</span>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 text-white"
+                        onClick={() => handleRemoveLogisticsCc(email)}
+                        aria-label={`Eliminar ${email} de CC`}
+                      >
+                        ×
+                      </Button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="d-flex gap-2">
+                  <Form.Control
+                    type="email"
+                    value={logisticsCcInput}
+                    placeholder="Añadir correo en copia"
+                    onChange={(event) => setLogisticsCcInput(event.target.value)}
+                  />
+                  <Button variant="outline-primary" onClick={handleAddLogisticsCc}>
+                    Añadir CC
+                  </Button>
+                </div>
+              </Form.Group>
+
+              <Form.Group>
+                <Form.Label>Asunto</Form.Label>
+                <Form.Control type="text" readOnly value={logisticsSubject} />
+              </Form.Group>
+
+              <Form.Group>
+                <Form.Label>Mensaje</Form.Label>
+                <Form.Control as="textarea" rows={6} readOnly value={logisticsEmailBody} />
+              </Form.Group>
             </div>
-          </Form.Group>
-
-          <Form.Group>
-            <Form.Label>Asunto</Form.Label>
-            <Form.Control
-              type="text"
-              readOnly
-              value={`Nuevo Pedido de GEP Group con Nº ${currentOrderNumber ?? nextOrderNumber} para ${supplierName}`}
-            />
-          </Form.Group>
-
-          <Form.Group>
-            <Form.Label>Mensaje</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={6}
-              readOnly
-              value={emailBody}
-            />
-          </Form.Group>
+          ) : null}
 
           <div className="d-flex justify-content-end gap-2">
             <Button variant="outline-secondary" onClick={closeEmailModal}>
               Cancelar
             </Button>
             <Button variant="success" onClick={handleSendEmail}>
-              Enviar desde erp@gepgroup.es
+              Enviar correos desde erp@gepgroup.es
             </Button>
           </div>
         </Modal.Body>
