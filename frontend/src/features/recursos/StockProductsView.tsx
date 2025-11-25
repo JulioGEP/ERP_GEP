@@ -47,6 +47,7 @@ function mapProviderNames(providerIds: number[], providers: Provider[]): string[
 export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const queryClient = useQueryClient();
   const [draftSelections, setDraftSelections] = useState<Record<string, number[]>>({});
+  const [draftStocks, setDraftStocks] = useState<Record<string, string>>({});
   const [openProviderMenuId, setOpenProviderMenuId] = useState<string | null>(null);
   const providerDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -65,15 +66,28 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, providerIds }: { id: string; providerIds: number[] }) =>
-      updateProduct(id, { provider_ids: providerIds }),
+    mutationFn: ({
+      id,
+      providerIds,
+      almacenStock,
+    }: {
+      id: string;
+      providerIds?: number[];
+      almacenStock?: number | null;
+    }) =>
+      updateProduct(id, { provider_ids: providerIds, almacen_stock: almacenStock }),
     onSuccess: (product) => {
-      onNotify({ variant: 'success', message: 'Proveedores actualizados correctamente.' });
+      onNotify({ variant: 'success', message: 'Producto actualizado correctamente.' });
       queryClient.setQueryData<Product[] | undefined>(['products'], (current) => {
         if (!current) return current;
         return current.map((item) => (item.id === product.id ? { ...product } : item));
       });
       setDraftSelections((prev) => {
+        const next = { ...prev };
+        delete next[product.id];
+        return next;
+      });
+      setDraftStocks((prev) => {
         const next = { ...prev };
         delete next[product.id];
         return next;
@@ -170,6 +184,24 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     };
   }, [closeProviderMenu, openProviderMenuId]);
 
+  const handleStockChange = (productId: string, value: string) => {
+    setDraftStocks((prev) => ({ ...prev, [productId]: value }));
+  };
+
+  const handleStockBlur = (product: Product) => {
+    if (!(product.id in draftStocks)) return;
+
+    const value = draftStocks[product.id].trim();
+    const parsed = value === '' ? null : Number(value);
+
+    if (value !== '' && !Number.isFinite(parsed)) {
+      onNotify({ variant: 'danger', message: 'Introduce un número válido para el stock de almacén.' });
+      return;
+    }
+
+    updateMutation.mutate({ id: product.id, almacenStock: parsed });
+  };
+
   const subtitle = useMemo(
     () => 'Consulta el stock de productos importados desde Pipedrive y asigna proveedores.',
     [],
@@ -231,6 +263,9 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                 <th scope="col" style={{ minWidth: 140 }}>
                   <span className="fw-semibold">Categoría</span>
                 </th>
+                <th scope="col" style={{ minWidth: 180 }}>
+                  <span className="fw-semibold">Stock en almacén</span>
+                </th>
                 <th scope="col" style={{ minWidth: 260 }}>
                   <span className="fw-semibold">Proveedor</span>
                 </th>
@@ -239,13 +274,13 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="py-5 text-center">
+                  <td colSpan={6} className="py-5 text-center">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-5 text-center text-muted">
+                  <td colSpan={6} className="py-5 text-center text-muted">
                     No hay productos disponibles. Pulsa "Actualizar Stock" para sincronizar.
                   </td>
                 </tr>
@@ -253,6 +288,7 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                 filteredProducts.map((product) => {
                   const providerIds = draftSelections[product.id] ?? product.provider_ids;
                   const providerNames = mapProviderNames(providerIds, providers);
+                  const stockValue = draftStocks[product.id] ?? (product.almacen_stock ?? '').toString();
 
                   return (
                     <tr key={product.id}>
@@ -260,6 +296,17 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
                       <td className="fw-semibold">{product.name || '—'}</td>
                       <td>{product.code || '—'}</td>
                       <td>{product.category || '—'}</td>
+                      <td style={{ maxWidth: 180 }}>
+                        <Form.Control
+                          type="number"
+                          value={stockValue}
+                          size="sm"
+                          onChange={(event) => handleStockChange(product.id, event.target.value)}
+                          onBlur={() => handleStockBlur(product)}
+                          disabled={updateMutation.isPending}
+                          aria-label={`Stock en almacén para ${product.name ?? product.code ?? 'producto'}`}
+                        />
+                      </td>
                       <td>
                         <div
                           className="d-grid gap-2 position-relative"

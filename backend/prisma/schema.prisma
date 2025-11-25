@@ -150,6 +150,7 @@ model products {
   hora_fin               DateTime?  @db.Time(6)
   variant_start          DateTime?  @db.Date
   variant_end            DateTime?  @db.Date
+  almacen_stock          Int?
   provider_ids           Int[]      @default([])
   variants               variants[]
 }

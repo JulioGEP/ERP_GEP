@@ -8,6 +8,7 @@ export type ProductUpdatePayload = {
   active?: boolean | null;
   id_woo?: number | null;
   provider_ids?: number[] | null;
+  almacen_stock?: number | null;
 };
 
 export type ProductSyncSummary = {
@@ -73,6 +74,12 @@ function normalizeProduct(row: any): Product {
     type: row.type == null ? null : String(row.type),
     template: row.template == null ? null : String(row.template),
     url_formacion: row.url_formacion == null ? null : String(row.url_formacion),
+    almacen_stock:
+      typeof row.almacen_stock === 'number'
+        ? row.almacen_stock
+        : row.almacen_stock != null && !Number.isNaN(Number(row.almacen_stock))
+        ? Number(row.almacen_stock)
+        : null,
     provider_ids: Array.isArray(row.provider_ids)
       ? row.provider_ids
           .map((value: any) => Number(value))
@@ -113,6 +120,18 @@ function buildUpdateBody(payload: ProductUpdatePayload): Record<string, any> {
       body.provider_ids = parsed;
     } else {
       throw new ApiError('VALIDATION_ERROR', 'provider_ids debe ser un array de números');
+    }
+  }
+
+  if ('almacen_stock' in payload) {
+    if (payload.almacen_stock === null) {
+      body.almacen_stock = null;
+    } else if (payload.almacen_stock === undefined) {
+      // no-op
+    } else if (typeof payload.almacen_stock === 'number' && Number.isFinite(payload.almacen_stock)) {
+      body.almacen_stock = Math.trunc(payload.almacen_stock);
+    } else {
+      throw new ApiError('VALIDATION_ERROR', 'almacen_stock debe ser un número válido');
     }
   }
 
