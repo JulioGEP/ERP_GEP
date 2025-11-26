@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useMemo, useState } from 'react';
 import { Alert, Badge, Button, Spinner } from 'react-bootstrap';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -109,6 +110,15 @@ export function MaterialsBoardPage({
     return grouped;
   }, [materialsBudgets]);
 
+  const budgetsById = useMemo(() => {
+    const map = new Map<string, DealSummary>();
+    materialsBudgets.forEach((budget) => {
+      const id = getBudgetId(budget);
+      if (id) map.set(id, budget);
+    });
+    return map;
+  }, [materialsBudgets]);
+
   const updateStatusMutation = useMutation({
     mutationFn: async ({
       dealId,
@@ -158,6 +168,38 @@ export function MaterialsBoardPage({
     updateStatusMutation.mutate({ dealId: budgetId, status: nextStatus });
   };
 
+  const handleDragStart = (
+    event: React.DragEvent<HTMLElement>,
+    budget: DealSummary,
+    currentStatus: MaterialDealStatus,
+  ) => {
+    const budgetId = getBudgetId(budget);
+    if (!budgetId) return;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData(
+      'application/json',
+      JSON.stringify({ budgetId, status: currentStatus }),
+    );
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLElement>, targetStatus: MaterialDealStatus) => {
+    event.preventDefault();
+    const payload = event.dataTransfer.getData('application/json');
+    if (!payload) return;
+
+    try {
+      const data = JSON.parse(payload) as { budgetId?: string; status?: MaterialDealStatus };
+      if (!data?.budgetId) return;
+      const budget = budgetsById.get(data.budgetId);
+      if (!budget) return;
+      const currentStatus = resolveStatus(budget);
+      if (currentStatus === targetStatus) return;
+      handleStatusChange(budget, targetStatus);
+    } catch (error) {
+      console.error('Error handling drop', error);
+    }
+  };
+
   const hasError = !!error;
   const isRefreshing = isFetching && !isLoading;
 
@@ -205,7 +247,12 @@ export function MaterialsBoardPage({
         {MATERIAL_DEAL_STATUSES.map((status) => {
           const items = dealsByStatus.get(status) ?? [];
           return (
-            <section key={status} className="bg-white rounded-3 shadow-sm border p-3 d-flex flex-column gap-3">
+            <section
+              key={status}
+              className="bg-white rounded-3 shadow-sm border p-3 d-flex flex-column gap-3"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => handleDrop(event, status)}
+            >
               <header className="d-flex align-items-start justify-content-between gap-2">
                 <div className="d-flex flex-column">
                   <span className="text-muted text-uppercase small">Estado</span>
@@ -233,7 +280,10 @@ export function MaterialsBoardPage({
                       <article
                         key={budgetId ?? budget.deal_id ?? budget.dealId ?? budget.title}
                         className="border rounded-3 p-3 d-flex flex-column gap-2"
-                        style={{ cursor: 'pointer' }}
+                        style={{ cursor: 'grab' }}
+                        draggable
+                        onDragStart={(event) => handleDragStart(event, budget, status)}
+                        onDragEnd={(event) => event.dataTransfer?.clearData?.()}
                         onClick={() => onSelect(budget)}
                       >
                         <div className="d-flex align-items-center justify-content-between gap-2">
@@ -253,25 +303,6 @@ export function MaterialsBoardPage({
                           </div>
                           <div>
                             <span className="fw-semibold text-dark">Entrega estimada:</span> {estimatedDelivery}
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center gap-2 flex-wrap">
-                          <span className="text-muted small">Mover a:</span>
-                          <div className="d-flex flex-wrap gap-2">
-                            {MATERIAL_DEAL_STATUSES.map((option) => (
-                              <Button
-                                key={option}
-                                size="sm"
-                                variant={option === status ? 'primary' : 'outline-secondary'}
-                                disabled={isUpdating || option === status}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleStatusChange(budget, option);
-                                }}
-                              >
-                                {option}
-                              </Button>
-                            ))}
                           </div>
                         </div>
                       </article>
