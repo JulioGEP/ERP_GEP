@@ -10,8 +10,9 @@ import {
   type CalendarSessionsResponse,
   type CalendarVariantEvent,
   type CalendarVariantsResponse,
+  type CalendarTrainerInviteStatusMap,
 } from './api';
-import type { SessionEstado } from '../../api/sessions.types';
+import type { SessionEstado, SessionTrainerInviteStatus } from '../../api/sessions.types';
 import { ApiError } from '../../api/client';
 import { FilterToolbar, type FilterDefinition, type FilterOption } from '../../components/table/FilterToolbar';
 import { splitFilterValue } from '../../components/table/filterUtils';
@@ -57,6 +58,15 @@ const SESSION_CLASSNAMES: Record<SessionEstado, string> = {
   CANCELADA: 'estado-cancelada',
   FINALIZADA: 'estado-finalizada',
 };
+
+const TRAINER_INVITE_STATUS_META: Record<SessionTrainerInviteStatus, { label: string; className: string }> = {
+  NOT_SENT: { label: 'Sin enviar el mail', className: 'text-warning' },
+  PENDING: { label: 'Mail enviado', className: 'text-info' },
+  CONFIRMED: { label: 'Aceptada', className: 'text-success' },
+  DECLINED: { label: 'Denegada', className: 'text-danger' },
+};
+
+const DEFAULT_TRAINER_INVITE_STATUS: SessionTrainerInviteStatus = 'NOT_SENT';
 
 const SESSION_ESTADO_OPTIONS = Object.entries(SESSION_ESTADO_LABELS).map(([value, label]) => ({
   value,
@@ -405,6 +415,15 @@ function formatResourceSummary(resources: CalendarResource[], emptyLabel: string
 function formatResourceDetail(resources: CalendarResource[], emptyLabel: string): string {
   if (!resources.length) return emptyLabel;
   return resources.map((resource) => formatResourceName(resource)).join(', ');
+}
+
+function getTrainerInviteStatus(
+  trainerId: string,
+  statuses: CalendarTrainerInviteStatusMap,
+  fallback: SessionTrainerInviteStatus,
+): SessionTrainerInviteStatus {
+  const status = statuses?.[trainerId];
+  return status ?? fallback ?? DEFAULT_TRAINER_INVITE_STATUS;
 }
 
 type CalendarFilterRow = {
@@ -2101,6 +2120,33 @@ export function CalendarView({
                 {tooltipTertiaryText.length ? (
                   <div className="erp-calendar-tooltip-line">
                     {tooltipTertiaryText}
+                  </div>
+                ) : null}
+                {tooltip?.kind === 'session' ? (
+                  <div className="erp-calendar-tooltip-line mt-1">
+                    <div className="fw-semibold small mb-1">Confirmación formadores</div>
+                    {tooltip.session.trainers.length ? (
+                      <ul className="list-unstyled mb-0 d-flex flex-column gap-1">
+                        {tooltip.session.trainers.map((trainer) => {
+                          const status = getTrainerInviteStatus(
+                            trainer.id,
+                            tooltip.session.trainerInviteStatuses,
+                            tooltip.session.trainerInviteStatus,
+                          );
+                          const meta = TRAINER_INVITE_STATUS_META[status] ??
+                            TRAINER_INVITE_STATUS_META[DEFAULT_TRAINER_INVITE_STATUS];
+                          const trainerLabel = formatResourceName(trainer);
+                          return (
+                            <li key={trainer.id} className="d-flex justify-content-between gap-2">
+                              <span className="me-2">{trainerLabel}</span>
+                              <span className={`fw-semibold ${meta.className}`}>{meta.label}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <span className="text-muted small">Sin formadores invitados.</span>
+                    )}
                   </div>
                 ) : null}
               </div>

@@ -1,6 +1,6 @@
 // frontend/src/features/calendar/api.ts
 import { API_BASE, ApiError } from "../../api/client";
-import type { SessionEstado } from "../../api/sessions.types";
+import type { SessionEstado, SessionTrainerInviteStatus } from "../../api/sessions.types";
 
 export type CalendarVariantProduct = {
   id: string;
@@ -81,6 +81,15 @@ export type CalendarSessionStudent = {
   dni: string | null;
 };
 
+export type CalendarTrainerInvite = {
+  trainerId: string;
+  status: SessionTrainerInviteStatus;
+  sentAt: string | null;
+  respondedAt: string | null;
+};
+
+export type CalendarTrainerInviteStatusMap = Record<string, SessionTrainerInviteStatus>;
+
 export type CalendarSession = {
   id: string;
   dealId: string;
@@ -108,6 +117,9 @@ export type CalendarSession = {
   studentsTotal: number | null;
   students: CalendarSessionStudent[];
   studentNames: string[];
+  trainerInvites: CalendarTrainerInvite[];
+  trainerInviteStatus: SessionTrainerInviteStatus;
+  trainerInviteStatuses: CalendarTrainerInviteStatusMap;
 };
 
 export type CalendarSessionsParams = {
@@ -144,6 +156,13 @@ const SESSION_ESTADO_VALUES: SessionEstado[] = [
   'FINALIZADA',
 ];
 
+const TRAINER_INVITE_STATUS_VALUES: SessionTrainerInviteStatus[] = [
+  'NOT_SENT',
+  'PENDING',
+  'CONFIRMED',
+  'DECLINED',
+];
+
 function toTrimmed(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -171,6 +190,48 @@ function toResource(value: any): CalendarResource | null {
   if (!id || !name) return null;
   const secondary = toOptionalString(value?.sede ?? value?.apellido ?? value?.matricula ?? value?.secondary);
   return { id, name, secondary };
+}
+
+function toSessionTrainerInviteStatus(value: unknown): SessionTrainerInviteStatus {
+  const text = toTrimmed(value);
+  if (!text) return 'NOT_SENT';
+  const normalized = text.toUpperCase();
+  return TRAINER_INVITE_STATUS_VALUES.includes(normalized as SessionTrainerInviteStatus)
+    ? (normalized as SessionTrainerInviteStatus)
+    : 'NOT_SENT';
+}
+
+function sanitizeTrainerInvite(value: any): CalendarTrainerInvite | null {
+  const trainerId = toTrimmed(value?.trainer_id);
+  if (!trainerId) return null;
+
+  return {
+    trainerId,
+    status: toSessionTrainerInviteStatus(value?.status),
+    sentAt: toOptionalString(value?.sent_at),
+    respondedAt: toOptionalString(value?.responded_at),
+  } satisfies CalendarTrainerInvite;
+}
+
+function buildTrainerInviteStatusMap(
+  trainerIds: readonly string[],
+  invites: readonly CalendarTrainerInvite[],
+  defaultStatus: SessionTrainerInviteStatus,
+): CalendarTrainerInviteStatusMap {
+  const map: CalendarTrainerInviteStatusMap = {};
+  trainerIds.forEach((id) => {
+    const trimmed = id.trim();
+    if (!trimmed.length) return;
+    map[trimmed] = defaultStatus;
+  });
+
+  invites.forEach((invite) => {
+    const trainerId = invite.trainerId?.trim();
+    if (!trainerId || !(trainerId in map)) return;
+    map[trainerId] = invite.status;
+  });
+
+  return map;
 }
 
 function ensureUniqueResources(resources: (CalendarResource | null)[]): CalendarResource[] {
@@ -618,6 +679,19 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
 
       const studentNames = buildStudentNames(students);
 
+      const trainerInvites = Array.isArray(row?.trainer_invites)
+        ? (row.trainer_invites as unknown[])
+            .map((invite) => sanitizeTrainerInvite(invite))
+            .filter((invite): invite is CalendarTrainerInvite => invite !== null)
+        : [];
+
+      const trainerInviteStatus = toSessionTrainerInviteStatus(row?.trainer_invite_status);
+      const trainerInviteStatuses = buildTrainerInviteStatusMap(
+        trainers.map((trainer) => trainer.id),
+        trainerInvites,
+        trainerInviteStatus,
+      );
+
       let studentsTotal =
         typeof row?.students_total === 'number'
           ? row.students_total
@@ -657,6 +731,9 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
         studentsTotal,
         students,
         studentNames,
+        trainerInvites,
+        trainerInviteStatus,
+        trainerInviteStatuses,
       } satisfies CalendarSession;
     })
     .filter((session): session is CalendarSession => session !== null);
