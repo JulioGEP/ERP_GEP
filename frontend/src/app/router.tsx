@@ -7,6 +7,7 @@ import type {
   MaterialsBoardPageProps,
   MaterialsBudgetsPageProps,
   MaterialsPendingProductsPageProps,
+  MaterialsOrdersPageProps,
 } from '../pages/materiales';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
@@ -33,6 +34,7 @@ const MaterialsBoardPage = lazy(() => import('../pages/materiales/MaterialsBoard
 const MaterialsPendingProductsPage = lazy(
   () => import('../pages/materiales/MaterialsPendingProductsPage'),
 );
+const MaterialsOrdersPage = lazy(() => import('../pages/materiales/MaterialsOrdersPage'));
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
 const PorUnidadMovilPage = lazy(() => import('../pages/calendario/PorUnidadMovilPage'));
 const PorFormadorPage = lazy(() => import('../pages/calendario/PorFormadorPage'));
@@ -88,6 +90,7 @@ type AppRouterProps = {
   materialsBoardPageProps: MaterialsBoardPageProps;
   materialsBudgetsPageProps: MaterialsBudgetsPageProps;
   materialsPendingProductsPageProps: MaterialsPendingProductsPageProps;
+  materialsOrdersPageProps: MaterialsOrdersPageProps;
   porSesionesPageProps: PorSesionesPageProps;
   porUnidadMovilPageProps: PorUnidadMovilPageProps;
   porFormadorPageProps: PorFormadorPageProps;
@@ -114,6 +117,7 @@ export function AppRouter({
   materialsBoardPageProps,
   materialsBudgetsPageProps,
   materialsPendingProductsPageProps,
+  materialsOrdersPageProps,
   porSesionesPageProps,
   porUnidadMovilPageProps,
   porFormadorPageProps,
@@ -206,6 +210,16 @@ export function AppRouter({
             <GuardedRoute
               path="/materiales/pendientes"
               element={<MaterialsPendingProductsPage {...materialsPendingProductsPageProps} />}
+            />
+          }
+        />
+
+        <Route
+          path="/materiales/pedidos"
+          element={
+            <GuardedRoute
+              path="/materiales/pedidos"
+              element={<MaterialsOrdersPage {...materialsOrdersPageProps} />}
             />
           }
         />

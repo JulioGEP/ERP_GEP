@@ -42,6 +42,7 @@ import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBud
 import type { MaterialsBoardPageProps } from '../pages/materiales/MaterialsBoardPage';
 import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
 import type { MaterialsPendingProductsPageProps } from '../pages/materiales/MaterialsPendingProductsPage';
+import type { MaterialsOrdersPageProps } from '../pages/materiales/MaterialsOrdersPage';
 import { isMaterialPipeline } from '../routes/materiales/MaterialsBudgetsPage';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
@@ -99,6 +100,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Materiales/Tablero', label: 'Tablero', path: '/materiales/tablero' },
       { key: 'Materiales/Todos', label: 'Todos', path: '/materiales/todos' },
       { key: 'Materiales/Pendientes', label: 'Pendientes', path: '/materiales/pendientes' },
+      { key: 'Materiales/Pedidos', label: 'Pedidos', path: '/materiales/pedidos' },
     ],
   },
   {
@@ -1359,6 +1361,15 @@ export default function AuthenticatedApp() {
     canImport: canImportBudgets,
   };
 
+  const materialsOrdersPageProps: MaterialsOrdersPageProps = {
+    budgets: materialsBudgets,
+    isLoading: allBudgetsQuery.isLoading,
+    isFetching: isRefreshingAllBudgets,
+    error: allBudgetsQuery.error ?? null,
+    onRetry: () => allBudgetsQuery.refetch(),
+    onSelect: handleSelectBudget,
+  };
+
   const calendarSessionsPageProps: PorSesionesPageProps = {
     onNotify: pushToast,
     onSessionOpen: handleOpenCalendarSession,
@@ -1529,6 +1540,7 @@ export default function AuthenticatedApp() {
             unworkedBudgetsPageProps={unworkedBudgetsPageProps}
             materialsBudgetsPageProps={materialsBudgetsPageProps}
             materialsPendingProductsPageProps={materialsPendingProductsPageProps}
+            materialsOrdersPageProps={materialsOrdersPageProps}
             materialsBoardPageProps={materialsBoardPageProps}
             porSesionesPageProps={calendarSessionsPageProps}
             porUnidadMovilPageProps={calendarUnitsPageProps}
