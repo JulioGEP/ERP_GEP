@@ -1,9 +1,9 @@
-import { FormEvent, useCallback, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Col, Form, InputGroup, ListGroup, Row, Spinner } from 'react-bootstrap';
 import { changePassword } from '../../api/auth';
 import { ApiError } from '../../api/client';
-import { fetchUserDocuments } from '../../api/userDocuments';
+import { fetchUserDocuments, type UserDocument } from '../../api/userDocuments';
 import { fetchUserById } from '../../api/users';
 import {
   fetchUserVacations,
@@ -16,6 +16,8 @@ import { TRAINER_DOCUMENT_TYPES, type TrainerDocumentTypeValue } from '../../fea
 import { VacationCalendar } from '../../components/vacations/VacationCalendar';
 import { useAuth } from '../../context/AuthContext';
 import type { TrainerDocument } from '../../types/trainer';
+
+type ProfileDocument = TrainerDocument | UserDocument;
 
 type ProfileUser = {
   id: string;
@@ -67,6 +69,14 @@ function formatFileSize(file: File): string {
     return `${(size / 1024).toFixed(1)} KB`;
   }
   return `${size} B`;
+}
+
+function resolveDocumentLink(doc: ProfileDocument): string | null {
+  if ('download_url' in doc) {
+    return doc.drive_web_view_link ?? doc.drive_web_content_link ?? doc.download_url;
+  }
+
+  return doc.drive_web_view_link ?? null;
 }
 
 export default function ProfilePage() {
@@ -257,7 +267,7 @@ export default function ProfilePage() {
     return Number.isNaN(date.getTime()) ? userDetails.startDate : date.toLocaleDateString();
   }, [userDetails?.startDate]);
 
-  const documents = useMemo(
+  const documents = useMemo<ProfileDocument[]>(
     () =>
       trainerId
         ? (trainerDocumentsQuery.data?.documents ?? [])
@@ -350,7 +360,7 @@ export default function ProfilePage() {
                   </div>
                   <Button
                     as="a"
-                    href={doc.drive_web_view_link ?? doc.drive_web_content_link ?? doc.download_url}
+                    href={resolveDocumentLink(doc) ?? undefined}
                     variant="outline-primary"
                     size="sm"
                     target="_blank"
@@ -401,7 +411,9 @@ export default function ProfilePage() {
                   <Form.Label>Archivo</Form.Label>
                   <Form.Control
                     type="file"
-                    onChange={(event) => setSelectedDocument(event.target.files?.[0] ?? null)}
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      setSelectedDocument(event.target.files?.[0] ?? null)
+                    }
                     disabled={isUploadingDocument}
                   />
                   {selectedDocument ? (
