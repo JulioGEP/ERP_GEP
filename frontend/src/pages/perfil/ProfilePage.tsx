@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useMemo, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Col, Form, InputGroup, ListGroup, Row, Spinner } from 'react-bootstrap';
 import { changePassword } from '../../api/auth';
 import { ApiError } from '../../api/client';
@@ -11,8 +11,11 @@ import {
   type UserVacationsResponse,
   type VacationType,
 } from '../../api/userVacations';
+import { fetchTrainerDocuments, uploadTrainerDocument } from '../../features/recursos/api';
+import { TRAINER_DOCUMENT_TYPES, type TrainerDocumentTypeValue } from '../../features/recursos/trainers.constants';
 import { VacationCalendar } from '../../components/vacations/VacationCalendar';
 import { useAuth } from '../../context/AuthContext';
+import type { TrainerDocument } from '../../types/trainer';
 
 type ProfileUser = {
   id: string;
@@ -25,6 +28,7 @@ type ProfileUser = {
   address?: string | null;
   position?: string | null;
   startDate?: string | null;
+  trainerId?: string | null;
 };
 
 const VACATION_LABELS: Record<VacationType, string> = {
@@ -43,8 +47,31 @@ const VACATION_COLORS: Record<VacationType, string> = {
   T: '#7c3aed',
 };
 
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize) as any);
+  }
+  return btoa(binary);
+}
+
+function formatFileSize(file: File): string {
+  const size = file.size;
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (size >= 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+  return `${size} B`;
+}
+
 export default function ProfilePage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -59,6 +86,12 @@ export default function ProfilePage() {
   const [vacationStart, setVacationStart] = useState('');
   const [vacationEnd, setVacationEnd] = useState('');
   const [vacationNotes, setVacationNotes] = useState('');
+  const [selectedDocumentType, setSelectedDocumentType] = useState<TrainerDocumentTypeValue>(
+    TRAINER_DOCUMENT_TYPES[0]?.value ?? 'curriculum_vitae',
+  );
+  const [selectedDocument, setSelectedDocument] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
   const profileQuery = useQuery<ProfileUser | undefined>({
     queryKey: ['profile', user?.id],
@@ -76,7 +109,18 @@ export default function ProfilePage() {
       if (!user?.id) return [];
       return fetchUserDocuments(user.id);
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !profileQuery.data?.trainerId,
+  });
+
+  const trainerDocumentsQuery = useQuery({
+    queryKey: ['trainer-documents-profile', profileQuery.data?.trainerId],
+    queryFn: async () => {
+      if (!profileQuery.data?.trainerId) {
+        return { documents: [] as TrainerDocument[], driveFolderWebViewLink: null as string | null };
+      }
+      return fetchTrainerDocuments(profileQuery.data.trainerId);
+    },
+    enabled: Boolean(profileQuery.data?.trainerId),
   });
 
   const vacationsQuery = useQuery<UserVacationsResponse>({
@@ -139,6 +183,41 @@ export default function ProfilePage() {
   const canRequestVacation =
     Boolean(vacationStart && vacationEnd) && !vacationRequestMutation.isPending && Boolean(user?.email);
 
+  const trainerId = useMemo(() => profileQuery.data?.trainerId ?? user?.trainerId ?? null, [profileQuery.data?.trainerId, user?.trainerId]);
+
+  const uploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!trainerId) {
+        throw new Error('No se ha encontrado tu ficha de formador.');
+      }
+      if (!selectedDocument) {
+        throw new Error('Selecciona un archivo para subir.');
+      }
+      const contentBase64 = await fileToBase64(selectedDocument);
+      return uploadTrainerDocument({
+        trainerId,
+        documentType: selectedDocumentType,
+        fileName: selectedDocument.name,
+        mimeType: selectedDocument.type,
+        fileSize: selectedDocument.size,
+        contentBase64,
+      });
+    },
+    onSuccess: () => {
+      setUploadError(null);
+      setUploadSuccess('Documento subido correctamente.');
+      setSelectedDocument(null);
+      queryClient.invalidateQueries({ queryKey: ['trainer-documents-profile', trainerId] });
+    },
+    onError: (error) => {
+      const apiError = error instanceof ApiError ? error.message : null;
+      setUploadError(apiError ?? 'No se pudo subir el documento.');
+      setUploadSuccess(null);
+    },
+  });
+
+  const isUploadingDocument = uploadMutation.isPending;
+
   const handleVacationRequest = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -178,7 +257,16 @@ export default function ProfilePage() {
     return Number.isNaN(date.getTime()) ? userDetails.startDate : date.toLocaleDateString();
   }, [userDetails?.startDate]);
 
-  const documents = documentsQuery.data ?? [];
+  const documents = useMemo(
+    () =>
+      trainerId
+        ? (trainerDocumentsQuery.data?.documents ?? [])
+        : (documentsQuery.data ?? []),
+    [documentsQuery.data, trainerDocumentsQuery.data?.documents, trainerId],
+  );
+  const documentsLoading = trainerId ? trainerDocumentsQuery.isLoading : documentsQuery.isLoading;
+  const documentsError = trainerId ? trainerDocumentsQuery.isError : documentsQuery.isError;
+  const driveFolderLink = trainerId ? trainerDocumentsQuery.data?.driveFolderWebViewLink ?? null : null;
 
   const vacationData = vacationsQuery.data;
   const vacationCounts = vacationData?.counts ?? { A: 0, F: 0, L: 0, C: 0, T: 0 };
@@ -240,9 +328,9 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {documentsQuery.isError ? <Alert variant="danger">No se pudieron cargar los documentos.</Alert> : null}
+          {documentsError ? <Alert variant="danger">No se pudieron cargar los documentos.</Alert> : null}
 
-          {documentsQuery.isLoading ? (
+          {documentsLoading ? (
             <div className="d-flex align-items-center gap-2 text-muted">
               <Spinner size="sm" animation="border" />
               <span>Cargando documentos…</span>
@@ -253,7 +341,12 @@ export default function ProfilePage() {
                 <ListGroup.Item key={doc.id} className="d-flex justify-content-between align-items-center">
                   <div>
                     <div className="fw-semibold">{doc.file_name}</div>
-                    <div className="text-muted small">{doc.mime_type || 'Archivo'}</div>
+                    <div className="text-muted small d-flex align-items-center gap-2">
+                      <span>{doc.mime_type || 'Archivo'}</span>
+                      {'document_type' in doc && doc.document_type_label ? (
+                        <Badge bg="light" text="dark">{doc.document_type_label}</Badge>
+                      ) : null}
+                    </div>
                   </div>
                   <Button
                     as="a"
@@ -270,6 +363,62 @@ export default function ProfilePage() {
             </ListGroup>
           ) : (
             <p className="text-muted mb-0">No hay documentos disponibles.</p>
+          )}
+
+          {trainerId ? (
+            <div className="border-top pt-3 d-grid gap-3">
+              <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                  <h3 className="h6 fw-bold mb-1">Subir documento</h3>
+                  <p className="text-muted mb-0">Selecciona la categoría y adjunta el archivo.</p>
+                </div>
+                {driveFolderLink ? (
+                  <Button as="a" href={driveFolderLink} target="_blank" rel="noreferrer" variant="outline-secondary">
+                    Ver carpeta en Drive
+                  </Button>
+                ) : null}
+              </div>
+
+              {uploadError ? <Alert variant="danger" className="mb-0">{uploadError}</Alert> : null}
+              {uploadSuccess ? <Alert variant="success" className="mb-0">{uploadSuccess}</Alert> : null}
+
+              <Row className="g-3 align-items-end">
+                <Col xs={12} md={4}>
+                  <Form.Label>Categoría</Form.Label>
+                  <Form.Select
+                    value={selectedDocumentType}
+                    onChange={(event) => setSelectedDocumentType(event.target.value as TrainerDocumentTypeValue)}
+                    disabled={isUploadingDocument}
+                  >
+                    {TRAINER_DOCUMENT_TYPES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col xs={12} md={5}>
+                  <Form.Label>Archivo</Form.Label>
+                  <Form.Control
+                    type="file"
+                    onChange={(event) => setSelectedDocument(event.target.files?.[0] ?? null)}
+                    disabled={isUploadingDocument}
+                  />
+                  {selectedDocument ? (
+                    <div className="text-muted small mt-1">
+                      Archivo seleccionado: {selectedDocument.name} ({formatFileSize(selectedDocument)})
+                    </div>
+                  ) : null}
+                </Col>
+                <Col xs={12} md={3} className="d-flex align-items-end">
+                  <Button onClick={() => uploadMutation.mutate()} disabled={isUploadingDocument || !selectedDocument}>
+                    {isUploadingDocument ? 'Subiendo…' : 'Subir documento'}
+                  </Button>
+                </Col>
+              </Row>
+            </div>
+          ) : (
+            <p className="text-muted mb-0">Tu perfil no está vinculado a una ficha de formador.</p>
           )}
         </Card.Body>
       </Card>

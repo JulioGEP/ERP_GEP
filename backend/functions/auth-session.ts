@@ -17,6 +17,7 @@ function serializeUser(user: any) {
     role: getRoleDisplayValue(user.role) ?? user.role,
     active: user.active,
     position: user.position,
+    trainerId: user.trainer?.trainer_id ?? null,
   };
 }
 

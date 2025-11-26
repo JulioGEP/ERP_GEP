@@ -18,6 +18,7 @@ type User = {
   role: string;
   active: boolean;
   position?: string | null;
+  trainerId?: string | null;
 };
 
 type SessionPayload = {

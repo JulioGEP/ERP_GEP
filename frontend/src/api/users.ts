@@ -13,6 +13,7 @@ export type UserSummary = {
   startDate: string | null;
   createdAt: string;
   updatedAt: string;
+  trainerId: string | null;
 };
 
 export type UsersListResponse = {

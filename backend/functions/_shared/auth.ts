@@ -285,8 +285,8 @@ export async function findActiveSession(
   // Usamos bracket-notation para que el tipado de Prisma no se queje en TS
   const session = (await (prisma as any)['auth_sessions'].findUnique({
     where: { id: sessionId },
-    include: { user: true },
-  })) as (AuthSessionRecord & { user: UserRecord | null }) | null;
+    include: { user: { include: { trainer: true } } },
+  })) as (AuthSessionRecord & { user: (UserRecord & { trainer?: any }) | null }) | null;
 
   if (!session || !isSessionActive(session) || !session.user || !session.user.active) {
     return null;

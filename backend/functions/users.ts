@@ -34,6 +34,7 @@ function serializeUser(user: any) {
     startDate: user.start_date,
     createdAt: user.created_at,
     updatedAt: user.updated_at,
+    trainerId: user.trainer?.trainer_id ?? null,
   };
 }
 
@@ -202,7 +203,7 @@ async function handleGet(
       return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
     }
 
-    const user = await prisma.users.findUnique({ where: { id: userId } });
+    const user = await prisma.users.findUnique({ where: { id: userId }, include: { trainer: true } });
 
     if (!user) {
       return errorResponse('NOT_FOUND', 'Usuario no encontrado', 404);
