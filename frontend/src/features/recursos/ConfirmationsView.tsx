@@ -1,6 +1,6 @@
 // frontend/src/features/recursos/ConfirmationsView.tsx
-import { useEffect, useMemo } from 'react';
-import { Alert, Badge, Button, Spinner, Table } from 'react-bootstrap';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Badge, Button, Form, Spinner, Table } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import {
   RESOURCES_CONFIRMATIONS_QUERY_KEY,
@@ -37,6 +37,32 @@ function formatDateTime(value: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
   return new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(date);
+}
+
+function normalizeDateOnly(value: string | null): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function matchesDateRange(value: string | null, start: string, end: string): boolean {
+  const normalized = normalizeDateOnly(value);
+  if (!normalized) return true;
+
+  if (start) {
+    const startDate = new Date(start);
+    startDate.setHours(0, 0, 0, 0);
+    if (normalized < startDate) return false;
+  }
+
+  if (end) {
+    const endDate = new Date(end);
+    endDate.setHours(23, 59, 59, 999);
+    if (normalized > endDate) return false;
+  }
+
+  return true;
 }
 
 function StatusBadge({ status }: { status: TrainerInviteStatus }) {
@@ -102,14 +128,107 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
   const variantInvites = query.data?.variantInvites ?? [];
   const generatedAt = query.data?.generatedAt ?? null;
 
+  const [selectedStatuses, setSelectedStatuses] = useState<TrainerInviteStatus[]>([
+    'PENDING',
+    'CONFIRMED',
+    'DECLINED',
+  ]);
+  const [selectedTrainers, setSelectedTrainers] = useState<string[]>([]);
+  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [hidePastSessions, setHidePastSessions] = useState(true);
+
+  const trainerOptions = useMemo(() => {
+    const options = new Map<string, string>();
+    const addOption = (invite: { trainerId: string | null; trainerEmail: string | null; trainerName: string | null }) => {
+      const key = invite.trainerId ?? invite.trainerEmail ?? invite.trainerName ?? '';
+      if (!key) return;
+      const label = invite.trainerName ?? invite.trainerEmail ?? 'Formador sin nombre';
+      options.set(key, label);
+    };
+
+    sessionInvites.forEach(addOption);
+    variantInvites.forEach(addOption);
+
+    return Array.from(options.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'es'));
+  }, [sessionInvites, variantInvites]);
+
+  const sessionOptions = useMemo(
+    () =>
+      Array.from(
+        sessionInvites.reduce((acc, invite) => {
+          acc.set(invite.sessionId, invite.sessionTitle ?? 'Sesión sin nombre');
+          return acc;
+        }, new Map<string, string>()),
+      )
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'es')),
+    [sessionInvites],
+  );
+
+  const today = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }, []);
+
+  const filteredSessionInvites = useMemo(
+    () =>
+      sessionInvites.filter((invite) => {
+        if (!selectedStatuses.includes(invite.status)) return false;
+
+        const sessionDate = normalizeDateOnly(invite.startDate);
+        if (
+          hidePastSessions &&
+          invite.status === 'CONFIRMED' &&
+          sessionDate &&
+          today &&
+          sessionDate < today
+        ) {
+          return false;
+        }
+
+        if (!matchesDateRange(invite.startDate, startDate, endDate)) return false;
+
+        if (selectedTrainers.length) {
+          const key = invite.trainerId ?? invite.trainerEmail ?? invite.trainerName ?? '';
+          if (!key || !selectedTrainers.includes(key)) return false;
+        }
+
+        if (selectedSessions.length && !selectedSessions.includes(invite.sessionId)) return false;
+
+        return true;
+      }),
+    [endDate, hidePastSessions, selectedSessions, selectedStatuses, selectedTrainers, sessionInvites, startDate, today],
+  );
+
+  const filteredVariantInvites = useMemo(
+    () =>
+      variantInvites.filter((invite) => {
+        if (!selectedStatuses.includes(invite.status)) return false;
+
+        if (!matchesDateRange(invite.date, startDate, endDate)) return false;
+
+        if (selectedTrainers.length) {
+          const key = invite.trainerId ?? invite.trainerEmail ?? invite.trainerName ?? '';
+          if (!key || !selectedTrainers.includes(key)) return false;
+        }
+
+        return true;
+      }),
+    [endDate, selectedStatuses, selectedTrainers, startDate, variantInvites],
+  );
+
   const summary = useMemo(() => {
     const countByStatus = (rows: Array<{ status: TrainerInviteStatus }>) => ({
       pending: rows.filter((row) => row.status === 'PENDING').length,
       confirmed: rows.filter((row) => row.status === 'CONFIRMED').length,
       declined: rows.filter((row) => row.status === 'DECLINED').length,
     });
-    const sessions = countByStatus(sessionInvites);
-    const variants = countByStatus(variantInvites);
+    const sessions = countByStatus(filteredSessionInvites);
+    const variants = countByStatus(filteredVariantInvites);
     return {
       pending: sessions.pending + variants.pending,
       confirmed: sessions.confirmed + variants.confirmed,
@@ -117,7 +236,7 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
       sessions,
       variants,
     };
-  }, [sessionInvites, variantInvites]);
+  }, [filteredSessionInvites, filteredVariantInvites]);
 
   return (
     <div className="py-3">
@@ -155,6 +274,131 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
         <Badge bg="danger">Rechazadas: {summary.declined}</Badge>
       </div>
 
+      <div className="mt-4 border rounded p-3 bg-light">
+        <div className="d-flex flex-wrap justify-content-between gap-3 mb-3 align-items-center">
+          <h2 className="h6 mb-0">Filtros</h2>
+          <div className="d-flex flex-wrap gap-2">
+            <Button
+              variant={hidePastSessions ? 'primary' : 'outline-primary'}
+              size="sm"
+              active={hidePastSessions}
+              onClick={() => setHidePastSessions((value) => !value)}
+            >
+              Ocultar pasadas
+            </Button>
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => {
+                setSelectedStatuses(['PENDING', 'CONFIRMED', 'DECLINED']);
+                setSelectedTrainers([]);
+                setSelectedSessions([]);
+                setStartDate('');
+                setEndDate('');
+                setHidePastSessions(true);
+              }}
+            >
+              Limpiar filtros
+            </Button>
+          </div>
+        </div>
+
+        <div className="row g-3">
+          <div className="col-12 col-lg-3">
+            <Form.Group controlId="filter-status">
+              <Form.Label className="fw-semibold">Estado</Form.Label>
+              <div className="d-flex flex-wrap gap-2">
+                {(
+                  [
+                    { value: 'PENDING', label: 'Pendiente' },
+                    { value: 'CONFIRMED', label: 'Confirmada' },
+                    { value: 'DECLINED', label: 'Rechazada' },
+                  ] as const
+                ).map(({ value, label }) => (
+                  <Form.Check
+                    key={value}
+                    inline
+                    type="checkbox"
+                    id={`status-${value}`}
+                    label={label}
+                    checked={selectedStatuses.includes(value)}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setSelectedStatuses((current) => {
+                        if (checked) {
+                          if (current.includes(value as TrainerInviteStatus)) return current;
+                          return [...current, value as TrainerInviteStatus];
+                        }
+                        return current.filter((status) => status !== value);
+                      });
+                    }}
+                  />
+                ))}
+              </div>
+            </Form.Group>
+          </div>
+
+          <div className="col-12 col-lg-3">
+            <Form.Group controlId="filter-dates">
+              <Form.Label className="fw-semibold">Fecha</Form.Label>
+              <div className="d-flex gap-2">
+                <Form.Control
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                  aria-label="Fecha inicio"
+                />
+                <Form.Control
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                  aria-label="Fecha fin"
+                />
+              </div>
+              <div className="text-muted small mt-1">Filtra por fecha de sesión o variante.</div>
+            </Form.Group>
+          </div>
+
+          <div className="col-12 col-lg-3">
+            <Form.Group controlId="filter-trainers">
+              <Form.Label className="fw-semibold">Formadores</Form.Label>
+              <Form.Select
+                multiple
+                value={selectedTrainers}
+                onChange={(event) =>
+                  setSelectedTrainers(Array.from(event.target.selectedOptions, (option) => option.value))
+                }
+              >
+                {trainerOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </div>
+
+          <div className="col-12 col-lg-3">
+            <Form.Group controlId="filter-sessions">
+              <Form.Label className="fw-semibold">Sesiones</Form.Label>
+              <Form.Select
+                multiple
+                value={selectedSessions}
+                onChange={(event) =>
+                  setSelectedSessions(Array.from(event.target.selectedOptions, (option) => option.value))
+                }
+              >
+                {sessionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </div>
+        </div>
+      </div>
+
       {query.isError ? (
         <Alert variant="danger" className="mt-3">
           {query.error?.message ?? 'No se pudieron cargar las confirmaciones.'}
@@ -175,7 +419,7 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
                 Pendientes: {summary.sessions.pending}
               </Badge>
             </div>
-            {sessionInvites.length === 0 ? (
+            {filteredSessionInvites.length === 0 ? (
               <p className="text-muted fst-italic mt-3">No hay confirmaciones registradas para sesiones.</p>
             ) : (
               <div className="table-responsive mt-3">
@@ -184,6 +428,7 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
                     <tr>
                       <th>Sesión</th>
                       <th>Pipeline</th>
+                      <th>Fecha</th>
                       <th>Formador</th>
                       <th>Estado</th>
                       <th>Enviado</th>
@@ -191,12 +436,13 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {sessionInvites.map((invite) => (
+                    {filteredSessionInvites.map((invite) => (
                       <tr key={invite.inviteId}>
                         <td>
                           <SessionCell {...invite} />
                         </td>
                         <td>{PIPELINE_LABELS[invite.pipelineType]}</td>
+                        <td>{formatDateTime(invite.startDate)}</td>
                         <td>
                           <TrainerCell name={invite.trainerName} email={invite.trainerEmail} />
                         </td>
@@ -220,7 +466,7 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
                 Pendientes: {summary.variants.pending}
               </Badge>
             </div>
-            {variantInvites.length === 0 ? (
+            {filteredVariantInvites.length === 0 ? (
               <p className="text-muted fst-italic mt-3">No hay confirmaciones registradas para variantes.</p>
             ) : (
               <div className="table-responsive mt-3">
@@ -236,7 +482,7 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {variantInvites.map((invite) => (
+                    {filteredVariantInvites.map((invite) => (
                       <tr key={invite.inviteId}>
                         <td>
                           <VariantCell {...invite} />
