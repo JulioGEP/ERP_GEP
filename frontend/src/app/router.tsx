@@ -44,6 +44,7 @@ const SalasPage = lazy(() => import('../pages/recursos/SalasPage'));
 const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/TemplatesCertificadosPage'));
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
 const StockPage = lazy(() => import('../pages/recursos/StockPage'));
+const BulkBudgetImportPage = lazy(() => import('../pages/recursos/BulkBudgetImportPage'));
 const ProveedoresPage = lazy(() => import('../pages/recursos/ProveedoresPage'));
 const ConfirmacionesPage = lazy(() => import('../pages/recursos/ConfirmacionesPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
@@ -318,6 +319,10 @@ export function AppRouter({
         <Route
           path="/recursos/stock"
           element={<GuardedRoute path="/recursos/stock" element={<StockPage {...stockPageProps} />} />}
+        />
+        <Route
+          path="/recursos/importar_en_bucle"
+          element={<GuardedRoute path="/recursos/importar_en_bucle" element={<BulkBudgetImportPage />} />}
         />
         <Route
           path="/recursos/confirmaciones"
