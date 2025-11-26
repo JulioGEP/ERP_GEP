@@ -70,6 +70,17 @@ function normalizeProductId(raw: any): string | null {
   return id.length ? id : null;
 }
 
+function normalizeProductName(raw: any): string | null {
+  if (raw === null || raw === undefined) return null;
+  const name = String(raw).trim();
+  if (!name.length) return null;
+
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function parseProductHours(raw: any): { ok: boolean; value: number | null } {
   if (raw === null || raw === undefined || raw === "") {
     return { ok: true, value: null };
@@ -611,46 +622,86 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
   return out as T;
 }
 
+type ProductStockLookup = {
+  byId: Map<string, { stock: number | null; idPipe: string | null }>;
+  byName: Map<string, { stock: number | null; idPipe: string | null }>;
+};
+
 async function buildProductStockMap(
   prisma: PrismaClient,
-  deals: Array<{ deal_products?: Array<{ code?: string | null }> }>,
-) {
+  deals: Array<{ deal_products?: Array<{ code?: string | null; name?: string | null }> }>,
+): Promise<ProductStockLookup> {
   const productPipeIds = new Set<string>();
+  const productNames = new Set<string>();
 
   for (const deal of deals) {
     for (const product of deal.deal_products ?? []) {
       const productId = normalizeProductId(product?.code);
+      const productName = typeof product?.name === "string" ? product.name.trim() : null;
       if (productId) {
         productPipeIds.add(productId);
+      }
+      if (productName?.length) {
+        productNames.add(productName);
       }
     }
   }
 
-  if (!productPipeIds.size) return new Map<string, number | null>();
+  if (!productPipeIds.size && !productNames.size) {
+    return { byId: new Map(), byName: new Map() };
+  }
+
+  const conditions: any[] = [];
+  if (productPipeIds.size) {
+    conditions.push({ id_pipe: { in: Array.from(productPipeIds) } });
+  }
+  if (productNames.size) {
+    conditions.push({ name: { in: Array.from(productNames) } });
+  }
 
   const rows = await prisma.products.findMany({
-    where: { id_pipe: { in: Array.from(productPipeIds) } },
-    select: { id_pipe: true, almacen_stock: true },
+    where: { OR: conditions },
+    select: { id_pipe: true, almacen_stock: true, name: true },
   });
 
-  return new Map<string, number | null>(
-    rows.map((row) => [String(row.id_pipe), row.almacen_stock == null ? null : Number(row.almacen_stock)]),
-  );
+  const byId = new Map<string, { stock: number | null; idPipe: string | null }>();
+  const byName = new Map<string, { stock: number | null; idPipe: string | null }>();
+
+  for (const row of rows) {
+    const normalizedId = normalizeProductId(row.id_pipe);
+    const normalizedName = normalizeProductName(row.name);
+    const stock = row.almacen_stock == null ? null : Number(row.almacen_stock);
+    const info = { stock, idPipe: normalizedId };
+
+    if (normalizedId) {
+      byId.set(normalizedId, info);
+    }
+    if (normalizedName) {
+      byName.set(normalizedName, info);
+    }
+  }
+
+  return { byId, byName };
 }
 
 function attachProductStockToDeal<T extends Record<string, any>>(
   deal: T | null,
-  stockMap: Map<string, number | null>,
+  stockMap: ProductStockLookup,
 ): T | null {
   if (!deal || !Array.isArray((deal as any).products)) return deal;
 
   const enrichedProducts = (deal as any).products.map((product: any) => {
     const pipeId = normalizeProductId(product?.code ?? product?.id_pipe ?? null);
-    const stock = pipeId ? stockMap.get(pipeId) ?? null : null;
+    const normalizedName = normalizeProductName(product?.name ?? product?.code ?? null);
+    const stockEntryById = pipeId ? stockMap.byId.get(pipeId) : undefined;
+    const stockEntryByName = normalizedName ? stockMap.byName.get(normalizedName) : undefined;
+    const stockEntry = stockEntryById ?? stockEntryByName ?? null;
+    const stock = stockEntry ? stockEntry.stock : null;
+    const resolvedPipeId = pipeId ?? stockEntry?.idPipe ?? product?.id_pipe ?? null;
 
     return {
       ...product,
-      id_pipe: pipeId ?? product?.id_pipe ?? null,
+      id_pipe: resolvedPipeId,
       product_stock: stock,
       almacen_stock: product?.almacen_stock ?? stock ?? null,
     };
