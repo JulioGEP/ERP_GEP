@@ -1,28 +1,14 @@
-import { useMemo } from 'react';
 import { Alert, Spinner, Table } from 'react-bootstrap';
-import type { DealSummary } from '../../types/deal';
-import { isMaterialPipeline } from './MaterialsBudgetsPage';
+import type { MaterialOrder } from '../../types/materialOrder';
 
 export type MaterialsOrdersPageProps = {
-  budgets: DealSummary[];
+  orders: MaterialOrder[];
   isLoading: boolean;
   isFetching: boolean;
   error: unknown;
   onRetry: () => void;
-  onSelect?: (budget: DealSummary) => void;
+  onSelect?: (order: MaterialOrder) => void;
 };
-
-function getBudgetId(budget: DealSummary): string | null {
-  const fallbackId = budget.dealId ?? budget.deal_id;
-  if (fallbackId == null) return null;
-  const trimmed = String(fallbackId).trim();
-  return trimmed.length ? trimmed : null;
-}
-
-function getProviderName(budget: DealSummary): string {
-  const provider = budget.proveedores ?? budget.proveedor ?? '';
-  return provider.trim().length ? provider.trim() : '—';
-}
 
 function formatOrderDate(dateIso: string | null | undefined): string {
   if (!dateIso) return '—';
@@ -32,15 +18,15 @@ function formatOrderDate(dateIso: string | null | undefined): string {
 }
 
 export function MaterialsOrdersPage({
-  budgets,
+  orders,
   isLoading,
   isFetching,
   error,
   onRetry,
   onSelect,
 }: MaterialsOrdersPageProps) {
-  const materialsBudgets = useMemo(() => budgets.filter((budget) => isMaterialPipeline(budget)), [budgets]);
   const hasError = !!error;
+  const hasOrders = orders.length > 0;
 
   return (
     <div className="d-grid gap-4">
@@ -83,27 +69,26 @@ export function MaterialsOrdersPage({
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
-              ) : materialsBudgets.length === 0 ? (
+              ) : !hasOrders ? (
                 <tr>
                   <td colSpan={3} className="text-center py-4 text-muted">
                     No hay pedidos de materiales para mostrar.
                   </td>
                 </tr>
               ) : (
-                materialsBudgets.map((budget, index) => {
-                  const budgetId = getBudgetId(budget);
-                  const rowKey = budget.deal_id ?? budget.dealId ?? `material-order-${index}`;
+                orders.map((order, index) => {
+                  const rowKey = order.id ?? `material-order-${index}`;
                   return (
                     <tr
                       key={rowKey}
                       role={onSelect ? 'button' : undefined}
                       className="align-middle"
-                      onClick={onSelect ? () => onSelect(budget) : undefined}
+                      onClick={onSelect ? () => onSelect(order) : undefined}
                       style={onSelect ? { cursor: 'pointer' } : undefined}
                     >
-                      <td className="fw-semibold">{budgetId ? `#${budgetId}` : '—'}</td>
-                      <td>{getProviderName(budget)}</td>
-                      <td>{formatOrderDate(budget.a_fecha)}</td>
+                      <td className="fw-semibold">{order.orderNumber ? `#${order.orderNumber}` : '—'}</td>
+                      <td>{order.supplierName ?? order.supplierEmail ?? '—'}</td>
+                      <td>{formatOrderDate(order.createdAt)}</td>
                     </tr>
                   );
                 })

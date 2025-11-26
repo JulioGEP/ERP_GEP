@@ -12,6 +12,7 @@ import type { ProductCommentPayload } from '../features/presupuestos/ProductComm
 import { VariantModal } from '../features/formacion_abierta/ProductVariantsList';
 import type { ActiveVariant, ProductInfo, VariantInfo } from '../features/formacion_abierta/types';
 import { ApiError } from '../api/client';
+import { fetchMaterialOrders } from '../features/materials/orders.api';
 import {
   deleteDeal,
   fetchDealDetail,
@@ -44,6 +45,7 @@ import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBud
 import type { MaterialsPendingProductsPageProps } from '../pages/materiales/MaterialsPendingProductsPage';
 import type { MaterialsOrdersPageProps } from '../pages/materiales/MaterialsOrdersPage';
 import { isMaterialPipeline } from '../routes/materiales/MaterialsBudgetsPage';
+import { MATERIAL_ORDERS_QUERY_KEY } from '../features/materials/queryKeys';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
@@ -60,6 +62,7 @@ import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPa
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
+import type { MaterialOrder, MaterialOrdersResponse } from '../types/materialOrder';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 const NAVBAR_OFFCANVAS_ID = 'app-navbar-offcanvas';
@@ -690,6 +693,15 @@ export default function AuthenticatedApp() {
     enabled: isBudgetsTodosRoute || isBudgetsSinTrabajarRoute || isMaterialsRoute,
   });
 
+  const materialsOrdersQuery = useQuery({
+    queryKey: MATERIAL_ORDERS_QUERY_KEY,
+    queryFn: () => fetchMaterialOrders(),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 1,
+    enabled: isMaterialsRoute,
+  });
+
   const pendingPlanningBudgets = useMemo(() => {
     const source = budgetsWithoutSessionsQuery.data ?? [];
     if (!Array.isArray(source) || source.length === 0) {
@@ -719,6 +731,28 @@ export default function AuthenticatedApp() {
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  const handleMaterialOrderCreated = useCallback(
+    (order: MaterialOrder, nextOrder?: number) => {
+      queryClient.setQueryData<MaterialOrdersResponse | undefined>(
+        MATERIAL_ORDERS_QUERY_KEY,
+        (current) => {
+          if (!current) {
+            return { orders: [order], nextOrderNumber: nextOrder ?? order.orderNumber + 1 };
+          }
+
+          const updatedOrders = [order, ...current.orders];
+          const resolvedNextOrderNumber = Math.max(
+            nextOrder ?? current.nextOrderNumber,
+            order.orderNumber + 1,
+          );
+
+          return { ...current, orders: updatedOrders, nextOrderNumber: resolvedNextOrderNumber };
+        },
+      );
+    },
+    [queryClient],
+  );
 
   const handleOpenImportModal = useCallback(() => {
     setImportResultWarnings(null);
@@ -968,6 +1002,10 @@ export default function AuthenticatedApp() {
 
   const allBudgets = allBudgetsQuery.data ?? [];
   const isRefreshingAllBudgets = allBudgetsQuery.isFetching && !allBudgetsQuery.isLoading;
+  const materialOrdersData = materialsOrdersQuery.data;
+  const materialOrders = materialOrdersData?.orders ?? [];
+  const nextMaterialOrderNumber = materialOrdersData?.nextOrderNumber ?? 1;
+  const isRefreshingMaterialOrders = materialsOrdersQuery.isFetching && !materialsOrdersQuery.isLoading;
   const materialsBudgets = useMemo(
     () => allBudgets.filter((budget) => isMaterialPipeline(budget)),
     [allBudgets],
@@ -1359,15 +1397,18 @@ export default function AuthenticatedApp() {
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
     canImport: canImportBudgets,
+    nextOrderNumber: nextMaterialOrderNumber,
+    onOrderCreated: handleMaterialOrderCreated,
+    onOrdersRefresh: () => materialsOrdersQuery.refetch(),
+    isLoadingOrders: materialsOrdersQuery.isLoading,
   };
 
   const materialsOrdersPageProps: MaterialsOrdersPageProps = {
-    budgets: materialsBudgets,
-    isLoading: allBudgetsQuery.isLoading,
-    isFetching: isRefreshingAllBudgets,
-    error: allBudgetsQuery.error ?? null,
-    onRetry: () => allBudgetsQuery.refetch(),
-    onSelect: handleSelectBudget,
+    orders: materialOrders,
+    isLoading: materialsOrdersQuery.isLoading,
+    isFetching: isRefreshingMaterialOrders,
+    error: materialsOrdersQuery.error ?? null,
+    onRetry: () => materialsOrdersQuery.refetch(),
   };
 
   const calendarSessionsPageProps: PorSesionesPageProps = {

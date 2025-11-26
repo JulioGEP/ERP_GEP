@@ -11,13 +11,14 @@ type SendEmailParams = {
   subject: string;
   html?: string;
   text?: string; // compat: si viene text y no hay html, lo renderizamos simple
+  cc?: string | string[];
 };
 
 /**
  * Envío de email mediante Gmail API (Service Account + DWD) usando sendGmail().
  * Sin nodemailer/OAuth2: menos superficie y sin problemas de OpenSSL.
  */
-export async function sendEmail({ to, subject, html, text }: SendEmailParams): Promise<void> {
+export async function sendEmail({ to, subject, html, text, cc }: SendEmailParams): Promise<void> {
   const plainText = text ?? (html ? stripHtml(html) : "");
   const htmlBody =
     html ??
@@ -28,6 +29,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
       : "<div></div>");
 
   const hasText = Boolean(plainText);
+  const ccHeader = normalizeEmailList(cc);
   const boundary = `mime_boundary_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
   if (hasText) {
@@ -48,6 +50,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
 
     await sendGmail({
       to,
+      cc: ccHeader,
       subject,
       body: bodyParts,
       contentType: `multipart/alternative; boundary="${boundary}"`,
@@ -58,6 +61,7 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
 
   await sendGmail({
     to,
+    cc: ccHeader,
     subject,
     body: chunkBase64(Buffer.from(htmlBody, "utf8").toString("base64")),
     contentType: "text/html; charset=UTF-8",
@@ -107,4 +111,19 @@ function stripHtml(source: string): string {
 function chunkBase64(input: string): string {
   const chunked = input.replace(/.{1,76}(?=.)/g, "$&\r\n");
   return chunked.endsWith("\r\n") ? chunked : `${chunked}\r\n`;
+}
+
+function normalizeEmailList(value: string | string[] | undefined): string | undefined {
+  if (!value) return undefined;
+  const items = Array.isArray(value) ? value : value.split(",");
+  const normalized = Array.from(
+    new Set(
+      items
+        .map((entry) => entry?.trim())
+        .filter((entry): entry is string => Boolean(entry && entry.length)),
+    ),
+  );
+
+  if (!normalized.length) return undefined;
+  return normalized.join(", ");
 }

@@ -99,6 +99,7 @@ export async function getGmailAccessToken(): Promise<string> {
 
 export async function sendGmail(params: {
   to: string;
+  cc?: string;
   subject: string;
   body: string;
   contentType: string;
@@ -112,6 +113,7 @@ export async function sendGmail(params: {
   const headers = [
     `From: ${fromAddr}`,
     `To: ${params.to}`,
+    params.cc ? `Cc: ${params.cc}` : null,
     `Subject: ${subjectHeader}`,
     params.replyTo ? `Reply-To: ${params.replyTo}` : null,
     `MIME-Version: 1.0`,
