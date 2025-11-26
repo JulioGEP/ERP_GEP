@@ -43,6 +43,35 @@ type SelectedProduct = {
   stockUsage: number;
 };
 
+function getProductIdentifier(row: PendingProductRow): string {
+  return row.idPipe ?? row.productName;
+}
+
+function getUsedStockForProduct(
+  row: PendingProductRow,
+  selection: Record<string, SelectedProduct>,
+  excludeKey?: string,
+): number {
+  const productId = getProductIdentifier(row);
+
+  return Object.values(selection).reduce((total, product) => {
+    if (excludeKey && product.row.key === excludeKey) return total;
+    if (product.handling !== 'stock') return total;
+    if (getProductIdentifier(product.row) !== productId) return total;
+    return total + (product.stockUsage ?? 0);
+  }, 0);
+}
+
+function getRemainingStockForProduct(
+  row: PendingProductRow,
+  selection: Record<string, SelectedProduct>,
+  excludeKey?: string,
+): number {
+  const usedStock = getUsedStockForProduct(row, selection, excludeKey);
+  const baseStock = row.stockValue ?? 0;
+  return Math.max(0, baseStock - usedStock);
+}
+
 type IconProps = SVGProps<SVGSVGElement>;
 
 function CheckSquareIcon(props: IconProps) {
@@ -320,6 +349,7 @@ export function MaterialsPendingProductsPage({
     setSelectedProducts((current) => {
       const { key } = row;
       const hasStock = (row.stockValue ?? 0) > 0;
+      const remainingStock = getRemainingStockForProduct(row, current);
 
       if (current[key]) {
         const updated = { ...current };
@@ -327,13 +357,18 @@ export function MaterialsPendingProductsPage({
         return updated;
       }
 
+      const canUseStock = hasStock && remainingStock > 0;
+      const defaultStockUsage = canUseStock
+        ? Math.min(getDefaultStockUsage(row), remainingStock)
+        : 0;
+
       return {
         ...current,
         [key]: {
           row,
-          handling: hasStock ? 'stock' : 'supplier',
+          handling: canUseStock ? 'stock' : 'supplier',
           hasStock,
-          stockUsage: hasStock ? getDefaultStockUsage(row) : 0,
+          stockUsage: defaultStockUsage,
         },
       };
     });
@@ -370,14 +405,24 @@ export function MaterialsPendingProductsPage({
   }, [showEmailModal, supplierContactEmail]);
 
   const handleSelectAll = () => {
+    const stockAllocation: Record<string, number> = {};
+
     const allSelected = pendingProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
       const hasStock = (row.stockValue ?? 0) > 0;
+      const productId = getProductIdentifier(row);
+      const remainingStock = Math.max(0, (row.stockValue ?? 0) - (stockAllocation[productId] ?? 0));
+      const defaultStockUsage = hasStock ? Math.min(getDefaultStockUsage(row), remainingStock) : 0;
+      const willUseStock = hasStock && defaultStockUsage > 0;
+
+      if (willUseStock) {
+        stockAllocation[productId] = (stockAllocation[productId] ?? 0) + defaultStockUsage;
+      }
 
       acc[row.key] = {
         row,
-        handling: hasStock ? 'stock' : 'supplier',
+        handling: willUseStock ? 'stock' : 'supplier',
         hasStock,
-        stockUsage: hasStock ? getDefaultStockUsage(row) : 0,
+        stockUsage: defaultStockUsage,
       };
 
       return acc;
@@ -395,9 +440,11 @@ export function MaterialsPendingProductsPage({
       const existing = current[key];
       if (!existing) return current;
 
+      const remainingStock = getRemainingStockForProduct(existing.row, current, key);
+
       const nextStockUsage =
         handling === 'stock'
-          ? existing.stockUsage || getDefaultStockUsage(existing.row)
+          ? Math.min(existing.stockUsage || getDefaultStockUsage(existing.row), remainingStock)
           : 0;
 
       return {
@@ -412,8 +459,8 @@ export function MaterialsPendingProductsPage({
       const existing = current[key];
       if (!existing) return current;
 
-      const maxStock = Math.min(existing.row.stockValue ?? 0, existing.row.quantityValue ?? 0);
-      const sanitizedValue = Number.isFinite(value) ? Math.max(0, Math.min(maxStock, value)) : 0;
+      const remainingStock = getRemainingStockForProduct(existing.row, current, key);
+      const sanitizedValue = Number.isFinite(value) ? Math.max(0, Math.min(remainingStock, value)) : 0;
 
       return {
         ...current,
@@ -790,6 +837,8 @@ export function MaterialsPendingProductsPage({
               </thead>
               <tbody>
                 {selectedList.map(({ row, handling, hasStock, stockUsage }) => {
+                  const usedStock = getUsedStockForProduct(row, selectedProducts);
+                  const remainingStock = getRemainingStockForProduct(row, selectedProducts, row.key);
                   const remainingForSupplier = Math.max(
                     (row.quantityValue ?? 0) - (handling === 'stock' ? stockUsage : 0),
                     0,
@@ -805,7 +854,13 @@ export function MaterialsPendingProductsPage({
                     <td className={hasSufficientStock(row) ? 'text-success fw-semibold' : 'text-danger fw-semibold'}>
                       {row.quantityLabel}
                     </td>
-                    <td>{row.stockLabel}</td>
+                    <td>
+                      <div className="fw-semibold">{formatQuantity(row.stockValue)}</div>
+                      <div className="small text-muted">En uso: {formatQuantity(usedStock)}</div>
+                      <div className="small text-muted">
+                        Disponible: {formatQuantity(Math.max(0, (row.stockValue ?? 0) - usedStock))}
+                      </div>
+                    </td>
                     <td>
                       <div className="d-flex flex-column gap-2">
                         <Form.Check
@@ -824,7 +879,7 @@ export function MaterialsPendingProductsPage({
                               <Form.Control
                                 type="number"
                                 min={0}
-                                max={row.stockValue ?? undefined}
+                                max={remainingStock}
                                 value={handling === 'stock' ? stockUsage : 0}
                                 disabled={handling !== 'stock'}
                                 onChange={(event) =>
@@ -833,7 +888,7 @@ export function MaterialsPendingProductsPage({
                                 style={{ maxWidth: 160 }}
                               />
                               <span className="small text-muted">
-                                Máx: {formatQuantity(Math.min(row.stockValue ?? 0, row.quantityValue ?? 0))}
+                                Máx: {formatQuantity(remainingStock)}
                               </span>
                             </div>
                             <div className="small text-muted">
