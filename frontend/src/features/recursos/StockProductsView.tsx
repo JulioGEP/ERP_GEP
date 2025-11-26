@@ -4,7 +4,7 @@ import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstr
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product, ProductAttribute } from '../../types/product';
 import type { Provider } from '../../types/provider';
-import { fetchProducts, syncProducts, updateProduct } from './products.api';
+import { fetchProducts, syncProducts, updateProduct, type ProductUpdatePayload } from './products.api';
 import { fetchProviders } from './providers.api';
 import { ApiError } from '../../api/client';
 import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
@@ -228,8 +228,23 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
       providerIds?: number[];
       almacenStock?: number | null;
       atributos?: ProductAttribute[] | null;
-    }) =>
-      updateProduct(id, { provider_ids: providerIds, almacen_stock: almacenStock, atributos }),
+    }) => {
+      const payload: ProductUpdatePayload = {};
+
+      if (providerIds !== undefined) {
+        payload.provider_ids = providerIds;
+      }
+
+      if (almacenStock !== undefined) {
+        payload.almacen_stock = almacenStock;
+      }
+
+      if (atributos !== undefined) {
+        payload.atributos = atributos;
+      }
+
+      return updateProduct(id, payload);
+    },
     onSuccess: (product) => {
       onNotify({ variant: 'success', message: 'Producto actualizado correctamente.' });
       queryClient.setQueryData<Product[] | undefined>(['products'], (current) => {
