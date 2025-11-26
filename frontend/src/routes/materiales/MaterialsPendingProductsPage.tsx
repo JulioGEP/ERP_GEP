@@ -310,11 +310,13 @@ export function MaterialsPendingProductsPage({
   const [ccEmails, setCcEmails] = useState<string[]>([defaultCommercialEmail]);
   const [toEmail, setToEmail] = useState('');
   const [mailSent, setMailSent] = useState(false);
+  const [supplierEmailSent, setSupplierEmailSent] = useState(false);
   const defaultLogisticsEmail = 'logistica@gepgroup.es';
   const [logisticsToInput, setLogisticsToInput] = useState('');
   const [logisticsToEmails, setLogisticsToEmails] = useState<string[]>([defaultLogisticsEmail]);
   const [logisticsCcInput, setLogisticsCcInput] = useState('');
   const [logisticsCcEmails, setLogisticsCcEmails] = useState<string[]>([defaultCommercialEmail]);
+  const [logisticsEmailSent, setLogisticsEmailSent] = useState(false);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
   const errorDetails = useMemo(() => buildErrorDetails(error), [error]);
@@ -467,10 +469,12 @@ export function MaterialsPendingProductsPage({
     setMailSent(false);
     setCcInput('');
     setCcEmails([defaultCommercialEmail]);
+    setSupplierEmailSent(false);
     setLogisticsToInput('');
     setLogisticsToEmails([defaultLogisticsEmail]);
     setLogisticsCcInput('');
     setLogisticsCcEmails([defaultCommercialEmail]);
+    setLogisticsEmailSent(false);
   };
 
   const closeOrderModal = () => {
@@ -487,7 +491,7 @@ export function MaterialsPendingProductsPage({
     setShowEmailModal(false);
   };
 
-  const handleSendEmail = () => {
+  const finalizeEmailSending = () => {
     setMailSent(true);
     closeEmailModal();
     closeOrderModal();
@@ -548,6 +552,8 @@ export function MaterialsPendingProductsPage({
     .map((product) => `- ${product.productName} ${formatQuantity(product.supplierQuantity)}`)
     .join('\n');
 
+  const hasSupplierRequest = productRequests.some((product) => product.supplierQuantity > 0);
+
   const emailBody = `Hola ${supplierContactName}\n\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${
     supplierProductLines || '- Sin productos para pedir (se cubrirá con stock disponible).'
   }\n\nDime si tienes disponibilidad y por favor, indícanos fechas estimadas de entrega.\n\nMuchas gracias de antemano.\n\nEquipo de GEP Group.`;
@@ -600,6 +606,20 @@ export function MaterialsPendingProductsPage({
 
       return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' };
     });
+  };
+
+  const handleSendSupplierEmail = () => {
+    setSupplierEmailSent(true);
+    if (!hasStockUsage || logisticsEmailSent) {
+      finalizeEmailSending();
+    }
+  };
+
+  const handleSendLogisticsEmail = () => {
+    setLogisticsEmailSent(true);
+    if (!hasSupplierRequest || supplierEmailSent) {
+      finalizeEmailSending();
+    }
   };
 
   return (
@@ -1059,9 +1079,14 @@ export function MaterialsPendingProductsPage({
             <Button variant="outline-secondary" onClick={closeEmailModal}>
               Cancelar
             </Button>
-            <Button variant="success" onClick={handleSendEmail}>
-              Enviar correos desde erp@gepgroup.es
+            <Button variant="success" onClick={handleSendSupplierEmail}>
+              Enviar correo a proveedor
             </Button>
+            {hasStockUsage ? (
+              <Button variant="success" onClick={handleSendLogisticsEmail}>
+                Enviar correo a logística
+              </Button>
+            ) : null}
           </div>
         </Modal.Body>
       </Modal>
