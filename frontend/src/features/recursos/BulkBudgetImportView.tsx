@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, Badge, Button, Card, Form, ListGroup, Stack } from 'react-bootstrap';
+import * as XLSX from 'xlsx';
 import { ApiError } from '../../api/client';
 import { importDeal } from '../presupuestos/api/deals.api';
 
@@ -32,6 +33,7 @@ export function BulkBudgetImportView() {
   const [rawInput, setRawInput] = useState('');
   const [progress, setProgress] = useState<BudgetImportProgress[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
 
   const budgetIds = useMemo(() => {
     return rawInput
@@ -77,6 +79,55 @@ export function BulkBudgetImportView() {
     [budgetIds, updateStatus],
   );
 
+  const handleExcelUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadMessage(null);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) {
+        setUploadMessage('No se encontró ninguna pestaña en el Excel.');
+        return;
+      }
+
+      const rows: Array<Record<string, unknown>> = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName]);
+      if (!rows.length) {
+        setUploadMessage('El archivo está vacío o no contiene datos legibles.');
+        return;
+      }
+
+      const parsedIds = rows
+        .map((row) => {
+          const keys = Object.keys(row).map((key) => key.trim().toLowerCase());
+          const dealKeyIndex = keys.findIndex((key) => key === 'deal_id_pipedrive');
+          if (dealKeyIndex === -1) return null;
+
+          const dealKey = Object.keys(row)[dealKeyIndex];
+          const value = (row as Record<string, unknown>)[dealKey];
+          return typeof value === 'number' || typeof value === 'string' ? String(value).trim() : null;
+        })
+        .filter((value): value is string => Boolean(value));
+
+      if (!parsedIds.length) {
+        setUploadMessage('No se encontraron presupuestos en la columna "deal_id_pipedrive".');
+        return;
+      }
+
+      const uniqueIds = Array.from(new Set(parsedIds));
+      setRawInput(uniqueIds.join(', '));
+      setUploadMessage(`Se detectaron ${uniqueIds.length} presupuestos desde el Excel.`);
+    } catch (error) {
+      console.error(error);
+      setUploadMessage('No se pudo leer el archivo. Asegúrate de que es un Excel válido.');
+    } finally {
+      event.target.value = '';
+    }
+  }, []);
+
   return (
     <Stack gap={4}>
       <div>
@@ -90,6 +141,20 @@ export function BulkBudgetImportView() {
       <Card>
         <Card.Body>
           <Form onSubmit={handleSubmit} className="d-flex flex-column gap-3">
+            <Form.Group controlId="bulk-budget-import-excel">
+              <Form.Label>Subir Excel</Form.Label>
+              <Form.Control type="file" accept=".xlsx,.xls" onChange={handleExcelUpload} disabled={isRunning} />
+              <Form.Text className="text-muted">
+                Usa un Excel con la columna <code>deal_id_pipedrive</code> para rellenar automáticamente los
+                presupuestos.
+              </Form.Text>
+              {uploadMessage && (
+                <Alert className="mt-2 mb-0" variant="info">
+                  {uploadMessage}
+                </Alert>
+              )}
+            </Form.Group>
+
             <Form.Group controlId="bulk-budget-import-input">
               <Form.Label>Presupuestos</Form.Label>
               <Form.Control
