@@ -6,7 +6,7 @@ import type {
   DealSummarySession,
   DealDocument,
   DealNote,
-  type MaterialDealStatus,
+  MaterialDealStatus,
 } from '../../../types/deal';
 import { ApiError, requestJson, toStringValue } from '../../../api/client';
 import { splitFilterValue } from '../../../components/table/filterUtils';
