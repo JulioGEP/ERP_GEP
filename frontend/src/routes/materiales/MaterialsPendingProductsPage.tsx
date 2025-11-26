@@ -296,21 +296,6 @@ export function MaterialsPendingProductsPage({
   const hasRows = pendingProducts.length > 0;
   const errorDetails = useMemo(() => buildErrorDetails(error), [error]);
 
-  const quantityTotalsByPipeId = useMemo(() => {
-    const totals = new Map<string, number>();
-
-    pendingProducts.forEach((row) => {
-      const idPipe = row.idPipe?.trim();
-      const quantity = row.quantityValue ?? 0;
-      if (!idPipe) return;
-
-      const current = totals.get(idPipe) ?? 0;
-      totals.set(idPipe, current + quantity);
-    });
-
-    return totals;
-  }, [pendingProducts]);
-
   const hasMissingProductStock = useMemo(
     () => pendingProducts.some((row) => row.missingProductStockField),
     [pendingProducts],
@@ -320,17 +305,9 @@ export function MaterialsPendingProductsPage({
     throw new Error('El endpoint de materiales pendientes no devuelve product_stock.');
   }
 
-  const getTotalQuantityForRow = (row: PendingProductRow) => {
-    if (row.idPipe) {
-      return quantityTotalsByPipeId.get(row.idPipe) ?? row.quantityValue ?? 0;
-    }
-
-    return row.quantityValue ?? 0;
-  };
-
   const hasSufficientStock = (row: PendingProductRow) => {
-    if (row.stockValue == null) return false;
-    return getTotalQuantityForRow(row) <= row.stockValue;
+    if (row.quantityValue == null || row.stockValue == null) return false;
+    return row.quantityValue <= row.stockValue;
   };
 
   const getDefaultStockUsage = (row: PendingProductRow) => {
@@ -712,7 +689,6 @@ export function MaterialsPendingProductsPage({
                     Producto {getSortIndicator(sortConfig, 'productName')}
                   </button>
                 </th>
-                <th scope="col">Stock</th>
                 <th scope="col">
                   <button
                     type="button"
@@ -722,6 +698,7 @@ export function MaterialsPendingProductsPage({
                     Cantidad {getSortIndicator(sortConfig, 'quantity')}
                   </button>
                 </th>
+                <th scope="col">Stock</th>
                 <th scope="col">
                   <button
                     type="button"
@@ -771,10 +748,10 @@ export function MaterialsPendingProductsPage({
                     <td>{row.organizationName}</td>
                     <td>{row.supplier}</td>
                     <td>{row.productName}</td>
-                    <td>{row.stockLabel}</td>
                     <td className={hasSufficientStock(row) ? 'text-success fw-semibold' : 'text-danger fw-semibold'}>
                       {row.quantityLabel}
                     </td>
+                    <td>{row.stockLabel}</td>
                     <td>{row.estimatedDelivery}</td>
                   </tr>
                 ))
