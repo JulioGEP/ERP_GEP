@@ -43,23 +43,17 @@ type SelectedProduct = {
   stockUsage: number;
 };
 
-function getProductIdentifier(row: PendingProductRow): string {
-  return row.idPipe ?? row.productName;
-}
-
 function getUsedStockForProduct(
   row: PendingProductRow,
   selection: Record<string, SelectedProduct>,
   excludeKey?: string,
 ): number {
-  const productId = getProductIdentifier(row);
+  if (excludeKey && row.key === excludeKey) return 0;
 
-  return Object.values(selection).reduce((total, product) => {
-    if (excludeKey && product.row.key === excludeKey) return total;
-    if (product.handling !== 'stock') return total;
-    if (getProductIdentifier(product.row) !== productId) return total;
-    return total + (product.stockUsage ?? 0);
-  }, 0);
+  const selected = selection[row.key];
+  if (!selected || selected.handling !== 'stock') return 0;
+
+  return selected.stockUsage ?? 0;
 }
 
 function getRemainingStockForProduct(
@@ -405,18 +399,11 @@ export function MaterialsPendingProductsPage({
   }, [showEmailModal, supplierContactEmail]);
 
   const handleSelectAll = () => {
-    const stockAllocation: Record<string, number> = {};
-
     const allSelected = pendingProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
       const hasStock = (row.stockValue ?? 0) > 0;
-      const productId = getProductIdentifier(row);
-      const remainingStock = Math.max(0, (row.stockValue ?? 0) - (stockAllocation[productId] ?? 0));
+      const remainingStock = getRemainingStockForProduct(row, acc);
       const defaultStockUsage = hasStock ? Math.min(getDefaultStockUsage(row), remainingStock) : 0;
       const willUseStock = hasStock && defaultStockUsage > 0;
-
-      if (willUseStock) {
-        stockAllocation[productId] = (stockAllocation[productId] ?? 0) + defaultStockUsage;
-      }
 
       acc[row.key] = {
         row,
