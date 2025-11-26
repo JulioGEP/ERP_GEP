@@ -38,6 +38,7 @@ type SessionInviteRecord = {
       pipeline_label: string | null;
       title: string | null;
     } | null;
+    fecha_inicio_utc: Date | string | null;
   } | null;
   trainers: {
     trainer_id: string | null;
@@ -81,6 +82,7 @@ type SessionConfirmationRow = {
   trainerName: string | null;
   trainerEmail: string | null;
   status: TrainerInviteStatus;
+  startDate: string | null;
   sentAt: string | null;
   respondedAt: string | null;
 };
@@ -169,6 +171,7 @@ function buildSessionInvitePayload(invite: SessionInviteRecord): SessionConfirma
     trainerName: formatFullName(invite.trainers),
     trainerEmail: invite.trainers?.email ?? invite.trainer_email ?? null,
     status,
+    startDate: toMadridISOString(invite.sesiones.fecha_inicio_utc),
     sentAt: toMadridISOString(invite.sent_at),
     respondedAt: toMadridISOString(invite.responded_at),
   };
@@ -247,6 +250,7 @@ export const handler = createHttpHandler(async (request) => {
                 title: true,
               },
             },
+            fecha_inicio_utc: true,
           },
         },
         trainers: { select: { trainer_id: true, name: true, apellido: true, email: true } },

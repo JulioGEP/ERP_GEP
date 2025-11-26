@@ -16,6 +16,7 @@ export type SessionConfirmationRow = {
   trainerName: string | null;
   trainerEmail: string | null;
   status: TrainerInviteStatus;
+  startDate: string | null;
   sentAt: string | null;
   respondedAt: string | null;
 };
@@ -105,6 +106,7 @@ function normalizeSessionInvite(row: any): SessionConfirmationRow {
     trainerName: normalizeNullableString(row.trainerName),
     trainerEmail: normalizeNullableString(row.trainerEmail),
     status: status.toUpperCase() as TrainerInviteStatus,
+    startDate: normalizeDate(row.startDate),
     sentAt: normalizeDate(row.sentAt),
     respondedAt: normalizeDate(row.respondedAt),
   };
