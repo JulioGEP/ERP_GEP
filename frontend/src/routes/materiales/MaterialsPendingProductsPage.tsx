@@ -1,7 +1,12 @@
 import type { SVGProps } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
+import type { MaterialOrder } from '../../types/materialOrder';
+import type { CreateMaterialOrderPayload } from '../../features/materials/orders.api';
+import { createMaterialOrder } from '../../features/materials/orders.api';
+import { MATERIAL_ORDERS_QUERY_KEY } from '../../features/materials/queryKeys';
 import type { DealProduct, DealSummary } from '../../types/deal';
 import { isMaterialPipeline } from './MaterialsBudgetsPage';
 
@@ -15,6 +20,10 @@ export type MaterialsPendingProductsPageProps = {
   onOpenImportModal: () => void;
   isImporting: boolean;
   canImport: boolean;
+  nextOrderNumber: number;
+  onOrderCreated?: (order: MaterialOrder, nextOrderNumber?: number) => void;
+  onOrdersRefresh?: () => void;
+  isLoadingOrders?: boolean;
 };
 
 type PendingProductRow = {
@@ -297,29 +306,37 @@ export function MaterialsPendingProductsPage({
   onOpenImportModal,
   isImporting,
   canImport,
+  nextOrderNumber: initialNextOrderNumber,
+  onOrderCreated,
+  onOrdersRefresh,
+  isLoadingOrders,
 }: MaterialsPendingProductsPageProps) {
+  const queryClient = useQueryClient();
   const pendingProducts = useMemo(() => buildPendingProducts(budgets), [budgets]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(null);
   const [selectedProducts, setSelectedProducts] = useState<Record<string, SelectedProduct>>({});
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
-  const [nextOrderNumber, setNextOrderNumber] = useState(101);
+  const [nextOrderNumber, setNextOrderNumber] = useState(initialNextOrderNumber);
   const [currentOrderNumber, setCurrentOrderNumber] = useState<number | null>(null);
   const defaultCommercialEmail = 'sales@gepgroup.es';
   const [ccInput, setCcInput] = useState('');
   const [ccEmails, setCcEmails] = useState<string[]>([defaultCommercialEmail]);
   const [toEmail, setToEmail] = useState('');
   const [mailSent, setMailSent] = useState(false);
-  const [supplierEmailSent, setSupplierEmailSent] = useState(false);
   const defaultLogisticsEmail = 'logistica@gepgroup.es';
   const [logisticsToInput, setLogisticsToInput] = useState('');
   const [logisticsToEmails, setLogisticsToEmails] = useState<string[]>([defaultLogisticsEmail]);
   const [logisticsCcInput, setLogisticsCcInput] = useState('');
   const [logisticsCcEmails, setLogisticsCcEmails] = useState<string[]>([defaultCommercialEmail]);
-  const [logisticsEmailSent, setLogisticsEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
   const errorDetails = useMemo(() => buildErrorDetails(error), [error]);
+
+  useEffect(() => {
+    setNextOrderNumber(initialNextOrderNumber);
+  }, [initialNextOrderNumber]);
 
   const hasMissingProductStock = useMemo(
     () => pendingProducts.some((row) => row.missingProductStockField),
@@ -469,18 +486,20 @@ export function MaterialsPendingProductsPage({
     setMailSent(false);
     setCcInput('');
     setCcEmails([defaultCommercialEmail]);
-    setSupplierEmailSent(false);
     setLogisticsToInput('');
     setLogisticsToEmails([defaultLogisticsEmail]);
     setLogisticsCcInput('');
     setLogisticsCcEmails([defaultCommercialEmail]);
-    setLogisticsEmailSent(false);
+    setEmailError(null);
   };
 
   const closeOrderModal = () => {
     setShowOrderModal(false);
     setShowEmailModal(false);
     setToEmail('');
+    setCurrentOrderNumber(null);
+    setEmailError(null);
+    createOrderMutation.reset();
   };
 
   const openEmailModal = () => {
@@ -489,14 +508,20 @@ export function MaterialsPendingProductsPage({
 
   const closeEmailModal = () => {
     setShowEmailModal(false);
+    setEmailError(null);
+    createOrderMutation.reset();
   };
 
-  const finalizeEmailSending = () => {
+  const finalizeEmailSending = (upcomingOrderNumber?: number) => {
     setMailSent(true);
     closeEmailModal();
     closeOrderModal();
-    setNextOrderNumber((value) => value + 1);
     setSelectedProducts({});
+    if (typeof upcomingOrderNumber === 'number') {
+      setNextOrderNumber(upcomingOrderNumber);
+    } else {
+      setNextOrderNumber((value) => value + 1);
+    }
   };
 
   const handleAddCc = () => {
@@ -505,6 +530,28 @@ export function MaterialsPendingProductsPage({
     setCcEmails((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
     setCcInput('');
   };
+
+  const createOrderMutation = useMutation({
+    mutationFn: (payload: CreateMaterialOrderPayload) => createMaterialOrder(payload),
+    onSuccess: (result) => {
+      setEmailError(null);
+      onOrderCreated?.(result.order, result.nextOrderNumber);
+      onOrdersRefresh?.();
+      queryClient.invalidateQueries({ queryKey: MATERIAL_ORDERS_QUERY_KEY });
+      finalizeEmailSending(result.nextOrderNumber);
+    },
+    onError: (mutationError: unknown) => {
+      if (isApiError(mutationError)) {
+        setEmailError(mutationError.message);
+        return;
+      }
+      if (mutationError instanceof Error) {
+        setEmailError(mutationError.message);
+        return;
+      }
+      setEmailError('No se pudo enviar los correos de pedido.');
+    },
+  });
 
   const handleRemoveCc = (cc: string) => {
     setCcEmails((current) => current.filter((email) => email !== cc));
@@ -552,8 +599,6 @@ export function MaterialsPendingProductsPage({
     .map((product) => `- ${product.productName} ${formatQuantity(product.supplierQuantity)}`)
     .join('\n');
 
-  const hasSupplierRequest = productRequests.some((product) => product.supplierQuantity > 0);
-
   const emailBody = `Hola ${supplierContactName}\n\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${
     supplierProductLines || '- Sin productos para pedir (se cubrirá con stock disponible).'
   }\n\nDime si tienes disponibilidad y por favor, indícanos fechas estimadas de entrega.\n\nMuchas gracias de antemano.\n\nEquipo de GEP Group.`;
@@ -570,7 +615,10 @@ export function MaterialsPendingProductsPage({
     .join(' ');
 
   const budgetIdForSubject = primaryBudget?.deal_id ?? primaryBudget?.dealId ?? selectedList[0]?.row.budgetId ?? '—';
-  const logisticsSubject = `Uso de stock para prespuesto ${budgetIdForSubject}`;
+  const logisticsSubject = `Uso de stock para presupuesto ${budgetIdForSubject}`;
+  const orderNumberForModal = currentOrderNumber ?? nextOrderNumber;
+  const supplierSubject = `Nuevo Pedido de GEP Group con Nº ${orderNumberForModal} para ${supplierName}`;
+  const isSendingEmails = createOrderMutation.isPending;
 
   const logisticsEmailBody = `Hola Logistica\n\nEl comercial asignado de este presupuesto es "${
     primaryBudget?.comercial ?? '—'
@@ -608,18 +656,50 @@ export function MaterialsPendingProductsPage({
     });
   };
 
-  const handleSendSupplierEmail = () => {
-    setSupplierEmailSent(true);
-    if (!hasStockUsage || logisticsEmailSent) {
-      finalizeEmailSending();
-    }
-  };
+  const handleSendEmails = () => {
+    setEmailError(null);
+    if (!selectedList.length || isSendingEmails) return;
 
-  const handleSendLogisticsEmail = () => {
-    setLogisticsEmailSent(true);
-    if (!hasSupplierRequest || supplierEmailSent) {
-      finalizeEmailSending();
+    const supplierEmailAddress = (toEmail || supplierContactEmail || '').trim();
+
+    if (!supplierEmailAddress) {
+      setEmailError('Indica el correo de contacto del proveedor.');
+      return;
     }
+
+    const sourceBudgetIds = Array.from(
+      new Set(
+        selectedList
+          .map(({ row }) => row.budgetId)
+          .filter((value): value is string => Boolean(value && value.trim())),
+      ),
+    );
+
+    if (!sourceBudgetIds.length && primaryBudget?.deal_id) {
+      sourceBudgetIds.push(String(primaryBudget.deal_id));
+    }
+
+    if (!sourceBudgetIds.length) {
+      setEmailError('No se pudo identificar el presupuesto asociado al pedido.');
+      return;
+    }
+
+    const payload: CreateMaterialOrderPayload = {
+      orderNumber: orderNumberForModal,
+      supplierName,
+      supplierEmail: supplierEmailAddress,
+      supplierCc: ccEmails,
+      supplierSubject,
+      supplierBody: emailBody,
+      logisticsTo: hasStockUsage ? logisticsToEmails : [],
+      logisticsCc: hasStockUsage ? logisticsCcEmails : [],
+      logisticsSubject: hasStockUsage ? logisticsSubject : undefined,
+      logisticsBody: hasStockUsage ? logisticsEmailBody : undefined,
+      products: productRequests,
+      sourceBudgetIds,
+    };
+
+    createOrderMutation.mutate(payload);
   };
 
   return (
@@ -633,12 +713,14 @@ export function MaterialsPendingProductsPage({
           <Button
             size="lg"
             variant="primary"
-            disabled={!selectedList.length}
+            disabled={!selectedList.length || isLoadingOrders || isSendingEmails}
             onClick={openOrderModal}
           >
             Crear pedido
           </Button>
-          {(isLoading || isFetching || isImporting) && <Spinner animation="border" role="status" size="sm" />}
+          {(isLoading || isFetching || isImporting || isLoadingOrders) && (
+            <Spinner animation="border" role="status" size="sm" />
+          )}
           {canImport && (
             <Button size="lg" onClick={onOpenImportModal} disabled={isImporting}>
               Importar presupuesto
@@ -939,6 +1021,11 @@ export function MaterialsPendingProductsPage({
           <Modal.Title>Envío de emails</Modal.Title>
         </Modal.Header>
         <Modal.Body className="d-grid gap-4">
+          {emailError ? (
+            <Alert variant="danger" className="mb-0">
+              {emailError}
+            </Alert>
+          ) : null}
           <div className="d-grid gap-3">
             <h5 className="mb-0">Email a proveedor</h5>
             <Form.Group>
@@ -987,7 +1074,7 @@ export function MaterialsPendingProductsPage({
               <Form.Control
                 type="text"
                 readOnly
-                value={`Nuevo Pedido de GEP Group con Nº ${currentOrderNumber ?? nextOrderNumber} para ${supplierName}`}
+                value={supplierSubject}
               />
             </Form.Group>
 
@@ -1076,14 +1163,21 @@ export function MaterialsPendingProductsPage({
           ) : null}
 
           <div className="d-flex justify-content-end gap-2">
-            <Button variant="outline-secondary" onClick={closeEmailModal}>
+            <Button variant="outline-secondary" onClick={closeEmailModal} disabled={isSendingEmails}>
               Cancelar
             </Button>
-            <Button variant="success" onClick={handleSendSupplierEmail}>
-              Enviar correo a proveedor
+            <Button variant="success" onClick={handleSendEmails} disabled={isSendingEmails}>
+              {isSendingEmails ? (
+                <span className="d-inline-flex align-items-center gap-2">
+                  <Spinner animation="border" role="status" size="sm" />
+                  Enviando correos…
+                </span>
+              ) : (
+                'Enviar correo a proveedor'
+              )}
             </Button>
             {hasStockUsage ? (
-              <Button variant="success" onClick={handleSendLogisticsEmail}>
+              <Button variant="success" onClick={handleSendEmails} disabled={isSendingEmails}>
                 Enviar correo a logística
               </Button>
             ) : null}

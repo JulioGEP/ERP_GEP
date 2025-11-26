@@ -658,6 +658,22 @@ model auth_sessions {
   @@map("auth_sessions")
 }
 
+model pedidos {
+  id                Int       @id @default(autoincrement())
+  order_number      Int       @unique
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  supplier_name     String?
+  supplier_email    String?
+  recipient_email   String?
+  cc_emails         String[]
+  products          Json
+  source_budget_ids String[]
+  notes             String?
+  sent_from         String?   @default("erp@gepgroup.es")
+
+  @@map("pedidos")
+}
+
 enum DocumentOrigin {
   imported
   user_upload
