@@ -711,10 +711,20 @@ async function createSessionRecord(
   });
   if (!deal) throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
 
+  const candidateProductIds = Array.from(
+    new Set<string>([
+      payload.dealProductId,
+      `${deal.deal_id}_${payload.dealProductId}`,
+    ]),
+  );
+
   const product = await tx.deal_products.findFirst({
     where: {
       deal_id: deal.deal_id,
-      OR: [{ id: payload.dealProductId }, { code: payload.dealProductId }],
+      OR: [
+        { id: { in: candidateProductIds } },
+        { code: payload.dealProductId },
+      ],
     },
     select: { id: true, deal_id: true, name: true, code: true },
   });
