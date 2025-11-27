@@ -182,7 +182,14 @@ export const handler = async (event: any) => {
   if (event.httpMethod === 'OPTIONS') return preflightResponse();
 
   try {
-    await requireAuth(event, { roles: ['Admin', 'Logistica', 'Administracion', 'People'] });
+    const prisma = getPrisma();
+    const auth = await requireAuth(event, prisma, {
+      requireRoles: ['Admin', 'Logistica', 'Administracion', 'People'],
+    });
+
+    if ('error' in auth) {
+      return auth.error;
+    }
 
     if (event.httpMethod !== 'POST') {
       return errorResponse('METHOD_NOT_ALLOWED', 'Solo se permite POST', 405);
@@ -202,8 +209,6 @@ export const handler = async (event: any) => {
     if (!parsedRows) {
       return errorResponse('VALIDATION_ERROR', 'No se encontraron sesiones válidas en la solicitud', 400);
     }
-
-    const prisma = getPrisma();
 
     const deal = await prisma.deals.findUnique({
       where: { deal_id: dealId },
