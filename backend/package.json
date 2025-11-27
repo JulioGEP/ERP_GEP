@@ -8,7 +8,7 @@
     "npm": ">=10.8.0"
   },
   "scripts": {
-    "generate": "PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT=${PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT:-60000} prisma generate --schema prisma/schema.prisma",
+    "generate": "SCHEMA_PATH=${npm_package_json%/package.json}/prisma/schema.prisma PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT=${PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT:-60000} prisma generate --schema \"$SCHEMA_PATH\"",
     "migrate:deploy": "node ../scripts/prisma-migrate-retry.js",
     "prisma:prune": "node ../scripts/prisma-prune-binaries.mjs || true",
     "typecheck": "npm run generate && tsc -p tsconfig.json",
