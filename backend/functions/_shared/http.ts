@@ -199,7 +199,7 @@ function normalizeHandlerResult(result: HttpHandlerResult) {
 export function createHttpHandler<TBody = unknown>(handler: HttpHandler<TBody>) {
   return async function netlifyHandler(
     event: NetlifyHandlerEvent,
-    context: NetlifyHandlerContext,
+    context: NetlifyHandlerContext = {} as NetlifyHandlerContext,
   ) {
     const method = String(event.httpMethod || 'GET').toUpperCase();
     if (method === 'OPTIONS') {
@@ -216,9 +216,11 @@ export function createHttpHandler<TBody = unknown>(handler: HttpHandler<TBody>) 
       return parsedBody.error;
     }
 
+    const requestContext = context ?? ({} as NetlifyHandlerContext);
+
     const request: HttpRequest<TBody> = {
       event,
-      context,
+      context: requestContext,
       method,
       path: event.path || '',
       headers: normalizeIncomingHeaders(event.headers),
