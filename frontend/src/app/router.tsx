@@ -22,7 +22,6 @@ import type { ProveedoresPageProps } from '../pages/recursos/ProveedoresPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
-import type { SessionImportPageProps } from '../pages/recursos/SessionImportPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext';
 
@@ -50,7 +49,6 @@ const ProveedoresPage = lazy(() => import('../pages/recursos/ProveedoresPage'));
 const ConfirmacionesPage = lazy(() => import('../pages/recursos/ConfirmacionesPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
 const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/FormacionAbiertaPage'));
-const SessionImportPage = lazy(() => import('../pages/recursos/SessionImportPage'));
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
 const InformesPreventivoPage = lazy(() => import('../pages/informes/PreventivoReportPage'));
 const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroReportPage'));
@@ -107,7 +105,6 @@ type AppRouterProps = {
   recursosConfirmacionesPageProps: ConfirmacionesPageProps;
   certificadosPageProps: CertificadosPageProps;
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
-  recursosSessionImportPageProps: SessionImportPageProps;
   usersPageProps: UsersPageProps;
   defaultRedirectPath: string;
   knownPaths: ReadonlySet<string>;
@@ -135,7 +132,6 @@ export function AppRouter({
   recursosConfirmacionesPageProps,
   certificadosPageProps,
   recursosFormacionAbiertaPageProps,
-  recursosSessionImportPageProps,
   usersPageProps,
   defaultRedirectPath,
   knownPaths,
@@ -327,10 +323,6 @@ export function AppRouter({
         <Route
           path="/recursos/importar_en_bucle"
           element={<GuardedRoute path="/recursos/importar_en_bucle" element={<BulkBudgetImportPage />} />}
-        />
-        <Route
-          path="/recursos/importar_sesiones"
-          element={<GuardedRoute path="/recursos/importar_sesiones" element={<SessionImportPage {...recursosSessionImportPageProps} />} />}
         />
         <Route
           path="/recursos/confirmaciones"

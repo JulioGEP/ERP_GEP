@@ -15,11 +15,11 @@
     "build": "npm run build:frontend",
     "prebuild:frontend": "if [ ! -x frontend/node_modules/.bin/vite ]; then npm install --prefer-offline --include=dev --include-workspace-root --workspaces; fi",
     "build:frontend": "npm run build --workspace frontend",
-    "netlify:build": "npm --prefix backend run migrate:deploy && npm --prefix backend run generate && npm --prefix backend run prisma:prune && npm run build",
+    "netlify:build": "npm run -w backend migrate:deploy && npm run -w backend generate && npm run -w backend prisma:prune && npm run build",
     "dev": "echo \"Dev local: usa 'npx netlify dev -p 8888' si tienes Netlify CLI disponible\"",
     "prisma:format": "backend/node_modules/.bin/prisma format --schema backend/prisma/schema.prisma",
-    "prisma:generate": "npm --prefix backend run generate",
-    "typecheck:functions": "npm --prefix backend run typecheck"
+    "prisma:generate": "npm run -w backend generate",
+    "typecheck:functions": "npm run -w backend typecheck"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
