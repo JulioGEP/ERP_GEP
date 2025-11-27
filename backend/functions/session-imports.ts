@@ -2,7 +2,7 @@
 import type { Prisma, SessionEstado } from '@prisma/client';
 import { requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
-import { compareSessionsForOrder } from './_shared/sessions';
+import { compareSessionsForOrder, toStringOrNull } from './_shared/sessions';
 import { preflightResponse, successResponse, errorResponse } from './_shared/response';
 
 type SessionImportRow = {
@@ -106,6 +106,37 @@ function parseEstado(value: unknown): SessionEstado {
     .toLowerCase();
 
   return STATE_MAP[normalized] ?? 'BORRADOR';
+}
+
+function extractSessionNumber(session: any, fallback: string): string {
+  const candidates: unknown[] = [
+    session?.numero,
+    session?.numero_cache,
+    session?.numero_sesion,
+    session?.session_number,
+    session?.orden,
+    session?.order,
+    session?.position,
+  ];
+
+  for (const candidate of candidates) {
+    const value = toStringOrNull(candidate);
+    if (value) return value;
+  }
+
+  const metadata = session?.metadata;
+  if (metadata && typeof metadata === 'object') {
+    const metadataNumber = toStringOrNull((metadata as any)?.numero || (metadata as any)?.session_number);
+    if (metadataNumber) return metadataNumber;
+  }
+
+  const cache = toStringOrNull(session?.nombre_cache);
+  if (cache) {
+    const match = cache.match(/ses[ií]on\s+(\d+)/i);
+    if (match?.[1]) return match[1];
+  }
+
+  return fallback;
 }
 
 function shuffle<T>(items: T[]): T[] {
@@ -236,15 +267,32 @@ export const handler = async (event: any) => {
       select: { id: true, sala_id: true, fecha_inicio_utc: true, fecha_fin_utc: true },
     });
 
-    const existingSorted = existingSessions.slice().sort(compareSessionsForOrder);
-    const newSorted = parsedRows.slice().sort((a, b) => a.sessionNumber.localeCompare(b.sessionNumber, 'es', { numeric: true }));
+    const existingSorted = existingSessions
+      .slice()
+      .sort(compareSessionsForOrder)
+      .map((session, index) => ({
+        session,
+        sessionNumber: extractSessionNumber(session, String(index + 1)),
+      }));
 
-    const updatesCount = Math.min(existingSorted.length, newSorted.length);
-    const deletions = existingSorted.slice(newSorted.length);
-    const creations = newSorted.slice(existingSorted.length);
+    const deletionsIds = new Set<string>();
+    const existingByNumber = existingSorted.reduce((acc, item) => {
+      if (acc.has(item.sessionNumber)) {
+        deletionsIds.add(item.session.id);
+        return acc;
+      }
+      acc.set(item.sessionNumber, item.session);
+      return acc;
+    }, new Map<string, (typeof existingSessions)[number]>());
+
+    const incomingNumbers = new Set(parsedRows.map((row) => row.sessionNumber));
+    existingSorted.forEach(({ sessionNumber, session }) => {
+      if (!incomingNumbers.has(sessionNumber)) {
+        deletionsIds.add(session.id);
+      }
+    });
 
     const plannedSalaAssignments: Array<{ sessionId: string | null; sala_id: string; start: Date; end: Date }> = [];
-    const deletionsIds = new Set(deletions.map((item) => item.id));
 
     const findSalaForRange = (start: Date, end: Date, currentId: string | null): string | null => {
       if (isCompanyPipeline(deal.pipeline_label)) return null;
@@ -277,52 +325,51 @@ export const handler = async (event: any) => {
       let updated = 0;
       let removed = 0;
 
-      for (let i = 0; i < updatesCount; i += 1) {
-        const session = existingSorted[i];
-        const row = newSorted[i];
+      const incomingSorted = parsedRows.slice().sort((a, b) =>
+        a.sessionNumber.localeCompare(b.sessionNumber, 'es', { numeric: true }),
+      );
 
-        const sala_id = findSalaForRange(row.start, row.end, session.id);
-        if (sala_id) plannedSalaAssignments.push({ sessionId: session.id, sala_id, start: row.start, end: row.end });
+      for (const row of incomingSorted) {
+        const existing = existingByNumber.get(row.sessionNumber) ?? null;
 
-        const mainTrainerId = await resolveTrainerId(tx, row.trainer);
-        const supTrainerId = await resolveTrainerId(tx, row.trainerSup);
+        if (existing) {
+          const sala_id = findSalaForRange(row.start, row.end, existing.id);
+          if (sala_id) plannedSalaAssignments.push({ sessionId: existing.id, sala_id, start: row.start, end: row.end });
 
-        await tx.sesiones.update({
-          where: { id: session.id },
-          data: {
-            deal_product_id: session.deal_product_id || dealProductId,
-            nombre_cache: session.nombre_cache || `Sesión ${row.sessionNumber}`,
-            fecha_inicio_utc: row.start,
-            fecha_fin_utc: row.end,
-            sala_id,
-            direccion: session.direccion || deal.training_address || '',
-            estado: row.estado,
-          },
-        });
+          const mainTrainerId = await resolveTrainerId(tx, row.trainer);
+          const supTrainerId = await resolveTrainerId(tx, row.trainerSup);
 
-        await tx.sesion_trainers.deleteMany({ where: { sesion_id: session.id } });
-        const trainerLinks = [mainTrainerId, supTrainerId].filter(Boolean).map((trainerId) => ({
-          sesion_id: session.id,
-          trainer_id: trainerId as string,
-        }));
-        if (trainerLinks.length) {
-          await tx.sesion_trainers.createMany({ data: trainerLinks, skipDuplicates: true });
+          await tx.sesiones.update({
+            where: { id: existing.id },
+            data: {
+              deal_product_id: existing.deal_product_id || dealProductId,
+              nombre_cache: `Sesión ${row.sessionNumber}`,
+              fecha_inicio_utc: row.start,
+              fecha_fin_utc: row.end,
+              sala_id,
+              direccion: existing.direccion || deal.training_address || '',
+              estado: row.estado,
+            },
+          });
+
+          await tx.sesion_trainers.deleteMany({ where: { sesion_id: existing.id } });
+          const trainerLinks = [mainTrainerId, supTrainerId].filter(Boolean).map((trainerId) => ({
+            sesion_id: existing.id,
+            trainer_id: trainerId as string,
+          }));
+          if (trainerLinks.length) {
+            await tx.sesion_trainers.createMany({ data: trainerLinks, skipDuplicates: true });
+          }
+
+          await tx.sesion_unidades.deleteMany({ where: { sesion_id: existing.id } });
+          if (legacyUnit?.unidad_id) {
+            await tx.sesion_unidades.create({ data: { sesion_id: existing.id, unidad_movil_id: legacyUnit.unidad_id } });
+          }
+
+          updated += 1;
+          continue;
         }
 
-        await tx.sesion_unidades.deleteMany({ where: { sesion_id: session.id } });
-        if (legacyUnit?.unidad_id) {
-          await tx.sesion_unidades.create({ data: { sesion_id: session.id, unidad_movil_id: legacyUnit.unidad_id } });
-        }
-
-        updated += 1;
-      }
-
-      for (const obsolete of deletions) {
-        await tx.sesiones.delete({ where: { id: obsolete.id } });
-        removed += 1;
-      }
-
-      for (const row of creations) {
         const sala_id = findSalaForRange(row.start, row.end, null);
         if (sala_id) plannedSalaAssignments.push({ sessionId: null, sala_id, start: row.start, end: row.end });
 
@@ -354,6 +401,12 @@ export const handler = async (event: any) => {
         }
 
         created += 1;
+      }
+
+      for (const obsolete of existingSessions) {
+        if (!deletionsIds.has(obsolete.id)) continue;
+        await tx.sesiones.delete({ where: { id: obsolete.id } });
+        removed += 1;
       }
 
       return { created, updated, removed };
