@@ -45,6 +45,7 @@ const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/Templates
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
 const StockPage = lazy(() => import('../pages/recursos/StockPage'));
 const BulkBudgetImportPage = lazy(() => import('../pages/recursos/BulkBudgetImportPage'));
+const BulkSessionsImportPage = lazy(() => import('../pages/recursos/BulkSessionsImportPage'));
 const ProveedoresPage = lazy(() => import('../pages/recursos/ProveedoresPage'));
 const ConfirmacionesPage = lazy(() => import('../pages/recursos/ConfirmacionesPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
@@ -323,6 +324,10 @@ export function AppRouter({
         <Route
           path="/recursos/importar_en_bucle"
           element={<GuardedRoute path="/recursos/importar_en_bucle" element={<BulkBudgetImportPage />} />}
+        />
+        <Route
+          path="/recursos/importar_sesiones"
+          element={<GuardedRoute path="/recursos/importar_sesiones" element={<BulkSessionsImportPage />} />}
         />
         <Route
           path="/recursos/confirmaciones"

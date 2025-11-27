@@ -1,5 +1,6 @@
 // backend/functions/sesiones.ts
 import { randomUUID } from 'crypto';
+import * as XLSX from 'xlsx';
 import type { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { logAudit, resolveUserIdFromEvent, type JsonValue } from './_shared/audit-log';
@@ -560,6 +561,65 @@ function ensureArrayOfStrings(
   return items;
 }
 
+function parseDelimitedIdList(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  const items: string[] = [];
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const trimmed = toTrimmed(entry);
+      if (!trimmed) continue;
+      if (!items.includes(trimmed)) items.push(trimmed);
+    }
+    return items;
+  }
+
+  const text = String(value ?? '').trim();
+  if (!text.length) return [];
+
+  for (const raw of text.split(/[;,\n]/)) {
+    const trimmed = toTrimmed(raw);
+    if (!trimmed) continue;
+    if (!items.includes(trimmed)) items.push(trimmed);
+  }
+
+  return items;
+}
+
+function hasProvidedValue(value: unknown): boolean {
+  if (value === undefined) return false;
+  if (value === null) return true;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return true;
+}
+
+function parseErrorMessage(error: unknown): string {
+  if (!error) return 'Error desconocido';
+  if (typeof error === 'string') return error;
+  if (error instanceof Error && error.message) return error.message;
+
+  if (typeof error === 'object') {
+    const message = (error as any).message;
+    if (typeof message === 'string' && message.trim().length) {
+      return message.trim();
+    }
+
+    const body = (error as any).body;
+    if (typeof body === 'string' && body.trim().length) {
+      try {
+        const parsed = JSON.parse(body);
+        if (typeof parsed?.message === 'string' && parsed.message.trim().length) {
+          return parsed.message.trim();
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  return 'Error desconocido';
+}
+
 type SessionPatchResult =
   | {
       data: Record<string, any>;
@@ -627,6 +687,110 @@ function ensureValidDateRange(start?: Date | null, end?: Date | null) {
     return errorResponse('VALIDATION_ERROR', 'La fecha de fin no puede ser anterior al inicio', 400);
   }
   return null;
+}
+
+async function createSessionRecord(
+  tx: Prisma.TransactionClient,
+  payload: {
+    dealId: string;
+    dealProductId: string;
+    direccion: string | null;
+    salaId: string | null;
+    trainerIds: string[];
+    unidadIds: string[];
+    fechaInicio?: Date | null;
+    fechaFin?: Date | null;
+    setFechaInicio: boolean;
+    setFechaFin: boolean;
+    forceEstadoBorrador: boolean;
+  },
+): Promise<ReturnType<typeof normalizeSession>> {
+  const deal = await tx.deals.findUnique({
+    where: { deal_id: payload.dealId },
+    select: { deal_id: true, training_address: true, sede_label: true, pipeline_id: true },
+  });
+  if (!deal) throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
+
+  const product = await tx.deal_products.findUnique({
+    where: { id: payload.dealProductId },
+    select: { id: true, deal_id: true, name: true, code: true },
+  });
+  if (!product || product.deal_id !== deal.deal_id) throw errorResponse('NOT_FOUND', 'Producto del presupuesto no encontrado', 404);
+
+  const baseName = buildNombreBase(product.name, product.code);
+
+  await ensureResourcesAvailable(tx, {
+    trainerIds: payload.trainerIds.length ? payload.trainerIds : undefined,
+    unidadIds: payload.unidadIds.length ? payload.unidadIds : undefined,
+    salaId: payload.salaId,
+    start: payload.fechaInicio ?? undefined,
+    end: payload.fechaFin ?? undefined,
+  });
+
+  const autoEstado = computeAutomaticSessionEstadoFromValues({
+    fechaInicio: payload.fechaInicio ?? null,
+    fechaFin: payload.fechaFin ?? null,
+    salaId: payload.salaId,
+    trainerIds: payload.trainerIds,
+    unidadIds: payload.unidadIds,
+    dealSede: deal.sede_label ?? null,
+    dealPipeline: deal.pipeline_id ?? null,
+  });
+
+  const finalEstado = payload.forceEstadoBorrador ? 'BORRADOR' : autoEstado;
+
+  const createData: Prisma.sesionesUncheckedCreateInput = {
+    id: randomUUID(),
+    deal_id: deal.deal_id,
+    deal_product_id: product.id,
+    nombre_cache: baseName,
+    direccion: payload.direccion ?? deal.training_address ?? '',
+    sala_id: payload.salaId,
+    estado: finalEstado,
+  };
+
+  if (payload.setFechaInicio) {
+    createData.fecha_inicio_utc = payload.fechaInicio ?? null;
+  }
+  if (payload.setFechaFin) {
+    createData.fecha_fin_utc = payload.fechaFin ?? null;
+  }
+
+  const created = await tx.sesiones.create({
+    data: createData,
+  });
+
+  if (payload.trainerIds.length) {
+    await tx.sesion_trainers.createMany({
+      data: payload.trainerIds.map((trainerId: string) => ({
+        sesion_id: created.id,
+        trainer_id: trainerId,
+      })),
+    });
+  }
+
+  if (payload.unidadIds.length) {
+    await tx.sesion_unidades.createMany({
+      data: payload.unidadIds.map((unidadId: string) => ({
+        sesion_id: created.id,
+        unidad_movil_id: unidadId,
+      })),
+    });
+  }
+
+  await reindexSessionNames(tx, product.id, baseName);
+
+  const storedRaw = await tx.sesiones.findUnique({
+    where: { id: created.id },
+    include: {
+      deals: { select: { sede_label: true, pipeline_id: true } },
+      sesion_trainers: { select: { trainer_id: true } },
+      sesion_unidades: { select: { unidad_movil_id: true } },
+      trainer_session_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
+    },
+  });
+
+  return normalizeSession(ensureSessionRelations(storedRaw as any));
 }
 
 type DateRange = { start: Date; end: Date };
@@ -922,10 +1086,14 @@ export const handler = async (event: any) => {
       /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/by-deal(?:\?|$)/i.test(pathOrUrl);
     const isCountsRequest =
       /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/[^/]+\/counts(?:\?|$)/i.test(pathOrUrl);
+    const isBulkImportRequest =
+      /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/import-bulk(?:\?|$)/i.test(pathOrUrl);
 
     // Para PATCH/DELETE lee el id desde pathOrUrl
     const sessionIdFromPath =
-      isAvailabilityRequest || isDealSessionsRequest ? null : parseSessionIdFromPath(pathOrUrl);
+      isAvailabilityRequest || isDealSessionsRequest || isBulkImportRequest
+        ? null
+        : parseSessionIdFromPath(pathOrUrl);
 
     // Generate from deal
     if (
@@ -938,6 +1106,172 @@ export const handler = async (event: any) => {
       const result = await prisma.$transaction((tx: Prisma.TransactionClient) => generateSessionsForDeal(tx, dealId));
       if ('error' in result) return result.error;
       return successResponse({ count: result.count ?? 0 });
+    }
+
+    if (method === 'POST' && isBulkImportRequest) {
+      const body = parseJson(event.body);
+      const fileDataBase64 = toTrimmed(body?.fileData ?? body?.file_data);
+      if (!fileDataBase64) return errorResponse('VALIDATION_ERROR', 'fileData es obligatorio', 400);
+
+      let workbook: XLSX.WorkBook;
+      try {
+        const buffer = Buffer.from(fileDataBase64, 'base64');
+        workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+      } catch (error) {
+        return errorResponse('INVALID_FILE', 'No se pudo leer el Excel proporcionado', 400);
+      }
+
+      const sheetName = toTrimmed(body?.sheetName ?? body?.sheet_name) ?? workbook.SheetNames[0];
+      if (!sheetName || !workbook.Sheets[sheetName]) {
+        return errorResponse('VALIDATION_ERROR', 'Hoja del Excel no encontrada', 400);
+      }
+
+      const rows = XLSX.utils.sheet_to_json<any>(workbook.Sheets[sheetName], {
+        defval: null,
+        raw: false,
+        blankrows: false,
+      });
+
+      if (!rows.length) {
+        return errorResponse('VALIDATION_ERROR', 'El fichero no contiene filas de datos', 400);
+      }
+
+      type BulkRowResult = {
+        row: number;
+        deal_id: string | null;
+        deal_product_id: string | null;
+        session_id?: string | null;
+        status: 'created' | 'error';
+        message?: string;
+      };
+
+      const results: BulkRowResult[] = [];
+      let createdCount = 0;
+      const auditUserId = await resolveUserIdFromEvent(event, prisma);
+
+      for (let index = 0; index < rows.length; index += 1) {
+        const row = rows[index] as Record<string, unknown>;
+        const rowNumber = index + 2; // 1 para cabecera + 1 para base cero
+
+        const rawDealId = row.deal_id ?? row.dealId ?? row.deal ?? row.presupuesto ?? row.budget_id;
+        const rawDealProductId =
+          row.deal_product_id ?? row.dealProductId ?? row.producto ?? row.product_id ?? row.producto_id;
+        const rawFechaInicio =
+          row.fecha_inicio_utc ?? row.fecha_inicio ?? row.start ?? row.inicio ?? row.fechaInicio ?? row.start_date;
+        const rawFechaFin = row.fecha_fin_utc ?? row.fecha_fin ?? row.end ?? row.fin ?? row.fechaFin ?? row.end_date;
+
+        const dealId = toTrimmed(rawDealId);
+        const dealProductId = toTrimmed(rawDealProductId);
+        const direccion = toOptionalText(row.direccion ?? row.address ?? row.dirección ?? row.training_address);
+        const salaId = toTrimmed(row.sala_id ?? row.sala ?? row.room_id ?? row.room);
+        const trainerIds = parseDelimitedIdList(row.trainer_ids ?? row.formadores ?? row.trainers ?? row.trainerIds);
+        const unidadIds = parseDelimitedIdList(row.unidad_movil_ids ?? row.unidades ?? row.unidadIds ?? row.units);
+        const forceEstadoBorrador = shouldForceEstadoBorrador(row.force_estado_borrador ?? row.forceBorrador);
+
+        const fechaInicioResult = parseDateInput(rawFechaInicio);
+        if (fechaInicioResult && 'error' in fechaInicioResult) {
+          results.push({
+            row: rowNumber,
+            deal_id: dealId ?? null,
+            deal_product_id: dealProductId ?? null,
+            status: 'error',
+            message: 'Fecha de inicio inválida',
+          });
+          continue;
+        }
+
+        const fechaFinResult = parseDateInput(rawFechaFin);
+        if (fechaFinResult && 'error' in fechaFinResult) {
+          results.push({
+            row: rowNumber,
+            deal_id: dealId ?? null,
+            deal_product_id: dealProductId ?? null,
+            status: 'error',
+            message: 'Fecha de fin inválida',
+          });
+          continue;
+        }
+
+        const hasFechaInicio = hasProvidedValue(rawFechaInicio);
+        const hasFechaFin = hasProvidedValue(rawFechaFin);
+        const fechaInicio = fechaInicioResult as Date | null | undefined;
+        const fechaFin = fechaFinResult as Date | null | undefined;
+
+        const rangeError = ensureValidDateRange(fechaInicio ?? undefined, fechaFin ?? undefined);
+        if (rangeError) {
+          results.push({
+            row: rowNumber,
+            deal_id: dealId ?? null,
+            deal_product_id: dealProductId ?? null,
+            status: 'error',
+            message: parseErrorMessage(rangeError),
+          });
+          continue;
+        }
+
+        if (!dealId || !dealProductId) {
+          results.push({
+            row: rowNumber,
+            deal_id: dealId ?? null,
+            deal_product_id: dealProductId ?? null,
+            status: 'error',
+            message: 'deal_id y deal_product_id son obligatorios',
+          });
+          continue;
+        }
+
+        try {
+          const session = await prisma.$transaction((tx: Prisma.TransactionClient) =>
+            createSessionRecord(tx, {
+              dealId,
+              dealProductId,
+              direccion,
+              salaId: salaId ?? null,
+              trainerIds,
+              unidadIds,
+              fechaInicio: hasFechaInicio ? (fechaInicio ?? null) : undefined,
+              fechaFin: hasFechaFin ? (fechaFin ?? null) : undefined,
+              setFechaInicio: hasFechaInicio,
+              setFechaFin: hasFechaFin,
+              forceEstadoBorrador,
+            }),
+          );
+
+          createdCount += 1;
+
+          await logAudit({
+            userId: auditUserId,
+            action: 'session.created_bulk_import',
+            entityType: 'session',
+            entityId: session.id,
+            before: null,
+            after: buildSessionAuditSnapshot(session) as JsonValue,
+          });
+
+          results.push({
+            row: rowNumber,
+            deal_id: session.deal_id,
+            deal_product_id: session.deal_product_id,
+            session_id: session.id,
+            status: 'created',
+          });
+        } catch (error) {
+          results.push({
+            row: rowNumber,
+            deal_id: dealId ?? null,
+            deal_product_id: dealProductId ?? null,
+            status: 'error',
+            message: parseErrorMessage(error),
+          });
+        }
+      }
+
+      const failedCount = results.filter((row) => row.status === 'error').length;
+
+      return successResponse({
+        summary: { total: rows.length, created: createdCount, failed: failedCount },
+        results,
+      });
     }
 
     // Availability
@@ -1454,109 +1788,38 @@ if (method === 'GET') {
       const fechaFinResult = parseDateInput(body.fecha_fin_utc);
       if (fechaFinResult && 'error' in fechaFinResult) return fechaFinResult.error;
 
+      const hasFechaInicio = Object.prototype.hasOwnProperty.call(body, 'fecha_inicio_utc');
+      const hasFechaFin = Object.prototype.hasOwnProperty.call(body, 'fecha_fin_utc');
+      const fechaInicioDate = hasFechaInicio ? ((fechaInicioResult as Date | null | undefined) ?? null) : undefined;
+      const fechaFinDate = hasFechaFin ? ((fechaFinResult as Date | null | undefined) ?? null) : undefined;
+
       const rangeError = ensureValidDateRange(
-        (fechaInicioResult as Date | null | undefined) ?? undefined,
-        (fechaFinResult as Date | null | undefined) ?? undefined,
+        fechaInicioDate ?? undefined,
+        fechaFinDate ?? undefined,
       );
       if (rangeError) return rangeError;
 
       const direccion = toOptionalText(body.direccion);
-      const fechaInicioDate = fechaInicioResult === undefined ? null : (fechaInicioResult as Date | null);
-      const fechaFinDate = fechaFinResult === undefined ? null : (fechaFinResult as Date | null);
       const salaId = toTrimmed(body.sala_id);
       const forceEstadoBorrador = shouldForceEstadoBorrador(body.force_estado_borrador);
 
       const auditUserIdPromise = resolveUserIdFromEvent(event, prisma);
 
-      const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        const deal = await tx.deals.findUnique({
-          where: { deal_id: dealId },
-          select: { deal_id: true, training_address: true, sede_label: true, pipeline_id: true },
-        });
-        if (!deal) throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
-
-        const product = await tx.deal_products.findUnique({
-          where: { id: dealProductId },
-          select: { id: true, deal_id: true, name: true, code: true },
-        });
-        if (!product || product.deal_id !== deal.deal_id) throw errorResponse('NOT_FOUND', 'Producto del presupuesto no encontrado', 404);
-
-        const baseName = buildNombreBase(product.name, product.code);
-
-        await ensureResourcesAvailable(tx, {
-          trainerIds: (trainerIdsResult as string[]).length ? (trainerIdsResult as string[]) : undefined,
-          unidadIds: (unidadIdsResult as string[]).length ? (unidadIdsResult as string[]) : undefined,
-          salaId: salaId ?? null,
-          start: fechaInicioDate,
-          end: fechaFinDate,
-        });
-
-        const autoEstado = computeAutomaticSessionEstadoFromValues({
-          fechaInicio: fechaInicioDate,
-          fechaFin: fechaFinDate,
+      const result = await prisma.$transaction((tx: Prisma.TransactionClient) =>
+        createSessionRecord(tx, {
+          dealId,
+          dealProductId,
+          direccion,
           salaId: salaId ?? null,
           trainerIds: trainerIdsResult as string[],
           unidadIds: unidadIdsResult as string[],
-          dealSede: deal.sede_label ?? null,
-          dealPipeline: deal.pipeline_id ?? null,
-        });
-
-        const finalEstado = forceEstadoBorrador ? 'BORRADOR' : autoEstado;
-
-        // Construimos un unchecked create para evitar el XOR con relaciones anidadas
-        const createData: Prisma.sesionesUncheckedCreateInput = {
-          id: randomUUID(),
-          deal_id: deal.deal_id,
-          deal_product_id: product.id,
-          nombre_cache: baseName,
-          direccion: direccion ?? deal.training_address ?? '',
-          sala_id: salaId ?? null,
-          estado: finalEstado,
-        };
-
-        // Solo añadimos las fechas si vienen definidas (no mandar undefined)
-        if (fechaInicioResult !== undefined) {
-          createData.fecha_inicio_utc = fechaInicioDate as Date | null;
-        }
-        if (fechaFinResult !== undefined) {
-          createData.fecha_fin_utc = fechaFinDate as Date | null;
-        }
-
-        const created = await tx.sesiones.create({
-          data: createData,
-        });
-
-        if ((trainerIdsResult as string[]).length) {
-          await tx.sesion_trainers.createMany({
-            data: (trainerIdsResult as string[]).map((trainerId: string) => ({
-              sesion_id: created.id,
-              trainer_id: trainerId,
-            })),
-          });
-        }
-        if ((unidadIdsResult as string[]).length) {
-          await tx.sesion_unidades.createMany({
-            data: (unidadIdsResult as string[]).map((unidadId: string) => ({
-              sesion_id: created.id,
-              unidad_movil_id: unidadId,
-            })),
-          });
-        }
-
-        await reindexSessionNames(tx, product.id, baseName);
-
-        const storedRaw = await tx.sesiones.findUnique({
-          where: { id: created.id },
-          include: {
-            deals: { select: { sede_label: true, pipeline_id: true } },
-            sesion_trainers: { select: { trainer_id: true } },
-            sesion_unidades: { select: { unidad_movil_id: true } },
-            trainer_session_invites: { select: { trainer_id: true, status: true, sent_at: true, responded_at: true } },
-          },
-        });
-
-        return normalizeSession(ensureSessionRelations(storedRaw as any));
-      });
+          fechaInicio: fechaInicioDate,
+          fechaFin: fechaFinDate,
+          setFechaInicio: hasFechaInicio,
+          setFechaFin: hasFechaFin,
+          forceEstadoBorrador,
+        }),
+      );
 
       const auditUserId = await auditUserIdPromise;
       const auditAfter = {
