@@ -59,6 +59,21 @@ function getCellValue(row: Record<string, any>, keys: string[]): string {
   return '';
 }
 
+function buildErrorMessage(error: ApiError): string {
+  switch (error.code) {
+    case 'NOT_FOUND':
+      return 'Presupuesto no encontrado para el deal indicado.';
+    case 'VALIDATION_ERROR':
+      return error.message || 'Los datos del Excel no cumplen los requisitos (fechas o columnas requeridas).';
+    case 'INVALID_BODY':
+      return 'El archivo enviado no tiene el formato esperado.';
+    case 'METHOD_NOT_ALLOWED':
+      return 'El método usado no es válido para la importación.';
+    default:
+      return error.message ? `${error.message} (código: ${error.code})` : 'No se pudieron importar las sesiones.';
+  }
+}
+
 function mapRow(raw: Record<string, any>): ParsedSessionRow | null {
   const normalizedEntries = Object.entries(raw).reduce<Record<string, any>>((acc, [key, value]) => {
     acc[normalizeHeader(key)] = value;
@@ -164,7 +179,7 @@ export function SessionBulkImportView() {
           ),
         );
       } catch (err) {
-        const message = err instanceof ApiError ? err.message : 'No se pudieron importar las sesiones.';
+        const message = err instanceof ApiError ? buildErrorMessage(err) : 'No se pudieron importar las sesiones.';
         setProgress((current) =>
           current.map((item) =>
             item.dealId === dealId ? { ...item, status: 'error', message } : item,
