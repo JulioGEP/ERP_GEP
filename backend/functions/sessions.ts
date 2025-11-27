@@ -711,17 +711,15 @@ async function createSessionRecord(
   });
   if (!deal) throw errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404);
 
-  const product =
-    (await tx.deal_products.findUnique({
-      where: { id: payload.dealProductId },
-      select: { id: true, deal_id: true, name: true, code: true },
-    })) ??
-    (await tx.deal_products.findFirst({
-      where: { deal_id: deal.deal_id, code: payload.dealProductId },
-      select: { id: true, deal_id: true, name: true, code: true },
-    }));
+  const product = await tx.deal_products.findFirst({
+    where: {
+      deal_id: deal.deal_id,
+      OR: [{ id: payload.dealProductId }, { code: payload.dealProductId }],
+    },
+    select: { id: true, deal_id: true, name: true, code: true },
+  });
 
-  if (!product || product.deal_id !== deal.deal_id) throw errorResponse('NOT_FOUND', 'Producto del presupuesto no encontrado', 404);
+  if (!product) throw errorResponse('NOT_FOUND', 'Producto del presupuesto no encontrado', 404);
 
   const baseName = buildNombreBase(product.name, product.code);
 
