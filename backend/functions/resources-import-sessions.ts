@@ -12,6 +12,7 @@ type SessionEstado = 'BORRADOR' | 'PLANIFICADA' | 'SUSPENDIDA' | 'CANCELADA' | '
 type SessionImportRow = {
   deal_id: string | null;
   deal_product_id: string | null;
+  curso_name: string | null;
   nombre_cache: string | null;
   fecha_inicio_utc: Date | null;
   fecha_fin_utc: Date | null;
@@ -63,6 +64,63 @@ function parseDate(value: unknown): Date | null {
   return Number.isFinite(dateFromString.getTime()) ? dateFromString : null;
 }
 
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j += 1) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost,
+      );
+    }
+  }
+
+  return matrix[a.length][b.length];
+}
+
+function similarityScore(reference: string, candidate: string): number {
+  const normalizedReference = normalizeText(reference);
+  const normalizedCandidate = normalizeText(candidate);
+
+  if (!normalizedReference.length || !normalizedCandidate.length) return 0;
+
+  const distance = levenshteinDistance(normalizedReference, normalizedCandidate);
+  return 1 - distance / Math.max(normalizedReference.length, normalizedCandidate.length);
+}
+
+function findProductByCourseName(
+  courseName: string | null,
+  products: Array<{ id: string; deal_id: string | null; name: string | null }>,
+): string | null {
+  if (!courseName) return null;
+
+  let bestMatch: { id: string | null; score: number } = { id: null, score: 0 };
+
+  for (const product of products) {
+    if (!product.name) continue;
+    const score = similarityScore(courseName, product.name);
+    if (score > bestMatch.score) {
+      bestMatch = { id: product.id, score };
+    }
+  }
+
+  return bestMatch.score >= 0.75 ? bestMatch.id : null;
+}
+
 function normalizeEstado(value: unknown): SessionEstado | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim().toUpperCase();
@@ -76,6 +134,7 @@ function normalizeEstado(value: unknown): SessionEstado | null {
 function mapRawRow(row: Record<string, unknown>): SessionImportRow {
   const dealId = toTrimmed(row.deal_id ?? row.dealId);
   const dealProductId = toTrimmed(row.deal_product_id ?? row.deal_product_id ?? row.dealProductId);
+  const cursoName = toTrimmed(row.curso_name ?? row.cursoName ?? row.course_name ?? row.courseName);
   const nombreCache = toTrimmed(row.nombre_cache ?? row.nombreCache ?? row.nombre);
   const direccion = toTrimmed(row.direccion ?? row.address) ?? '';
   const unidadMovilId = toTrimmed(row.unidad_movil ?? row.unidad_movil_id ?? row.unidadMovilId);
@@ -84,6 +143,7 @@ function mapRawRow(row: Record<string, unknown>): SessionImportRow {
   return {
     deal_id: dealId,
     deal_product_id: dealProductId,
+    curso_name: cursoName,
     nombre_cache: nombreCache,
     fecha_inicio_utc: parseDate(row.fecha_inicio_utc ?? row.fecha_inicio ?? row.start_date),
     fecha_fin_utc: parseDate(row.fecha_fin_utc ?? row.fecha_fin ?? row.end_date),
@@ -175,7 +235,7 @@ export const handler = createHttpHandler<any>(async (request) => {
 
   const [deals, dealProducts, trainers, unidadesMoviles, salas]: [
     Array<{ deal_id: string }>,
-    Array<{ id: string; deal_id: string | null }>,
+    Array<{ id: string; deal_id: string | null; name: string | null }>,
     Array<{ trainer_id: string }>,
     Array<{ unidad_id: string }>,
     Array<{ sala_id: string }>,
@@ -194,7 +254,7 @@ export const handler = createHttpHandler<any>(async (request) => {
               ].filter(Boolean) as Prisma.Enumerable<Prisma.deal_productsWhereInput>,
             }
           : undefined,
-      select: { id: true, deal_id: true },
+      select: { id: true, deal_id: true, name: true },
     }),
     prisma.trainers.findMany({
       where: uniqueTrainerIds.length ? { trainer_id: { in: uniqueTrainerIds } } : undefined,
@@ -215,7 +275,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     existing.push(product);
     map.set(product.deal_id, existing);
     return map;
-  }, new Map<string, Array<{ id: string; deal_id: string | null }>>());
+  }, new Map<string, Array<{ id: string; deal_id: string | null; name: string | null }>>());
   const trainerMap = new Map(trainers.map((trainer) => [trainer.trainer_id, trainer]));
   const unidadMovilMap = new Map(unidadesMoviles.map((unidad) => [unidad.unidad_id, unidad]));
   const salaIds = salas.map((sala) => sala.sala_id);
@@ -247,9 +307,15 @@ export const handler = createHttpHandler<any>(async (request) => {
         } else if (productsForDeal.length === 0) {
           errors.push('deal_product_id obligatorio: el deal no tiene productos configurados');
         } else {
-          errors.push(
-            'deal_product_id obligatorio: el deal tiene múltiples productos, indica cuál usar',
-          );
+          const matchedProductId = findProductByCourseName(row.curso_name, productsForDeal);
+          if (matchedProductId) {
+            dealProductId = matchedProductId;
+            row.deal_product_id = matchedProductId;
+          } else {
+            errors.push(
+              'deal_product_id obligatorio: el deal tiene múltiples productos, indica cuál usar',
+            );
+          }
         }
       }
 
