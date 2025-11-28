@@ -126,6 +126,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Formaciones', label: 'Formaciones', path: '/recursos/formaciones' },
       { key: 'Recursos/Stock', label: 'Stock', path: '/recursos/stock' },
       { key: 'Recursos/ImportarEnBucle', label: 'Importar en bucle', path: '/recursos/importar_en_bucle' },
+      { key: 'Recursos/ImportarSesiones', label: 'Importar sesiones', path: '/recursos/importar_sesiones' },
       { key: 'Recursos/Proveedores', label: 'Proveedores', path: '/recursos/proveedores' },
       { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
     ],
