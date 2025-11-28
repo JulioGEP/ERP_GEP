@@ -215,10 +215,18 @@ async function createSessionFromRow(
     throw errorResponse('NOT_FOUND', `Presupuesto ${row.dealId} no encontrado`, 404);
   }
 
-  const product = await tx.deal_products.findUnique({
+  let product = await tx.deal_products.findUnique({
     where: { id: normalizedDealProductId },
     select: { id: true, deal_id: true, name: true, code: true },
   });
+
+  if ((!product || product.deal_id !== deal.deal_id) && normalizedDealProductId !== row.dealProductId) {
+    product = await tx.deal_products.findUnique({
+      where: { id: row.dealProductId },
+      select: { id: true, deal_id: true, name: true, code: true },
+    });
+  }
+
   if (!product || product.deal_id !== deal.deal_id) {
     throw errorResponse('NOT_FOUND', `Producto ${row.dealProductId} no encontrado en el presupuesto`, 404);
   }
