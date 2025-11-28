@@ -377,6 +377,17 @@ function toSessionEstado(value: unknown): SessionEstado | null {
     ? (normalized as SessionEstado)
     : null;
 }
+function parseOptionalSessionEstado(
+  value: unknown,
+): { estado: SessionEstado | null; error?: ReturnType<typeof errorResponse> } {
+  if (value === undefined || value === null) return { estado: null };
+  const text = String(value).trim();
+  if (!text.length) return { estado: null };
+
+  const estado = toSessionEstado(text);
+  if (!estado) return { estado: null, error: errorResponse('VALIDATION_ERROR', 'Estado inválido', 400) };
+  return { estado };
+}
 function isManualSessionEstado(value: SessionEstado | null | undefined): boolean {
   return value ? MANUAL_SESSION_STATES.has(value) : false;
 }
@@ -721,6 +732,7 @@ async function createSessionRecord(
     setFechaInicio: boolean;
     setFechaFin: boolean;
     forceEstadoBorrador: boolean;
+    estado?: SessionEstado | null;
   },
 ): Promise<ReturnType<typeof normalizeSession>> {
   const deal = await tx.deals.findUnique({
@@ -780,7 +792,7 @@ async function createSessionRecord(
     dealPipeline: deal.pipeline_id ?? null,
   });
 
-  const finalEstado = payload.forceEstadoBorrador ? 'BORRADOR' : autoEstado;
+  const finalEstado = payload.estado ?? (payload.forceEstadoBorrador ? 'BORRADOR' : autoEstado);
 
   const createData: Prisma.sesionesUncheckedCreateInput = {
     id: randomUUID(),
@@ -1202,14 +1214,27 @@ export const handler = async (event: any) => {
         const rawFechaInicio =
           row.fecha_inicio_utc ?? row.fecha_inicio ?? row.start ?? row.inicio ?? row.fechaInicio ?? row.start_date;
         const rawFechaFin = row.fecha_fin_utc ?? row.fecha_fin ?? row.end ?? row.fin ?? row.fechaFin ?? row.end_date;
+        const rawEstado = row.estado ?? row.state ?? row.status;
 
         const dealId = toTrimmed(rawDealId);
         const dealProductId = toTrimmed(rawDealProductId);
-        const direccion = toOptionalText(row.direccion ?? row.address ?? row.dirección ?? row.training_address);
+        const direccion = toTrimmed(row.direccion ?? row.address ?? row.dirección ?? row.training_address);
         const salaId = toTrimmed(row.sala_id ?? row.sala ?? row.room_id ?? row.room);
         const trainerIds = parseDelimitedIdList(row.trainer_ids ?? row.formadores ?? row.trainers ?? row.trainerIds);
         const unidadIds = parseDelimitedIdList(row.unidad_movil_ids ?? row.unidades ?? row.unidadIds ?? row.units);
         const forceEstadoBorrador = shouldForceEstadoBorrador(row.force_estado_borrador ?? row.forceBorrador);
+
+        const estadoResult = parseOptionalSessionEstado(rawEstado);
+        if (estadoResult.error) {
+          results.push({
+            row: rowNumber,
+            deal_id: dealId ?? null,
+            deal_product_id: dealProductId ?? null,
+            status: 'error',
+            message: parseErrorMessage(estadoResult.error),
+          });
+          continue;
+        }
 
         const fechaInicioResult = parseDateInput(rawFechaInicio);
         if (fechaInicioResult && 'error' in fechaInicioResult) {
@@ -1277,6 +1302,7 @@ export const handler = async (event: any) => {
               setFechaInicio: hasFechaInicio,
               setFechaFin: hasFechaFin,
               forceEstadoBorrador,
+              estado: estadoResult.estado,
             }),
           );
 
@@ -1842,9 +1868,12 @@ if (method === 'GET') {
       );
       if (rangeError) return rangeError;
 
-      const direccion = toOptionalText(body.direccion);
+      const direccion = toTrimmed(body.direccion);
       const salaId = toTrimmed(body.sala_id);
       const forceEstadoBorrador = shouldForceEstadoBorrador(body.force_estado_borrador);
+
+      const estadoResult = parseOptionalSessionEstado(body.estado);
+      if (estadoResult.error) return estadoResult.error;
 
       const auditUserIdPromise = resolveUserIdFromEvent(event, prisma);
 
@@ -1861,6 +1890,7 @@ if (method === 'GET') {
           setFechaInicio: hasFechaInicio,
           setFechaFin: hasFechaFin,
           forceEstadoBorrador,
+          estado: estadoResult.estado,
         }),
       );
 
