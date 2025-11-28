@@ -283,10 +283,11 @@ export const handler = createHttpHandler<any>(async (request) => {
   const results: Array<{ row: number; sessionId?: string; error?: string }> = [];
   const randomSalaId = () => (salaIds.length ? salaIds[Math.floor(Math.random() * salaIds.length)] : null);
 
-  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    for (let index = 0; index < mappedRows.length; index += 1) {
-      const rowNumber = index + 2; // Excel row (header assumed in row 1)
-      const row = mappedRows[index];
+  await prisma.$transaction(
+    async (tx: Prisma.TransactionClient) => {
+      for (let index = 0; index < mappedRows.length; index += 1) {
+        const rowNumber = index + 2; // Excel row (header assumed in row 1)
+        const row = mappedRows[index];
 
       const errors: string[] = [];
 
@@ -398,8 +399,9 @@ export const handler = createHttpHandler<any>(async (request) => {
         });
         results.push({ row: rowNumber, error: message });
       }
-    }
-  });
+    },
+    { timeout: 60_000 },
+  );
 
   const imported = results.filter((result) => !result.error).length;
   const failed = results.filter((result) => result.error).length;
