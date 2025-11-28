@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "postinstall": "prisma generate --schema ../../prisma/schema.prisma"
+    "postinstall": "prisma generate --schema ../prisma/schema.prisma"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
