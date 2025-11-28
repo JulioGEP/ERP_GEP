@@ -73,6 +73,45 @@ function normalizeEstado(value: unknown): SessionEstado | null {
   return null;
 }
 
+function normalizeTextForSimilarity(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function diceCoefficientSimilarity(a: string, b: string): number {
+  const normalizedA = normalizeTextForSimilarity(a);
+  const normalizedB = normalizeTextForSimilarity(b);
+
+  if (!normalizedA.length || !normalizedB.length) return 0;
+  if (normalizedA === normalizedB) return 1;
+
+  const getBigrams = (text: string) => {
+    const bigrams = new Map<string, number>();
+    for (let i = 0; i < text.length - 1; i += 1) {
+      const bigram = text.slice(i, i + 2);
+      bigrams.set(bigram, (bigrams.get(bigram) ?? 0) + 1);
+    }
+    return bigrams;
+  };
+
+  const bigramsA = getBigrams(normalizedA);
+  const bigramsB = getBigrams(normalizedB);
+
+  let intersection = 0;
+  bigramsA.forEach((countA, bigram) => {
+    const countB = bigramsB.get(bigram);
+    if (countB) {
+      intersection += Math.min(countA, countB);
+    }
+  });
+
+  return (2 * intersection) / (normalizedA.length - 1 + normalizedB.length - 1);
+}
+
 function mapRawRow(row: Record<string, unknown>): SessionImportRow {
   const dealId = toTrimmed(row.deal_id ?? row.dealId);
   const dealProductId = toTrimmed(row.deal_product_id ?? row.deal_product_id ?? row.dealProductId);
@@ -173,9 +212,17 @@ export const handler = createHttpHandler<any>(async (request) => {
     ),
   );
 
+  const productFilters: Prisma.deal_productsWhereInput[] = [];
+  if (uniqueProductIds.length) {
+    productFilters.push({ id: { in: uniqueProductIds } });
+  }
+  if (dealIdsMissingProduct.length) {
+    productFilters.push({ deal_id: { in: dealIdsMissingProduct } });
+  }
+
   const [deals, dealProducts, trainers, unidadesMoviles, salas]: [
     Array<{ deal_id: string }>,
-    Array<{ id: string; deal_id: string | null }>,
+    Array<{ id: string; deal_id: string | null; name: string | null }>,
     Array<{ trainer_id: string }>,
     Array<{ unidad_id: string }>,
     Array<{ sala_id: string }>,
@@ -185,16 +232,8 @@ export const handler = createHttpHandler<any>(async (request) => {
       select: { deal_id: true },
     }),
     prisma.deal_products.findMany({
-      where:
-        uniqueProductIds.length || dealIdsMissingProduct.length
-          ? {
-              OR: [
-                uniqueProductIds.length ? { id: { in: uniqueProductIds } } : undefined,
-                dealIdsMissingProduct.length ? { deal_id: { in: dealIdsMissingProduct } } : undefined,
-              ].filter(Boolean) as Prisma.Enumerable<Prisma.deal_productsWhereInput>,
-            }
-          : undefined,
-      select: { id: true, deal_id: true },
+      where: productFilters.length ? { OR: productFilters } : undefined,
+      select: { id: true, deal_id: true, name: true },
     }),
     prisma.trainers.findMany({
       where: uniqueTrainerIds.length ? { trainer_id: { in: uniqueTrainerIds } } : undefined,
@@ -215,7 +254,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     existing.push(product);
     map.set(product.deal_id, existing);
     return map;
-  }, new Map<string, Array<{ id: string; deal_id: string | null }>>());
+  }, new Map<string, Array<{ id: string; deal_id: string | null; name: string | null }>>());
   const trainerMap = new Map(trainers.map((trainer) => [trainer.trainer_id, trainer]));
   const unidadMovilMap = new Map(unidadesMoviles.map((unidad) => [unidad.unidad_id, unidad]));
   const salaIds = salas.map((sala) => sala.sala_id);
@@ -247,9 +286,34 @@ export const handler = createHttpHandler<any>(async (request) => {
         } else if (productsForDeal.length === 0) {
           errors.push('deal_product_id obligatorio: el deal no tiene productos configurados');
         } else {
-          errors.push(
-            'deal_product_id obligatorio: el deal tiene múltiples productos, indica cuál usar',
-          );
+          const nombreCache = row.nombre_cache;
+          if (nombreCache) {
+            let bestMatch: { id: string } | null = null;
+            let bestScore = 0;
+
+            for (const product of productsForDeal) {
+              if (!product.name) continue;
+
+              const similarity = diceCoefficientSimilarity(nombreCache, product.name);
+              if (similarity > bestScore) {
+                bestScore = similarity;
+                bestMatch = product;
+              }
+            }
+
+            if (bestMatch && bestScore >= 0.75) {
+              dealProductId = bestMatch.id;
+              row.deal_product_id = dealProductId;
+            } else {
+              errors.push(
+                'deal_product_id obligatorio: el deal tiene múltiples productos y nombre_cache no coincide con ninguno',
+              );
+            }
+          } else {
+            errors.push(
+              'deal_product_id obligatorio: el deal tiene múltiples productos, indica cuál usar',
+            );
+          }
         }
       }
 
