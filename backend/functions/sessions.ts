@@ -739,13 +739,20 @@ async function createSessionRecord(
 
   const fallbackIdSuffix = `_${payload.dealProductId}`;
 
+  const productFilters = {
+    OR: [
+      { id: { in: candidateProductIds } },
+      { id: { endsWith: fallbackIdSuffix } },
+      { code: payload.dealProductId },
+    ],
+  } as const;
+
   const product = await tx.deal_products.findFirst({
     where: {
-      deal_id: deal.deal_id,
       OR: [
-        { id: { in: candidateProductIds } },
-        { id: { endsWith: fallbackIdSuffix } },
-        { code: payload.dealProductId },
+        { deal_id: deal.deal_id, ...productFilters },
+        { deal_id: null, ...productFilters },
+        productFilters,
       ],
     },
     select: { id: true, deal_id: true, name: true, code: true },
