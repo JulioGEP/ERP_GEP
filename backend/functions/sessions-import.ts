@@ -215,19 +215,25 @@ async function createSessionFromRow(
     throw errorResponse('NOT_FOUND', `Presupuesto ${row.dealId} no encontrado`, 404);
   }
 
-  let product = await tx.deal_products.findUnique({
-    where: { id: normalizedDealProductId },
+  const productSearch = [
+    { id: normalizedDealProductId },
+    { id: row.dealProductId },
+    { code: row.dealProductId },
+  ];
+
+  if (normalizedDealProductId !== row.dealProductId) {
+    productSearch.push({ code: normalizedDealProductId });
+  }
+
+  const product = await tx.deal_products.findFirst({
+    where: {
+      deal_id: deal.deal_id,
+      OR: productSearch,
+    },
     select: { id: true, deal_id: true, name: true, code: true },
   });
 
-  if ((!product || product.deal_id !== deal.deal_id) && normalizedDealProductId !== row.dealProductId) {
-    product = await tx.deal_products.findUnique({
-      where: { id: row.dealProductId },
-      select: { id: true, deal_id: true, name: true, code: true },
-    });
-  }
-
-  if (!product || product.deal_id !== deal.deal_id) {
+  if (!product) {
     throw errorResponse('NOT_FOUND', `Producto ${row.dealProductId} no encontrado en el presupuesto`, 404);
   }
 
