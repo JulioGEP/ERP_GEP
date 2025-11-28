@@ -29,6 +29,31 @@ type ImportResult = {
 
 const DEFAULT_UNIT_ID = '52377f13-05dd-4830-88aa-0f5c78bee750';
 
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
+    return error.message;
+  }
+
+  if (error && typeof error === 'object') {
+    const message = (error as any).message;
+    if (typeof message === 'string' && message.trim()) return message;
+
+    const body = (error as any).body;
+    if (typeof body === 'string') {
+      try {
+        const parsed = JSON.parse(body);
+        if (parsed?.message && typeof parsed.message === 'string') {
+          return parsed.message;
+        }
+      } catch (parseError) {
+        console.error('[sessions-import] Failed to parse error body', { error, parseError });
+      }
+    }
+  }
+
+  return 'No se pudo crear la sesión';
+}
+
 function toTrimmed(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -300,7 +325,14 @@ export const handler = createHttpHandler<any>(async (request) => {
         message: `Sesión "${nombreCache}" creada correctamente`,
       });
     } catch (error: any) {
-      const message = typeof error?.message === 'string' ? error.message : 'No se pudo crear la sesión';
+      const message = extractErrorMessage(error);
+      console.error('[sessions-import] Failed to import row', {
+        index,
+        dealId: normalized.dealId,
+        dealProductId: normalized.dealProductId,
+        row: rows[index],
+        error,
+      });
       results.push({
         index,
         deal_id: normalized.dealId,
