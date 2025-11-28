@@ -156,6 +156,14 @@ export const handler = createHttpHandler<any>(async (request) => {
         .filter((value): value is string => Boolean(value)),
     ),
   );
+  const dealIdsMissingProduct = Array.from(
+    new Set(
+      mappedRows
+        .filter((row) => !row.deal_product_id && row.deal_id)
+        .map((row) => row.deal_id!)
+        .filter(Boolean),
+    ),
+  );
   const uniqueTrainerIds = Array.from(
     new Set(mappedRows.map((row) => row.trainer_id).filter((value): value is string => Boolean(value))),
   );
@@ -177,7 +185,15 @@ export const handler = createHttpHandler<any>(async (request) => {
       select: { deal_id: true },
     }),
     prisma.deal_products.findMany({
-      where: uniqueProductIds.length ? { id: { in: uniqueProductIds } } : undefined,
+      where:
+        uniqueProductIds.length || dealIdsMissingProduct.length
+          ? {
+              OR: [
+                uniqueProductIds.length ? { id: { in: uniqueProductIds } } : undefined,
+                dealIdsMissingProduct.length ? { deal_id: { in: dealIdsMissingProduct } } : undefined,
+              ].filter(Boolean) as Prisma.Enumerable<Prisma.deal_productsWhereInput>,
+            }
+          : undefined,
       select: { id: true, deal_id: true },
     }),
     prisma.trainers.findMany({
@@ -193,6 +209,13 @@ export const handler = createHttpHandler<any>(async (request) => {
 
   const dealMap = new Map(deals.map((deal) => [deal.deal_id, deal]));
   const productMap = new Map(dealProducts.map((product) => [product.id, product]));
+  const productByDealId = dealProducts.reduce((map, product) => {
+    if (!product.deal_id) return map;
+    const existing = map.get(product.deal_id) ?? [];
+    existing.push(product);
+    map.set(product.deal_id, existing);
+    return map;
+  }, new Map<string, Array<{ id: string; deal_id: string | null }>>());
   const trainerMap = new Map(trainers.map((trainer) => [trainer.trainer_id, trainer]));
   const unidadMovilMap = new Map(unidadesMoviles.map((unidad) => [unidad.unidad_id, unidad]));
   const salaIds = salas.map((sala) => sala.sala_id);
@@ -213,10 +236,27 @@ export const handler = createHttpHandler<any>(async (request) => {
         errors.push('deal_id no existe');
       }
 
-      if (!row.deal_product_id) {
+      let dealProductId = row.deal_product_id;
+      if (!dealProductId && row.deal_id) {
+        const productsForDeal = productByDealId.get(row.deal_id) ?? [];
+        // If the deal only has one product, we can safely auto-assign it; otherwise the user must
+        // specify which product applies to the session.
+        if (productsForDeal.length === 1) {
+          dealProductId = productsForDeal[0].id;
+          row.deal_product_id = dealProductId;
+        } else if (productsForDeal.length === 0) {
+          errors.push('deal_product_id obligatorio: el deal no tiene productos configurados');
+        } else {
+          errors.push(
+            'deal_product_id obligatorio: el deal tiene múltiples productos, indica cuál usar',
+          );
+        }
+      }
+
+      if (!dealProductId) {
         errors.push('deal_product_id obligatorio');
       } else {
-        const product = productMap.get(row.deal_product_id);
+        const product = productMap.get(dealProductId);
         if (!product) {
           errors.push('deal_product_id no existe');
         } else if (row.deal_id && product.deal_id && product.deal_id !== row.deal_id) {
