@@ -1,0 +1,12 @@
+{
+  "ID Negocio": "deal_id",
+  "ID Producto": "deal_product_id",
+  "Título": "nombre_cache",
+  "Inicio": "fecha_inicio_utc",
+  "Fin": "fecha_fin_utc",
+  "Sala": "sala_id",
+  "Dirección": "direccion",
+  "Comentarios": "comentarios",
+  "Estado": "estado",
+  "Drive": "drive_url"
+}
