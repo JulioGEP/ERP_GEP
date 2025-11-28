@@ -185,6 +185,19 @@ function normalizeRow(row: ImportRow, index: number) {
   return { dealId, dealProductId, trainerId, estado, start, end };
 }
 
+function normalizeDealProductId(dealId: string, dealProductId: string): string {
+  const dealIdPart = toTrimmed(dealId);
+  const productPart = toTrimmed(dealProductId);
+  if (!dealIdPart || !productPart) return dealProductId;
+
+  const maybeComposite = productPart.split('_');
+  if (maybeComposite.length === 2 && maybeComposite[0] === dealIdPart && maybeComposite[1]) {
+    return maybeComposite[1];
+  }
+
+  return dealProductId;
+}
+
 async function createSessionFromRow(
   tx: Prisma.TransactionClient,
   row: ReturnType<typeof normalizeRow> & { dealId: string; dealProductId: string; start: Date | null; end: Date | null },
@@ -192,6 +205,8 @@ async function createSessionFromRow(
 ): Promise<{ sessionId: string; nombreCache: string }>
 // eslint-disable-next-line brace-style
 {
+  const normalizedDealProductId = normalizeDealProductId(row.dealId, row.dealProductId);
+
   const deal = await tx.deals.findUnique({
     where: { deal_id: row.dealId },
     select: { deal_id: true, training_address: true, sede_label: true },
@@ -201,7 +216,7 @@ async function createSessionFromRow(
   }
 
   const product = await tx.deal_products.findUnique({
-    where: { id: row.dealProductId },
+    where: { id: normalizedDealProductId },
     select: { id: true, deal_id: true, name: true, code: true },
   });
   if (!product || product.deal_id !== deal.deal_id) {
