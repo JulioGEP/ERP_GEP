@@ -12,8 +12,7 @@
     "migrate:deploy": "node ../scripts/prisma-migrate-retry.js",
     "prisma:prune": "node ../scripts/prisma-prune-binaries.mjs || true",
     "typecheck": "npm run generate && tsc -p tsconfig.json",
-    "postinstall": "prisma generate --schema prisma/schema.prisma",
-    "import:sesiones": "node ../scripts/import-sesiones-bulk.js"
+    "postinstall": "prisma generate --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
@@ -23,8 +22,7 @@
     "bcryptjs": "^2.4.3",
     "googleapis": "^133.0.0",
     "nodemailer": "^6.10.1",
-    "uuid": "^9.0.1",
-    "xlsx": "^0.18.5"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.19.24",
