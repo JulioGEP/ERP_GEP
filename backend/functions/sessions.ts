@@ -53,6 +53,24 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }
 
+function normalizeColumnKey(key: string): string {
+  return key
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function normalizeRowKeys(row: Record<string, unknown>): Record<string, unknown> {
+  return Object.entries(row).reduce<Record<string, unknown>>((acc, [key, value]) => {
+    const normalizedKey = normalizeColumnKey(String(key));
+    if (normalizedKey.length) acc[normalizedKey] = value;
+    return acc;
+  }, {});
+}
+
 function toTrimmed(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -1168,7 +1186,7 @@ export const handler = async (event: any) => {
       const auditUserId = await resolveUserIdFromEvent(event, prisma);
 
       for (let index = 0; index < rows.length; index += 1) {
-        const row = rows[index] as Record<string, unknown>;
+        const row = normalizeRowKeys(rows[index] as Record<string, unknown>);
         const rowNumber = index + 2; // 1 para cabecera + 1 para base cero
 
         const rawDealId = row.deal_id ?? row.dealId ?? row.deal ?? row.presupuesto ?? row.budget_id;
