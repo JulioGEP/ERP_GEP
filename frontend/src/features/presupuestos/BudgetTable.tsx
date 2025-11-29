@@ -198,6 +198,26 @@ function getOrganizationLabel(budget: DealSummary): string {
   return safeTrim(budget.organization?.name ?? '') ?? '—';
 }
 
+function TruncatedCellText({
+  label,
+  title,
+  className,
+}: {
+  label: string;
+  title?: string;
+  className?: string;
+}) {
+  const classes = ['budget-table__cell-text', 'text-truncate', 'd-inline-block', 'w-100'];
+  if (className) {
+    classes.push(className);
+  }
+  return (
+    <span className={classes.join(' ')} title={title ?? label}>
+      {label}
+    </span>
+  );
+}
+
 function getTitleLabel(budget: DealSummary): string {
   return safeTrim(budget.title ?? '') ?? '—';
 }
@@ -1063,11 +1083,7 @@ export function BudgetTable({
         const budgetId = getBudgetId(budget);
         const presupuestoLabel = budgetId ? `#${budgetId}` : '—';
         const title = budget.title && budget.title !== presupuestoLabel ? budget.title : undefined;
-        return (
-          <span className="fw-semibold" title={title}>
-            {presupuestoLabel}
-          </span>
-        );
+        return <TruncatedCellText label={presupuestoLabel} title={title} className="fw-semibold" />;
       },
       enableSorting: true,
       meta: { style: { width: 160 } },
@@ -1077,7 +1093,10 @@ export function BudgetTable({
       id: 'empresa',
       header: createSortableHeader('Empresa'),
       accessorFn: (budget) => getOrganizationLabel(budget),
-      cell: ({ row }) => getOrganizationLabel(row.original),
+      cell: ({ row }) => {
+        const label = getOrganizationLabel(row.original);
+        return <TruncatedCellText label={label} title={label} />;
+      },
     };
 
     if (variant === 'unworked') {
@@ -1260,7 +1279,8 @@ export function BudgetTable({
         cell: ({ row }) => {
           const budget = row.original;
           const titleLabel = getTitleLabel(budget);
-          return <span title={budget.title ?? ''}>{titleLabel}</span>;
+          const fullTitle = budget.title ?? '';
+          return <TruncatedCellText label={titleLabel} title={fullTitle} />;
         },
       },
       {
@@ -1271,7 +1291,7 @@ export function BudgetTable({
           const budget = row.original;
           const names = getProductNames(budget);
           const { label } = getProductLabel(budget);
-          return <span title={names.join(', ')}>{label}</span>;
+          return <TruncatedCellText label={label} title={names.join(', ')} />;
         },
       },
       {
@@ -1285,7 +1305,10 @@ export function BudgetTable({
         id: 'negocio',
         header: createSortableHeader('Negocio'),
         accessorFn: (budget) => getNegocioLabel(budget),
-        cell: ({ row }) => getNegocioLabel(row.original),
+        cell: ({ row }) => {
+          const label = getNegocioLabel(row.original);
+          return <TruncatedCellText label={label} title={label} />;
+        },
       },
     ];
 
@@ -1484,7 +1507,7 @@ export function BudgetTable({
           })()
         : null}
       <div className="table-responsive" style={{ maxHeight: '70vh' }} ref={tableContainerRef}>
-        <Table hover className="mb-0 align-middle">
+        <Table hover className="mb-0 align-middle budget-table">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
