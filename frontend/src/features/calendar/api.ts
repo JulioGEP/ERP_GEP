@@ -97,8 +97,8 @@ export type CalendarSession = {
   productName: string | null;
   productCode: string | null;
   title: string;
-  start: string | null;
-  end: string | null;
+  start: string;
+  end: string;
   estado: SessionEstado;
   direccion: string | null;
   comentarios: string | null;
@@ -580,9 +580,7 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
       const start = toTrimmed(row?.fecha_inicio_utc);
       const end = toTrimmed(row?.fecha_fin_utc);
       const title = toTrimmed(row?.nombre_cache) ?? 'Sesión';
-      const estado = toSessionEstado(row?.estado);
-      if (!id || !estado) return null;
-      if ((!start || !end) && estado !== 'BORRADOR') return null;
+      if (!id || !start || !end) return null;
 
       const room = row?.sala ? toResource({ ...row.sala, id: row.sala.sala_id }) : null;
       const trainers = ensureUniqueResources(
@@ -650,7 +648,7 @@ function sanitizeSessionsPayload(payload: any[]): CalendarSession[] {
         title,
         start,
         end,
-        estado,
+        estado: toSessionEstado(row?.estado),
         direccion: toOptionalString(row?.direccion),
         comentarios: toOptionalString(row?.comentarios),
         room,

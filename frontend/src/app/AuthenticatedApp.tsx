@@ -40,7 +40,6 @@ import { hasPendingExternalFollowUp } from './utils/budgetFollowUp';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
-import type { SessionsPageProps } from '../pages/presupuestos/SessionsPage';
 import type { MaterialsBoardPageProps } from '../pages/materiales/MaterialsBoardPage';
 import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
 import type { MaterialsPendingProductsPageProps } from '../pages/materiales/MaterialsPendingProductsPage';
@@ -95,7 +94,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Presupuestos/Todos', label: 'Todos', path: '/presupuestos/todos' },
       { key: 'Presupuestos/SinTrabajar', label: 'Sin trabajar', path: '/presupuestos/sintrabajar' },
       { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
-      { key: 'Presupuestos/Sesiones', label: 'Sesiones', path: '/presupuestos/sesiones' },
     ],
   },
   {
@@ -1343,11 +1341,6 @@ export default function AuthenticatedApp() {
     },
   };
 
-  const budgetSessionsPageProps: SessionsPageProps = {
-    onSessionOpen: handleOpenCalendarSession,
-    onNotify: pushToast,
-  };
-
   const allBudgetsPageProps: AllBudgetsPageProps = {
     budgets: allBudgets,
     isLoading: allBudgetsQuery.isLoading,
@@ -1588,7 +1581,6 @@ export default function AuthenticatedApp() {
             budgetsPageProps={budgetsPageProps}
             allBudgetsPageProps={allBudgetsPageProps}
             unworkedBudgetsPageProps={unworkedBudgetsPageProps}
-            budgetSessionsPageProps={budgetSessionsPageProps}
             materialsBudgetsPageProps={materialsBudgetsPageProps}
             materialsPendingProductsPageProps={materialsPendingProductsPageProps}
             materialsOrdersPageProps={materialsOrdersPageProps}

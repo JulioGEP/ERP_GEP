@@ -3,7 +3,6 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
-import type { SessionsPageProps } from '../pages/presupuestos/SessionsPage';
 import type {
   MaterialsBoardPageProps,
   MaterialsBudgetsPageProps,
@@ -30,7 +29,6 @@ const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const AllBudgetsPage = lazy(() => import('../pages/presupuestos/AllBudgetsPage'));
 const UnworkedBudgetsPage = lazy(() => import('../pages/presupuestos/UnworkedBudgetsPage'));
-const SessionsPage = lazy(() => import('../pages/presupuestos/SessionsPage'));
 const MaterialsBudgetsPage = lazy(() => import('../pages/materiales/MaterialsBudgetsPage'));
 const MaterialsBoardPage = lazy(() => import('../pages/materiales/MaterialsBoardPage'));
 const MaterialsPendingProductsPage = lazy(
@@ -91,7 +89,6 @@ type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
   allBudgetsPageProps: AllBudgetsPageProps;
   unworkedBudgetsPageProps: UnworkedBudgetsPageProps;
-  budgetSessionsPageProps: SessionsPageProps;
   materialsBoardPageProps: MaterialsBoardPageProps;
   materialsBudgetsPageProps: MaterialsBudgetsPageProps;
   materialsPendingProductsPageProps: MaterialsPendingProductsPageProps;
@@ -119,7 +116,6 @@ export function AppRouter({
   budgetsPageProps,
   allBudgetsPageProps,
   unworkedBudgetsPageProps,
-  budgetSessionsPageProps,
   materialsBoardPageProps,
   materialsBudgetsPageProps,
   materialsPendingProductsPageProps,
@@ -169,16 +165,6 @@ export function AppRouter({
             <GuardedRoute
               path="/presupuestos/todos"
               element={<AllBudgetsPage {...allBudgetsPageProps} />}
-            />
-          }
-        />
-
-        <Route
-          path="/presupuestos/sesiones"
-          element={
-            <GuardedRoute
-              path="/presupuestos/sesiones"
-              element={<SessionsPage {...budgetSessionsPageProps} />}
             />
           }
         />
