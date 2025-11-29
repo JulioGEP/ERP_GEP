@@ -1086,7 +1086,7 @@ export function BudgetTable({
         return <TruncatedCellText label={presupuestoLabel} title={title} className="fw-semibold" />;
       },
       enableSorting: true,
-      meta: { style: { width: 160 } },
+      meta: { style: { width: variant === 'unworked' ? 120 : 160 } },
     };
 
     const empresaColumn: ColumnDef<DealSummary, unknown> = {
@@ -1097,6 +1097,7 @@ export function BudgetTable({
         const label = getOrganizationLabel(row.original);
         return <TruncatedCellText label={label} title={label} />;
       },
+      meta: variant === 'unworked' ? { style: { width: 260 } } : undefined,
     };
 
     if (variant === 'unworked') {
@@ -1111,7 +1112,7 @@ export function BudgetTable({
           const title = safeTrim(budget.title ?? '') ?? undefined;
           return <span title={title}>{info.label}</span>;
         },
-        meta: { style: { width: 160 } },
+        meta: { style: { width: 140 } },
       };
 
       const followUpColumns: ColumnDef<DealSummary, unknown>[] = [
