@@ -199,6 +199,23 @@ body {
   background-color: rgba(232, 71, 77, 0.08);
 }
 
+.budget-table {
+  table-layout: fixed;
+}
+
+.budget-table th,
+.budget-table td {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.budget-table__cell-text {
+  max-width: 100%;
+  vertical-align: middle;
+}
+
 .pagination .page-link {
   color: var(--color-red);
 }
