@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { Button, Spinner } from 'react-bootstrap';
 import type { DealSummary } from '../../types/deal';
 import type { TableFiltersState } from '../../hooks/useTableFilterState';
@@ -29,7 +29,8 @@ export type BudgetSectionLayoutProps = {
   tableVariant?: BudgetTableVariant;
   pageSize?: number;
   defaultFilters?: TableFiltersState;
-  onRefreshAll?: () => void;
+  onRefreshAll?: (budgets: DealSummary[]) => void;
+  onVisibleBudgetsChange?: (budgets: DealSummary[]) => void;
   children?: ReactNode;
 };
 
@@ -54,11 +55,31 @@ export function BudgetSectionLayout({
   pageSize,
   defaultFilters,
   onRefreshAll,
+  onVisibleBudgetsChange,
   children,
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
+  const [visibleBudgets, setVisibleBudgets] = useState<DealSummary[]>(budgets);
 
-  const handleRefreshAll = onRefreshAll ?? onRetry;
+  useEffect(() => {
+    setVisibleBudgets(budgets);
+  }, [budgets]);
+
+  const handleRefreshAll = useCallback(() => {
+    if (onRefreshAll) {
+      onRefreshAll(visibleBudgets);
+      return;
+    }
+    onRetry();
+  }, [onRefreshAll, onRetry, visibleBudgets]);
+
+  const handleVisibleBudgetsChange = useCallback(
+    (rows: DealSummary[]) => {
+      setVisibleBudgets(rows);
+      onVisibleBudgetsChange?.(rows);
+    },
+    [onVisibleBudgetsChange],
+  );
 
   return (
     <div className="d-grid gap-4">
@@ -99,6 +120,7 @@ export function BudgetSectionLayout({
         variant={tableVariant}
         pageSize={pageSize}
         defaultFilters={defaultFilters}
+        onVisibleBudgetsChange={handleVisibleBudgetsChange}
       />
 
       {children}
