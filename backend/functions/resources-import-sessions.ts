@@ -233,39 +233,39 @@ export const handler = createHttpHandler<any>(async (request) => {
     ),
   );
 
-  const [deals, dealProducts, trainers, unidadesMoviles, salas]: [
-    Array<{ deal_id: string }>,
-    Array<{ id: string; deal_id: string | null; name: string | null }>,
-    Array<{ trainer_id: string }>,
-    Array<{ unidad_id: string }>,
-    Array<{ sala_id: string }>,
-  ] = await Promise.all([
-    prisma.deals.findMany({
-      where: uniqueDealIds.length ? { deal_id: { in: uniqueDealIds } } : undefined,
-      select: { deal_id: true },
-    }),
-    prisma.deal_products.findMany({
-      where:
-        uniqueProductIds.length || dealIdsMissingProduct.length
-          ? {
-              OR: [
-                uniqueProductIds.length ? { id: { in: uniqueProductIds } } : undefined,
-                dealIdsMissingProduct.length ? { deal_id: { in: dealIdsMissingProduct } } : undefined,
-              ].filter(Boolean) as Prisma.Enumerable<Prisma.deal_productsWhereInput>,
-            }
-          : undefined,
-      select: { id: true, deal_id: true, name: true },
-    }),
-    prisma.trainers.findMany({
-      where: uniqueTrainerIds.length ? { trainer_id: { in: uniqueTrainerIds } } : undefined,
-      select: { trainer_id: true },
-    }),
-    prisma.unidades_moviles.findMany({
-      where: uniqueUnidadMovilIds.length ? { unidad_id: { in: uniqueUnidadMovilIds } } : undefined,
-      select: { unidad_id: true },
-    }),
-    prisma.salas.findMany({ select: { sala_id: true } }),
-  ]);
+    const [deals, dealProducts, trainers, unidadesMoviles, salas]: [
+      Array<{ deal_id: string }>,
+      Array<{ id: string; deal_id: string | null; name: string | null }>,
+      Array<{ trainer_id: string }>,
+      Array<{ unidad_id: string }>,
+      Array<{ sala_id: string }>,
+    ] = await Promise.all([
+      prisma.deals.findMany({
+        where: uniqueDealIds.length ? { deal_id: { in: uniqueDealIds } } : undefined,
+        select: { deal_id: true },
+      }),
+      prisma.deal_products.findMany({
+        where:
+          uniqueProductIds.length || dealIdsMissingProduct.length
+            ? {
+                OR: [
+                  ...(uniqueProductIds.length ? [{ id: { in: uniqueProductIds } }] : []),
+                  ...(dealIdsMissingProduct.length ? [{ deal_id: { in: dealIdsMissingProduct } }] : []),
+                ],
+              }
+            : undefined,
+        select: { id: true, deal_id: true, name: true },
+      }),
+      prisma.trainers.findMany({
+        where: uniqueTrainerIds.length ? { trainer_id: { in: uniqueTrainerIds } } : undefined,
+        select: { trainer_id: true },
+      }),
+      prisma.unidades_moviles.findMany({
+        where: uniqueUnidadMovilIds.length ? { unidad_id: { in: uniqueUnidadMovilIds } } : undefined,
+        select: { unidad_id: true },
+      }),
+      prisma.salas.findMany({ select: { sala_id: true } }),
+    ]);
 
   const dealMap = new Map(deals.map((deal) => [deal.deal_id, deal]));
   const productMap = new Map(dealProducts.map((product) => [product.id, product]));
@@ -399,6 +399,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         });
         results.push({ row: rowNumber, error: message });
       }
+    }
     },
     { timeout: 60_000 },
   );
