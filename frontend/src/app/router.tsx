@@ -22,7 +22,6 @@ import type { ProveedoresPageProps } from '../pages/recursos/ProveedoresPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
-import type { OpenTrainingBulkUpdatePageProps } from '../pages/recursos/OpenTrainingBulkUpdatePage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext';
 
@@ -47,7 +46,6 @@ const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
 const StockPage = lazy(() => import('../pages/recursos/StockPage'));
 const SessionImportPage = lazy(() => import('../pages/recursos/SessionImportPage'));
 const BulkBudgetImportPage = lazy(() => import('../pages/recursos/BulkBudgetImportPage'));
-const OpenTrainingBulkUpdatePage = lazy(() => import('../pages/recursos/OpenTrainingBulkUpdatePage'));
 const ProveedoresPage = lazy(() => import('../pages/recursos/ProveedoresPage'));
 const ConfirmacionesPage = lazy(() => import('../pages/recursos/ConfirmacionesPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
@@ -108,7 +106,6 @@ type AppRouterProps = {
   recursosConfirmacionesPageProps: ConfirmacionesPageProps;
   certificadosPageProps: CertificadosPageProps;
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
-  openTrainingBulkUpdatePageProps: OpenTrainingBulkUpdatePageProps;
   usersPageProps: UsersPageProps;
   defaultRedirectPath: string;
   knownPaths: ReadonlySet<string>;
@@ -136,7 +133,6 @@ export function AppRouter({
   recursosConfirmacionesPageProps,
   certificadosPageProps,
   recursosFormacionAbiertaPageProps,
-  openTrainingBulkUpdatePageProps,
   usersPageProps,
   defaultRedirectPath,
   knownPaths,
@@ -332,15 +328,6 @@ export function AppRouter({
         <Route
           path="/recursos/importar_en_bucle"
           element={<GuardedRoute path="/recursos/importar_en_bucle" element={<BulkBudgetImportPage />} />}
-        />
-        <Route
-          path="/recursos/actualizar_en-bucle"
-          element={
-            <GuardedRoute
-              path="/recursos/actualizar_en-bucle"
-              element={<OpenTrainingBulkUpdatePage {...openTrainingBulkUpdatePageProps} />}
-            />
-          }
         />
         <Route
           path="/recursos/confirmaciones"
