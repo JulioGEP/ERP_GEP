@@ -292,6 +292,12 @@ function parseDateValue(value: string | null | undefined): number | null {
   return null;
 }
 
+function getStartOfTodayTimestamp(): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today.getTime();
+}
+
 function formatDateLabel(timestamp: number | null): string {
   if (timestamp === null) {
     return '—';
@@ -479,6 +485,29 @@ function getTrainingDateTimestamp(budget: DealSummary): number | null {
   return null;
 }
 
+function hasOverduePlannedSession(budget: DealSummary): boolean {
+  const sessions = Array.isArray(budget.sessions) ? budget.sessions : [];
+  if (!sessions.length) {
+    return false;
+  }
+
+  const todayStart = getStartOfTodayTimestamp();
+
+  return sessions.some((session) => {
+    const state = typeof session?.estado === 'string' ? session.estado.trim().toUpperCase() : '';
+    if (state !== 'PLANIFICADA') {
+      return false;
+    }
+
+    const endTimestamp = parseDateValue(session?.fecha_fin_utc ?? null);
+    if (endTimestamp === null) {
+      return false;
+    }
+
+    return endTimestamp < todayStart;
+  });
+}
+
 function getTrainingDateInfo(budget: DealSummary): { label: string; sortValue: number | null } {
   const timestamp = getTrainingDateTimestamp(budget);
   return {
@@ -532,6 +561,7 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
     }
     return joined;
   },
+  session_planificada_vencida: (budget) => (hasOverduePlannedSession(budget) ? 'Sí' : 'No'),
   product_names: (budget) => getProductNames(budget).join(' '),
   student_names: (budget) => (budget.studentNames ?? []).join(' '),
   training_date: (budget) => {
@@ -562,6 +592,15 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'tipo_servicio', label: 'Tipo de servicio' },
   { key: 'comercial', label: 'Comercial' },
   { key: 'session_estado', label: 'Estado sesión', type: 'select' },
+  {
+    key: 'session_planificada_vencida',
+    label: 'Por finalizar',
+    type: 'select',
+    options: [
+      { value: 'Sí', label: 'Sí' },
+      { value: 'No', label: 'No' },
+    ],
+  },
   { key: 'product_names', label: 'Productos' },
   { key: 'student_names', label: 'Alumnos' },
   { key: 'training_date', label: 'Fecha de formación', type: 'date' },
@@ -589,6 +628,7 @@ const BUDGET_SELECT_FILTER_KEYS = new Set<string>([
   'tipo_servicio',
   'comercial',
   'session_estado',
+  'session_planificada_vencida',
 ]);
 
 function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
