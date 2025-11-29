@@ -33,7 +33,7 @@ const encodeBudgetsQueryValue = (value: string) =>
   encodeURIComponent(value).replace(/%20/g, '+');
 
 const SESSION_PENDING_COMPLETION_URL =
-  `${ALL_BUDGETS_PATH}?budgets-table__filter__session_planificada_vencida=${encodeBudgetsQueryValue('Sí')}`;
+  `${ALL_BUDGETS_PATH}?budgets-table__filter__session_estado=FINALIZADA`;
 
 const SESSION_FORMACION_ABIERTA_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__pipeline=${encodeBudgetsQueryValue(
   'Formación Empresas||GEP Services',
