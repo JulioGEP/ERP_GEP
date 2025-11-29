@@ -660,7 +660,6 @@ export default function AuthenticatedApp() {
   const [importResultWarnings, setImportResultWarnings] = useState<string[] | null>(null);
   const [importResultDealId, setImportResultDealId] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
-  const [isBulkRefreshingBudgets, setIsBulkRefreshingBudgets] = useState(false);
   const [autoRefreshBudgetId, setAutoRefreshBudgetId] = useState<string | null>(null);
   const [isCheckingExistingDeal, setIsCheckingExistingDeal] = useState(false);
   const [activeCalendarVariant, setActiveCalendarVariant] = useState<ActiveVariant | null>(null);
@@ -1001,12 +1000,10 @@ export default function AuthenticatedApp() {
   }, [location.pathname]);
 
   const isRefreshingWithoutSessions =
-    (budgetsWithoutSessionsQuery.isFetching && !budgetsWithoutSessionsQuery.isLoading) ||
-    isBulkRefreshingBudgets;
+    budgetsWithoutSessionsQuery.isFetching && !budgetsWithoutSessionsQuery.isLoading;
 
   const allBudgets = allBudgetsQuery.data ?? [];
-  const isRefreshingAllBudgets =
-    (allBudgetsQuery.isFetching && !allBudgetsQuery.isLoading) || isBulkRefreshingBudgets;
+  const isRefreshingAllBudgets = allBudgetsQuery.isFetching && !allBudgetsQuery.isLoading;
   const materialOrdersData = materialsOrdersQuery.data;
   const materialOrders = materialOrdersData?.orders ?? [];
   const nextMaterialOrderNumber = materialOrdersData?.nextOrderNumber ?? 1;
@@ -1019,67 +1016,6 @@ export default function AuthenticatedApp() {
   const unworkedBudgets = useMemo(
     () => allBudgets.filter((budget) => hasPendingExternalFollowUp(budget)),
     [allBudgets],
-  );
-
-  const handleRefreshBudgets = useCallback(
-    async (filteredBudgets: DealSummary[]) => {
-      if (isBulkRefreshingBudgets) return;
-
-      const budgetIds = Array.from(
-        new Set(
-          filteredBudgets
-            .map((budget) => String(budget.deal_id ?? '').trim())
-            .filter((id) => id.length > 0),
-        ),
-      );
-
-      if (!budgetIds.length) {
-        pushToast({ variant: 'info', message: 'No hay presupuestos para actualizar.' });
-        return;
-      }
-
-      setIsBulkRefreshingBudgets(true);
-
-      const warnings: string[] = [];
-      const failures: string[] = [];
-
-      for (const id of budgetIds) {
-        try {
-          const result = normalizeImportDealResult(await importDeal(id));
-          if (result.warnings.length) {
-            warnings.push(...result.warnings.map((warning) => `#${id}: ${warning}`));
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Error desconocido';
-          failures.push(`#${id}: ${message}`);
-        }
-      }
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: DEALS_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: DEALS_WITHOUT_SESSIONS_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: DEALS_ALL_QUERY_KEY }),
-      ]);
-
-      setIsBulkRefreshingBudgets(false);
-
-      if (failures.length) {
-        pushToast({
-          variant: 'warning',
-          message: `Algunos presupuestos no se pudieron actualizar (${failures.length}).`,
-        });
-      } else {
-        pushToast({ variant: 'success', message: 'Presupuestos actualizados correctamente.' });
-      }
-
-      if (warnings.length) {
-        pushToast({
-          variant: 'warning',
-          message: `Actualizados con avisos:\n${warnings.join('\n')}`,
-        });
-      }
-    },
-    [isBulkRefreshingBudgets, pushToast, queryClient],
   );
 
   const handleImportSubmit = useCallback(
@@ -1403,7 +1339,6 @@ export default function AuthenticatedApp() {
       fetcher: fetchDealsWithoutSessions,
       queryKey: ['budget-table', 'noSessions'],
     },
-    onRefreshAll: handleRefreshBudgets,
   };
 
   const allBudgetsPageProps: AllBudgetsPageProps = {
@@ -1421,7 +1356,6 @@ export default function AuthenticatedApp() {
       fetcher: fetchDeals,
       queryKey: ['budget-table', 'all'],
     },
-    onRefreshAll: handleRefreshBudgets,
   };
 
   const unworkedBudgetsPageProps: UnworkedBudgetsPageProps = {
@@ -1435,7 +1369,6 @@ export default function AuthenticatedApp() {
     onOpenImportModal: handleOpenImportModal,
     isImporting: importMutation.isPending,
     canImport: canImportBudgets,
-    onRefreshAll: handleRefreshBudgets,
   };
 
   const materialsBoardPageProps: MaterialsBoardPageProps = {
@@ -1445,7 +1378,6 @@ export default function AuthenticatedApp() {
     error: allBudgetsQuery.error ?? null,
     onRetry: () => allBudgetsQuery.refetch(),
     onSelect: handleSelectBudget,
-    onRefreshAll: handleRefreshBudgets,
   };
 
   const materialsBudgetsPageProps: MaterialsBudgetsPageProps = {
