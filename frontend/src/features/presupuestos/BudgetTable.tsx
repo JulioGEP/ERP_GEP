@@ -122,7 +122,6 @@ interface BudgetTableProps {
   variant?: BudgetTableVariant;
   pageSize?: number;
   defaultFilters?: TableFiltersState;
-  onVisibleBudgetsChange?: (budgets: DealSummary[]) => void;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -696,7 +695,6 @@ export function BudgetTable({
   variant = 'default',
   pageSize,
   defaultFilters,
-  onVisibleBudgetsChange,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -979,10 +977,6 @@ export function BudgetTable({
     : clientFilteredBudgets;
 
   const resultCount = tableBudgets.length;
-
-  useEffect(() => {
-    onVisibleBudgetsChange?.(tableBudgets);
-  }, [onVisibleBudgetsChange, tableBudgets]);
 
   const effectivePageSize = typeof pageSize === 'number' && pageSize > 0 ? Math.floor(pageSize) : null;
   const pageCount = effectivePageSize ? Math.max(1, Math.ceil(resultCount / effectivePageSize)) : 1;
