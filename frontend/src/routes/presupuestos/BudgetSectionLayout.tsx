@@ -29,6 +29,7 @@ export type BudgetSectionLayoutProps = {
   tableVariant?: BudgetTableVariant;
   pageSize?: number;
   defaultFilters?: TableFiltersState;
+  onRefreshAll?: () => void;
   children?: ReactNode;
 };
 
@@ -52,9 +53,12 @@ export function BudgetSectionLayout({
   tableVariant = 'default',
   pageSize,
   defaultFilters,
+  onRefreshAll,
   children,
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
+
+  const handleRefreshAll = onRefreshAll ?? onRetry;
 
   return (
     <div className="d-grid gap-4">
@@ -68,6 +72,9 @@ export function BudgetSectionLayout({
         </div>
         <div className="d-flex align-items-center gap-3">
           {(isImporting || isFetching) && <Spinner animation="border" role="status" size="sm" />}
+          <Button size="lg" variant="outline-secondary" onClick={handleRefreshAll} disabled={isLoading || isFetching}>
+            Actualizar todo
+          </Button>
           {canImport && (
             <Button size="lg" onClick={onOpenImportModal} disabled={isImporting}>
               Importar presupuesto
