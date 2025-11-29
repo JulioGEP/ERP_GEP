@@ -62,7 +62,7 @@ export function OpenTrainingBulkUpdateView() {
   const openTrainingBudgetsQuery = useQuery({
     queryKey: OPEN_TRAINING_BUDGETS_QUERY_KEY,
     queryFn: async () => {
-      const deals = await fetchDeals({ filters: { pipeline: OPEN_TRAINING_PIPELINE_LABEL } });
+      const deals = await fetchDeals({ filters: { pipeline_id: OPEN_TRAINING_PIPELINE_LABEL } });
       return deals.filter(isOpenTrainingBudget);
     },
     refetchOnWindowFocus: false,
