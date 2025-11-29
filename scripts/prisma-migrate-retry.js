@@ -1,16 +1,24 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 
-const MAX_ATTEMPTS = parseInt(process.env.PRISMA_MIGRATE_MAX_ATTEMPTS || '3', 10);
-const BACKOFF_MS = parseInt(process.env.PRISMA_MIGRATE_BACKOFF_MS || '5000', 10);
+const MAX_ATTEMPTS = parseInt(process.env.PRISMA_MIGRATE_MAX_ATTEMPTS || '5', 10);
+const BACKOFF_MS = parseInt(process.env.PRISMA_MIGRATE_BACKOFF_MS || '10000', 10);
+
+const resolvedMigrateLockTimeout =
+  process.env.PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000';
+const resolvedSchemaLockTimeout =
+  process.env.PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000';
 
 const env = {
   ...process.env,
-  PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT:
-    process.env.PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000',
-  PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT:
-    process.env.PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000',
+  PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedMigrateLockTimeout,
+  PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedSchemaLockTimeout,
 };
+
+console.log('Prisma advisory lock timeouts (ms):', {
+  migrate: resolvedMigrateLockTimeout,
+  schema: resolvedSchemaLockTimeout,
+});
 
 const backendDir = path.join(__dirname, '..', 'backend');
 const failedMigration = '20251120000002_add_atributos_to_products';
