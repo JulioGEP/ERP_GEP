@@ -59,7 +59,6 @@ import type { StockPageProps } from '../pages/recursos/StockPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
-import type { OpenTrainingBulkUpdatePageProps } from '../pages/recursos/OpenTrainingBulkUpdatePage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
@@ -128,7 +127,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Stock', label: 'Stock', path: '/recursos/stock' },
       { key: 'Recursos/ImportarSesion', label: 'Importar sesiones', path: '/recursos/importar_sesion' },
       { key: 'Recursos/ImportarEnBucle', label: 'Importar en bucle', path: '/recursos/importar_en_bucle' },
-      { key: 'Recursos/ActualizarEnBucle', label: 'Actualizar en bucle', path: '/recursos/actualizar_en-bucle' },
       { key: 'Recursos/Proveedores', label: 'Proveedores', path: '/recursos/proveedores' },
       { key: 'Recursos/FormacionAbierta', label: 'Formación Abierta', path: '/recursos/formacion_abierta' },
     ],
@@ -1467,7 +1465,6 @@ export default function AuthenticatedApp() {
 
   const certificadosPageProps: CertificadosPageProps = {};
   const recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps = {};
-  const openTrainingBulkUpdatePageProps: OpenTrainingBulkUpdatePageProps = {};
   const usersPageProps: UsersPageProps = { onNotify: pushToast };
 
   const pipelineLabelValue = normalizeOptionalString(selectedBudgetSummary?.pipeline_label);
@@ -1601,7 +1598,6 @@ export default function AuthenticatedApp() {
             recursosConfirmacionesPageProps={recursosConfirmacionesPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
-            openTrainingBulkUpdatePageProps={openTrainingBulkUpdatePageProps}
             usersPageProps={usersPageProps}
             defaultRedirectPath={homePath}
             knownPaths={allowedPaths}
