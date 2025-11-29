@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Alert, Button, Pagination, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Form, Pagination, Spinner, Table } from 'react-bootstrap';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
   useReactTable,
@@ -99,6 +99,27 @@ const SESSION_STATE_LABELS: Record<SessionEstado, string> = {
 
 const SESSION_ESTADOS_SET = new Set<string>(SESSION_ESTADOS);
 
+export type BudgetUpdateState = 'idle' | 'running' | 'success' | 'error';
+
+export type BudgetUpdateStatus = {
+  state: BudgetUpdateState;
+  message?: string;
+};
+
+const BUDGET_UPDATE_STATUS_LABELS: Record<BudgetUpdateState, string> = {
+  idle: 'Pendiente',
+  running: 'Actualizando…',
+  success: 'Actualizado',
+  error: 'Error',
+};
+
+const BUDGET_UPDATE_STATUS_VARIANTS: Record<BudgetUpdateState, string> = {
+  idle: 'secondary',
+  running: 'info',
+  success: 'success',
+  error: 'danger',
+};
+
 export type BudgetServerQueryOptions = {
   fetcher: (options: DealsListOptions) => Promise<DealSummary[]>;
   queryKey?: readonly unknown[];
@@ -122,6 +143,12 @@ interface BudgetTableProps {
   variant?: BudgetTableVariant;
   pageSize?: number;
   defaultFilters?: TableFiltersState;
+  selectableBudgets?: boolean;
+  selectedBudgetIds?: Set<string>;
+  onSelectAllBudgets?: (budgetIds: string[]) => void;
+  onToggleBudgetSelection?: (budgetId: string, budget: DealSummary) => void;
+  selectionStatusProvider?: (budgetId: string) => BudgetUpdateStatus | undefined;
+  selectionDisabled?: boolean;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -695,6 +722,12 @@ export function BudgetTable({
   variant = 'default',
   pageSize,
   defaultFilters,
+  selectableBudgets = false,
+  selectedBudgetIds = new Set(),
+  onSelectAllBudgets,
+  onToggleBudgetSelection,
+  selectionStatusProvider,
+  selectionDisabled = false,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
@@ -1019,6 +1052,7 @@ export function BudgetTable({
   );
 
   const showDeleteAction = typeof onDelete === 'function';
+  const selectionEnabled = selectableBudgets && typeof onToggleBudgetSelection === 'function';
 
   const handleFilterChange = useCallback(
     (key: string, value: string) => {
@@ -1069,6 +1103,76 @@ export function BudgetTable({
   );
 
   const columns = useMemo<ColumnDef<DealSummary, unknown>[]>(() => {
+    const tableBudgetIds = tableBudgets
+      .map((budget) => getBudgetId(budget))
+      .filter((id): id is string => Boolean(id));
+
+    const visibleSelectedCount = tableBudgetIds.filter((id) => selectedBudgetIds.has(id)).length;
+    const allVisibleSelected = tableBudgetIds.length > 0 && visibleSelectedCount === tableBudgetIds.length;
+    const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
+
+    const selectionColumn: ColumnDef<DealSummary, unknown> | null = selectionEnabled
+      ? {
+          id: 'seleccion',
+          header: () => (
+            <Form.Check
+              type="checkbox"
+              checked={allVisibleSelected}
+              ref={(element) => {
+                if (element) {
+                  element.indeterminate = someVisibleSelected;
+                }
+              }}
+              onChange={(event) => {
+                event.stopPropagation();
+                if (onSelectAllBudgets) {
+                  onSelectAllBudgets(tableBudgetIds);
+                }
+              }}
+              disabled={!tableBudgetIds.length || selectionDisabled}
+              aria-label="Seleccionar todos los presupuestos visibles"
+            />
+          ),
+          cell: ({ row }) => {
+            const budget = row.original;
+            const budgetId = getBudgetId(budget);
+            const isSelected = budgetId ? selectedBudgetIds.has(budgetId) : false;
+            const status = budgetId ? selectionStatusProvider?.(budgetId) : undefined;
+
+            return (
+              <div className="d-flex flex-column gap-1">
+                <div className="d-flex align-items-center gap-2">
+                  <Form.Check
+                    type="checkbox"
+                    checked={isSelected}
+                    disabled={!budgetId || selectionDisabled}
+                    onChange={(event) => {
+                      event.stopPropagation();
+                      if (budgetId && onToggleBudgetSelection) {
+                        onToggleBudgetSelection(budgetId, budget);
+                      }
+                    }}
+                    aria-label={budgetId ? `Seleccionar presupuesto ${budgetId}` : 'Seleccionar presupuesto'}
+                  />
+                  {status ? (
+                    <Badge bg={BUDGET_UPDATE_STATUS_VARIANTS[status.state]}>
+                      {BUDGET_UPDATE_STATUS_LABELS[status.state]}
+                    </Badge>
+                  ) : null}
+                </div>
+                {status?.message && status.state !== 'idle' ? (
+                  <span className={`small ${status.state === 'error' ? 'text-danger' : 'text-muted'}`}>
+                    {status.message}
+                  </span>
+                ) : null}
+              </div>
+            );
+          },
+          enableSorting: false,
+          meta: { style: { width: 220 } },
+        }
+      : null;
+
     const presupuestoColumn: ColumnDef<DealSummary, unknown> = {
       id: 'presupuesto',
       header: createSortableHeader('Presupuesto'),
@@ -1340,8 +1444,20 @@ export function BudgetTable({
       });
     }
 
-    return baseColumns;
-  }, [deletingId, handleDelete, showDeleteAction, variant]);
+    return selectionColumn ? [selectionColumn, ...baseColumns] : baseColumns;
+  }, [
+    deletingId,
+    handleDelete,
+    onSelectAllBudgets,
+    onToggleBudgetSelection,
+    selectionDisabled,
+    selectionEnabled,
+    selectionStatusProvider,
+    selectedBudgetIds,
+    showDeleteAction,
+    tableBudgets,
+    variant,
+  ]);
 
   const table = useReactTable<DealSummary>({
     data: paginatedBudgets,
@@ -1551,7 +1667,17 @@ export function BudgetTable({
                   const row = rows[virtualRow.index];
                   const budget = row.original;
                   return (
-                    <tr key={row.id} role="button" onClick={() => onSelect(budget)}>
+                    <tr
+                      key={row.id}
+                      role="button"
+                      onClick={(event) => {
+                        const target = event.target as HTMLElement | null;
+                        if (target?.closest('input[type="checkbox"]')) {
+                          return;
+                        }
+                        onSelect(budget);
+                      }}
+                    >
                       {row.getVisibleCells().map((cell) => {
                         const meta = cell.column.columnDef.meta as { style?: React.CSSProperties } | undefined;
                         const style = meta?.style;
