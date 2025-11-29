@@ -7,7 +7,6 @@ import {
   type BudgetServerQueryOptions,
   type BudgetTableLabels,
   type BudgetTableVariant,
-  type BudgetUpdateStatus,
 } from '../../features/presupuestos/BudgetTable';
 
 export type BudgetSectionLayoutProps = {
@@ -31,13 +30,6 @@ export type BudgetSectionLayoutProps = {
   pageSize?: number;
   defaultFilters?: TableFiltersState;
   children?: ReactNode;
-  selectableBudgets?: boolean;
-  selectedBudgetIds?: Set<string>;
-  onSelectAllBudgets?: (budgetIds: string[]) => void;
-  onToggleBudgetSelection?: (budgetId: string, budget: DealSummary) => void;
-  selectionStatusProvider?: (budgetId: string) => BudgetUpdateStatus | undefined;
-  selectionDisabled?: boolean;
-  extraActions?: ReactNode;
 };
 
 export function BudgetSectionLayout({
@@ -61,13 +53,6 @@ export function BudgetSectionLayout({
   pageSize,
   defaultFilters,
   children,
-  selectableBudgets,
-  selectedBudgetIds,
-  onSelectAllBudgets,
-  onToggleBudgetSelection,
-  selectionStatusProvider,
-  selectionDisabled,
-  extraActions,
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
 
@@ -88,7 +73,6 @@ export function BudgetSectionLayout({
               Importar presupuesto
             </Button>
           )}
-          {extraActions}
         </div>
       </section>
 
@@ -108,12 +92,6 @@ export function BudgetSectionLayout({
         variant={tableVariant}
         pageSize={pageSize}
         defaultFilters={defaultFilters}
-        selectableBudgets={selectableBudgets}
-        selectedBudgetIds={selectedBudgetIds}
-        onSelectAllBudgets={onSelectAllBudgets}
-        onToggleBudgetSelection={onToggleBudgetSelection}
-        selectionStatusProvider={selectionStatusProvider}
-        selectionDisabled={selectionDisabled}
       />
 
       {children}
