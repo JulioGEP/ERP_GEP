@@ -149,13 +149,10 @@ export const handler = createHttpHandler(async (request) => {
           deals: buildSessionPipelineFilter(),
         },
       }),
-      prisma.sesiones.count({ where: { estado: 'SUSPENDIDA' } }),
-      prisma.sesiones.count({
-        where: {
-          estado: { not: 'FINALIZADA' },
-          fecha_fin_utc: { not: null, lt: now },
-        },
+      prisma.deals.count({
+        where: { sessions: { some: { estado: 'SUSPENDIDA' } } },
       }),
+      prisma.sesiones.count({ where: { estado: 'PLANIFICADA' } }),
       prisma.deals.count({
         where: {
           ...buildYesLabelFilter('caes_label'),
