@@ -472,6 +472,10 @@ function isSessionPendingCompletion(session: CalendarSession): boolean {
     return false;
   }
 
+  if (!session.end) {
+    return false;
+  }
+
   try {
     const endDate = new Date(session.end);
     if (Number.isNaN(endDate.getTime())) {
@@ -1268,7 +1272,7 @@ export function CalendarView({
     const hasSearch = searchValue.trim().length > 0;
     if ((hasFilter || hasSearch) && resultCount === 1) {
       const session = filteredSessions[0];
-      if (session) {
+      if (session?.start) {
         const sessionId = session.id;
         if (autoFocusSessionIdRef.current !== sessionId) {
           autoFocusSessionIdRef.current = sessionId;
@@ -1294,12 +1298,14 @@ export function CalendarView({
   }, [activeFilters, filteredSessions, resultCount, searchValue, view]);
 
   const events: CalendarEventItem[] = useMemo(() => {
-    const items: CalendarEventItem[] = filteredSessions.map((session) => ({
-      kind: 'session',
-      start: session.start,
-      end: session.end,
-      session,
-    }));
+    const items: CalendarEventItem[] = filteredSessions
+      .filter((session) => session.start && session.end)
+      .map((session) => ({
+        kind: 'session',
+        start: session.start!,
+        end: session.end!,
+        session,
+      }));
     if (includeVariants) {
       filteredVariants.forEach((variant) => {
         items.push({
@@ -1405,20 +1411,22 @@ export function CalendarView({
     | null
   >(null);
 
-  const tooltipStartLabel = tooltip
-    ? madridTimeFormatter.format(
-        new Date(tooltip.kind === 'session' ? tooltip.session.start : tooltip.variant.start),
-      )
+  const tooltipStartDate = tooltip
+    ? tooltip.kind === 'session'
+      ? tooltip.session.start
+      : tooltip.variant.start
+    : null;
+  const tooltipEndDate = tooltip
+    ? tooltip.kind === 'session'
+      ? tooltip.session.end
+      : tooltip.variant.end
+    : null;
+  const tooltipStartLabel = tooltipStartDate
+    ? madridTimeFormatter.format(new Date(tooltipStartDate))
     : '';
-  const tooltipEndLabel = tooltip
-    ? madridTimeFormatter.format(
-        new Date(tooltip.kind === 'session' ? tooltip.session.end : tooltip.variant.end),
-      )
-    : '';
-  const tooltipDateLabel = tooltip
-    ? madridDateFormatter.format(
-        new Date(tooltip.kind === 'session' ? tooltip.session.start : tooltip.variant.start),
-      )
+  const tooltipEndLabel = tooltipEndDate ? madridTimeFormatter.format(new Date(tooltipEndDate)) : '';
+  const tooltipDateLabel = tooltipStartDate
+    ? madridDateFormatter.format(new Date(tooltipStartDate))
     : '';
 
   const tooltipTitle = tooltip

@@ -45,7 +45,7 @@ function toRangeIso(date: string, boundary: 'start' | 'end'): string {
   return adjusted.toISOString();
 }
 
-function formatDateTime(value: string): string {
+function formatDateTime(value: string | null): string {
   if (!value) return '';
   return new Date(value).toLocaleString('es-ES', {
     dateStyle: 'short',
