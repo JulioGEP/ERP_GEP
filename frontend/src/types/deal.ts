@@ -98,6 +98,7 @@ export interface DealDocument {
 export interface DealSummarySession {
   id: string | null;
   fecha_inicio_utc: string | null;
+  fecha_fin_utc?: string | null;
   fecha?: string | null;
   estado?: SessionEstado | null;
 }
