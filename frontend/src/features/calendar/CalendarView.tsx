@@ -637,6 +637,14 @@ function formatVariantUnitNames(units: VariantUnit[]): string {
     .join(', ');
 }
 
+function getVariantStatusClass(status?: string | null): string {
+  const normalizedStatus = status?.trim().toLowerCase();
+  if (normalizedStatus === 'private') {
+    return 'is-cancelled';
+  }
+  return '';
+}
+
 function subsequenceScore(text: string, token: string): number {
   if (!token.length) return Number.POSITIVE_INFINITY;
   let score = 0;
@@ -1875,7 +1883,7 @@ export function CalendarView({
                         return (
                           <div
                             key={`variant-${variant.id}`}
-                            className="erp-calendar-event erp-calendar-month-event erp-calendar-event-variant"
+                            className={`erp-calendar-event erp-calendar-month-event erp-calendar-event-variant ${getVariantStatusClass(variant.variant.status)}`.trim()}
                             title={variantTitle}
                             role="button"
                             tabIndex={0}
@@ -2014,7 +2022,7 @@ export function CalendarView({
                           );
                         }
 
-                        const className = `${baseClass} erp-calendar-event-variant ${continuesClasses}`.trim();
+                        const className = `${baseClass} erp-calendar-event-variant ${getVariantStatusClass(event.variant.variant.status)} ${continuesClasses}`.trim();
                         return (
                           <div
                             key={`variant-${event.variant.id}-${event.startMinutes}`}
