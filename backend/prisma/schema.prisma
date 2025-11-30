@@ -225,6 +225,7 @@ model deals {
   deal_files           deal_files[]
   deal_notes           deal_notes[]
   deal_products        deal_products[]
+  deal_webhook_events  deal_webhook_events[]
   organizations        organizations?         @relation(fields: [org_id], references: [org_id], map: "deals_org_fk")
   persons              persons?               @relation(fields: [person_id], references: [person_id], map: "deals_person_fk")
   sesion_files         sesion_files[]
