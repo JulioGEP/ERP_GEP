@@ -132,7 +132,7 @@ export const handler = createHttpHandler(async (request) => {
   try {
     const [
       draftSessions,
-      suspendedSessions,
+      suspendedBudgets,
       pendingCompletionBudgets,
       caesPending,
       fundaePending,
@@ -149,7 +149,13 @@ export const handler = createHttpHandler(async (request) => {
           deals: buildSessionPipelineFilter(),
         },
       }),
-      prisma.sesiones.count({ where: { estado: 'SUSPENDIDA' } }),
+      prisma.deals.count({
+        where: {
+          sesiones: {
+            some: { estado: 'SUSPENDIDA' },
+          },
+        },
+      }),
       prisma.deals.count({
         where: {
           sesiones: {
@@ -534,7 +540,7 @@ export const handler = createHttpHandler(async (request) => {
       sessions: {
         borrador: draftSessions,
         sinFormador: variantsWithoutTrainerWithDeals,
-        suspendida: suspendedSessions,
+        suspendida: suspendedBudgets,
         porFinalizar: pendingCompletionBudgets,
       },
       followUp: {
