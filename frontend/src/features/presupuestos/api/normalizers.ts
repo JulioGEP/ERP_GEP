@@ -254,12 +254,6 @@ function normalizeDealStudentNames(raw: Json): string[] {
   return names;
 }
 
-function normalizeWebhookStatus(value: unknown): 'NEW' | 'UPDATED' | null {
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim().toUpperCase();
-  return normalized === 'NEW' || normalized === 'UPDATED' ? normalized : null;
-}
-
 export function normalizeDealSummary(row: Json): DealSummary {
   const rawDealId = row?.deal_id ?? row?.dealId ?? row?.id;
   const resolvedDealId =
@@ -352,8 +346,6 @@ export function normalizeDealSummary(row: Json): DealSummary {
     forma_pago_material: toStringValue(row?.forma_pago_material) ?? null,
     presu_holded: toStringValue(row?.presu_holded) ?? null,
     modo_reserva: toStringValue(row?.modo_reserva) ?? null,
-    webhook_status: normalizeWebhookStatus(row?.webhook_status ?? (row as any)?.webhookStatus),
-    webhook_seen_at: toStringValue(row?.webhook_seen_at ?? (row as any)?.webhookSeenAt),
     hours: toNumber(row?.hours),
     a_fecha: toStringValue(row?.a_fecha) ?? null,
     studentNames,
@@ -446,8 +438,6 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     notes: notesSource.map((note) => normalizeDealNote(note)),
     documents: documentsSource.map((doc) => normalizeDealDocument(doc)),
     presu_holded: toStringValue(raw?.presu_holded) ?? null,
-    webhook_status: normalizeWebhookStatus(raw?.webhook_status ?? (raw as any)?.webhookStatus),
-    webhook_seen_at: toStringValue(raw?.webhook_seen_at ?? (raw as any)?.webhookSeenAt),
   };
 
   return normalized;

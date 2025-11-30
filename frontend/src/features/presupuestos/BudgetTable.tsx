@@ -235,17 +235,6 @@ function getBudgetId(budget: DealSummary): string | null {
   return null;
 }
 
-function getWebhookHighlightStatus(budget: DealSummary): 'NEW' | 'UPDATED' | null {
-  const status = typeof budget.webhook_status === 'string' ? budget.webhook_status.trim().toUpperCase() : null;
-  if (!status || (status !== 'NEW' && status !== 'UPDATED')) {
-    return null;
-  }
-  if (budget.webhook_seen_at) {
-    return null;
-  }
-  return status as 'NEW' | 'UPDATED';
-}
-
 function getErrorMessage(error: unknown): string | null {
   if (!error) return null;
   if (error instanceof Error) {
@@ -750,7 +739,6 @@ export function BudgetTable({
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [locallySeenDeals, setLocallySeenDeals] = useState<Set<string>>(new Set());
 
   const cachedFallbackBudgets = enableFallback
     ? queryClient.getQueryData<DealSummary[]>(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY) ?? null
@@ -1602,31 +1590,8 @@ export function BudgetTable({
                 {virtualRows.map((virtualRow) => {
                   const row = rows[virtualRow.index];
                   const budget = row.original;
-                  const budgetId = getBudgetId(budget);
-                  const hasBeenSeen = budgetId ? locallySeenDeals.has(budgetId) : false;
-                  const highlightStatus = hasBeenSeen ? null : getWebhookHighlightStatus(budget);
-                  const rowClassName =
-                    highlightStatus === 'NEW'
-                      ? 'table-success'
-                      : highlightStatus === 'UPDATED'
-                      ? 'table-warning'
-                      : undefined;
                   return (
-                    <tr
-                      key={row.id}
-                      role="button"
-                      className={rowClassName}
-                      onClick={() => {
-                        onSelect(budget);
-                        if (budgetId && highlightStatus) {
-                          setLocallySeenDeals((prev) => {
-                            const next = new Set(prev);
-                            next.add(budgetId);
-                            return next;
-                          });
-                        }
-                      }}
-                    >
+                    <tr key={row.id} role="button" onClick={() => onSelect(budget)}>
                       {row.getVisibleCells().map((cell) => {
                         const meta = cell.column.columnDef.meta as { style?: React.CSSProperties } | undefined;
                         const style = meta?.style;

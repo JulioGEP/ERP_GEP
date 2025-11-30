@@ -141,9 +141,6 @@ export interface DealSummary {
   presu_holded?: string | null;
   modo_reserva?: string | null;
 
-  webhook_status?: 'NEW' | 'UPDATED' | null;
-  webhook_seen_at?: string | null;
-
   hours?: number | null;    // editable en ERP (no autocalculado)
 
   organization?: DealOrganization | null;
@@ -191,9 +188,6 @@ export interface DealDetail {
   w_id_variation?: string | null;
   presu_holded?: string | null;
   modo_reserva?: string | null;
-
-  webhook_status?: 'NEW' | 'UPDATED' | null;
-  webhook_seen_at?: string | null;
 
   hours?: number | null;    // editable en ERP
 

@@ -274,19 +274,6 @@ model deal_files {
   @@index([deal_id], map: "idx_deal_files_deal_id")
 }
 
-model deal_webhook_events {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  deal_id    String
-  status     String   @db.VarChar(50)
-  message    String?  @db.Text
-  warnings   Json?
-  created_at DateTime @default(now()) @db.Timestamptz(6)
-  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
-
-  @@index([deal_id], map: "idx_deal_webhook_events_deal_id")
-  @@map("deal_webhook_events")
-}
-
 model deal_notes {
   id         String    @id
   deal_id    String?
