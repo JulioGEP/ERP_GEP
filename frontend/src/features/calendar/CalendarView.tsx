@@ -80,15 +80,6 @@ const CALENDAR_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_transporte', label: 'Transporte' },
   { key: 'product_name', label: 'Producto' },
   { key: 'estado', label: 'Estado', type: 'select', options: SESSION_ESTADO_OPTIONS },
-  {
-    key: 'por_finalizar',
-    label: 'Por finalizar',
-    type: 'select',
-    options: [
-      { value: 'Sí', label: 'Sí' },
-      { value: 'No', label: 'No' },
-    ],
-  },
   { key: 'trainer', label: 'Formador' },
   { key: 'unit', label: 'Unidad móvil' },
   { key: 'room', label: 'Sala' },
@@ -516,7 +507,6 @@ const CALENDAR_SESSION_FILTER_ACCESSORS: Record<string, (session: CalendarSessio
     return safeString(parts.join(' '));
   },
   comentarios: (session) => safeString(session.comentarios ?? ''),
-  por_finalizar: (session) => (isSessionPendingCompletion(session) ? 'Sí' : 'No'),
 };
 
 const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVariantEvent) => string> = {
@@ -579,7 +569,6 @@ const CALENDAR_VARIANT_FILTER_ACCESSORS: Record<string, (variant: CalendarVarian
   },
   students_total: (variant) => safeString(formatStudentsFilterValue(variant.variant.students_total)),
   comentarios: (variant) => safeString(variant.variant.status ?? ''),
-  por_finalizar: () => '',
 };
 
 type VariantTrainer = CalendarVariantEvent['variant']['trainers'][number];
