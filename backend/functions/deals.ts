@@ -21,7 +21,7 @@ import { generateSessionsForDeal } from "./_shared/sessionGeneration";
 import { studentsFromNotes } from "./_shared/studentsFromNotes";
 import type { StudentIdentifier } from "./_shared/studentsFromNotes";
 import { logAudit, resolveUserIdFromEvent, type JsonValue } from "./_shared/audit-log";
-import { isTrustedClient, logSuspiciousRequest } from "./_shared/security";
+import { isTrustedClient, isTrustedPipedrive, logSuspiciousRequest } from "./_shared/security";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -55,6 +55,42 @@ const BOOLEAN_EDITABLE_FIELDS = new Set([
 
 const DEAL_NOT_WON_ERROR_CODE = "DEAL_NOT_WON";
 const DEAL_NOT_WON_ERROR_MESSAGE = "Este negocio no está Ganado, no lo podemos subir";
+
+type WebhookLogStatus = "success" | "error";
+type WebhookLogAction = "create" | "update";
+
+async function logPipedriveWebhookResult({
+  prisma,
+  dealId,
+  action,
+  status,
+  message,
+  payload,
+  client,
+}: {
+  prisma: PrismaClient;
+  dealId: string;
+  action: WebhookLogAction;
+  status: WebhookLogStatus;
+  message: string;
+  payload: Prisma.InputJsonValue | null;
+  client: string;
+}): Promise<void> {
+  try {
+    await prisma.webhooks_pipe.create({
+      data: {
+        deal_id: dealId,
+        action,
+        status,
+        message,
+        payload,
+        client,
+      },
+    });
+  } catch (logError) {
+    console.error("[deals] No se pudo registrar el webhook de Pipedrive", logError);
+  }
+}
 
 /* -------------------- Helpers -------------------- */
 function parsePathId(path: any): string | null {
@@ -1037,7 +1073,10 @@ export const handler = async (event: any) => {
     const method = event.httpMethod;
     const path = event.path || "";
 
-    if (!isTrustedClient(event.headers)) {
+    const trustedClient = isTrustedClient(event.headers);
+    const trustedPipedrive = isTrustedPipedrive(event.headers);
+
+    if (!trustedClient && !trustedPipedrive) {
       await logSuspiciousRequest({
         event,
         headers: event.headers,
@@ -1046,6 +1085,7 @@ export const handler = async (event: any) => {
         rawUrl: event.rawUrl ?? null,
         reason: 'missing_or_invalid_client_header',
       });
+      return errorResponse('FORBIDDEN', 'Cliente no autorizado', 403);
     }
 
     // id por PATH o por QUERY (?dealId=)
@@ -1061,6 +1101,7 @@ export const handler = async (event: any) => {
       (method === "GET" && path.endsWith("/deals/import"))
     ) {
       const body = event.body ? JSON.parse(event.body) : {};
+      const clientLabel = trustedPipedrive ? 'pipedrive' : 'frontend';
       const incomingId =
         body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
       if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
@@ -1144,6 +1185,18 @@ export const handler = async (event: any) => {
           console.error('[deals] Failed to log Pipedrive import', auditError);
         }
 
+        await logPipedriveWebhookResult({
+          prisma,
+          dealId: String(deal_id),
+          action: existedBeforeImport ? 'update' : 'create',
+          status: 'success',
+          message: existedBeforeImport
+            ? 'Presupuesto actualizado correctamente'
+            : 'Presupuesto importado correctamente',
+          payload: body as Prisma.InputJsonValue,
+          client: clientLabel,
+        });
+
         return successResponse({ ok: true, warnings, deal });
       } catch (e: any) {
         if (e?.code === DEAL_NOT_WON_ERROR_CODE) {
@@ -1155,9 +1208,28 @@ export const handler = async (event: any) => {
             typeof e?.message === "string" && e.message.trim().length
               ? e.message.trim()
               : DEAL_NOT_WON_ERROR_MESSAGE;
+          await logPipedriveWebhookResult({
+            prisma,
+            dealId: String(incomingId),
+            action: existedBeforeImport ? 'update' : 'create',
+            status: 'error',
+            message,
+            payload: body as Prisma.InputJsonValue,
+            client: clientLabel,
+          });
           return errorResponse(DEAL_NOT_WON_ERROR_CODE, message, statusCode);
         }
-        return errorResponse("IMPORT_ERROR", e?.message || "Error importando deal", 502);
+        const errorMessage = e?.message || "Error importando deal";
+        await logPipedriveWebhookResult({
+          prisma,
+          dealId: String(incomingId),
+          action: existedBeforeImport ? 'update' : 'create',
+          status: 'error',
+          message: errorMessage,
+          payload: body as Prisma.InputJsonValue,
+          client: clientLabel,
+        });
+        return errorResponse("IMPORT_ERROR", errorMessage, 502);
       }
     }
 
