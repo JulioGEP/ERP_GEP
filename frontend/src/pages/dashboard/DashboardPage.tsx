@@ -32,7 +32,7 @@ const SESSION_SUSPENDED_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__
 const encodeBudgetsQueryValue = (value: string) =>
   encodeURIComponent(value).replace(/%20/g, '+');
 
-const SESSION_PENDING_COMPLETION_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__session_estado=PLANIFICADA&budgets-table__filter__session_planificada_vencida=S%C3%AD`;
+const SESSION_PENDING_COMPLETION_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__session_estado=PLANIFICADA`;
 
 const SESSION_FORMACION_ABIERTA_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__pipeline=${encodeBudgetsQueryValue(
   'Formación Empresas||GEP Services',
