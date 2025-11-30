@@ -133,7 +133,7 @@ export const handler = createHttpHandler(async (request) => {
     const [
       draftSessions,
       suspendedSessions,
-      pendingCompletionSessions,
+      pendingCompletionBudgets,
       caesPending,
       fundaePending,
       hotelPending,
@@ -150,10 +150,14 @@ export const handler = createHttpHandler(async (request) => {
         },
       }),
       prisma.sesiones.count({ where: { estado: 'SUSPENDIDA' } }),
-      prisma.sesiones.count({
+      prisma.deals.count({
         where: {
-          estado: 'PLANIFICADA',
-          fecha_fin_utc: { not: null, lt: todayStart },
+          sesiones: {
+            some: {
+              estado: 'PLANIFICADA',
+              fecha_fin_utc: { not: null, lt: todayStart },
+            },
+          },
         },
       }),
       prisma.deals.count({
@@ -531,7 +535,7 @@ export const handler = createHttpHandler(async (request) => {
         borrador: draftSessions,
         sinFormador: variantsWithoutTrainerWithDeals,
         suspendida: suspendedSessions,
-        porFinalizar: pendingCompletionSessions,
+        porFinalizar: pendingCompletionBudgets,
       },
       followUp: {
         caesPorTrabajar: caesPending,
