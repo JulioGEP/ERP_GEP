@@ -53,9 +53,6 @@ const BOOLEAN_EDITABLE_FIELDS = new Set([
   "po_val",
 ]);
 
-const WEBHOOK_STATUS_NEW = "NEW";
-const WEBHOOK_STATUS_UPDATED = "UPDATED";
-
 const DEAL_NOT_WON_ERROR_CODE = "DEAL_NOT_WON";
 const DEAL_NOT_WON_ERROR_MESSAGE = "Este negocio no está Ganado, no lo podemos subir";
 
@@ -135,98 +132,6 @@ function isFormacionAbiertaPipeline(value: unknown): boolean {
 function isDealWonStatus(status: unknown): boolean {
   if (typeof status !== "string") return false;
   return status.trim().toLowerCase() === "won";
-}
-
-type DealNotificationRow = {
-  deal_id: string;
-  type: string;
-  seen_at: Date | null;
-};
-
-async function fetchNotificationStates(
-  prisma: PrismaClient,
-  dealIds: string[],
-  userId: string | null,
-): Promise<Map<string, DealNotificationRow>> {
-  if (!userId || !dealIds.length) return new Map();
-
-  const notifications = await prisma.deal_user_notifications.findMany({
-    where: { deal_id: { in: dealIds }, user_id: userId },
-    select: { deal_id: true, type: true, seen_at: true },
-  });
-
-  return notifications.reduce<Map<string, DealNotificationRow>>((acc, notification) => {
-    if (!notification?.deal_id) return acc;
-    acc.set(notification.deal_id, notification as DealNotificationRow);
-    return acc;
-  }, new Map());
-}
-
-async function markDealNotificationSeen(
-  prisma: PrismaClient,
-  dealId: string,
-  userId: string | null,
-): Promise<DealNotificationRow | null> {
-  if (!userId || !dealId.trim()) return null;
-
-  const existing = await prisma.deal_user_notifications.findUnique({
-    where: { deal_id_user_id: { deal_id: dealId, user_id: userId } },
-    select: { deal_id: true, type: true },
-  });
-
-  if (!existing) return null;
-
-  const now = nowInMadridDate();
-  const updated = await prisma.deal_user_notifications.update({
-    where: { deal_id_user_id: { deal_id: dealId, user_id: userId } },
-    data: { seen_at: now },
-    select: { deal_id: true, type: true, seen_at: true },
-  });
-
-  return updated as DealNotificationRow;
-}
-
-async function resetNotificationsForAllUsers(
-  prisma: PrismaClient,
-  dealId: string,
-  type: string,
-): Promise<void> {
-  if (!dealId.trim()) return;
-
-  const users = await prisma.users.findMany({
-    where: { active: true },
-    select: { id: true },
-  });
-
-  if (!users.length) return;
-
-  const operations = users.map((user) =>
-    prisma.deal_user_notifications.upsert({
-      where: { deal_id_user_id: { deal_id: dealId, user_id: user.id } },
-      create: { deal_id: dealId, user_id: user.id, type },
-      update: { type, seen_at: null },
-    }),
-  );
-
-  await prisma.$transaction(operations);
-}
-
-async function persistWebhookEvent(
-  prisma: PrismaClient,
-  params: { dealId: string; status: string; message?: string | null; warnings?: string[] },
-): Promise<void> {
-  const payload: Prisma.deal_webhook_eventsCreateInput = {
-    deal_id: params.dealId,
-    status: params.status,
-    message: params.message ?? null,
-    warnings: params.warnings?.length ? (params.warnings as Prisma.InputJsonValue) : null,
-  };
-
-  try {
-    await prisma.deal_webhook_events.create({ data: payload });
-  } catch (error) {
-    console.error("[deals] Failed to persist webhook event log", { error, payload });
-  }
 }
 
 type SessionForStudents = {
@@ -1124,7 +1029,6 @@ export const handler = async (event: any) => {
       return { statusCode: 204, headers: COMMON_HEADERS, body: "" };
     }
     const prisma = getPrisma();
-    const currentUserIdPromise = resolveUserIdFromEvent(event, prisma);
     // Tipos derivados del método real, evitando indexar 'where' directamente
     type _DealsFindManyArg = Parameters<typeof prisma.deals.findMany>[0];
     type DealsWhere = _DealsFindManyArg extends { where?: infer W } ? NonNullable<W> : never;
@@ -1222,26 +1126,8 @@ export const handler = async (event: any) => {
         const stockMap = await buildProductStockMap(prisma, dealRaw ? [dealRaw] : []);
         const deal = attachProductStockToDeal(mapDealForApi(dealRaw), stockMap);
 
-        const normalizedDealId = String(deal_id ?? incomingIdStr);
-        const notificationType = existedBeforeImport ? WEBHOOK_STATUS_UPDATED : WEBHOOK_STATUS_NEW;
         try {
-          await Promise.all([
-            persistWebhookEvent(prisma, {
-              dealId: normalizedDealId,
-              status: notificationType,
-              message: existedBeforeImport
-                ? "Presupuesto actualizado desde webhook"
-                : "Presupuesto importado desde webhook",
-              warnings,
-            }),
-            resetNotificationsForAllUsers(prisma, normalizedDealId, notificationType),
-          ]);
-        } catch (logError) {
-          console.error("[deals] Failed to track webhook import", logError);
-        }
-
-        try {
-          const auditUserId = await currentUserIdPromise;
+          const auditUserId = await resolveUserIdFromEvent(event, prisma);
           await logAudit({
             userId: auditUserId,
             action: 'deal.imported_pipedrive',
@@ -1269,25 +1155,7 @@ export const handler = async (event: any) => {
             typeof e?.message === "string" && e.message.trim().length
               ? e.message.trim()
               : DEAL_NOT_WON_ERROR_MESSAGE;
-          try {
-            await persistWebhookEvent(prisma, {
-              dealId: incomingIdStr,
-              status: "ERROR",
-              message,
-            });
-          } catch (logError) {
-            console.error("[deals] Failed to track rejected import", logError);
-          }
           return errorResponse(DEAL_NOT_WON_ERROR_CODE, message, statusCode);
-        }
-        try {
-          await persistWebhookEvent(prisma, {
-            dealId: incomingIdStr,
-            status: "ERROR",
-            message: e?.message || "Error importando deal",
-          });
-        } catch (logError) {
-          console.error("[deals] Failed to track import error", logError);
         }
         return errorResponse("IMPORT_ERROR", e?.message || "Error importando deal", 502);
       }
@@ -1295,7 +1163,6 @@ export const handler = async (event: any) => {
 
     /* ------------------- GET detalle: /deals/:id o ?dealId= ------------------- */
     if (method === "GET" && dealId !== null) {
-      const currentUserId = await currentUserIdPromise;
       let dealRaw = await prisma.deals.findUnique({
         where: { deal_id: String(dealId) },
         include: {
@@ -1371,29 +1238,12 @@ export const handler = async (event: any) => {
             : null,
       }));
 
-      let notificationState: DealNotificationRow | null = null;
-      try {
-        notificationState = await markDealNotificationSeen(prisma, String(dealId), currentUserId);
-        if (!notificationState && currentUserId) {
-          const map = await fetchNotificationStates(
-            prisma,
-            [String(dealId)],
-            currentUserId,
-          );
-          notificationState = map.get(String(dealId)) ?? null;
-        }
-      } catch (notificationError) {
-        console.error("[deals] Failed to update notification state", notificationError);
-      }
-
       return successResponse({
         deal: deal
           ? {
               ...deal,
               sede_labels: sedeLabels,
               deal_products: dealProducts,
-              webhook_status: notificationState?.type ?? null,
-              webhook_seen_at: toMadridISOString(notificationState?.seen_at ?? null),
             }
           : null,
       });
@@ -1829,7 +1679,6 @@ export const handler = async (event: any) => {
 
     /* --------------- GET listado: .netlify/functions/deals?pendingCertificates=true --------------- */
     if (method === "GET" && event.queryStringParameters?.pendingCertificates === "true") {
-      const currentUserId = await currentUserIdPromise;
       const now = nowInMadridDate();
 
       // 1) Variantes de productos pasadas (para limitar búsqueda)
@@ -2035,28 +1884,11 @@ export const handler = async (event: any) => {
       const deals = rowsRaw.map((r: any) =>
         attachProductStockToDeal(mapDealForApi(normalizeDealRelations(r)), stockMap),
       );
-      const notificationMap = await fetchNotificationStates(
-        prisma,
-        rowsRaw.map((row: any) => String(row?.deal_id ?? "")).filter((id) => id.length > 0),
-        currentUserId,
-      );
-      const dealsWithNotifications = deals.map((deal) => {
-        const id = deal?.deal_id ?? (deal as any)?.dealId ?? null;
-        if (!id) return deal;
-        const notification = notificationMap.get(String(id));
-        if (!notification) return deal;
-        return {
-          ...deal,
-          webhook_status: notification.type ?? null,
-          webhook_seen_at: toMadridISOString(notification.seen_at ?? null),
-        };
-      });
-      return successResponse({ deals: dealsWithNotifications });
+      return successResponse({ deals });
     }
 
     /* -------------- GET listado: /.netlify/functions/deals -------------- */
     if (method === "GET") {
-      const currentUserId = await currentUserIdPromise;
       const rowsRaw = await prisma.deals.findMany({
         select: {
           deal_id: true,
@@ -2161,23 +1993,7 @@ export const handler = async (event: any) => {
       );
 
       const deals = dealsRaw.filter((deal): deal is Record<string, any> => deal !== null);
-      const notificationMap = await fetchNotificationStates(
-        prisma,
-        rowsRaw.map((row: any) => String(row?.deal_id ?? "")).filter((id) => id.length > 0),
-        currentUserId,
-      );
-      const dealsWithNotifications = deals.map((deal) => {
-        const id = deal?.deal_id ?? (deal as any)?.dealId ?? null;
-        if (!id) return deal;
-        const notification = notificationMap.get(String(id));
-        if (!notification) return deal;
-        return {
-          ...deal,
-          webhook_status: notification.type ?? null,
-          webhook_seen_at: toMadridISOString(notification.seen_at ?? null),
-        };
-      });
-      return successResponse({ deals: dealsWithNotifications });
+      return successResponse({ deals });
     }
 
     return errorResponse("NOT_IMPLEMENTED", "Ruta o método no soportado", 404);
