@@ -23,15 +23,6 @@ import type { StudentIdentifier } from "./_shared/studentsFromNotes";
 import { logAudit, resolveUserIdFromEvent, type JsonValue } from "./_shared/audit-log";
 import { isTrustedClient, logSuspiciousRequest } from "./_shared/security";
 
-type DealWebhookEventRecord = {
-  id: string;
-  deal_id: string;
-  status: string;
-  message: string | null;
-  warnings: JsonValue | null;
-  created_at: Date | string | null;
-};
-
 const EDITABLE_FIELDS = new Set([
   "sede_label",
   "training_address_label", // alias de entrada…
@@ -141,114 +132,6 @@ function isFormacionAbiertaPipeline(value: unknown): boolean {
 function isDealWonStatus(status: unknown): boolean {
   if (typeof status !== "string") return false;
   return status.trim().toLowerCase() === "won";
-}
-
-function normalizeWarningsList(raw: unknown): string[] | null {
-  if (!raw) return null;
-  const entries = Array.isArray(raw) ? raw : [raw];
-  const warnings = entries
-    .map((value) => {
-      if (typeof value === "string") return value.trim();
-      if (value === null || value === undefined) return "";
-      if (typeof value === "object") return JSON.stringify(value);
-      return String(value ?? "").trim();
-    })
-    .filter((value) => value.length > 0);
-
-  return warnings.length ? warnings : null;
-}
-
-function resolveDealIdFromWebhookBody(body: any): string | null {
-  if (!body) return null;
-  const candidates = [body?.dealId, body?.id, body?.deal_id, body?.current?.id, body?.meta?.id];
-  for (const candidate of candidates) {
-    if (candidate === null || candidate === undefined) continue;
-    const normalized = String(candidate).trim();
-    if (normalized.length) {
-      return normalized;
-    }
-  }
-  return null;
-}
-
-async function fetchLatestWebhookEvents(
-  prisma: PrismaClient,
-  dealIds: readonly string[],
-): Promise<Map<string, DealWebhookEventRecord>> {
-  const map = new Map<string, DealWebhookEventRecord>();
-  if (!dealIds.length) return map;
-
-  const rows = await prisma.deal_webhook_events.findMany({
-    where: { deal_id: { in: dealIds as string[] } },
-    orderBy: [{ deal_id: "asc" }, { created_at: "desc" }],
-    select: {
-      id: true,
-      deal_id: true,
-      status: true,
-      message: true,
-      warnings: true,
-      created_at: true,
-    },
-  });
-
-  for (const row of rows) {
-    if (!row?.deal_id || map.has(row.deal_id)) continue;
-    map.set(row.deal_id, row as DealWebhookEventRecord);
-  }
-
-  return map;
-}
-
-function applyWebhookEventMetadata<T extends Record<string, any> | null | undefined>(
-  deal: T,
-  event: DealWebhookEventRecord | null | undefined,
-): T {
-  if (!deal || !event) return deal;
-
-  const warnings = normalizeWarningsList(event.warnings ?? null);
-  return {
-    ...(deal as Record<string, any>),
-    webhook_event_id: event.id,
-    webhook_status: event.status,
-    webhook_message: typeof event.message === "string" ? event.message : null,
-    webhook_warnings: warnings,
-    webhook_created_at: toMadridISOString(event.created_at ?? null),
-  } as T;
-}
-
-function applyWebhookEventsToDeals(
-  deals: Array<Record<string, any> | null>,
-  eventsMap: Map<string, DealWebhookEventRecord>,
-): Array<Record<string, any> | null> {
-  return deals.map((deal) => {
-    if (!deal) return deal;
-    const id = (deal as any)?.deal_id;
-    const event = typeof id === "string" || typeof id === "number" ? eventsMap.get(String(id)) : null;
-    return applyWebhookEventMetadata(deal, event);
-  });
-}
-
-async function logWebhookEvent(
-  prisma: PrismaClient,
-  params: { dealId: string; status: string; message?: string | null; warnings?: string[] | null },
-): Promise<DealWebhookEventRecord | null> {
-  try {
-    const warnings = normalizeWarningsList(params.warnings ?? null);
-    const created = await prisma.deal_webhook_events.create({
-      data: {
-        deal_id: params.dealId,
-        status: params.status,
-        message: params.message ?? null,
-        warnings,
-      },
-      select: { id: true, deal_id: true, status: true, message: true, warnings: true, created_at: true },
-    });
-
-    return created as DealWebhookEventRecord;
-  } catch (error) {
-    console.error("[deals] Failed to log webhook event", error);
-    return null;
-  }
 }
 
 type SessionForStudents = {
@@ -1178,13 +1061,11 @@ export const handler = async (event: any) => {
       (method === "GET" && path.endsWith("/deals/import"))
     ) {
       const body = event.body ? JSON.parse(event.body) : {};
-      const incomingId = resolveDealIdFromWebhookBody(body);
-      const incomingIdStr =
-        incomingId ??
-        (event.queryStringParameters?.dealId
-          ? String(event.queryStringParameters.dealId).trim()
-          : "");
-      if (!incomingIdStr) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
+      const incomingId =
+        body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
+      if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
+
+      const incomingIdStr = String(incomingId ?? "").trim();
       const existedBeforeImport = incomingIdStr
         ? Boolean(
             await prisma.deals.findUnique({
@@ -1193,8 +1074,6 @@ export const handler = async (event: any) => {
             }),
           )
         : false;
-
-      let webhookEvent: DealWebhookEventRecord | null = null;
 
       try {
         const { deal_id, warnings: importWarnings } = await importDealFromPipedrive(incomingId);
@@ -1247,17 +1126,6 @@ export const handler = async (event: any) => {
         const stockMap = await buildProductStockMap(prisma, dealRaw ? [dealRaw] : []);
         const deal = attachProductStockToDeal(mapDealForApi(dealRaw), stockMap);
 
-        const webhookStatus = existedBeforeImport ? "updated" : "imported";
-        webhookEvent = await logWebhookEvent(prisma, {
-          dealId: String(deal_id),
-          status: webhookStatus,
-          message:
-            webhookStatus === "imported"
-              ? "Presupuesto importado automáticamente desde webhook"
-              : "Presupuesto actualizado automáticamente desde webhook",
-          warnings,
-        });
-
         try {
           const auditUserId = await resolveUserIdFromEvent(event, prisma);
           await logAudit({
@@ -1276,8 +1144,7 @@ export const handler = async (event: any) => {
           console.error('[deals] Failed to log Pipedrive import', auditError);
         }
 
-        const responseDeal = applyWebhookEventMetadata(deal, webhookEvent);
-        return successResponse({ ok: true, warnings, deal: responseDeal });
+        return successResponse({ ok: true, warnings, deal });
       } catch (e: any) {
         if (e?.code === DEAL_NOT_WON_ERROR_CODE) {
           const statusCode =
@@ -1288,18 +1155,8 @@ export const handler = async (event: any) => {
             typeof e?.message === "string" && e.message.trim().length
               ? e.message.trim()
               : DEAL_NOT_WON_ERROR_MESSAGE;
-          await logWebhookEvent(prisma, {
-            dealId: incomingIdStr,
-            status: "error",
-            message,
-          });
           return errorResponse(DEAL_NOT_WON_ERROR_CODE, message, statusCode);
         }
-        await logWebhookEvent(prisma, {
-          dealId: incomingIdStr,
-          status: "error",
-          message: e?.message || "Error importando deal",
-        });
         return errorResponse("IMPORT_ERROR", e?.message || "Error importando deal", 502);
       }
     }
@@ -1381,21 +1238,14 @@ export const handler = async (event: any) => {
             : null,
       }));
 
-      const webhookEvents = await fetchLatestWebhookEvents(prisma, [String(dealId)]);
-      const webhookEvent = webhookEvents.get(String(dealId)) ?? null;
-
-      const mappedDeal = deal
-        ? {
-            ...deal,
-            sede_labels: sedeLabels,
-            deal_products: dealProducts,
-          }
-        : null;
-
-      const responseDeal = applyWebhookEventMetadata(mappedDeal, webhookEvent);
-
       return successResponse({
-        deal: responseDeal,
+        deal: deal
+          ? {
+              ...deal,
+              sede_labels: sedeLabels,
+              deal_products: dealProducts,
+            }
+          : null,
       });
     }
 
@@ -1824,13 +1674,7 @@ export const handler = async (event: any) => {
 
         return result;
       });
-      const dealIds = rowsRaw
-        .map((row) => (row?.deal_id ? String(row.deal_id) : null))
-        .filter((id): id is string => Boolean(id));
-      const webhookEvents = await fetchLatestWebhookEvents(prisma, dealIds);
-      const dealsWithEvents = applyWebhookEventsToDeals(deals, webhookEvents);
-
-      return successResponse({ deals: dealsWithEvents });
+      return successResponse({ deals });
     }
 
     /* --------------- GET listado: .netlify/functions/deals?pendingCertificates=true --------------- */
@@ -1972,14 +1816,7 @@ export const handler = async (event: any) => {
       const deals = rowsRaw.map((row: any) =>
         attachProductStockToDeal(mapDealForApi(normalizeDealRelations(row)), stockMap),
       );
-
-      const dealIds = rowsRaw
-        .map((row) => (row?.deal_id ? String(row.deal_id) : null))
-        .filter((id): id is string => Boolean(id));
-      const webhookEvents = await fetchLatestWebhookEvents(prisma, dealIds);
-      const dealsWithEvents = applyWebhookEventsToDeals(deals, webhookEvents);
-
-      return successResponse({ deals: dealsWithEvents });
+      return successResponse({ deals });
     }
 
     /* -------------- GET listado: /.netlify/functions/deals?noSessions=true -------------- */
@@ -2047,14 +1884,7 @@ export const handler = async (event: any) => {
       const deals = rowsRaw.map((r: any) =>
         attachProductStockToDeal(mapDealForApi(normalizeDealRelations(r)), stockMap),
       );
-
-      const dealIds = rowsRaw
-        .map((row) => (row?.deal_id ? String(row.deal_id) : null))
-        .filter((id): id is string => Boolean(id));
-      const webhookEvents = await fetchLatestWebhookEvents(prisma, dealIds);
-      const dealsWithEvents = applyWebhookEventsToDeals(deals, webhookEvents);
-
-      return successResponse({ deals: dealsWithEvents });
+      return successResponse({ deals });
     }
 
     /* -------------- GET listado: /.netlify/functions/deals -------------- */
@@ -2163,14 +1993,7 @@ export const handler = async (event: any) => {
       );
 
       const deals = dealsRaw.filter((deal): deal is Record<string, any> => deal !== null);
-
-      const dealIds = rowsRaw
-        .map((row: any) => (row?.deal_id ? String(row.deal_id) : null))
-        .filter((id: string | null): id is string => Boolean(id));
-      const webhookEvents = await fetchLatestWebhookEvents(prisma, dealIds);
-      const dealsWithEvents = applyWebhookEventsToDeals(deals, webhookEvents);
-
-      return successResponse({ deals: dealsWithEvents });
+      return successResponse({ deals });
     }
 
     return errorResponse("NOT_IMPLEMENTED", "Ruta o método no soportado", 404);

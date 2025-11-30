@@ -30,7 +30,6 @@ import { SESSION_ESTADOS, type SessionEstado } from '../../api/sessions.types';
 import { DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY } from './queryKeys';
 import type { DealsListOptions } from './api/deals.api';
 import { fetchProducts } from '../recursos/products.api';
-import { useCurrentUserIdentity } from './useCurrentUserIdentity';
 
 function TrashIcon({ size = 16 }: { size?: number }) {
   return (
@@ -509,38 +508,6 @@ function hasOverduePlannedSession(budget: DealSummary): boolean {
   });
 }
 
-function buildSeenStorageKey(userId: string): string {
-  const normalized = userId.trim() || 'erp_user';
-  return `budgets-webhook-seen:${normalized}`;
-}
-
-function readSeenEventIds(storageKey: string): Set<string> {
-  if (typeof window === 'undefined') return new Set();
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    const validIds = parsed
-      .map((value) => (typeof value === 'string' ? value.trim() : ''))
-      .filter((value) => value.length > 0);
-    return new Set(validIds);
-  } catch (error) {
-    console.warn('No se pudieron leer los eventos de webhook vistos', error);
-    return new Set();
-  }
-}
-
-function persistSeenEventIds(storageKey: string, ids: Set<string>): void {
-  if (typeof window === 'undefined') return;
-  try {
-    const values = Array.from(ids);
-    window.localStorage.setItem(storageKey, JSON.stringify(values));
-  } catch (error) {
-    console.warn('No se pudieron guardar los eventos de webhook vistos', error);
-  }
-}
-
 function getTrainingDateInfo(budget: DealSummary): { label: string; sortValue: number | null } {
   const timestamp = getTrainingDateTimestamp(budget);
   return {
@@ -772,51 +739,6 @@ export function BudgetTable({
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const { userId } = useCurrentUserIdentity();
-  const seenStorageKey = useMemo(() => buildSeenStorageKey(userId), [userId]);
-  const [seenWebhookEvents, setSeenWebhookEvents] = useState<Set<string>>(() =>
-    readSeenEventIds(seenStorageKey),
-  );
-
-  useEffect(() => {
-    setSeenWebhookEvents(readSeenEventIds(seenStorageKey));
-  }, [seenStorageKey]);
-
-  const markEventAsSeen = useCallback(
-    (eventId: string | null | undefined) => {
-      if (!eventId) return;
-      setSeenWebhookEvents((current) => {
-        if (current.has(eventId)) return current;
-        const next = new Set(current);
-        next.add(eventId);
-        persistSeenEventIds(seenStorageKey, next);
-        return next;
-      });
-    },
-    [seenStorageKey],
-  );
-
-  const resolveRowHighlight = useCallback(
-    (budget: DealSummary): string => {
-      const eventId = budget.webhook_event_id ?? null;
-      if (!eventId || seenWebhookEvents.has(eventId)) {
-        return '';
-      }
-      const status = (budget.webhook_status ?? '').trim().toLowerCase();
-      if (status === 'imported') return 'bg-success-subtle';
-      if (status === 'updated') return 'bg-warning-subtle';
-      return '';
-    },
-    [seenWebhookEvents],
-  );
-
-  const handleSelectBudget = useCallback(
-    (budget: DealSummary) => {
-      markEventAsSeen(budget.webhook_event_id ?? null);
-      onSelect(budget);
-    },
-    [markEventAsSeen, onSelect],
-  );
 
   const cachedFallbackBudgets = enableFallback
     ? queryClient.getQueryData<DealSummary[]>(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY) ?? null
@@ -1668,14 +1590,8 @@ export function BudgetTable({
                 {virtualRows.map((virtualRow) => {
                   const row = rows[virtualRow.index];
                   const budget = row.original;
-                  const rowHighlight = resolveRowHighlight(budget);
                   return (
-                    <tr
-                      key={row.id}
-                      role="button"
-                      className={rowHighlight || undefined}
-                      onClick={() => handleSelectBudget(budget)}
-                    >
+                    <tr key={row.id} role="button" onClick={() => onSelect(budget)}>
                       {row.getVisibleCells().map((cell) => {
                         const meta = cell.column.columnDef.meta as { style?: React.CSSProperties } | undefined;
                         const style = meta?.style;
