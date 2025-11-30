@@ -43,6 +43,11 @@
   to = "/.netlify/functions/deals/import"
   status = 200
 
+[[redirects]]
+  from = "/reporting/webhooks_pipe"
+  to = "/.netlify/functions/reporting-webhooks-pipe"
+  status = 200
+
 # Auth (endpoints explícitos)
 [[redirects]]
   from = "/auth/login"
