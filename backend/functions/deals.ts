@@ -21,7 +21,11 @@ import { generateSessionsForDeal } from "./_shared/sessionGeneration";
 import { studentsFromNotes } from "./_shared/studentsFromNotes";
 import type { StudentIdentifier } from "./_shared/studentsFromNotes";
 import { logAudit, resolveUserIdFromEvent, type JsonValue } from "./_shared/audit-log";
-import { isTrustedClient, logSuspiciousRequest } from "./_shared/security";
+import {
+  isTrustedClient,
+  isTrustedPipedriveWebhook,
+  logSuspiciousRequest,
+} from "./_shared/security";
 
 const EDITABLE_FIELDS = new Set([
   "sede_label",
@@ -62,6 +66,37 @@ function parsePathId(path: any): string | null {
   // admite .../deals/:id
   const m = String(path).match(/\/deals\/([^/?#]+)/i);
   return m ? decodeURIComponent(m[1]) : null;
+}
+
+function normalizeIncomingDealId(raw: any): string | null {
+  if (raw === null || raw === undefined) return null;
+  const id = String(raw).trim();
+  return id.length ? id : null;
+}
+
+function parsePipedriveWebhookContext(payload: unknown): { dealId: string | null; status: string | null } | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const meta = (payload as any)?.meta;
+  const objectName = typeof meta?.object === "string" ? meta.object.trim().toLowerCase() : null;
+  if (objectName && objectName !== "deal") {
+    return null;
+  }
+
+  const dealId =
+    normalizeIncomingDealId(meta?.id ?? meta?.object_id ?? meta?.objectId) ??
+    normalizeIncomingDealId((payload as any)?.current?.id ?? (payload as any)?.previous?.id);
+
+  const statusRaw = (payload as any)?.current?.status ?? meta?.status ?? null;
+  const status = typeof statusRaw === "string" ? statusRaw : null;
+
+  if (!dealId && !status) {
+    return null;
+  }
+
+  return { dealId, status };
 }
 
 function normalizeProductId(raw: any): string | null {
@@ -1037,7 +1072,10 @@ export const handler = async (event: any) => {
     const method = event.httpMethod;
     const path = event.path || "";
 
-    if (!isTrustedClient(event.headers)) {
+    const trustedClient =
+      isTrustedClient(event.headers) || isTrustedPipedriveWebhook(event.headers);
+
+    if (!trustedClient) {
       await logSuspiciousRequest({
         event,
         headers: event.headers,
@@ -1046,6 +1084,7 @@ export const handler = async (event: any) => {
         rawUrl: event.rawUrl ?? null,
         reason: 'missing_or_invalid_client_header',
       });
+      return errorResponse('FORBIDDEN', 'Cliente no autorizado', 403);
     }
 
     // id por PATH o por QUERY (?dealId=)
@@ -1061,15 +1100,29 @@ export const handler = async (event: any) => {
       (method === "GET" && path.endsWith("/deals/import"))
     ) {
       const body = event.body ? JSON.parse(event.body) : {};
-      const incomingId =
-        body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
+      const pipedriveContext = parsePipedriveWebhookContext(body);
+      const incomingId = normalizeIncomingDealId(
+        body?.dealId ??
+          body?.id ??
+          body?.deal_id ??
+          pipedriveContext?.dealId ??
+          event.queryStringParameters?.dealId,
+      );
       if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
 
-      const incomingIdStr = String(incomingId ?? "").trim();
-      const existedBeforeImport = incomingIdStr
+      if (pipedriveContext?.status && !isDealWonStatus(pipedriveContext.status)) {
+        return successResponse({
+          ok: true,
+          skipped: true,
+          reason: DEAL_NOT_WON_ERROR_CODE,
+          deal_id: incomingId,
+        });
+      }
+
+      const existedBeforeImport = incomingId
         ? Boolean(
             await prisma.deals.findUnique({
-              where: { deal_id: incomingIdStr },
+              where: { deal_id: incomingId },
               select: { deal_id: true },
             }),
           )

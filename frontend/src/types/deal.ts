@@ -141,6 +141,9 @@ export interface DealSummary {
   presu_holded?: string | null;
   modo_reserva?: string | null;
 
+  created_at?: string | null;
+  updated_at?: string | null;
+
   hours?: number | null;    // editable en ERP (no autocalculado)
 
   organization?: DealOrganization | null;
@@ -193,6 +196,9 @@ export interface DealDetail {
 
   organization?: DealOrganization | null;
   person?: DealPerson | null;
+
+  created_at?: string | null;
+  updated_at?: string | null;
 
   // Nombres alineados con el backend nuevo:
   products?: DealProduct[]; // antes: deal_products

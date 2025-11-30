@@ -8,11 +8,13 @@ import {
   type BudgetTableLabels,
   type BudgetTableVariant,
 } from '../../features/presupuestos/BudgetTable';
+import type { BudgetHighlight } from '../../features/presupuestos/hooks/useBudgetHighlights';
 
 export type BudgetSectionLayoutProps = {
   title: string;
   subtitle?: string;
   budgets: DealSummary[];
+  highlightedBudgets?: ReadonlyMap<string, BudgetHighlight>;
   isLoading: boolean;
   isFetching: boolean;
   error: unknown;
@@ -36,6 +38,7 @@ export function BudgetSectionLayout({
   title,
   subtitle,
   budgets,
+  highlightedBudgets,
   isLoading,
   isFetching,
   error,
@@ -78,6 +81,7 @@ export function BudgetSectionLayout({
 
       <BudgetTable
         budgets={budgets}
+        highlightedBudgets={highlightedBudgets}
         isLoading={isLoading}
         isFetching={isFetching}
         error={error}

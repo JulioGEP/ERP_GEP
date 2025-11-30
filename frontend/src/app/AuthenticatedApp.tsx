@@ -63,6 +63,7 @@ import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
 import type { MaterialOrder, MaterialOrdersResponse } from '../types/materialOrder';
+import { useBudgetHighlights } from '../features/presupuestos/hooks/useBudgetHighlights';
 
 const ACTIVE_PATH_STORAGE_KEY = 'erp-gep-active-path';
 const NAVBAR_OFFCANVAS_ID = 'app-navbar-offcanvas';
@@ -1004,6 +1005,8 @@ export default function AuthenticatedApp() {
 
   const allBudgets = allBudgetsQuery.data ?? [];
   const isRefreshingAllBudgets = allBudgetsQuery.isFetching && !allBudgetsQuery.isLoading;
+  const { highlights: budgetHighlights, markAsSeen: markBudgetAsSeen } =
+    useBudgetHighlights(allBudgets);
   const materialOrdersData = materialsOrdersQuery.data;
   const materialOrders = materialOrdersData?.orders ?? [];
   const nextMaterialOrderNumber = materialOrdersData?.nextOrderNumber ?? 1;
@@ -1159,13 +1162,17 @@ export default function AuthenticatedApp() {
     },
   });
 
-  const handleSelectBudget = useCallback((budget: DealSummary) => {
-    setSelectedBudgetSummary(budget);
-    // 👇 asegura string | null
-    setSelectedBudgetId(budget.dealId ?? null);
-    setAutoRefreshBudgetId(null);
-    setHighlightedCalendarSessionId(null);
-  }, []);
+  const handleSelectBudget = useCallback(
+    (budget: DealSummary) => {
+      markBudgetAsSeen(budget);
+      setSelectedBudgetSummary(budget);
+      // 👇 asegura string | null
+      setSelectedBudgetId(budget.dealId ?? null);
+      setAutoRefreshBudgetId(null);
+      setHighlightedCalendarSessionId(null);
+    },
+    [markBudgetAsSeen],
+  );
 
   const handleDeleteBudget = useCallback(
     async (budget: DealSummary) => {
@@ -1325,6 +1332,7 @@ export default function AuthenticatedApp() {
 
   const budgetsPageProps: BudgetsPageProps = {
     budgets: pendingPlanningBudgets,
+    highlightedBudgets: budgetHighlights,
     isLoading: budgetsWithoutSessionsQuery.isLoading,
     isFetching: isRefreshingWithoutSessions,
     error: budgetsWithoutSessionsQuery.error ?? null,
@@ -1343,6 +1351,7 @@ export default function AuthenticatedApp() {
 
   const allBudgetsPageProps: AllBudgetsPageProps = {
     budgets: allBudgets,
+    highlightedBudgets: budgetHighlights,
     isLoading: allBudgetsQuery.isLoading,
     isFetching: isRefreshingAllBudgets,
     error: allBudgetsQuery.error ?? null,
@@ -1360,6 +1369,7 @@ export default function AuthenticatedApp() {
 
   const unworkedBudgetsPageProps: UnworkedBudgetsPageProps = {
     budgets: unworkedBudgets,
+    highlightedBudgets: budgetHighlights,
     isLoading: allBudgetsQuery.isLoading,
     isFetching: isRefreshingAllBudgets,
     error: allBudgetsQuery.error ?? null,
