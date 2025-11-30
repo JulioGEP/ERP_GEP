@@ -56,71 +56,12 @@ const BOOLEAN_EDITABLE_FIELDS = new Set([
 const DEAL_NOT_WON_ERROR_CODE = "DEAL_NOT_WON";
 const DEAL_NOT_WON_ERROR_MESSAGE = "Este negocio no está Ganado, no lo podemos subir";
 
-async function logWebhookEvent(
-  prisma: PrismaClient,
-  params: {
-    dealId: string;
-    status: string;
-    message?: string | null;
-    warnings?: string[] | null;
-  },
-): Promise<void> {
-  const warningsPayload: Prisma.JsonValue | null = Array.isArray(params.warnings)
-    ? (params.warnings as unknown as Prisma.JsonValue)
-    : null;
-
-  try {
-    await prisma.deal_webhook_events.create({
-      data: {
-        deal_id: params.dealId,
-        status: params.status,
-        message: params.message ?? null,
-        warnings: warningsPayload,
-      },
-    });
-  } catch (error) {
-    console.error("[deals] Failed to persist webhook event", {
-      dealId: params.dealId,
-      status: params.status,
-      error,
-    });
-  }
-}
-
 /* -------------------- Helpers -------------------- */
 function parsePathId(path: any): string | null {
   if (!path) return null;
   // admite .../deals/:id
   const m = String(path).match(/\/deals\/([^/?#]+)/i);
   return m ? decodeURIComponent(m[1]) : null;
-}
-
-function normalizeDealId(raw: any): string | null {
-  if (raw === null || raw === undefined) return null;
-  const id = String(raw).trim();
-  return id.length ? id : null;
-}
-
-function resolveDealIdFromPayload(
-  body: any,
-  queryParams: Record<string, unknown> | undefined,
-): string | null {
-  const candidates = [
-    body?.dealId,
-    body?.id,
-    body?.deal_id,
-    body?.deal?.id,
-    body?.meta?.id,
-    body?.current?.id,
-    queryParams?.dealId,
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizeDealId(candidate);
-    if (normalized !== null) return normalized;
-  }
-
-  return null;
 }
 
 function normalizeProductId(raw: any): string | null {
@@ -1120,7 +1061,8 @@ export const handler = async (event: any) => {
       (method === "GET" && path.endsWith("/deals/import"))
     ) {
       const body = event.body ? JSON.parse(event.body) : {};
-      const incomingId = resolveDealIdFromPayload(body, event.queryStringParameters);
+      const incomingId =
+        body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
       if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
 
       const incomingIdStr = String(incomingId ?? "").trim();
@@ -1202,29 +1144,8 @@ export const handler = async (event: any) => {
           console.error('[deals] Failed to log Pipedrive import', auditError);
         }
 
-        try {
-          await logWebhookEvent(prisma, {
-            dealId: String(deal_id),
-            status: existedBeforeImport ? 'updated' : 'imported',
-            message: existedBeforeImport
-              ? 'Presupuesto actualizado desde Pipedrive'
-              : 'Presupuesto importado desde Pipedrive',
-            warnings,
-          });
-        } catch (webhookLogError) {
-          console.error('[deals] Failed to store webhook event', webhookLogError);
-        }
-
         return successResponse({ ok: true, warnings, deal });
       } catch (e: any) {
-        if (incomingIdStr) {
-          await logWebhookEvent(prisma, {
-            dealId: incomingIdStr,
-            status: "error",
-            message: e?.message ?? "Error importando deal",
-            warnings: [],
-          });
-        }
         if (e?.code === DEAL_NOT_WON_ERROR_CODE) {
           const statusCode =
             typeof e?.statusCode === "number" && Number.isFinite(e.statusCode)
