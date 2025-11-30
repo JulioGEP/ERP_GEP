@@ -30,6 +30,7 @@ import { SESSION_ESTADOS, type SessionEstado } from '../../api/sessions.types';
 import { DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY } from './queryKeys';
 import type { DealsListOptions } from './api/deals.api';
 import { fetchProducts } from '../recursos/products.api';
+import type { BudgetHighlight } from './hooks/useBudgetHighlights';
 
 function TrashIcon({ size = 16 }: { size?: number }) {
   return (
@@ -89,6 +90,11 @@ const FOLLOW_UP_DEFAULT_VALIDATION_COLUMN_STYLE: React.CSSProperties = {
   width: 96,
 };
 
+const ROW_HIGHLIGHT_STYLES: Record<BudgetHighlight, React.CSSProperties> = {
+  new: { backgroundColor: 'rgba(25, 135, 84, 0.15)' },
+  updated: { backgroundColor: 'rgba(255, 193, 7, 0.2)' },
+};
+
 const SESSION_STATE_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
   PLANIFICADA: 'Planificada',
@@ -108,6 +114,7 @@ export type BudgetTableVariant = 'default' | 'unworked';
 
 interface BudgetTableProps {
   budgets: DealSummary[];
+  highlightedBudgets?: ReadonlyMap<string, BudgetHighlight>;
   isLoading: boolean;
   isFetching: boolean;
   error: unknown;
@@ -721,6 +728,7 @@ function applyBudgetFilters(
 
 export function BudgetTable({
   budgets,
+  highlightedBudgets,
   isLoading,
   isFetching,
   error,
@@ -1590,8 +1598,18 @@ export function BudgetTable({
                 {virtualRows.map((virtualRow) => {
                   const row = rows[virtualRow.index];
                   const budget = row.original;
+                  const budgetId = getBudgetId(budget);
+                  const highlight = budgetId ? highlightedBudgets?.get(budgetId) ?? null : null;
+                  const rowStyle = highlight ? ROW_HIGHLIGHT_STYLES[highlight] : undefined;
+                  const rowClassName = highlight ? `budget-row-${highlight}` : undefined;
                   return (
-                    <tr key={row.id} role="button" onClick={() => onSelect(budget)}>
+                    <tr
+                      key={row.id}
+                      role="button"
+                      style={rowStyle}
+                      className={rowClassName}
+                      onClick={() => onSelect(budget)}
+                    >
                       {row.getVisibleCells().map((cell) => {
                         const meta = cell.column.columnDef.meta as { style?: React.CSSProperties } | undefined;
                         const style = meta?.style;
