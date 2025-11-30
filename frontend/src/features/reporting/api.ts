@@ -173,67 +173,6 @@ export async function fetchAuditLogs(options: FetchAuditLogsOptions = {}): Promi
     .filter((entry): entry is AuditLogEntry => entry !== null);
 }
 
-export type DealWebhookEventReport = {
-  id: string;
-  dealId: string;
-  dealTitle: string | null;
-  status: string;
-  message: string | null;
-  warnings: string[];
-  createdAt: string | null;
-  updatedAt: string | null;
-};
-
-function sanitizeWarnings(value: unknown): string[] {
-  if (!value) return [];
-  const entries = Array.isArray(value) ? value : [value];
-  return entries
-    .map((entry) => {
-      if (typeof entry === 'string') return entry.trim();
-      if (entry === null || entry === undefined) return '';
-      if (typeof entry === 'object') return JSON.stringify(entry);
-      return String(entry ?? '').trim();
-    })
-    .filter((entry) => entry.length > 0);
-}
-
-function sanitizeWebhookEvent(raw: unknown): DealWebhookEventReport | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const record = raw as Record<string, unknown>;
-  const id = sanitizeText(record.id);
-  const dealId = sanitizeText(record.dealId ?? record.deal_id ?? record.dealID);
-  const status = sanitizeText(record.status);
-  if (!id || !dealId || !status) {
-    return null;
-  }
-
-  return {
-    id,
-    dealId,
-    dealTitle: sanitizeText(record.dealTitle ?? record.deal_title),
-    status,
-    message: sanitizeText(record.message),
-    warnings: sanitizeWarnings(record.warnings),
-    createdAt: sanitizeDate(record.createdAt ?? record.created_at),
-    updatedAt: sanitizeDate(record.updatedAt ?? record.updated_at),
-  } satisfies DealWebhookEventReport;
-}
-
-export async function fetchDealWebhookEvents(limit?: number): Promise<DealWebhookEventReport[]> {
-  const params = new URLSearchParams();
-  if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
-    params.set('limit', String(Math.min(Math.floor(limit), 500)));
-  }
-
-  const query = params.toString();
-  const url = query.length ? `/reporting-webhooks-pipe?${query}` : '/reporting-webhooks-pipe';
-  const data = await getJson<{ events?: unknown[] }>(url);
-  const events = Array.isArray(data?.events) ? data.events : [];
-  return events
-    .map(sanitizeWebhookEvent)
-    .filter((event): event is DealWebhookEventReport => event !== null);
-}
-
 const EXTRA_COST_FIELD_KEYS = [
   'precioCosteFormacion',
   'precioCostePreventivo',

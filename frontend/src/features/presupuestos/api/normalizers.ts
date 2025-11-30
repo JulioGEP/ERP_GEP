@@ -52,20 +52,6 @@ function toBoolean(value: unknown): boolean {
   return value === true;
 }
 
-function sanitizeWarnings(value: unknown): string[] | null {
-  if (!value) return null;
-  const entries = Array.isArray(value) ? value : [value];
-  const warnings = entries
-    .map((entry) => {
-      if (typeof entry === 'string') return entry.trim();
-      if (entry === null || entry === undefined) return '';
-      if (typeof entry === 'object') return JSON.stringify(entry);
-      return String(entry ?? '').trim();
-    })
-    .filter((entry) => entry.length > 0);
-  return warnings.length ? warnings : null;
-}
-
 function normalizeMaterialKey(value: unknown): string {
   const label = toStringValue(value);
   if (!label) return '';
@@ -363,11 +349,6 @@ export function normalizeDealSummary(row: Json): DealSummary {
     hours: toNumber(row?.hours),
     a_fecha: toStringValue(row?.a_fecha) ?? null,
     studentNames,
-    webhook_event_id: toStringValue(row?.webhook_event_id) ?? null,
-    webhook_status: toStringValue(row?.webhook_status) ?? null,
-    webhook_message: toStringValue(row?.webhook_message) ?? null,
-    webhook_warnings: sanitizeWarnings(row?.webhook_warnings),
-    webhook_created_at: toStringValue(row?.webhook_created_at) ?? null,
   } satisfies DealSummary;
 }
 
@@ -457,11 +438,6 @@ export function normalizeDealDetail(raw: Json): DealDetail {
     notes: notesSource.map((note) => normalizeDealNote(note)),
     documents: documentsSource.map((doc) => normalizeDealDocument(doc)),
     presu_holded: toStringValue(raw?.presu_holded) ?? null,
-    webhook_event_id: toStringValue(raw?.webhook_event_id) ?? null,
-    webhook_status: toStringValue(raw?.webhook_status) ?? null,
-    webhook_message: toStringValue(raw?.webhook_message) ?? null,
-    webhook_warnings: sanitizeWarnings(raw?.webhook_warnings),
-    webhook_created_at: toStringValue(raw?.webhook_created_at) ?? null,
   };
 
   return normalized;
