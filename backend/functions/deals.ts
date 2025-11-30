@@ -95,6 +95,34 @@ function parsePathId(path: any): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+function normalizeDealId(raw: any): string | null {
+  if (raw === null || raw === undefined) return null;
+  const id = String(raw).trim();
+  return id.length ? id : null;
+}
+
+function resolveDealIdFromPayload(
+  body: any,
+  queryParams: Record<string, unknown> | undefined,
+): string | null {
+  const candidates = [
+    body?.dealId,
+    body?.id,
+    body?.deal_id,
+    body?.deal?.id,
+    body?.meta?.id,
+    body?.current?.id,
+    queryParams?.dealId,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeDealId(candidate);
+    if (normalized !== null) return normalized;
+  }
+
+  return null;
+}
+
 function normalizeProductId(raw: any): string | null {
   if (raw === null || raw === undefined) return null;
   const id = String(raw).trim();
@@ -1092,8 +1120,7 @@ export const handler = async (event: any) => {
       (method === "GET" && path.endsWith("/deals/import"))
     ) {
       const body = event.body ? JSON.parse(event.body) : {};
-      const incomingId =
-        body?.dealId ?? body?.id ?? body?.deal_id ?? event.queryStringParameters?.dealId;
+      const incomingId = resolveDealIdFromPayload(body, event.queryStringParameters);
       if (!incomingId) return errorResponse("VALIDATION_ERROR", "Falta dealId", 400);
 
       const incomingIdStr = String(incomingId ?? "").trim();
