@@ -10,13 +10,21 @@ const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000; // 1 hora
 // Exportado por si otros módulos necesitan el mapping
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
-  Comercial: ['/dashboard', '/perfil', '/presupuestos/sinplanificar', '/presupuestos/*', '/calendario/*'],
+  Comercial: [
+    '/dashboard',
+    '/perfil',
+    '/presupuestos/sinplanificar',
+    '/presupuestos/*',
+    '/calendario/*',
+    '/materiales/*',
+  ],
   Administracion: [
     '/dashboard',
     '/perfil',
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/calendario/*',
+    '/materiales/*',
     '/certificados',
     '/certificados/*',
     '/recursos/confirmaciones',
@@ -27,6 +35,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/calendario/*',
+    '/materiales/*',
     '/recursos/unidades_moviles',
     '/recursos/salas',
     '/recursos/confirmaciones',
@@ -37,6 +46,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/presupuestos/sinplanificar',
     '/presupuestos/*',
     '/calendario/*',
+    '/materiales/*',
     '/recursos/formadores_bomberos',
     '/recursos/confirmaciones',
     '/usuarios/vacaciones',
