@@ -26,11 +26,11 @@ function buildYesLabelFilter(field: YesLabelField): DealsWhereFilter {
   };
 }
 
-function buildSessionPipelineFilter() {
-  const pipelineConditions = SESSION_PIPELINE_LABELS.map((label) => ({
-    pipeline_id: { equals: label, mode: 'insensitive' as const },
-  }));
+const pipelineConditions = SESSION_PIPELINE_LABELS.map((label) => ({
+  pipeline_id: { equals: label, mode: 'insensitive' as const },
+}));
 
+function buildSessionPipelineFilter() {
   return { is: { OR: pipelineConditions } };
 }
 
@@ -131,7 +131,7 @@ export const handler = createHttpHandler(async (request) => {
 
   try {
     const [
-      draftSessions,
+      draftBudgetsWithDraftSession,
       suspendedBudgets,
       pendingCompletionBudgets,
       caesPending,
@@ -143,11 +143,13 @@ export const handler = createHttpHandler(async (request) => {
       variantsInTimeline,
       variantsMissingTrainer,
     ] = await Promise.all([
-      prisma.sesiones.count({
+      prisma.sesiones.findMany({
         where: {
           estado: 'BORRADOR',
           deals: buildSessionPipelineFilter(),
         },
+        distinct: ['deal_id'],
+        select: { deal_id: true },
       }),
       prisma.deals.count({
         where: {
@@ -274,6 +276,8 @@ export const handler = createHttpHandler(async (request) => {
         },
       }),
     ]);
+
+    const draftBudgets = draftBudgetsWithDraftSession.length;
 
     type SessionTimelineEntry = {
       id: string;
@@ -538,7 +542,7 @@ export const handler = createHttpHandler(async (request) => {
 
     return successResponse({
       sessions: {
-        borrador: draftSessions,
+        borrador: draftBudgets,
         sinFormador: variantsWithoutTrainerWithDeals,
         suspendida: suspendedBudgets,
         porFinalizar: pendingCompletionBudgets,
