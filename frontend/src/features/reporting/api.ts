@@ -89,6 +89,16 @@ export type AuditLogEntry = {
   after: unknown | null;
 };
 
+export type PipedriveWebhookEvent = {
+  id: string;
+  dealId: string;
+  status: string;
+  message: string | null;
+  warnings: unknown;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 function sanitizeControlHorarioRecord(entry: unknown): ControlHorarioRecord | null {
   if (!entry || typeof entry !== 'object') {
     return null;
@@ -171,6 +181,62 @@ export async function fetchAuditLogs(options: FetchAuditLogsOptions = {}): Promi
   return entries
     .map(sanitizeAuditLogEntry)
     .filter((entry): entry is AuditLogEntry => entry !== null);
+}
+
+function sanitizeWarnings(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (Array.isArray(value) || typeof value === 'object') {
+    return value;
+  }
+  return String(value);
+}
+
+function sanitizeWebhookEvent(entry: unknown): PipedriveWebhookEvent | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const raw = entry as Record<string, unknown>;
+  const id = sanitizeText(raw.id);
+  const dealId = sanitizeText(raw.dealId ?? raw.deal_id);
+  const status = sanitizeText(raw.status);
+
+  if (!id || !dealId || !status) {
+    return null;
+  }
+
+  return {
+    id,
+    dealId,
+    status,
+    message: sanitizeText(raw.message),
+    warnings: sanitizeWarnings(raw.warnings ?? raw.alerts),
+    createdAt: sanitizeDate(raw.createdAt ?? raw.created_at),
+    updatedAt: sanitizeDate(raw.updatedAt ?? raw.updated_at),
+  } satisfies PipedriveWebhookEvent;
+}
+
+export async function fetchPipedriveWebhookEvents(
+  options: FetchAuditLogsOptions = {},
+): Promise<PipedriveWebhookEvent[]> {
+  const params = new URLSearchParams();
+  const limit = options.limit;
+  if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
+    params.set('limit', String(Math.min(Math.floor(limit), 500)));
+  }
+
+  const query = params.toString();
+  const url = query.length
+    ? `/reporting-webhooks-pipe?${query}`
+    : '/reporting-webhooks-pipe';
+
+  const data = await getJson<{ events?: unknown[] }>(url);
+  const entries = Array.isArray(data?.events) ? data.events : [];
+  return entries
+    .map(sanitizeWebhookEvent)
+    .filter((event): event is PipedriveWebhookEvent => event !== null);
 }
 
 const EXTRA_COST_FIELD_KEYS = [
