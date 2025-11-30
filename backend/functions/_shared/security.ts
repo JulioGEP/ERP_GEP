@@ -64,6 +64,10 @@ export function isTrustedClient(
 ): boolean {
   const normalized = normalizeHeaders(headers);
 
+  if (isPipedriveWebhook(normalized)) {
+    return true;
+  }
+
   const headerValue = normalized[CLIENT_HEADER_NAME];
   if (
     headerValue &&
@@ -73,6 +77,13 @@ export function isTrustedClient(
   }
 
   return hasTrustedFrontendReferer(normalized);
+}
+
+function isPipedriveWebhook(headers: Record<string, string>): boolean {
+  return (
+    typeof headers['x-pipedrive-delivery-id'] === 'string' ||
+    typeof headers['x-pipedrive-signature'] === 'string'
+  );
 }
 
 function resolveTrustedFrontendHosts(): string[] {
