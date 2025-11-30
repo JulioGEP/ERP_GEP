@@ -151,6 +151,12 @@ export interface DealSummary {
   productNames?: string[];
   sessions?: DealSummarySession[];
   studentNames?: string[];
+
+  webhook_event_id?: string | null;
+  webhook_status?: string | null;
+  webhook_message?: string | null;
+  webhook_warnings?: string[] | null;
+  webhook_created_at?: string | null;
 }
 
 /** Detalle completo (para el modal) */
@@ -198,6 +204,12 @@ export interface DealDetail {
   products?: DealProduct[]; // antes: deal_products
   notes?: DealNote[];       // antes: deal_notes
   documents?: DealDocument[];
+
+  webhook_event_id?: string | null;
+  webhook_status?: string | null;
+  webhook_message?: string | null;
+  webhook_warnings?: string[] | null;
+  webhook_created_at?: string | null;
 }
 
 /* ======================
