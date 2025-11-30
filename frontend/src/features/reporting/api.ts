@@ -173,6 +173,61 @@ export async function fetchAuditLogs(options: FetchAuditLogsOptions = {}): Promi
     .filter((entry): entry is AuditLogEntry => entry !== null);
 }
 
+export type WebhookPipeLogEntry = {
+  id: string;
+  dealId: string | null;
+  status: string;
+  message: string | null;
+  warnings: string[] | null;
+  createdAt: string | null;
+};
+
+function sanitizeWebhookLogEntry(entry: unknown): WebhookPipeLogEntry | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const raw = entry as Record<string, unknown>;
+  const id = sanitizeText(raw.id);
+  if (!id) {
+    return null;
+  }
+
+  const warnings: string[] | null = Array.isArray(raw.warnings)
+    ? (raw.warnings as unknown[])
+        .map((item) => sanitizeText(item) ?? null)
+        .filter((item): item is string => Boolean(item))
+    : null;
+
+  return {
+    id,
+    dealId: sanitizeText(raw.dealId ?? raw.deal_id),
+    status: sanitizeText(raw.status) ?? 'UNKNOWN',
+    message: sanitizeText(raw.message),
+    warnings,
+    createdAt: sanitizeDate(raw.createdAt ?? raw.created_at),
+  } satisfies WebhookPipeLogEntry;
+}
+
+export type FetchWebhookPipeLogsOptions = { limit?: number };
+
+export async function fetchWebhookPipeLogs(
+  options: FetchWebhookPipeLogsOptions = {},
+): Promise<WebhookPipeLogEntry[]> {
+  const params = new URLSearchParams();
+  if (typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0) {
+    params.set('limit', String(Math.min(Math.floor(options.limit), 500)));
+  }
+
+  const query = params.toString();
+  const url = query.length ? `/reporting-webhooks-pipe?${query}` : '/reporting-webhooks-pipe';
+  const data = await getJson<{ logs?: unknown }>(url);
+  const entries = Array.isArray(data?.logs) ? data.logs : [];
+  return entries
+    .map(sanitizeWebhookLogEntry)
+    .filter((entry): entry is WebhookPipeLogEntry => entry !== null);
+}
+
 const EXTRA_COST_FIELD_KEYS = [
   'precioCosteFormacion',
   'precioCostePreventivo',
