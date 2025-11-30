@@ -187,11 +187,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         label: 'Logs',
         path: '/reporting/logs',
       },
-      {
-        key: 'Reporting/WebhooksPipe',
-        label: 'Webhooks Pipedrive',
-        path: '/reporting/webhooks_pipe',
-      },
     ],
   },
   {

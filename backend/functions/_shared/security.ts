@@ -5,7 +5,7 @@ import { getPrisma } from './prisma';
 import { sendEmail } from './mailer';
 
 export const CLIENT_HEADER_NAME = 'x-erp-client';
-export const TRUSTED_CLIENT_HEADER_VALUES = new Set(['frontend', 'pipedrive']);
+export const TRUSTED_CLIENT_HEADER_VALUE = 'frontend';
 const SECURITY_ALERT_EMAIL = 'julio@gepgroup.es';
 
 type HeaderValue = string | null;
@@ -64,26 +64,15 @@ export function isTrustedClient(
 ): boolean {
   const normalized = normalizeHeaders(headers);
 
-  if (isPipedriveWebhook(normalized)) {
-    return true;
-  }
-
   const headerValue = normalized[CLIENT_HEADER_NAME];
   if (
     headerValue &&
-    TRUSTED_CLIENT_HEADER_VALUES.has(headerValue.trim().toLowerCase())
+    headerValue.trim().toLowerCase() === TRUSTED_CLIENT_HEADER_VALUE
   ) {
     return true;
   }
 
   return hasTrustedFrontendReferer(normalized);
-}
-
-function isPipedriveWebhook(headers: Record<string, string>): boolean {
-  return (
-    typeof headers['x-pipedrive-delivery-id'] === 'string' ||
-    typeof headers['x-pipedrive-signature'] === 'string'
-  );
 }
 
 function resolveTrustedFrontendHosts(): string[] {
