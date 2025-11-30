@@ -674,21 +674,6 @@ model pedidos {
   @@map("pedidos")
 }
 
-model webhooks_pipe {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  created_at   DateTime @default(now()) @db.Timestamptz(6)
-  deal_id      String
-  action       String   @db.VarChar(20)
-  status       String   @db.VarChar(20)
-  message      String?
-  error_detail String?
-  payload      Json?
-  client       String?  @db.VarChar(50)
-
-  @@index([deal_id], map: "idx_webhooks_pipe_deal_id")
-  @@map("webhooks_pipe")
-}
-
 enum DocumentOrigin {
   imported
   user_upload

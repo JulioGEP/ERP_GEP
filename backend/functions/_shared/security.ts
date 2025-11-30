@@ -6,7 +6,6 @@ import { sendEmail } from './mailer';
 
 export const CLIENT_HEADER_NAME = 'x-erp-client';
 export const TRUSTED_CLIENT_HEADER_VALUE = 'frontend';
-export const TRUSTED_CLIENT_HEADER_VALUE_PIPEDRIVE = 'pipedrive';
 const SECURITY_ALERT_EMAIL = 'julio@gepgroup.es';
 
 type HeaderValue = string | null;
@@ -68,21 +67,12 @@ export function isTrustedClient(
   const headerValue = normalized[CLIENT_HEADER_NAME];
   if (
     headerValue &&
-    new Set([
-      TRUSTED_CLIENT_HEADER_VALUE,
-      TRUSTED_CLIENT_HEADER_VALUE_PIPEDRIVE,
-    ]).has(headerValue.trim().toLowerCase())
+    headerValue.trim().toLowerCase() === TRUSTED_CLIENT_HEADER_VALUE
   ) {
     return true;
   }
 
   return hasTrustedFrontendReferer(normalized);
-}
-
-export function isTrustedPipedrive(headers: Record<string, string | undefined> | undefined): boolean {
-  const normalized = normalizeHeaders(headers);
-  const headerValue = normalized[CLIENT_HEADER_NAME];
-  return headerValue?.trim().toLowerCase() === TRUSTED_CLIENT_HEADER_VALUE_PIPEDRIVE;
 }
 
 function resolveTrustedFrontendHosts(): string[] {
