@@ -2,12 +2,20 @@ export const SESSION_COOKIE_NAME = 'erp_session';
 
 export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Admin: ['ALL'],
-  Comercial: ['/dashboard', '/presupuestos/todos', '/presupuestos/*', '/calendario/*', '/perfil'],
+  Comercial: [
+    '/dashboard',
+    '/presupuestos/todos',
+    '/presupuestos/*',
+    '/calendario/*',
+    '/materiales/*',
+    '/perfil',
+  ],
   Administracion: [
     '/dashboard',
     '/presupuestos/todos',
     '/presupuestos/*',
     '/calendario/*',
+    '/materiales/*',
     '/certificados',
     '/certificados/*',
     '/perfil',
@@ -18,6 +26,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/presupuestos/todos',
     '/presupuestos/*',
     '/calendario/*',
+    '/materiales/*',
     '/recursos/unidades_moviles',
     '/recursos/salas',
     '/perfil',
@@ -28,6 +37,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/presupuestos/todos',
     '/presupuestos/*',
     '/calendario/*',
+    '/materiales/*',
     '/recursos/formadores_bomberos',
     '/perfil',
     '/recursos/confirmaciones',
