@@ -68,6 +68,19 @@ function parsePathId(path: any): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+function safeJsonParse(body: string | null | undefined): unknown {
+  if (!body) return {};
+  try {
+    return JSON.parse(body);
+  } catch (error) {
+    console.warn("[deals] Failed to parse request body as JSON", {
+      error: error instanceof Error ? error.message : String(error),
+      bodySnippet: body.slice(0, 200),
+    });
+    return null;
+  }
+}
+
 function normalizeIncomingDealId(raw: any): string | null {
   if (raw === null || raw === undefined) return null;
   const id = String(raw).trim();
@@ -1099,7 +1112,7 @@ export const handler = async (event: any) => {
       (method === "POST" && path.endsWith("/deals/import")) ||
       (method === "GET" && path.endsWith("/deals/import"))
     ) {
-      const body = event.body ? JSON.parse(event.body) : {};
+      const body = safeJsonParse(event.body) ?? {};
       const pipedriveContext = parsePipedriveWebhookContext(body);
       const incomingId = normalizeIncomingDealId(
         body?.dealId ??
