@@ -812,10 +812,9 @@ async function ensureResourcesAvailable(
   if (!range) return;
 
   const resourceConditions: any[] = [];
-  const trainerIdSet = new Set((trainerIds ?? []).map((id) => toTrimmed(id)).filter(Boolean) as string[]);
 
-  if (trainerIdSet.size) {
-    resourceConditions.push({ sesion_trainers: { some: { trainer_id: { in: Array.from(trainerIdSet) } } } });
+  if (trainerIds && trainerIds.length) {
+    resourceConditions.push({ sesion_trainers: { some: { trainer_id: { in: trainerIds } } } });
   }
   const filteredUnidadIds = (unidadIds ?? []).filter((id) => (id ? !ALWAYS_AVAILABLE_UNIT_IDS.has(id) : false));
   if (filteredUnidadIds.length) {
@@ -830,7 +829,6 @@ async function ensureResourcesAvailable(
     where: { ...(sessionId ? { id: { not: sessionId } } : {}), OR: resourceConditions },
     select: {
       id: true,
-      nombre_cache: true,
       fecha_inicio_utc: true,
       fecha_fin_utc: true,
       sala_id: true,
@@ -848,123 +846,7 @@ async function ensureResourcesAvailable(
   });
   if (!conflicting.length) return;
 
-  const conflict = await describeResourceConflict(tx, conflicting, {
-    salaId,
-    trainerIds: Array.from(trainerIdSet),
-    unidadIds: filteredUnidadIds,
-  });
-
-  throw errorResponse(
-    'RESOURCE_UNAVAILABLE',
-    conflict ?? 'Algunos recursos ya están asignados en las fechas seleccionadas.',
-    409,
-  );
-}
-
-type ResourceConflictDetail = {
-  type: 'trainer' | 'unidad' | 'sala';
-  resourceId: string;
-  sessionName: string | null;
-};
-
-function buildSessionConflictDetail(
-  sessions: SessionRecord[],
-  resourceIds: { trainerIds: Set<string>; unidadIds: Set<string>; salaId: string | null },
-): ResourceConflictDetail | null {
-  for (const session of sessions) {
-    const sessionName = toTrimmed(session.nombre_cache);
-    const trainerLinks = Array.isArray(session.trainers)
-      ? session.trainers
-      : Array.isArray(session.sesion_trainers)
-        ? session.sesion_trainers
-        : [];
-    const trainerMatch = trainerLinks
-      .map((link) => toTrimmed(link.trainer_id))
-      .find((id) => (id ? resourceIds.trainerIds.has(id) : false));
-    if (trainerMatch) {
-      return { type: 'trainer', resourceId: trainerMatch, sessionName };
-    }
-
-    const unidadLinks = Array.isArray(session.unidades)
-      ? session.unidades
-      : Array.isArray(session.sesion_unidades)
-        ? session.sesion_unidades
-        : [];
-    const unidadMatch = unidadLinks
-      .map((link) => toTrimmed(link.unidad_movil_id ?? link.unidad_id))
-      .find((id) => (id ? resourceIds.unidadIds.has(id) : false));
-    if (unidadMatch) {
-      return { type: 'unidad', resourceId: unidadMatch, sessionName };
-    }
-
-    if (resourceIds.salaId && session.sala_id && resourceIds.salaId === session.sala_id) {
-      return { type: 'sala', resourceId: session.sala_id, sessionName };
-    }
-  }
-
-  return null;
-}
-
-function formatFullName(name: string | null | undefined, apellido: string | null | undefined): string | null {
-  const parts = [toTrimmed(name), toTrimmed(apellido)].filter(Boolean) as string[];
-  return parts.length ? parts.join(' ') : null;
-}
-
-async function describeResourceConflict(
-  prisma: Prisma.TransactionClient,
-  sessions: SessionRecord[],
-  resources: { trainerIds: string[]; unidadIds: string[]; salaId: string | null },
-): Promise<string | null> {
-  const conflict = buildSessionConflictDetail(sessions, {
-    trainerIds: new Set(resources.trainerIds),
-    unidadIds: new Set(resources.unidadIds),
-    salaId: resources.salaId,
-  });
-
-  if (!conflict) return null;
-
-  const sessionName = toTrimmed(conflict.sessionName) ?? 'otra sesión';
-
-  if (conflict.type === 'trainer') {
-    try {
-      const trainer = await prisma.trainers.findUnique({
-        where: { trainer_id: conflict.resourceId },
-        select: { name: true, apellido: true },
-      });
-      const trainerName = formatFullName(trainer?.name, trainer?.apellido) ?? 'seleccionado';
-      return `El formador ${trainerName} está asignado a la sesión ${sessionName}.`;
-    } catch {
-      return null;
-    }
-  }
-
-  if (conflict.type === 'unidad') {
-    try {
-      const unidad = await prisma.unidades_moviles.findUnique({
-        where: { unidad_id: conflict.resourceId },
-        select: { name: true, matricula: true },
-      });
-      const unidadName = toTrimmed(unidad?.name) ?? toTrimmed(unidad?.matricula) ?? 'seleccionada';
-      return `La unidad móvil ${unidadName} está asignada a la sesión ${sessionName}.`;
-    } catch {
-      return null;
-    }
-  }
-
-  if (conflict.type === 'sala') {
-    try {
-      const sala = await prisma.salas.findUnique({
-        where: { sala_id: conflict.resourceId },
-        select: { name: true },
-      });
-      const salaName = toTrimmed(sala?.name) ?? 'seleccionada';
-      return `La sala ${salaName} está asignada a la sesión ${sessionName}.`;
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
+  throw errorResponse('RESOURCE_UNAVAILABLE', 'Algunos recursos ya están asignados en las fechas seleccionadas.', 409);
 }
 
 function parseLimit(value: unknown): number {
