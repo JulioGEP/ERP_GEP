@@ -91,6 +91,11 @@ export function isTrustedPipedriveWebhook(
     normalized['x-pipedrive-webhook-signature'],
     normalized['x-pipedrive-timestamp'],
     normalized['x-pipedrive-event'],
+    // Webhooks v2 headers
+    normalized['x-pipedrive-delivery-id'],
+    normalized['x-pipedrive-delivery-attempts'],
+    normalized['x-pipedrive-delivery-timestamp'],
+    normalized['x-pipedrive-hmac-sha256'],
   ];
   if (pipedriveHeaders.some((value) => typeof value === 'string' && value.trim().length > 0)) {
     return true;
