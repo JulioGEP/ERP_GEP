@@ -40,6 +40,7 @@ type VariantCreatePayload = {
   product_id?: string;
   sedes?: Array<string> | string;
   dates?: Array<string> | string;
+  combined_variants?: Array<{ sede?: string; date?: string }> | string;
 };
 
 type WooProductAttribute = {
@@ -74,6 +75,39 @@ type VariantCombo = {
   sede: string;
   date: ParsedDate;
 };
+
+function parseSingleDate(value: string): ParsedDate {
+  const match = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) {
+    throw new Error(`INVALID_DATE:${value}`);
+  }
+  const [, dayText, monthText, yearText] = match;
+  const day = Number.parseInt(dayText, 10);
+  const month = Number.parseInt(monthText, 10);
+  const year = Number.parseInt(yearText, 10);
+  if (!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) {
+    throw new Error(`INVALID_DATE:${value}`);
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const key = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+  return {
+    value: date,
+    display: `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`,
+    key,
+  };
+}
+
+function formatDateDisplay(value: Date | string | null | undefined): string {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  return `${day}/${month}/${year}`;
+}
 
 function normalizeVariant(record: VariantRecord) {
   const price =
@@ -146,27 +180,54 @@ function parseDates(input: VariantCreatePayload['dates']): ParsedDate[] {
   for (const raw of values) {
     const trimmed = raw.trim();
     if (!trimmed) continue;
-    const match = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (!match) {
-      throw new Error(`INVALID_DATE:${trimmed}`);
-    }
-    const [, dayText, monthText, yearText] = match;
-    const day = Number.parseInt(dayText, 10);
-    const month = Number.parseInt(monthText, 10);
-    const year = Number.parseInt(yearText, 10);
-    if (!Number.isFinite(day) || !Number.isFinite(month) || !Number.isFinite(year)) {
-      throw new Error(`INVALID_DATE:${trimmed}`);
-    }
-    const date = new Date(Date.UTC(year, month - 1, day));
-    const key = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const parsedDate = parseSingleDate(trimmed);
+    const key = parsedDate.key;
     if (seen.has(key)) {
       continue;
     }
     seen.add(key);
-    parsed.push({ value: date, display: `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`, key });
+    parsed.push(parsedDate);
   }
 
   return parsed;
+}
+
+function parseCombinedVariants(input: VariantCreatePayload['combined_variants']): VariantCombo[] {
+  if (input == null) return [];
+
+  const raw = Array.isArray(input)
+    ? input.map((item) =>
+        typeof item === 'string'
+          ? item
+          : `${item?.sede ?? ''},${item?.date ?? ''}`,
+      )
+    : String(input).split(';');
+
+  const seen = new Set<string>();
+  const combos: VariantCombo[] = [];
+
+  for (const chunk of raw) {
+    const trimmed = chunk.trim();
+    if (!trimmed) continue;
+
+    const [sedeRaw, ...dateParts] = trimmed.split(',');
+    const sede = sedeRaw.trim();
+    const dateText = dateParts.join(',').trim();
+
+    if (!sede || !dateText) {
+      throw new Error(`INVALID_VARIANT:${trimmed}`);
+    }
+
+    const parsedDate = parseSingleDate(dateText);
+    const key = `${sede.toLowerCase()}|${parsedDate.key}`;
+
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    combos.push({ sede, date: parsedDate });
+  }
+
+  return combos;
 }
 
 function buildCombos(sedes: string[], dates: ParsedDate[]): VariantCombo[] {
@@ -502,27 +563,33 @@ export const handler = async (event: any) => {
 
     let sedes: string[];
     let dates: ParsedDate[];
+    let combinedVariants: VariantCombo[];
     try {
       sedes = parseSedes(payload.sedes);
       dates = parseDates(payload.dates);
+      combinedVariants = parseCombinedVariants(payload.combined_variants);
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('INVALID_DATE')) {
         return errorResponse('VALIDATION_ERROR', `Formato de fecha inválido: ${error.message.split(':')[1]}`, 400);
       }
+      if (error instanceof Error && error.message.startsWith('INVALID_VARIANT')) {
+        return errorResponse(
+          'VALIDATION_ERROR',
+          `Formato de variante inválido: ${error.message.split(':')[1]}`,
+          400,
+        );
+      }
       return errorResponse('VALIDATION_ERROR', 'Datos inválidos', 400);
     }
 
-    if (!sedes.length) {
-      return errorResponse('VALIDATION_ERROR', 'Debes indicar al menos una sede', 400);
-    }
-
-    if (!dates.length) {
-      return errorResponse('VALIDATION_ERROR', 'Debes indicar al menos una fecha', 400);
-    }
-
-    const combos = buildCombos(sedes, dates);
+    const combosFromMatrix = sedes.length && dates.length ? buildCombos(sedes, dates) : [];
+    const combos = [...combinedVariants, ...combosFromMatrix];
     if (!combos.length) {
-      return errorResponse('VALIDATION_ERROR', 'No hay combinaciones válidas para crear', 400);
+      return errorResponse(
+        'VALIDATION_ERROR',
+        'Debes indicar al menos una variante combinada o una sede y una fecha',
+        400,
+      );
     }
 
     const prisma = getPrisma();
@@ -686,10 +753,31 @@ export const handler = async (event: any) => {
       createdVariants.push(record as VariantRecord);
     }
 
+    const created = createdVariants.map(normalizeVariant);
+    const skipped = combos.length - combosToCreate.length;
+
+    const createdSummary = created
+      .map((variant) => {
+        const dateText = formatDateDisplay(variant.date);
+        const sedeText = variant.sede ?? 'Sin sede';
+        return dateText ? `${sedeText} (${dateText})` : sedeText;
+      })
+      .filter((text) => text.length > 0)
+      .join('; ');
+
+    const messageParts: string[] = [];
+    if (createdSummary) {
+      messageParts.push(`Variantes creadas: ${createdSummary}.`);
+    }
+    if (skipped > 0) {
+      messageParts.push(`Combinaciones omitidas por existir: ${skipped}.`);
+    }
+
     return successResponse({
       ok: true,
-      created: createdVariants.map(normalizeVariant),
-      skipped: combos.length - combosToCreate.length,
+      created,
+      skipped,
+      message: messageParts.length ? messageParts.join(' ') : undefined,
     });
   } catch (error) {
     console.error('[product-variants-create] handler error', error);

@@ -568,6 +568,7 @@ function VariantCreationModal({
 }) {
   const [sedesInput, setSedesInput] = useState('');
   const [datesInput, setDatesInput] = useState('');
+  const [combinedInput, setCombinedInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -584,6 +585,7 @@ function VariantCreationModal({
 
     setSedesInput('');
     setDatesInput('');
+    setCombinedInput('');
     setError(null);
     setSuccess(null);
     setIsSaving(false);
@@ -623,25 +625,115 @@ function VariantCreationModal({
     return { values, invalid: null };
   };
 
+  const parseCombinedVariantsInput = (
+    value: string,
+  ): { combos: Array<{ sede: string; date: string }>; errors: string[] } => {
+    const raw = value.split(';');
+    const seen = new Set<string>();
+    const combos: Array<{ sede: string; date: string }> = [];
+    const errors: string[] = [];
+
+    for (const chunk of raw) {
+      const trimmed = chunk.trim();
+      if (!trimmed) continue;
+
+      const [sedeRaw, ...dateParts] = trimmed.split(',');
+      const sede = sedeRaw?.trim() ?? '';
+      const dateRaw = dateParts.join(',').trim();
+
+      if (!sede || !dateRaw) {
+        errors.push(`Formato inválido en "${trimmed}"`);
+        continue;
+      }
+
+      const match = dateRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (!match) {
+        errors.push(`Fecha inválida en "${trimmed}"`);
+        continue;
+      }
+
+      const day = match[1].padStart(2, '0');
+      const month = match[2].padStart(2, '0');
+      const year = match[3];
+      const normalized = `${day}/${month}/${year}`;
+      const key = `${sede.toLowerCase()}|${normalized}`;
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+      combos.push({ sede, date: normalized });
+    }
+
+    return { combos, errors };
+  };
+
+  const formatVariantDate = (value: string | null): string => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const buildRequestedCombos = (
+    sedes: string[],
+    dates: string[],
+    combined: Array<{ sede: string; date: string }>,
+  ): Array<{ sede: string; date: string }> => {
+    const combos: Array<{ sede: string; date: string }> = [];
+    const seen = new Set<string>();
+
+    for (const combo of combined) {
+      const key = `${combo.sede.toLowerCase()}|${combo.date}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      combos.push(combo);
+    }
+
+    for (const sede of sedes) {
+      for (const date of dates) {
+        const key = `${sede.toLowerCase()}|${date}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        combos.push({ sede, date });
+      }
+    }
+
+    return combos;
+  };
+
   const handleSave = async () => {
     if (!product) return;
     if (isSaving) return;
 
     const sedes = parseSedesInput(sedesInput);
     const { values: dates, invalid } = parseDatesInput(datesInput);
+    const { combos: combinedCombos, errors: combinedErrors } = parseCombinedVariantsInput(combinedInput);
 
-    if (!sedes.length) {
-      setError('Debes indicar al menos una sede.');
+    if (combinedErrors.length) {
+      setError(`Revisa las variantes combinadas: ${combinedErrors.join(' ')}`);
       return;
     }
 
-    if (invalid) {
+    if (invalid && datesInput.trim().length > 0) {
       setError(`Formato de fecha inválido: ${invalid}`);
       return;
     }
 
-    if (!dates.length) {
-      setError('Debes indicar al menos una fecha.');
+    if (!combinedCombos.length && !sedes.length) {
+      setError('Debes indicar al menos una sede o una variante combinada.');
+      return;
+    }
+
+    if (!combinedCombos.length && !dates.length) {
+      setError('Debes indicar al menos una fecha o una variante combinada.');
+      return;
+    }
+
+    const requestedCombos = buildRequestedCombos(sedes, dates, combinedCombos);
+    if (!requestedCombos.length) {
+      setError('No hay combinaciones válidas para crear.');
       return;
     }
 
@@ -649,7 +741,7 @@ function VariantCreationModal({
     setError(null);
 
     try {
-      const result = await createProductVariantsForProduct(product.id, sedes, dates);
+      const result = await createProductVariantsForProduct(product.id, sedes, dates, combinedCombos);
       onVariantsCreated(product.id, result);
 
       const createdMessage = `Se crearon ${result.created.length} variantes.`;
@@ -657,11 +749,23 @@ function VariantCreationModal({
         ? ` ${result.skipped} combinaciones ya existían.`
         : '';
 
-      setSuccess(result.message ?? `${createdMessage}${skippedMessage}`);
+      const detailSummary = result.created
+        .map((variant) => {
+          const dateText = formatVariantDate(variant.date);
+          const sedeText = variant.sede ?? 'Sin sede';
+          return dateText ? `${sedeText} (${dateText})` : sedeText;
+        })
+        .filter((text) => text.length > 0)
+        .join('; ');
+
+      const detailMessage = detailSummary ? ` Detalle: ${detailSummary}.` : '';
+
+      setSuccess(result.message ?? `${createdMessage}${skippedMessage}${detailMessage}`);
 
       if (result.created.length) {
         setSedesInput('');
         setDatesInput('');
+        setCombinedInput('');
       }
     } catch (error) {
       const message =
@@ -679,7 +783,10 @@ function VariantCreationModal({
 
   const sedesPreview = parseSedesInput(sedesInput);
   const { values: datesPreview, invalid: invalidDatePreview } = parseDatesInput(datesInput);
-  const combinationsPreview = invalidDatePreview ? 0 : sedesPreview.length * datesPreview.length;
+  const { combos: combinedPreview, errors: combinedPreviewErrors } = parseCombinedVariantsInput(combinedInput);
+  const combinationsPreview = invalidDatePreview && datesInput.trim().length > 0
+    ? combinedPreview.length
+    : buildRequestedCombos(sedesPreview, datesPreview, combinedPreview).length;
 
   return (
     <Modal show={!!product} onHide={handleAttemptClose} centered backdrop={isSaving ? 'static' : true}>
@@ -729,12 +836,33 @@ function VariantCreationModal({
             Usa el formato dd/mm/aaaa y separa las fechas con comas.
           </Form.Text>
         </Form.Group>
+        <Form.Group controlId="variant-create-combined">
+          <Form.Label>Variantes combinadas</Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={2}
+            value={combinedInput}
+            onChange={(event) => {
+              setCombinedInput(event.target.value);
+              setSuccess(null);
+            }}
+            placeholder="Sede,dd/mm/aaaa;Sede,dd/mm/aaaa"
+            disabled={isSaving}
+          />
+          <Form.Text className="text-muted">
+            Añade variantes ya concatenadas (sede y fecha) separadas por punto y coma.
+          </Form.Text>
+        </Form.Group>
         {invalidDatePreview ? (
           <div className="text-danger small">Formato de fecha inválido detectado: {invalidDatePreview}</div>
         ) : null}
+        {combinedPreviewErrors.length > 0 ? (
+          <div className="text-danger small">Revisa las variantes combinadas: {combinedPreviewErrors.join(' ')}</div>
+        ) : null}
         {combinationsPreview > 0 ? (
           <div className="text-muted small">
-            Se crearán hasta {combinationsPreview} variantes nuevas (combinaciones de sede y fecha).
+            Se crearán hasta {combinationsPreview} variantes nuevas (combinaciones de sede/fecha y variantes
+            concatenadas).
           </div>
         ) : null}
       </Modal.Body>
