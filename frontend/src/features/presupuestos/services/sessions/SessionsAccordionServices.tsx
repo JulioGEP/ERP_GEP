@@ -885,6 +885,18 @@ function getTimeZoneOffset(date: Date, timeZone: string): number {
   return utcTime - date.getTime();
 }
 
+function formatSessionStartDate(value: string | null | undefined): string | null {
+  const iso = localInputToUtc(value ?? null);
+  if (typeof iso !== 'string') return null;
+  const dt = new Date(iso);
+  if (!Number.isFinite(dt.getTime())) return null;
+  return new Intl.DateTimeFormat('es-ES', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: MADRID_TIMEZONE,
+  }).format(dt);
+}
+
 function localInputToUtc(value: string | null): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -1929,6 +1941,7 @@ export function SessionsAccordionServices({
                     const displayIndex = ((pagination.page ?? currentPage) - 1) * SESSION_LIMIT + sessionIndex + 1;
                     const productName = product.name ?? product.code ?? 'Producto';
                     const sessionName = form.nombre_cache?.trim() || `Sesión ${displayIndex}`;
+                    const sessionStartLabel = formatSessionStartDate(form.fecha_inicio_local);
                     return (
                       <ListGroup.Item
                         key={session.id}
@@ -1955,6 +1968,9 @@ export function SessionsAccordionServices({
                         </div>
                         <div className="d-flex align-items-center gap-3">
                           <div className="session-item-actions d-inline-flex align-items-center gap-2">
+                            {sessionStartLabel && (
+                              <span className="text-muted small text-nowrap">{sessionStartLabel}</span>
+                            )}
                             <SessionActionIcon
                               label="Duplicar sesión"
                               onActivate={() => handleDuplicate(session.id)}
