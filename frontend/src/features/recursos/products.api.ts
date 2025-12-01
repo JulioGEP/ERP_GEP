@@ -20,22 +20,6 @@ export type ProductSyncSummary = {
   deactivated: number | string;
 };
 
-export type HoldedSyncEntry = {
-  id_pipe: string;
-  sku: string;
-  name: string | null;
-  action: 'created' | 'updated';
-  status: 'success' | 'error';
-  message: string;
-};
-
-export type HoldedSyncSummary = {
-  total: number;
-  created: number;
-  updated: number;
-  errors: number;
-};
-
 type ProductListResponse = {
   ok: boolean;
   products?: unknown;
@@ -226,24 +210,4 @@ export async function syncProducts(): Promise<ProductSyncSummary | null> {
   );
 
   return json.summary ?? null;
-}
-
-type HoldedSyncResponse = {
-  ok: boolean;
-  summary?: HoldedSyncSummary;
-  entries?: HoldedSyncEntry[];
-  message?: string;
-  error_code?: string;
-};
-
-export async function syncProductsWithHolded(): Promise<{
-  summary: HoldedSyncSummary | null;
-  entries: HoldedSyncEntry[];
-}> {
-  const json = await requestJson<HoldedSyncResponse>('/products-holded-sync', { method: 'POST' });
-
-  return {
-    summary: json.summary ?? null,
-    entries: Array.isArray(json.entries) ? json.entries : [],
-  };
 }
