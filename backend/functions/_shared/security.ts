@@ -6,7 +6,6 @@ import { sendEmail } from './mailer';
 
 export const CLIENT_HEADER_NAME = 'x-erp-client';
 export const TRUSTED_CLIENT_HEADER_VALUE = 'frontend';
-const TRUSTED_PIPEDRIVE_CLIENT_VALUE = 'pipedrive';
 const SECURITY_ALERT_EMAIL = 'julio@gepgroup.es';
 
 type HeaderValue = string | null;
@@ -74,39 +73,6 @@ export function isTrustedClient(
   }
 
   return hasTrustedFrontendReferer(normalized);
-}
-
-export function isTrustedPipedriveWebhook(
-  headers: Record<string, string | undefined> | undefined,
-): boolean {
-  const normalized = normalizeHeaders(headers);
-
-  const clientHeader = normalized[CLIENT_HEADER_NAME];
-  if (clientHeader && clientHeader.trim().toLowerCase() === TRUSTED_PIPEDRIVE_CLIENT_VALUE) {
-    return true;
-  }
-
-  const pipedriveHeaders = [
-    normalized['x-pipedrive-signature'],
-    normalized['x-pipedrive-webhook-signature'],
-    normalized['x-pipedrive-timestamp'],
-    normalized['x-pipedrive-event'],
-    // Webhooks v2 headers
-    normalized['x-pipedrive-delivery-id'],
-    normalized['x-pipedrive-delivery-attempts'],
-    normalized['x-pipedrive-delivery-timestamp'],
-    normalized['x-pipedrive-hmac-sha256'],
-  ];
-  if (pipedriveHeaders.some((value) => typeof value === 'string' && value.trim().length > 0)) {
-    return true;
-  }
-
-  const userAgent = normalized['user-agent'] ?? '';
-  if (userAgent.toLowerCase().includes('pipedrive')) {
-    return true;
-  }
-
-  return false;
 }
 
 function resolveTrustedFrontendHosts(): string[] {
