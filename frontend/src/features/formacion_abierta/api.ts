@@ -157,6 +157,7 @@ export async function createProductVariantsForProduct(
   productId: string,
   sedes: string[],
   dates: string[],
+  combinedVariants: Array<{ sede: string; date: string }>,
 ): Promise<{ created: VariantInfo[]; skipped: number; message: string | null }> {
   const json = await requestJson<VariantBulkCreateResponse>(
     apiPath('product-variants-create'),
@@ -166,7 +167,7 @@ export async function createProductVariantsForProduct(
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ product_id: productId, sedes, dates }),
+      body: JSON.stringify({ product_id: productId, sedes, dates, combined_variants: combinedVariants }),
     },
     { defaultErrorMessage: 'No se pudieron crear las variantes.' },
   );
