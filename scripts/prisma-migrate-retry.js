@@ -3,14 +3,31 @@ const path = require('path');
 
 const MAX_ATTEMPTS = parseInt(process.env.PRISMA_MIGRATE_MAX_ATTEMPTS || '5', 10);
 const BACKOFF_MS = parseInt(process.env.PRISMA_MIGRATE_BACKOFF_MS || '10000', 10);
+const STATEMENT_TIMEOUT = parseInt(process.env.PRISMA_STATEMENT_TIMEOUT || '60000', 10);
 
 const resolvedMigrateLockTimeout =
   process.env.PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000';
 const resolvedSchemaLockTimeout =
   process.env.PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000';
 
+// Avoid Neon cancelling the advisory lock attempt after 10s (default statement_timeout).
+// We cannot change the remote DB default, so we append a query param to the connection
+// string only for this script to give migrations a wider margin.
+let databaseUrl = process.env.DATABASE_URL;
+
+if (databaseUrl) {
+  try {
+    const parsed = new URL(databaseUrl);
+    parsed.searchParams.set('statement_timeout', `${STATEMENT_TIMEOUT}`);
+    databaseUrl = parsed.toString();
+  } catch (error) {
+    console.warn('Could not parse DATABASE_URL to inject statement_timeout; using raw value', error);
+  }
+}
+
 const env = {
   ...process.env,
+  ...(databaseUrl ? { DATABASE_URL: databaseUrl } : null),
   PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedMigrateLockTimeout,
   PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedSchemaLockTimeout,
 };
