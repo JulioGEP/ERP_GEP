@@ -1,4 +1,5 @@
 // backend/functions/products.ts
+import { Prisma } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
@@ -18,6 +19,7 @@ type ProductRecord = {
   template: string | null;
   url_formacion: string | null;
   atributos: any[] | null;
+  price: Prisma.Decimal | number | null;
   almacen_stock: number | bigint | null;
   provider_ids: number[] | bigint[] | null;
   active: boolean;
@@ -70,6 +72,7 @@ function normalizeProduct(record: ProductRecord) {
     type: record.type ?? null,
     template: record.template ?? null,
     url_formacion: record.url_formacion ?? null,
+    price: record.price == null ? null : Number(record.price),
     atributos,
     almacen_stock:
       record.almacen_stock === null || record.almacen_stock === undefined

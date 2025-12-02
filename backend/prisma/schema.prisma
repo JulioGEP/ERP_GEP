@@ -180,6 +180,7 @@ model products {
   variant_stock_status   String?
   variant_stock_quantity Int?
   variant_price          Decimal?   @db.Decimal(12, 2)
+  price                  Decimal?   @db.Decimal(12, 2)
   hora_inicio            DateTime?  @db.Time(6)
   hora_fin               DateTime?  @db.Time(6)
   variant_start          DateTime?  @db.Date

@@ -88,6 +88,12 @@ function normalizeProduct(row: any): Product {
     type: row.type == null ? null : String(row.type),
     template: row.template == null ? null : String(row.template),
     url_formacion: row.url_formacion == null ? null : String(row.url_formacion),
+    price:
+      row.price === null || row.price === undefined
+        ? null
+        : Number.isFinite(Number(row.price))
+        ? Number(row.price)
+        : null,
     atributos,
     almacen_stock:
       typeof row.almacen_stock === 'number'

@@ -24,6 +24,7 @@ type ProductInput = {
   code: string | null;
   category: string | null;
   type: string | null;
+  price: number | null;
   active: boolean;
 };
 
@@ -53,12 +54,16 @@ export const handler = async (event: any) => {
       const typeRawValue = normalizeText((raw as any)?.[TYPE_FIELD_HASH]);
       const typeLabel = typeFromAttributes ?? typeRawValue;
 
+      const priceValue = Number((raw as any)?.price ?? (raw as any)?.prices?.[0]?.price);
+      const price = Number.isFinite(priceValue) ? priceValue : null;
+
       mappedProducts.push({
         id_pipe: idPipe,
         name: normalizeText(raw?.name),
         code: normalizeText(attributes.code ?? raw?.code),
         category: categoryLabel,
         type: typeLabel,
+        price,
         active: (raw as any)?.selectable === undefined ? true : Boolean((raw as any).selectable),
       });
     }
@@ -101,6 +106,7 @@ export const handler = async (event: any) => {
           code: product.code,
           category: product.category,
           type: product.type,
+          price: product.price != null ? new Prisma.Decimal(product.price) : null,
           active: product.active,
           updated_at: now,
         };
@@ -113,6 +119,7 @@ export const handler = async (event: any) => {
             code: product.code,
             category: product.category,
             type: product.type,
+            price: product.price != null ? new Prisma.Decimal(product.price) : null,
             active: product.active,
             updated_at: now,
           },

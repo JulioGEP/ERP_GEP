@@ -15,6 +15,7 @@ export type Product = {
   type: string | null;
   template: string | null;
   url_formacion: string | null;
+  price: number | null;
   atributos: ProductAttribute[];
   almacen_stock: number | null;
   provider_ids: number[];
