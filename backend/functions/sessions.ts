@@ -1643,7 +1643,8 @@ if (method === 'GET') {
         const allowsBorradorToManual = currentEstado === 'BORRADOR' && isBorradorTransitionEstado(requestedEstado);
         const allowsManualToBorrador = requestedEstado === 'BORRADOR' && isBorradorTransitionEstado(currentEstado);
 
-        if (!isManualSessionEstado(requestedEstado) && !allowsManualToBorrador) {
+        const matchesAutomaticEstado = requestedEstado === autoEstado;
+        if (!isManualSessionEstado(requestedEstado) && !allowsManualToBorrador && !matchesAutomaticEstado) {
           return errorResponse('VALIDATION_ERROR', 'Estado no editable', 400);
         }
         if (!isCurrentManual && !allowsBorradorToManual && autoEstado !== 'PLANIFICADA') {
