@@ -5,7 +5,7 @@ import { getPrisma } from './_shared/prisma';
 import { requireAuth } from './_shared/auth';
 import { sendEmail } from './_shared/mailer';
 
-const RECIPIENT = 'julio.garcia.becerra@gmail.com';
+const RECIPIENT = 'people@gepgroup.es';
 
 function parseDateOnly(value: unknown): string | null {
   if (!value) return null;
@@ -47,9 +47,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('VALIDATION_ERROR', 'Las fechas de inicio y fin son obligatorias', 400);
   }
 
-  const recipient = auth.user.email
-    ? `${RECIPIENT}, ${auth.user.email}`
-    : RECIPIENT;
+  const cc = auth.user.email ? auth.user.email : undefined;
 
   const html = `
     <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height:1.5; max-width:640px">
@@ -62,7 +60,8 @@ export const handler = createHttpHandler<any>(async (request) => {
   `;
 
   await sendEmail({
-    to: recipient,
+    to: RECIPIENT,
+    cc,
     subject: 'Petición de vacaciones',
     html,
     text: `Petición de vacaciones\nUsuario: ${auth.user.first_name} ${auth.user.last_name ?? ''} (${auth.user.email})\nFechas: ${startDate} -> ${endDate}${
