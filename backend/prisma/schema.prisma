@@ -9,16 +9,16 @@ datasource db {
 }
 
 model proveedores {
-  provider_id       Int       @id @default(autoincrement())
-  nombre_fiscal     String    @db.VarChar(255)
-  direccion_fiscal  String?   @db.VarChar(50)
-  telefono_fiscal   String?   @db.VarChar(50)
-  mail_empresa      String?   @db.VarChar(320)
-  persona_contacto  String?   @db.VarChar(255)
-  telefono_contacto String?   @db.VarChar(50)
-  mail_contacto     String?   @db.VarChar(320)
-  created_at        DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime  @default(now()) @db.Timestamptz(6)
+  provider_id       Int      @id @default(autoincrement())
+  nombre_fiscal     String   @db.VarChar(255)
+  direccion_fiscal  String?  @db.VarChar(50)
+  telefono_fiscal   String?  @db.VarChar(50)
+  mail_empresa      String?  @db.VarChar(320)
+  persona_contacto  String?  @db.VarChar(255)
+  telefono_contacto String?  @db.VarChar(50)
+  mail_contacto     String?  @db.VarChar(320)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("proveedores")
 }
@@ -103,13 +103,13 @@ model user_vacation_balances {
 }
 
 model vacation_requests {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String    @db.Uuid
-  start_date DateTime  @db.Date
-  end_date   DateTime  @db.Date
-  tag        String?   @db.VarChar(1)
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  start_date DateTime @db.Date
+  end_date   DateTime @db.Date
+  tag        String?  @db.VarChar(1)
   notes      String?
-  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  created_at DateTime @default(now()) @db.Timestamptz(6)
 
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -144,6 +144,23 @@ model audit_logs {
   @@index([user_id])
   @@index([created_at])
   @@map("audit_log")
+}
+
+model pipedrive_webhook_events {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  event         String?  @db.VarChar(150)
+  event_action  String?  @db.VarChar(100)
+  event_object  String?  @db.VarChar(100)
+  company_id    Int?
+  object_id     Int?
+  retry         Int?
+  webhook_token String?  @db.VarChar(255)
+  headers       Json?
+  payload       Json
+
+  @@index([created_at], map: "idx_pipedrive_webhook_events_created_at")
+  @@map("pipedrive_webhook_events")
 }
 
 model products {
@@ -204,48 +221,48 @@ model variants {
 }
 
 model deals {
-  deal_id              String                 @id
-  created_at           DateTime               @default(now())
-  updated_at           DateTime               @default(now()) @updatedAt
-  title                String?
-  org_id               String?
-  pipeline_id          String?
-  pipeline_label       String?
-  estado_material      String?                @db.VarChar(100)
-  training_address     String?
-  sede_label           String?
-  caes_label           String?
-  fundae_label         String?
-  hotel_label          String?
-  person_id            String?
-  transporte           String?                @db.VarChar(10)
-  po                   String?                @db.VarChar(191)
-  tipo_servicio        String?                @db.VarChar(50)
-  mail_invoice         String?                @db.VarChar(255)
-  proveedores          String?
-  observaciones        String?
+  deal_id                         String                 @id
+  created_at                      DateTime               @default(now())
+  updated_at                      DateTime               @default(now()) @updatedAt
+  title                           String?
+  org_id                          String?
+  pipeline_id                     String?
+  pipeline_label                  String?
+  estado_material                 String?                @db.VarChar(100)
+  training_address                String?
+  sede_label                      String?
+  caes_label                      String?
+  fundae_label                    String?
+  hotel_label                     String?
+  person_id                       String?
+  transporte                      String?                @db.VarChar(10)
+  po                              String?                @db.VarChar(191)
+  tipo_servicio                   String?                @db.VarChar(50)
+  mail_invoice                    String?                @db.VarChar(255)
+  proveedores                     String?
+  observaciones                   String?
   fecha_estimada_entrega_material String?
-  direccion_envio      String?
-  forma_pago_material  String?
-  comercial            String?
-  a_fecha              DateTime?              @db.Timestamp(6)
-  w_id_variation       String?
-  presu_holded         String?
-  modo_reserva         String?
-  caes_val             Boolean                @default(false)
-  fundae_val           Boolean                @default(false)
-  hotel_val            Boolean                @default(false)
-  transporte_val       Boolean                @default(false)
-  po_val               Boolean                @default(false)
-  alumnos              alumnos[]
-  deal_files           deal_files[]
-  deal_notes           deal_notes[]
-  deal_products        deal_products[]
-  organizations        organizations?         @relation(fields: [org_id], references: [org_id], map: "deals_org_fk")
-  persons              persons?               @relation(fields: [person_id], references: [person_id], map: "deals_person_fk")
-  sesion_files         sesion_files[]
-  sesiones             sesiones[]
-  sesiones_comentarios sesiones_comentarios[]
+  direccion_envio                 String?
+  forma_pago_material             String?
+  comercial                       String?
+  a_fecha                         DateTime?              @db.Timestamp(6)
+  w_id_variation                  String?
+  presu_holded                    String?
+  modo_reserva                    String?
+  caes_val                        Boolean                @default(false)
+  fundae_val                      Boolean                @default(false)
+  hotel_val                       Boolean                @default(false)
+  transporte_val                  Boolean                @default(false)
+  po_val                          Boolean                @default(false)
+  alumnos                         alumnos[]
+  deal_files                      deal_files[]
+  deal_notes                      deal_notes[]
+  deal_products                   deal_products[]
+  organizations                   organizations?         @relation(fields: [org_id], references: [org_id], map: "deals_org_fk")
+  persons                         persons?               @relation(fields: [person_id], references: [person_id], map: "deals_person_fk")
+  sesion_files                    sesion_files[]
+  sesiones                        sesiones[]
+  sesiones_comentarios            sesiones_comentarios[]
 
   @@index([org_id], map: "idx_deals_org_id")
   @@index([person_id], map: "idx_deals_person_id")
@@ -675,9 +692,9 @@ model auth_sessions {
 }
 
 model pedidos {
-  id                Int       @id @default(autoincrement())
-  order_number      Int       @unique
-  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  id                Int      @id @default(autoincrement())
+  order_number      Int      @unique
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
   supplier_name     String?
   supplier_email    String?
   recipient_email   String?
@@ -685,7 +702,7 @@ model pedidos {
   products          Json
   source_budget_ids String[]
   notes             String?
-  sent_from         String?   @default("erp@gepgroup.es")
+  sent_from         String?  @default("erp@gepgroup.es")
 
   @@map("pedidos")
 }
