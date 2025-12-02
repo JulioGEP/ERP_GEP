@@ -277,6 +277,14 @@ async function updateProductFromPipedrive(prisma: ReturnType<typeof getPrisma>, 
   return { updated: true, created: !existingProduct } as const;
 }
 
+async function deleteProductFromDatabase(prisma: ReturnType<typeof getPrisma>, productId: string) {
+  const deletion = await prisma.products.deleteMany({
+    where: { id_pipe: productId },
+  });
+
+  return { deleted: deletion.count > 0 } as const;
+}
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: COMMON_HEADERS, body: '' };
@@ -306,6 +314,7 @@ export const handler: Handler = async (event) => {
     | 'created'
     | 'updated'
     | 'deleted'
+    | 'product_deleted'
     | 'product_updated'
     | 'product_created'
     | 'skipped' = 'skipped';
@@ -354,7 +363,16 @@ export const handler: Handler = async (event) => {
       }
     }
 
-    if (action === 'delete') {
+    if (action === 'delete' && entity === 'product') {
+      const productId = resolveEntityId(body);
+      if (productId) {
+        const deletionResult = await deleteProductFromDatabase(prisma, productId);
+        if (deletionResult.deleted) {
+          processedDealId = productId;
+          processedAction = 'product_deleted';
+        }
+      }
+    } else if (action === 'delete') {
       const entityId = resolveEntityId(body) ?? dealId;
       if (entityId) {
         const deletionResult = await deleteDealFromDatabase(prisma, entityId);
