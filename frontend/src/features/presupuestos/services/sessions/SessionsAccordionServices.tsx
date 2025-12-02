@@ -1066,7 +1066,8 @@ async function fetchAllProductSessions(
     } satisfies SessionGroupDTO['product']);
 
   const sessions: SessionDTO[] = [...(baseGroup?.sessions ?? [])];
-  const totalPages = Math.max(1, pagination.totalPages ?? Math.ceil((pagination.total ?? 0) / SESSION_LIMIT) || 1);
+  const estimatedTotalPages = pagination.totalPages ?? Math.ceil((pagination.total ?? 0) / SESSION_LIMIT);
+  const totalPages = Math.max(1, estimatedTotalPages || 1);
 
   for (let page = 2; page <= totalPages; page += 1) {
     const pageGroups = await fetchDealSessions(dealId, { productId: product.id, page, limit: SESSION_LIMIT });
