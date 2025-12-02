@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Alert, Badge, Card, Spinner, Table } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import { fetchPipedriveWebhookEvents, type PipedriveWebhookEvent } from '../../features/reporting/api';
@@ -30,6 +30,14 @@ function JsonCell({ value }: { value: unknown }) {
 }
 
 function EventTable({ events, formatter }: { events: PipedriveWebhookEvent[]; formatter: Intl.DateTimeFormat }) {
+  const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
+
+  const handleRowClick = (eventId: number) => {
+    setExpandedEventId((currentId) => (currentId === eventId ? null : eventId));
+  };
+
+  const columnCount = 9;
+
   return (
     <div className="table-responsive">
       <Table striped bordered hover size="sm" className="align-middle">
@@ -44,41 +52,51 @@ function EventTable({ events, formatter }: { events: PipedriveWebhookEvent[]; fo
             <th>Reintento</th>
             <th>Token</th>
             <th>Cabeceras</th>
-            <th>Payload</th>
           </tr>
         </thead>
         <tbody>
           {events.map((event) => (
-            <tr key={event.id}>
-              <td className="text-nowrap">{formatTimestamp(event.createdAt, formatter)}</td>
-              <td>{event.event ?? '—'}</td>
-              <td>{event.eventAction ?? '—'}</td>
-              <td>{event.eventObject ?? '—'}</td>
-              <td>{event.companyId ?? '—'}</td>
-              <td>{event.objectId ?? '—'}</td>
-              <td>
-                {typeof event.retry === 'number' ? (
-                  <Badge bg={event.retry > 0 ? 'warning' : 'secondary'}>{event.retry}</Badge>
-                ) : (
-                  '—'
-                )}
-              </td>
-              <td>
-                {event.webhookToken ? (
-                  <code className="text-break" style={{ wordBreak: 'break-all' }}>
-                    {event.webhookToken}
-                  </code>
-                ) : (
-                  '—'
-                )}
-              </td>
-              <td>
-                <JsonCell value={event.headers} />
-              </td>
-              <td>
-                <JsonCell value={event.payload} />
-              </td>
-            </tr>
+            <Fragment key={event.id}>
+              <tr
+                role="button"
+                className="table-row-button"
+                onClick={() => handleRowClick(event.id)}
+              >
+                <td className="text-nowrap">{formatTimestamp(event.createdAt, formatter)}</td>
+                <td>{event.event ?? '—'}</td>
+                <td>{event.eventAction ?? '—'}</td>
+                <td>{event.eventObject ?? '—'}</td>
+                <td>{event.companyId ?? '—'}</td>
+                <td>{event.objectId ?? '—'}</td>
+                <td>
+                  {typeof event.retry === 'number' ? (
+                    <Badge bg={event.retry > 0 ? 'warning' : 'secondary'}>{event.retry}</Badge>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+                <td>
+                  {event.webhookToken ? (
+                    <code className="text-break" style={{ wordBreak: 'break-all' }}>
+                      {event.webhookToken}
+                    </code>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+                <td>
+                  <JsonCell value={event.headers} />
+                </td>
+              </tr>
+              {expandedEventId === event.id && (
+                <tr>
+                  <td colSpan={columnCount}>
+                    <div className="fw-semibold mb-1">Payload</div>
+                    <JsonCell value={event.payload} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </Table>
