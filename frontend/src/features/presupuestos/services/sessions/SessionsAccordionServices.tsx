@@ -1249,6 +1249,20 @@ export function SessionsAccordionServices({
     });
   }, [applicableProducts]);
 
+  useEffect(() => {
+    if (!isCalendarRoute || !normalizedHighlightSessionId) return;
+    setPageByProduct((current) => {
+      let changed = false;
+      const next: Record<string, number> = {};
+      for (const product of applicableProducts) {
+        const currentPage = current[product.id] ?? 1;
+        if (currentPage !== 1) changed = true;
+        next[product.id] = 1;
+      }
+      return changed ? next : current;
+    });
+  }, [applicableProducts, isCalendarRoute, normalizedHighlightSessionId]);
+
   const [newSessionIds, setNewSessionIds] = useState<Set<string>>(new Set());
 
   const trainersQuery = useQuery({
