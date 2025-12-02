@@ -23,6 +23,21 @@ function sanitizeDate(value: unknown): string | null {
   return trimmed;
 }
 
+function sanitizeInteger(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 export type TrainerHoursItem = {
   trainerId: string;
   name: string | null;
@@ -171,6 +186,69 @@ export async function fetchAuditLogs(options: FetchAuditLogsOptions = {}): Promi
   return entries
     .map(sanitizeAuditLogEntry)
     .filter((entry): entry is AuditLogEntry => entry !== null);
+}
+
+export type PipedriveWebhookEvent = {
+  id: string;
+  createdAt: string | null;
+  event: string | null;
+  eventAction: string | null;
+  eventObject: string | null;
+  companyId: number | null;
+  objectId: number | null;
+  retry: number | null;
+  webhookToken: string | null;
+  headers: Record<string, unknown> | null;
+  payload: unknown;
+};
+
+function sanitizeRecord(record: unknown): PipedriveWebhookEvent | null {
+  if (!record || typeof record !== 'object') {
+    return null;
+  }
+
+  const raw = record as Record<string, unknown>;
+  const id = sanitizeText(raw.id);
+  if (!id) {
+    return null;
+  }
+
+  return {
+    id,
+    createdAt: sanitizeDate(raw.createdAt ?? raw.created_at),
+    event: sanitizeText(raw.event),
+    eventAction: sanitizeText(raw.eventAction ?? raw.event_action),
+    eventObject: sanitizeText(raw.eventObject ?? raw.event_object),
+    companyId: sanitizeInteger(raw.companyId ?? raw.company_id),
+    objectId: sanitizeInteger(raw.objectId ?? raw.object_id),
+    retry: sanitizeInteger(raw.retry),
+    webhookToken: sanitizeText(raw.webhookToken ?? raw.webhook_token),
+    headers: typeof raw.headers === 'object' && raw.headers !== null ? (raw.headers as Record<string, unknown>) : null,
+    payload: raw.payload ?? null,
+  } satisfies PipedriveWebhookEvent;
+}
+
+export type FetchPipedriveWebhookEventsOptions = {
+  limit?: number;
+};
+
+export async function fetchPipedriveWebhookEvents(
+  options: FetchPipedriveWebhookEventsOptions = {},
+): Promise<PipedriveWebhookEvent[]> {
+  const params = new URLSearchParams();
+  const limit = options.limit;
+  if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
+    params.set('limit', String(Math.min(Math.trunc(limit), 500)));
+  }
+
+  const query = params.toString();
+  const url = query.length ? `/reporting-pipedrive-webhooks?${query}` : '/reporting-pipedrive-webhooks';
+
+  const data = await getJson<{ events?: unknown }>(url);
+  const events = Array.isArray(data?.events) ? data.events : [];
+  return events
+    .map(sanitizeRecord)
+    .filter((record): record is PipedriveWebhookEvent => record !== null);
 }
 
 const EXTRA_COST_FIELD_KEYS = [
