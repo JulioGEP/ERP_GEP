@@ -1044,6 +1044,54 @@ function sortSessionsForDisplay(
     .map(({ session }) => session);
 }
 
+async function fetchAllProductSessions(
+  dealId: string,
+  product: ApplicableProductInfo,
+): Promise<SessionGroupDTO> {
+  const groups = await fetchDealSessions(dealId, {
+    productId: product.id,
+    page: 1,
+    limit: SESSION_LIMIT,
+  });
+
+  const baseGroup = groups[0] ?? null;
+  const pagination = baseGroup?.pagination ?? { page: 1, limit: SESSION_LIMIT, total: 0, totalPages: 1 };
+  const productInfo =
+    baseGroup?.product ??
+    ({
+      id: product.id,
+      code: product.code ?? null,
+      name: product.name ?? null,
+      quantity: product.hours ?? 0,
+    } satisfies SessionGroupDTO['product']);
+
+  const sessions: SessionDTO[] = [...(baseGroup?.sessions ?? [])];
+  const totalPages = Math.max(1, pagination.totalPages ?? Math.ceil((pagination.total ?? 0) / SESSION_LIMIT) || 1);
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const pageGroups = await fetchDealSessions(dealId, { productId: product.id, page, limit: SESSION_LIMIT });
+    const pageGroup = pageGroups[0];
+    if (pageGroup?.sessions?.length) {
+      sessions.push(...pageGroup.sessions);
+    }
+  }
+
+  const totalSessions = pagination.total ?? sessions.length;
+  const derivedTotalPages = Math.max(1, pagination.totalPages ?? Math.ceil(Math.max(totalSessions, sessions.length) / SESSION_LIMIT));
+
+  return {
+    product: productInfo,
+    sessions,
+    pagination: {
+      ...pagination,
+      page: 1,
+      limit: SESSION_LIMIT,
+      total: Math.max(totalSessions, sessions.length),
+      totalPages: derivedTotalPages,
+    },
+  } satisfies SessionGroupDTO;
+}
+
 function buildSessionPatchPayload(
   form: SessionFormState,
   saved: SessionFormState | undefined,
@@ -1260,6 +1308,20 @@ export function SessionsAccordionServices({
     });
   }, [applicableProducts]);
 
+  useEffect(() => {
+    if (!isCalendarRoute || !normalizedHighlightSessionId) return;
+    setPageByProduct((current) => {
+      let changed = false;
+      const next: Record<string, number> = {};
+      for (const product of applicableProducts) {
+        const previous = current[product.id] ?? 1;
+        next[product.id] = 1;
+        if (previous !== 1) changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [applicableProducts, isCalendarRoute, normalizedHighlightSessionId]);
+
   const [newSessionIds, setNewSessionIds] = useState<Set<string>>(new Set());
 
   const trainersQuery = useQuery({
@@ -1285,17 +1347,9 @@ export function SessionsAccordionServices({
 
   const sessionQueries = useQueries({
     queries: applicableProducts.map((product) => {
-      const currentPage = pageByProduct[product.id] ?? 1;
       return {
-        queryKey: ['dealSessions', dealId, product.id, currentPage, SESSION_LIMIT],
-        queryFn: async () => {
-          const groups = await fetchDealSessions(dealId, {
-            productId: product.id,
-            page: currentPage,
-            limit: SESSION_LIMIT,
-          });
-          return groups[0] ?? null;
-        },
+        queryKey: ['dealSessions', dealId, product.id, 'all', SESSION_LIMIT],
+        queryFn: () => fetchAllProductSessions(dealId, product),
         enabled: shouldShow && generationDone,
         staleTime: 0,
         refetchOnWindowFocus: false,
@@ -1329,7 +1383,12 @@ export function SessionsAccordionServices({
 
   const queriesUpdatedKey = sessionQueries.map((query) => query.dataUpdatedAt).join('|');
 
-  const sessionLineCount = applicableProducts.length;
+  const sessionLineCount = sessionQueries.reduce((count, query) => {
+    const group = query.data as SessionGroupDTO | null;
+    const totalFromPagination = group?.pagination?.total;
+    if (typeof totalFromPagination === 'number') return count + totalFromPagination;
+    return count + (group?.sessions?.length ?? 0);
+  }, 0);
 
   useEffect(() => {
     if (!generationDone) return;
@@ -1958,15 +2017,25 @@ export function SessionsAccordionServices({
             highlightEnabled: isCalendarRoute,
             newSessionIds,
           });
-          const pagination = group?.pagination ?? { page: 1, totalPages: 1, total: 0 };
-          const currentPage = pageByProduct[product.id] ?? 1;
+          const totalSessions = sortedSessions.length;
+          const totalPages = Math.max(1, Math.ceil(totalSessions / SESSION_LIMIT));
+          const currentPage = Math.min(pageByProduct[product.id] ?? 1, totalPages);
+          const pagination = {
+            page: currentPage,
+            totalPages,
+            total: group?.pagination?.total ?? totalSessions,
+          };
           const pageWindowStart = Math.floor((currentPage - 1) / 10) * 10 + 1;
           const pageWindowEnd = Math.min(pageWindowStart + 9, pagination.totalPages);
           const pageNumbers = Array.from(
             { length: Math.max(0, pageWindowEnd - pageWindowStart + 1) },
             (_, index) => pageWindowStart + index,
           );
-          const isLoading = query.isLoading || query.isFetching;
+          const displaySessions = sortedSessions.slice(
+            (currentPage - 1) * SESSION_LIMIT,
+            (currentPage - 1) * SESSION_LIMIT + SESSION_LIMIT,
+          );
+          const isLoading = query.isPending || query.isFetching;
           const queryError = query.error;
 
           return (
@@ -2023,17 +2092,17 @@ export function SessionsAccordionServices({
                   {queryError instanceof Error ? queryError.message : 'No se pudieron cargar las sesiones'}
                 </Alert>
               )}
-              {!isLoading && !queryError && !sessions.length && (
+              {!isLoading && !queryError && !sortedSessions.length && (
                 <p className="text-muted">Sin sesiones para este producto.</p>
               )}
-              {!!sessions.length && (
+              {!!sortedSessions.length && (
                 <ListGroup as="ol" numbered className="mb-0">
-                  {sortedSessions.map((session, sessionIndex) => {
+                  {displaySessions.map((session, sessionIndex) => {
                     const form = forms[session.id];
                     const status =
                       saveStatus[session.id] ?? { saving: false, error: null, dirty: false };
                     if (!form) return null;
-                    const displayIndex = ((pagination.page ?? currentPage) - 1) * SESSION_LIMIT + sessionIndex + 1;
+                    const displayIndex = (pagination.page - 1) * SESSION_LIMIT + sessionIndex + 1;
                     const productName = product.name ?? product.code ?? 'Producto';
                     const sessionName = form.nombre_cache?.trim() || `Sesión ${displayIndex}`;
                     const sessionStartLabel = formatSessionStartDate(form.fecha_inicio_local);
