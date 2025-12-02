@@ -239,6 +239,19 @@ export const handler: Handler = async (event) => {
   }
 
   const prisma = getPrisma();
+  const action = resolveAction(body);
+  const status = resolveDealStatus(body);
+  const dealId = resolveDealId(body);
+  const shouldPersistEvent = action === 'delete' || isDealWonStatus(status);
+
+  if (!shouldPersistEvent) {
+    return {
+      statusCode: 200,
+      headers: COMMON_HEADERS,
+      body: JSON.stringify({ ok: true, processed: null, action: 'skipped' }),
+    };
+  }
+
   let processedDealId: string | null = null;
   let processedAction: 'created' | 'updated' | 'deleted' | 'skipped' = 'skipped';
   await prisma.pipedrive_webhook_events.create({
@@ -270,10 +283,6 @@ export const handler: Handler = async (event) => {
   });
 
   try {
-    const action = resolveAction(body);
-    const dealId = resolveDealId(body);
-    const status = resolveDealStatus(body);
-
     if (action === 'delete') {
       const entityId = resolveEntityId(body) ?? dealId;
       if (entityId) {
