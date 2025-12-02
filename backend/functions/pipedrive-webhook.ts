@@ -1,9 +1,33 @@
 import type { Handler } from '@netlify/functions';
+import { Prisma } from '@prisma/client';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { deleteDealFromDatabase, importDealFromPipedrive } from './deals';
+import { extractProductCatalogAttributes, getProduct } from './_shared/pipedrive';
 
 const EXPECTED_TOKEN = process.env.PIPEDRIVE_WEBHOOK_TOKEN;
+const PRODUCT_TYPE_FIELD_HASH = '5bad94030bb7917c186f3238fb2cd8f7a91cf30b';
+
+type ProductPayload = {
+  id_pipe: string;
+  name: string | null;
+  code: string | null;
+  category: string | null;
+  type: string | null;
+  price: number | null;
+  active: boolean;
+};
+
+function normalizeText(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
+function normaliseCategory(value: string | null | undefined) {
+  if (!value) return null;
+  return value.trim();
+}
 
 function normalizeHeaders(headers: unknown): Record<string, string> {
   if (!headers || typeof headers !== 'object') return {};
@@ -85,6 +109,148 @@ function normalizeNullableInt(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
   const parsed = Number.parseInt(String(value ?? ''), 10);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeEntityId(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const str = String(value).trim();
+  if (!str.length) return null;
+
+  const asNumber = Number.parseInt(str, 10);
+  if (Number.isFinite(asNumber)) return String(asNumber);
+  return str;
+}
+
+function resolveEntity(body: Record<string, unknown>): string | null {
+  const meta = body?.['meta'] as Record<string, unknown> | undefined;
+  const candidates = [body?.['entity'], meta?.['entity'], meta?.['object']];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length) {
+      return candidate.trim().toLowerCase();
+    }
+  }
+
+  return null;
+}
+
+function resolveProductId(body: Record<string, unknown>): string | null {
+  const data = body?.['data'] as Record<string, unknown> | undefined;
+  const meta = body?.['meta'] as Record<string, unknown> | undefined;
+
+  const candidates = [
+    data?.['id'],
+    data && typeof data === 'object' ? (data as any).current?.id : null,
+    data && typeof data === 'object' ? (data as any).previous?.id : null,
+    body?.['id'],
+    body?.['object_id'],
+    meta?.['object_id'],
+    meta?.['id'],
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeEntityId(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
+async function mapPipedriveProduct(raw: any): Promise<ProductPayload | null> {
+  const idPipe = normalizeText(raw?.id);
+  if (!idPipe) return null;
+
+  const attributes = await extractProductCatalogAttributes(raw);
+  const categoryLabel = normaliseCategory(attributes.category ?? normalizeText(raw?.category));
+
+  const typeFromAttributes = normalizeText(attributes.type);
+  const typeRawValue = normalizeText((raw as any)?.[PRODUCT_TYPE_FIELD_HASH]);
+  const typeLabel = typeFromAttributes ?? typeRawValue;
+
+  const priceValue = Number((raw as any)?.price ?? (raw as any)?.prices?.[0]?.price);
+  const price = Number.isFinite(priceValue) ? priceValue : null;
+
+  return {
+    id_pipe: idPipe,
+    name: normalizeText(raw?.name),
+    code: normalizeText(attributes.code ?? raw?.code),
+    category: categoryLabel,
+    type: typeLabel,
+    price,
+    active: (raw as any)?.selectable === undefined ? true : Boolean((raw as any).selectable),
+  };
+}
+
+async function upsertProductFromPipedrive(prisma: ReturnType<typeof getPrisma>, id: string) {
+  const rawProduct = await getProduct(id);
+  if (!rawProduct) return { processed: null, action: 'skipped' as const };
+
+  const payload = await mapPipedriveProduct(rawProduct);
+  if (!payload) return { processed: null, action: 'skipped' as const };
+
+  const now = new Date();
+  const existed = await prisma.products.findUnique({
+    where: { id_pipe: payload.id_pipe },
+    select: { id_pipe: true },
+  });
+
+  await prisma.products.upsert({
+    where: { id_pipe: payload.id_pipe },
+    create: {
+      id_pipe: payload.id_pipe,
+      name: payload.name,
+      code: payload.code,
+      category: payload.category,
+      type: payload.type,
+      price: payload.price != null ? new Prisma.Decimal(payload.price) : null,
+      active: payload.active,
+      updated_at: now,
+    },
+    update: {
+      name: payload.name,
+      code: payload.code,
+      category: payload.category,
+      type: payload.type,
+      price: payload.price != null ? new Prisma.Decimal(payload.price) : null,
+      active: payload.active,
+      updated_at: now,
+    },
+  });
+
+  return { processed: payload.id_pipe, action: existed ? 'updated' : 'created' } as const;
+}
+
+async function persistWebhookEvent(
+  prisma: ReturnType<typeof getPrisma>,
+  body: Record<string, unknown>,
+  resolvedToken: string | null,
+  normalizedHeaders: Record<string, string>,
+) {
+  await prisma.pipedrive_webhook_events.create({
+    data: {
+      event: typeof body.event === 'string' ? body.event : null,
+      event_action:
+        typeof body.meta === 'object' && body.meta !== null && typeof (body.meta as any).action === 'string'
+          ? (body.meta as any).action
+          : null,
+      event_object:
+        typeof body.meta === 'object' && body.meta !== null && typeof (body.meta as any).object === 'string'
+          ? (body.meta as any).object
+          : null,
+      company_id:
+        typeof body.meta === 'object' && body.meta !== null
+          ? normalizeNullableInt((body.meta as any).company_id)
+          : null,
+      object_id:
+        typeof body.meta === 'object' && body.meta !== null
+          ? normalizeNullableInt((body.meta as any).id)
+          : null,
+      retry: normalizeNullableInt(body.retry),
+      webhook_token: resolvedToken,
+      headers: filterHeaders(normalizedHeaders),
+      payload: body ?? {},
+    },
+  });
 }
 
 function resolveToken(
@@ -233,12 +399,39 @@ export const handler: Handler = async (event) => {
 
   const body = parsed.body as Record<string, unknown>;
   const resolvedToken = resolveToken(normalizedHeaders, body);
+  const entity = resolveEntity(body);
 
   if (EXPECTED_TOKEN && resolvedToken !== EXPECTED_TOKEN) {
     return buildErrorResponse(401, 'INVALID_TOKEN', 'Token de webhook no válido');
   }
 
   const prisma = getPrisma();
+  if (entity === 'product') {
+    const productId = resolveProductId(body);
+    if (!productId) {
+      return buildErrorResponse(400, 'MISSING_PRODUCT_ID', 'No se pudo determinar el ID del producto');
+    }
+
+    try {
+      await persistWebhookEvent(prisma, body, resolvedToken, normalizedHeaders);
+      const { processed, action } = await upsertProductFromPipedrive(prisma, productId);
+
+      return {
+        statusCode: 200,
+        headers: COMMON_HEADERS,
+        body: JSON.stringify({ ok: true, processed, action }),
+      };
+    } catch (processError) {
+      console.error('[pipedrive-webhook] Failed processing product webhook', {
+        error:
+          processError instanceof Error
+            ? { message: processError.message, stack: processError.stack }
+            : processError,
+      });
+      return buildErrorResponse(502, 'PRODUCT_PROCESSING_FAILED', 'No se pudo procesar el producto');
+    }
+  }
+
   const action = resolveAction(body);
   const status = resolveDealStatus(body);
   const dealId = resolveDealId(body);
@@ -254,33 +447,7 @@ export const handler: Handler = async (event) => {
 
   let processedDealId: string | null = null;
   let processedAction: 'created' | 'updated' | 'deleted' | 'skipped' = 'skipped';
-  await prisma.pipedrive_webhook_events.create({
-    data: {
-      event: typeof body.event === 'string' ? body.event : null,
-      event_action:
-        typeof body.meta === 'object' && body.meta !== null &&
-        typeof (body.meta as any).action === 'string'
-          ? (body.meta as any).action
-          : null,
-      event_object:
-        typeof body.meta === 'object' && body.meta !== null &&
-        typeof (body.meta as any).object === 'string'
-          ? (body.meta as any).object
-          : null,
-      company_id:
-        typeof body.meta === 'object' && body.meta !== null
-          ? normalizeNullableInt((body.meta as any).company_id)
-          : null,
-      object_id:
-        typeof body.meta === 'object' && body.meta !== null
-          ? normalizeNullableInt((body.meta as any).id)
-          : null,
-      retry: normalizeNullableInt(body.retry),
-      webhook_token: resolvedToken,
-      headers: filterHeaders(normalizedHeaders),
-      payload: body ?? {},
-    },
-  });
+  await persistWebhookEvent(prisma, body, resolvedToken, normalizedHeaders);
 
   try {
     if (action === 'delete') {
