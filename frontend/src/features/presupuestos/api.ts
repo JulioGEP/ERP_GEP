@@ -578,6 +578,8 @@ function normalizeDealSummary(row: Json): DealSummary {
   const summary: DealSummary = {
     deal_id: resolvedDealId,
     dealId: resolvedDealId, // compat
+    created_at: toStringValue(row?.created_at) ?? null,
+    updated_at: toStringValue(row?.updated_at) ?? null,
     title,
 
     pipeline_label: pipelineLabel,
