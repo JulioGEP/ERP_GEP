@@ -36,7 +36,7 @@ function EventTable({ events, formatter }: { events: PipedriveWebhookEvent[]; fo
     setExpandedEventId((currentId) => (currentId === eventId ? null : eventId));
   };
 
-  const columnCount = 9;
+  const columnCount = 8;
 
   return (
     <div className="table-responsive">
@@ -51,7 +51,6 @@ function EventTable({ events, formatter }: { events: PipedriveWebhookEvent[]; fo
             <th>Objeto ID</th>
             <th>Reintento</th>
             <th>Token</th>
-            <th>Cabeceras</th>
           </tr>
         </thead>
         <tbody>
@@ -83,9 +82,6 @@ function EventTable({ events, formatter }: { events: PipedriveWebhookEvent[]; fo
                   ) : (
                     '—'
                   )}
-                </td>
-                <td>
-                  <JsonCell value={event.headers} />
                 </td>
               </tr>
               {expandedEventId === event.id && (
