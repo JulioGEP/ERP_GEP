@@ -28,6 +28,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/certificados',
     '/certificados/*',
     '/recursos/confirmaciones',
+    '/recursos/pipedrive_webhooks',
   ],
   Logistica: [
     '/dashboard',
@@ -39,6 +40,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/recursos/unidades_moviles',
     '/recursos/salas',
     '/recursos/confirmaciones',
+    '/recursos/pipedrive_webhooks',
   ],
   People: [
     '/dashboard',
@@ -49,6 +51,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/materiales/*',
     '/recursos/formadores_bomberos',
     '/recursos/confirmaciones',
+    '/recursos/pipedrive_webhooks',
     '/usuarios/vacaciones',
   ],
   Formador: ['/usuarios/trainer/*', '/perfil'],
@@ -134,6 +137,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/recursos/unidades_moviles',
   '/recursos/salas',
   '/recursos/confirmaciones',
+  '/recursos/pipedrive_webhooks',
   '/certificados',
   '/certificados/templates_certificados',
   '/calendario/por_sesiones',
