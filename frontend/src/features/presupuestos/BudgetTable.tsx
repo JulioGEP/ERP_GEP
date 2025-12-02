@@ -88,14 +88,6 @@ const FOLLOW_UP_DEFAULT_VALIDATION_COLUMN_STYLE: React.CSSProperties = {
   width: 96,
 };
 
-const NEW_BUDGET_HIGHLIGHT_STYLE: React.CSSProperties = {
-  backgroundColor: 'rgba(25, 135, 84, 0.08)',
-};
-
-const UPDATED_BUDGET_HIGHLIGHT_STYLE: React.CSSProperties = {
-  backgroundColor: 'rgba(255, 193, 7, 0.14)',
-};
-
 const SESSION_STATE_LABELS: Record<SessionEstado, string> = {
   BORRADOR: 'Borrador',
   PLANIFICADA: 'Planificada',
@@ -240,10 +232,6 @@ function getBudgetId(budget: DealSummary): string | null {
 
   if (idCandidates.length) return idCandidates[0];
   return null;
-}
-
-function getBudgetVersion(budget: DealSummary): string {
-  return budget.updated_at ?? budget.created_at ?? '';
 }
 
 function getErrorMessage(error: unknown): string | null {
@@ -688,9 +676,6 @@ export function BudgetTable({
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [highlightedRows, setHighlightedRows] = useState<Record<string, 'new' | 'updated'>>({});
-  const seenBudgetVersionsRef = useRef<Record<string, string>>({});
-  const hasInitializedHighlightsRef = useRef(false);
 
   const cachedFallbackBudgets = enableFallback
     ? queryClient.getQueryData<DealSummary[]>(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY) ?? null
@@ -998,52 +983,6 @@ export function BudgetTable({
     return tableBudgets.slice(start, start + effectivePageSize);
   }, [effectivePageSize, pageIndex, tableBudgets]);
 
-  useEffect(() => {
-    if (!hasInitializedHighlightsRef.current) {
-      if (!isLoading && !isFetching) {
-        tableBudgets.forEach((budget) => {
-          const budgetId = getBudgetId(budget);
-          if (!budgetId) return;
-          seenBudgetVersionsRef.current[budgetId] = getBudgetVersion(budget);
-        });
-        hasInitializedHighlightsRef.current = true;
-      }
-      return;
-    }
-
-    if (!tableBudgets.length) {
-      return;
-    }
-
-    setHighlightedRows((current) => {
-      let shouldUpdate = false;
-      const next = { ...current };
-
-      tableBudgets.forEach((budget) => {
-        const budgetId = getBudgetId(budget);
-        if (!budgetId) return;
-
-        const version = getBudgetVersion(budget);
-        const seenVersion = seenBudgetVersionsRef.current[budgetId];
-
-        if (seenVersion === undefined) {
-          seenBudgetVersionsRef.current[budgetId] = version;
-          next[budgetId] = 'new';
-          shouldUpdate = true;
-          return;
-        }
-
-        if (version && version !== seenVersion) {
-          seenBudgetVersionsRef.current[budgetId] = version;
-          next[budgetId] = 'updated';
-          shouldUpdate = true;
-        }
-      });
-
-      return shouldUpdate ? next : current;
-    });
-  }, [isFetching, isLoading, tableBudgets]);
-
   const hasAppliedFilters = useMemo(() => {
     const hasFilterValues = Object.entries(enforcedFilters).some(
       ([key, value]) => BUDGET_FILTER_DEFINITION_KEYS.has(key) && value.trim().length > 0,
@@ -1104,22 +1043,6 @@ export function BudgetTable({
       }
     },
     [onDelete, showDeleteAction]
-  );
-
-  const handleRowSelect = useCallback(
-    (budget: DealSummary) => {
-      const budgetId = getBudgetId(budget);
-      if (budgetId) {
-        setHighlightedRows((current) => {
-          if (!(budgetId in current)) return current;
-          const next = { ...current };
-          delete next[budgetId];
-          return next;
-        });
-      }
-      onSelect(budget);
-    },
-    [onSelect],
   );
 
   const columns = useMemo<ColumnDef<DealSummary, unknown>[]>(() => {
@@ -1604,21 +1527,8 @@ export function BudgetTable({
                 {virtualRows.map((virtualRow) => {
                   const row = rows[virtualRow.index];
                   const budget = row.original;
-                  const budgetId = getBudgetId(budget);
-                  const highlightState = budgetId ? highlightedRows[budgetId] : undefined;
-                  const rowStyle =
-                    highlightState === 'new'
-                      ? NEW_BUDGET_HIGHLIGHT_STYLE
-                      : highlightState === 'updated'
-                      ? UPDATED_BUDGET_HIGHLIGHT_STYLE
-                      : undefined;
                   return (
-                    <tr
-                      key={row.id}
-                      role="button"
-                      onClick={() => handleRowSelect(budget)}
-                      style={rowStyle}
-                    >
+                    <tr key={row.id} role="button" onClick={() => onSelect(budget)}>
                       {row.getVisibleCells().map((cell) => {
                         const meta = cell.column.columnDef.meta as { style?: React.CSSProperties } | undefined;
                         const style = meta?.style;
