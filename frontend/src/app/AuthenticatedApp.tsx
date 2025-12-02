@@ -183,6 +183,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/reporting/comparativa',
       },
       {
+        key: 'Reporting/WebhooksPipedrive',
+        label: 'Webhooks Pipedrive',
+        path: '/reporting/webhooks_pipedrive',
+      },
+      {
         key: 'Reporting/Logs',
         label: 'Logs',
         path: '/reporting/logs',
