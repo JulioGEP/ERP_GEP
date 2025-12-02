@@ -10,7 +10,6 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
-import { useLocation } from 'react-router-dom';
 import {
   Accordion,
   Alert,
@@ -130,14 +129,6 @@ const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
 };
 const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['BORRADOR', 'SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
 const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
-const SESSION_ESTADO_ORDER: Record<SessionEstado, number> = {
-  BORRADOR: 0,
-  PLANIFICADA: 1,
-  SUSPENDIDA: 2,
-  FINALIZADA: 3,
-  CANCELADA: 4,
-};
-const CALENDAR_ROUTE_PREFIX = '/calendario';
 
 const TRAINER_INVITE_STATUS_BADGES: Record<SessionTrainerInviteStatus, { label: string; variant: string }> = {
   NOT_SENT: { label: 'Sin enviar el mail', variant: 'warning' },
@@ -1871,11 +1862,6 @@ export function SessionsAccordionEmpresas({
   highlightSessionId,
 }: SessionsAccordionEmpresasProps) {
   const qc = useQueryClient();
-  const location = useLocation();
-  const isCalendarRoute = useMemo(
-    () => location.pathname.startsWith(CALENDAR_ROUTE_PREFIX),
-    [location.pathname],
-  );
   const mapApplicableProduct = useCallback(
     (product: DealProduct & { id: string | number }): ApplicableProductInfo => ({
       id: String(product.id),
@@ -1914,7 +1900,6 @@ export function SessionsAccordionEmpresas({
   const [mapAddress, setMapAddress] = useState<string | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const normalizedHighlightSessionId = useMemo(() => highlightSessionId?.trim() ?? null, [highlightSessionId]);
-  const [newSessionIds, setNewSessionIds] = useState<string[]>([]);
 
   const generateMutation = useMutation({
     mutationFn: (id: string) => generateSessionsFromDeal(id),
@@ -2032,24 +2017,6 @@ export function SessionsAccordionEmpresas({
     formsRef.current = forms;
   }, [forms]);
 
-  const newSessionIdSet = useMemo(() => new Set(newSessionIds), [newSessionIds]);
-
-  const trackNewSessionId = useCallback((sessionId: string | null | undefined) => {
-    const normalizedId = sessionId?.trim();
-    if (!normalizedId) return;
-    setNewSessionIds((current) => (current.includes(normalizedId) ? current : [normalizedId, ...current]));
-  }, []);
-
-  useEffect(() => {
-    setNewSessionIds((current) =>
-      current.filter((sessionId) => {
-        const estado = forms[sessionId]?.estado;
-        if (!estado) return true;
-        return estado === 'BORRADOR';
-      }),
-    );
-  }, [forms]);
-
   const queriesUpdatedKey = sessionQueries.map((query) => query.dataUpdatedAt).join('|');
 
   const totalSessionsCount = generationDone
@@ -2091,42 +2058,6 @@ export function SessionsAccordionEmpresas({
       return next;
     });
   }, [generationDone, queriesUpdatedKey, applicableProducts]);
-
-  const sortSessionsForDisplay = useCallback(
-    (sessions: SessionDTO[]) => {
-      if (!sessions.length) return sessions;
-
-      const indexMap = new Map<string, number>();
-      sessions.forEach((session, index) => indexMap.set(session.id, index));
-
-      const getEstado = (session: SessionDTO) => forms[session.id]?.estado ?? session.estado;
-
-      const getPriority = (session: SessionDTO) => {
-        if (isCalendarRoute && normalizedHighlightSessionId && session.id === normalizedHighlightSessionId) {
-          return -1;
-        }
-        if (newSessionIdSet.has(session.id) && getEstado(session) === 'BORRADOR') {
-          return 0;
-        }
-        return 1;
-      };
-
-      return [...sessions].sort((a, b) => {
-        const priorityA = getPriority(a);
-        const priorityB = getPriority(b);
-        if (priorityA !== priorityB) return priorityA - priorityB;
-
-        const estadoRankA = SESSION_ESTADO_ORDER[getEstado(a)] ?? Number.MAX_SAFE_INTEGER;
-        const estadoRankB = SESSION_ESTADO_ORDER[getEstado(b)] ?? Number.MAX_SAFE_INTEGER;
-        if (estadoRankA !== estadoRankB) return estadoRankA - estadoRankB;
-
-        const indexA = indexMap.get(a.id) ?? 0;
-        const indexB = indexMap.get(b.id) ?? 0;
-        return indexA - indexB;
-      });
-    },
-    [forms, isCalendarRoute, newSessionIdSet, normalizedHighlightSessionId],
-  );
 
   const patchMutation = useMutation({
     mutationFn: ({ sessionId, payload }: { sessionId: string; payload: Parameters<typeof patchSession>[1] }) =>
@@ -2468,32 +2399,12 @@ export function SessionsAccordionEmpresas({
     });
   };
 
-  const handleCreateSession = async (productId: string) => {
-    try {
-      const created = await createMutation.mutateAsync({
-        deal_id: dealId,
-        deal_product_id: productId,
-        direccion: dealAddress ?? '',
-      });
-      trackNewSessionId(created.id);
-      setPageByProduct((current) => ({ ...current, [productId]: 1 }));
-      await invalidateProductSessions(productId);
-    } catch (error) {
-      const message = isApiError(error)
-        ? error.message
-        : error instanceof Error
-        ? error.message
-        : 'No se pudo crear la sesión';
-      alert(message);
-    }
-  };
-
   const handleDuplicate = async (sessionId: string) => {
     const session = formsRef.current[sessionId];
     const productId = sessionProductRef.current[sessionId];
     if (!session || !productId) return;
     try {
-      const created = await createMutation.mutateAsync({
+      await createMutation.mutateAsync({
         deal_id: dealId,
         deal_product_id: productId,
         direccion: session.direccion ?? dealAddress ?? '',
@@ -2502,8 +2413,6 @@ export function SessionsAccordionEmpresas({
         sala_id: session.sala_id,
         force_estado_borrador: true,
       });
-      trackNewSessionId(created.id);
-      setPageByProduct((current) => ({ ...current, [productId]: 1 }));
       await invalidateProductSessions(productId);
     } catch (error) {
       const message = isApiError(error)
@@ -2722,28 +2631,10 @@ export function SessionsAccordionEmpresas({
           const query = sessionQueries[index];
           const group = (query?.data as SessionGroupDTO | null) ?? null;
           const sessions = group?.sessions ?? [];
-          const orderedSessions = sortSessionsForDisplay(sessions);
           const pagination = group?.pagination ?? { page: 1, totalPages: 1, total: 0 };
           const currentPage = pageByProduct[product.id] ?? 1;
           const isLoading = query.isLoading || query.isFetching;
           const queryError = query.error;
-          const paginationItems = Array.from({ length: pagination.totalPages }, (_, pageIndex) => {
-            const pageNumber = pageIndex + 1;
-            return (
-              <Pagination.Item
-                key={pageNumber}
-                active={pageNumber === currentPage}
-                onClick={() =>
-                  setPageByProduct((current) => ({
-                    ...current,
-                    [product.id]: pageNumber,
-                  }))
-                }
-              >
-                {pageNumber}
-              </Pagination.Item>
-            );
-          });
 
           return (
             <div key={product.id} className="mb-4">
@@ -2756,7 +2647,23 @@ export function SessionsAccordionEmpresas({
                   <Button
                     size="sm"
                     variant="outline-primary"
-                    onClick={() => void handleCreateSession(product.id)}
+                    onClick={() => {
+                      createMutation
+                        .mutateAsync({
+                          deal_id: dealId,
+                          deal_product_id: product.id,
+                          direccion: dealAddress ?? '',
+                        })
+                        .then(() => invalidateProductSessions(product.id))
+                        .catch((error: unknown) => {
+                          const message = isApiError(error)
+                            ? error.message
+                            : error instanceof Error
+                            ? error.message
+                            : 'No se pudo crear la sesión';
+                          alert(message);
+                        });
+                    }}
                     disabled={createMutation.isPending}
                   >
                     {createMutation.isPending ? (
@@ -2777,12 +2684,12 @@ export function SessionsAccordionEmpresas({
                   {queryError instanceof Error ? queryError.message : 'No se pudieron cargar las sesiones'}
                 </Alert>
               )}
-              {!isLoading && !queryError && !orderedSessions.length && (
+              {!isLoading && !queryError && !sessions.length && (
                 <p className="text-muted">Sin sesiones para este producto.</p>
               )}
-              {!!orderedSessions.length && (
+              {!!sessions.length && (
                 <ListGroup as="ol" numbered className="mb-0">
-                  {orderedSessions.map((session, sessionIndex) => {
+                  {sessions.map((session, sessionIndex) => {
                     const form = forms[session.id];
                     const status =
                       saveStatus[session.id] ?? { saving: false, error: null, dirty: false };
@@ -2868,7 +2775,7 @@ export function SessionsAccordionEmpresas({
                         setPageByProduct((current) => ({ ...current, [product.id]: Math.max(1, currentPage - 1) }))
                       }
                     />
-                    {paginationItems}
+                    <Pagination.Item active>{currentPage}</Pagination.Item>
                     <Pagination.Next
                       disabled={currentPage >= pagination.totalPages}
                       onClick={() =>
