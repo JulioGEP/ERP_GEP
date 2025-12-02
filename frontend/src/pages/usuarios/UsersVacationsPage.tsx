@@ -9,15 +9,6 @@ import {
   type UserVacationDay,
 } from '../../api/userVacations';
 
-type VacationRequest = {
-  id: string;
-  requester: string;
-  type: 'Vacaciones' | 'Teletrabajo';
-  startDate: string;
-  endDate: string;
-  team: string;
-};
-
 const VACATION_TYPE_LABELS: Record<VacationType, string> = {
   A: 'Vacaciones',
   F: 'Festivo',
@@ -55,32 +46,6 @@ export default function UsersVacationsPage() {
   const [feedback, setFeedback] = useState<{ variant: 'success' | 'danger'; message: string } | null>(
     null,
   );
-  const [vacationRequests, setVacationRequests] = useState<VacationRequest[]>([
-    {
-      id: 'req-1',
-      requester: 'Ana López',
-      type: 'Vacaciones',
-      startDate: '2024-07-12',
-      endDate: '2024-07-16',
-      team: 'Equipo Alfa',
-    },
-    {
-      id: 'req-2',
-      requester: 'Carlos Méndez',
-      type: 'Teletrabajo',
-      startDate: '2024-07-18',
-      endDate: '2024-07-18',
-      team: 'Equipo Beta',
-    },
-    {
-      id: 'req-3',
-      requester: 'Lucía García',
-      type: 'Vacaciones',
-      startDate: '2024-08-05',
-      endDate: '2024-08-09',
-      team: 'Equipo Producto',
-    },
-  ]);
 
   const summaryQuery = useQuery({
     queryKey: ['vacations-summary', year],
@@ -158,16 +123,6 @@ export default function UsersVacationsPage() {
     });
   };
 
-  const handleVacationRequestAction = (requestId: string, action: 'delete' | 'accept') => {
-    setVacationRequests((prev) => prev.filter((request) => request.id !== requestId));
-    if (action === 'accept') {
-      setFeedback({
-        variant: 'success',
-        message: 'Solicitud aceptada y añadida al calendario de la persona solicitante.',
-      });
-    }
-  };
-
   const handleBulkSubmit = () => {
     if (!bulkDate || !bulkType || selectedUsers.length === 0) return;
     void bulkMutation.mutate({ date: bulkDate, type: bulkType, userIds: selectedUsers });
@@ -203,72 +158,6 @@ export default function UsersVacationsPage() {
       </div>
 
       {feedback ? <Alert variant={feedback.variant}>{feedback.message}</Alert> : null}
-
-      <Card className="mb-3">
-        <Card.Header>
-          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div>
-              <h2 className="h5 mb-0">Solicitudes de vacaciones y teletrabajo</h2>
-              <div className="text-muted small">Gestiona las peticiones pendientes de los equipos.</div>
-            </div>
-            <Badge bg="primary" className="text-uppercase">
-              {vacationRequests.length} pendientes
-            </Badge>
-          </div>
-        </Card.Header>
-        <Card.Body className="p-0">
-          {vacationRequests.length === 0 ? (
-            <div className="text-center text-muted py-4">No hay solicitudes pendientes.</div>
-          ) : (
-            <div className="table-responsive">
-              <Table hover className="mb-0 align-middle">
-                <thead>
-                  <tr>
-                    <th>Persona</th>
-                    <th>Tipo</th>
-                    <th>Fechas</th>
-                    <th>Equipo</th>
-                    <th className="text-end">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vacationRequests.map((request) => (
-                    <tr key={request.id}>
-                      <td className="fw-semibold">{request.requester}</td>
-                      <td>
-                        <Badge bg={request.type === 'Vacaciones' ? 'warning' : 'info'} className="text-uppercase">
-                          {request.type}
-                        </Badge>
-                      </td>
-                      <td>
-                        {new Date(request.startDate).toLocaleDateString('es-ES')} -{' '}
-                        {new Date(request.endDate).toLocaleDateString('es-ES')}
-                      </td>
-                      <td>{request.team}</td>
-                      <td className="text-end d-flex gap-2 justify-content-end">
-                        <Button
-                          variant="success"
-                          size="sm"
-                          onClick={() => handleVacationRequestAction(request.id, 'accept')}
-                        >
-                          Aceptar
-                        </Button>
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          onClick={() => handleVacationRequestAction(request.id, 'delete')}
-                        >
-                          Eliminar
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
-          )}
-        </Card.Body>
-      </Card>
 
       <Card>
         <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-3">
