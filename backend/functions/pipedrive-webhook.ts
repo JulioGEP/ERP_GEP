@@ -1,4 +1,6 @@
 import type { Handler } from '@netlify/functions';
+import { Prisma } from '@prisma/client';
+import { extractProductCatalogAttributes, getProduct } from './_shared/pipedrive';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { deleteDealFromDatabase, importDealFromPipedrive } from './deals';
@@ -85,6 +87,17 @@ function normalizeNullableInt(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
   const parsed = Number.parseInt(String(value ?? ''), 10);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeText(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
+function normaliseCategory(value: string | null | undefined) {
+  if (!value) return null;
+  return value.trim();
 }
 
 function resolveToken(
@@ -191,6 +204,19 @@ function resolveAction(body: Record<string, unknown>): string | null {
   return null;
 }
 
+function resolveEntity(body: Record<string, unknown>): string | null {
+  const meta = body?.['meta'] as Record<string, unknown> | undefined;
+  const candidates = [body?.['entity'], meta?.['entity'], meta?.['object']];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length) {
+      return candidate.trim().toLowerCase();
+    }
+  }
+
+  return null;
+}
+
 function resolveEntityId(body: Record<string, unknown>): string | null {
   const meta = body?.['meta'] as Record<string, unknown> | undefined;
   const candidates = [body?.['entity_id'], meta?.['entity_id'], meta?.['id']];
@@ -201,6 +227,67 @@ function resolveEntityId(body: Record<string, unknown>): string | null {
   }
 
   return null;
+}
+
+function resolveProductId(body: Record<string, unknown>): string | null {
+  const data = body?.['data'] as Record<string, unknown> | undefined;
+  const meta = body?.['meta'] as Record<string, unknown> | undefined;
+
+  const candidates = [
+    body?.['id'],
+    data?.['id'],
+    data && typeof data === 'object' ? (data as any).current?.id : null,
+    data && typeof data === 'object' ? (data as any).previous?.id : null,
+    meta?.['id'],
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeDealId(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
+async function updateProductFromPipedrive(prisma: ReturnType<typeof getPrisma>, pipedriveId: string) {
+  let pipedriveProduct: any;
+  try {
+    pipedriveProduct = await getProduct(pipedriveId);
+  } catch (error) {
+    console.error('[pipedrive-webhook] Failed to fetch product from Pipedrive', { error });
+    return { updated: false as const };
+  }
+
+  if (!pipedriveProduct) return { updated: false as const };
+
+  const idPipe = normalizeText((pipedriveProduct as any)?.id);
+  const lookupId = normalizeDealId(pipedriveId) ?? idPipe;
+  if (!lookupId) return { updated: false as const };
+
+  const attributes = await extractProductCatalogAttributes(pipedriveProduct);
+  const categoryLabel = normaliseCategory(attributes.category ?? normalizeText((pipedriveProduct as any)?.category));
+  const typeLabel = normalizeText(attributes.type);
+  const priceValue = Number((pipedriveProduct as any)?.price ?? (pipedriveProduct as any)?.prices?.[0]?.price);
+  const price = Number.isFinite(priceValue) ? new Prisma.Decimal(priceValue) : null;
+  const active = (pipedriveProduct as any)?.selectable === undefined ? true : Boolean((pipedriveProduct as any)?.selectable);
+
+  const existing = await prisma.products.findUnique({ where: { id_pipe: lookupId }, select: { id: true } });
+  if (!existing) return { updated: false as const };
+
+  await prisma.products.update({
+    where: { id_pipe: lookupId },
+    data: {
+      name: normalizeText((pipedriveProduct as any)?.name),
+      code: normalizeText(attributes.code ?? (pipedriveProduct as any)?.code),
+      category: categoryLabel,
+      type: typeLabel,
+      price,
+      active,
+      updated_at: new Date(),
+    },
+  });
+
+  return { updated: true as const };
 }
 
 function isDealWonStatus(status: unknown): boolean {
@@ -240,9 +327,12 @@ export const handler: Handler = async (event) => {
 
   const prisma = getPrisma();
   const action = resolveAction(body);
+  const entity = resolveEntity(body);
   const status = resolveDealStatus(body);
   const dealId = resolveDealId(body);
-  const shouldPersistEvent = action === 'delete' || isDealWonStatus(status);
+  const productId = resolveProductId(body);
+  const isProductChange = entity === 'product' && action === 'change';
+  const shouldPersistEvent = action === 'delete' || isDealWonStatus(status) || isProductChange;
 
   if (!shouldPersistEvent) {
     return {
@@ -283,7 +373,13 @@ export const handler: Handler = async (event) => {
   });
 
   try {
-    if (action === 'delete') {
+    if (isProductChange && productId) {
+      const updated = await updateProductFromPipedrive(prisma, productId);
+      if (updated?.updated) {
+        processedDealId = productId;
+        processedAction = 'updated';
+      }
+    } else if (action === 'delete') {
       const entityId = resolveEntityId(body) ?? dealId;
       if (entityId) {
         const deletionResult = await deleteDealFromDatabase(prisma, entityId);
