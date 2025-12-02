@@ -1696,6 +1696,16 @@ function buildIsoRangeFromInputs(
   return { startIso };
 }
 
+function isSessionPlanificable(form: SessionFormState): boolean {
+  const hasName = form.nombre_cache.trim().length > 0;
+  const hasRange = Boolean(buildIsoRangeFromInputs(form.fecha_inicio_local, form.fecha_fin_local));
+  const hasLocation = Boolean(form.sala_id) || form.direccion.trim().length > 0;
+  const hasTrainers = form.trainer_ids.length > 0;
+  const hasUnits = form.unidad_movil_ids.length > 0;
+
+  return hasName && hasRange && hasLocation && hasTrainers && hasUnits;
+}
+
 function addHoursToLocalDateTime(value: string, hours: number): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -1848,7 +1858,8 @@ function buildSessionPatchPayload(
   }
 
   if (form.estado !== saved.estado) {
-    if (MANUAL_SESSION_ESTADO_SET.has(form.estado)) {
+    const canPlanificar = form.estado === 'PLANIFICADA' && isSessionPlanificable(form);
+    if (MANUAL_SESSION_ESTADO_SET.has(form.estado) || canPlanificar) {
       (patch as Record<string, SessionEstado>).estado = form.estado;
       hasChanges = true;
     }
@@ -3091,6 +3102,7 @@ function SessionEditor({
   const unitPointerInteractingRef = useRef(false);
   const isInCompany = dealSede === 'In Company';
   const trainingPoints = useTrainingTemplatePoints(templateId);
+  const canSetPlanificada = isSessionPlanificable(form);
   const handleManualSave = useCallback(() => {
     void onSave();
   }, [onSave]);
@@ -3417,7 +3429,8 @@ function SessionEditor({
               value={form.estado}
               onChange={(event) => {
                 const nextValue = event.target.value as SessionEstado;
-                if (!MANUAL_SESSION_ESTADO_SET.has(nextValue)) {
+                const canPlanificar = nextValue === 'PLANIFICADA' && canSetPlanificada;
+                if (!MANUAL_SESSION_ESTADO_SET.has(nextValue) && !canPlanificar) {
                   return;
                 }
                 onChange((current) => ({ ...current, estado: nextValue }));
@@ -3427,7 +3440,7 @@ function SessionEditor({
               <option value="BORRADOR">
                 {SESSION_ESTADO_LABELS.BORRADOR}
               </option>
-              <option value="PLANIFICADA" disabled>
+              <option value="PLANIFICADA" disabled={!canSetPlanificada}>
                 {SESSION_ESTADO_LABELS.PLANIFICADA}
               </option>
               <option value="SUSPENDIDA">{SESSION_ESTADO_LABELS.SUSPENDIDA}</option>
