@@ -49,6 +49,15 @@ const VACATION_COLORS: Record<VacationType, string> = {
   T: '#7c3aed',
 };
 
+const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> = [
+  { value: '', label: 'Sin marca' },
+  { value: 'A', label: VACATION_LABELS.A },
+  { value: 'F', label: VACATION_LABELS.F },
+  { value: 'L', label: VACATION_LABELS.L },
+  { value: 'C', label: VACATION_LABELS.C },
+  { value: 'T', label: VACATION_LABELS.T },
+];
+
 async function fileToBase64(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   let binary = '';
@@ -96,6 +105,7 @@ export default function ProfilePage() {
   const [vacationStart, setVacationStart] = useState('');
   const [vacationEnd, setVacationEnd] = useState('');
   const [vacationNotes, setVacationNotes] = useState('');
+  const [vacationTag, setVacationTag] = useState<VacationType | ''>('');
   const [selectedDocumentType, setSelectedDocumentType] = useState<TrainerDocumentTypeValue>(
     TRAINER_DOCUMENT_TYPES[0]?.value ?? 'curriculum_vitae',
   );
@@ -159,13 +169,15 @@ export default function ProfilePage() {
   });
 
   const vacationRequestMutation = useMutation({
-    mutationFn: () => sendVacationRequest({ startDate: vacationStart, endDate: vacationEnd, notes: vacationNotes }),
+    mutationFn: () =>
+      sendVacationRequest({ startDate: vacationStart, endDate: vacationEnd, notes: vacationNotes, tag: vacationTag }),
     onSuccess: (response) => {
       setVacationRequestMessage(response.message || 'Petición enviada correctamente.');
       setVacationRequestError(null);
       setVacationStart('');
       setVacationEnd('');
       setVacationNotes('');
+      setVacationTag('');
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
@@ -507,7 +519,7 @@ export default function ProfilePage() {
             {vacationRequestError ? <Alert variant="danger">{vacationRequestError}</Alert> : null}
             <Form onSubmit={handleVacationRequest} className="d-grid gap-3">
               <Row className="g-3">
-                <Col xs={12} md={4}>
+                <Col xs={12} md={3}>
                   <Form.Label>Inicio</Form.Label>
                   <Form.Control
                     type="date"
@@ -516,7 +528,7 @@ export default function ProfilePage() {
                     required
                   />
                 </Col>
-                <Col xs={12} md={4}>
+                <Col xs={12} md={3}>
                   <Form.Label>Fin</Form.Label>
                   <Form.Control
                     type="date"
@@ -525,7 +537,20 @@ export default function ProfilePage() {
                     required
                   />
                 </Col>
-                <Col xs={12} md={4}>
+                <Col xs={12} md={3}>
+                  <Form.Label>Tipo de petición</Form.Label>
+                  <Form.Select
+                    value={vacationTag}
+                    onChange={(event) => setVacationTag(event.target.value as VacationType | '')}
+                  >
+                    {VACATION_TAG_OPTIONS.map((option) => (
+                      <option key={option.value || 'none'} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col xs={12} md={3}>
                   <Form.Label>Notas (opcional)</Form.Label>
                   <Form.Control
                     type="text"
