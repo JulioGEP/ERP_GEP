@@ -18,7 +18,6 @@ import {
 } from '../../components/table/FilterToolbar';
 import {
   FILTER_MULTI_VALUE_SEPARATOR,
-  joinFilterValues,
   splitFilterValue,
 } from '../../components/table/filterUtils';
 import {
@@ -534,38 +533,14 @@ const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> =
   deal_id: (budget) => getBudgetId(budget) ?? '',
   title: (budget) => getTitleLabel(budget),
   organization: (budget) => getOrganizationLabel(budget),
-  pipeline: (budget) =>
-    safeTrim(budget.pipeline_label ?? budget.pipeline_id ?? '') ?? '',
-  training_address: (budget) => safeTrim(budget.training_address ?? '') ?? '',
-  sede_label: (budget) => safeTrim(budget.sede_label ?? '') ?? '',
-  caes_label: (budget) => safeTrim(budget.caes_label ?? '') ?? '',
-  caes_val: (budget) => formatValidationFilterValue(budget.caes_val),
-  fundae_label: (budget) => safeTrim(budget.fundae_label ?? '') ?? '',
-  fundae_val: (budget) => formatValidationFilterValue(budget.fundae_val),
-  hotel_label: (budget) => safeTrim(budget.hotel_label ?? '') ?? '',
-  hotel_val: (budget) => formatValidationFilterValue(budget.hotel_val),
-  transporte: (budget) => safeTrim(budget.transporte ?? '') ?? '',
-  transporte_val: (budget) => formatValidationFilterValue(budget.transporte_val),
   po: (budget) => safeTrim(budget.po ?? '') ?? '',
-  po_val: (budget) => formatValidationFilterValue(budget.po_val),
-  tipo_servicio: (budget) => safeTrim(budget.tipo_servicio ?? '') ?? '',
   comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
-  session_estado: (budget) => {
-    const states = getBudgetSessionStates(budget);
-    if (!states.length) {
-      return '';
-    }
-    const joined = joinFilterValues(states);
-    if (!joined.length) {
-      return '';
-    }
-    return joined;
-  },
-  session_planificada_vencida: (budget) => (hasOverduePlannedSession(budget) ? 'Sí' : 'No'),
   product_names: (budget) => getProductNames(budget).join(' '),
-  student_names: (budget) => (budget.studentNames ?? []).join(' '),
-  training_date: (budget) => {
-    const timestamp = getTrainingDateTimestamp(budget);
+  proveedores: (budget) => safeTrim(budget.proveedores ?? '') ?? '',
+  direccion_envio: (budget) => safeTrim(budget.direccion_envio ?? '') ?? '',
+  observaciones: (budget) => safeTrim(budget.observaciones ?? '') ?? '',
+  fecha_estimada_entrega_material: (budget) => {
+    const timestamp = parseDateValue(budget.fecha_estimada_entrega_material ?? null);
     const iso = formatDateIso(timestamp);
     const label = formatDateLabel(timestamp);
     return [iso, label].filter(Boolean).join(' ');
@@ -576,34 +551,13 @@ const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'deal_id', label: 'Presupuesto' },
   { key: 'title', label: 'Título' },
   { key: 'organization', label: 'Empresa' },
-  { key: 'pipeline', label: 'Negocio' },
-  { key: 'training_address', label: 'Dirección de formación' },
-  { key: 'sede_label', label: 'Sede' },
-  { key: 'caes_label', label: 'CAES' },
-  { key: 'caes_val', label: 'Validación CAES', type: 'select' },
-  { key: 'fundae_label', label: 'FUNDAE' },
-  { key: 'fundae_val', label: 'Validación FUNDAE', type: 'select' },
-  { key: 'hotel_label', label: 'Hotel' },
-  { key: 'hotel_val', label: 'Validación Hotel', type: 'select' },
-  { key: 'transporte', label: 'Transporte' },
-  { key: 'transporte_val', label: 'Validación Transporte', type: 'select' },
-  { key: 'po', label: 'PO', type: 'select' },
-  { key: 'po_val', label: 'Validación PO', type: 'select' },
-  { key: 'tipo_servicio', label: 'Tipo de servicio' },
   { key: 'comercial', label: 'Comercial' },
-  { key: 'session_estado', label: 'Estado sesión', type: 'select' },
-  {
-    key: 'session_planificada_vencida',
-    label: 'Por finalizar',
-    type: 'select',
-    options: [
-      { value: 'Sí', label: 'Sí' },
-      { value: 'No', label: 'No' },
-    ],
-  },
   { key: 'product_names', label: 'Productos' },
-  { key: 'student_names', label: 'Alumnos' },
-  { key: 'training_date', label: 'Fecha de formación', type: 'date' },
+  { key: 'proveedores', label: 'Proveedores' },
+  { key: 'direccion_envio', label: 'Dirección de Envío' },
+  { key: 'po', label: 'PO' },
+  { key: 'observaciones', label: 'Observaciones' },
+  { key: 'fecha_estimada_entrega_material', label: 'Estimada de Entrega', type: 'date' },
 ];
 
 const BUDGET_FILTER_DEFINITION_KEYS = new Set(
@@ -612,24 +566,7 @@ const BUDGET_FILTER_DEFINITION_KEYS = new Set(
 
 const BUDGET_FILTER_KEYS = Object.keys(BUDGET_FILTER_ACCESSORS);
 
-const BUDGET_SELECT_FILTER_KEYS = new Set<string>([
-  'pipeline',
-  'sede_label',
-  'caes_label',
-  'caes_val',
-  'fundae_label',
-  'fundae_val',
-  'hotel_label',
-  'hotel_val',
-  'transporte',
-  'transporte_val',
-  'po',
-  'po_val',
-  'tipo_servicio',
-  'comercial',
-  'session_estado',
-  'session_planificada_vencida',
-]);
+const BUDGET_SELECT_FILTER_KEYS = new Set<string>();
 
 function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
   const values: Record<string, string> = {};
