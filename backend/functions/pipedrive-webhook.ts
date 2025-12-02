@@ -193,7 +193,7 @@ function resolveAction(body: Record<string, unknown>): string | null {
 
 function resolveEntityId(body: Record<string, unknown>): string | null {
   const meta = body?.['meta'] as Record<string, unknown> | undefined;
-  const candidates = [body?.['entity_id'], meta?.['id']];
+  const candidates = [body?.['entity_id'], meta?.['entity_id'], meta?.['id']];
 
   for (const candidate of candidates) {
     const normalized = normalizeDealId(candidate);
