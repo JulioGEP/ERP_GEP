@@ -59,7 +59,6 @@ import type { StockPageProps } from '../pages/recursos/StockPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
-import type { PipedriveWebhooksPageProps } from '../pages/recursos/PipedriveWebhooksPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext'; // ⬅️ ruta corregida
 import { TOAST_EVENT, type ToastEventDetail } from '../utils/toast';
@@ -122,7 +121,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Recursos/Formadores', label: 'Formadores / Bomberos', path: '/recursos/formadores_bomberos' },
       { key: 'Recursos/Confirmaciones', label: 'Confirmaciones', path: '/recursos/confirmaciones' },
-      { key: 'Recursos/PipedriveWebhooks', label: 'Pipedrive Webhooks', path: '/recursos/pipedrive_webhooks' },
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Formaciones', label: 'Formaciones', path: '/recursos/formaciones' },
@@ -1465,8 +1463,6 @@ export default function AuthenticatedApp() {
     onNotify: pushToast,
   };
 
-  const recursosPipedriveWebhooksPageProps: PipedriveWebhooksPageProps = {};
-
   const certificadosPageProps: CertificadosPageProps = {};
   const recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps = {};
   const usersPageProps: UsersPageProps = { onNotify: pushToast };
@@ -1600,7 +1596,6 @@ export default function AuthenticatedApp() {
             productosPageProps={productosPageProps}
             stockPageProps={stockPageProps}
             recursosConfirmacionesPageProps={recursosConfirmacionesPageProps}
-            recursosPipedriveWebhooksPageProps={recursosPipedriveWebhooksPageProps}
             certificadosPageProps={certificadosPageProps}
             recursosFormacionAbiertaPageProps={recursosFormacionAbiertaPageProps}
             usersPageProps={usersPageProps}
