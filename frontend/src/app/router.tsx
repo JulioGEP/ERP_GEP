@@ -22,7 +22,6 @@ import type { ProveedoresPageProps } from '../pages/recursos/ProveedoresPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
 import type { ConfirmacionesPageProps } from '../pages/recursos/ConfirmacionesPage';
-import type { PipedriveWebhooksPageProps } from '../pages/recursos/PipedriveWebhooksPage';
 import type { UsersPageProps } from '../pages/usuarios/UsersPage';
 import { useAuth } from '../context/AuthContext';
 
@@ -49,7 +48,6 @@ const SessionImportPage = lazy(() => import('../pages/recursos/SessionImportPage
 const BulkBudgetImportPage = lazy(() => import('../pages/recursos/BulkBudgetImportPage'));
 const ProveedoresPage = lazy(() => import('../pages/recursos/ProveedoresPage'));
 const ConfirmacionesPage = lazy(() => import('../pages/recursos/ConfirmacionesPage'));
-const PipedriveWebhooksPage = lazy(() => import('../pages/recursos/PipedriveWebhooksPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
 const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/FormacionAbiertaPage'));
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
@@ -106,7 +104,6 @@ type AppRouterProps = {
   productosPageProps: ProductosPageProps;
   stockPageProps: StockPageProps;
   recursosConfirmacionesPageProps: ConfirmacionesPageProps;
-  recursosPipedriveWebhooksPageProps: PipedriveWebhooksPageProps;
   certificadosPageProps: CertificadosPageProps;
   recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps;
   usersPageProps: UsersPageProps;
@@ -134,7 +131,6 @@ export function AppRouter({
   productosPageProps,
   stockPageProps,
   recursosConfirmacionesPageProps,
-  recursosPipedriveWebhooksPageProps,
   certificadosPageProps,
   recursosFormacionAbiertaPageProps,
   usersPageProps,
@@ -339,15 +335,6 @@ export function AppRouter({
             <GuardedRoute
               path="/recursos/confirmaciones"
               element={<ConfirmacionesPage {...recursosConfirmacionesPageProps} />}
-            />
-          }
-        />
-        <Route
-          path="/recursos/pipedrive_webhooks"
-          element={
-            <GuardedRoute
-              path="/recursos/pipedrive_webhooks"
-              element={<PipedriveWebhooksPage {...recursosPipedriveWebhooksPageProps} />}
             />
           }
         />

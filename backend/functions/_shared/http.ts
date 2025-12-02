@@ -227,7 +227,7 @@ export function createHttpHandler<TBody = unknown>(handler: HttpHandler<TBody>) 
       body: parsedBody.body as TBody,
     };
 
-    if (!isTrustedClient(request.headers, request.path)) {
+    if (!isTrustedClient(request.headers)) {
       await logSuspiciousRequest({
         event,
         headers: event.headers,

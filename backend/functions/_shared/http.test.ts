@@ -145,19 +145,4 @@ describe('createHttpHandler – trusted client validation', () => {
 
     assert.equal(response.statusCode, 200);
   });
-
-  it('allows pipedrive webhook user agents for the webhook endpoint', async () => {
-    const handler = createHttpHandler(async () => successResponse({ ok: true }));
-
-    const response = await handler(
-      {
-        httpMethod: 'POST',
-        path: '/api/pipedrive-webhooks',
-        headers: { 'user-agent': 'Pipedrive-Webhook' },
-      } as any,
-      {} as any,
-    );
-
-    assert.equal(response.statusCode, 200);
-  });
 });
