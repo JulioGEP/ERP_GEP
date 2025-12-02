@@ -10,6 +10,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Accordion,
   Alert,
@@ -126,6 +127,13 @@ const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
   SUSPENDIDA: 'warning',
   CANCELADA: 'danger',
   FINALIZADA: 'primary',
+};
+const SESSION_ESTADO_ORDER: Record<SessionEstado, number> = {
+  BORRADOR: 0,
+  PLANIFICADA: 1,
+  SUSPENDIDA: 2,
+  FINALIZADA: 3,
+  CANCELADA: 4,
 };
 const MANUAL_SESSION_ESTADOS: SessionEstado[] = ['BORRADOR', 'SUSPENDIDA', 'CANCELADA', 'FINALIZADA'];
 const MANUAL_SESSION_ESTADO_SET = new Set<SessionEstado>(MANUAL_SESSION_ESTADOS);
@@ -1737,6 +1745,41 @@ function areStringArraysEqual(a: string[], b: string[]): boolean {
   return sortedA.every((value, index) => value === sortedB[index]);
 }
 
+function areSetsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const value of a) {
+    if (!b.has(value)) return false;
+  }
+  return true;
+}
+
+function sortSessionsForDisplay(
+  sessions: SessionDTO[],
+  options: { highlightSessionId: string | null; highlightEnabled: boolean; newSessionIds: Set<string> },
+): SessionDTO[] {
+  const { highlightSessionId, highlightEnabled, newSessionIds } = options;
+  const normalizedHighlightId = highlightEnabled ? highlightSessionId : null;
+
+  return [...sessions]
+    .map((session, index) => ({ session, index }))
+    .sort((a, b) => {
+      const aHighlight = normalizedHighlightId != null && a.session.id === normalizedHighlightId;
+      const bHighlight = normalizedHighlightId != null && b.session.id === normalizedHighlightId;
+      if (aHighlight !== bHighlight) return aHighlight ? -1 : 1;
+
+      const aNew = newSessionIds.has(a.session.id) && a.session.estado === 'BORRADOR';
+      const bNew = newSessionIds.has(b.session.id) && b.session.estado === 'BORRADOR';
+      if (aNew !== bNew) return aNew ? -1 : 1;
+
+      const aEstadoOrder = SESSION_ESTADO_ORDER[a.session.estado] ?? Number.MAX_SAFE_INTEGER;
+      const bEstadoOrder = SESSION_ESTADO_ORDER[b.session.estado] ?? Number.MAX_SAFE_INTEGER;
+      if (aEstadoOrder !== bEstadoOrder) return aEstadoOrder - bEstadoOrder;
+
+      return a.index - b.index;
+    })
+    .map(({ session }) => session);
+}
+
 function buildSessionPatchPayload(
   form: SessionFormState,
   saved: SessionFormState | undefined,
@@ -1900,6 +1943,8 @@ export function SessionsAccordionEmpresas({
   const [mapAddress, setMapAddress] = useState<string | null>(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const normalizedHighlightSessionId = useMemo(() => highlightSessionId?.trim() ?? null, [highlightSessionId]);
+  const location = useLocation();
+  const isCalendarRoute = useMemo(() => location.pathname.startsWith('/calendario'), [location.pathname]);
 
   const generateMutation = useMutation({
     mutationFn: (id: string) => generateSessionsFromDeal(id),
@@ -1951,6 +1996,8 @@ export function SessionsAccordionEmpresas({
       return next;
     });
   }, [applicableProducts]);
+
+  const [newSessionIds, setNewSessionIds] = useState<Set<string>>(new Set());
 
   const trainersQuery = useQuery({
     queryKey: ['trainers', 'active'],
@@ -2058,6 +2105,20 @@ export function SessionsAccordionEmpresas({
       return next;
     });
   }, [generationDone, queriesUpdatedKey, applicableProducts]);
+
+  useEffect(() => {
+    setNewSessionIds((current) => {
+      if (!current.size) return current;
+      const next = new Set<string>();
+      current.forEach((sessionId) => {
+        const estado = forms[sessionId]?.estado;
+        if (estado === 'BORRADOR') {
+          next.add(sessionId);
+        }
+      });
+      return areSetsEqual(next, current) ? current : next;
+    });
+  }, [forms]);
 
   const patchMutation = useMutation({
     mutationFn: ({ sessionId, payload }: { sessionId: string; payload: Parameters<typeof patchSession>[1] }) =>
@@ -2404,7 +2465,7 @@ export function SessionsAccordionEmpresas({
     const productId = sessionProductRef.current[sessionId];
     if (!session || !productId) return;
     try {
-      await createMutation.mutateAsync({
+      const newSession = await createMutation.mutateAsync({
         deal_id: dealId,
         deal_product_id: productId,
         direccion: session.direccion ?? dealAddress ?? '',
@@ -2413,6 +2474,12 @@ export function SessionsAccordionEmpresas({
         sala_id: session.sala_id,
         force_estado_borrador: true,
       });
+      setNewSessionIds((current) => {
+        const next = new Set(current);
+        if (newSession?.id) next.add(newSession.id);
+        return next;
+      });
+      setPageByProduct((current) => ({ ...current, [productId]: 1 }));
       await invalidateProductSessions(productId);
     } catch (error) {
       const message = isApiError(error)
@@ -2631,8 +2698,19 @@ export function SessionsAccordionEmpresas({
           const query = sessionQueries[index];
           const group = (query?.data as SessionGroupDTO | null) ?? null;
           const sessions = group?.sessions ?? [];
+          const sortedSessions = sortSessionsForDisplay(sessions, {
+            highlightSessionId: normalizedHighlightSessionId,
+            highlightEnabled: isCalendarRoute,
+            newSessionIds,
+          });
           const pagination = group?.pagination ?? { page: 1, totalPages: 1, total: 0 };
           const currentPage = pageByProduct[product.id] ?? 1;
+          const pageWindowStart = Math.floor((currentPage - 1) / 10) * 10 + 1;
+          const pageWindowEnd = Math.min(pageWindowStart + 9, pagination.totalPages);
+          const pageNumbers = Array.from(
+            { length: Math.max(0, pageWindowEnd - pageWindowStart + 1) },
+            (_, index) => pageWindowStart + index,
+          );
           const isLoading = query.isLoading || query.isFetching;
           const queryError = query.error;
 
@@ -2647,22 +2725,28 @@ export function SessionsAccordionEmpresas({
                   <Button
                     size="sm"
                     variant="outline-primary"
-                    onClick={() => {
-                      createMutation
-                        .mutateAsync({
+                    onClick={async () => {
+                      try {
+                        const newSession = await createMutation.mutateAsync({
                           deal_id: dealId,
                           deal_product_id: product.id,
                           direccion: dealAddress ?? '',
-                        })
-                        .then(() => invalidateProductSessions(product.id))
-                        .catch((error: unknown) => {
-                          const message = isApiError(error)
-                            ? error.message
-                            : error instanceof Error
-                            ? error.message
-                            : 'No se pudo crear la sesión';
-                          alert(message);
                         });
+                        setPageByProduct((current) => ({ ...current, [product.id]: 1 }));
+                        setNewSessionIds((current) => {
+                          const next = new Set(current);
+                          if (newSession?.id) next.add(newSession.id);
+                          return next;
+                        });
+                        await invalidateProductSessions(product.id);
+                      } catch (error) {
+                        const message = isApiError(error)
+                          ? error.message
+                          : error instanceof Error
+                          ? error.message
+                          : 'No se pudo crear la sesión';
+                        alert(message);
+                      }
                     }}
                     disabled={createMutation.isPending}
                   >
@@ -2689,7 +2773,7 @@ export function SessionsAccordionEmpresas({
               )}
               {!!sessions.length && (
                 <ListGroup as="ol" numbered className="mb-0">
-                  {sessions.map((session, sessionIndex) => {
+                  {sortedSessions.map((session, sessionIndex) => {
                     const form = forms[session.id];
                     const status =
                       saveStatus[session.id] ?? { saving: false, error: null, dirty: false };
@@ -2775,7 +2859,17 @@ export function SessionsAccordionEmpresas({
                         setPageByProduct((current) => ({ ...current, [product.id]: Math.max(1, currentPage - 1) }))
                       }
                     />
-                    <Pagination.Item active>{currentPage}</Pagination.Item>
+                    {pageNumbers.map((pageNumber) => (
+                      <Pagination.Item
+                        key={pageNumber}
+                        active={pageNumber === currentPage}
+                        onClick={() =>
+                          setPageByProduct((current) => ({ ...current, [product.id]: pageNumber }))
+                        }
+                      >
+                        {pageNumber}
+                      </Pagination.Item>
+                    ))}
                     <Pagination.Next
                       disabled={currentPage >= pagination.totalPages}
                       onClick={() =>
