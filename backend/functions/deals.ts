@@ -622,6 +622,66 @@ function mapDealForApi<T extends Record<string, any>>(deal: T | null): T | null 
   return out as T;
 }
 
+export async function deleteDealFromDatabase(
+  prisma: PrismaClient,
+  dealId: string,
+): Promise<{ deleted: boolean }> {
+  const id = String(dealId);
+
+  const existingRaw = await prisma.deals.findUnique({
+    where: { deal_id: id },
+    include: {
+      organizations: { select: { name: true } },
+    },
+  });
+
+  const existing = normalizeDealRelations(existingRaw);
+
+  if (!existing) {
+    return { deleted: false };
+  }
+
+  const commentsTableExistsResult = await prisma.$queryRaw<
+    Array<{ table_ref: string | null }>
+  >`SELECT to_regclass('public.comments')::text AS table_ref`;
+
+  const commentsTableExists = Array.isArray(commentsTableExistsResult)
+    ? commentsTableExistsResult.some((row) => Boolean(row?.table_ref))
+    : false;
+
+  const transactionOperations: Prisma.PrismaPromise<unknown>[] = [
+    prisma.deal_products.deleteMany({ where: { deal_id: id } }),
+    prisma.deal_notes.deleteMany({ where: { deal_id: id } }),
+    prisma.deal_files.deleteMany({ where: { deal_id: id } }),
+    prisma.sesiones.deleteMany({ where: { deal_id: id } }),
+    prisma.deals.delete({ where: { deal_id: id } }),
+  ];
+
+  if (commentsTableExists) {
+    transactionOperations.splice(
+      3,
+      0,
+      prisma.$executeRaw`DELETE FROM comments WHERE deal_id = ${id}`,
+    );
+  }
+
+  await prisma.$transaction(transactionOperations);
+
+  try {
+    await deleteDealFolderFromGoogleDrive({
+      deal: existing,
+      organizationName: existing.organizations?.name ?? null,
+    });
+  } catch (driveError) {
+    console.warn("[google-drive-sync] Error no bloqueante eliminando carpeta del deal", {
+      dealId: existing.deal_id,
+      error: driveError instanceof Error ? driveError.message : String(driveError),
+    });
+  }
+
+  return { deleted: true };
+}
+
 type ProductStockLookup = {
   byId: Map<string, { stock: number | null; idPipe: string | null }>;
   byName: Map<string, { stock: number | null; idPipe: string | null }>;
@@ -1251,56 +1311,10 @@ export const handler = async (event: any) => {
 
     /* ---------------- ELIMINAR DEAL ---------------- */
     if (method === "DELETE" && dealId !== null) {
-      const id = String(dealId);
+      const deletionResult = await deleteDealFromDatabase(prisma, String(dealId));
 
-      const existingRaw = await prisma.deals.findUnique({
-        where: { deal_id: id },
-        include: {
-          organizations: { select: { name: true } },
-        },
-      });
-      const existing = normalizeDealRelations(existingRaw);
-
-      if (!existing) {
+      if (!deletionResult.deleted) {
         return errorResponse("NOT_FOUND", "Deal no encontrado", 404);
-      }
-
-      const commentsTableExistsResult = await prisma.$queryRaw<
-        Array<{ table_ref: string | null }>
-      >`SELECT to_regclass('public.comments')::text AS table_ref`;
-
-      const commentsTableExists = Array.isArray(commentsTableExistsResult)
-        ? commentsTableExistsResult.some((row) => Boolean(row?.table_ref))
-        : false;
-
-      const transactionOperations = [
-        prisma.deal_products.deleteMany({ where: { deal_id: id } }),
-        prisma.deal_notes.deleteMany({ where: { deal_id: id } }),
-        prisma.deal_files.deleteMany({ where: { deal_id: id } }),
-        prisma.sesiones.deleteMany({ where: { deal_id: id } }),
-        prisma.deals.delete({ where: { deal_id: id } }),
-      ];
-
-      if (commentsTableExists) {
-        transactionOperations.splice(
-          3,
-          0,
-          
-        );
-      }
-
-      await prisma.$transaction(transactionOperations);
-
-      try {
-        await deleteDealFolderFromGoogleDrive({
-          deal: existing,
-          organizationName: existing.organizations?.name ?? null,
-        });
-      } catch (driveError) {
-        console.warn("[google-drive-sync] Error no bloqueante eliminando carpeta del deal", {
-          dealId: existing.deal_id,
-          error: driveError instanceof Error ? driveError.message : String(driveError),
-        });
       }
 
       return successResponse({ ok: true });
