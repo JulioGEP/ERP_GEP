@@ -64,6 +64,7 @@ export async function sendVacationRequest(payload: {
   startDate: string;
   endDate: string;
   notes?: string;
+  tag?: VacationType | '';
 }): Promise<{ message: string }> {
   return postJson<{ message: string }>('/vacation-requests', payload);
 }

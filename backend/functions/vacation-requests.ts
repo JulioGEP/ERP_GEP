@@ -6,6 +6,13 @@ import { requireAuth } from './_shared/auth';
 import { sendEmail } from './_shared/mailer';
 
 const RECIPIENT = 'people@gepgroup.es';
+const VACATION_TAG_LABELS: Record<'A' | 'F' | 'L' | 'C' | 'T', string> = {
+  A: 'Ausencia legal',
+  F: 'Fiestas nacionales y autonómicas',
+  L: 'Festivos locales',
+  C: 'Día aniversario',
+  T: 'Teletrabajo',
+};
 
 function parseDateOnly(value: unknown): string | null {
   if (!value) return null;
@@ -42,6 +49,10 @@ export const handler = createHttpHandler<any>(async (request) => {
   const startDate = parseDateOnly(request.body.startDate ?? request.body.start_date);
   const endDate = parseDateOnly(request.body.endDate ?? request.body.end_date);
   const notes = typeof request.body.notes === 'string' ? request.body.notes.trim() : '';
+  const rawTag = typeof request.body.tag === 'string' ? request.body.tag.trim().toUpperCase() : '';
+  const tag = (['A', 'F', 'L', 'C', 'T'] as const).includes(rawTag as any)
+    ? (rawTag as keyof typeof VACATION_TAG_LABELS)
+    : null;
 
   if (!startDate || !endDate) {
     return errorResponse('VALIDATION_ERROR', 'Las fechas de inicio y fin son obligatorias', 400);
@@ -54,6 +65,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       <h2>Petición de vacaciones</h2>
       <p><strong>Usuario:</strong> ${auth.user.first_name} ${auth.user.last_name ?? ''} (${auth.user.email})</p>
       <p><strong>Fechas solicitadas:</strong> ${formatHumanDate(startDate)} → ${formatHumanDate(endDate)}</p>
+      ${tag ? `<p><strong>Tipo:</strong> ${VACATION_TAG_LABELS[tag]}</p>` : ''}
       ${notes ? `<p><strong>Notas:</strong> ${notes}</p>` : ''}
       <p style="margin-top:16px;color:#555">Enviado automáticamente desde ERP.</p>
     </div>
@@ -65,8 +77,8 @@ export const handler = createHttpHandler<any>(async (request) => {
     subject: 'Petición de vacaciones',
     html,
     text: `Petición de vacaciones\nUsuario: ${auth.user.first_name} ${auth.user.last_name ?? ''} (${auth.user.email})\nFechas: ${startDate} -> ${endDate}${
-      notes ? `\nNotas: ${notes}` : ''
-    }`,
+      tag ? `\nTipo: ${VACATION_TAG_LABELS[tag]}` : ''
+    }${notes ? `\nNotas: ${notes}` : ''}`,
   });
 
   return successResponse({ message: 'Petición enviada correctamente' });
