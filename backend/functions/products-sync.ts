@@ -1,5 +1,5 @@
 // backend/functions/products-sync.ts
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { extractProductCatalogAttributes, listAllProducts } from './_shared/pipedrive';
