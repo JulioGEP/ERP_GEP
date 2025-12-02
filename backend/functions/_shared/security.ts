@@ -59,8 +59,12 @@ function resolveClientIpFromHeaders(
 
 const TRUSTED_FRONTEND_HOSTS = new Set(resolveTrustedFrontendHosts());
 
+const TRUSTED_WEBHOOK_PATHS = ['/pipedrive-webhooks'];
+const KNOWN_WEBHOOK_USER_AGENTS = [/pipedrive/i];
+
 export function isTrustedClient(
   headers: Record<string, string | undefined> | undefined,
+  path?: string,
 ): boolean {
   const normalized = normalizeHeaders(headers);
 
@@ -72,7 +76,36 @@ export function isTrustedClient(
     return true;
   }
 
-  return hasTrustedFrontendReferer(normalized);
+  if (hasTrustedFrontendReferer(normalized)) {
+    return true;
+  }
+
+  return isTrustedWebhookAgent(normalized, path);
+}
+
+function isTrustedWebhookAgent(
+  headers: Record<string, string>,
+  path?: string,
+): boolean {
+  if (!path) {
+    return false;
+  }
+
+  const normalizedPath = path.toLowerCase();
+  const matchesWebhookPath = TRUSTED_WEBHOOK_PATHS.some((webhookPath) =>
+    normalizedPath.includes(webhookPath),
+  );
+
+  if (!matchesWebhookPath) {
+    return false;
+  }
+
+  const userAgent = headers['user-agent'];
+  if (typeof userAgent !== 'string' || !userAgent.trim()) {
+    return false;
+  }
+
+  return KNOWN_WEBHOOK_USER_AGENTS.some((pattern) => pattern.test(userAgent));
 }
 
 function resolveTrustedFrontendHosts(): string[] {
