@@ -772,7 +772,7 @@ async function withTimeout<T>(
 }
 
 /* ======================= IMPORT DESDE PIPEDRIVE ======================= */
-async function importDealFromPipedrive(dealIdRaw: any) {
+export async function importDealFromPipedrive(dealIdRaw: any) {
   const dealIdStr = String(dealIdRaw ?? "").trim();
   if (!dealIdStr) throw new Error("Falta dealId");
   const dealIdNum = Number(dealIdStr);

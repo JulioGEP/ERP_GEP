@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
+import { importDealFromPipedrive } from './deals';
 
 const EXPECTED_TOKEN = process.env.PIPEDRIVE_WEBHOOK_TOKEN;
 
@@ -132,6 +133,55 @@ function filterHeaders(headers: Record<string, string>): Record<string, string> 
   return Object.fromEntries(entries);
 }
 
+function normalizeDealId(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const str = String(value).trim();
+  if (!str.length) return null;
+
+  const asNumber = Number.parseInt(str, 10);
+  if (Number.isFinite(asNumber)) return String(asNumber);
+  return str;
+}
+
+function resolveDealId(body: Record<string, unknown>): string | null {
+  const data = body?.['data'] as Record<string, unknown> | undefined;
+  const meta = body?.['meta'] as Record<string, unknown> | undefined;
+
+  const candidates = [
+    data?.['id'],
+    data && typeof data === 'object' ? (data as any).current?.id : null,
+    data && typeof data === 'object' ? (data as any).previous?.id : null,
+    meta?.['id'],
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeDealId(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
+function resolveDealStatus(body: Record<string, unknown>): string | null {
+  const data = body?.['data'] as Record<string, unknown> | undefined;
+  const candidates = [
+    data?.['status'],
+    data && typeof data === 'object' ? (data as any).current?.status : null,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
+function isDealWonStatus(status: unknown): boolean {
+  return typeof status === 'string' && status.trim().toLowerCase() === 'won';
+}
+
 function buildErrorResponse(statusCode: number, code: string, message: string) {
   return {
     statusCode,
@@ -164,6 +214,8 @@ export const handler: Handler = async (event) => {
   }
 
   const prisma = getPrisma();
+  let processedDealId: string | null = null;
+  let processedAction: 'created' | 'updated' | 'skipped' = 'skipped';
   await prisma.pipedrive_webhook_events.create({
     data: {
       event: typeof body.event === 'string' ? body.event : null,
@@ -192,5 +244,34 @@ export const handler: Handler = async (event) => {
     },
   });
 
-  return { statusCode: 200, headers: COMMON_HEADERS, body: JSON.stringify({ ok: true }) };
+  try {
+    const dealId = resolveDealId(body);
+    const status = resolveDealStatus(body);
+
+    if (dealId && isDealWonStatus(status)) {
+      const existedBefore = await prisma.deals.findUnique({
+        where: { deal_id: dealId },
+        select: { deal_id: true },
+      });
+
+      await importDealFromPipedrive(dealId);
+
+      processedDealId = dealId;
+      processedAction = existedBefore ? 'updated' : 'created';
+    }
+  } catch (processError) {
+    console.error('[pipedrive-webhook] Failed processing deal webhook', {
+      error:
+        processError instanceof Error
+          ? { message: processError.message, stack: processError.stack }
+          : processError,
+    });
+    return buildErrorResponse(502, 'DEAL_PROCESSING_FAILED', 'No se pudo procesar el webhook');
+  }
+
+  return {
+    statusCode: 200,
+    headers: COMMON_HEADERS,
+    body: JSON.stringify({ ok: true, processed: processedDealId, action: processedAction }),
+  };
 };
