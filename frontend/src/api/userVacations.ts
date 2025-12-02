@@ -101,7 +101,8 @@ export async function applyBulkVacationDay(payload: {
 }
 
 export async function fetchVacationRequests(): Promise<VacationRequestItem[]> {
-  return getJson<VacationRequestItem[]>('/vacation-requests');
+  const response = await getJson<{ requests: VacationRequestItem[] }>('/vacation-requests');
+  return response.requests ?? [];
 }
 
 export async function deleteVacationRequest(id: string): Promise<{ message: string }> {

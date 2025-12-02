@@ -123,19 +123,19 @@ async function handleListRequests(prisma: ReturnType<typeof getPrisma>) {
     include: { user: { select: { id: true, first_name: true, last_name: true, email: true } } },
   });
 
-  return successResponse(
-    requests.map((request) => ({
-      id: request.id,
-      userId: request.user_id,
-      userName: `${request.user.first_name} ${request.user.last_name ?? ''}`.trim(),
-      userEmail: request.user.email,
-      startDate: formatDateOnly(request.start_date),
-      endDate: formatDateOnly(request.end_date),
-      tag: request.tag,
-      notes: request.notes,
-      createdAt: request.created_at.toISOString(),
-    })),
-  );
+  const formattedRequests = requests.map((request) => ({
+    id: request.id,
+    userId: request.user_id,
+    userName: `${request.user.first_name} ${request.user.last_name ?? ''}`.trim(),
+    userEmail: request.user.email,
+    startDate: formatDateOnly(request.start_date),
+    endDate: formatDateOnly(request.end_date),
+    tag: request.tag,
+    notes: request.notes,
+    createdAt: request.created_at.toISOString(),
+  }));
+
+  return successResponse({ requests: formattedRequests });
 }
 
 async function handleDeleteRequest(request: any, prisma: ReturnType<typeof getPrisma>) {
