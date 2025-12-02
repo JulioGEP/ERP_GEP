@@ -1,7 +1,7 @@
 import type { Handler } from '@netlify/functions';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
-import { importDealFromPipedrive } from './deals';
+import { deleteDealFromDatabase, importDealFromPipedrive } from './deals';
 
 const EXPECTED_TOKEN = process.env.PIPEDRIVE_WEBHOOK_TOKEN;
 
@@ -178,6 +178,31 @@ function resolveDealStatus(body: Record<string, unknown>): string | null {
   return null;
 }
 
+function resolveAction(body: Record<string, unknown>): string | null {
+  const meta = body?.['meta'] as Record<string, unknown> | undefined;
+  const candidates = [body?.['action'], meta?.['action']];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length) {
+      return candidate.trim().toLowerCase();
+    }
+  }
+
+  return null;
+}
+
+function resolveEntityId(body: Record<string, unknown>): string | null {
+  const meta = body?.['meta'] as Record<string, unknown> | undefined;
+  const candidates = [body?.['entity_id'], meta?.['id']];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeDealId(candidate);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
 function isDealWonStatus(status: unknown): boolean {
   return typeof status === 'string' && status.trim().toLowerCase() === 'won';
 }
@@ -215,7 +240,7 @@ export const handler: Handler = async (event) => {
 
   const prisma = getPrisma();
   let processedDealId: string | null = null;
-  let processedAction: 'created' | 'updated' | 'skipped' = 'skipped';
+  let processedAction: 'created' | 'updated' | 'deleted' | 'skipped' = 'skipped';
   await prisma.pipedrive_webhook_events.create({
     data: {
       event: typeof body.event === 'string' ? body.event : null,
@@ -245,10 +270,20 @@ export const handler: Handler = async (event) => {
   });
 
   try {
+    const action = resolveAction(body);
     const dealId = resolveDealId(body);
     const status = resolveDealStatus(body);
 
-    if (dealId && isDealWonStatus(status)) {
+    if (action === 'delete') {
+      const entityId = resolveEntityId(body) ?? dealId;
+      if (entityId) {
+        const deletionResult = await deleteDealFromDatabase(prisma, entityId);
+        if (deletionResult.deleted) {
+          processedDealId = entityId;
+          processedAction = 'deleted';
+        }
+      }
+    } else if (dealId && isDealWonStatus(status)) {
       const existedBefore = await prisma.deals.findUnique({
         where: { deal_id: dealId },
         select: { deal_id: true },
