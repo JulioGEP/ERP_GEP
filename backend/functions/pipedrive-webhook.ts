@@ -1,4 +1,6 @@
+import { Prisma } from '@prisma/client';
 import type { Handler } from '@netlify/functions';
+import { extractProductCatalogAttributes, getProduct } from './_shared/pipedrive';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { deleteDealFromDatabase, importDealFromPipedrive } from './deals';
@@ -191,6 +193,19 @@ function resolveAction(body: Record<string, unknown>): string | null {
   return null;
 }
 
+function resolveEntity(body: Record<string, unknown>): string | null {
+  const meta = body?.['meta'] as Record<string, unknown> | undefined;
+  const candidates = [body?.['entity'], meta?.['object'], meta?.['entity']];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length) {
+      return candidate.trim().toLowerCase();
+    }
+  }
+
+  return null;
+}
+
 function resolveEntityId(body: Record<string, unknown>): string | null {
   const meta = body?.['meta'] as Record<string, unknown> | undefined;
   const candidates = [body?.['entity_id'], meta?.['entity_id'], meta?.['id']];
@@ -213,6 +228,50 @@ function buildErrorResponse(statusCode: number, code: string, message: string) {
     headers: COMMON_HEADERS,
     body: JSON.stringify({ ok: false, error_code: code, message }),
   };
+}
+
+function normalizeText(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
+function normalizeCategory(value: string | null | undefined) {
+  if (!value) return null;
+  return value.trim();
+}
+
+async function updateProductFromPipedrive(prisma: ReturnType<typeof getPrisma>, productId: string) {
+  const existingProduct = await prisma.products.findUnique({
+    where: { id_pipe: productId },
+  });
+
+  if (!existingProduct) return { updated: false } as const;
+
+  const pdProduct = await getProduct(productId);
+  if (!pdProduct) return { updated: false } as const;
+
+  const attributes = await extractProductCatalogAttributes(pdProduct);
+  const categoryLabel = normalizeCategory(attributes.category ?? normalizeText(pdProduct?.category));
+  const typeLabel = normalizeText(attributes.type);
+
+  const priceValue = Number((pdProduct as any)?.price ?? (pdProduct as any)?.prices?.[0]?.price);
+  const price = Number.isFinite(priceValue) ? priceValue : null;
+
+  await prisma.products.update({
+    where: { id_pipe: productId },
+    data: {
+      name: normalizeText(pdProduct?.name),
+      code: normalizeText(attributes.code ?? pdProduct?.code),
+      category: categoryLabel,
+      type: typeLabel,
+      price: price != null ? new Prisma.Decimal(price) : null,
+      active: (pdProduct as any)?.selectable === undefined ? true : Boolean((pdProduct as any).selectable),
+      updated_at: new Date(),
+    },
+  });
+
+  return { updated: true } as const;
 }
 
 export const handler: Handler = async (event) => {
@@ -240,7 +299,7 @@ export const handler: Handler = async (event) => {
 
   const prisma = getPrisma();
   let processedDealId: string | null = null;
-  let processedAction: 'created' | 'updated' | 'deleted' | 'skipped' = 'skipped';
+  let processedAction: 'created' | 'updated' | 'deleted' | 'product_updated' | 'skipped' = 'skipped';
   await prisma.pipedrive_webhook_events.create({
     data: {
       event: typeof body.event === 'string' ? body.event : null,
@@ -273,6 +332,18 @@ export const handler: Handler = async (event) => {
     const action = resolveAction(body);
     const dealId = resolveDealId(body);
     const status = resolveDealStatus(body);
+    const entity = resolveEntity(body);
+
+    if (entity === 'product' && action === 'change') {
+      const productId = resolveEntityId(body) ?? resolveDealId(body);
+      if (productId) {
+        const { updated } = await updateProductFromPipedrive(prisma, productId);
+        if (updated) {
+          processedDealId = productId;
+          processedAction = 'product_updated';
+        }
+      }
+    }
 
     if (action === 'delete') {
       const entityId = resolveEntityId(body) ?? dealId;
