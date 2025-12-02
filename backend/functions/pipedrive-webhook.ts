@@ -246,8 +246,6 @@ async function updateProductFromPipedrive(prisma: ReturnType<typeof getPrisma>, 
     where: { id_pipe: productId },
   });
 
-  if (!existingProduct) return { updated: false } as const;
-
   const pdProduct = await getProduct(productId);
   if (!pdProduct) return { updated: false } as const;
 
@@ -257,21 +255,26 @@ async function updateProductFromPipedrive(prisma: ReturnType<typeof getPrisma>, 
 
   const priceValue = Number((pdProduct as any)?.price ?? (pdProduct as any)?.prices?.[0]?.price);
   const price = Number.isFinite(priceValue) ? priceValue : null;
+  const data = {
+    name: normalizeText(pdProduct?.name),
+    code: normalizeText(attributes.code ?? pdProduct?.code),
+    category: categoryLabel,
+    type: typeLabel,
+    price: price != null ? new Prisma.Decimal(price) : null,
+    active: (pdProduct as any)?.selectable === undefined ? true : Boolean((pdProduct as any).selectable),
+    updated_at: new Date(),
+  };
 
-  await prisma.products.update({
+  await prisma.products.upsert({
     where: { id_pipe: productId },
-    data: {
-      name: normalizeText(pdProduct?.name),
-      code: normalizeText(attributes.code ?? pdProduct?.code),
-      category: categoryLabel,
-      type: typeLabel,
-      price: price != null ? new Prisma.Decimal(price) : null,
-      active: (pdProduct as any)?.selectable === undefined ? true : Boolean((pdProduct as any).selectable),
-      updated_at: new Date(),
+    update: data,
+    create: {
+      id_pipe: productId,
+      ...data,
     },
   });
 
-  return { updated: true } as const;
+  return { updated: true, created: !existingProduct } as const;
 }
 
 export const handler: Handler = async (event) => {
@@ -299,7 +302,13 @@ export const handler: Handler = async (event) => {
 
   const prisma = getPrisma();
   let processedDealId: string | null = null;
-  let processedAction: 'created' | 'updated' | 'deleted' | 'product_updated' | 'skipped' = 'skipped';
+  let processedAction:
+    | 'created'
+    | 'updated'
+    | 'deleted'
+    | 'product_updated'
+    | 'product_created'
+    | 'skipped' = 'skipped';
   await prisma.pipedrive_webhook_events.create({
     data: {
       event: typeof body.event === 'string' ? body.event : null,
@@ -334,13 +343,13 @@ export const handler: Handler = async (event) => {
     const status = resolveDealStatus(body);
     const entity = resolveEntity(body);
 
-    if (entity === 'product' && action === 'change') {
+    if (entity === 'product' && (action === 'change' || action === 'create')) {
       const productId = resolveEntityId(body) ?? resolveDealId(body);
       if (productId) {
-        const { updated } = await updateProductFromPipedrive(prisma, productId);
+        const { updated, created } = await updateProductFromPipedrive(prisma, productId);
         if (updated) {
           processedDealId = productId;
-          processedAction = 'product_updated';
+          processedAction = created ? 'product_created' : 'product_updated';
         }
       }
     }
