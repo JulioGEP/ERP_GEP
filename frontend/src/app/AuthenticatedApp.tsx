@@ -1387,6 +1387,18 @@ export default function AuthenticatedApp() {
     error: allBudgetsQuery.error ?? null,
     onRetry: () => allBudgetsQuery.refetch(),
     onSelect: handleSelectBudget,
+    onDelete: handleDeleteBudget,
+    onOpenImportModal: handleOpenImportModal,
+    isImporting: importMutation.isPending,
+    canImport: canImportBudgets,
+    serverQueryOptions: {
+      fetcher: async (options) => {
+        const results = await fetchDeals(options);
+        return results.filter((budget) => isMaterialPipeline(budget));
+      },
+      queryKey: ['budget-table', 'materials'],
+    },
+    pageSize: 10,
   };
 
   const materialsPendingProductsPageProps: MaterialsPendingProductsPageProps = {
