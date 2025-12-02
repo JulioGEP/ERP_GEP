@@ -53,6 +53,7 @@ model users {
   documents         user_documents[]
   vacation_days     user_vacation_days[]
   vacation_balances user_vacation_balances[]
+  vacation_requests vacation_requests[]
 }
 
 model user_documents {
@@ -99,6 +100,21 @@ model user_vacation_balances {
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([user_id, year], map: "ux_user_vacation_balance_year")
+}
+
+model vacation_requests {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  start_date DateTime  @db.Date
+  end_date   DateTime  @db.Date
+  tag        String?   @db.VarChar(1)
+  notes      String?
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id], map: "idx_vacation_requests_user_id")
+  @@map("vacation_requests")
 }
 
 model tokens {

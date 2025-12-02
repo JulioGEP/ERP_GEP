@@ -1,5 +1,5 @@
 // frontend/src/api/userVacations.ts
-import { getJson, patchJson, postJson } from './client';
+import { delJson, getJson, patchJson, postJson } from './client';
 
 export type VacationType = 'A' | 'F' | 'L' | 'C' | 'T';
 
@@ -36,6 +36,18 @@ export type VacationSummaryResponse = {
   year: number;
   generatedAt: string;
   users: VacationSummaryUser[];
+};
+
+export type VacationRequestItem = {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  startDate: string;
+  endDate: string;
+  tag: VacationType | null;
+  notes?: string | null;
+  createdAt: string;
 };
 
 export async function fetchUserVacations(userId: string, year?: number): Promise<UserVacationsResponse> {
@@ -86,4 +98,17 @@ export async function applyBulkVacationDay(payload: {
     '/user-vacations-bulk',
     payload,
   );
+}
+
+export async function fetchVacationRequests(): Promise<VacationRequestItem[]> {
+  return getJson<VacationRequestItem[]>('/vacation-requests');
+}
+
+export async function deleteVacationRequest(id: string): Promise<{ message: string }> {
+  const searchParams = new URLSearchParams({ id });
+  return delJson<{ message: string }>(`/vacation-requests?${searchParams.toString()}`);
+}
+
+export async function acceptVacationRequest(id: string): Promise<{ message: string; appliedDates: string[] }> {
+  return patchJson<{ message: string; appliedDates: string[] }>('/vacation-requests', { id });
 }

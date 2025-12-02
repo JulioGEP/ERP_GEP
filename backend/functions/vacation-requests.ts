@@ -2,8 +2,9 @@
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
-import { requireAuth } from './_shared/auth';
+import { normalizeRoleKey, requireAuth } from './_shared/auth';
 import { sendEmail } from './_shared/mailer';
+import { formatDateOnly, VACATION_TYPES } from './_shared/vacations';
 
 const RECIPIENT = 'people@gepgroup.es';
 const VACATION_TAG_LABELS: Record<'A' | 'F' | 'L' | 'C' | 'T', string> = {
@@ -38,10 +39,28 @@ export const handler = createHttpHandler<any>(async (request) => {
     return auth.error;
   }
 
-  if (request.method !== 'POST') {
-    return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
+  if (request.method === 'POST') {
+    return handleCreateRequest(request, prisma, auth);
   }
 
+  const role = normalizeRoleKey(auth.user.role);
+  if (role !== 'admin' && role !== 'people') {
+    return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
+  }
+
+  switch (request.method) {
+    case 'GET':
+      return handleListRequests(prisma);
+    case 'DELETE':
+      return handleDeleteRequest(request, prisma);
+    case 'PATCH':
+      return handleAcceptRequest(request, prisma);
+    default:
+      return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
+  }
+});
+
+async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPrisma>, auth: any) {
   if (!request.body || typeof request.body !== 'object') {
     return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
   }
@@ -58,6 +77,10 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('VALIDATION_ERROR', 'Las fechas de inicio y fin son obligatorias', 400);
   }
 
+  if (endDate < startDate) {
+    return errorResponse('VALIDATION_ERROR', 'La fecha de fin no puede ser anterior a la de inicio', 400);
+  }
+
   const cc = auth.user.email ? auth.user.email : undefined;
 
   const html = `
@@ -71,6 +94,16 @@ export const handler = createHttpHandler<any>(async (request) => {
     </div>
   `;
 
+  await prisma.vacation_requests.create({
+    data: {
+      user_id: auth.user.id,
+      start_date: new Date(`${startDate}T00:00:00Z`),
+      end_date: new Date(`${endDate}T00:00:00Z`),
+      tag,
+      notes: notes || null,
+    },
+  });
+
   await sendEmail({
     to: RECIPIENT,
     cc,
@@ -82,4 +115,82 @@ export const handler = createHttpHandler<any>(async (request) => {
   });
 
   return successResponse({ message: 'Petición enviada correctamente' });
-});
+}
+
+async function handleListRequests(prisma: ReturnType<typeof getPrisma>) {
+  const requests = await prisma.vacation_requests.findMany({
+    orderBy: { created_at: 'desc' },
+    include: { user: { select: { id: true, first_name: true, last_name: true, email: true } } },
+  });
+
+  return successResponse(
+    requests.map((request) => ({
+      id: request.id,
+      userId: request.user_id,
+      userName: `${request.user.first_name} ${request.user.last_name ?? ''}`.trim(),
+      userEmail: request.user.email,
+      startDate: formatDateOnly(request.start_date),
+      endDate: formatDateOnly(request.end_date),
+      tag: request.tag,
+      notes: request.notes,
+      createdAt: request.created_at.toISOString(),
+    })),
+  );
+}
+
+async function handleDeleteRequest(request: any, prisma: ReturnType<typeof getPrisma>) {
+  const id = String(request.query.id || '').trim();
+  if (!id) {
+    return errorResponse('VALIDATION_ERROR', 'id es obligatorio', 400);
+  }
+
+  const existing = await prisma.vacation_requests.findUnique({ where: { id } });
+  if (!existing) {
+    return errorResponse('NOT_FOUND', 'Petición no encontrada', 404);
+  }
+
+  await prisma.vacation_requests.delete({ where: { id } });
+  return successResponse({ message: 'Petición eliminada' });
+}
+
+async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPrisma>) {
+  if (!request.body || typeof request.body !== 'object') {
+    return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
+  }
+
+  const id = String(request.body.id || '').trim();
+  if (!id) {
+    return errorResponse('VALIDATION_ERROR', 'id es obligatorio', 400);
+  }
+
+  const existing = await prisma.vacation_requests.findUnique({ where: { id } });
+  if (!existing) {
+    return errorResponse('NOT_FOUND', 'Petición no encontrada', 404);
+  }
+
+  const start = new Date(existing.start_date);
+  const end = new Date(existing.end_date);
+  const effectiveType = existing.tag && VACATION_TYPES.has(existing.tag) ? existing.tag : 'A';
+
+  if (end < start) {
+    return errorResponse('VALIDATION_ERROR', 'La solicitud tiene un rango de fechas inválido', 400);
+  }
+
+  const appliedDates: string[] = [];
+  const operations = [] as ReturnType<typeof prisma.user_vacation_days.upsert>[];
+  for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const dateOnly = new Date(cursor);
+    appliedDates.push(formatDateOnly(dateOnly));
+    operations.push(
+      prisma.user_vacation_days.upsert({
+        where: { user_id_date: { user_id: existing.user_id, date: dateOnly } },
+        update: { type: effectiveType },
+        create: { user_id: existing.user_id, date: dateOnly, type: effectiveType },
+      }),
+    );
+  }
+
+  await prisma.$transaction([...operations, prisma.vacation_requests.delete({ where: { id } })]);
+
+  return successResponse({ message: 'Petición aceptada y aplicada al calendario', appliedDates });
+}

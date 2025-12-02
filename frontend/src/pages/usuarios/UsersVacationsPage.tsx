@@ -2,11 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import {
+  acceptVacationRequest,
+  deleteVacationRequest,
   applyBulkVacationDay,
+  fetchVacationRequests,
   fetchVacationsSummary,
   type VacationSummaryUser,
   type VacationType,
   type UserVacationDay,
+  type VacationRequestItem,
 } from '../../api/userVacations';
 
 const VACATION_TYPE_LABELS: Record<VacationType, string> = {
@@ -46,10 +50,16 @@ export default function UsersVacationsPage() {
   const [feedback, setFeedback] = useState<{ variant: 'success' | 'danger'; message: string } | null>(
     null,
   );
+  const [requestActionId, setRequestActionId] = useState<string | null>(null);
 
   const summaryQuery = useQuery({
     queryKey: ['vacations-summary', year],
     queryFn: () => fetchVacationsSummary(year),
+  });
+
+  const requestsQuery = useQuery<VacationRequestItem[]>({
+    queryKey: ['vacation-requests'],
+    queryFn: fetchVacationRequests,
   });
 
   const users = useMemo<VacationSummaryUser[]>(() => {
@@ -116,6 +126,35 @@ export default function UsersVacationsPage() {
     },
   });
 
+  const acceptRequestMutation = useMutation({
+    mutationFn: (id: string) => acceptVacationRequest(id),
+    onMutate: (id) => setRequestActionId(id),
+    onSuccess: (payload) => {
+      setFeedback({ variant: 'success', message: payload.message });
+      void queryClient.invalidateQueries({ queryKey: ['vacation-requests'] });
+      void summaryQuery.refetch();
+    },
+    onError: () => {
+      setFeedback({ variant: 'danger', message: 'No se pudo aceptar la petición.' });
+    },
+    onSettled: () => setRequestActionId(null),
+  });
+
+  const deleteRequestMutation = useMutation({
+    mutationFn: (id: string) => deleteVacationRequest(id),
+    onMutate: (id) => setRequestActionId(id),
+    onSuccess: () => {
+      setFeedback({ variant: 'success', message: 'Petición eliminada correctamente.' });
+      void queryClient.invalidateQueries({ queryKey: ['vacation-requests'] });
+    },
+    onError: () => {
+      setFeedback({ variant: 'danger', message: 'No se pudo eliminar la petición.' });
+    },
+    onSettled: () => setRequestActionId(null),
+  });
+
+  const requests = requestsQuery.data ?? [];
+
   const handleUserToggle = (userId: string, checked: boolean) => {
     setSelectedUsers((prev) => {
       if (checked) return [...new Set([...prev, userId])];
@@ -158,6 +197,97 @@ export default function UsersVacationsPage() {
       </div>
 
       {feedback ? <Alert variant={feedback.variant}>{feedback.message}</Alert> : null}
+
+      <Card className="mb-4">
+        <Card.Header className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <div className="fw-semibold">Peticiones de vacaciones y teletrabajo</div>
+            <div className="text-muted small">Revisa las solicitudes enviadas por el equipo.</div>
+          </div>
+          <Badge bg="light" text="dark" className="border">
+            {requests.length} pendientes
+          </Badge>
+        </Card.Header>
+        <Card.Body className="p-0">
+          {requestsQuery.isLoading ? (
+            <div className="d-flex justify-content-center align-items-center py-4">
+              <Spinner animation="border" />
+            </div>
+          ) : null}
+          {requestsQuery.isError ? (
+            <Alert variant="danger" className="m-3">
+              No se pudieron cargar las peticiones pendientes.
+            </Alert>
+          ) : null}
+          {!requestsQuery.isLoading && !requestsQuery.isError ? (
+            requests.length ? (
+              <div className="table-responsive">
+                <Table hover className="mb-0 align-middle">
+                  <thead>
+                    <tr>
+                      <th>Persona</th>
+                      <th>Correo</th>
+                      <th>Fechas solicitadas</th>
+                      <th>Tipo</th>
+                      <th>Notas</th>
+                      <th>Creada</th>
+                      <th className="text-end">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {requests.map((request) => {
+                      const accepting = acceptRequestMutation.isPending && acceptRequestMutation.variables === request.id;
+                      const deleting = deleteRequestMutation.isPending && deleteRequestMutation.variables === request.id;
+                      const disabled = accepting || deleting || requestActionId === request.id;
+                      const dateRangeLabel =
+                        request.startDate === request.endDate
+                          ? request.startDate
+                          : `${request.startDate} → ${request.endDate}`;
+                      const tagLabel = request.tag ? VACATION_TYPE_LABELS[request.tag] ?? 'Otro' : 'Vacaciones';
+                      const typeColor = request.tag ? VACATION_TYPE_COLORS[request.tag] : '#0ea5e9';
+
+                      return (
+                        <tr key={request.id}>
+                          <td className="fw-semibold">{request.userName}</td>
+                          <td className="text-muted small">{request.userEmail}</td>
+                          <td>{dateRangeLabel}</td>
+                          <td>
+                            <Badge bg="light" text="dark" className="border" style={{ borderColor: typeColor }}>
+                              {tagLabel}
+                            </Badge>
+                          </td>
+                          <td>{request.notes?.length ? request.notes : '—'}</td>
+                          <td>{new Date(request.createdAt).toLocaleString('es-ES')}</td>
+                          <td className="text-end d-flex justify-content-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-success"
+                              disabled={disabled}
+                              onClick={() => acceptRequestMutation.mutate(request.id)}
+                            >
+                              {accepting ? 'Aceptando…' : 'Aceptar'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              disabled={disabled}
+                              onClick={() => deleteRequestMutation.mutate(request.id)}
+                            >
+                              {deleting ? 'Eliminando…' : 'Eliminar'}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+              </div>
+            ) : (
+              <div className="p-3 text-muted">No hay peticiones pendientes.</div>
+            )
+          ) : null}
+        </Card.Body>
+      </Card>
 
       <Card>
         <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-3">
