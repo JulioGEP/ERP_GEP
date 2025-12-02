@@ -1628,14 +1628,6 @@ if (method === 'GET') {
 
       const storedEstado = toSessionEstado(storedRecord.estado);
       const currentEstado = storedEstado ?? 'BORRADOR';
-      const hasCompleteSchedulingData = Boolean(
-        fechaInicio instanceof Date &&
-          fechaFin instanceof Date &&
-          nextSalaId &&
-          String(nextSalaId).trim().length &&
-          (nextTrainerIds as string[]).length &&
-          (nextUnidadIds as string[]).length,
-      );
       const autoEstado = computeAutomaticSessionEstadoFromValues({
         fechaInicio,
         fechaFin,
@@ -1650,13 +1642,11 @@ if (method === 'GET') {
         const isCurrentManual = isManualSessionEstado(currentEstado);
         const allowsBorradorToManual = currentEstado === 'BORRADOR' && isBorradorTransitionEstado(requestedEstado);
         const allowsManualToBorrador = requestedEstado === 'BORRADOR' && isBorradorTransitionEstado(currentEstado);
-        const allowsManualToAutomaticPlanificada =
-          requestedEstado === 'PLANIFICADA' && currentEstado !== 'BORRADOR' && hasCompleteSchedulingData;
 
-        if (!isManualSessionEstado(requestedEstado) && !allowsManualToBorrador && !allowsManualToAutomaticPlanificada) {
+        if (!isManualSessionEstado(requestedEstado) && !allowsManualToBorrador) {
           return errorResponse('VALIDATION_ERROR', 'Estado no editable', 400);
         }
-        if (!allowsManualToAutomaticPlanificada && !isCurrentManual && !allowsBorradorToManual && autoEstado !== 'PLANIFICADA') {
+        if (!isCurrentManual && !allowsBorradorToManual && autoEstado !== 'PLANIFICADA') {
           return errorResponse('VALIDATION_ERROR', 'La sesión debe estar planificada para cambiar el estado', 400);
         }
         if (requestedEstado !== currentEstado) (data as Record<string, SessionEstado>).estado = requestedEstado;
