@@ -8,7 +8,7 @@ export type BudgetsPageProps = Omit<BudgetSectionLayoutProps, 'title' | 'subtitl
 export function BudgetsPage({ budgets, ...rest }: BudgetsPageProps) {
   const defaultFilters = useMemo(
     () => ({
-      pipeline: joinFilterValues(['Formación Empresas', 'GEP Services']),
+      negocio: joinFilterValues(['Formación Empresas', 'GEP Services']),
     }),
     [],
   );

@@ -34,7 +34,7 @@ const encodeBudgetsQueryValue = (value: string) =>
 
 const SESSION_PENDING_COMPLETION_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__session_estado=PLANIFICADA`;
 
-const SESSION_FORMACION_ABIERTA_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__pipeline=${encodeBudgetsQueryValue(
+const SESSION_FORMACION_ABIERTA_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__negocio=${encodeBudgetsQueryValue(
   'Formación Empresas||GEP Services',
 )}`;
 
