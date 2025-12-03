@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Alert, Button, Card, Form, Modal, Spinner } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'react-router-dom';
 
 import { ApiError } from "../../api/client";
 import type { SessionPublicLink } from "../../api/sessions.types";
@@ -62,6 +63,11 @@ type PersistedCertificatePageState = {
   selectedTemplateKey?: string;
   templateSelectionManuallyChanged?: boolean;
   excludedCertifiedIds?: string[];
+};
+
+type CertificatesNavigationPrefill = {
+  dealId?: string;
+  sessionId?: string | null;
 };
 
 function resolveTrainingTemplatesApi(): TrainingTemplatesApi | null {
@@ -538,6 +544,9 @@ export function CertificadosPage() {
     () => new Set<string>(),
   );
   const [showCertifiedWarning, setShowCertifiedWarning] = useState(false);
+  const location = useLocation();
+  const navigationPrefillHandledRef = useRef(false);
+  const pendingNavigationSessionRef = useRef<string | null>(null);
   const suppressCertifiedWarningRef = useRef(false);
   const hasLoadedPersistedStateRef = useRef(false);
   const pendingPersistedSessionRef = useRef<string | null>(null);
@@ -729,6 +738,43 @@ export function CertificadosPage() {
   );
 
   useEffect(() => {
+    if (navigationPrefillHandledRef.current) {
+      return;
+    }
+
+    const state = location.state as unknown;
+    const prefill: CertificatesNavigationPrefill | null =
+      state && typeof state === 'object' && 'certificatesPrefill' in state
+        ? ((state as { certificatesPrefill?: CertificatesNavigationPrefill }).certificatesPrefill ??
+          null)
+        : null;
+
+    if (!prefill) {
+      return;
+    }
+
+    navigationPrefillHandledRef.current = true;
+
+    const dealIdFromState = typeof prefill.dealId === 'string' ? prefill.dealId.trim() : '';
+    const sessionIdFromState =
+      typeof prefill.sessionId === 'string' ? prefill.sessionId.trim() : null;
+
+    if (sessionIdFromState) {
+      pendingNavigationSessionRef.current = sessionIdFromState;
+    }
+
+    if (dealIdFromState) {
+      setDealIdInput(dealIdFromState);
+      void loadDealAndSessions(dealIdFromState);
+    }
+  }, [location.state, loadDealAndSessions]);
+
+  useEffect(() => {
+    if (navigationPrefillHandledRef.current) {
+      hasLoadedPersistedStateRef.current = true;
+      return;
+    }
+
     if (typeof window === 'undefined') {
       hasLoadedPersistedStateRef.current = true;
       return;
@@ -797,17 +843,24 @@ export function CertificadosPage() {
   );
 
   useEffect(() => {
-    const pendingSessionId = pendingPersistedSessionRef.current;
+    const pendingSessionId =
+      pendingNavigationSessionRef.current ?? pendingPersistedSessionRef.current;
     if (!pendingSessionId) {
       return;
     }
 
     const sessionExists = sessions.some((session) => session.id === pendingSessionId);
     if (!sessionExists) {
-      pendingPersistedSessionRef.current = null;
+      if (pendingNavigationSessionRef.current === pendingSessionId) {
+        pendingNavigationSessionRef.current = null;
+      }
+      if (pendingPersistedSessionRef.current === pendingSessionId) {
+        pendingPersistedSessionRef.current = null;
+      }
       return;
     }
 
+    pendingNavigationSessionRef.current = null;
     pendingPersistedSessionRef.current = null;
     void selectSession(pendingSessionId);
   }, [sessions, selectSession]);
