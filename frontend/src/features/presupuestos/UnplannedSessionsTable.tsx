@@ -164,6 +164,7 @@ export function UnplannedSessionsTable(props?: {
   onStateChange?: (state: { visible: number; total: number; fetching: boolean }) => void;
   allowedPipelines?: string[];
   showFormationColumn?: boolean;
+  excludedPipelines?: string[];
 }) {
   const query = useQuery(queryConfig);
   const { filters, searchValue, setFilterValue, setSearchValue, clearFilter, clearAllFilters, setFiltersAndSearch } =
@@ -175,16 +176,30 @@ export function UnplannedSessionsTable(props?: {
     if (!entries.length) return null;
     return new Set(entries.map((entry) => normalizeText(entry)));
   }, [props?.allowedPipelines]);
+  const excludedPipelines = useMemo(() => {
+    const entries = props?.excludedPipelines ?? [];
+    if (!entries.length) return null;
+    return new Set(entries.map((entry) => normalizeText(entry)));
+  }, [props?.excludedPipelines]);
 
   const sessions = useMemo(() => {
     const data = query.data ?? [];
-    if (!allowedPipelines) return data;
+    if (!allowedPipelines && !excludedPipelines) return data;
     return data.filter((session) => {
       const pipeline = normalizeText(session.pipeline ?? '');
       if (!pipeline.length) return false;
+
+      if (excludedPipelines?.has(pipeline)) {
+        return false;
+      }
+
+      if (!allowedPipelines) {
+        return true;
+      }
+
       return allowedPipelines.has(pipeline);
     });
-  }, [allowedPipelines, query.data]);
+  }, [allowedPipelines, excludedPipelines, query.data]);
 
   const pipelineOptions = useMemo<FilterOption[]>(() => {
     const seen = new Set<string>();
