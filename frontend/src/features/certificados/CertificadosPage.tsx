@@ -19,7 +19,6 @@ import {
   fetchSessionPublicLink,
 } from "../presupuestos/api/sessions.api";
 import { BudgetTable } from '../presupuestos/BudgetTable';
-import { useSearchParams } from "react-router-dom";
 import { useCertificateData } from './hooks/useCertificateData';
 import { CertificateTable } from './CertificateTable';
 import { CertificateToolbar, type CertificateToolbarProgressStatus } from './CertificateToolbar';
@@ -506,13 +505,6 @@ function resolveGenerationError(error: unknown): string {
 }
 
 export function CertificadosPage() {
-  const [searchParams] = useSearchParams();
-  const initialParamsRef = useRef<{
-    dealId?: string;
-    sessionId?: string | null;
-    sessionNumber?: number | null;
-    applied?: boolean;
-  } | null>(null);
   const [dealIdInput, setDealIdInput] = useState('');
   const {
     deal,
@@ -528,57 +520,6 @@ export function CertificadosPage() {
     selectSession,
     resetAll: resetCertificateData,
   } = useCertificateData();
-
-  useEffect(() => {
-    const dealIdParam = searchParams.get('dealId')?.trim() ?? '';
-    const sessionIdParam = searchParams.get('sessionId')?.trim() ?? '';
-    const sessionNumberParam = searchParams.get('sessionNumber')?.trim() ?? '';
-
-    const hasParams = dealIdParam || sessionIdParam || sessionNumberParam;
-    if (!hasParams) {
-      return;
-    }
-
-    if (initialParamsRef.current?.applied === false) {
-      return;
-    }
-
-    const parsedSessionNumber = Number(sessionNumberParam);
-    initialParamsRef.current = {
-      dealId: dealIdParam || undefined,
-      sessionId: sessionIdParam || null,
-      sessionNumber: Number.isFinite(parsedSessionNumber) ? parsedSessionNumber : null,
-      applied: false,
-    };
-
-    if (dealIdParam) {
-      setDealIdInput(dealIdParam);
-      void loadDealAndSessions(dealIdParam);
-    }
-  }, [loadDealAndSessions, searchParams]);
-
-  useEffect(() => {
-    const params = initialParamsRef.current;
-    if (!params || params.applied || !params.dealId || loadingDeal) {
-      return;
-    }
-
-    if (!sessions.length) {
-      return;
-    }
-
-    let targetSessionId = params.sessionId;
-    if (!targetSessionId && params.sessionNumber && params.sessionNumber > 0) {
-      const sessionByOrder = sessions[params.sessionNumber - 1];
-      targetSessionId = sessionByOrder?.id ?? null;
-    }
-
-    if (targetSessionId) {
-      void selectSession(targetSessionId);
-    }
-
-    initialParamsRef.current = { ...params, applied: true };
-  }, [loadingDeal, selectSession, sessions]);
 
   const [editableRows, setEditableRows] = useState<CertificateRow[]>([]);
   const [generating, setGenerating] = useState(false);
