@@ -1707,7 +1707,7 @@ export function CalendarView({
           ? unitNames
           : 'Sin unidad móvil'
       : mode === 'organizations'
-        ? formatVariantOrganizationSummary(variantEvent, 'Sin organización')
+        ? formatVariantOrganizationSummary(variantEvent, 'F.Abierta')
       : variantEvent.variant.name?.trim().length
       ? variantEvent.variant.name
       : variantEvent.product.name ?? 'Variante sin nombre';
@@ -1922,7 +1922,7 @@ export function CalendarView({
                               ? unitNames
                               : 'Sin unidad móvil'
                           : mode === 'organizations'
-                          ? formatVariantOrganizationSummary(variant, 'Sin organización')
+                          ? formatVariantOrganizationSummary(variant, 'F.Abierta')
                           : variant.variant.name?.trim().length
                           ? variant.variant.name
                           : variant.product.name ?? 'Variante sin nombre';
@@ -1930,7 +1930,7 @@ export function CalendarView({
                         if (mode === 'organizations') {
                           const organizations = formatVariantOrganizationDetail(
                             variant,
-                            'Sin organización',
+                            'F.Abierta',
                           );
                           if (organizations.length) {
                             variantTitleParts.push(organizations);
