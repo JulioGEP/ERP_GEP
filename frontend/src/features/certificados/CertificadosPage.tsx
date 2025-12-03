@@ -761,6 +761,10 @@ export function CertificadosPage() {
       return;
     }
 
+    if (hasLoadedPersistedStateRef.current && !navigationPreset) {
+      return;
+    }
+
     if (navigationPreset) {
       const normalizedDealId = navigationPreset.presetDealId;
       setDealIdInput(normalizedDealId);
