@@ -305,6 +305,7 @@ export function BudgetDetailModalEmpresas({
 
   const [form, setForm] = useState<BudgetFormValuesEmpresas | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [pendingCloseAction, setPendingCloseAction] = useState<(() => void) | null>(null);
   const [saving, setSaving] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapAddress, setMapAddress] = useState<string | null>(null);
@@ -1020,18 +1021,28 @@ export function BudgetDetailModalEmpresas({
     }
   }
 
-  function requestClose() {
+  function requestClose(nextAction?: () => void) {
     if (isDirty) {
+      setPendingCloseAction(() => nextAction ?? null);
       setShowConfirm(true);
     } else {
       setShowConfirm(false);
+      setPendingCloseAction(null);
       onClose();
+      nextAction?.();
     }
   }
 
   const handleDiscardChanges = () => {
     setShowConfirm(false);
     onClose();
+    pendingCloseAction?.();
+    setPendingCloseAction(null);
+  };
+
+  const handleCancelCloseRequest = () => {
+    setShowConfirm(false);
+    setPendingCloseAction(null);
   };
 
   function closePreview() {
@@ -1334,9 +1345,11 @@ export function BudgetDetailModalEmpresas({
                 dealId={normalizedDealId}
                 dealAddress={defaultSessionAddress ?? null}
                 dealSedeLabel={dealSedeLabel ?? null}
+                dealDisplayId={presupuestoDisplay ?? null}
                 products={detailProducts}
                 onNotify={onNotify}
                 highlightSessionId={highlightSessionId ?? null}
+                onRequestCloseBudget={requestClose}
               />
               <Accordion.Item eventKey="notes">
                 <Accordion.Header>
@@ -1782,13 +1795,13 @@ export function BudgetDetailModalEmpresas({
     ) : null}
 
     {/* Confirmación cambios pendientes */}
-    <Modal show={showConfirm} onHide={() => setShowConfirm(false)} centered>
+    <Modal show={showConfirm} onHide={handleCancelCloseRequest} centered>
       <Modal.Header closeButton>
         <Modal.Title>Cambios sin guardar</Modal.Title>
       </Modal.Header>
       <Modal.Body>Tienes cambios pendientes de guardar</Modal.Body>
       <Modal.Footer>
-        <Button variant="secondary" onClick={() => setShowConfirm(false)}>
+        <Button variant="secondary" onClick={handleCancelCloseRequest}>
           Seguir con los cambios
         </Button>
         <Button variant="danger" onClick={handleDiscardChanges}>
