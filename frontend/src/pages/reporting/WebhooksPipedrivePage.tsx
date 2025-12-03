@@ -30,9 +30,9 @@ function JsonCell({ value }: { value: unknown }) {
 }
 
 function EventTable({ events, formatter }: { events: PipedriveWebhookEvent[]; formatter: Intl.DateTimeFormat }) {
-  const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
-  const handleRowClick = (eventId: number) => {
+  const handleRowClick = (eventId: string) => {
     setExpandedEventId((currentId) => (currentId === eventId ? null : eventId));
   };
 
