@@ -52,7 +52,12 @@ function buildSessionFilters(session: UnplannedSessionSummary) {
   return { values, normalized };
 }
 
-function applyFilters(sessions: UnplannedSessionSummary[], filters: Record<string, string>, search: string) {
+function applyFilters(
+  sessions: UnplannedSessionSummary[],
+  filters: Record<string, string>,
+  search: string,
+  { includeFormation = true, definitions = FILTER_DEFINITIONS }: { includeFormation?: boolean; definitions?: FilterDefinition[] } = {},
+) {
   const filterEntries = Object.entries(filters)
     .map(([key, value]) => [key.trim(), value.trim()] as const)
     .filter(([key, value]) => key.length && value.length);
@@ -64,7 +69,7 @@ function applyFilters(sessions: UnplannedSessionSummary[], filters: Record<strin
 
     if (filterEntries.length) {
       const match = filterEntries.every(([key, value]) => {
-        const definition = FILTER_DEFINITIONS.find((definition) => definition.key === key);
+        const definition = definitions.find((definition) => definition.key === key);
         if (!definition) return true;
         const target = prepared.values[key] ?? '';
 
@@ -89,7 +94,9 @@ function applyFilters(sessions: UnplannedSessionSummary[], filters: Record<strin
       return true;
     }
 
-    const searchTarget = `${prepared.values.presupuesto} ${prepared.values.empresa} ${prepared.values.sesion} ${prepared.values.formacion} ${prepared.values.negocio}`;
+    const searchTarget = includeFormation
+      ? `${prepared.values.presupuesto} ${prepared.values.empresa} ${prepared.values.sesion} ${prepared.values.formacion} ${prepared.values.negocio}`
+      : `${prepared.values.presupuesto} ${prepared.values.empresa} ${prepared.values.sesion} ${prepared.values.negocio}`;
     return normalizeText(searchTarget).includes(normalizedSearch);
   });
 
@@ -112,10 +119,15 @@ function ProductTags({ tags }: { tags: string[] }) {
   );
 }
 
-function renderRow(session: UnplannedSessionSummary, onSelect?: (session: UnplannedSessionSummary) => void) {
+function renderRow(
+  session: UnplannedSessionSummary,
+  onSelect?: (session: UnplannedSessionSummary) => void,
+  options: { includeFormation?: boolean } = {},
+) {
   const sessionLabel = session.sessionName?.trim() || 'Sesión sin nombre';
   const pipelineLabel = session.pipeline?.trim() || '—';
   const organizationLabel = session.organizationName?.trim() || '—';
+  const includeFormation = options.includeFormation ?? true;
 
   const handleClick = () => {
     onSelect?.(session);
@@ -131,9 +143,11 @@ function renderRow(session: UnplannedSessionSummary, onSelect?: (session: Unplan
       <td className="fw-semibold">{session.dealId}</td>
       <td>{organizationLabel}</td>
       <td>{sessionLabel}</td>
-      <td>
-        <ProductTags tags={session.productTags} />
-      </td>
+      {includeFormation ? (
+        <td>
+          <ProductTags tags={session.productTags} />
+        </td>
+      ) : null}
       <td>
         <Badge bg="info" className="text-bg-info bg-opacity-25 text-info-emphasis">
           {pipelineLabel}
@@ -148,12 +162,29 @@ export function UnplannedSessionsTable(props?: {
   filtersContainer?: HTMLElement | null;
   viewStorageKey?: string;
   onStateChange?: (state: { visible: number; total: number; fetching: boolean }) => void;
+  allowedPipelines?: string[];
+  showFormationColumn?: boolean;
 }) {
   const query = useQuery(queryConfig);
   const { filters, searchValue, setFilterValue, setSearchValue, clearFilter, clearAllFilters, setFiltersAndSearch } =
     useTableFilterState({ tableKey: 'unplanned-sessions' });
 
-  const sessions = query.data ?? [];
+  const includeFormation = props?.showFormationColumn ?? true;
+  const allowedPipelines = useMemo(() => {
+    const entries = props?.allowedPipelines ?? [];
+    if (!entries.length) return null;
+    return new Set(entries.map((entry) => normalizeText(entry)));
+  }, [props?.allowedPipelines]);
+
+  const sessions = useMemo(() => {
+    const data = query.data ?? [];
+    if (!allowedPipelines) return data;
+    return data.filter((session) => {
+      const pipeline = normalizeText(session.pipeline ?? '');
+      if (!pipeline.length) return false;
+      return allowedPipelines.has(pipeline);
+    });
+  }, [allowedPipelines, query.data]);
 
   const pipelineOptions = useMemo<FilterOption[]>(() => {
     const seen = new Set<string>();
@@ -169,15 +200,22 @@ export function UnplannedSessionsTable(props?: {
       .map((value) => ({ value, label: value }));
   }, [sessions]);
 
-  const filtersWithOptions = useMemo<FilterDefinition[]>(
-    () =>
-      FILTER_DEFINITIONS.map((definition) =>
-        definition.key === 'negocio' ? { ...definition, options: pipelineOptions } : definition,
-      ),
-    [pipelineOptions],
-  );
+  const filtersWithOptions = useMemo<FilterDefinition[]>(() => {
+    return FILTER_DEFINITIONS.filter((definition) => includeFormation || definition.key !== 'formacion').map(
+      (definition) =>
+        definition.key === 'negocio'
+          ? {
+              ...definition,
+              options: pipelineOptions,
+            }
+          : definition,
+    );
+  }, [includeFormation, pipelineOptions]);
 
-  const filteredSessions = useMemo(() => applyFilters(sessions, filters, searchValue), [sessions, filters, searchValue]);
+  const filteredSessions = useMemo(
+    () => applyFilters(sessions, filters, searchValue, { includeFormation, definitions: filtersWithOptions }),
+    [filtersWithOptions, includeFormation, sessions, filters, searchValue],
+  );
 
   const filterToolbar = (
     <FilterToolbar
@@ -274,11 +312,15 @@ export function UnplannedSessionsTable(props?: {
               <th scope="col" style={{ minWidth: 120 }}>Presu</th>
               <th scope="col" style={{ minWidth: 180 }}>Empresa</th>
               <th scope="col" style={{ minWidth: 200 }}>Sesión</th>
-              <th scope="col" style={{ minWidth: 240 }}>Formación</th>
+              {includeFormation ? <th scope="col" style={{ minWidth: 240 }}>Formación</th> : null}
               <th scope="col" style={{ minWidth: 170 }}>Negocio</th>
             </tr>
           </thead>
-          <tbody>{filteredSessions.map((session) => renderRow(session, props?.onSelectSession))}</tbody>
+          <tbody>
+            {filteredSessions.map((session) =>
+              renderRow(session, props?.onSelectSession, { includeFormation }),
+            )}
+          </tbody>
         </Table>
       </div>
     </div>

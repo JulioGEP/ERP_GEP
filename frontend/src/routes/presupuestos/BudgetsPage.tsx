@@ -1,5 +1,5 @@
 import { BudgetSectionLayout, type BudgetSectionLayoutProps } from './BudgetSectionLayout';
-import { OpenTrainingUnplannedTable } from '../../features/presupuestos/OpenTrainingUnplannedTable';
+import { UnplannedSessionsTable } from '../../features/presupuestos/UnplannedSessionsTable';
 
 export type BudgetsPageProps = Omit<BudgetSectionLayoutProps, 'title' | 'subtitle'>;
 
@@ -12,7 +12,10 @@ export function BudgetsPage({ budgets, ...rest }: BudgetsPageProps) {
       subtitle="Sube tu presupuesto y planifica"
       showFilters={false}
     >
-      <OpenTrainingUnplannedTable budgets={budgets} />
+      <UnplannedSessionsTable
+        allowedPipelines={['GEP Services', 'Formación Empresa']}
+        showFormationColumn={false}
+      />
     </BudgetSectionLayout>
   );
 }
