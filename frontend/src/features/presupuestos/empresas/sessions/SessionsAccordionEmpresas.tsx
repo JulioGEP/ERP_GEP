@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Accordion,
   Alert,
@@ -237,10 +237,12 @@ function SessionStudentsAccordionItem({
   dealId,
   sessionId,
   onNotify,
+  onNavigateToCertificates,
 }: {
   dealId: string;
   sessionId: string;
   onNotify?: (toast: ToastParams) => void;
+  onNavigateToCertificates?: () => void | Promise<void>;
 }) {
   const qc = useQueryClient();
   const [editingId, setEditingId] = useState<'new' | string | null>(null);
@@ -252,6 +254,7 @@ function SessionStudentsAccordionItem({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [generatedLinks, setGeneratedLinks] = useState<SessionPublicLink[]>([]);
   const [deletingLinkKey, setDeletingLinkKey] = useState<string | null>(null);
+  const [navigatingToCertificates, setNavigatingToCertificates] = useState(false);
 
   const studentsQuery = useQuery({
     queryKey: ['session-students', dealId, sessionId],
@@ -433,6 +436,16 @@ function SessionStudentsAccordionItem({
       onNotify?.({ variant: 'danger', message });
     } finally {
       setDeletingLinkKey((current) => (current === key ? null : current));
+    }
+  };
+
+  const handleNavigateToCertificatesClick = async () => {
+    if (!onNavigateToCertificates) return;
+    setNavigatingToCertificates(true);
+    try {
+      await Promise.resolve(onNavigateToCertificates());
+    } finally {
+      setNavigatingToCertificates(false);
     }
   };
 
@@ -792,6 +805,22 @@ function SessionStudentsAccordionItem({
                   </>
                 ) : (
                   'Generar URL'
+                )}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleNavigateToCertificatesClick}
+                disabled={navigatingToCertificates || studentsLoading}
+                className="d-flex align-items-center gap-2"
+              >
+                {navigatingToCertificates ? (
+                  <>
+                    <Spinner animation="border" size="sm" role="status" />
+                    <span>Abriendo certificados…</span>
+                  </>
+                ) : (
+                  'Crear Certificados'
                 )}
               </Button>
               {generatedLinks.length ? (
@@ -1949,20 +1978,24 @@ function rangesOverlap(a: SessionTimeRange, b: SessionTimeRange): boolean {
 
 interface SessionsAccordionEmpresasProps {
   dealId: string;
+  dealDisplayId?: string | null;
   dealAddress: string | null;
   dealSedeLabel: string | null;
   products: DealProduct[];
   onNotify?: (toast: ToastParams) => void;
   highlightSessionId?: string | null;
+  onRequestCloseBudget?: (nextAction?: () => void) => void;
 }
 
 export function SessionsAccordionEmpresas({
   dealId,
+  dealDisplayId,
   dealAddress,
   dealSedeLabel,
   products,
   onNotify,
   highlightSessionId,
+  onRequestCloseBudget,
 }: SessionsAccordionEmpresasProps) {
   const qc = useQueryClient();
   const mapApplicableProduct = useCallback(
@@ -2004,6 +2037,7 @@ export function SessionsAccordionEmpresas({
   const [showMapModal, setShowMapModal] = useState(false);
   const normalizedHighlightSessionId = useMemo(() => highlightSessionId?.trim() ?? null, [highlightSessionId]);
   const location = useLocation();
+  const navigate = useNavigate();
   const isCalendarRoute = useMemo(() => location.pathname.startsWith('/calendario'), [location.pathname]);
 
   const generateMutation = useMutation({
@@ -2447,17 +2481,17 @@ export function SessionsAccordionEmpresas({
   );
 
   const handleCloseSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string): Promise<boolean> => {
       const status = saveStatus[sessionId];
       if (status?.saving) {
         onNotify?.({ variant: 'info', message: 'Espera a que termine el guardado en curso.' });
-        return;
+        return false;
       }
 
       const hasChanges = hasSessionChanges(sessionId);
       if (!hasChanges) {
         setActiveSession(null);
-        return;
+        return true;
       }
 
       const shouldSave = window.confirm('Tienes cambios sin guardar. ¿Deseas guardarlos antes de cerrar?');
@@ -2465,11 +2499,14 @@ export function SessionsAccordionEmpresas({
         const savedSuccessfully = await runSave(sessionId, { notifyOnSuccess: true });
         if (savedSuccessfully) {
           setActiveSession(null);
+          return true;
         }
-      } else {
-        revertSessionChanges(sessionId);
-        setActiveSession(null);
+        return false;
       }
+
+      revertSessionChanges(sessionId);
+      setActiveSession(null);
+      return true;
     },
     [hasSessionChanges, onNotify, runSave, revertSessionChanges, saveStatus],
   );
@@ -2478,6 +2515,32 @@ export function SessionsAccordionEmpresas({
     if (!activeSession) return;
     void handleCloseSession(activeSession.sessionId);
   }, [activeSession, handleCloseSession]);
+
+  const handleNavigateToCertificates = useCallback(
+    async (sessionId: string) => {
+      const closed = await handleCloseSession(sessionId);
+      if (!closed) return;
+
+      const presetDealId = (dealDisplayId ?? dealId).trim();
+
+      const goToCertificates = () => {
+        navigate('/certificados', {
+          state: {
+            presetDealId,
+            presetSessionId: sessionId,
+            fromSessionModal: true,
+          },
+        });
+      };
+
+      if (onRequestCloseBudget) {
+        onRequestCloseBudget(goToCertificates);
+      } else {
+        goToCertificates();
+      }
+    },
+    [dealDisplayId, dealId, handleCloseSession, navigate, onRequestCloseBudget],
+  );
 
   const handleSelectSession = useCallback(
     async ({
@@ -3088,6 +3151,7 @@ export function SessionsAccordionEmpresas({
                   onSendInvites={handleSendInvites}
                   onNotify={onNotify}
                   hasUnsavedChanges={hasSessionChanges(activeSession.sessionId)}
+                  onNavigateToCertificates={() => handleNavigateToCertificates(activeSession.sessionId)}
                 />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
@@ -3137,6 +3201,7 @@ interface SessionEditorProps {
   onSendInvites: (sessionId: string) => void;
   onNotify?: (toast: ToastParams) => void;
   hasUnsavedChanges: boolean;
+  onNavigateToCertificates?: () => void;
 }
 
 function SessionEditor({
@@ -3158,6 +3223,7 @@ function SessionEditor({
   onSendInvites,
   onNotify,
   hasUnsavedChanges,
+  onNavigateToCertificates,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
@@ -3878,6 +3944,7 @@ function SessionEditor({
         dealId={dealId}
         onNotify={onNotify}
         driveUrl={form.drive_url ?? null}
+        onNavigateToCertificates={onNavigateToCertificates}
       />
     </div>
   );
@@ -3888,11 +3955,13 @@ function SessionCommentsSection({
   dealId,
   onNotify,
   driveUrl,
+  onNavigateToCertificates,
 }: {
   sessionId: string;
   dealId: string;
   onNotify?: (toast: ToastParams) => void;
   driveUrl?: string | null;
+  onNavigateToCertificates?: () => void;
 }) {
   const { userId, userName } = useCurrentUserIdentity();
 
@@ -4294,6 +4363,7 @@ function SessionCommentsSection({
           dealId={dealId}
           sessionId={sessionId}
           onNotify={onNotify}
+          onNavigateToCertificates={onNavigateToCertificates}
         />
       </Accordion>
 

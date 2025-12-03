@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Alert, Button, Card, Form, Modal, Spinner } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { ApiError } from "../../api/client";
 import type { SessionPublicLink } from "../../api/sessions.types";
@@ -62,6 +63,12 @@ type PersistedCertificatePageState = {
   selectedTemplateKey?: string;
   templateSelectionManuallyChanged?: boolean;
   excludedCertifiedIds?: string[];
+};
+
+type CertificatesNavigationState = {
+  presetDealId?: string;
+  presetSessionId?: string | null;
+  fromSessionModal?: boolean;
 };
 
 function resolveTrainingTemplatesApi(): TrainingTemplatesApi | null {
@@ -506,6 +513,26 @@ function resolveGenerationError(error: unknown): string {
 
 export function CertificadosPage() {
   const [dealIdInput, setDealIdInput] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navigationPreset = useMemo(() => {
+    const state = location.state as CertificatesNavigationState | null;
+    if (!state) {
+      return null;
+    }
+
+    const presetDealId = typeof state.presetDealId === 'string' ? state.presetDealId.trim() : '';
+    if (!presetDealId.length) {
+      return null;
+    }
+
+    const presetSessionId =
+      typeof state.presetSessionId === 'string' && state.presetSessionId.trim().length
+        ? state.presetSessionId.trim()
+        : null;
+
+    return { presetDealId, presetSessionId };
+  }, [location.state]);
   const {
     deal,
     sessions,
@@ -734,6 +761,23 @@ export function CertificadosPage() {
       return;
     }
 
+    if (navigationPreset) {
+      const normalizedDealId = navigationPreset.presetDealId;
+      setDealIdInput(normalizedDealId);
+      pendingPersistedSessionRef.current = navigationPreset.presetSessionId ?? null;
+      pendingPersistedRowsRef.current = null;
+      pendingPersistedExcludedIdsRef.current = null;
+      pendingTemplateManualRef.current = false;
+      pendingPersistedTemplateKeyRef.current = null;
+      setTemplateSelectionManuallyChanged(false);
+      suppressCertifiedWarningRef.current = false;
+      setShowCertifiedWarning(false);
+      hasLoadedPersistedStateRef.current = true;
+      void loadDealAndSessions(normalizedDealId);
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+      return;
+    }
+
     let parsedState: PersistedCertificatePageState | null = null;
 
     try {
@@ -785,7 +829,14 @@ export function CertificadosPage() {
       : null;
 
     hasLoadedPersistedStateRef.current = true;
-  }, [loadDealAndSessions, setTemplateSelectionManuallyChanged]);
+  }, [
+    loadDealAndSessions,
+    location.pathname,
+    location.search,
+    navigationPreset,
+    navigate,
+    setTemplateSelectionManuallyChanged,
+  ]);
 
   const setGenerationStepStatus = useCallback(
     (stepId: GenerationStepId, status: GenerationStepStatus) => {
