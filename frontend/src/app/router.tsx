@@ -12,6 +12,7 @@ import type {
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
+import type { PorEmpresaPageProps } from '../pages/calendario/PorEmpresaPage';
 import type { FormadoresBomberosPageProps } from '../pages/recursos/FormadoresBomberosPage';
 import type { UnidadesMovilesPageProps } from '../pages/recursos/UnidadesMovilesPage';
 import type { SalasPageProps } from '../pages/recursos/SalasPage';
@@ -38,6 +39,7 @@ const MaterialsOrdersPage = lazy(() => import('../pages/materiales/MaterialsOrde
 const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage'));
 const PorUnidadMovilPage = lazy(() => import('../pages/calendario/PorUnidadMovilPage'));
 const PorFormadorPage = lazy(() => import('../pages/calendario/PorFormadorPage'));
+const PorEmpresaPage = lazy(() => import('../pages/calendario/PorEmpresaPage'));
 const FormadoresBomberosPage = lazy(() => import('../pages/recursos/FormadoresBomberosPage'));
 const UnidadesMovilesPage = lazy(() => import('../pages/recursos/UnidadesMovilesPage'));
 const SalasPage = lazy(() => import('../pages/recursos/SalasPage'));
@@ -97,6 +99,7 @@ type AppRouterProps = {
   porSesionesPageProps: PorSesionesPageProps;
   porUnidadMovilPageProps: PorUnidadMovilPageProps;
   porFormadorPageProps: PorFormadorPageProps;
+  porEmpresaPageProps: PorEmpresaPageProps;
   formadoresBomberosPageProps: FormadoresBomberosPageProps;
   unidadesMovilesPageProps: UnidadesMovilesPageProps;
   salasPageProps: SalasPageProps;
@@ -124,6 +127,7 @@ export function AppRouter({
   porSesionesPageProps,
   porUnidadMovilPageProps,
   porFormadorPageProps,
+  porEmpresaPageProps,
   formadoresBomberosPageProps,
   unidadesMovilesPageProps,
   salasPageProps,
@@ -267,6 +271,21 @@ export function AppRouter({
                 <PorFormadorPage
                   {...(porFormadorPageProps as PorFormadorPageProps & Record<string, unknown>)}
                   key="calendar-formadores"
+                />
+              }
+            />
+          }
+        />
+
+        <Route
+          path="/calendario/por_empresa"
+          element={
+            <GuardedRoute
+              path="/calendario/por_empresa"
+              element={
+                <PorEmpresaPage
+                  {...(porEmpresaPageProps as PorEmpresaPageProps & Record<string, unknown>)}
+                  key="calendar-empresas"
                 />
               }
             />

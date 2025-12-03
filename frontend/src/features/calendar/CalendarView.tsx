@@ -121,7 +121,7 @@ const CALENDAR_DYNAMIC_SELECT_KEYS = new Set<string>(
 const CALENDAR_FILTER_KEYS = CALENDAR_FILTER_DEFINITIONS.map((definition) => definition.key);
 
 type CalendarViewType = 'month' | 'week' | 'day';
-type CalendarMode = 'sessions' | 'trainers' | 'units';
+type CalendarMode = 'sessions' | 'trainers' | 'units' | 'organizations';
 
 type ToastParams = {
   variant: 'success' | 'danger' | 'info';
@@ -405,6 +405,52 @@ function formatResourceSummary(resources: CalendarResource[], emptyLabel: string
 function formatResourceDetail(resources: CalendarResource[], emptyLabel: string): string {
   if (!resources.length) return emptyLabel;
   return resources.map((resource) => formatResourceName(resource)).join(', ');
+}
+
+function formatSessionOrganization(
+  session: CalendarSession,
+  emptyLabel = 'Sin organización',
+): string {
+  const organization = safeString(session.dealOrganizationName ?? '');
+  if (organization.length) {
+    return organization;
+  }
+
+  const fallback = safeString(session.dealTitle ?? '');
+  return fallback.length ? fallback : emptyLabel;
+}
+
+function formatVariantOrganizationSummary(
+  variant: CalendarVariantEvent,
+  emptyLabel = 'Sin organización',
+): string {
+  const organizations = collectVariantDealValues(
+    variant,
+    (deal) => deal.organizationName ?? deal.title,
+  );
+
+  if (!organizations.length) {
+    return emptyLabel;
+  }
+
+  const [first, ...rest] = organizations;
+  return rest.length ? `${first} +${rest.length}` : first;
+}
+
+function formatVariantOrganizationDetail(
+  variant: CalendarVariantEvent,
+  emptyLabel = 'Sin organización',
+): string {
+  const organizations = collectVariantDealValues(
+    variant,
+    (deal) => deal.organizationName ?? deal.title,
+  );
+
+  if (!organizations.length) {
+    return emptyLabel;
+  }
+
+  return organizations.join(', ');
 }
 
 type CalendarFilterRow = {
@@ -981,7 +1027,8 @@ export function CalendarView({
     };
   }, [debouncedRange]);
 
-  const includeVariants = mode === 'sessions' || mode === 'trainers' || mode === 'units';
+  const includeVariants =
+    mode === 'sessions' || mode === 'trainers' || mode === 'units' || mode === 'organizations';
 
   const sessionsQuery = useQuery<CalendarSessionsResponse, ApiError>({
     queryKey: ['calendarSessions', fetchRange?.start ?? null, fetchRange?.end ?? null],
@@ -1598,14 +1645,18 @@ export function CalendarView({
             chips.push(buildChipLabel('unit', formatResourceName(unit)));
           });
         }
+      } else if (mode === 'organizations') {
+        /* No hay chips específicos para organizaciones por ahora */
       }
 
       const eventTitle =
         mode === 'sessions'
           ? session.dealPipelineId ?? session.title
-          : mode === 'trainers'
+        : mode === 'trainers'
           ? formatResourceSummary(session.trainers, 'Sin formador')
-          : formatResourceSummary(session.units, 'Sin unidad móvil');
+          : mode === 'units'
+          ? formatResourceSummary(session.units, 'Sin unidad móvil')
+          : formatSessionOrganization(session, 'Sin organización');
 
       return (
         <div className="erp-calendar-event-content">
@@ -1651,13 +1702,15 @@ export function CalendarView({
         ? trainerNames.length
           ? trainerNames
           : 'Sin formador'
-        : mode === 'units'
+      : mode === 'units'
         ? unitNames.length
           ? unitNames
           : 'Sin unidad móvil'
-        : variantEvent.variant.name?.trim().length
-        ? variantEvent.variant.name
-        : variantEvent.product.name ?? 'Variante sin nombre';
+      : mode === 'organizations'
+        ? formatVariantOrganizationSummary(variantEvent, 'Sin organización')
+      : variantEvent.variant.name?.trim().length
+      ? variantEvent.variant.name
+      : variantEvent.product.name ?? 'Variante sin nombre';
 
     return (
       <div className="erp-calendar-event-content">
@@ -1806,15 +1859,19 @@ export function CalendarView({
                           const monthEventLabel =
                             mode === 'sessions'
                               ? session.dealPipelineId ?? session.title
-                              : mode === 'trainers'
-                              ? formatResourceSummary(session.trainers, 'Sin formador')
-                              : formatResourceSummary(session.units, 'Sin unidad móvil');
+                            : mode === 'trainers'
+                            ? formatResourceSummary(session.trainers, 'Sin formador')
+                            : mode === 'units'
+                            ? formatResourceSummary(session.units, 'Sin unidad móvil')
+                            : formatSessionOrganization(session, 'Sin organización');
                           const monthEventTitle =
                             mode === 'sessions'
                               ? session.dealPipelineId ?? session.title
-                              : mode === 'trainers'
-                              ? formatResourceDetail(session.trainers, 'Sin formador')
-                              : formatResourceDetail(session.units, 'Sin unidad móvil');
+                            : mode === 'trainers'
+                            ? formatResourceDetail(session.trainers, 'Sin formador')
+                            : mode === 'units'
+                            ? formatResourceDetail(session.units, 'Sin unidad móvil')
+                            : formatSessionOrganization(session, 'Sin organización');
                           return (
                             <div
                               key={`session-${session.id}`}
@@ -1860,14 +1917,25 @@ export function CalendarView({
                             ? trainerNames.length
                               ? trainerNames
                               : 'Sin formador'
-                            : mode === 'units'
+                          : mode === 'units'
                             ? unitNames.length
                               ? unitNames
                               : 'Sin unidad móvil'
-                            : variant.variant.name?.trim().length
-                            ? variant.variant.name
-                            : variant.product.name ?? 'Variante sin nombre';
+                          : mode === 'organizations'
+                          ? formatVariantOrganizationSummary(variant, 'Sin organización')
+                          : variant.variant.name?.trim().length
+                          ? variant.variant.name
+                          : variant.product.name ?? 'Variante sin nombre';
                         const variantTitleParts: string[] = [];
+                        if (mode === 'organizations') {
+                          const organizations = formatVariantOrganizationDetail(
+                            variant,
+                            'Sin organización',
+                          );
+                          if (organizations.length) {
+                            variantTitleParts.push(organizations);
+                          }
+                        }
                         if (variant.product.name) {
                           variantTitleParts.push(variant.product.name);
                         } else if (variant.product.code) {
