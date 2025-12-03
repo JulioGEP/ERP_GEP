@@ -424,33 +424,18 @@ function formatVariantOrganizationSummary(
   variant: CalendarVariantEvent,
   emptyLabel = 'Sin organización',
 ): string {
-  const organizations = collectVariantDealValues(
-    variant,
-    (deal) => deal.organizationName ?? deal.title,
-  );
-
-  if (!organizations.length) {
-    return emptyLabel;
-  }
-
-  const [first, ...rest] = organizations;
-  return rest.length ? `${first} +${rest.length}` : first;
+  // En la vista por empresa siempre debe mostrarse "F.Abierta" para las variantes,
+  // independientemente de los presupuestos u organizaciones asociadas.
+  return emptyLabel;
 }
 
 function formatVariantOrganizationDetail(
   variant: CalendarVariantEvent,
   emptyLabel = 'Sin organización',
 ): string {
-  const organizations = collectVariantDealValues(
-    variant,
-    (deal) => deal.organizationName ?? deal.title,
-  );
-
-  if (!organizations.length) {
-    return emptyLabel;
-  }
-
-  return organizations.join(', ');
+  // En la vista por empresa siempre debe mostrarse "F.Abierta" para las variantes,
+  // independientemente de los presupuestos u organizaciones asociadas.
+  return emptyLabel;
 }
 
 type CalendarFilterRow = {
