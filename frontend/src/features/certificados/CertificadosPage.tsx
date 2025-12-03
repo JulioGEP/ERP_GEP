@@ -567,7 +567,6 @@ export function CertificadosPage() {
   const [showCertifiedWarning, setShowCertifiedWarning] = useState(false);
   const suppressCertifiedWarningRef = useRef(false);
   const hasLoadedPersistedStateRef = useRef(false);
-  const pendingPersistedSessionRef = useRef<string | null>(null);
   const pendingPersistedRowsRef = useRef<CertificateRow[] | null>(null);
   const pendingPersistedExcludedIdsRef = useRef<string[] | null>(null);
   const pendingTemplateManualRef = useRef<boolean | null>(null);
@@ -768,7 +767,6 @@ export function CertificadosPage() {
     if (navigationPreset) {
       const normalizedDealId = navigationPreset.presetDealId;
       setDealIdInput(normalizedDealId);
-      pendingPersistedSessionRef.current = navigationPreset.presetSessionId ?? null;
       pendingPersistedRowsRef.current = null;
       pendingPersistedExcludedIdsRef.current = null;
       pendingTemplateManualRef.current = false;
@@ -777,7 +775,9 @@ export function CertificadosPage() {
       suppressCertifiedWarningRef.current = false;
       setShowCertifiedWarning(false);
       hasLoadedPersistedStateRef.current = true;
-      void loadDealAndSessions(normalizedDealId);
+      void loadDealAndSessions(normalizedDealId, {
+        presetSessionId: navigationPreset.presetSessionId ?? null,
+      });
       navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
       return;
     }
@@ -800,7 +800,6 @@ export function CertificadosPage() {
 
     if (storedDealId) {
       setDealIdInput(storedDealId);
-      void loadDealAndSessions(storedDealId);
     } else {
       setDealIdInput('');
     }
@@ -819,7 +818,7 @@ export function CertificadosPage() {
     setTemplateSelectionManuallyChanged(manualFlag);
     pendingTemplateManualRef.current = manualFlag;
 
-    pendingPersistedSessionRef.current =
+    const storedSessionId =
       parsedState && typeof parsedState.selectedSessionId === 'string'
         ? parsedState.selectedSessionId
         : null;
@@ -833,6 +832,10 @@ export function CertificadosPage() {
       : null;
 
     hasLoadedPersistedStateRef.current = true;
+
+    if (storedDealId) {
+      void loadDealAndSessions(storedDealId, { presetSessionId: storedSessionId });
+    }
   }, [
     loadDealAndSessions,
     location.pathname,
@@ -850,26 +853,6 @@ export function CertificadosPage() {
     },
     [setGenerationSteps],
   );
-
-  useEffect(() => {
-    const pendingSessionId = pendingPersistedSessionRef.current;
-    if (!pendingSessionId) {
-      return;
-    }
-
-    if (loadingDeal) {
-      return;
-    }
-
-    const sessionExists = sessions.some((session) => session.id === pendingSessionId);
-    if (!sessionExists) {
-      pendingPersistedSessionRef.current = null;
-      return;
-    }
-
-    pendingPersistedSessionRef.current = null;
-    void selectSession(pendingSessionId);
-  }, [loadingDeal, sessions, selectSession]);
 
   useEffect(() => {
     const persistedRows = pendingPersistedRowsRef.current;
@@ -1497,7 +1480,6 @@ export function CertificadosPage() {
       }
     }
 
-    pendingPersistedSessionRef.current = null;
     pendingPersistedRowsRef.current = null;
     pendingPersistedExcludedIdsRef.current = null;
     pendingTemplateManualRef.current = null;
