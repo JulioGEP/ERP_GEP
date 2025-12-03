@@ -920,6 +920,8 @@ export const handler = async (event: any) => {
       /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/range(?:\?|$)/i.test(pathOrUrl);
     const isDealSessionsRequest =
       /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/by-deal(?:\?|$)/i.test(pathOrUrl);
+    const isUnplannedSessionsRequest =
+      /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/unplanned(?:\?|$)/i.test(pathOrUrl);
     const isCountsRequest =
       /\/(?:\.netlify\/functions\/)?(?:sesiones|sessions)\/[^/]+\/counts(?:\?|$)/i.test(pathOrUrl);
 
@@ -939,6 +941,28 @@ export const handler = async (event: any) => {
       if ('error' in result) return result.error;
       return successResponse({ count: result.count ?? 0 });
     }
+
+    const normalizePipelineKey = (value: unknown): string =>
+      String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+
+    const allowedPipelines = new Set<string>([
+      normalizePipelineKey('Formación Empresa'),
+      normalizePipelineKey('Formación Empresas'),
+      normalizePipelineKey('GEP Services'),
+    ]);
+
+    const isAllowedPipeline = (label: unknown, id: unknown): boolean => {
+      const normalizedLabel = normalizePipelineKey(label);
+      if (normalizedLabel && allowedPipelines.has(normalizedLabel)) return true;
+      const normalizedId = normalizePipelineKey(id);
+      if (normalizedId && allowedPipelines.has(normalizedId)) return true;
+      return false;
+    };
 
     // Availability
     if (method === 'GET' && isAvailabilityRequest) {
@@ -1044,6 +1068,64 @@ export const handler = async (event: any) => {
           availableTrainers: Array.from(scheduleAvailableTrainerSet),
         },
       });
+    }
+
+    // Unplanned sessions (no start/end date) for Formación Empresa & GEP Services
+    if (method === 'GET' && isUnplannedSessionsRequest) {
+      const rawSessions = await prisma.sesiones.findMany({
+        where: {
+          fecha_inicio_utc: null,
+          fecha_fin_utc: null,
+          deals: {
+            w_id_variation: null,
+          },
+        },
+        select: {
+          id: true,
+          deal_id: true,
+          nombre_cache: true,
+          deals: {
+            select: {
+              pipeline_label: true,
+              pipeline_id: true,
+              organizations: { select: { name: true } },
+            },
+          },
+          deal_products: { select: { name: true, code: true, type: true } },
+        },
+        orderBy: [{ deal_id: 'asc' }, { nombre_cache: 'asc' }],
+      });
+
+      const sesiones = (rawSessions as any[])
+        .filter((session) =>
+          isAllowedPipeline(
+            session?.deals?.pipeline_label ?? null,
+            session?.deals?.pipeline_id ?? null,
+          ),
+        )
+        .map((session) => {
+          const dealId = toTrimmed(session?.deal_id);
+          const pipeline =
+            toTrimmed(session?.deals?.pipeline_label) ?? toTrimmed(session?.deals?.pipeline_id);
+          const organizationName = toTrimmed(session?.deals?.organizations?.name);
+          const productTags = Array.isArray(session?.deal_products)
+            ? session.deal_products
+                .map((p: any) => toTrimmed(p?.name) ?? toTrimmed(p?.code))
+                .filter((tag: string | null): tag is string => Boolean(tag))
+            : [];
+
+          return {
+            id: toTrimmed(session?.id),
+            dealId,
+            sessionName: toTrimmed(session?.nombre_cache),
+            pipeline,
+            organizationName,
+            productTags,
+          };
+        })
+        .filter((session) => session.id && session.dealId);
+
+      return successResponse({ sesiones });
     }
 
     // Sessions by deal (lightweight)

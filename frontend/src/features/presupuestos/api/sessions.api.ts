@@ -401,3 +401,34 @@ export async function deleteSessionPublicLink(
     method: 'DELETE',
   });
 }
+
+export type UnplannedSessionSummary = {
+  id: string;
+  dealId: string;
+  sessionName: string | null;
+  pipeline: string | null;
+  organizationName: string | null;
+  productTags: string[];
+};
+
+export async function fetchUnplannedSessions(): Promise<UnplannedSessionSummary[]> {
+  const data = await request<{ sesiones?: unknown[] }>('/sessions/unplanned');
+  const entries = Array.isArray(data?.sesiones) ? data.sesiones ?? [] : [];
+
+  return entries
+    .map((entry) => {
+      const id = toStringValue((entry as any)?.id);
+      const dealId = toStringValue((entry as any)?.dealId);
+      if (!id || !dealId) {
+        return null;
+      }
+
+      const sessionName = toStringValue((entry as any)?.sessionName);
+      const pipeline = toStringValue((entry as any)?.pipeline);
+      const organizationName = toStringValue((entry as any)?.organizationName);
+      const productTags = toStringArray((entry as any)?.productTags) ?? [];
+
+      return { id, dealId, sessionName, pipeline, organizationName, productTags };
+    })
+    .filter((session): session is UnplannedSessionSummary => session !== null);
+}

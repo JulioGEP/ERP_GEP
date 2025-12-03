@@ -40,6 +40,7 @@ import { hasPendingExternalFollowUp } from './utils/budgetFollowUp';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
+import type { UnplannedSessionsPageProps } from '../pages/presupuestos/UnplannedSessionsPage';
 import type { MaterialsBoardPageProps } from '../pages/materiales/MaterialsBoardPage';
 import type { MaterialsBudgetsPageProps } from '../pages/materiales/MaterialsBudgetsPage';
 import type { MaterialsPendingProductsPageProps } from '../pages/materiales/MaterialsPendingProductsPage';
@@ -95,6 +96,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Presupuestos/Todos', label: 'Todos', path: '/presupuestos/todos' },
       { key: 'Presupuestos/SinTrabajar', label: 'Sin trabajar', path: '/presupuestos/sintrabajar' },
       { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
+      { key: 'Presupuestos/SinAgendar', label: 'Sin agendar', path: '/presupuestos/sin_agendar' },
     ],
   },
   {
@@ -1348,6 +1350,8 @@ export default function AuthenticatedApp() {
     },
   };
 
+  const unplannedSessionsPageProps: UnplannedSessionsPageProps = {};
+
   const allBudgetsPageProps: AllBudgetsPageProps = {
     budgets: allBudgets,
     isLoading: allBudgetsQuery.isLoading,
@@ -1606,6 +1610,7 @@ export default function AuthenticatedApp() {
             budgetsPageProps={budgetsPageProps}
             allBudgetsPageProps={allBudgetsPageProps}
             unworkedBudgetsPageProps={unworkedBudgetsPageProps}
+            unplannedSessionsPageProps={unplannedSessionsPageProps}
             materialsBudgetsPageProps={materialsBudgetsPageProps}
             materialsPendingProductsPageProps={materialsPendingProductsPageProps}
             materialsOrdersPageProps={materialsOrdersPageProps}

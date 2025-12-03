@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import type { BudgetsPageProps } from '../pages/presupuestos/BudgetsPage';
 import type { AllBudgetsPageProps } from '../pages/presupuestos/AllBudgetsPage';
 import type { UnworkedBudgetsPageProps } from '../pages/presupuestos/UnworkedBudgetsPage';
+import type { UnplannedSessionsPageProps } from '../pages/presupuestos/UnplannedSessionsPage';
 import type {
   MaterialsBoardPageProps,
   MaterialsBudgetsPageProps,
@@ -30,6 +31,7 @@ const DashboardPage = lazy(() => import('../pages/dashboard/DashboardPage'));
 const BudgetsPage = lazy(() => import('../pages/presupuestos/BudgetsPage'));
 const AllBudgetsPage = lazy(() => import('../pages/presupuestos/AllBudgetsPage'));
 const UnworkedBudgetsPage = lazy(() => import('../pages/presupuestos/UnworkedBudgetsPage'));
+const UnplannedSessionsPage = lazy(() => import('../pages/presupuestos/UnplannedSessionsPage'));
 const MaterialsBudgetsPage = lazy(() => import('../pages/materiales/MaterialsBudgetsPage'));
 const MaterialsBoardPage = lazy(() => import('../pages/materiales/MaterialsBoardPage'));
 const MaterialsPendingProductsPage = lazy(
@@ -92,6 +94,7 @@ type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
   allBudgetsPageProps: AllBudgetsPageProps;
   unworkedBudgetsPageProps: UnworkedBudgetsPageProps;
+  unplannedSessionsPageProps: UnplannedSessionsPageProps;
   materialsBoardPageProps: MaterialsBoardPageProps;
   materialsBudgetsPageProps: MaterialsBudgetsPageProps;
   materialsPendingProductsPageProps: MaterialsPendingProductsPageProps;
@@ -120,6 +123,7 @@ export function AppRouter({
   budgetsPageProps,
   allBudgetsPageProps,
   unworkedBudgetsPageProps,
+  unplannedSessionsPageProps,
   materialsBoardPageProps,
   materialsBudgetsPageProps,
   materialsPendingProductsPageProps,
@@ -190,6 +194,16 @@ export function AppRouter({
             <GuardedRoute
               path="/presupuestos/sinplanificar"
               element={<BudgetsPage {...budgetsPageProps} />}
+            />
+          }
+        />
+
+        <Route
+          path="/presupuestos/sin_agendar"
+          element={
+            <GuardedRoute
+              path="/presupuestos/sin_agendar"
+              element={<UnplannedSessionsPage {...unplannedSessionsPageProps} />}
             />
           }
         />
