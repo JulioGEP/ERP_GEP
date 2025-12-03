@@ -1165,37 +1165,28 @@ const PENDING_PLANNING_PIPELINE_KEYS = new Set<string>([
   normalizePipelineKey("GEP Services"),
 ]);
 
-function hasAssignedTrainer(session: DealSummarySession | null | undefined): boolean {
-  if (!session) return false;
-
-  const trainerIds = Array.isArray(session.trainer_ids) ? session.trainer_ids : [];
-  if (trainerIds.some((id) => typeof id === "string" && id.trim().length > 0)) {
-    return true;
-  }
-
-  const trainerId = typeof session.trainer_id === "string" ? session.trainer_id.trim() : "";
-  return trainerId.length > 0;
-}
-
-function hasPendingTrainerSessions(deal: DealSummary): boolean {
+function hasDraftSessions(deal: DealSummary): boolean {
   const sessions = Array.isArray(deal.sessions) ? deal.sessions : [];
   if (!sessions.length) {
     return false;
   }
 
   return sessions.some((session) => {
-    const startDate = typeof session?.fecha_inicio_utc === "string" ? session.fecha_inicio_utc.trim() : "";
-    const endDate = typeof session?.fecha_fin_utc === "string" ? session.fecha_fin_utc.trim() : "";
-
-    if (!startDate || !endDate) {
+    if (!session) {
       return false;
     }
-
-    return !hasAssignedTrainer(session);
+    const state = typeof session.estado === "string" ? session.estado.trim().toUpperCase() : null;
+    return state === "BORRADOR";
   });
 }
 
 function matchesPendingPlanningCriteria(deal: DealSummary): boolean {
+  const hasLinkedVariant = typeof deal.w_id_variation === 'string' && deal.w_id_variation.trim().length > 0;
+
+  if (hasLinkedVariant) {
+    return true;
+  }
+
   const pipelineKey = [deal.pipeline_label, deal.pipeline_id]
     .map((value) => normalizePipelineKey(value))
     .find((key) => key.length > 0);
@@ -1204,12 +1195,7 @@ function matchesPendingPlanningCriteria(deal: DealSummary): boolean {
     return false;
   }
 
-  const hasLinkedVariant = typeof deal.w_id_variation === "string" && deal.w_id_variation.trim().length > 0;
-  if (hasLinkedVariant) {
-    return false;
-  }
-
-  return hasPendingTrainerSessions(deal);
+  return hasDraftSessions(deal);
 }
 
 /* =====================

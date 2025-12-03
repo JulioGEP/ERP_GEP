@@ -13,45 +13,21 @@ const resolvedSchemaLockTimeout =
 // Avoid Neon cancelling the advisory lock attempt after 10s (default statement_timeout).
 // We cannot change the remote DB default, so we append a query param to the connection
 // string only for this script to give migrations a wider margin.
-const rawDatabaseUrl = process.env.DATABASE_URL;
-const rawMigrateUrl = process.env.PRISMA_MIGRATE_DATABASE_URL;
+let databaseUrl = process.env.DATABASE_URL;
 
-let databaseUrl = rawDatabaseUrl;
-let migrateDatabaseUrl = rawMigrateUrl;
-
-function addStatementTimeout(connectionString, label) {
-  if (!connectionString) return null;
-
+if (databaseUrl) {
   try {
-    const parsed = new URL(connectionString);
-
-    // Prefer explicit query param for providers that honour it.
+    const parsed = new URL(databaseUrl);
     parsed.searchParams.set('statement_timeout', `${STATEMENT_TIMEOUT}`);
-
-    // Some Neon / pgBouncer setups ignore statement_timeout unless it is also
-    // provided via the `options` param. Append it while preserving any
-    // existing options.
-    const options = parsed.searchParams.get('options');
-    const statementTimeoutOption = `-c statement_timeout=${STATEMENT_TIMEOUT}`;
-    if (!options?.includes('statement_timeout')) {
-      const updatedOptions = options ? `${options} ${statementTimeoutOption}` : statementTimeoutOption;
-      parsed.searchParams.set('options', updatedOptions);
-    }
-
-    return parsed.toString();
+    databaseUrl = parsed.toString();
   } catch (error) {
-    console.warn(`Could not parse ${label} to inject statement_timeout; using raw value`, error);
-    return connectionString;
+    console.warn('Could not parse DATABASE_URL to inject statement_timeout; using raw value', error);
   }
 }
-
-databaseUrl = addStatementTimeout(databaseUrl, 'DATABASE_URL');
-migrateDatabaseUrl = addStatementTimeout(migrateDatabaseUrl, 'PRISMA_MIGRATE_DATABASE_URL');
 
 const env = {
   ...process.env,
   ...(databaseUrl ? { DATABASE_URL: databaseUrl } : null),
-  ...(migrateDatabaseUrl ? { PRISMA_MIGRATE_DATABASE_URL: migrateDatabaseUrl } : null),
   PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedMigrateLockTimeout,
   PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedSchemaLockTimeout,
 };
