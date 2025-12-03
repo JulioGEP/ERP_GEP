@@ -1223,7 +1223,7 @@ export function BudgetDetailModalEmpresas({
               </Col>
               <Col md={2}>
                 <div className="d-flex justify-content-between align-items-center gap-2">
-                  <Form.Label className="mb-0">Transporte</Form.Label>
+                  <Form.Label className="mb-0">Trans.Alumnos</Form.Label>
                   {renderFollowUpBlock('transporte_val')}
                 </div>
                 <Form.Control
