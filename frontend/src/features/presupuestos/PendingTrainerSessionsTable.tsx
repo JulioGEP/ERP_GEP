@@ -22,6 +22,7 @@ type PendingSessionRow = {
   sessionName: string;
   pipelineLabel: string;
   sessionId: string;
+  startDate?: string | null;
 };
 
 function normalizePipelineKey(value: unknown): string {
@@ -50,6 +51,11 @@ function hasTrainer(session: DealSummarySession | null | undefined): boolean {
 
 function hasValue(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasScheduledRange(session: DealSummarySession | null | undefined): session is DealSummarySession {
+  if (!session) return false;
+  return hasValue(session.fecha_inicio_utc) && hasValue(session.fecha_fin_utc);
 }
 
 function buildSessionName(session: DealSummarySession): string {
@@ -103,13 +109,7 @@ export function PendingTrainerSessionsTable({
       const budgetId = deal.deal_id;
 
       sessions.forEach((session, index) => {
-        if (!session) return;
-
-        if (!hasValue(session.fecha_inicio_utc) || !hasValue(session.fecha_fin_utc)) {
-          return;
-        }
-
-        if (hasTrainer(session)) {
+        if (!hasScheduledRange(session) || hasTrainer(session)) {
           return;
         }
 
@@ -118,9 +118,28 @@ export function PendingTrainerSessionsTable({
           organization,
           pipelineLabel,
           sessionName: buildSessionName(session),
-          sessionId: session.id ?? `${budgetId}-session-${index}`,
+          sessionId: session?.id ?? `${budgetId}-session-${index}`,
+          startDate: session?.fecha_inicio_utc ?? null,
         });
       });
+    });
+
+    sessionRows.sort((a, b) => {
+      const dateA = a.startDate ? new Date(a.startDate).getTime() : Number.POSITIVE_INFINITY;
+      const dateB = b.startDate ? new Date(b.startDate).getTime() : Number.POSITIVE_INFINITY;
+
+      if (Number.isFinite(dateA) || Number.isFinite(dateB)) {
+        if (!Number.isFinite(dateA)) return 1;
+        if (!Number.isFinite(dateB)) return -1;
+        if (dateA !== dateB) return dateA - dateB;
+      }
+
+      const byBudget = a.budgetId.localeCompare(b.budgetId, 'es', { sensitivity: 'base' });
+      if (byBudget !== 0) {
+        return byBudget;
+      }
+
+      return a.sessionName.localeCompare(b.sessionName, 'es', { sensitivity: 'base' });
     });
 
     return sessionRows;

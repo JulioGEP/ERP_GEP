@@ -13,11 +13,17 @@ const resolvedSchemaLockTimeout =
 // Avoid Neon cancelling the advisory lock attempt after 10s (default statement_timeout).
 // We cannot change the remote DB default, so we append a query param to the connection
 // string only for this script to give migrations a wider margin.
-let databaseUrl = process.env.DATABASE_URL;
+const rawDatabaseUrl = process.env.DATABASE_URL;
+const rawMigrateUrl = process.env.PRISMA_MIGRATE_DATABASE_URL;
 
-if (databaseUrl) {
+let databaseUrl = rawDatabaseUrl;
+let migrateDatabaseUrl = rawMigrateUrl;
+
+function addStatementTimeout(connectionString, label) {
+  if (!connectionString) return null;
+
   try {
-    const parsed = new URL(databaseUrl);
+    const parsed = new URL(connectionString);
 
     // Prefer explicit query param for providers that honour it.
     parsed.searchParams.set('statement_timeout', `${STATEMENT_TIMEOUT}`);
@@ -32,15 +38,20 @@ if (databaseUrl) {
       parsed.searchParams.set('options', updatedOptions);
     }
 
-    databaseUrl = parsed.toString();
+    return parsed.toString();
   } catch (error) {
-    console.warn('Could not parse DATABASE_URL to inject statement_timeout; using raw value', error);
+    console.warn(`Could not parse ${label} to inject statement_timeout; using raw value`, error);
+    return connectionString;
   }
 }
+
+databaseUrl = addStatementTimeout(databaseUrl, 'DATABASE_URL');
+migrateDatabaseUrl = addStatementTimeout(migrateDatabaseUrl, 'PRISMA_MIGRATE_DATABASE_URL');
 
 const env = {
   ...process.env,
   ...(databaseUrl ? { DATABASE_URL: databaseUrl } : null),
+  ...(migrateDatabaseUrl ? { PRISMA_MIGRATE_DATABASE_URL: migrateDatabaseUrl } : null),
   PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedMigrateLockTimeout,
   PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedSchemaLockTimeout,
 };
