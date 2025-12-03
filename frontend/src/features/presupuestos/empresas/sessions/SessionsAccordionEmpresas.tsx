@@ -236,10 +236,12 @@ function validateStudentDraft(draft: StudentDraft): string | null {
 function SessionStudentsAccordionItem({
   dealId,
   sessionId,
+  sessionDisplayIndex,
   onNotify,
 }: {
   dealId: string;
   sessionId: string;
+  sessionDisplayIndex?: number;
   onNotify?: (toast: ToastParams) => void;
 }) {
   const qc = useQueryClient();
@@ -252,6 +254,15 @@ function SessionStudentsAccordionItem({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [generatedLinks, setGeneratedLinks] = useState<SessionPublicLink[]>([]);
   const [deletingLinkKey, setDeletingLinkKey] = useState<string | null>(null);
+  const sessionCertificatesUrl = useMemo(() => {
+    const url = new URL('https://erpgep.netlify.app/certificados');
+    url.searchParams.set('dealId', dealId);
+    url.searchParams.set('sessionId', sessionId);
+    if (sessionDisplayIndex != null) {
+      url.searchParams.set('sessionNumber', String(sessionDisplayIndex));
+    }
+    return url.toString();
+  }, [dealId, sessionDisplayIndex, sessionId]);
 
   const studentsQuery = useQuery({
     queryKey: ['session-students', dealId, sessionId],
@@ -793,6 +804,14 @@ function SessionStudentsAccordionItem({
                 ) : (
                   'Generar URL'
                 )}
+              </Button>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => window.open(sessionCertificatesUrl, '_blank', 'noopener')}
+                className="d-flex align-items-center gap-2"
+              >
+                Certificados
               </Button>
               {generatedLinks.length ? (
                 <div className="d-flex flex-wrap align-items-center gap-2">
@@ -3088,6 +3107,7 @@ export function SessionsAccordionEmpresas({
                   onSendInvites={handleSendInvites}
                   onNotify={onNotify}
                   hasUnsavedChanges={hasSessionChanges(activeSession.sessionId)}
+                  sessionDisplayIndex={activeSession.displayIndex}
                 />
               ) : (
                 <p className="text-muted mb-0">No se pudo cargar la sesión seleccionada.</p>
@@ -3137,6 +3157,7 @@ interface SessionEditorProps {
   onSendInvites: (sessionId: string) => void;
   onNotify?: (toast: ToastParams) => void;
   hasUnsavedChanges: boolean;
+  sessionDisplayIndex?: number;
 }
 
 function SessionEditor({
@@ -3158,6 +3179,7 @@ function SessionEditor({
   onSendInvites,
   onNotify,
   hasUnsavedChanges,
+  sessionDisplayIndex,
 }: SessionEditorProps) {
   const [trainerFilter, setTrainerFilter] = useState('');
   const [unitFilter, setUnitFilter] = useState('');
@@ -3878,6 +3900,7 @@ function SessionEditor({
         dealId={dealId}
         onNotify={onNotify}
         driveUrl={form.drive_url ?? null}
+        sessionDisplayIndex={sessionDisplayIndex}
       />
     </div>
   );
@@ -3888,11 +3911,13 @@ function SessionCommentsSection({
   dealId,
   onNotify,
   driveUrl,
+  sessionDisplayIndex,
 }: {
   sessionId: string;
   dealId: string;
   onNotify?: (toast: ToastParams) => void;
   driveUrl?: string | null;
+  sessionDisplayIndex?: number;
 }) {
   const { userId, userName } = useCurrentUserIdentity();
 
@@ -4293,6 +4318,7 @@ function SessionCommentsSection({
         <SessionStudentsAccordionItem
           dealId={dealId}
           sessionId={sessionId}
+          sessionDisplayIndex={sessionDisplayIndex}
           onNotify={onNotify}
         />
       </Accordion>
