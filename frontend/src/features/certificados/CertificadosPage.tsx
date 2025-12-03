@@ -857,6 +857,10 @@ export function CertificadosPage() {
       return;
     }
 
+    if (loadingDeal) {
+      return;
+    }
+
     const sessionExists = sessions.some((session) => session.id === pendingSessionId);
     if (!sessionExists) {
       pendingPersistedSessionRef.current = null;
@@ -865,7 +869,7 @@ export function CertificadosPage() {
 
     pendingPersistedSessionRef.current = null;
     void selectSession(pendingSessionId);
-  }, [sessions, selectSession]);
+  }, [loadingDeal, sessions, selectSession]);
 
   useEffect(() => {
     const persistedRows = pendingPersistedRowsRef.current;
