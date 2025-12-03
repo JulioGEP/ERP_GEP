@@ -2005,6 +2005,10 @@ export function SessionsAccordionEmpresas({
   const normalizedHighlightSessionId = useMemo(() => highlightSessionId?.trim() ?? null, [highlightSessionId]);
   const location = useLocation();
   const isCalendarRoute = useMemo(() => location.pathname.startsWith('/calendario'), [location.pathname]);
+  const highlightEnabled = useMemo(
+    () => isCalendarRoute || normalizedHighlightSessionId !== null,
+    [isCalendarRoute, normalizedHighlightSessionId],
+  );
 
   const generateMutation = useMutation({
     mutationFn: (id: string) => generateSessionsFromDeal(id),
@@ -2058,7 +2062,7 @@ export function SessionsAccordionEmpresas({
   }, [applicableProducts]);
 
   useEffect(() => {
-    if (!isCalendarRoute || !normalizedHighlightSessionId) return;
+    if (!highlightEnabled || !normalizedHighlightSessionId) return;
     setPageByProduct((current) => {
       let changed = false;
       const next: Record<string, number> = {};
@@ -2069,7 +2073,7 @@ export function SessionsAccordionEmpresas({
       }
       return changed ? next : current;
     });
-  }, [applicableProducts, isCalendarRoute, normalizedHighlightSessionId]);
+  }, [applicableProducts, highlightEnabled, normalizedHighlightSessionId]);
 
   const [newSessionIds, setNewSessionIds] = useState<Set<string>>(new Set());
 
@@ -2768,7 +2772,7 @@ export function SessionsAccordionEmpresas({
           const sessions = group?.sessions ?? [];
           const sortedSessions = sortSessionsForDisplay(sessions, {
             highlightSessionId: normalizedHighlightSessionId,
-            highlightEnabled: isCalendarRoute,
+            highlightEnabled,
             newSessionIds,
           });
           const totalSessions = sortedSessions.length;

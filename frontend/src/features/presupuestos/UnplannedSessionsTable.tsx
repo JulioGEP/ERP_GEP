@@ -24,13 +24,22 @@ function ProductTags({ tags }: { tags: string[] }) {
   );
 }
 
-function renderRow(session: UnplannedSessionSummary) {
+function renderRow(session: UnplannedSessionSummary, onSelect?: (session: UnplannedSessionSummary) => void) {
   const sessionLabel = session.sessionName?.trim() || 'Sesión sin nombre';
   const pipelineLabel = session.pipeline?.trim() || '—';
   const organizationLabel = session.organizationName?.trim() || '—';
 
+  const handleClick = () => {
+    onSelect?.(session);
+  };
+
   return (
-    <tr key={session.id}>
+    <tr
+      key={session.id}
+      role="button"
+      style={onSelect ? { cursor: 'pointer' } : undefined}
+      onClick={handleClick}
+    >
       <td className="fw-semibold">{session.dealId}</td>
       <td>{organizationLabel}</td>
       <td>{sessionLabel}</td>
@@ -46,7 +55,9 @@ function renderRow(session: UnplannedSessionSummary) {
   );
 }
 
-export function UnplannedSessionsTable() {
+export function UnplannedSessionsTable(props?: {
+  onSelectSession?: (session: UnplannedSessionSummary) => void;
+}) {
   const query = useQuery(queryConfig);
 
   if (query.isLoading) {
@@ -106,7 +117,7 @@ export function UnplannedSessionsTable() {
               <th scope="col" style={{ minWidth: 170 }}>Negocio</th>
             </tr>
           </thead>
-          <tbody>{sessions.map(renderRow)}</tbody>
+          <tbody>{sessions.map((session) => renderRow(session, props?.onSelectSession))}</tbody>
         </Table>
       </div>
     </div>

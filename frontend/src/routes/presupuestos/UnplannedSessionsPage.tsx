@@ -1,6 +1,11 @@
 import { UnplannedSessionsTable } from '../../features/presupuestos/UnplannedSessionsTable';
+import type { UnplannedSessionSummary } from '../../features/presupuestos/api/sessions.api';
 
-export function UnplannedSessionsPage() {
+export interface UnplannedSessionsPageProps {
+  onSelectSession?: (session: UnplannedSessionSummary) => void;
+}
+
+export function UnplannedSessionsPage({ onSelectSession }: UnplannedSessionsPageProps) {
   return (
     <div className="d-grid gap-4">
       <header className="d-flex flex-column gap-2">
@@ -10,7 +15,7 @@ export function UnplannedSessionsPage() {
         </p>
       </header>
 
-      <UnplannedSessionsTable />
+      <UnplannedSessionsTable onSelectSession={onSelectSession} />
     </div>
   );
 }

@@ -21,6 +21,7 @@ import {
   matchesPendingPlanningCriteria,
   importDeal,
 } from '../features/presupuestos/api/deals.api';
+import type { UnplannedSessionSummary } from '../features/presupuestos/api/sessions.api';
 import {
   DEALS_ALL_QUERY_KEY,
   DEALS_QUERY_KEY,
@@ -1332,6 +1333,86 @@ export default function AuthenticatedApp() {
     [pushToast, queryClient],
   );
 
+  const handleOpenUnplannedSession = useCallback(
+    (session: UnplannedSessionSummary) => {
+      void (async () => {
+        const id = session.dealId?.trim();
+        if (!id) {
+          pushToast({ variant: 'danger', message: 'No se pudo determinar el identificador del presupuesto.' });
+          return;
+        }
+
+        const sessionTitle = session.sessionName?.trim() ?? '';
+        const organizationName = session.organizationName?.trim() ?? '';
+        const summaryTitle = sessionTitle.length
+          ? sessionTitle
+          : organizationName.length
+          ? organizationName
+          : `Presupuesto ${id}`;
+
+        const productNames = session.productTags?.length ? session.productTags : undefined;
+
+        const summaryFromSession: DealSummary = {
+          deal_id: id,
+          dealId: id,
+          title: summaryTitle,
+          training_address: null,
+          organization: null,
+          person: null,
+          products: undefined,
+          productNames,
+        };
+
+        const pipelineCandidate = session.pipeline?.trim() ?? null;
+        const pipelineCandidateKey = normalizePipelineKey(pipelineCandidate);
+        let pipelineLabel =
+          pipelineCandidate && KNOWN_PIPELINE_KEYS.has(pipelineCandidateKey) ? pipelineCandidate : null;
+        let pipelineId = pipelineCandidate;
+
+        if (!pipelineLabel) {
+          let detail: DealDetail | null = queryClient.getQueryData<DealDetail>(['deal', id]) ?? null;
+          if (!detail) {
+            try {
+              detail = await fetchDealDetail(id);
+              queryClient.setQueryData(['deal', id], detail);
+            } catch (error) {
+              console.error('[App] Error al obtener el pipeline del presupuesto', error);
+              pushToast({ variant: 'danger', message: 'No se pudo obtener el pipeline del presupuesto.' });
+              return;
+            }
+          }
+
+          if (detail) {
+            pipelineLabel = detail.pipeline_label?.trim() ?? pipelineLabel;
+            const detailPipelineId = (detail as any)?.pipeline_id;
+            if (detailPipelineId != null) {
+              const normalized = String(detailPipelineId).trim();
+              if (normalized.length) {
+                pipelineId = normalized;
+              }
+            }
+          }
+        }
+
+        if (!pipelineLabel) {
+          pushToast({ variant: 'danger', message: 'No se pudo determinar el pipeline del presupuesto.' });
+          return;
+        }
+
+        const summaryWithPipeline: DealSummary = {
+          ...summaryFromSession,
+          pipeline_label: pipelineLabel,
+          pipeline_id: pipelineId ?? pipelineLabel,
+        };
+
+        setSelectedBudgetSummary(summaryWithPipeline);
+        setSelectedBudgetId(id);
+        setHighlightedCalendarSessionId(session.id?.trim() ?? null);
+      })();
+    },
+    [pushToast, queryClient],
+  );
+
   const budgetsPageProps: BudgetsPageProps = {
     budgets: pendingPlanningBudgets,
     isLoading: budgetsWithoutSessionsQuery.isLoading,
@@ -1350,7 +1431,9 @@ export default function AuthenticatedApp() {
     },
   };
 
-  const unplannedSessionsPageProps: UnplannedSessionsPageProps = {};
+  const unplannedSessionsPageProps: UnplannedSessionsPageProps = {
+    onSelectSession: handleOpenUnplannedSession,
+  };
 
   const allBudgetsPageProps: AllBudgetsPageProps = {
     budgets: allBudgets,
