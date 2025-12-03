@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
   Accordion,
   Alert,
@@ -243,7 +243,6 @@ function SessionStudentsAccordionItem({
   onNotify?: (toast: ToastParams) => void;
 }) {
   const qc = useQueryClient();
-  const navigate = useNavigate();
   const [editingId, setEditingId] = useState<'new' | string | null>(null);
   const [draft, setDraft] = useState<StudentDraft>(EMPTY_STUDENT_DRAFT);
   const [formError, setFormError] = useState<string | null>(null);
@@ -324,20 +323,6 @@ function SessionStudentsAccordionItem({
       : 'No se pudo cargar la URL pública'
     : null;
   const publicLinkGenerating = createPublicLinkMutation.isPending;
-
-  const handleNavigateToCertificates = () => {
-    const normalizedDealId = dealId.trim();
-    if (!normalizedDealId) return;
-
-    navigate('/certificados', {
-      state: {
-        certificatesPrefill: {
-          dealId: normalizedDealId,
-          sessionId,
-        },
-      },
-    });
-  };
 
   useEffect(() => {
     setGeneratedLinks((current) => {
@@ -792,14 +777,6 @@ function SessionStudentsAccordionItem({
                 disabled={isNewRow || Boolean(editingStudentId) || saving || studentsLoading}
               >
                 Agregar alumno
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleNavigateToCertificates}
-                className="d-flex align-items-center gap-2"
-              >
-                Crear Certificados
               </Button>
               <Button
                 variant="outline-secondary"
