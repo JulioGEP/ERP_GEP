@@ -98,6 +98,38 @@ describe('normalizeProductDefaults', () => {
     expect(defaults.default_variant_price).toBe('120');
     expect(defaults.hora_inicio).toBe('08:00');
   });
+
+  it('accepts variant defaults without the default prefix', () => {
+    const defaults = normalizeProductDefaults({
+      variant_start: '10:00',
+      variant_end: '12:00',
+      variant_stock_status: 'instock',
+      variant_stock_quantity: '7',
+      variant_price: 99.99,
+    });
+
+    expect(defaults.default_variant_start).toBe('10:00');
+    expect(defaults.default_variant_end).toBe('12:00');
+    expect(defaults.default_variant_stock_status).toBe('instock');
+    expect(defaults.default_variant_stock_quantity).toBe(7);
+    expect(defaults.default_variant_price).toBe('99.99');
+  });
+
+  it('accepts variant defaults without any prefix', () => {
+    const defaults = normalizeProductDefaults({
+      start: '09:00',
+      end: '11:00',
+      stock_status: 'outofstock',
+      stock_quantity: '3',
+      price: '75.5',
+    });
+
+    expect(defaults.default_variant_start).toBe('09:00');
+    expect(defaults.default_variant_end).toBe('11:00');
+    expect(defaults.default_variant_stock_status).toBe('outofstock');
+    expect(defaults.default_variant_stock_quantity).toBe(3);
+    expect(defaults.default_variant_price).toBe('75.5');
+  });
 });
 
 describe('normalizeDealTag', () => {
