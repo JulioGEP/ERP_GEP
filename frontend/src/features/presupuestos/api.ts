@@ -471,8 +471,22 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
   const id = toStringValue(session.id);
   const startDate = toStringValue(session.fecha_inicio_utc);
   const fallbackDate = toStringValue((session as any).fecha);
+  const endDate = toStringValue(session.fecha_fin_utc ?? (session as any).fecha_fin);
   const estadoRaw = toStringValue((session as any).estado);
   const estado = estadoRaw ? toSessionEstadoValue(estadoRaw) : null;
+  const name =
+    toStringValue((session as any).nombre_cache) ??
+    toStringValue((session as any).nombre) ??
+    toStringValue((session as any).session_name) ??
+    toStringValue((session as any).name);
+  const trainerIds = sanitizeStringArray(
+    Array.isArray((session as any).trainer_ids)
+      ? ((session as any).trainer_ids as string[])
+      : Array.isArray((session as any).trainerIds)
+      ? ((session as any).trainerIds as string[])
+      : undefined,
+  );
+  const trainerId = toStringValue((session as any).trainer_id ?? (session as any).trainerId);
 
   if (!id && !startDate && !fallbackDate) {
     return null;
@@ -481,8 +495,12 @@ function normalizeDealSummarySession(raw: Json): DealSummarySession | null {
   return {
     id: id ?? null,
     fecha_inicio_utc: startDate ?? fallbackDate ?? null,
+    fecha_fin_utc: endDate ?? null,
     fecha: fallbackDate ?? (startDate ?? null),
     estado,
+    nombre: name ?? null,
+    trainer_ids: trainerIds ?? null,
+    trainer_id: trainerId ?? null,
   };
 }
 
