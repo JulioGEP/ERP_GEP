@@ -113,8 +113,11 @@ export function useCertificateData() {
   );
 
   const loadDealAndSessions = useCallback(
-    async (dealId: string | number) => {
+    async (dealId: string | number, options?: { presetSessionId?: string | null }) => {
       const normalizedDealId = String(dealId ?? '').trim();
+      const normalizedPresetSessionId = options?.presetSessionId
+        ? String(options.presetSessionId).trim()
+        : '';
 
       sessionRequestIdRef.current = 0;
       resetState();
@@ -141,15 +144,28 @@ export function useCertificateData() {
         const flattenedSessions = flattenSessionGroups(sessionGroups, productMap);
         setSessions(flattenedSessions);
 
+        const presetSession = normalizedPresetSessionId
+          ? flattenedSessions.find(
+              (session) => String(session.id).trim() === normalizedPresetSessionId,
+            )
+          : null;
+
+        if (presetSession) {
+          setSelectedSessionId(presetSession.id);
+          await loadStudentsForSession(dealDetail.deal_id, presetSession.id);
+          return;
+        }
+
         if (flattenedSessions.length === 1) {
           const onlySession = flattenedSessions[0];
           setSelectedSessionId(onlySession.id);
           // ⬇️ Ahora compila aunque deal_id sea string | null
           await loadStudentsForSession(dealDetail.deal_id, onlySession.id);
-        } else {
-          setSelectedSessionId(null);
-          setStudents([]);
+          return;
         }
+
+        setSelectedSessionId(null);
+        setStudents([]);
       } catch (error) {
         resetState();
         setDealError(resolveErrorMessage(error));
