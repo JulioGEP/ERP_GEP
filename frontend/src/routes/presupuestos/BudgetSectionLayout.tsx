@@ -7,6 +7,7 @@ import {
   type BudgetServerQueryOptions,
   type BudgetTableLabels,
   type BudgetTableVariant,
+  type BudgetFiltersConfig,
 } from '../../features/presupuestos/BudgetTable';
 
 export type BudgetSectionLayoutProps = {
@@ -30,6 +31,7 @@ export type BudgetSectionLayoutProps = {
   pageSize?: number;
   defaultFilters?: TableFiltersState;
   children?: ReactNode;
+  filtersConfig?: BudgetFiltersConfig;
 };
 
 export function BudgetSectionLayout({
@@ -52,6 +54,7 @@ export function BudgetSectionLayout({
   tableVariant = 'default',
   pageSize,
   defaultFilters,
+  filtersConfig,
   children,
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
@@ -92,6 +95,7 @@ export function BudgetSectionLayout({
         variant={tableVariant}
         pageSize={pageSize}
         defaultFilters={defaultFilters}
+        filtersConfig={filtersConfig}
       />
 
       {children}

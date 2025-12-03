@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { BudgetSectionLayout, type BudgetSectionLayoutProps } from '../presupuestos/BudgetSectionLayout';
+import { MATERIALS_BUDGET_FILTERS_CONFIG } from '../../features/presupuestos/BudgetTable';
 import type { DealSummary } from '../../types/deal';
 
 export type MaterialsBudgetsPageProps = Omit<BudgetSectionLayoutProps, 'title' | 'subtitle' | 'enableFallback'>;
@@ -61,6 +62,7 @@ export function MaterialsBudgetsPage({ budgets, tableLabels, serverQueryOptions,
       budgets={materialsBudgets}
       tableLabels={mergedLabels}
       serverQueryOptions={filteredServerQueryOptions}
+      filtersConfig={MATERIALS_BUDGET_FILTERS_CONFIG}
     />
   );
 }

@@ -103,6 +103,12 @@ export type BudgetServerQueryOptions = {
   queryKey?: readonly unknown[];
 };
 
+export type BudgetFiltersConfig = {
+  accessors: Record<string, (budget: DealSummary) => string>;
+  definitions: FilterDefinition[];
+  selectFilterKeys?: ReadonlySet<string>;
+};
+
 export type BudgetTableVariant = 'default' | 'unworked';
 
 interface BudgetTableProps {
@@ -121,6 +127,7 @@ interface BudgetTableProps {
   variant?: BudgetTableVariant;
   pageSize?: number;
   defaultFilters?: TableFiltersState;
+  filtersConfig?: BudgetFiltersConfig;
 }
 
 /** ============ Helpers de presentación ============ */
@@ -522,6 +529,123 @@ function normalizeText(value: string): string {
     .toLowerCase();
 }
 
+function booleanToLabel(value: boolean | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return value ? 'Sí' : 'No';
+}
+
+function getStudentsLabel(budget: DealSummary): string {
+  if (!Array.isArray(budget.studentNames) || !budget.studentNames.length) {
+    return '';
+  }
+  return budget.studentNames.map((student) => safeTrim(student ?? '') ?? '').filter(Boolean).join(' ');
+}
+
+function getTrainingAddress(budget: DealSummary): string {
+  return safeTrim(budget.training_address ?? '') ?? '';
+}
+
+const DEFAULT_BUDGET_FILTERS_CONFIG: BudgetFiltersConfig = {
+  accessors: {
+    deal_id: (budget) => getBudgetId(budget) ?? '',
+    title: (budget) => getTitleLabel(budget),
+    organization: (budget) => getOrganizationLabel(budget),
+    comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
+    product_names: (budget) => getProductNames(budget).join(' '),
+    training_address: (budget) => getTrainingAddress(budget),
+    negocio: (budget) => getNegocioLabel(budget),
+    sede: (budget) => safeTrim(budget.sede_label ?? '') ?? '',
+    caes: (budget) => safeTrim(budget.caes_label ?? '') ?? '',
+    caes_val: (budget) => booleanToLabel(budget.caes_val),
+    fundae: (budget) => safeTrim(budget.fundae_label ?? '') ?? '',
+    fundae_val: (budget) => booleanToLabel(budget.fundae_val),
+    hotel: (budget) => safeTrim(budget.hotel_label ?? '') ?? '',
+    hotel_val: (budget) => booleanToLabel(budget.hotel_val),
+    transporte: (budget) => safeTrim(budget.transporte ?? '') ?? '',
+    transporte_val: (budget) => booleanToLabel(budget.transporte_val),
+    po: (budget) => safeTrim(budget.po ?? '') ?? '',
+    po_val: (budget) => booleanToLabel(budget.po_val),
+    tipo_servicio: (budget) => safeTrim(budget.tipo_servicio ?? '') ?? '',
+    session_estado: (budget) => getBudgetSessionStates(budget).join(' '),
+    alumnos: (budget) => getStudentsLabel(budget),
+    fecha_formacion: (budget) => {
+      const timestamp = getTrainingDateTimestamp(budget);
+      const iso = formatDateIso(timestamp);
+      const label = formatDateLabel(timestamp);
+      return [iso, label].filter(Boolean).join(' ');
+    },
+  },
+  definitions: [
+    { key: 'deal_id', label: 'Presupuesto' },
+    { key: 'title', label: 'Título' },
+    { key: 'organization', label: 'Empresa' },
+    { key: 'comercial', label: 'Comercial' },
+    { key: 'product_names', label: 'Productos' },
+    { key: 'training_address', label: 'Dirección de formación' },
+    { key: 'negocio', label: 'Negocio' },
+    { key: 'sede', label: 'Sede' },
+    { key: 'caes', label: 'CAES' },
+    { key: 'caes_val', label: 'Validación CAES' },
+    { key: 'fundae', label: 'FUNDAE' },
+    { key: 'fundae_val', label: 'Validación FUNDAE' },
+    { key: 'hotel', label: 'Hotel' },
+    { key: 'hotel_val', label: 'Validación Hotel' },
+    { key: 'transporte', label: 'Transporte' },
+    { key: 'transporte_val', label: 'Validación Transporte' },
+    { key: 'po', label: 'PO' },
+    { key: 'po_val', label: 'Validación PO' },
+    { key: 'tipo_servicio', label: 'Tipo de servicio' },
+    { key: 'session_estado', label: 'Estado sesión' },
+    { key: 'alumnos', label: 'Alumnos' },
+    { key: 'fecha_formacion', label: 'Fecha de formación', type: 'date' },
+  ],
+  selectFilterKeys: new Set([
+    'session_estado',
+    'caes_val',
+    'fundae_val',
+    'hotel_val',
+    'transporte_val',
+    'po_val',
+    'tipo_servicio',
+    'transporte',
+  ]),
+};
+
+export const MATERIALS_BUDGET_FILTERS_CONFIG: BudgetFiltersConfig = {
+  accessors: {
+    deal_id: (budget) => getBudgetId(budget) ?? '',
+    title: (budget) => getTitleLabel(budget),
+    organization: (budget) => getOrganizationLabel(budget),
+    po: (budget) => safeTrim(budget.po ?? '') ?? '',
+    comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
+    product_names: (budget) => getProductNames(budget).join(' '),
+    proveedores: (budget) => safeTrim(budget.proveedores ?? '') ?? '',
+    direccion_envio: (budget) => safeTrim(budget.direccion_envio ?? '') ?? '',
+    observaciones: (budget) => safeTrim(budget.observaciones ?? '') ?? '',
+    fecha_estimada_entrega_material: (budget) => {
+      const timestamp = parseDateValue(budget.fecha_estimada_entrega_material ?? null);
+      const iso = formatDateIso(timestamp);
+      const label = formatDateLabel(timestamp);
+      return [iso, label].filter(Boolean).join(' ');
+    },
+  },
+  definitions: [
+    { key: 'deal_id', label: 'Presupuesto' },
+    { key: 'title', label: 'Título' },
+    { key: 'organization', label: 'Empresa' },
+    { key: 'comercial', label: 'Comercial' },
+    { key: 'product_names', label: 'Productos' },
+    { key: 'proveedores', label: 'Proveedores' },
+    { key: 'direccion_envio', label: 'Dirección de Envío' },
+    { key: 'po', label: 'PO' },
+    { key: 'observaciones', label: 'Observaciones' },
+    { key: 'fecha_estimada_entrega_material', label: 'Estimada de Entrega', type: 'date' },
+  ],
+  selectFilterKeys: new Set<string>(),
+};
+
 type BudgetFilterRow = {
   budget: DealSummary;
   values: Record<string, string>;
@@ -529,54 +653,19 @@ type BudgetFilterRow = {
   search: string;
 };
 
-const BUDGET_FILTER_ACCESSORS: Record<string, (budget: DealSummary) => string> = {
-  deal_id: (budget) => getBudgetId(budget) ?? '',
-  title: (budget) => getTitleLabel(budget),
-  organization: (budget) => getOrganizationLabel(budget),
-  po: (budget) => safeTrim(budget.po ?? '') ?? '',
-  comercial: (budget) => safeTrim(budget.comercial ?? '') ?? '',
-  product_names: (budget) => getProductNames(budget).join(' '),
-  proveedores: (budget) => safeTrim(budget.proveedores ?? '') ?? '',
-  direccion_envio: (budget) => safeTrim(budget.direccion_envio ?? '') ?? '',
-  observaciones: (budget) => safeTrim(budget.observaciones ?? '') ?? '',
-  fecha_estimada_entrega_material: (budget) => {
-    const timestamp = parseDateValue(budget.fecha_estimada_entrega_material ?? null);
-    const iso = formatDateIso(timestamp);
-    const label = formatDateLabel(timestamp);
-    return [iso, label].filter(Boolean).join(' ');
-  },
-};
-
-const BUDGET_FILTER_DEFINITIONS: FilterDefinition[] = [
-  { key: 'deal_id', label: 'Presupuesto' },
-  { key: 'title', label: 'Título' },
-  { key: 'organization', label: 'Empresa' },
-  { key: 'comercial', label: 'Comercial' },
-  { key: 'product_names', label: 'Productos' },
-  { key: 'proveedores', label: 'Proveedores' },
-  { key: 'direccion_envio', label: 'Dirección de Envío' },
-  { key: 'po', label: 'PO' },
-  { key: 'observaciones', label: 'Observaciones' },
-  { key: 'fecha_estimada_entrega_material', label: 'Estimada de Entrega', type: 'date' },
-];
-
-const BUDGET_FILTER_DEFINITION_KEYS = new Set(
-  BUDGET_FILTER_DEFINITIONS.map((definition) => definition.key),
-);
-
-const BUDGET_FILTER_KEYS = Object.keys(BUDGET_FILTER_ACCESSORS);
-
-const BUDGET_SELECT_FILTER_KEYS = new Set<string>();
-
-function createBudgetFilterRow(budget: DealSummary): BudgetFilterRow {
+function createBudgetFilterRow(
+  budget: DealSummary,
+  filterKeys: string[],
+  filterAccessors: Record<string, (budget: DealSummary) => string>,
+): BudgetFilterRow {
   const values: Record<string, string> = {};
   const normalized: Record<string, string> = {};
-  for (const key of BUDGET_FILTER_KEYS) {
-    const raw = BUDGET_FILTER_ACCESSORS[key]?.(budget) ?? '';
+  for (const key of filterKeys) {
+    const raw = filterAccessors[key]?.(budget) ?? '';
     values[key] = raw;
     normalized[key] = normalizeText(raw);
   }
-  const search = BUDGET_FILTER_KEYS.map((key) => normalized[key]).join(' ');
+  const search = filterKeys.map((key) => normalized[key]).join(' ');
   return { budget, values, normalized, search };
 }
 
@@ -616,9 +705,10 @@ function applyBudgetFilters(
   rows: BudgetFilterRow[],
   filters: Record<string, string>,
   search: string,
+  filterDefinitionKeys: Set<string>,
 ): BudgetFilterRow[] {
   const filterEntries = Object.entries(filters).filter(
-    ([key, value]) => value.trim().length && BUDGET_FILTER_DEFINITION_KEYS.has(key),
+    ([key, value]) => value.trim().length && filterDefinitionKeys.has(key),
   );
   let filtered = rows;
   if (filterEntries.length) {
@@ -672,10 +762,24 @@ export function BudgetTable({
   variant = 'default',
   pageSize,
   defaultFilters,
+  filtersConfig,
 }: BudgetTableProps) {
   const labels = useMemo(() => ({ ...DEFAULT_LABELS, ...(labelsProp ?? {}) }), [labelsProp]);
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const normalizedFiltersConfig = filtersConfig ?? DEFAULT_BUDGET_FILTERS_CONFIG;
+  const filterAccessors = normalizedFiltersConfig.accessors;
+  const filterDefinitionsBase = normalizedFiltersConfig.definitions;
+  const filterSelectKeys = useMemo(
+    () => new Set(normalizedFiltersConfig.selectFilterKeys ?? []),
+    [normalizedFiltersConfig.selectFilterKeys],
+  );
+  const filterDefinitionKeys = useMemo(
+    () => new Set(filterDefinitionsBase.map((definition) => definition.key)),
+    [filterDefinitionsBase],
+  );
+  const filterKeys = useMemo(() => Object.keys(filterAccessors), [filterAccessors]);
 
   const cachedFallbackBudgets = enableFallback
     ? queryClient.getQueryData<DealSummary[]>(DEALS_WITHOUT_SESSIONS_FALLBACK_QUERY_KEY) ?? null
@@ -771,14 +875,14 @@ export function BudgetTable({
   );
 
   const preparedRows = useMemo(
-    () => effectiveBudgets.map((budget) => createBudgetFilterRow(budget)),
-    [effectiveBudgets],
+    () => effectiveBudgets.map((budget) => createBudgetFilterRow(budget, filterKeys, filterAccessors)),
+    [effectiveBudgets, filterKeys, filterAccessors],
   );
 
   const selectOptionsByKey = useMemo(() => {
     const accumulator = new Map<string, Set<string>>();
-    BUDGET_SELECT_FILTER_KEYS.forEach((key) => {
-      if (key === 'session_state') {
+    filterSelectKeys.forEach((key) => {
+      if (key === 'session_estado') {
         accumulator.set(key, new Set<string>(SESSION_ESTADOS));
         return;
       }
@@ -786,7 +890,7 @@ export function BudgetTable({
     });
 
     preparedRows.forEach((row) => {
-      BUDGET_SELECT_FILTER_KEYS.forEach((key) => {
+      filterSelectKeys.forEach((key) => {
         const raw = row.values[key] ?? '';
         const trimmed = raw.trim();
         if (!trimmed.length) return;
@@ -806,7 +910,7 @@ export function BudgetTable({
     });
 
     const result: Record<string, FilterOption[]> = {};
-    BUDGET_SELECT_FILTER_KEYS.forEach((key) => {
+    filterSelectKeys.forEach((key) => {
       const values = accumulator.get(key);
       if (!values || values.size === 0) {
         result[key] = [];
@@ -859,7 +963,7 @@ export function BudgetTable({
 
   const filterDefinitions = useMemo<FilterDefinition[]>(
     () =>
-      BUDGET_FILTER_DEFINITIONS.map((definition) => {
+      filterDefinitionsBase.map((definition) => {
         if (definition.key === 'product_names') {
           return {
             ...definition,
@@ -897,7 +1001,7 @@ export function BudgetTable({
           } satisfies FilterDefinition;
         }
 
-        if (!BUDGET_SELECT_FILTER_KEYS.has(definition.key)) {
+        if (!filterSelectKeys.has(definition.key)) {
           return definition;
         }
         const options = selectOptionsByKey[definition.key] ?? [];
@@ -908,12 +1012,12 @@ export function BudgetTable({
           placeholder: definition.placeholder ?? 'Selecciona o escribe valores',
         } satisfies FilterDefinition;
       }),
-    [productFilterOptions, selectOptionsByKey],
+    [filterDefinitionsBase, filterSelectKeys, productFilterOptions, selectOptionsByKey],
   );
 
   const filteredRows = useMemo(
-    () => applyBudgetFilters(preparedRows, enforcedFilters, searchValue),
-    [preparedRows, enforcedFilters, searchValue],
+    () => applyBudgetFilters(preparedRows, enforcedFilters, searchValue, filterDefinitionKeys),
+    [preparedRows, enforcedFilters, searchValue, filterDefinitionKeys],
   );
 
   const clientFilteredBudgets = useMemo(
@@ -985,10 +1089,10 @@ export function BudgetTable({
 
   const hasAppliedFilters = useMemo(() => {
     const hasFilterValues = Object.entries(enforcedFilters).some(
-      ([key, value]) => BUDGET_FILTER_DEFINITION_KEYS.has(key) && value.trim().length > 0,
+      ([key, value]) => filterDefinitionKeys.has(key) && value.trim().length > 0,
     );
     return hasFilterValues || searchValue.trim().length > 0;
-  }, [enforcedFilters, searchValue]);
+  }, [enforcedFilters, filterDefinitionKeys, searchValue]);
 
   const tanstackSortingState = useMemo<SortingState>(
     () => sortingState.map((item) => ({ id: item.id, desc: item.desc })),
