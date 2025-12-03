@@ -72,7 +72,6 @@ describe('products.api', () => {
         type: 'tipo',
         template: 'tpl',
         url_formacion: 'https://example.com',
-        price: null,
         almacen_stock: 12,
         provider_ids: [1, 2],
         atributos: [

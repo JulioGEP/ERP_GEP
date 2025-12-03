@@ -296,8 +296,7 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
 }
 
 export function normalizeProductFromResponse(input: any): ProductInfo {
-  const stockQuantity =
-    toNumberOrNull(input?.default_variant_stock_quantity) ?? toNumberOrNull(input?.variant_stock_quantity);
+  const stockQuantity = toNumberOrNull(input?.default_variant_stock_quantity);
   const variantsRaw: unknown[] = Array.isArray(input?.variants) ? input.variants : [];
 
   const variants = variantsRaw.map((variant, index) =>
@@ -313,40 +312,24 @@ export function normalizeProductFromResponse(input: any): ProductInfo {
     category: input?.category ?? null,
     hora_inicio: input?.hora_inicio ?? null,
     hora_fin: input?.hora_fin ?? null,
-    default_variant_start: input?.default_variant_start ?? input?.variant_start ?? null,
-    default_variant_end: input?.default_variant_end ?? input?.variant_end ?? null,
-    default_variant_stock_status: input?.default_variant_stock_status ?? input?.variant_stock_status ?? null,
+    default_variant_start: input?.default_variant_start ?? null,
+    default_variant_end: input?.default_variant_end ?? null,
+    default_variant_stock_status: input?.default_variant_stock_status ?? null,
     default_variant_stock_quantity: stockQuantity,
-    default_variant_price:
-      input?.default_variant_price != null
-        ? String(input.default_variant_price)
-        : input?.variant_price != null
-          ? String(input.variant_price)
-          : null,
+    default_variant_price: input?.default_variant_price != null ? String(input.default_variant_price) : null,
     variants,
   } satisfies ProductInfo;
 }
 
 export function normalizeProductDefaults(input: any): ProductDefaults {
-  const stockQuantity =
-    toNumberOrNull(input?.default_variant_stock_quantity) ??
-    toNumberOrNull(input?.variant_stock_quantity) ??
-    toNumberOrNull(input?.stock_quantity);
+  const stockQuantity = toNumberOrNull(input?.default_variant_stock_quantity);
 
   return {
-    default_variant_start: input?.default_variant_start ?? input?.variant_start ?? input?.start ?? null,
-    default_variant_end: input?.default_variant_end ?? input?.variant_end ?? input?.end ?? null,
-    default_variant_stock_status:
-      input?.default_variant_stock_status ?? input?.variant_stock_status ?? input?.stock_status ?? null,
+    default_variant_start: input?.default_variant_start ?? null,
+    default_variant_end: input?.default_variant_end ?? null,
+    default_variant_stock_status: input?.default_variant_stock_status ?? null,
     default_variant_stock_quantity: stockQuantity,
-    default_variant_price:
-      input?.default_variant_price != null
-        ? String(input.default_variant_price)
-        : input?.variant_price != null
-          ? String(input.variant_price)
-          : input?.price != null
-            ? String(input.price)
-            : null,
+    default_variant_price: input?.default_variant_price != null ? String(input.default_variant_price) : null,
     hora_inicio: input?.hora_inicio ?? null,
     hora_fin: input?.hora_fin ?? null,
   } satisfies ProductDefaults;
