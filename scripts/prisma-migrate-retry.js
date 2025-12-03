@@ -18,7 +18,20 @@ let databaseUrl = process.env.DATABASE_URL;
 if (databaseUrl) {
   try {
     const parsed = new URL(databaseUrl);
+
+    // Prefer explicit query param for providers that honour it.
     parsed.searchParams.set('statement_timeout', `${STATEMENT_TIMEOUT}`);
+
+    // Some Neon / pgBouncer setups ignore statement_timeout unless it is also
+    // provided via the `options` param. Append it while preserving any
+    // existing options.
+    const options = parsed.searchParams.get('options');
+    const statementTimeoutOption = `-c statement_timeout=${STATEMENT_TIMEOUT}`;
+    if (!options?.includes('statement_timeout')) {
+      const updatedOptions = options ? `${options} ${statementTimeoutOption}` : statementTimeoutOption;
+      parsed.searchParams.set('options', updatedOptions);
+    }
+
     databaseUrl = parsed.toString();
   } catch (error) {
     console.warn('Could not parse DATABASE_URL to inject statement_timeout; using raw value', error);
