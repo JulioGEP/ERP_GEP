@@ -49,6 +49,7 @@ import { MATERIAL_ORDERS_QUERY_KEY } from '../features/materials/queryKeys';
 import type { PorSesionesPageProps } from '../pages/calendario/PorSesionesPage';
 import type { PorUnidadMovilPageProps } from '../pages/calendario/PorUnidadMovilPage';
 import type { PorFormadorPageProps } from '../pages/calendario/PorFormadorPage';
+import type { PorEmpresaPageProps } from '../pages/calendario/PorEmpresaPage';
 import type { FormadoresBomberosPageProps } from '../pages/recursos/FormadoresBomberosPage';
 import type { UnidadesMovilesPageProps } from '../pages/recursos/UnidadesMovilesPage';
 import type { SalasPageProps } from '../pages/recursos/SalasPage';
@@ -112,6 +113,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Calendario/Sesiones', label: 'Por sesiones', path: '/calendario/por_sesiones' },
       { key: 'Calendario/Formadores', label: 'Por formador', path: '/calendario/por_formador' },
+      { key: 'Calendario/Empresas', label: 'Por empresa', path: '/calendario/por_empresa' },
       { key: 'Calendario/Unidades', label: 'Por unidad móvil', path: '/calendario/por_unidad_movil' },
     ],
   },
@@ -1448,6 +1450,12 @@ export default function AuthenticatedApp() {
     onVariantOpen: handleOpenCalendarVariant,
   };
 
+  const calendarOrganizationsPageProps: PorEmpresaPageProps = {
+    onNotify: pushToast,
+    onSessionOpen: handleOpenCalendarSession,
+    onVariantOpen: handleOpenCalendarVariant,
+  };
+
   const formadoresBomberosPageProps: FormadoresBomberosPageProps = {
     onNotify: pushToast,
   };
@@ -1605,6 +1613,7 @@ export default function AuthenticatedApp() {
             porSesionesPageProps={calendarSessionsPageProps}
             porUnidadMovilPageProps={calendarUnitsPageProps}
             porFormadorPageProps={calendarTrainersPageProps}
+            porEmpresaPageProps={calendarOrganizationsPageProps}
             formadoresBomberosPageProps={formadoresBomberosPageProps}
             unidadesMovilesPageProps={unidadesMovilesPageProps}
             salasPageProps={salasPageProps}
