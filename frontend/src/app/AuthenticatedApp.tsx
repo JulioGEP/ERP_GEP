@@ -1433,6 +1433,9 @@ export default function AuthenticatedApp() {
 
   const unplannedSessionsPageProps: UnplannedSessionsPageProps = {
     onSelectSession: handleOpenUnplannedSession,
+    onOpenImportModal: handleOpenImportModal,
+    isImporting: importMutation.isPending,
+    canImport: canImportBudgets,
   };
 
   const allBudgetsPageProps: AllBudgetsPageProps = {
