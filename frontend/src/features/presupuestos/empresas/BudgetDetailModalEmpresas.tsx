@@ -1103,7 +1103,7 @@ export function BudgetDetailModalEmpresas({
             variant="outline-light"
             size="sm"
             className="erp-modal-action"
-            onClick={requestClose}
+            onClick={() => requestClose()}
           >
             Cerrar
           </Button>
@@ -1616,7 +1616,7 @@ export function BudgetDetailModalEmpresas({
         )}
       </Modal.Body>
       <Modal.Footer className="erp-modal-footer border-0 pt-0">
-        <Button variant="outline-secondary" onClick={requestClose} disabled={saving}>
+        <Button variant="outline-secondary" onClick={() => requestClose()} disabled={saving}>
           Cerrar
         </Button>
         {isDirty && deal && (
