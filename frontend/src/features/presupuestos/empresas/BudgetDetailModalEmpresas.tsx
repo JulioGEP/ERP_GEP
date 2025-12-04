@@ -95,7 +95,7 @@ function mergeDealDetailData(current: DealDetail | undefined, next: DealDetail):
 
 const EMPTY_DOCUMENTS: DealDocument[] = [];
 const PIPELINE_LABEL = 'Formación Empresas';
-const TRAINING_PRODUCT_PREFIXES = ['form-'] as const;
+const TRAINING_PRODUCT_PREFIXES = ['form-', 'ces-'] as const;
 
 function isTrainingProduct(product: DealDetailViewModel['products'][number] | null | undefined) {
   const code = typeof product?.code === 'string' ? product.code.trim().toLowerCase() : '';
