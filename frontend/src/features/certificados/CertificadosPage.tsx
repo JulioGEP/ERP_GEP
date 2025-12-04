@@ -744,7 +744,13 @@ export function CertificadosPage() {
           return;
         }
         setPublicLinkUrl(null);
-        setPublicLinkError(resolveGenerationError(error));
+        if (error instanceof ApiError && error.code === 'UNAUTHORIZED') {
+          setPublicLinkError(
+            'La sesión ha expirado. Vuelve a iniciar sesión y repite la generación para obtener el enlace público.',
+          );
+        } else {
+          setPublicLinkError(resolveGenerationError(error));
+        }
       } finally {
         if (publicLinkRequestIdRef.current === requestId) {
           setPublicLinkLoading(false);
