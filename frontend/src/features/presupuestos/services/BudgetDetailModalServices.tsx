@@ -604,7 +604,9 @@ export function BudgetDetailModalServices({
     () =>
       detailProducts.filter((product) => {
         const code = product?.code ?? '';
-        return typeof code === 'string' ? !code.toLowerCase().startsWith('ext-') : true;
+        if (typeof code !== 'string') return true;
+        const normalized = code.toLowerCase();
+        return !normalized.startsWith('ext-') && !normalized.startsWith('ces-');
       }),
     [detailProducts]
   );
@@ -628,7 +630,9 @@ export function BudgetDetailModalServices({
 
   const extraProducts = detailProducts.filter((product) => {
     const code = product?.code ?? '';
-    return typeof code === 'string' ? code.toLowerCase().startsWith('ext-') : false;
+    if (typeof code !== 'string') return false;
+    const normalized = code.toLowerCase();
+    return normalized.startsWith('ext-') || normalized.startsWith('ces-');
   });
 
   const modalTitle = organizationDisplay || 'Detalle presupuesto';
