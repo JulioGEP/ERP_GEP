@@ -503,6 +503,27 @@ function toDosDate(date: Date): number {
   return ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
 }
 
+function resolveDownloadableUrl(url: string): string {
+  const trimmed = typeof url === 'string' ? url.trim() : '';
+  if (!trimmed) return url;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname.includes('drive.google.com')) {
+      const pathMatch = parsed.pathname.match(/\/d\/([^/]+)/);
+      const queryId = parsed.searchParams.get('id');
+      const fileId = pathMatch?.[1] ?? queryId;
+      if (fileId) {
+        return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+      }
+    }
+  } catch {
+    // Ignored: fallback to the original URL if it cannot be parsed.
+  }
+
+  return trimmed;
+}
+
 async function createZipBlob(files: Array<{ name: string; data: ArrayBuffer }>): Promise<Blob> {
   const encoder = new TextEncoder();
   const chunks: Uint8Array[] = [];
@@ -1578,7 +1599,8 @@ export function CertificadosPage() {
       const files: Array<{ name: string; data: ArrayBuffer }> = [];
 
       for (const certificate of downloadableCertificates) {
-        const response = await fetch(certificate.url);
+        const downloadUrl = resolveDownloadableUrl(certificate.url);
+        const response = await fetch(downloadUrl);
         if (!response.ok) {
           throw new Error(`No se pudo descargar ${certificate.fileName}.`);
         }
@@ -2103,36 +2125,40 @@ export function CertificadosPage() {
                   )}
                 </>
               )}
-              {!generating && generationSummary && sessionDriveUrl && (
-                <div className="mt-2 text-start">
-                  <Button
-                    variant="outline-primary"
-                    href={sessionDriveUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Carpeta Google Drive
-                  </Button>
-                </div>
-              )}
-              {!generating && downloadableCertificates.length > 0 && (
-                <div className="mt-2 text-start d-flex flex-column gap-1">
-                  <Button
-                    variant="primary"
-                    onClick={handleDownloadZip}
-                    disabled={downloadingZip}
-                  >
-                    {downloadingZip ? (
-                      <>
-                        <Spinner animation="border" size="sm" className="me-2" />
-                        Preparando ZIP…
-                      </>
-                    ) : (
-                      'Descargar en ZIP'
-                    )}
-                  </Button>
-                  {zipDownloadError && (
-                    <div className="text-danger small">{zipDownloadError}</div>
+              {!generating && (sessionDriveUrl || downloadableCertificates.length > 0) && (
+                <div className="mt-2 text-start d-flex flex-wrap gap-2 align-items-start">
+                  {sessionDriveUrl && (
+                    <Button
+                      variant="outline-primary"
+                      href={sessionDriveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-fill"
+                    >
+                      Carpeta Google Drive
+                    </Button>
+                  )}
+                  {downloadableCertificates.length > 0 && (
+                    <div className="d-flex flex-column gap-1 flex-fill">
+                      <Button
+                        variant="primary"
+                        onClick={handleDownloadZip}
+                        disabled={downloadingZip}
+                        className="flex-fill"
+                      >
+                        {downloadingZip ? (
+                          <>
+                            <Spinner animation="border" size="sm" className="me-2" />
+                            Preparando ZIP…
+                          </>
+                        ) : (
+                          'Descargar en ZIP'
+                        )}
+                      </Button>
+                      {zipDownloadError && (
+                        <div className="text-danger small">{zipDownloadError}</div>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
