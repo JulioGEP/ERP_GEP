@@ -322,14 +322,25 @@ export function normalizeProductFromResponse(input: any): ProductInfo {
 }
 
 export function normalizeProductDefaults(input: any): ProductDefaults {
-  const stockQuantity = toNumberOrNull(input?.default_variant_stock_quantity);
+  const stockQuantity = toNumberOrNull(
+    input?.default_variant_stock_quantity ?? input?.variant_stock_quantity,
+  );
+  const stockStatus = toTrimmedString(
+    input?.default_variant_stock_status ?? input?.variant_stock_status,
+  );
+  const price =
+    input?.default_variant_price != null
+      ? String(input.default_variant_price)
+      : input?.variant_price != null
+        ? String(input.variant_price)
+        : null;
 
   return {
     default_variant_start: input?.default_variant_start ?? null,
     default_variant_end: input?.default_variant_end ?? null,
-    default_variant_stock_status: input?.default_variant_stock_status ?? null,
+    default_variant_stock_status: stockStatus,
     default_variant_stock_quantity: stockQuantity,
-    default_variant_price: input?.default_variant_price != null ? String(input.default_variant_price) : null,
+    default_variant_price: price,
     hora_inicio: input?.hora_inicio ?? null,
     hora_fin: input?.hora_fin ?? null,
   } satisfies ProductDefaults;

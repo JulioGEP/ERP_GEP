@@ -98,6 +98,20 @@ describe('normalizeProductDefaults', () => {
     expect(defaults.default_variant_price).toBe('120');
     expect(defaults.hora_inicio).toBe('08:00');
   });
+
+  it('accepts variant_* fields returned by the API', () => {
+    const defaults = normalizeProductDefaults({
+      variant_stock_status: 'instock',
+      variant_stock_quantity: 5,
+      variant_price: 99.5,
+      hora_fin: '14:00',
+    });
+
+    expect(defaults.default_variant_stock_status).toBe('instock');
+    expect(defaults.default_variant_stock_quantity).toBe(5);
+    expect(defaults.default_variant_price).toBe('99.5');
+    expect(defaults.hora_fin).toBe('14:00');
+  });
 });
 
 describe('normalizeDealTag', () => {
