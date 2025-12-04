@@ -138,8 +138,10 @@ export function MobileUnitModal({
     [mode]
   );
 
-  const handleTextChange = (field: "name" | "matricula") =>
-    (event: ChangeEvent<HTMLInputElement>) => {
+  const handleTextChange = (
+    field: "name" | "matricula" | "itv" | "revision" | "tipo_seguro" | "vigencia_seguro",
+  ) =>
+    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       setFormValues((prev) => ({ ...prev, [field]: event.target.value }));
     };
 

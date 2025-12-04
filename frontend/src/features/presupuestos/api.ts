@@ -231,6 +231,7 @@ export type MobileUnitOption = {
   unidad_id: string;
   name: string;
   matricula: string | null;
+  activo?: boolean;
 };
 
 export type ProductVariantOption = {
