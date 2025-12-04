@@ -1334,6 +1334,10 @@ async function uploadBufferToDrive(params: {
   };
 }
 
+function buildNonExpiringDriveViewLink(fileId: string): string {
+  return `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/view?usp=sharing`;
+}
+
 async function ensureFilePublicWebViewLink(fileId: string): Promise<string | null> {
   const permissionUrl = `${DRIVE_API_BASE}/files/${encodeURIComponent(
     fileId
@@ -1368,6 +1372,26 @@ async function ensureFilePublicWebViewLink(fileId: string): Promise<string | nul
 
   const metadata: any = await metadataResponse.json().catch(() => ({}));
   return typeof metadata?.webViewLink === "string" ? metadata.webViewLink : null;
+}
+
+function resolveStableDriveFileLink(fileId: string, provided?: string | null): string {
+  const canonicalLink = buildNonExpiringDriveViewLink(fileId);
+
+  if (!provided) return canonicalLink;
+
+  try {
+    const parsed = new URL(provided);
+    const hasTemporaryToken =
+      parsed.searchParams.has("token") ||
+      parsed.searchParams.has("Expires") ||
+      parsed.searchParams.has("Signature");
+
+    if (hasTemporaryToken) return canonicalLink;
+  } catch {
+    /* noop */
+  }
+
+  return provided;
 }
 
 async function updateDealFolderLink({
@@ -1893,7 +1917,10 @@ export async function uploadSessionDocumentToGoogleDrive(params: {
   return {
     driveFileId: uploadResult.id,
     driveFileName: uploadResult.name || safeName,
-    driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
+    driveWebViewLink: resolveStableDriveFileLink(
+      uploadResult.id,
+      publicLink ?? uploadResult.webViewLink,
+    ),
     sessionFolderWebViewLink: sessionFolderLink,
   };
 }
