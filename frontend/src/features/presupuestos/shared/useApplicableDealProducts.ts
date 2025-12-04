@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { DealProduct } from '../../../types/deal';
 
-export const SESSION_CODE_PREFIXES = ['form-', 'prev-', 'pci-'] as const;
+export const SESSION_CODE_PREFIXES = ['form-', 'ces-', 'prev-', 'pci-'] as const;
 
 type DealProductWithId = DealProduct & { id: string | number };
 
