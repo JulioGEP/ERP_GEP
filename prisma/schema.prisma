@@ -376,6 +376,11 @@ model unidades_moviles {
   matricula  String   @unique
   tipo       String[] @default([])
   sede       String[] @default([])
+  activo     Boolean  @default(true)
+  itv        DateTime? @db.Date
+  revision   DateTime? @db.Date
+  tipo_seguro String? @db.VarChar(20)
+  vigencia_seguro DateTime? @db.Date
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @updatedAt @db.Timestamptz(6)
 

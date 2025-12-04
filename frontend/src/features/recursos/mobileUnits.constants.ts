@@ -6,6 +6,7 @@ export const MOBILE_UNIT_SEDE_OPTIONS = [
 ] as const;
 
 export const MOBILE_UNIT_TIPO_OPTIONS = ['Formación', 'Preventivo', 'PCI', 'Remolque'] as const;
+export const MOBILE_UNIT_SEGURO_OPTIONS = ['Anual', 'Trimestral'] as const;
 
 export type MobileUnitSedeOption = (typeof MOBILE_UNIT_SEDE_OPTIONS)[number];
 export type MobileUnitTipoOption = (typeof MOBILE_UNIT_TIPO_OPTIONS)[number];

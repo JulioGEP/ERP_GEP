@@ -10,6 +10,11 @@ type MobileUnitRecord = {
   matricula: string;
   tipo: string[] | string | null;
   sede: string[] | string | null;
+  activo: boolean | null;
+  itv: Date | string | null;
+  revision: Date | string | null;
+  tipo_seguro: string | null;
+  vigencia_seguro: Date | string | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
 };
@@ -54,6 +59,11 @@ function mapSelectionValues(value: unknown, validValues: readonly string[]) {
 function normalizeMobileUnit(row: MobileUnitRecord) {
   const tipo = mapSelectionValues(row.tipo, VALID_TIPO);
   const sede = mapSelectionValues(row.sede, VALID_SEDE);
+  const tipoSeguro = toTrimmedString(row.tipo_seguro);
+  const itv = toMadridISOString(row.itv);
+  const revision = toMadridISOString(row.revision);
+  const vigenciaSeguro = toMadridISOString(row.vigencia_seguro);
+  const dateOnly = (value: string | null) => (value ? value.slice(0, 10) : null);
 
   return {
     unidad_id: row.unidad_id,
@@ -61,9 +71,26 @@ function normalizeMobileUnit(row: MobileUnitRecord) {
     matricula: row.matricula,
     tipo,
     sede,
+    activo: row.activo !== false,
+    itv: dateOnly(itv),
+    revision: dateOnly(revision),
+    tipo_seguro: tipoSeguro,
+    vigencia_seguro: dateOnly(vigenciaSeguro),
     created_at: toMadridISOString(row.created_at),
     updated_at: toMadridISOString(row.updated_at),
   };
+}
+
+function parseDate(value: unknown, field: string) {
+  if (value === undefined) return { hasValue: false as const, date: null as Date | null };
+  if (value === null || value === '') return { hasValue: true as const, date: null as Date | null };
+  const text = String(value).trim();
+  if (!text) return { hasValue: true as const, date: null as Date | null };
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return { error: errorResponse('VALIDATION_ERROR', `El campo ${field} debe ser una fecha válida`, 400) };
+  }
+  return { hasValue: true as const, date: parsed };
 }
 
 function normalizeSelection(
@@ -117,6 +144,18 @@ function buildCreateData(body: any) {
   if ("error" in tipoResult) return tipoResult;
   const sedeResult = normalizeSelection(body?.sede, VALID_SEDE, "sede");
   if ("error" in sedeResult) return sedeResult;
+  const itvResult = parseDate(body?.itv, 'itv');
+  if ('error' in itvResult) return itvResult;
+  const revisionResult = parseDate(body?.revision, 'revision');
+  if ('error' in revisionResult) return revisionResult;
+  const vigenciaSeguroResult = parseDate(body?.vigencia_seguro, 'vigencia_seguro');
+  if ('error' in vigenciaSeguroResult) return vigenciaSeguroResult;
+  const tipoSeguro = toTrimmedString(body?.tipo_seguro);
+  const seguroValido = !tipoSeguro || ['anual', 'trimestral'].includes(tipoSeguro.toLowerCase());
+  if (!seguroValido) {
+    return { error: errorResponse('VALIDATION_ERROR', 'El campo tipo_seguro debe ser "Anual" o "Trimestral"', 400) };
+  }
+  const activo = body?.activo === undefined ? true : Boolean(body.activo);
 
   if (!name) {
     return { error: errorResponse('VALIDATION_ERROR', 'El campo name es obligatorio', 400) };
@@ -133,6 +172,11 @@ function buildCreateData(body: any) {
     matricula,
     tipo: tipoResult.value,
     sede: sedeResult.value,
+    activo,
+    itv: itvResult.hasValue ? itvResult.date : undefined,
+    revision: revisionResult.hasValue ? revisionResult.date : undefined,
+    tipo_seguro: tipoSeguro ? tipoSeguro[0].toUpperCase() + tipoSeguro.slice(1).toLowerCase() : null,
+    vigencia_seguro: vigenciaSeguroResult.hasValue ? vigenciaSeguroResult.date : undefined,
   };
 
   return { data };
@@ -183,6 +227,44 @@ function buildUpdateData(body: any) {
     const sedeResult = normalizeSelection(body.sede, VALID_SEDE, 'sede');
     if ('error' in sedeResult) return sedeResult;
     data.sede = sedeResult.value;
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'activo')) {
+    data.activo = Boolean(body.activo);
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'itv')) {
+    const result = parseDate(body.itv, 'itv');
+    if ('error' in result) return result;
+    data.itv = result.hasValue ? result.date : undefined;
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'revision')) {
+    const result = parseDate(body.revision, 'revision');
+    if ('error' in result) return result;
+    data.revision = result.hasValue ? result.date : undefined;
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'tipo_seguro')) {
+    const tipoSeguro = toTrimmedString(body.tipo_seguro);
+    const seguroValido = !tipoSeguro || ['anual', 'trimestral'].includes(tipoSeguro.toLowerCase());
+    if (!seguroValido) {
+      return { error: errorResponse('VALIDATION_ERROR', 'El campo tipo_seguro debe ser "Anual" o "Trimestral"', 400) };
+    }
+    data.tipo_seguro = tipoSeguro
+      ? tipoSeguro[0].toUpperCase() + tipoSeguro.slice(1).toLowerCase()
+      : null;
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'vigencia_seguro')) {
+    const result = parseDate(body.vigencia_seguro, 'vigencia_seguro');
+    if ('error' in result) return result;
+    data.vigencia_seguro = result.hasValue ? result.date : undefined;
     hasChanges = true;
   }
 

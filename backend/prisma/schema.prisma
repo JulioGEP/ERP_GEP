@@ -673,6 +673,11 @@ model unidades_moviles {
   matricula       String?           @db.VarChar(50)
   tipo            String[]          @default([])
   sede            String[]          @default([])
+  activo          Boolean           @default(true)
+  itv             DateTime?         @db.Date
+  revision        DateTime?         @db.Date
+  tipo_seguro     String?           @db.VarChar(20)
+  vigencia_seguro DateTime?         @db.Date
   sesion_unidades sesion_unidades[]
   variants        variants[]
 }
