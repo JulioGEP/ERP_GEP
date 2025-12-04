@@ -221,11 +221,54 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
     }
   };
 
+  const firefighterIdsSet = new Set<string>();
+  const registerFirefighterId = (value: unknown) => {
+    const normalized = toStringValue(value);
+    if (normalized) {
+      firefighterIdsSet.add(normalized);
+    }
+  };
+
+  const collectFirefighterId = (value: unknown) => {
+    if (value === null || value === undefined) {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => collectFirefighterId(item));
+      return;
+    }
+
+    if (typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      registerFirefighterId(
+        record.trainer_id ??
+          record.trainerId ??
+          record.bombero_id ??
+          record.bomberoId ??
+          record.firefighter_id ??
+          record.firefighterId ??
+          record.id,
+      );
+      return;
+    }
+
+    registerFirefighterId(value);
+  };
+
   registerTrainerId((session as any).trainer_id ?? (session as any).trainerId);
 
   const rawTrainerIds = (session as any).trainer_ids ?? (session as any).trainerIds;
   if (Array.isArray(rawTrainerIds)) {
     rawTrainerIds.forEach((value) => registerTrainerId(value));
+  }
+
+  collectFirefighterId((session as any).bombero_id ?? (session as any).firefighter_id);
+
+  const rawFirefighterIds =
+    (session as any).bombero_ids ?? (session as any).firefighter_ids ?? (session as any).bomberos ?? (session as any).firefighters;
+  if (rawFirefighterIds !== undefined) {
+    collectFirefighterId(rawFirefighterIds);
   }
 
   const trainers = (session as any).trainers;
@@ -250,9 +293,25 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
     }
   }
 
+  Object.entries(session).forEach(([key, value]) => {
+    const normalizedKey = key.toLowerCase();
+    if (normalizedKey.includes('bombero') || normalizedKey.includes('firefighter')) {
+      collectFirefighterId(value);
+    }
+  });
+
   const trainerIds = sanitizeStringArray(Array.from(trainerIdsSet)) ?? null;
   const trainer_id = toStringValue(
     (session as any).trainer_id ?? (session as any).trainerId ?? (trainerIds ? trainerIds[0] : null),
+  );
+
+  const firefighterIds = sanitizeStringArray(Array.from(firefighterIdsSet)) ?? null;
+  const firefighterId = toStringValue(
+    (session as any).firefighter_id ??
+      (session as any).bombero_id ??
+      (session as any).firefighterId ??
+      (session as any).bomberoId ??
+      (firefighterIds ? firefighterIds[0] : null),
   );
 
   if (!id && !startDate && !fallbackDate) {
@@ -269,6 +328,10 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
     nombre,
     trainer_ids: trainerIds,
     trainer_id: trainer_id ?? null,
+    firefighter_ids: firefighterIds,
+    firefighter_id: firefighterId ?? null,
+    bombero_ids: firefighterIds,
+    bombero_id: firefighterId ?? null,
   };
 }
 
