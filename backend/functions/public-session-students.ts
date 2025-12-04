@@ -1,6 +1,7 @@
 // backend/functions/public-session-students.ts
 import { validate as isUUID } from 'uuid';
 import { getPrisma } from './_shared/prisma';
+import { normalizeDriveUrl } from './_shared/drive';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
 
@@ -110,10 +111,7 @@ function mapStudent(student: any) {
     dni: student.dni,
     apto: Boolean(student.apto),
     certificado: Boolean(student.certificado),
-    drive_url:
-      typeof student.drive_url === 'string' && student.drive_url.trim().length
-        ? student.drive_url.trim()
-        : null,
+    drive_url: normalizeDriveUrl(student.drive_url),
     created_at: toMadridISOString(student.created_at),
     updated_at: toMadridISOString(student.updated_at),
   };
