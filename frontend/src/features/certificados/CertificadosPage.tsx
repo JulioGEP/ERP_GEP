@@ -374,133 +374,6 @@ function buildCertificateFileName(row: CertificateRow, session: CertificateSessi
   return `${fileName}.pdf`;
 }
 
-function buildZipFileName(params: {
-  dealId: string | null;
-  sessionName: string | null;
-  companyName: string | null;
-}): string {
-  const parts = [
-    'Certificados',
-    sanitizeFileNamePart(toTrimmedString(params.dealId)),
-    sanitizeFileNamePart(toTrimmedString(params.sessionName)),
-    sanitizeFileNamePart(toTrimmedString(params.companyName)),
-  ].filter((part) => part.length > 0);
-
-  if (!parts.length) {
-    return 'certificados';
-  }
-
-  return parts.join(' - ');
-}
-
-const CRC32_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i += 1) {
-    let current = i;
-    for (let j = 0; j < 8; j += 1) {
-      current = current & 1 ? 0xedb88320 ^ (current >>> 1) : current >>> 1;
-    }
-    table[i] = current >>> 0;
-  }
-  return table;
-})();
-
-function computeCrc32(data: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (let i = 0; i < data.length; i += 1) {
-    const byte = data[i];
-    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xff];
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-async function buildZipBlob(files: Array<{ name: string; blob: Blob }>): Promise<Blob> {
-  const encoder = new TextEncoder();
-  const chunks: Uint8Array[] = [];
-  const centralDirectory: Uint8Array[] = [];
-  let offset = 0;
-
-  for (const file of files) {
-    const nameBytes = encoder.encode(file.name);
-    const data = new Uint8Array(await file.blob.arrayBuffer());
-    const crc32 = computeCrc32(data);
-    const size = data.length;
-
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    const localView = new DataView(localHeader.buffer);
-    localView.setUint32(0, 0x04034b50, true);
-    localView.setUint16(4, 20, true);
-    localView.setUint16(6, 0, true);
-    localView.setUint16(8, 0, true);
-    localView.setUint16(10, 0, true);
-    localView.setUint16(12, 0, true);
-    localView.setUint32(14, crc32, true);
-    localView.setUint32(18, size, true);
-    localView.setUint32(22, size, true);
-    localView.setUint16(26, nameBytes.length, true);
-    localView.setUint16(28, 0, true);
-    localHeader.set(nameBytes, 30);
-
-    chunks.push(localHeader, data);
-
-    const centralHeader = new Uint8Array(46 + nameBytes.length);
-    const centralView = new DataView(centralHeader.buffer);
-    centralView.setUint32(0, 0x02014b50, true);
-    centralView.setUint16(4, 20, true);
-    centralView.setUint16(6, 20, true);
-    centralView.setUint16(8, 0, true);
-    centralView.setUint16(10, 0, true);
-    centralView.setUint16(12, 0, true);
-    centralView.setUint16(14, 0, true);
-    centralView.setUint32(16, crc32, true);
-    centralView.setUint32(20, size, true);
-    centralView.setUint32(24, size, true);
-    centralView.setUint16(28, nameBytes.length, true);
-    centralView.setUint16(30, 0, true);
-    centralView.setUint16(32, 0, true);
-    centralView.setUint16(34, 0, true);
-    centralView.setUint16(36, 0, true);
-    centralView.setUint32(38, 0, true);
-    centralView.setUint32(42, offset, true);
-    centralHeader.set(nameBytes, 46);
-
-    centralDirectory.push(centralHeader);
-
-    offset += localHeader.length + data.length;
-  }
-
-  const centralSize = centralDirectory.reduce((total, item) => total + item.length, 0);
-  const centralOffset = offset;
-  const endRecord = new Uint8Array(22);
-  const endView = new DataView(endRecord.buffer);
-  endView.setUint32(0, 0x06054b50, true);
-  endView.setUint16(4, 0, true);
-  endView.setUint16(6, 0, true);
-  endView.setUint16(8, files.length, true);
-  endView.setUint16(10, files.length, true);
-  endView.setUint32(12, centralSize, true);
-  endView.setUint32(16, centralOffset, true);
-  endView.setUint16(20, 0, true);
-
-  const totalSize = offset + centralSize + endRecord.length;
-  const output = new Uint8Array(totalSize);
-  let position = 0;
-
-  for (const part of chunks) {
-    output.set(part, position);
-    position += part.length;
-  }
-
-  for (const part of centralDirectory) {
-    output.set(part, position);
-    position += part.length;
-  }
-
-  output.set(endRecord, position);
-
-  return new Blob([output], { type: 'application/zip' });
-}
-
 const CERTIFICATE_BATCH_SIZE = 5;
 const CERTIFICATE_MAX_RETRIES = 3;
 const CERTIFICATE_RETRY_DELAY_MS = 500;
@@ -683,8 +556,6 @@ export function CertificadosPage() {
   const [generationResults, setGenerationResults] = useState<GenerationResult[]>([]);
   const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>(() => createGenerationSteps());
   const [isCancellingGeneration, setIsCancellingGeneration] = useState(false);
-  const [downloadingZip, setDownloadingZip] = useState(false);
-  const [zipDownloadError, setZipDownloadError] = useState<string | null>(null);
   const generationAbortRef = useRef<{ cancelled: boolean } | null>(null);
   const [publicLinkUrl, setPublicLinkUrl] = useState<string | null>(null);
   const [publicLinkLoading, setPublicLinkLoading] = useState(false);
@@ -1206,8 +1077,6 @@ export function CertificadosPage() {
       setGenerationError(null);
       setGenerationProgress(0);
       setGenerationTotal(0);
-      setZipDownloadError(null);
-      setDownloadingZip(false);
 
       if (!dealId) {
         setGenerationError('Selecciona un deal válido antes de generar certificados.');
@@ -1538,84 +1407,6 @@ export function CertificadosPage() {
     void runCertificateGeneration({ rows: rowsToRetry, resetResults: false });
   }, [editableRows, generationResults, runCertificateGeneration]);
 
-  const handleDownloadCertificatesZip = useCallback(async () => {
-    if (!successfulGenerationResults.length) {
-      return;
-    }
-
-    setZipDownloadError(null);
-    setDownloadingZip(true);
-
-    try {
-      const nameCounts = new Map<string, number>();
-      const files = await Promise.all(
-        successfulGenerationResults.map(async (result, index) => {
-          const url = result.url;
-          if (!url) {
-            return null;
-          }
-
-          let response: Response;
-          try {
-            response = await fetch(url);
-          } catch (error) {
-            throw new Error(
-              `No se pudo descargar el certificado "${result.label}". Vuelve a intentarlo más tarde.`,
-            );
-          }
-
-          if (!response.ok) {
-            throw new Error(
-              `No se pudo descargar el certificado "${result.label}" (código ${response.status}).`,
-            );
-          }
-
-          const blob = await response.blob();
-
-          const baseName =
-            sanitizeFileNamePart(result.label || `certificado-${index + 1}`) ||
-            `certificado-${index + 1}`;
-          const trimmedBase = baseName.replace(/\.pdf$/i, '').trim();
-          const currentCount = nameCounts.get(trimmedBase) ?? 0;
-          nameCounts.set(trimmedBase, currentCount + 1);
-          const suffix = currentCount > 0 ? ` (${currentCount + 1})` : '';
-          const fileName = `${trimmedBase}${suffix}.pdf`;
-
-          return { name: fileName, blob };
-        }),
-      );
-
-      const sanitizedFiles = files.filter((file): file is { name: string; blob: Blob } => Boolean(file));
-      if (!sanitizedFiles.length) {
-        throw new Error('No hay certificados disponibles para descargar.');
-      }
-      const zipBlob = await buildZipBlob(sanitizedFiles);
-      const zipFileName = `${buildZipFileName({
-        dealId: deal?.deal_id ? String(deal.deal_id) : null,
-        sessionName: selectedSession?.nombre_cache ?? selectedSession?.productName ?? null,
-        companyName: deal?.organization?.name ?? null,
-      })}.zip`;
-
-      const objectUrl = URL.createObjectURL(zipBlob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = zipFileName;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(objectUrl);
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : 'No se pudo descargar el archivo ZIP con los certificados.';
-      setZipDownloadError(message);
-    } finally {
-      setDownloadingZip(false);
-    }
-  }, [deal?.deal_id, deal?.organization?.name, selectedSession, successfulGenerationResults]);
-
   const sessionOptions = useMemo(
     () =>
       sessions.map((session) => ({
@@ -1721,8 +1512,6 @@ export function CertificadosPage() {
     resetGenerationSteps();
     setGenerating(false);
     setIsCancellingGeneration(false);
-    setDownloadingZip(false);
-    setZipDownloadError(null);
 
     setPublicLinkUrl(null);
     setPublicLinkError(null);
@@ -1823,11 +1612,6 @@ export function CertificadosPage() {
 
   const hasGenerationFailures = Boolean(generationSummary && generationSummary.errorCount > 0);
   const sessionDriveUrl = toNonEmptyString(selectedSession?.drive_url ?? null);
-  const successfulGenerationResults = useMemo(
-    () => generationResults.filter((result) => result.status === 'success' && result.url),
-    [generationResults],
-  );
-  const hasDownloadableCertificates = successfulGenerationResults.length > 0;
 
   useEffect(() => {
     if (!hasLoadedPersistedStateRef.current) {
@@ -2132,31 +1916,6 @@ export function CertificadosPage() {
                   >
                     Carpeta Google Drive
                   </Button>
-                </div>
-              )}
-              {!generating && hasDownloadableCertificates && (
-                <div className="mt-2 text-start d-flex flex-column gap-2">
-                  <div className="d-flex flex-wrap gap-2">
-                    <Button
-                      variant="outline-primary"
-                      onClick={() => void handleDownloadCertificatesZip()}
-                      disabled={downloadingZip}
-                    >
-                      {downloadingZip ? (
-                        <>
-                          <Spinner animation="border" size="sm" className="me-2" />
-                          Preparando ZIP…
-                        </>
-                      ) : (
-                        'Descargar en ZIP'
-                      )}
-                    </Button>
-                  </div>
-                  {zipDownloadError && (
-                    <Alert variant="danger" className="mb-0">
-                      {zipDownloadError}
-                    </Alert>
-                  )}
                 </div>
               )}
               {hasGenerationFailures && !generating && (
