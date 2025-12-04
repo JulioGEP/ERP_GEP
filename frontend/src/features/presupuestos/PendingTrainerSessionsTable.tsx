@@ -46,6 +46,11 @@ function getPipelineLabel(budget: DealSummary): string {
   return budget.pipeline_label?.trim() || budget.pipeline_id?.toString().trim() || '—';
 }
 
+function isFinalizedSession(session: DealSummarySession): boolean {
+  if (typeof session.estado !== 'string') return false;
+  return session.estado.trim().toUpperCase() === 'FINALIZADA';
+}
+
 function getSessionName(session: DealSummarySession): string {
   const rawName = (session as any).nombre_cache ?? (session as any).nombre;
   if (typeof rawName === 'string' && rawName.trim().length) {
@@ -101,6 +106,10 @@ export function PendingTrainerSessionsTable({
 
       budget.sessions.forEach((session) => {
         if (!session) return;
+
+        if (isFinalizedSession(session)) {
+          return;
+        }
 
         const startDate = parseDate(session.fecha_inicio_utc ?? session.fecha);
         const endDate = parseDate(session.fecha_fin_utc);
@@ -192,7 +201,7 @@ export function PendingTrainerSessionsTable({
         {isFetching ? <Spinner animation="border" size="sm" role="status" /> : null}
       </div>
 
-      <div className="table-responsive">
+      <div className="table-responsive" style={{ maxHeight: '620px', overflowY: 'auto' }}>
         <Table hover responsive className="mb-0 align-middle">
           <thead className="table-light">
             <tr>
