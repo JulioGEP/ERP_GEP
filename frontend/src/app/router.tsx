@@ -60,6 +60,7 @@ const InformesSimulacroPage = lazy(() => import('../pages/informes/SimulacroRepo
 const InformesRecursoPreventivoEbroPage = lazy(
   () => import('../pages/informes/RecursoPreventivoEbroReportPage'),
 );
+const InformesListadoPage = lazy(() => import('../pages/informes/InformesListadoPage'));
 const UsersPage = lazy(() => import('../pages/usuarios/UsersPage'));
 const TrainerDashboardPage = lazy(() => import('../pages/usuarios/trainer/TrainerDashboardPage'));
 const TrainerPendingSessionsPage = lazy(() => import('../pages/usuarios/trainer/TrainerPendingSessionsPage'));
@@ -387,6 +388,10 @@ export function AppRouter({
         <Route
           path="/informes/formacion"
           element={<GuardedRoute path="/informes/formacion" element={<InformesFormacionPage />} />}
+        />
+        <Route
+          path="/informes/listado"
+          element={<GuardedRoute path="/informes/listado" element={<InformesListadoPage />} />}
         />
         <Route
           path="/informes/preventivo"

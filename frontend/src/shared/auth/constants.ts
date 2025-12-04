@@ -66,6 +66,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/calendario/por_formador',
   '/calendario/por_empresa',
   '/calendario/por_unidad_movil',
+  '/informes/listado',
   '/informes/formacion',
   '/informes/preventivo',
   '/informes/simulacro',
