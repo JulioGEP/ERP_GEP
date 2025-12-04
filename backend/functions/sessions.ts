@@ -1076,6 +1076,7 @@ export const handler = async (event: any) => {
         where: {
           fecha_inicio_utc: null,
           fecha_fin_utc: null,
+          sesion_trainers: { none: {} },
           deals: {
             w_id_variation: null,
           },
