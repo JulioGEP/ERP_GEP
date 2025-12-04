@@ -23,8 +23,7 @@ export function BudgetsPage({
       onRetry={onRetry}
       title="Form. Empresa y GEP Services · Sin planificar"
       subtitle="Sube tu presupuesto y planifica"
-      showFilters={false}
-      tableContent={
+      tableContent={(filtersContainer) => (
         <PendingTrainerSessionsTable
           budgets={budgets}
           isLoading={isLoading}
@@ -32,8 +31,9 @@ export function BudgetsPage({
           error={error}
           onRetry={onRetry}
           onSelectSession={onSelectSession}
+          filtersContainer={filtersContainer}
         />
-      }
+      )}
     >
       <OpenTrainingUnplannedTable budgets={budgets} />
     </BudgetSectionLayout>

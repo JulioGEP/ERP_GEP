@@ -33,7 +33,7 @@ export type BudgetSectionLayoutProps = {
   defaultFilters?: TableFiltersState;
   children?: ReactNode;
   filtersConfig?: BudgetFiltersConfig;
-  tableContent?: ReactNode;
+  tableContent?: ReactNode | ((filtersContainer: HTMLDivElement | null) => ReactNode);
 };
 
 export function BudgetSectionLayout({
@@ -62,6 +62,8 @@ export function BudgetSectionLayout({
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
 
+  const renderedTableContent = typeof tableContent === 'function' ? tableContent(filtersContainer) : tableContent;
+
   return (
     <div className="d-grid gap-4">
       <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
@@ -82,7 +84,7 @@ export function BudgetSectionLayout({
         </div>
       </section>
 
-      {tableContent ?? (
+      {renderedTableContent ?? (
         <BudgetTable
           budgets={budgets}
           isLoading={isLoading}

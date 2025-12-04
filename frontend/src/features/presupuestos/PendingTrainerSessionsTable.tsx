@@ -1,7 +1,15 @@
+import { createPortal } from 'react-dom';
 import { useMemo } from 'react';
 import { Alert, Badge, Spinner, Table } from 'react-bootstrap';
 import type { DealSummary, DealSummarySession } from '../../types/deal';
 import { SESSION_ESTADOS, type SessionEstado } from '../../api/sessions.types';
+import {
+  FilterToolbar,
+  type FilterDefinition,
+  type FilterOption,
+} from '../../components/table/FilterToolbar';
+import { splitFilterValue } from '../../components/table/filterUtils';
+import { useTableFilterState } from '../../hooks/useTableFilterState';
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' });
 
@@ -110,7 +118,7 @@ function hasFirefighter(session: DealSummarySession): boolean {
     return true;
   }
 
-  const hasDynamicFirefighterField = Object.entries(session as Record<string, unknown>).some(([key, value]) => {
+  const hasDynamicFirefighterField = Object.entries(session as unknown as Record<string, unknown>).some(([key, value]) => {
     const normalizedKey = key.toLowerCase();
     if (!normalizedKey.includes('bombero') && !normalizedKey.includes('firefighter')) {
       return false;
@@ -145,6 +153,7 @@ export type PendingTrainerSessionsTableProps = {
   error: unknown;
   onRetry: () => void;
   onSelectSession?: (budget: DealSummary, sessionId: string | null) => void;
+  filtersContainer?: HTMLElement | null;
 };
 
 type PendingSessionRow = {
@@ -159,6 +168,89 @@ type PendingSessionRow = {
   budget: DealSummary;
 };
 
+const FILTER_DEFINITIONS: FilterDefinition[] = [
+  { key: 'empresa', label: 'Empresa', type: 'select', placeholder: 'Selecciona empresas' },
+  {
+    key: 'ocultar_empresa',
+    label: 'Ocultar empresa',
+    type: 'select',
+    placeholder: 'Empresas a ocultar',
+  },
+  {
+    key: 'fecha',
+    label: 'Fecha',
+    type: 'select',
+    placeholder: 'Selecciona un rango',
+    options: [
+      { value: 'next_7', label: '7 días vista' },
+      { value: 'next_15', label: '15 días vista' },
+      { value: 'this_month', label: 'Este mes' },
+      { value: 'next_month', label: 'Mes siguiente' },
+    ],
+  },
+  {
+    key: 'estado',
+    label: 'Estado',
+    type: 'select',
+    placeholder: 'Selecciona estados',
+  },
+];
+
+type DateRangeFilter = {
+  start: number;
+  end: number;
+};
+
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+}
+
+function startOfDay(date: Date): Date {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function endOfDay(date: Date): Date {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 999);
+  return result;
+}
+
+function getDateRange(value: string): DateRangeFilter | null {
+  const normalized = value.trim().toLowerCase();
+  const today = startOfDay(new Date());
+  const tomorrow = startOfDay(new Date(today.getTime() + 24 * 60 * 60 * 1000));
+
+  switch (normalized) {
+    case 'next_7': {
+      const end = endOfDay(new Date(tomorrow.getTime() + 6 * 24 * 60 * 60 * 1000));
+      return { start: tomorrow.getTime(), end: end.getTime() };
+    }
+    case 'next_15': {
+      const end = endOfDay(new Date(tomorrow.getTime() + 14 * 24 * 60 * 60 * 1000));
+      return { start: tomorrow.getTime(), end: end.getTime() };
+    }
+    case 'this_month': {
+      const monthStart = startOfDay(new Date(today.getFullYear(), today.getMonth(), 1));
+      const nextMonthStart = startOfDay(new Date(today.getFullYear(), today.getMonth() + 1, 1));
+      const monthEnd = endOfDay(new Date(nextMonthStart.getTime() - 1));
+      return { start: monthStart.getTime(), end: monthEnd.getTime() };
+    }
+    case 'next_month': {
+      const nextMonthStart = startOfDay(new Date(today.getFullYear(), today.getMonth() + 1, 1));
+      const followingMonthStart = startOfDay(new Date(today.getFullYear(), today.getMonth() + 2, 1));
+      const nextMonthEnd = endOfDay(new Date(followingMonthStart.getTime() - 1));
+      return { start: nextMonthStart.getTime(), end: nextMonthEnd.getTime() };
+    }
+    default:
+      return null;
+  }
+}
+
 export function PendingTrainerSessionsTable({
   budgets,
   isLoading,
@@ -166,6 +258,7 @@ export function PendingTrainerSessionsTable({
   error,
   onRetry,
   onSelectSession,
+  filtersContainer,
 }: PendingTrainerSessionsTableProps) {
   const rows = useMemo<PendingSessionRow[]>(() => {
     const list: PendingSessionRow[] = [];
@@ -238,6 +331,113 @@ export function PendingTrainerSessionsTable({
     return list;
   }, [budgets]);
 
+  const { filters, searchValue, setSearchValue, setFilterValue, clearFilter, clearAllFilters, setFiltersAndSearch } =
+    useTableFilterState({ tableKey: 'pending-trainer-sessions' });
+
+  const organizationOptions = useMemo<FilterOption[]>(() => {
+    const seen = new Set<string>();
+    const values: string[] = [];
+
+    rows.forEach((row) => {
+      const label = row.organization.trim();
+      if (!label.length) return;
+      const key = label.toLocaleLowerCase('es-ES');
+      if (seen.has(key)) return;
+      seen.add(key);
+      values.push(label);
+    });
+
+    return values
+      .filter((value) => value.length)
+      .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+      .map((value) => ({ value, label: value }));
+  }, [rows]);
+
+  const estadoOptions = useMemo<FilterOption[]>(
+    () =>
+      SESSION_ESTADOS.map((value) => ({
+        value,
+        label: SESSION_ESTADO_LABELS[value],
+      })),
+    [],
+  );
+
+  const filterDefinitions = useMemo<FilterDefinition[]>(
+    () =>
+      FILTER_DEFINITIONS.map((definition) => {
+        if (definition.key === 'empresa' || definition.key === 'ocultar_empresa') {
+          return { ...definition, options: organizationOptions } satisfies FilterDefinition;
+        }
+        if (definition.key === 'estado') {
+          return { ...definition, options: estadoOptions } satisfies FilterDefinition;
+        }
+        return definition;
+      }),
+    [estadoOptions, organizationOptions],
+  );
+
+  const filteredRows = useMemo(() => {
+    const normalizedSearch = normalizeText(searchValue);
+
+    const selectedCompanies = splitFilterValue(filters.empresa ?? '');
+    const hiddenCompanies = splitFilterValue(filters.ocultar_empresa ?? '');
+    const selectedEstados = splitFilterValue(filters.estado ?? '').map((estado) => estado.trim().toUpperCase());
+    const dateRange = getDateRange(filters.fecha ?? '');
+
+    return rows.filter((row) => {
+      if (selectedCompanies.length) {
+        const matches = selectedCompanies.some((company) => company === row.organization);
+        if (!matches) return false;
+      }
+
+      if (hiddenCompanies.length) {
+        const shouldHide = hiddenCompanies.some((company) => company === row.organization);
+        if (shouldHide) return false;
+      }
+
+      if (selectedEstados.length) {
+        if (!row.estado) return false;
+        const normalizedEstado = row.estado.trim().toUpperCase();
+        const matchesEstado = selectedEstados.some((estado) => estado === normalizedEstado);
+        if (!matchesEstado) return false;
+      }
+
+      if (dateRange) {
+        const timestamp = row.startDate.getTime();
+        if (timestamp < dateRange.start || timestamp > dateRange.end) {
+          return false;
+        }
+      }
+
+      if (!normalizedSearch.length) {
+        return true;
+      }
+
+      const searchTarget = normalizeText(
+        `${row.dealId} ${row.organization} ${row.sessionName} ${row.pipeline} ${row.estado ?? ''}`,
+      );
+      return searchTarget.includes(normalizedSearch);
+    });
+  }, [filters.estado, filters.fecha, filters.empresa, filters.ocultar_empresa, rows, searchValue]);
+
+  const filterToolbar = (
+    <FilterToolbar
+      filters={filterDefinitions}
+      activeFilters={filters}
+      searchValue={searchValue}
+      onSearchChange={setSearchValue}
+      onFilterChange={setFilterValue}
+      onRemoveFilter={clearFilter}
+      onClearAll={clearAllFilters}
+      resultCount={filteredRows.length}
+      isServerBusy={isFetching}
+      viewStorageKey="pending-trainer-sessions"
+      onApplyFilterState={({ filters: nextFilters, searchValue: nextSearch }) => setFiltersAndSearch(nextFilters, nextSearch)}
+    />
+  );
+
+  const toolbarPortal = filtersContainer ? createPortal(filterToolbar, filtersContainer) : null;
+
   if (isLoading) {
     return (
       <div className="text-center py-5 text-muted bg-white rounded-4 shadow-sm">
@@ -275,9 +475,10 @@ export function PendingTrainerSessionsTable({
 
   return (
     <div className="bg-white rounded-4 shadow-sm">
+      {toolbarPortal}
       <div className="d-flex justify-content-between align-items-center px-3 px-md-4 py-3 border-bottom">
         <div>
-          <h2 className="h5 mb-1">Sesiones sin formador ({rows.length})</h2>
+          <h2 className="h5 mb-1">Sesiones sin formador ({filteredRows.length})</h2>
           <p className="text-muted small mb-0">Form. Empresa y GEP Services con fecha de inicio y fin asignadas.</p>
         </div>
         {isFetching ? <Spinner animation="border" size="sm" role="status" /> : null}
@@ -296,7 +497,7 @@ export function PendingTrainerSessionsTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {filteredRows.map((row) => (
               <tr
                 key={row.id}
                 role="button"
