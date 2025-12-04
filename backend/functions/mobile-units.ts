@@ -26,6 +26,27 @@ type SelectionValidationResult =
   | { value: string[] }
   | { error: ReturnType<typeof errorResponse> };
 
+type ParseDateResult =
+  | { hasValue: boolean; date: Date | null }
+  | { error: ReturnType<typeof errorResponse> };
+
+type CreateDataResult =
+  | { data: {
+      unidad_id: string;
+      name: string;
+      matricula: string;
+      tipo: string[];
+      sede: string[];
+      activo: boolean;
+      itv?: Date | null;
+      revision?: Date | null;
+      tipo_seguro: string | null;
+      vigencia_seguro?: Date | null;
+    } }
+  | { error: ReturnType<typeof errorResponse> };
+
+type UpdateDataResult = { data: Record<string, any> } | { error: ReturnType<typeof errorResponse> };
+
 function parseUnitIdFromPath(path: string): string | null {
   const value = String(path || '');
   const match = value.match(/\/(?:\.netlify\/functions\/)?mobile-units\/([^/?#]+)/i);
@@ -81,16 +102,16 @@ function normalizeMobileUnit(row: MobileUnitRecord) {
   };
 }
 
-function parseDate(value: unknown, field: string) {
-  if (value === undefined) return { hasValue: false as const, date: null as Date | null };
-  if (value === null || value === '') return { hasValue: true as const, date: null as Date | null };
+function parseDate(value: unknown, field: string): ParseDateResult {
+  if (value === undefined) return { hasValue: false, date: null };
+  if (value === null || value === '') return { hasValue: true, date: null };
   const text = String(value).trim();
-  if (!text) return { hasValue: true as const, date: null as Date | null };
+  if (!text) return { hasValue: true, date: null };
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) {
     return { error: errorResponse('VALIDATION_ERROR', `El campo ${field} debe ser una fecha válida`, 400) };
   }
-  return { hasValue: true as const, date: parsed };
+  return { hasValue: true, date: parsed };
 }
 
 function normalizeSelection(
@@ -137,19 +158,19 @@ function normalizeSelection(
   return { value: mappedValues };
 }
 
-function buildCreateData(body: any) {
+function buildCreateData(body: any): CreateDataResult {
   const name = toTrimmedString(body?.name);
   const matricula = toTrimmedString(body?.matricula);
   const tipoResult = normalizeSelection(body?.tipo, VALID_TIPO, "tipo");
-  if ("error" in tipoResult) return tipoResult;
+  if ("error" in tipoResult) return { error: tipoResult.error };
   const sedeResult = normalizeSelection(body?.sede, VALID_SEDE, "sede");
-  if ("error" in sedeResult) return sedeResult;
+  if ("error" in sedeResult) return { error: sedeResult.error };
   const itvResult = parseDate(body?.itv, 'itv');
-  if ('error' in itvResult) return itvResult;
+  if ('error' in itvResult) return { error: itvResult.error };
   const revisionResult = parseDate(body?.revision, 'revision');
-  if ('error' in revisionResult) return revisionResult;
+  if ('error' in revisionResult) return { error: revisionResult.error };
   const vigenciaSeguroResult = parseDate(body?.vigencia_seguro, 'vigencia_seguro');
-  if ('error' in vigenciaSeguroResult) return vigenciaSeguroResult;
+  if ('error' in vigenciaSeguroResult) return { error: vigenciaSeguroResult.error };
   const tipoSeguro = toTrimmedString(body?.tipo_seguro);
   const seguroValido = !tipoSeguro || ['anual', 'trimestral'].includes(tipoSeguro.toLowerCase());
   if (!seguroValido) {
@@ -182,7 +203,7 @@ function buildCreateData(body: any) {
   return { data };
 }
 
-function buildUpdateData(body: any) {
+function buildUpdateData(body: any): UpdateDataResult {
   if (!body || typeof body !== 'object') {
     return { error: errorResponse('VALIDATION_ERROR', 'Body inválido', 400) };
   }
@@ -218,14 +239,14 @@ function buildUpdateData(body: any) {
 
   if (Object.prototype.hasOwnProperty.call(body, 'tipo')) {
     const tipoResult = normalizeSelection(body.tipo, VALID_TIPO, 'tipo');
-    if ('error' in tipoResult) return tipoResult;
+    if ('error' in tipoResult) return { error: tipoResult.error };
     data.tipo = tipoResult.value;
     hasChanges = true;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'sede')) {
     const sedeResult = normalizeSelection(body.sede, VALID_SEDE, 'sede');
-    if ('error' in sedeResult) return sedeResult;
+    if ('error' in sedeResult) return { error: sedeResult.error };
     data.sede = sedeResult.value;
     hasChanges = true;
   }
@@ -237,14 +258,14 @@ function buildUpdateData(body: any) {
 
   if (Object.prototype.hasOwnProperty.call(body, 'itv')) {
     const result = parseDate(body.itv, 'itv');
-    if ('error' in result) return result;
+    if ('error' in result) return { error: result.error };
     data.itv = result.hasValue ? result.date : undefined;
     hasChanges = true;
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'revision')) {
     const result = parseDate(body.revision, 'revision');
-    if ('error' in result) return result;
+    if ('error' in result) return { error: result.error };
     data.revision = result.hasValue ? result.date : undefined;
     hasChanges = true;
   }
@@ -263,7 +284,7 @@ function buildUpdateData(body: any) {
 
   if (Object.prototype.hasOwnProperty.call(body, 'vigencia_seguro')) {
     const result = parseDate(body.vigencia_seguro, 'vigencia_seguro');
-    if ('error' in result) return result;
+    if ('error' in result) return { error: result.error };
     data.vigencia_seguro = result.hasValue ? result.date : undefined;
     hasChanges = true;
   }
@@ -333,7 +354,9 @@ export const handler = async (event: any) => {
       const result = buildCreateData(body);
       if ('error' in result) return result.error;
 
-      const created = await prisma.unidades_moviles.create({ data: { ...result.data, created_at: new Date(), updated_at: new Date(), name: (result as any).data?.name ?? '' } });
+      const created = await prisma.unidades_moviles.create({
+        data: { ...result.data, created_at: new Date(), updated_at: new Date(), name: result.data.name },
+      });
       return successResponse({ mobileUnit: normalizeMobileUnit(created as any) }, 201);
     }
 

@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import type { Handler } from '@netlify/functions';
+import type { Handler, HandlerResponse } from '@netlify/functions';
 import { extractProductCatalogAttributes, getProduct } from './_shared/pipedrive';
 import { COMMON_HEADERS } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
@@ -23,7 +23,7 @@ function normalizeHeaders(headers: unknown): Record<string, string> {
 
 function decodeBody(event: Parameters<Handler>[0]):
   | { rawBody: string | null }
-  | { error: ReturnType<Handler> } {
+  | { error: HandlerResponse } {
   const raw = event.body;
   if (raw === undefined || raw === null) {
     return { rawBody: null };
@@ -55,7 +55,7 @@ function decodeBody(event: Parameters<Handler>[0]):
 
 function parseJsonBody(rawBody: string | null):
   | { body: any }
-  | { error: ReturnType<Handler> } {
+  | { error: HandlerResponse } {
   if (rawBody === null) {
     return { body: {} };
   }
@@ -318,6 +318,8 @@ export const handler: Handler = async (event) => {
     | 'product_updated'
     | 'product_created'
     | 'skipped' = 'skipped';
+  const filteredHeaders = filterHeaders(normalizedHeaders);
+
   await prisma.pipedrive_webhook_events.create({
     data: {
       event: typeof body.event === 'string' ? body.event : null,
@@ -341,8 +343,8 @@ export const handler: Handler = async (event) => {
           : null,
       retry: normalizeNullableInt(body.retry),
       webhook_token: resolvedToken,
-      headers: filterHeaders(normalizedHeaders),
-      payload: body ?? {},
+      headers: filteredHeaders ?? Prisma.JsonNull,
+      payload: (body as Prisma.InputJsonValue) ?? Prisma.JsonNull,
     },
   });
 
