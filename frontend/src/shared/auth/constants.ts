@@ -16,6 +16,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/presupuestos/*',
     '/calendario/*',
     '/materiales/*',
+    '/recursos/unidades_moviles',
     '/certificados',
     '/certificados/*',
     '/perfil',
