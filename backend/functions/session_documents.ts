@@ -20,6 +20,7 @@ import {
   resolveSessionNumber,
   toStringOrNull,
 } from './_shared/sessions';
+import { normalizeDriveUrl } from './_shared/drive';
 
 const ONE_MEGABYTE = 1024 * 1024;
 const MAX_SESSION_DOCUMENT_SIZE_BYTES = 4 * ONE_MEGABYTE;
@@ -120,12 +121,6 @@ type SessionFileRecord = {
   drive_file_name: string | null;
   drive_web_view_link: string | null;
 };
-
-function normalizeDriveUrl(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
-}
 
 function parsePath(path: string): ParsedPath {
   const normalized = String(path || '');

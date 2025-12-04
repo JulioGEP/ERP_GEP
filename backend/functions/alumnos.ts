@@ -4,6 +4,7 @@ import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
+import { normalizeDriveUrl } from './_shared/drive';
 
 function parsePath(path: string) {
   const value = String(path || '');
@@ -27,17 +28,6 @@ function normalizeName(value: unknown): string | null {
 function normalizeDni(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim().toUpperCase().replace(/\s+/g, '');
-  return trimmed.length ? trimmed : null;
-}
-
-function normalizeDriveUrl(value: unknown): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
   return trimmed.length ? trimmed : null;
 }
 
