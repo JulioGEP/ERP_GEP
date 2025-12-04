@@ -212,8 +212,48 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
   const estado = estadoRaw ? toSessionEstadoValue(estadoRaw) : null;
   const nombre_cache = toStringValue((session as any).nombre_cache ?? (session as any).nombre);
   const nombre = toStringValue((session as any).nombre);
-  const trainer_ids = sanitizeStringArray((session as any).trainer_ids) ?? null;
-  const trainer_id = toStringValue((session as any).trainer_id ?? (session as any).trainerId) ?? null;
+
+  const trainerIdsSet = new Set<string>();
+  const registerTrainerId = (value: unknown) => {
+    const normalized = toStringValue(value);
+    if (normalized) {
+      trainerIdsSet.add(normalized);
+    }
+  };
+
+  registerTrainerId((session as any).trainer_id ?? (session as any).trainerId);
+
+  const rawTrainerIds = (session as any).trainer_ids ?? (session as any).trainerIds;
+  if (Array.isArray(rawTrainerIds)) {
+    rawTrainerIds.forEach((value) => registerTrainerId(value));
+  }
+
+  const trainers = (session as any).trainers;
+  if (Array.isArray(trainers)) {
+    trainers.forEach((trainer) => {
+      if (trainer && typeof trainer === 'object') {
+        registerTrainerId((trainer as any).trainer_id ?? (trainer as any).trainerId ?? (trainer as any).id);
+      } else {
+        registerTrainerId(trainer);
+      }
+    });
+  }
+
+  const trainerRecord = (session as any).trainer;
+  if (trainerRecord) {
+    if (typeof trainerRecord === 'object') {
+      registerTrainerId(
+        (trainerRecord as any).trainer_id ?? (trainerRecord as any).trainerId ?? (trainerRecord as any).id,
+      );
+    } else {
+      registerTrainerId(trainerRecord);
+    }
+  }
+
+  const trainerIds = sanitizeStringArray(Array.from(trainerIdsSet)) ?? null;
+  const trainer_id = toStringValue(
+    (session as any).trainer_id ?? (session as any).trainerId ?? (trainerIds ? trainerIds[0] : null),
+  );
 
   if (!id && !startDate && !fallbackDate) {
     return null;
@@ -227,8 +267,8 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
     estado,
     nombre_cache,
     nombre,
-    trainer_ids,
-    trainer_id,
+    trainer_ids: trainerIds,
+    trainer_id: trainer_id ?? null,
   };
 }
 
