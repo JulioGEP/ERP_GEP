@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Alert, Badge, Spinner, Table } from 'react-bootstrap';
 import type { DealSummary, DealSummarySession } from '../../types/deal';
+import { SESSION_ESTADOS, type SessionEstado } from '../../api/sessions.types';
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' });
 
@@ -20,10 +21,35 @@ const ALLOWED_PIPELINES = new Set<string>([
   normalizePipelineKey('GEP Services'),
 ]);
 
+const SESSION_ESTADOS_SET = new Set<string>(SESSION_ESTADOS);
+
+const SESSION_ESTADO_LABELS: Record<SessionEstado, string> = {
+  BORRADOR: 'Borrador',
+  PLANIFICADA: 'Planificada',
+  SUSPENDIDA: 'Suspendida',
+  CANCELADA: 'Cancelada',
+  FINALIZADA: 'Finalizada',
+};
+
+const SESSION_ESTADO_VARIANTS: Record<SessionEstado, string> = {
+  BORRADOR: 'secondary',
+  PLANIFICADA: 'success',
+  SUSPENDIDA: 'warning',
+  CANCELADA: 'danger',
+  FINALIZADA: 'primary',
+};
+
 function parseDate(value: string | null | undefined): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizeSessionEstado(value: string | null | undefined): SessionEstado | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toUpperCase();
+  if (!normalized.length) return null;
+  return SESSION_ESTADOS_SET.has(normalized) ? (normalized as SessionEstado) : null;
 }
 
 function hasTrainer(session: DealSummarySession): boolean {
@@ -76,6 +102,7 @@ type PendingSessionRow = {
   pipeline: string;
   startDate: Date;
   sessionId: string | null;
+  estado: SessionEstado | null;
   budget: DealSummary;
 };
 
@@ -131,6 +158,7 @@ export function PendingTrainerSessionsTable({
         const organization = budget.organization?.name?.trim() || '—';
         const pipeline = getPipelineLabel(budget);
         const dealId = budget.deal_id;
+        const estado = normalizeSessionEstado(session.estado);
 
         list.push({
           id: `${dealId}-${session.id ?? sessionName}-${startDate.getTime()}`,
@@ -140,6 +168,7 @@ export function PendingTrainerSessionsTable({
           pipeline,
           startDate,
           sessionId,
+          estado,
           budget,
         });
       });
@@ -208,6 +237,7 @@ export function PendingTrainerSessionsTable({
               <th scope="col" style={{ minWidth: 120 }}>Presu</th>
               <th scope="col" style={{ minWidth: 180 }}>Empresa</th>
               <th scope="col" style={{ minWidth: 220 }}>Sesión</th>
+              <th scope="col" style={{ minWidth: 140 }}>Estado</th>
               <th scope="col" style={{ minWidth: 160 }}>Negocio</th>
               <th scope="col" style={{ minWidth: 150 }}>Fecha de inicio</th>
             </tr>
@@ -227,6 +257,15 @@ export function PendingTrainerSessionsTable({
                 </td>
                 <td>{row.organization}</td>
                 <td>{row.sessionName}</td>
+                <td>
+                  {row.estado ? (
+                    <Badge bg={SESSION_ESTADO_VARIANTS[row.estado]} className="text-uppercase">
+                      {SESSION_ESTADO_LABELS[row.estado]}
+                    </Badge>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td>{row.pipeline}</td>
                 <td>{dateFormatter.format(row.startDate)}</td>
               </tr>
