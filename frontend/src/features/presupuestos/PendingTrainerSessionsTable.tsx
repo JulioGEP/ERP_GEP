@@ -60,6 +60,7 @@ export type PendingTrainerSessionsTableProps = {
   isFetching: boolean;
   error: unknown;
   onRetry: () => void;
+  onSelectSession?: (budget: DealSummary, sessionId: string | null) => void;
 };
 
 type PendingSessionRow = {
@@ -69,9 +70,18 @@ type PendingSessionRow = {
   sessionName: string;
   pipeline: string;
   startDate: Date;
+  sessionId: string | null;
+  budget: DealSummary;
 };
 
-export function PendingTrainerSessionsTable({ budgets, isLoading, isFetching, error, onRetry }: PendingTrainerSessionsTableProps) {
+export function PendingTrainerSessionsTable({
+  budgets,
+  isLoading,
+  isFetching,
+  error,
+  onRetry,
+  onSelectSession,
+}: PendingTrainerSessionsTableProps) {
   const rows = useMemo<PendingSessionRow[]>(() => {
     const list: PendingSessionRow[] = [];
 
@@ -103,6 +113,12 @@ export function PendingTrainerSessionsTable({ budgets, isLoading, isFetching, er
         }
 
         const sessionName = getSessionName(session);
+        const sessionId =
+          typeof session.id === 'string' && session.id.trim().length
+            ? session.id.trim()
+            : session.id != null
+            ? String(session.id).trim()
+            : null;
         const organization = budget.organization?.name?.trim() || '—';
         const pipeline = getPipelineLabel(budget);
         const dealId = budget.deal_id;
@@ -114,6 +130,8 @@ export function PendingTrainerSessionsTable({ budgets, isLoading, isFetching, er
           sessionName,
           pipeline,
           startDate,
+          sessionId,
+          budget,
         });
       });
     });
@@ -187,7 +205,12 @@ export function PendingTrainerSessionsTable({ budgets, isLoading, isFetching, er
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id}>
+              <tr
+                key={row.id}
+                role="button"
+                style={{ cursor: onSelectSession ? 'pointer' : undefined }}
+                onClick={() => onSelectSession?.(row.budget, row.sessionId)}
+              >
                 <td>
                   <Badge bg="primary" className="text-uppercase">
                     {row.dealId}

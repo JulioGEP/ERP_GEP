@@ -1177,6 +1177,14 @@ export default function AuthenticatedApp() {
     setHighlightedCalendarSessionId(null);
   }, []);
 
+  const handleSelectBudgetSession = useCallback((budget: DealSummary, sessionId: string | null) => {
+    setSelectedBudgetSummary(budget);
+    // 👇 asegura string | null
+    setSelectedBudgetId(budget.dealId ?? null);
+    setAutoRefreshBudgetId(null);
+    setHighlightedCalendarSessionId(sessionId?.trim() ?? null);
+  }, []);
+
   const handleDeleteBudget = useCallback(
     async (budget: DealSummary) => {
       const rawId = budget.dealId ?? budget.deal_id;
@@ -1429,6 +1437,7 @@ export default function AuthenticatedApp() {
       fetcher: fetchDealsWithoutSessions,
       queryKey: ['budget-table', 'noSessions'],
     },
+    onSelectSession: handleSelectBudgetSession,
   };
 
   const unplannedSessionsPageProps: UnplannedSessionsPageProps = {
