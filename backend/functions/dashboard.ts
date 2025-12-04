@@ -159,7 +159,13 @@ export const handler = createHttpHandler(async (request) => {
           fecha_inicio_utc: { not: null },
           fecha_fin_utc: { not: null },
           sesion_trainers: { none: {} },
-          deals: { is: { OR: pipelineConditions, w_id_variation: null } },
+          deals: {
+            is: {
+              OR: pipelineConditions,
+              w_id_variation: null,
+              sessions: { some: { estado: 'BORRADOR' } },
+            },
+          },
         },
       }),
       prisma.sesiones.findMany({
