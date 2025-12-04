@@ -105,6 +105,10 @@ export interface DealSummarySession {
   nombre?: string | null;
   trainer_ids?: string[] | null;
   trainer_id?: string | null;
+  bombero_ids?: string[] | null;
+  bombero_id?: string | null;
+  firefighter_ids?: string[] | null;
+  firefighter_id?: string | null;
 }
 
 export interface DealSummary {

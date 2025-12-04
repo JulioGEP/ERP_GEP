@@ -52,20 +52,73 @@ function normalizeSessionEstado(value: string | null | undefined): SessionEstado
   return SESSION_ESTADOS_SET.has(normalized) ? (normalized as SessionEstado) : null;
 }
 
-function hasTrainer(session: DealSummarySession): boolean {
-  const primaryTrainer = typeof (session as any).trainer_id === 'string' ? (session as any).trainer_id.trim() : '';
-  if (primaryTrainer.length) {
-    return true;
+function hasAssignedValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return false;
   }
 
-  if (Array.isArray((session as any).trainer_ids)) {
-    return (session as any).trainer_ids.some((value: unknown) => {
-      if (typeof value !== 'string') return false;
-      return value.trim().length > 0;
-    });
+  if (Array.isArray(value)) {
+    return value.some((item) => hasAssignedValue(item));
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return hasAssignedValue(
+      record.trainer_id ?? record.trainerId ?? record.id ?? record.bombero_id ?? record.bomberoId ?? record.firefighter_id,
+    );
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value !== 0;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed.length) return false;
+    const normalized = trimmed.toLowerCase();
+    return normalized !== '0' && normalized !== 'null' && normalized !== 'undefined';
   }
 
   return false;
+}
+
+function hasTrainer(session: DealSummarySession): boolean {
+  if (hasAssignedValue((session as any).trainer_id)) {
+    return true;
+  }
+
+  if (hasAssignedValue((session as any).trainer_ids)) {
+    return true;
+  }
+
+  if (hasAssignedValue((session as any).trainers)) {
+    return true;
+  }
+
+  return false;
+}
+
+function hasFirefighter(session: DealSummarySession): boolean {
+  if (
+    hasAssignedValue((session as any).firefighter_id) ||
+    hasAssignedValue((session as any).firefighter_ids) ||
+    hasAssignedValue((session as any).bombero_id) ||
+    hasAssignedValue((session as any).bombero_ids) ||
+    hasAssignedValue((session as any).firefighters) ||
+    hasAssignedValue((session as any).bomberos)
+  ) {
+    return true;
+  }
+
+  const hasDynamicFirefighterField = Object.entries(session as Record<string, unknown>).some(([key, value]) => {
+    const normalizedKey = key.toLowerCase();
+    if (!normalizedKey.includes('bombero') && !normalizedKey.includes('firefighter')) {
+      return false;
+    }
+    return hasAssignedValue(value);
+  });
+
+  return hasDynamicFirefighterField;
 }
 
 function getPipelineLabel(budget: DealSummary): string {
@@ -144,7 +197,7 @@ export function PendingTrainerSessionsTable({
           return;
         }
 
-        if (hasTrainer(session)) {
+        if (hasTrainer(session) || hasFirefighter(session)) {
           return;
         }
 
