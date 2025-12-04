@@ -206,9 +206,14 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
   const session = raw as Record<string, unknown>;
   const id = toStringValue(session.id);
   const startDate = toStringValue(session.fecha_inicio_utc);
+  const endDate = toStringValue(session.fecha_fin_utc);
   const fallbackDate = toStringValue((session as any).fecha);
   const estadoRaw = toStringValue((session as any).estado);
   const estado = estadoRaw ? toSessionEstadoValue(estadoRaw) : null;
+  const nombre_cache = toStringValue((session as any).nombre_cache ?? (session as any).nombre);
+  const nombre = toStringValue((session as any).nombre);
+  const trainer_ids = sanitizeStringArray((session as any).trainer_ids) ?? null;
+  const trainer_id = toStringValue((session as any).trainer_id ?? (session as any).trainerId) ?? null;
 
   if (!id && !startDate && !fallbackDate) {
     return null;
@@ -217,8 +222,13 @@ export function normalizeDealSummarySession(raw: Json): DealSummarySession | nul
   return {
     id: id ?? null,
     fecha_inicio_utc: startDate ?? fallbackDate ?? null,
+    fecha_fin_utc: endDate ?? null,
     fecha: fallbackDate ?? (startDate ?? null),
     estado,
+    nombre_cache,
+    nombre,
+    trainer_ids,
+    trainer_id,
   };
 }
 
