@@ -1,6 +1,6 @@
 // frontend/src/features/recursos/MobileUnitsView.tsx
-import { useCallback, useMemo, useState } from "react";
-import { Alert, Button, Spinner, Table } from "react-bootstrap";
+import { type ChangeEvent, useCallback, useMemo, useState } from "react";
+import { Alert, Button, Form, Spinner, Table } from "react-bootstrap";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MobileUnitModal, type MobileUnitFormValues } from "./MobileUnitModal";
 import {
@@ -236,6 +236,21 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
     []
   );
 
+  const toggleUnitActive = useCallback(
+    (unit: MobileUnit) => {
+      updateMutation.mutate({ id: unit.unidad_id, payload: { activo: !unit.activo } });
+    },
+    [updateMutation]
+  );
+
+  const handleToggleActiveChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>, unit: MobileUnit) => {
+      event.stopPropagation();
+      toggleUnitActive(unit);
+    },
+    [toggleUnitActive]
+  );
+
   return (
     <div className="d-grid gap-4">
       <section className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
@@ -295,12 +310,13 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
                   sortState={sortState}
                   onSort={requestSort}
                 />
+                <th className="text-center fw-semibold">Activo</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="py-5 text-center">
+                  <td colSpan={5} className="py-5 text-center">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
@@ -311,17 +327,29 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
                     role="button"
                     onClick={() => handleSelectUnit(unit)}
                     style={{ cursor: "pointer" }}
-                    className={hasExpiringDates(unit, expirationThreshold) ? "text-danger" : undefined}
+                    className={hasExpiringDates(unit, expirationThreshold) ? "table-danger" : undefined}
                   >
                     <td className="fw-semibold">{unit.name}</td>
                     <td>{unit.matricula}</td>
                     <td>{unit.tipo.length ? unit.tipo.join(", ") : "—"}</td>
                     <td>{unit.sede.length ? unit.sede.join(", ") : "—"}</td>
+                    <td className="text-center">
+                      <Form.Check
+                        type="switch"
+                        id={`mobile-unit-status-${unit.unidad_id}`}
+                        checked={unit.activo}
+                        label={unit.activo ? "Activa" : "Inactiva"}
+                        className="d-inline-flex align-items-center gap-2"
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => handleToggleActiveChange(event, unit)}
+                        disabled={isSaving}
+                      />
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={4} className="py-5 text-center text-muted">
+                  <td colSpan={5} className="py-5 text-center text-muted">
                     No hay unidades móviles registradas todavía.
                   </td>
                 </tr>
