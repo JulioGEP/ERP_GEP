@@ -378,7 +378,11 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       if (!r.ok) throw new Error(data?.error || 'Error al buscar presupuesto')
 
       const payload = data?.deal || data || {}
-      const sessions = Array.isArray(payload.sessions) ? payload.sessions : []
+      const sessions = Array.isArray(payload.sessions)
+        ? payload.sessions
+        : Array.isArray(payload.sesiones)
+          ? payload.sesiones
+          : []
       const normalizedSessions = sessions
         .map((session) => sanitizeSessionOption(session))
         .filter(Boolean)
