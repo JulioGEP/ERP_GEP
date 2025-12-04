@@ -52,6 +52,11 @@ function buildPayload(values: MobileUnitFormValues): MobileUnitPayload {
     matricula: values.matricula.trim(),
     tipo: sanitizeSelection(values.tipo, MOBILE_UNIT_TIPO_OPTIONS),
     sede: sanitizeSelection(values.sede, MOBILE_UNIT_SEDE_OPTIONS),
+    activo: values.activo,
+    itv: values.itv,
+    revision: values.revision,
+    tipo_seguro: values.tipo_seguro.trim(),
+    vigencia_seguro: values.vigencia_seguro,
   };
 }
 
