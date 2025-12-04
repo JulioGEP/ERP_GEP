@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { useMemo, useEffect } from 'react';
+import { Fragment, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Badge, Spinner, Table } from 'react-bootstrap';
 import {
@@ -143,6 +143,12 @@ function renderRow(session: UnplannedSessionSummary, onSelect?: (session: Unplan
   );
 }
 
+type GroupedSessions = {
+  dealId: string;
+  organizationName: string | null;
+  sessions: UnplannedSessionSummary[];
+};
+
 export function UnplannedSessionsTable(props?: {
   onSelectSession?: (session: UnplannedSessionSummary) => void;
   filtersContainer?: HTMLElement | null;
@@ -178,6 +184,28 @@ export function UnplannedSessionsTable(props?: {
   );
 
   const filteredSessions = useMemo(() => applyFilters(sessions, filters, searchValue), [sessions, filters, searchValue]);
+
+  const groupedSessions = useMemo<GroupedSessions[]>(() => {
+    const groups = new Map<string, GroupedSessions>();
+
+    filteredSessions.forEach((session) => {
+      const group = groups.get(session.dealId);
+      if (group) {
+        group.sessions.push(session);
+        return;
+      }
+
+      groups.set(session.dealId, {
+        dealId: session.dealId,
+        organizationName: session.organizationName,
+        sessions: [session],
+      });
+    });
+
+    return Array.from(groups.values()).sort((a, b) =>
+      a.dealId.localeCompare(b.dealId, 'es', { numeric: true, sensitivity: 'base' }),
+    );
+  }, [filteredSessions]);
 
   const filterToolbar = (
     <FilterToolbar
@@ -278,7 +306,26 @@ export function UnplannedSessionsTable(props?: {
               <th scope="col" style={{ minWidth: 170 }}>Negocio</th>
             </tr>
           </thead>
-          <tbody>{filteredSessions.map((session) => renderRow(session, props?.onSelectSession))}</tbody>
+          <tbody>
+            {groupedSessions.map((group) => (
+              <Fragment key={group.dealId}>
+                <tr className="table-secondary">
+                  <th scope="row" colSpan={5} className="fw-semibold">
+                    <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                      <div className="d-flex flex-wrap align-items-center gap-2">
+                        <span className="text-uppercase">Presupuesto {group.dealId}</span>
+                        <span className="text-muted small">{group.organizationName?.trim() || '—'}</span>
+                      </div>
+                      <span className="text-muted small">
+                        {group.sessions.length} {group.sessions.length === 1 ? 'sesión' : 'sesiones'} sin agendar
+                      </span>
+                    </div>
+                  </th>
+                </tr>
+                {group.sessions.map((session) => renderRow(session, props?.onSelectSession))}
+              </Fragment>
+            ))}
+          </tbody>
         </Table>
       </div>
     </div>
