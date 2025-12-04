@@ -23,6 +23,7 @@ export type BudgetSectionLayoutProps = {
   onOpenImportModal: () => void;
   isImporting: boolean;
   canImport: boolean;
+  onSelectSession?: (budget: DealSummary, sessionId: string | null) => void;
   tableLabels?: Partial<BudgetTableLabels>;
   enableFallback?: boolean;
   showFilters?: boolean;

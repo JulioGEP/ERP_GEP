@@ -4,7 +4,15 @@ import { PendingTrainerSessionsTable } from '../../features/presupuestos/Pending
 
 export type BudgetsPageProps = Omit<BudgetSectionLayoutProps, 'title' | 'subtitle'>;
 
-export function BudgetsPage({ budgets, isLoading, isFetching, error, onRetry, ...rest }: BudgetsPageProps) {
+export function BudgetsPage({
+  budgets,
+  isLoading,
+  isFetching,
+  error,
+  onRetry,
+  onSelectSession,
+  ...rest
+}: BudgetsPageProps) {
   return (
     <BudgetSectionLayout
       {...rest}
@@ -23,6 +31,7 @@ export function BudgetsPage({ budgets, isLoading, isFetching, error, onRetry, ..
           isFetching={isFetching}
           error={error}
           onRetry={onRetry}
+          onSelectSession={onSelectSession}
         />
       }
     >
