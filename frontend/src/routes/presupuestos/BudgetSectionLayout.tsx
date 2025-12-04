@@ -32,6 +32,7 @@ export type BudgetSectionLayoutProps = {
   defaultFilters?: TableFiltersState;
   children?: ReactNode;
   filtersConfig?: BudgetFiltersConfig;
+  tableContent?: ReactNode;
 };
 
 export function BudgetSectionLayout({
@@ -55,6 +56,7 @@ export function BudgetSectionLayout({
   pageSize,
   defaultFilters,
   filtersConfig,
+  tableContent,
   children,
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
@@ -79,24 +81,26 @@ export function BudgetSectionLayout({
         </div>
       </section>
 
-      <BudgetTable
-        budgets={budgets}
-        isLoading={isLoading}
-        isFetching={isFetching}
-        error={error}
-        onRetry={onRetry}
-        onSelect={onSelect}
-        onDelete={onDelete}
-        labels={tableLabels}
-        enableFallback={enableFallback}
-        filtersContainer={filtersContainer}
-        showFilters={showFilters}
-        serverQueryOptions={serverQueryOptions}
-        variant={tableVariant}
-        pageSize={pageSize}
-        defaultFilters={defaultFilters}
-        filtersConfig={filtersConfig}
-      />
+      {tableContent ?? (
+        <BudgetTable
+          budgets={budgets}
+          isLoading={isLoading}
+          isFetching={isFetching}
+          error={error}
+          onRetry={onRetry}
+          onSelect={onSelect}
+          onDelete={onDelete}
+          labels={tableLabels}
+          enableFallback={enableFallback}
+          filtersContainer={filtersContainer}
+          showFilters={showFilters}
+          serverQueryOptions={serverQueryOptions}
+          variant={tableVariant}
+          pageSize={pageSize}
+          defaultFilters={defaultFilters}
+          filtersConfig={filtersConfig}
+        />
+      )}
 
       {children}
     </div>

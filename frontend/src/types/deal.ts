@@ -101,6 +101,10 @@ export interface DealSummarySession {
   fecha_fin_utc?: string | null;
   fecha?: string | null;
   estado?: SessionEstado | null;
+  nombre_cache?: string | null;
+  nombre?: string | null;
+  trainer_ids?: string[] | null;
+  trainer_id?: string | null;
 }
 
 export interface DealSummary {
