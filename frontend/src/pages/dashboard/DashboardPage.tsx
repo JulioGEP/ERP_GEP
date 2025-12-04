@@ -9,7 +9,14 @@ import type { ApiError } from '../../api/client';
 const QUERY_KEY = ['dashboard', 'metrics'] as const;
 
 const EMPTY_METRICS: DashboardMetrics = {
-  sessions: { borrador: 0, sinFormador: 0, suspendida: 0, porFinalizar: 0 },
+  sessions: {
+    sinAgendar: 0,
+    borrador: 0,
+    sinFormador: 0,
+    formacionAbiertaSinFormador: 0,
+    suspendida: 0,
+    porFinalizar: 0,
+  },
   followUp: {
     caesPorTrabajar: 0,
     fundaePorTrabajar: 0,
@@ -25,9 +32,9 @@ const NETLIFY_BASE_URL = 'https://erpgep.netlify.app';
 
 const ALL_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/todos`;
 const UNPLANNED_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sinplanificar`;
+const UNPLANNED_SESSIONS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sin_agendar`;
 const UNWORKED_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sintrabajar`;
 
-const SESSION_DRAFTS_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__session_estado=BORRADOR`;
 const SESSION_SUSPENDED_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__session_estado=SUSPENDIDA`;
 const encodeBudgetsQueryValue = (value: string) =>
   encodeURIComponent(value).replace(/%20/g, '+');
@@ -663,20 +670,29 @@ export default function DashboardPage() {
         <Stack gap={5}>
           <section>
             <h2 className="h5 mb-3">Sesiones</h2>
-            <Row xs={1} md={2} xl={4} className="g-4">
+            <Row xs={1} md={2} xl={5} className="g-4">
               <Col>
                 <MetricCard
-                  title="En borrador"
-                  value={metrics.sessions.borrador}
+                  title="Sin agendar"
+                  value={metrics.sessions.sinAgendar}
                   accent="primary"
-                  description="Sesiones aún pendientes de confirmar y planificar."
-                  href={SESSION_DRAFTS_URL}
+                  description="Sesiones sin fecha ni formador asignado."
+                  href={UNPLANNED_SESSIONS_PATH}
+                />
+              </Col>
+              <Col>
+                <MetricCard
+                  title="Sin formador"
+                  value={metrics.sessions.sinFormador}
+                  accent="primary"
+                  description="Sesiones de empresa pendientes de asignar formador."
+                  href={UNPLANNED_BUDGETS_PATH}
                 />
               </Col>
               <Col>
                 <MetricCard
                   title="Formacion Abierta"
-                  value={metrics.sessions.sinFormador}
+                  value={metrics.sessions.formacionAbiertaSinFormador}
                   accent="info"
                   description="Eventos de formación abierta con reservas sin formador asignado."
                   href={SESSION_FORMACION_ABIERTA_URL}
