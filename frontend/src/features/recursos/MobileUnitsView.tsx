@@ -28,6 +28,45 @@ type MobileUnitsViewProps = {
   onNotify: (toast: ToastParams) => void;
 };
 
+function addMonths(date: Date, months: number): Date {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return new Date(result.getFullYear(), result.getMonth(), result.getDate());
+}
+
+function parseDateString(value: string | null): Date | null {
+  if (!value || typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+
+  const ddMmYyyy = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (ddMmYyyy) {
+    const [, day, month, year] = ddMmYyyy;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const timestamp = Date.parse(trimmed);
+  return Number.isNaN(timestamp) ? null : new Date(timestamp);
+}
+
+function isDateExpiringSoon(value: string | null, threshold: Date): boolean {
+  const parsed = parseDateString(value);
+  if (!parsed) return false;
+
+  const normalized = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  return normalized <= threshold;
+}
+
+function hasExpiringDates(unit: MobileUnit, threshold: Date): boolean {
+  return (
+    isDateExpiringSoon(unit.itv, threshold) ||
+    isDateExpiringSoon(unit.revision, threshold) ||
+    isDateExpiringSoon(unit.vigencia_seguro, threshold)
+  );
+}
+
 function sanitizeSelection(values: string[], allowedValues: readonly string[]) {
   const selections = Array.isArray(values) ? values : [];
   const normalized = selections
@@ -74,6 +113,7 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [selectedUnit, setSelectedUnit] = useState<MobileUnit | null>(null);
+  const [showInactiveUnits, setShowInactiveUnits] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -120,6 +160,17 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
   const units = unitsQuery.data ?? [];
   const isLoading = unitsQuery.isLoading;
   const isFetching = unitsQuery.isFetching && !unitsQuery.isLoading;
+
+  const filteredUnits = useMemo(
+    () => (showInactiveUnits ? units : units.filter((unit) => unit.activo)),
+    [showInactiveUnits, units]
+  );
+
+  const expirationThreshold = useMemo(() => {
+    const today = new Date();
+    const normalizedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return addMonths(normalizedToday, 1);
+  }, []);
 
   const handleAddUnit = () => {
     setSelectedUnit(null);
@@ -176,7 +227,7 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
     pageSize,
     requestSort,
     goToPage,
-  } = useDataTable(units, {
+  } = useDataTable(filteredUnits, {
     getSortValue,
   });
 
@@ -196,6 +247,13 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
           {(isFetching || isSaving) && (
             <Spinner animation="border" role="status" size="sm" className="me-1" />
           )}
+          <Button
+            variant={showInactiveUnits ? "outline-secondary" : "secondary"}
+            onClick={() => setShowInactiveUnits((current) => !current)}
+            disabled={isSaving}
+          >
+            {showInactiveUnits ? "Ocultar unidades inactivas" : "Mostrar todas las unidades"}
+          </Button>
           <Button onClick={handleAddUnit} disabled={isSaving}>
             Añadir Unidad Móvil
           </Button>
@@ -253,6 +311,7 @@ export function MobileUnitsView({ onNotify }: MobileUnitsViewProps) {
                     role="button"
                     onClick={() => handleSelectUnit(unit)}
                     style={{ cursor: "pointer" }}
+                    className={hasExpiringDates(unit, expirationThreshold) ? "text-danger" : undefined}
                   >
                     <td className="fw-semibold">{unit.name}</td>
                     <td>{unit.matricula}</td>
