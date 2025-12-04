@@ -167,7 +167,7 @@ export function mapStudentsToCertificateRows(params: {
     fecha2 = formatDate(nextDay);
   }
   const horas = formatNumber(session?.productHours ?? null);
-  const formacion = pickNonEmptyString(session?.productName, deal?.deal_name) ?? '';
+  const formacion = pickNonEmptyString(session?.productName, deal?.title) ?? '';
 
   return students.map((student) => ({
     id: student.id,

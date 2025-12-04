@@ -389,6 +389,12 @@ type GenerationResult = {
   url?: string | null;
 };
 
+type DownloadableCertificate = {
+  id: string;
+  fileName: string;
+  url: string;
+};
+
 type GenerationStepStatus = CertificateToolbarProgressStatus;
 type GenerationStepId =
   | 'loadGenerator'
@@ -451,6 +457,127 @@ function buildSessionLabel(session: CertificateSession): string {
   if (session.nombre_cache) parts.push(session.nombre_cache);
   if (session.productName) parts.push(session.productName);
   return parts.join(' · ');
+}
+
+function buildZipFileName(deal: DealDetail | null, session: CertificateSession | null): string {
+  const dealId = sanitizeFileNamePart(toTrimmedString(deal?.deal_id ? String(deal.deal_id) : ''));
+  const sessionName = sanitizeFileNamePart(
+    pickNonEmptyString(session?.nombre_cache ?? null, session?.productName ?? null, session?.id ?? null) ?? '',
+  );
+  const organizationName = sanitizeFileNamePart(
+    pickNonEmptyString(deal?.organization?.name, deal?.title) ?? '',
+  );
+
+  const suffixParts = [dealId, sessionName, organizationName].filter(Boolean);
+  const baseName = suffixParts.length ? `Certificados - ${suffixParts.join(' - ')}` : 'Certificados';
+
+  return baseName.replace(/[\\/]+/g, '-');
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let value = i;
+    for (let j = 0; j < 8; j += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[i] = value >>> 0;
+  }
+  return table;
+})();
+
+function calculateCrc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let index = 0; index < data.length; index += 1) {
+    const byte = data[index];
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function toDosTime(date: Date): number {
+  return (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1);
+}
+
+function toDosDate(date: Date): number {
+  return ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+}
+
+async function createZipBlob(files: Array<{ name: string; data: ArrayBuffer }>): Promise<Blob> {
+  const encoder = new TextEncoder();
+  const chunks: Uint8Array[] = [];
+  const centralDirectory: Uint8Array[] = [];
+  let offset = 0;
+  const now = new Date();
+
+  files.forEach((file) => {
+    const nameBytes = encoder.encode(file.name);
+    const fileData = new Uint8Array(file.data);
+    const crc32 = calculateCrc32(fileData);
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, toDosTime(now), true);
+    localView.setUint16(12, toDosDate(now), true);
+    localView.setUint32(14, crc32, true);
+    localView.setUint32(18, fileData.length, true);
+    localView.setUint32(22, fileData.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+
+    chunks.push(localHeader, fileData);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, toDosTime(now), true);
+    centralView.setUint16(14, toDosDate(now), true);
+    centralView.setUint32(16, crc32, true);
+    centralView.setUint32(20, fileData.length, true);
+    centralView.setUint32(24, fileData.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint16(34, 0, true);
+    centralView.setUint16(36, 0, true);
+    centralView.setUint32(38, 0, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+
+    centralDirectory.push(centralHeader);
+    offset += localHeader.length + fileData.length;
+  });
+
+  const centralSize = centralDirectory.reduce((total, entry) => total + entry.length, 0);
+  const centralOffset = offset;
+
+  const endRecord = new Uint8Array(22);
+  const endView = new DataView(endRecord.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, files.length, true);
+  endView.setUint16(10, files.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, centralOffset, true);
+  endView.setUint16(20, 0, true);
+
+  const blobParts: BlobPart[] = [
+    ...chunks.map((chunk) => chunk as BlobPart),
+    ...centralDirectory.map((entry) => entry as BlobPart),
+    endRecord as BlobPart,
+  ];
+
+  return new Blob(blobParts, { type: 'application/zip' });
 }
 
 function buildStudentDisplayName(row: CertificateRow): string {
@@ -556,6 +683,8 @@ export function CertificadosPage() {
   const [generationResults, setGenerationResults] = useState<GenerationResult[]>([]);
   const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>(() => createGenerationSteps());
   const [isCancellingGeneration, setIsCancellingGeneration] = useState(false);
+  const [downloadingZip, setDownloadingZip] = useState(false);
+  const [zipDownloadError, setZipDownloadError] = useState<string | null>(null);
   const generationAbortRef = useRef<{ cancelled: boolean } | null>(null);
   const [publicLinkUrl, setPublicLinkUrl] = useState<string | null>(null);
   const [publicLinkLoading, setPublicLinkLoading] = useState(false);
@@ -1407,6 +1536,72 @@ export function CertificadosPage() {
     void runCertificateGeneration({ rows: rowsToRetry, resetResults: false });
   }, [editableRows, generationResults, runCertificateGeneration]);
 
+  const downloadableCertificates = useMemo(() => {
+    if (!generationResults.length) {
+      return [] as DownloadableCertificate[];
+    }
+
+    const rowsMap = new Map(editableRows.map((row) => [row.id, row]));
+
+    return generationResults
+      .filter((result) => result.status === 'success')
+      .map((result) => {
+        const row = rowsMap.get(result.id);
+        const resolvedUrl = toNonEmptyString(result.url ?? row?.driveUrl ?? null);
+        if (!resolvedUrl) {
+          return null;
+        }
+
+        const resolvedFileName =
+          (row && buildCertificateFileName(row, selectedSession ?? null)) ||
+          `${sanitizeFileNamePart(result.label || 'certificado') || 'certificado'}.pdf`;
+
+        return { id: result.id, url: resolvedUrl, fileName: resolvedFileName } satisfies DownloadableCertificate;
+      })
+      .filter((item): item is DownloadableCertificate => Boolean(item));
+  }, [editableRows, generationResults, selectedSession]);
+
+  useEffect(() => {
+    setZipDownloadError(null);
+  }, [dealIdInput, generationResults, selectedSessionId]);
+
+  const handleDownloadZip = useCallback(async () => {
+    if (!downloadableCertificates.length) {
+      setZipDownloadError('No hay certificados disponibles para descargar.');
+      return;
+    }
+
+    setZipDownloadError(null);
+    setDownloadingZip(true);
+
+    try {
+      const files: Array<{ name: string; data: ArrayBuffer }> = [];
+
+      for (const certificate of downloadableCertificates) {
+        const response = await fetch(certificate.url);
+        if (!response.ok) {
+          throw new Error(`No se pudo descargar ${certificate.fileName}.`);
+        }
+        const buffer = await response.arrayBuffer();
+        files.push({ name: certificate.fileName, data: buffer });
+      }
+
+      const zipBlob = await createZipBlob(files);
+      const zipName = `${buildZipFileName(deal ?? null, selectedSession ?? null)}.zip`;
+      const downloadUrl = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = zipName;
+      link.rel = 'noopener noreferrer';
+      link.click();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      setZipDownloadError(resolveGenerationError(error));
+    } finally {
+      setDownloadingZip(false);
+    }
+  }, [deal, downloadableCertificates, selectedSession]);
+
   const sessionOptions = useMemo(
     () =>
       sessions.map((session) => ({
@@ -1512,6 +1707,8 @@ export function CertificadosPage() {
     resetGenerationSteps();
     setGenerating(false);
     setIsCancellingGeneration(false);
+    setDownloadingZip(false);
+    setZipDownloadError(null);
 
     setPublicLinkUrl(null);
     setPublicLinkError(null);
@@ -1916,6 +2113,27 @@ export function CertificadosPage() {
                   >
                     Carpeta Google Drive
                   </Button>
+                </div>
+              )}
+              {!generating && downloadableCertificates.length > 0 && (
+                <div className="mt-2 text-start d-flex flex-column gap-1">
+                  <Button
+                    variant="primary"
+                    onClick={handleDownloadZip}
+                    disabled={downloadingZip}
+                  >
+                    {downloadingZip ? (
+                      <>
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Preparando ZIP…
+                      </>
+                    ) : (
+                      'Descargar en ZIP'
+                    )}
+                  </Button>
+                  {zipDownloadError && (
+                    <div className="text-danger small">{zipDownloadError}</div>
+                  )}
                 </div>
               )}
               {hasGenerationFailures && !generating && (
