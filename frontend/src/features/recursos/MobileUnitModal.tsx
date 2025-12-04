@@ -12,6 +12,7 @@ import { Button, Form, Modal, Spinner } from "react-bootstrap";
 import type { MobileUnit } from "../../types/mobile-unit";
 import {
   MOBILE_UNIT_SEDE_OPTIONS,
+  MOBILE_UNIT_SEGURO_OPTIONS,
   MOBILE_UNIT_TIPO_OPTIONS,
 } from "./mobileUnits.constants";
 
@@ -20,6 +21,11 @@ export type MobileUnitFormValues = {
   matricula: string;
   tipo: string[];
   sede: string[];
+  activo: boolean;
+  itv: string;
+  revision: string;
+  tipo_seguro: string;
+  vigencia_seguro: string;
 };
 
 type MobileUnitModalProps = {
@@ -36,6 +42,11 @@ const EMPTY_FORM: MobileUnitFormValues = {
   matricula: "",
   tipo: [],
   sede: [],
+  activo: true,
+  itv: "",
+  revision: "",
+  tipo_seguro: "",
+  vigencia_seguro: "",
 };
 
 function sanitizeSelection(values: string[], allowedValues: readonly string[]) {
@@ -63,6 +74,11 @@ function unitToFormValues(unit?: MobileUnit | null): MobileUnitFormValues {
     matricula: unit.matricula ?? "",
     tipo: Array.isArray(unit.tipo) ? sanitizeSelection(unit.tipo, MOBILE_UNIT_TIPO_OPTIONS) : [],
     sede: Array.isArray(unit.sede) ? sanitizeSelection(unit.sede, MOBILE_UNIT_SEDE_OPTIONS) : [],
+    activo: unit.activo !== false,
+    itv: unit.itv ?? "",
+    revision: unit.revision ?? "",
+    tipo_seguro: unit.tipo_seguro ?? "",
+    vigencia_seguro: unit.vigencia_seguro ?? "",
   };
 }
 
@@ -194,6 +210,11 @@ export function MobileUnitModal({
       matricula: trimmedMatricula,
       tipo: sanitizedTipo,
       sede: sanitizedSede,
+      activo: formValues.activo,
+      itv: formValues.itv,
+      revision: formValues.revision,
+      tipo_seguro: formValues.tipo_seguro,
+      vigencia_seguro: formValues.vigencia_seguro,
     });
   };
 
@@ -227,6 +248,35 @@ export function MobileUnitModal({
                 required
                 value={formValues.matricula}
                 onChange={handleTextChange("matricula")}
+                disabled={isSaving}
+              />
+            </Form.Group>
+            <Form.Group controlId="mobileUnitActivo">
+              <Form.Check
+                type="switch"
+                label="Unidad activa"
+                checked={formValues.activo}
+                onChange={(event) =>
+                  setFormValues((prev) => ({ ...prev, activo: event.target.checked }))
+                }
+                disabled={isSaving}
+              />
+            </Form.Group>
+            <Form.Group controlId="mobileUnitItv">
+              <Form.Label>ITV</Form.Label>
+              <Form.Control
+                type="date"
+                value={formValues.itv}
+                onChange={handleTextChange("itv")}
+                disabled={isSaving}
+              />
+            </Form.Group>
+            <Form.Group controlId="mobileUnitRevision">
+              <Form.Label>Revisión</Form.Label>
+              <Form.Control
+                type="date"
+                value={formValues.revision}
+                onChange={handleTextChange("revision")}
                 disabled={isSaving}
               />
             </Form.Group>
@@ -309,6 +359,30 @@ export function MobileUnitModal({
                   </div>
                 )}
               </div>
+            </Form.Group>
+            <Form.Group controlId="mobileUnitTipoSeguro">
+              <Form.Label>Tipo de seguro</Form.Label>
+              <Form.Select
+                value={formValues.tipo_seguro}
+                onChange={handleTextChange("tipo_seguro")}
+                disabled={isSaving}
+              >
+                <option value="">Sin especificar</option>
+                {MOBILE_UNIT_SEGURO_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+            <Form.Group controlId="mobileUnitVigenciaSeguro">
+              <Form.Label>Vigencia del seguro</Form.Label>
+              <Form.Control
+                type="date"
+                value={formValues.vigencia_seguro}
+                onChange={handleTextChange("vigencia_seguro")}
+                disabled={isSaving}
+              />
             </Form.Group>
           </div>
         </Modal.Body>

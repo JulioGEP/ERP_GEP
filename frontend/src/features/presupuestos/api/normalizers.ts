@@ -640,7 +640,12 @@ export function normalizeMobileUnitOption(raw: any): MobileUnitOption | null {
   if (!unidad_id) return null;
   const name = toStringValue(raw?.name) ?? null;
   if (!name) return null;
-  return { unidad_id, name, matricula: toStringValue(raw?.matricula) ?? null } satisfies MobileUnitOption;
+  return {
+    unidad_id,
+    name,
+    matricula: toStringValue(raw?.matricula) ?? null,
+    activo: raw?.activo === undefined ? true : Boolean(raw.activo),
+  } satisfies MobileUnitOption;
 }
 
 export function resolveProducts(detail?: DealDetail | null, summary?: DealSummary | null): DealProduct[] {

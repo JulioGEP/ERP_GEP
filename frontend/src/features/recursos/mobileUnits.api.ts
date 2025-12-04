@@ -12,6 +12,11 @@ export type MobileUnitPayload = {
   matricula?: string | null;
   tipo?: string[] | null;
   sede?: string[] | null;
+  activo?: boolean | null;
+  itv?: string | null;
+  revision?: string | null;
+  tipo_seguro?: string | null;
+  vigencia_seguro?: string | null;
 };
 
 type MobileUnitListResponse = {
@@ -65,6 +70,7 @@ function normalizeMobileUnit(row: any): MobileUnit {
 
   const tipo = sanitizeSelection(row.tipo, MOBILE_UNIT_TIPO_OPTIONS);
   const sede = sanitizeSelection(row.sede, MOBILE_UNIT_SEDE_OPTIONS);
+  const tipoSeguro = toNullableString(row.tipo_seguro);
 
   return {
     unidad_id: String(row.unidad_id ?? row.id ?? ""),
@@ -72,6 +78,11 @@ function normalizeMobileUnit(row: any): MobileUnit {
     matricula: String(row.matricula ?? ""),
     tipo,
     sede,
+    activo: row.activo === undefined ? true : Boolean(row.activo),
+    itv: row.itv ?? null,
+    revision: row.revision ?? null,
+    tipo_seguro: tipoSeguro,
+    vigencia_seguro: row.vigencia_seguro ?? null,
     created_at: createdAt,
     updated_at: updatedAt,
   };
@@ -106,6 +117,23 @@ function buildRequestBody(payload: MobileUnitPayload): Record<string, any> {
       const allowed = field === "tipo" ? MOBILE_UNIT_TIPO_OPTIONS : MOBILE_UNIT_SEDE_OPTIONS;
       body[field] = sanitizeSelection(payload[field], allowed);
     }
+  }
+
+  if ("activo" in payload) {
+    body.activo = Boolean(payload.activo);
+  }
+
+  const dateFields: Array<keyof MobileUnitPayload> = ["itv", "revision", "vigencia_seguro"];
+  for (const field of dateFields) {
+    if (field in payload) {
+      const value = toNullableString(payload[field]);
+      body[field] = value;
+    }
+  }
+
+  if ("tipo_seguro" in payload) {
+    const value = toNullableString(payload.tipo_seguro);
+    body.tipo_seguro = value;
   }
 
   return body;

@@ -1128,7 +1128,12 @@ function normalizeMobileUnitOption(raw: any): MobileUnitOption | null {
   if (!unidad_id) return null;
   const name = toStringValue(raw?.name) ?? null;
   if (!name) return null;
-  return { unidad_id, name, matricula: toStringValue(raw?.matricula) ?? null };
+  return {
+    unidad_id,
+    name,
+    matricula: toStringValue(raw?.matricula) ?? null,
+    activo: raw?.activo === undefined ? true : Boolean(raw.activo),
+  };
 }
 
 function sanitizeStringArray(values: string[] | undefined): string[] | undefined {
@@ -1782,8 +1787,9 @@ export async function fetchMobileUnitsCatalog(): Promise<MobileUnitOption[]> {
   const data = await request(`/mobile-units`);
   const units = Array.isArray(data?.mobileUnits) ? (data.mobileUnits as unknown[]) : [];
   return units
+    .filter((unit) => (unit as any)?.activo !== false)
     .map((unit) => normalizeMobileUnitOption(unit))
-    .filter((unit): unit is MobileUnitOption => !!unit)
+    .filter((unit): unit is MobileUnitOption => !!unit && unit.activo !== false)
     .sort((a: MobileUnitOption, b: MobileUnitOption) => a.name.localeCompare(b.name, 'es'));
 }
 
