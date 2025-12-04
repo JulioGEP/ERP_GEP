@@ -131,6 +131,8 @@ export const handler = createHttpHandler(async (request) => {
 
   try {
     const [
+      unplannedSessions,
+      sessionsWithoutTrainer,
       draftBudgetsWithDraftSession,
       suspendedBudgets,
       pendingCompletionBudgets,
@@ -143,6 +145,23 @@ export const handler = createHttpHandler(async (request) => {
       variantsInTimeline,
       variantsMissingTrainer,
     ] = await Promise.all([
+      prisma.sesiones.count({
+        where: {
+          fecha_inicio_utc: null,
+          fecha_fin_utc: null,
+          sesion_trainers: { none: {} },
+          deals: { is: { OR: pipelineConditions, w_id_variation: null } },
+        },
+      }),
+      prisma.sesiones.count({
+        where: {
+          estado: { notIn: ['PLANIFICADA', 'FINALIZADA'] },
+          fecha_inicio_utc: { not: null },
+          fecha_fin_utc: { not: null },
+          sesion_trainers: { none: {} },
+          deals: { is: { OR: pipelineConditions, w_id_variation: null } },
+        },
+      }),
       prisma.sesiones.findMany({
         where: {
           estado: 'BORRADOR',
@@ -542,8 +561,10 @@ export const handler = createHttpHandler(async (request) => {
 
     return successResponse({
       sessions: {
+        sinAgendar: unplannedSessions,
+        sinFormador: sessionsWithoutTrainer,
+        formacionAbiertaSinFormador: variantsWithoutTrainerWithDeals,
         borrador: draftBudgets,
-        sinFormador: variantsWithoutTrainerWithDeals,
         suspendida: suspendedBudgets,
         porFinalizar: pendingCompletionBudgets,
       },
