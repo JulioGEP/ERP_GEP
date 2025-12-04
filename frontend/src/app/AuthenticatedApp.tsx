@@ -153,6 +153,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     key: 'Informes',
     label: 'Informes',
     children: [
+      { key: 'Informes/Listado', label: 'Listado', path: '/informes/listado' },
       { key: 'Informes/Formacion', label: 'Formación', path: '/informes/formacion' },
       { key: 'Informes/Preventivo', label: 'Preventivo', path: '/informes/preventivo' },
       { key: 'Informes/Simulacro', label: 'Simulacro', path: '/informes/simulacro' },
