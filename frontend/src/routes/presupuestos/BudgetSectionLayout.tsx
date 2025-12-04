@@ -32,7 +32,6 @@ export type BudgetSectionLayoutProps = {
   defaultFilters?: TableFiltersState;
   children?: ReactNode;
   filtersConfig?: BudgetFiltersConfig;
-  tableComponent?: ReactNode;
 };
 
 export function BudgetSectionLayout({
@@ -57,31 +56,8 @@ export function BudgetSectionLayout({
   defaultFilters,
   filtersConfig,
   children,
-  tableComponent,
 }: BudgetSectionLayoutProps) {
   const [filtersContainer, setFiltersContainer] = useState<HTMLDivElement | null>(null);
-
-  const table =
-    tableComponent ?? (
-      <BudgetTable
-        budgets={budgets}
-        isLoading={isLoading}
-        isFetching={isFetching}
-        error={error}
-        onRetry={onRetry}
-        onSelect={onSelect}
-        onDelete={onDelete}
-        labels={tableLabels}
-        enableFallback={enableFallback}
-        filtersContainer={filtersContainer}
-        showFilters={showFilters}
-        serverQueryOptions={serverQueryOptions}
-        variant={tableVariant}
-        pageSize={pageSize}
-        defaultFilters={defaultFilters}
-        filtersConfig={filtersConfig}
-      />
-    );
 
   return (
     <div className="d-grid gap-4">
@@ -103,7 +79,24 @@ export function BudgetSectionLayout({
         </div>
       </section>
 
-      {table}
+      <BudgetTable
+        budgets={budgets}
+        isLoading={isLoading}
+        isFetching={isFetching}
+        error={error}
+        onRetry={onRetry}
+        onSelect={onSelect}
+        onDelete={onDelete}
+        labels={tableLabels}
+        enableFallback={enableFallback}
+        filtersContainer={filtersContainer}
+        showFilters={showFilters}
+        serverQueryOptions={serverQueryOptions}
+        variant={tableVariant}
+        pageSize={pageSize}
+        defaultFilters={defaultFilters}
+        filtersConfig={filtersConfig}
+      />
 
       {children}
     </div>

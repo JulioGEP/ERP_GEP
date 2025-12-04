@@ -9,12 +9,6 @@ const resolvedMigrateLockTimeout =
   process.env.PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000';
 const resolvedSchemaLockTimeout =
   process.env.PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT || '120000';
-// Prisma <5.20 no leía PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT y usaba
-// PRISMA_ENGINE_ADVISORY_LOCK_TIMEOUT. Lo seteamos también por compatibilidad
-// para que el binary tome el timeout ampliado en Netlify y evitemos el P1002
-// cuando el pooler de Neon tarda más de 10s en devolver el advisory lock.
-const resolvedEngineLockTimeout =
-  process.env.PRISMA_ENGINE_ADVISORY_LOCK_TIMEOUT || resolvedMigrateLockTimeout;
 
 // Avoid Neon cancelling the advisory lock attempt after 10s (default statement_timeout).
 // We cannot change the remote DB default, so we append a query param to the connection
@@ -36,13 +30,11 @@ const env = {
   ...(databaseUrl ? { DATABASE_URL: databaseUrl } : null),
   PRISMA_MIGRATE_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedMigrateLockTimeout,
   PRISMA_SCHEMA_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedSchemaLockTimeout,
-  PRISMA_ENGINE_ADVISORY_LOCK_TIMEOUT: resolvedEngineLockTimeout,
 };
 
 console.log('Prisma advisory lock timeouts (ms):', {
   migrate: resolvedMigrateLockTimeout,
   schema: resolvedSchemaLockTimeout,
-  engine: resolvedEngineLockTimeout,
 });
 
 const backendDir = path.join(__dirname, '..', 'backend');
