@@ -1,9 +1,8 @@
 // src/App.tsx
-import { lazy, Suspense, useMemo, useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
 import { useAuth } from './context/AuthContext';
-import { computeDefaultPath } from './shared/auth/utils';
 
 const AuthenticatedApp = lazy(() => import('./app/AuthenticatedApp'));
 let loginPagePreloadPromise: Promise<typeof import('./pages/auth/LoginPage')> | null = null;
@@ -66,19 +65,14 @@ export default function App() {
 
 function LoginRoute() {
   const location = useLocation();
-  const { isLoading, isAuthenticated, permissions, hasPermission } = useAuth();
-  const preferredPath = useMemo(() => computeDefaultPath(permissions), [permissions]);
+  const { isLoading, isAuthenticated } = useAuth();
 
   if (isLoading) {
     return <FullPageLoader />;
   }
 
   if (isAuthenticated) {
-    const target =
-      preferredPath !== '/' && hasPermission(preferredPath)
-        ? preferredPath
-        : '/';
-    return <Navigate to={target} replace state={location.state} />;
+    return <Navigate to="/dashboard" replace state={location.state} />;
   }
 
   return <LoginPage />;

@@ -1,18 +1,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Container, Form, InputGroup, Spinner } from 'react-bootstrap';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { ApiError, isApiError } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-
-type LocationState = {
-  from?: string;
-};
 
 export default function LoginPage() {
   const { login, isLoading: authLoading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const from = (location.state as LocationState | null)?.from || '/';
+  const redirectPath = '/dashboard';
 
   const isLoading = authLoading;
 
@@ -48,9 +43,9 @@ export default function LoginPage() {
   // Si ya hay sesión, redirige a home para evitar volver a loguear
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate(from, { replace: true });
+      navigate(redirectPath, { replace: true });
     }
-  }, [from, isAuthenticated, isLoading, navigate]);
+  }, [redirectPath, isAuthenticated, isLoading, navigate]);
 
   const formValid = useMemo(() => {
     const e = email.trim();
@@ -68,8 +63,8 @@ export default function LoginPage() {
 
       try {
         await login(email.trim(), password);
-        // Si todo va bien, volvemos a donde veníamos o al home
-        navigate(from, { replace: true });
+        // Siempre redirigimos al dashboard tras el login
+        navigate(redirectPath, { replace: true });
       } catch (err) {
         if (isApiError(err)) {
           if ((err as ApiError).status === 401) {
@@ -86,7 +81,7 @@ export default function LoginPage() {
         setSubmitting(false);
       }
     },
-    [email, password, formValid, submitting, login, navigate, from],
+    [email, password, formValid, submitting, login, navigate, redirectPath],
   );
 
   return (
