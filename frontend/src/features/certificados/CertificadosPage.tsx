@@ -514,7 +514,7 @@ function resolveDownloadableUrl(url: string): string {
       const queryId = parsed.searchParams.get('id');
       const fileId = pathMatch?.[1] ?? queryId;
       if (fileId) {
-        return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+        return `https://drive.usercontent.google.com/download?id=${encodeURIComponent(fileId)}&export=download`;
       }
     }
   } catch {
