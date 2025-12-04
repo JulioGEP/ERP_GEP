@@ -284,6 +284,11 @@ export function PendingTrainerSessionsTable({
           return;
         }
 
+        const estado = normalizeSessionEstado(session.estado);
+        if (estado === 'PLANIFICADA') {
+          return;
+        }
+
         const startDate = parseDate(session.fecha_inicio_utc ?? session.fecha);
         const endDate = parseDate(session.fecha_fin_utc);
         if (!startDate || !endDate) {
@@ -304,7 +309,6 @@ export function PendingTrainerSessionsTable({
         const organization = budget.organization?.name?.trim() || '—';
         const pipeline = getPipelineLabel(budget);
         const dealId = budget.deal_id;
-        const estado = normalizeSessionEstado(session.estado);
 
         list.push({
           id: `${dealId}-${session.id ?? sessionName}-${startDate.getTime()}`,
