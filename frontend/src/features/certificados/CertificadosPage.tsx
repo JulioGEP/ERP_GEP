@@ -524,6 +524,19 @@ function resolveDownloadableUrl(url: string): string {
   return trimmed;
 }
 
+async function downloadCertificateData(url: string): Promise<ArrayBuffer> {
+  const encodedUrl = encodeURIComponent(url);
+  const response = await fetch(`/api/certificate-download?url=${encodedUrl}`, {
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error('No se pudo descargar el certificado.');
+  }
+
+  return response.arrayBuffer();
+}
+
 async function createZipBlob(files: Array<{ name: string; data: ArrayBuffer }>): Promise<Blob> {
   const encoder = new TextEncoder();
   const chunks: Uint8Array[] = [];
@@ -1600,11 +1613,7 @@ export function CertificadosPage() {
 
       for (const certificate of downloadableCertificates) {
         const downloadUrl = resolveDownloadableUrl(certificate.url);
-        const response = await fetch(downloadUrl);
-        if (!response.ok) {
-          throw new Error(`No se pudo descargar ${certificate.fileName}.`);
-        }
-        const buffer = await response.arrayBuffer();
+        const buffer = await downloadCertificateData(downloadUrl);
         files.push({ name: certificate.fileName, data: buffer });
       }
 
