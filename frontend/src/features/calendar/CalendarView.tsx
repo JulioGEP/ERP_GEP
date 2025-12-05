@@ -1645,7 +1645,7 @@ export function CalendarView({
         : mode === 'trainers'
           ? formatResourceSummary(session.trainers, 'Sin formador')
           : mode === 'units'
-          ? formatResourceSummary(session.units, 'Sin unidad móvil')
+          ? truncateLabel(formatResourceSummary(session.units, 'Sin unidad móvil'), 20)
           : truncateLabel(formatSessionOrganization(session, 'Sin organización'));
 
       return (
@@ -1694,7 +1694,7 @@ export function CalendarView({
           : 'Sin formador'
       : mode === 'units'
         ? unitNames.length
-          ? unitNames
+          ? truncateLabel(unitNames, 20)
           : 'Sin unidad móvil'
       : mode === 'organizations'
         ? formatVariantOrganizationSummary(variantEvent, 'F.Abierta')
@@ -1852,7 +1852,7 @@ export function CalendarView({
                             : mode === 'trainers'
                             ? formatResourceSummary(session.trainers, 'Sin formador')
                             : mode === 'units'
-                            ? formatResourceSummary(session.units, 'Sin unidad móvil')
+                            ? truncateLabel(formatResourceSummary(session.units, 'Sin unidad móvil'), 20)
                             : truncateLabel(formatSessionOrganization(session, 'Sin organización'));
                           const monthEventTitle =
                             mode === 'sessions'
@@ -1909,7 +1909,7 @@ export function CalendarView({
                               : 'Sin formador'
                           : mode === 'units'
                             ? unitNames.length
-                              ? unitNames
+                              ? truncateLabel(unitNames, 20)
                               : 'Sin unidad móvil'
                           : mode === 'organizations'
                           ? formatVariantOrganizationSummary(variant, 'F.Abierta')
