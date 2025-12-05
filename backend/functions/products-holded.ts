@@ -45,23 +45,34 @@ async function sendHoldedRequest(
   payload: Record<string, unknown>,
   apiKey: string,
 ): Promise<HoldedResponsePayload> {
-  const response = await fetch(url, {
-    method,
-    headers: {
-      accept: 'application/json',
-      'content-type': 'application/json',
-      key: apiKey,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const text = await response.text();
-  let data: HoldedResponsePayload | null = null;
+  let response: Response;
 
   try {
-    data = text ? (JSON.parse(text) as HoldedResponsePayload) : null;
+    response = await fetch(url, {
+      method,
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        key: apiKey,
+      },
+      body: JSON.stringify(payload),
+    });
   } catch (error) {
-    console.error('[products-holded] Invalid JSON from Holded', error);
+    const message =
+      error instanceof Error ? error.message : 'No se pudo conectar con Holded (fallo de red)';
+    throw new Error(message);
+  }
+
+  const text = await response.text();
+  const isJsonResponse = response.headers.get('content-type')?.includes('application/json');
+  let data: HoldedResponsePayload | null = null;
+
+  if (isJsonResponse) {
+    try {
+      data = text ? (JSON.parse(text) as HoldedResponsePayload) : null;
+    } catch (error) {
+      console.error('[products-holded] Invalid JSON from Holded', { error, body: text });
+    }
   }
 
   if (!response.ok) {
