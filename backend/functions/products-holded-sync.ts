@@ -4,7 +4,7 @@ import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 
-const HOLDED_API_KEY = process.env.HOLDED_API_KEY;
+const HOLDED_API_KEY = process.env.HOLDED_API_KEY ?? process.env.API_HOLDED_KEY;
 const HOLDED_API_BASE_URL = process.env.HOLDED_API_BASE_URL ?? 'https://api.holded.com/api/invoicing/v1';
 
 const DEFAULT_TAX = '21';
@@ -120,7 +120,11 @@ export const handler = createHttpHandler(async (request) => {
   }
 
   if (!HOLDED_API_KEY) {
-    return errorResponse('CONFIG_ERROR', 'Falta la variable HOLDED_API_KEY para conectar con Holded', 500);
+    return errorResponse(
+      'CONFIG_ERROR',
+      'Falta la variable HOLDED_API_KEY o API_HOLDED_KEY para conectar con Holded',
+      500,
+    );
   }
 
   const prisma = getPrisma();
