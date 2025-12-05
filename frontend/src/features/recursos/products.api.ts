@@ -20,23 +20,6 @@ export type ProductSyncSummary = {
   deactivated: number | string;
 };
 
-export type HoldedSyncSummary = {
-  total: number;
-  created: number;
-  updated: number;
-  failed: number;
-};
-
-export type HoldedSyncResult = {
-  id: string;
-  id_pipe: string;
-  name: string | null;
-  holded_id: string | null;
-  action: 'created' | 'updated';
-  status: 'success' | 'error';
-  message?: string | null;
-};
-
 type ProductListResponse = {
   ok: boolean;
   products?: unknown;
@@ -54,14 +37,6 @@ type ProductMutationResponse = {
 type ProductSyncResponse = {
   ok: boolean;
   summary?: ProductSyncSummary;
-  message?: string;
-  error_code?: string;
-};
-
-type HoldedSyncResponse = {
-  ok: boolean;
-  summary?: HoldedSyncSummary;
-  results?: HoldedSyncResult[];
   message?: string;
   error_code?: string;
 };
@@ -107,7 +82,6 @@ function normalizeProduct(row: any): Product {
     id: String(row.id ?? ''),
     id_pipe: String(row.id_pipe ?? ''),
     id_woo: row.id_woo == null ? null : Number(row.id_woo),
-    id_holded: row.id_holded == null ? null : String(row.id_holded),
     name: row.name == null ? null : String(row.name),
     code: row.code == null ? null : String(row.code),
     category: row.category == null ? null : String(row.category),
@@ -242,28 +216,4 @@ export async function syncProducts(): Promise<ProductSyncSummary | null> {
   );
 
   return json.summary ?? null;
-}
-
-export async function syncHoldedProducts(): Promise<{
-  summary: HoldedSyncSummary;
-  results: HoldedSyncResult[];
-}> {
-  const json = await requestJson<HoldedSyncResponse>(
-    '/products-holded',
-    {
-      method: 'POST',
-    },
-    requestOptions,
-  );
-
-  return {
-    summary:
-      json.summary ?? {
-        total: 0,
-        created: 0,
-        updated: 0,
-        failed: 0,
-      },
-    results: json.results ?? [],
-  };
 }

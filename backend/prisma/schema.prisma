@@ -166,7 +166,6 @@ model pipedrive_webhook_events {
 model products {
   id                     String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   id_pipe                String     @unique
-  id_holded              String?    @db.Text
   name                   String?
   code                   String?
   category               String?
