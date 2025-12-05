@@ -20,16 +20,6 @@ export type ProductSyncSummary = {
   deactivated: number | string;
 };
 
-export type HoldedSyncResult = {
-  productId: string;
-  id_pipe: string;
-  name: string | null;
-  action: 'create' | 'update';
-  status: 'success' | 'error';
-  message: string;
-  holdedId: string | null;
-};
-
 type ProductListResponse = {
   ok: boolean;
   products?: unknown;
@@ -47,13 +37,6 @@ type ProductMutationResponse = {
 type ProductSyncResponse = {
   ok: boolean;
   summary?: ProductSyncSummary;
-  message?: string;
-  error_code?: string;
-};
-
-type HoldedSyncResponse = {
-  ok: boolean;
-  results?: unknown;
   message?: string;
   error_code?: string;
 };
@@ -98,7 +81,6 @@ function normalizeProduct(row: any): Product {
   return {
     id: String(row.id ?? ''),
     id_pipe: String(row.id_pipe ?? ''),
-    id_holded: row.id_holded == null ? null : String(row.id_holded),
     id_woo: row.id_woo == null ? null : Number(row.id_woo),
     name: row.name == null ? null : String(row.name),
     code: row.code == null ? null : String(row.code),
@@ -127,25 +109,6 @@ function normalizeProduct(row: any): Product {
     active: Boolean(row.active ?? true),
     created_at: createdAt,
     updated_at: updatedAt,
-  };
-}
-
-function normalizeHoldedResult(row: any): HoldedSyncResult {
-  if (!row || typeof row !== 'object') {
-    throw new ApiError('INVALID_RESPONSE', 'Formato de respuesta de Holded no válido');
-  }
-
-  const action = row.action === 'update' ? 'update' : 'create';
-  const status = row.status === 'success' ? 'success' : 'error';
-
-  return {
-    productId: String(row.productId ?? ''),
-    id_pipe: String(row.id_pipe ?? ''),
-    name: row.name == null ? null : String(row.name),
-    action,
-    status,
-    message: row.message == null ? '' : String(row.message),
-    holdedId: row.holdedId == null ? null : String(row.holdedId),
   };
 }
 
@@ -253,17 +216,4 @@ export async function syncProducts(): Promise<ProductSyncSummary | null> {
   );
 
   return json.summary ?? null;
-}
-
-export async function syncHoldedProducts(): Promise<HoldedSyncResult[]> {
-  const json = await requestJson<HoldedSyncResponse>(
-    '/products-holded-sync',
-    {
-      method: 'POST',
-    },
-    requestOptions,
-  );
-
-  const rows = Array.isArray(json.results) ? json.results : [];
-  return rows.map((row) => normalizeHoldedResult(row));
 }

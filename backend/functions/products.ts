@@ -9,7 +9,6 @@ import { toMadridISOString } from './_shared/timezone';
 type ProductRecord = {
   id: string;
   id_pipe: string;
-  id_holded: string | null;
   id_woo: bigint | number | null;
   name: string | null;
   code: string | null;
@@ -64,7 +63,6 @@ function normalizeProduct(record: ProductRecord) {
   return {
     id: record.id,
     id_pipe: record.id_pipe,
-    id_holded: record.id_holded ?? null,
     id_woo: record.id_woo == null ? null : Number(record.id_woo),
     name: record.name ?? null,
     code: record.code ?? null,

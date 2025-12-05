@@ -8,7 +8,6 @@ export type ProductAttribute = {
 export type Product = {
   id: string;
   id_pipe: string;
-  id_holded: string | null;
   id_woo: number | null;
   name: string | null;
   code: string | null;
