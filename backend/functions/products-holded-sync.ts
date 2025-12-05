@@ -4,7 +4,7 @@ import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 
-const HOLDED_API_KEY = process.env.HOLDED_API_KEY ?? process.env.API_HOLDED_KEY;
+const HOLDED_API_KEY = process.env.HOLDED_API_KEY;
 const HOLDED_API_BASE_URL = process.env.HOLDED_API_BASE_URL ?? 'https://api.holded.com/api/invoicing/v1';
 
 const DEFAULT_TAX = '21';
@@ -120,11 +120,7 @@ export const handler = createHttpHandler(async (request) => {
   }
 
   if (!HOLDED_API_KEY) {
-    return errorResponse(
-      'CONFIG_ERROR',
-      'Falta la variable HOLDED_API_KEY o API_HOLDED_KEY para conectar con Holded',
-      500,
-    );
+    return errorResponse('CONFIG_ERROR', 'Falta la variable HOLDED_API_KEY para conectar con Holded', 500);
   }
 
   const prisma = getPrisma();
@@ -140,11 +136,11 @@ export const handler = createHttpHandler(async (request) => {
     },
   });
 
+  const results: HoldedSyncResult[] = [];
   const now = new Date();
 
-  async function processProduct(product: (typeof products)[number]): Promise<HoldedSyncResult> {
+  for (const product of products) {
     const action: HoldedSyncResult['action'] = product.id_holded ? 'update' : 'create';
-
     try {
       const payload = product.id_holded ? buildUpdatePayload(product) : buildCreatePayload(product);
       const path = product.id_holded ? `/products/${encodeURIComponent(product.id_holded)}` : '/products';
@@ -163,7 +159,7 @@ export const handler = createHttpHandler(async (request) => {
         });
       }
 
-      return {
+      results.push({
         productId: product.id,
         id_pipe: product.id_pipe,
         name: product.name ?? product.code ?? null,
@@ -171,10 +167,10 @@ export const handler = createHttpHandler(async (request) => {
         status: 'success',
         message: `Producto ${action === 'create' ? 'creado' : 'actualizado'} correctamente en Holded`,
         holdedId: holdedId ?? null,
-      } satisfies HoldedSyncResult;
+      });
     } catch (error) {
       console.error('[products-holded-sync] Error procesando producto', product.id_pipe, error);
-      return {
+      results.push({
         productId: product.id,
         id_pipe: product.id_pipe,
         name: product.name ?? product.code ?? null,
@@ -182,23 +178,9 @@ export const handler = createHttpHandler(async (request) => {
         status: 'error',
         message: error instanceof Error ? error.message : 'Error inesperado sincronizando con Holded',
         holdedId: product.id_holded ?? null,
-      } satisfies HoldedSyncResult;
+      });
     }
   }
-
-  const concurrency = Math.min(products.length, 5);
-  const results: HoldedSyncResult[] = new Array(products.length);
-
-  // Procesamos en paralelo (máx 5 hilos) para evitar alcanzar el timeout de Netlify
-  let nextIndex = 0;
-  async function worker() {
-    while (nextIndex < products.length) {
-      const current = nextIndex++;
-      results[current] = await processProduct(products[current]);
-    }
-  }
-
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
   return successResponse({ results });
 });
