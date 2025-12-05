@@ -1,7 +1,7 @@
 // frontend/src/features/recursos/ProductsView.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
-import { Alert, Badge, Button, Form, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useReactTable,
@@ -12,8 +12,10 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { Product } from '../../types/product';
 import {
   fetchProducts,
+  syncHoldedProducts,
   syncProducts,
   updateProduct,
+  type HoldedSyncResult,
   type ProductSyncSummary,
   type ProductUpdatePayload,
 } from './products.api';
@@ -245,6 +247,9 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   const [urlDrafts, setUrlDrafts] = useState<Record<string, string>>({});
   const [templateDrafts, setTemplateDrafts] = useState<Record<string, string>>({});
   const [idWooDrafts, setIdWooDrafts] = useState<Record<string, string>>({});
+  const [holdedResults, setHoldedResults] = useState<HoldedSyncResult[]>([]);
+  const [holdedError, setHoldedError] = useState<string | null>(null);
+  const [showHoldedModal, setShowHoldedModal] = useState(false);
 
   useEffect(() => {
     const api = getTrainingTemplatesApi();
@@ -302,6 +307,27 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
     },
     onError: (error: unknown) => {
       onNotify({ variant: 'danger', message: resolveErrorMessage(error) });
+    },
+  });
+
+  const holdedMutation = useMutation<HoldedSyncResult[]>({
+    mutationFn: () => syncHoldedProducts(),
+    onMutate: () => {
+      setHoldedResults([]);
+      setHoldedError(null);
+      setShowHoldedModal(true);
+    },
+    onSuccess: (results) => {
+      setHoldedResults(results);
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      onNotify({ variant: 'success', message: 'Sincronización con Holded finalizada' });
+    },
+    onError: (error: unknown) => {
+      const message = resolveErrorMessage(error);
+      setHoldedError(message);
+      setHoldedResults([]);
+      setShowHoldedModal(true);
+      onNotify({ variant: 'danger', message });
     },
   });
 
@@ -383,12 +409,23 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
   const isFetching = productsQuery.isFetching && !productsQuery.isLoading;
   const errorMessage = productsQuery.error ? resolveErrorMessage(productsQuery.error) : null;
   const isSyncing = syncMutation.isPending;
+  const isHoldedSyncing = holdedMutation.isPending;
   const isUpdating = updateMutation.isPending;
 
   const handleSync = useCallback(() => {
     if (isSyncing) return;
     syncMutation.mutate();
   }, [isSyncing, syncMutation]);
+
+  const handleHoldedSync = useCallback(() => {
+    if (isHoldedSyncing) return;
+    holdedMutation.mutate();
+  }, [holdedMutation, isHoldedSyncing]);
+
+  const handleCloseHoldedModal = useCallback(() => {
+    if (isHoldedSyncing) return;
+    setShowHoldedModal(false);
+  }, [isHoldedSyncing]);
 
   const handleTemplateChange = useCallback(
     (product: Product, value: string) => {
@@ -942,9 +979,16 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
             <p className="text-muted mb-0">{subtitle}</p>
           </div>
           <div className="d-flex align-items-center gap-3 flex-wrap justify-content-lg-end">
-            {(isFetching || isSyncing || isUpdating) && (
+            {(isFetching || isSyncing || isHoldedSyncing || isUpdating) && (
               <Spinner animation="border" role="status" size="sm" />
             )}
+            <Button
+              onClick={handleHoldedSync}
+              disabled={isHoldedSyncing || isSyncing}
+              variant="outline-primary"
+            >
+              Actualizar Holded
+            </Button>
             <Button onClick={handleSync} disabled={isSyncing} variant="primary">
               Actualizar Formaciones
             </Button>
@@ -1035,6 +1079,70 @@ export function ProductsView({ onNotify }: ProductsViewProps) {
           </Table>
         </div>
       </div>
+
+      <Modal
+        show={showHoldedModal}
+        onHide={handleCloseHoldedModal}
+        size="lg"
+        centered
+        backdrop={isHoldedSyncing ? 'static' : true}
+        keyboard={!isHoldedSyncing}
+      >
+        <Modal.Header closeButton={!isHoldedSyncing}>
+          <Modal.Title>Actualización de Holded</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-grid gap-3">
+          {isHoldedSyncing ? (
+            <div className="d-flex align-items-center gap-3">
+              <Spinner animation="border" role="status" />
+              <span className="fw-semibold">Sincronizando productos con Holded...</span>
+            </div>
+          ) : null}
+
+          {holdedError ? (
+            <Alert variant="danger" className="mb-0">
+              {holdedError}
+            </Alert>
+          ) : null}
+
+          {holdedResults.length > 0 ? (
+            <div className="table-responsive">
+              <Table bordered responsive className="mb-0 align-middle">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>ID Pipedrive</th>
+                    <th>ID Holded</th>
+                    <th>Acción</th>
+                    <th>Estado</th>
+                    <th>Mensaje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {holdedResults.map((result) => (
+                    <tr key={result.productId}>
+                      <td className="fw-semibold">{result.name || '—'}</td>
+                      <td>{result.id_pipe}</td>
+                      <td>{result.holdedId || '—'}</td>
+                      <td>{result.action === 'create' ? 'Creado' : 'Actualizado'}</td>
+                      <td>
+                        <Badge bg={result.status === 'success' ? 'success' : 'danger'}>
+                          {result.status === 'success' ? 'Correcto' : 'Error'}
+                        </Badge>
+                      </td>
+                      <td className="text-break">{result.message || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          ) : null}
+
+          {!isHoldedSyncing && !holdedError && holdedResults.length === 0 ? (
+            <p className="mb-0 text-muted">No hay resultados para mostrar.</p>
+          ) : null}
+        </Modal.Body>
+      </Modal>
     </div>
   );
 }
