@@ -451,6 +451,11 @@ function safeString(value: unknown): string {
   return text.length ? text : '';
 }
 
+function truncateLabel(value: string, maxLength = 32): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1)}…`;
+}
+
 function collectVariantDealValues(
   variant: CalendarVariantEvent,
   extractor: (deal: CalendarVariantEvent['deals'][number]) => string | null | undefined,
@@ -1641,7 +1646,7 @@ export function CalendarView({
           ? formatResourceSummary(session.trainers, 'Sin formador')
           : mode === 'units'
           ? formatResourceSummary(session.units, 'Sin unidad móvil')
-          : formatSessionOrganization(session, 'Sin organización');
+          : truncateLabel(formatSessionOrganization(session, 'Sin organización'));
 
       return (
         <div className="erp-calendar-event-content">
@@ -1848,7 +1853,7 @@ export function CalendarView({
                             ? formatResourceSummary(session.trainers, 'Sin formador')
                             : mode === 'units'
                             ? formatResourceSummary(session.units, 'Sin unidad móvil')
-                            : formatSessionOrganization(session, 'Sin organización');
+                            : truncateLabel(formatSessionOrganization(session, 'Sin organización'));
                           const monthEventTitle =
                             mode === 'sessions'
                               ? session.dealPipelineId ?? session.title
