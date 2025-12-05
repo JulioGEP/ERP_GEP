@@ -20,6 +20,7 @@ const queryConfig = {
 const FILTER_DEFINITIONS: FilterDefinition[] = [
   { key: 'presupuesto', label: 'Presupuesto', placeholder: 'ID de presupuesto' },
   { key: 'empresa', label: 'Empresa' },
+  { key: 'ocultarEmpresa', label: 'Ocultar empresa', type: 'select' },
   { key: 'sesion', label: 'Sesión' },
   { key: 'formacion', label: 'Formación' },
   { key: 'negocio', label: 'Negocio', type: 'select' },
@@ -39,6 +40,7 @@ function buildSessionFilters(session: UnplannedSessionSummary) {
   const values: Record<string, string> = {
     presupuesto: String(session.dealId ?? ''),
     empresa: session.organizationName?.trim() ?? '',
+    ocultarEmpresa: session.organizationName?.trim() ?? '',
     sesion: session.sessionName?.trim() ?? '',
     formacion: productTags.join(` ${FILTER_MULTI_VALUE_SEPARATOR} `),
     negocio: pipeline,
@@ -73,6 +75,9 @@ function applyFilters(sessions: UnplannedSessionSummary[], filters: Record<strin
           if (!selected.length) return true;
           const targetValue = target.trim();
           if (!targetValue.length) return false;
+          if (definition.key === 'ocultarEmpresa') {
+            return !selected.some((candidate) => candidate === targetValue);
+          }
           return selected.some((candidate) => candidate === targetValue);
         }
 
@@ -175,12 +180,28 @@ export function UnplannedSessionsTable(props?: {
       .map((value) => ({ value, label: value }));
   }, [sessions]);
 
+  const organizationOptions = useMemo<FilterOption[]>(() => {
+    const seen = new Set<string>();
+    sessions.forEach((session) => {
+      const organization = session.organizationName?.trim();
+      if (organization) {
+        seen.add(organization);
+      }
+    });
+    return Array.from(seen)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+      .map((value) => ({ value, label: value }));
+  }, [sessions]);
+
   const filtersWithOptions = useMemo<FilterDefinition[]>(
     () =>
-      FILTER_DEFINITIONS.map((definition) =>
-        definition.key === 'negocio' ? { ...definition, options: pipelineOptions } : definition,
-      ),
-    [pipelineOptions],
+      FILTER_DEFINITIONS.map((definition) => {
+        if (definition.key === 'negocio') return { ...definition, options: pipelineOptions };
+        if (definition.key === 'ocultarEmpresa') return { ...definition, options: organizationOptions };
+        return definition;
+      }),
+    [organizationOptions, pipelineOptions],
   );
 
   const filteredSessions = useMemo(() => applyFilters(sessions, filters, searchValue), [sessions, filters, searchValue]);
