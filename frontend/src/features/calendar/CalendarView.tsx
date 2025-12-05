@@ -451,7 +451,7 @@ function safeString(value: unknown): string {
   return text.length ? text : '';
 }
 
-function truncateLabel(value: string, maxLength = 25): string {
+function truncateLabel(value: string, maxLength = 20): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 1)}…`;
 }
