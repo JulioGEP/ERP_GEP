@@ -99,6 +99,10 @@ Variables principales en un `.env` en la raíz (no versionado):
 - **Informes**: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `REPORTS_ALLOWED_ORIGIN`.
 
 ## Ejecución local
+> ℹ️ **Node/NPM necesarios**: los scripts de Prisma y Netlify requieren tener `node`/`npm` en el PATH. En entornos mínimos (p.ej.
+ciertos contenedores de CI) donde `npm` no está disponible, instala Node 22 con tu gestor preferido (por ejemplo `nvm install 22`)
+o habilita Corepack (`corepack enable`) antes de seguir.
+
 1. **Instalar dependencias** (monorepo):
    ```bash
    npm install
