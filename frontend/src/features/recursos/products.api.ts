@@ -7,6 +7,7 @@ export type ProductUpdatePayload = {
   url_formacion?: string | null;
   active?: boolean | null;
   id_woo?: number | null;
+  id_holded?: string | null;
   provider_ids?: number[] | null;
   almacen_stock?: number | null;
   atributos?: ProductAttribute[] | null;
@@ -37,6 +38,23 @@ type ProductMutationResponse = {
 type ProductSyncResponse = {
   ok: boolean;
   summary?: ProductSyncSummary;
+  message?: string;
+  error_code?: string;
+};
+
+export type HoldedSyncResult = {
+  productId: string;
+  idPipe: string;
+  holdedId: string | null;
+  action: 'create' | 'update';
+  status: 'success' | 'error';
+  message: string;
+  name: string | null;
+};
+
+type HoldedSyncResponse = {
+  ok: boolean;
+  results?: HoldedSyncResult[];
   message?: string;
   error_code?: string;
 };
@@ -82,6 +100,7 @@ function normalizeProduct(row: any): Product {
     id: String(row.id ?? ''),
     id_pipe: String(row.id_pipe ?? ''),
     id_woo: row.id_woo == null ? null : Number(row.id_woo),
+    id_holded: row.id_holded == null ? null : String(row.id_holded),
     name: row.name == null ? null : String(row.name),
     code: row.code == null ? null : String(row.code),
     category: row.category == null ? null : String(row.category),
@@ -112,6 +131,18 @@ function normalizeProduct(row: any): Product {
   };
 }
 
+function normalizeHoldedResult(row: any): HoldedSyncResult {
+  return {
+    productId: String(row?.productId ?? ''),
+    idPipe: String(row?.idPipe ?? ''),
+    holdedId: row?.holdedId == null ? null : String(row.holdedId),
+    action: row?.action === 'update' ? 'update' : 'create',
+    status: row?.status === 'success' ? 'success' : 'error',
+    message: typeof row?.message === 'string' ? row.message : 'Sin mensaje',
+    name: row?.name == null ? null : String(row.name),
+  };
+}
+
 function buildUpdateBody(payload: ProductUpdatePayload): Record<string, any> {
   const body: Record<string, any> = {};
 
@@ -129,6 +160,10 @@ function buildUpdateBody(payload: ProductUpdatePayload): Record<string, any> {
 
   if ('id_woo' in payload) {
     body.id_woo = toNullableNumber(payload.id_woo);
+  }
+
+  if ('id_holded' in payload) {
+    body.id_holded = toNullableString(payload.id_holded);
   }
 
   if ('provider_ids' in payload) {
@@ -216,4 +251,17 @@ export async function syncProducts(): Promise<ProductSyncSummary | null> {
   );
 
   return json.summary ?? null;
+}
+
+export async function syncHoldedProducts(): Promise<HoldedSyncResult[]> {
+  const json = await requestJson<HoldedSyncResponse>(
+    '/products-holded-sync',
+    {
+      method: 'POST',
+    },
+    requestOptions,
+  );
+
+  const rows = Array.isArray(json.results) ? json.results : [];
+  return rows.map((row) => normalizeHoldedResult(row));
 }
