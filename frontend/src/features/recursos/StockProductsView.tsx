@@ -4,7 +4,14 @@ import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstr
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product, ProductAttribute } from '../../types/product';
 import type { Provider } from '../../types/provider';
-import { fetchProducts, syncProducts, updateProduct, type ProductUpdatePayload } from './products.api';
+import {
+  fetchProducts,
+  syncHoldedProducts,
+  syncProducts,
+  updateProduct,
+  type HoldedSyncResult,
+  type ProductUpdatePayload,
+} from './products.api';
 import { fetchProviders } from './providers.api';
 import { ApiError } from '../../api/client';
 import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
@@ -190,6 +197,9 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const [openProviderMenuId, setOpenProviderMenuId] = useState<string | null>(null);
   const [attributeEditor, setAttributeEditor] = useState<AttributeEditorState | null>(null);
   const [attributeError, setAttributeError] = useState<string | null>(null);
+  const [holdedResults, setHoldedResults] = useState<HoldedSyncResult[]>([]);
+  const [holdedError, setHoldedError] = useState<string | null>(null);
+  const [showHoldedModal, setShowHoldedModal] = useState(false);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const providerDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -278,11 +288,33 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     },
   });
 
+  const holdedMutation = useMutation<HoldedSyncResult[]>({
+    mutationFn: () => syncHoldedProducts(),
+    onMutate: () => {
+      setHoldedResults([]);
+      setHoldedError(null);
+      setShowHoldedModal(true);
+    },
+    onSuccess: (results) => {
+      setHoldedResults(results);
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      onNotify({ variant: 'success', message: 'Sincronización con Holded finalizada' });
+    },
+    onError: (error) => {
+      const message = formatErrorMessage(error);
+      setHoldedError(message);
+      setHoldedResults([]);
+      setShowHoldedModal(true);
+      onNotify({ variant: 'danger', message });
+    },
+  });
+
   const products = productsQuery.data ?? [];
   const providers = providersQuery.data ?? [];
   const isLoading = productsQuery.isLoading || providersQuery.isLoading;
   const isFetching = productsQuery.isFetching || providersQuery.isFetching;
-  const isSaving = updateMutation.isPending || syncMutation.isPending;
+  const isHoldedSyncing = holdedMutation.isPending;
+  const isSaving = updateMutation.isPending || syncMutation.isPending || isHoldedSyncing;
 
   const productsError = productsQuery.error || providersQuery.error;
   const errorMessage = productsError ? formatErrorMessage(productsError) : null;
@@ -364,6 +396,16 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     },
     [setFilterValue],
   );
+
+  const handleHoldedSync = useCallback(() => {
+    if (isHoldedSyncing) return;
+    holdedMutation.mutate();
+  }, [holdedMutation, isHoldedSyncing]);
+
+  const handleCloseHoldedModal = useCallback(() => {
+    if (isHoldedSyncing) return;
+    setShowHoldedModal(false);
+  }, [isHoldedSyncing]);
 
   const handleSortChange = useCallback((key: StockSortKey) => {
     setSortConfig((previous) => {
@@ -632,6 +674,13 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
           </div>
           <div className="d-flex align-items-center gap-3 flex-wrap justify-content-lg-end">
             {isFetching || isSaving ? <Spinner animation="border" role="status" size="sm" /> : null}
+            <Button
+              variant="outline-primary"
+              onClick={handleHoldedSync}
+              disabled={isSaving}
+            >
+              Actualizar Holded
+            </Button>
             <Button variant="primary" onClick={() => syncMutation.mutate()} disabled={isSaving}>
               Actualizar Stock
             </Button>
@@ -842,6 +891,70 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
           </Table>
         </div>
       </div>
+
+      <Modal
+        show={showHoldedModal}
+        onHide={handleCloseHoldedModal}
+        size="lg"
+        centered
+        backdrop={isHoldedSyncing ? 'static' : true}
+        keyboard={!isHoldedSyncing}
+      >
+        <Modal.Header closeButton={!isHoldedSyncing}>
+          <Modal.Title>Actualización de Holded</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-grid gap-3">
+          {isHoldedSyncing ? (
+            <div className="d-flex align-items-center gap-3">
+              <Spinner animation="border" role="status" />
+              <span className="fw-semibold">Sincronizando productos con Holded...</span>
+            </div>
+          ) : null}
+
+          {holdedError ? (
+            <Alert variant="danger" className="mb-0">
+              {holdedError}
+            </Alert>
+          ) : null}
+
+          {holdedResults.length > 0 ? (
+            <div className="table-responsive">
+              <Table bordered responsive className="mb-0 align-middle">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>ID Pipedrive</th>
+                    <th>ID Holded</th>
+                    <th>Acción</th>
+                    <th>Estado</th>
+                    <th>Mensaje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {holdedResults.map((result) => (
+                    <tr key={result.productId}>
+                      <td className="fw-semibold">{result.name || '—'}</td>
+                      <td>{result.id_pipe}</td>
+                      <td>{result.holdedId || '—'}</td>
+                      <td>{result.action === 'create' ? 'Creado' : 'Actualizado'}</td>
+                      <td>
+                        <Badge bg={result.status === 'success' ? 'success' : 'danger'}>
+                          {result.status === 'success' ? 'Correcto' : 'Error'}
+                        </Badge>
+                      </td>
+                      <td className="text-break">{result.message || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          ) : null}
+
+          {!isHoldedSyncing && !holdedError && holdedResults.length === 0 ? (
+            <p className="mb-0 text-muted">No hay resultados para mostrar.</p>
+          ) : null}
+        </Modal.Body>
+      </Modal>
 
       <Modal show={Boolean(attributeEditor)} onHide={handleCloseAttributeEditor} size="lg" centered>
         <Modal.Header closeButton>
