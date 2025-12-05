@@ -85,7 +85,9 @@ export const handler = createHttpHandler(async (request) => {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
   }
 
-  const apiKey = (process.env.HOLDED_API_KEY || process.env.HOLDED_KEY || '').trim();
+  const apiKey = (
+    process.env.API_HOLDED_KEY || process.env.HOLDED_API_KEY || process.env.HOLDED_KEY || ''
+  ).trim();
   if (!apiKey) {
     return errorResponse('CONFIG_ERROR', 'La clave de Holded no está configurada', 500);
   }
