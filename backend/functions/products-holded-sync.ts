@@ -140,11 +140,11 @@ export const handler = createHttpHandler(async (request) => {
     },
   });
 
-  const results: HoldedSyncResult[] = [];
   const now = new Date();
 
-  for (const product of products) {
+  async function processProduct(product: (typeof products)[number]): Promise<HoldedSyncResult> {
     const action: HoldedSyncResult['action'] = product.id_holded ? 'update' : 'create';
+
     try {
       const payload = product.id_holded ? buildUpdatePayload(product) : buildCreatePayload(product);
       const path = product.id_holded ? `/products/${encodeURIComponent(product.id_holded)}` : '/products';
@@ -163,7 +163,7 @@ export const handler = createHttpHandler(async (request) => {
         });
       }
 
-      results.push({
+      return {
         productId: product.id,
         id_pipe: product.id_pipe,
         name: product.name ?? product.code ?? null,
@@ -171,10 +171,10 @@ export const handler = createHttpHandler(async (request) => {
         status: 'success',
         message: `Producto ${action === 'create' ? 'creado' : 'actualizado'} correctamente en Holded`,
         holdedId: holdedId ?? null,
-      });
+      } satisfies HoldedSyncResult;
     } catch (error) {
       console.error('[products-holded-sync] Error procesando producto', product.id_pipe, error);
-      results.push({
+      return {
         productId: product.id,
         id_pipe: product.id_pipe,
         name: product.name ?? product.code ?? null,
@@ -182,9 +182,23 @@ export const handler = createHttpHandler(async (request) => {
         status: 'error',
         message: error instanceof Error ? error.message : 'Error inesperado sincronizando con Holded',
         holdedId: product.id_holded ?? null,
-      });
+      } satisfies HoldedSyncResult;
     }
   }
+
+  const concurrency = Math.min(products.length, 5);
+  const results: HoldedSyncResult[] = new Array(products.length);
+
+  // Procesamos en paralelo (máx 5 hilos) para evitar alcanzar el timeout de Netlify
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < products.length) {
+      const current = nextIndex++;
+      results[current] = await processProduct(products[current]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
   return successResponse({ results });
 });
