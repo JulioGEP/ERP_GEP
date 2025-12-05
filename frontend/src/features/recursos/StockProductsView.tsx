@@ -4,14 +4,7 @@ import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstr
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product, ProductAttribute } from '../../types/product';
 import type { Provider } from '../../types/provider';
-import {
-  fetchProducts,
-  syncHoldedProducts,
-  syncProducts,
-  updateProduct,
-  type HoldedSyncResult,
-  type ProductUpdatePayload,
-} from './products.api';
+import { fetchProducts, syncProducts, updateProduct, type ProductUpdatePayload } from './products.api';
 import { fetchProviders } from './providers.api';
 import { ApiError } from '../../api/client';
 import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
@@ -197,9 +190,6 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const [openProviderMenuId, setOpenProviderMenuId] = useState<string | null>(null);
   const [attributeEditor, setAttributeEditor] = useState<AttributeEditorState | null>(null);
   const [attributeError, setAttributeError] = useState<string | null>(null);
-  const [showHoldedModal, setShowHoldedModal] = useState(false);
-  const [holdedResults, setHoldedResults] = useState<HoldedSyncResult[]>([]);
-  const [holdedError, setHoldedError] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const providerDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -288,37 +278,11 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     },
   });
 
-  const holdedSyncMutation = useMutation({
-    mutationFn: () => syncHoldedProducts(),
-    onMutate: () => {
-      setHoldedError(null);
-      setHoldedResults([]);
-      setShowHoldedModal(true);
-    },
-    onSuccess: (results) => {
-      const normalized = results ?? [];
-      setHoldedResults(normalized);
-      const successCount = normalized.filter((item) => item.status === 'success').length;
-      const total = normalized.length;
-      const message = total
-        ? `Holded actualizado: ${successCount}/${total} productos procesados.`
-        : 'No se procesaron productos.';
-      onNotify({ variant: 'success', message });
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-    },
-    onError: (error) => {
-      const message = formatErrorMessage(error);
-      setHoldedError(message);
-      setShowHoldedModal(true);
-      onNotify({ variant: 'danger', message });
-    },
-  });
-
   const products = productsQuery.data ?? [];
   const providers = providersQuery.data ?? [];
   const isLoading = productsQuery.isLoading || providersQuery.isLoading;
   const isFetching = productsQuery.isFetching || providersQuery.isFetching;
-  const isSaving = updateMutation.isPending || syncMutation.isPending || holdedSyncMutation.isPending;
+  const isSaving = updateMutation.isPending || syncMutation.isPending;
 
   const productsError = productsQuery.error || providersQuery.error;
   const errorMessage = productsError ? formatErrorMessage(productsError) : null;
@@ -668,9 +632,6 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
           </div>
           <div className="d-flex align-items-center gap-3 flex-wrap justify-content-lg-end">
             {isFetching || isSaving ? <Spinner animation="border" role="status" size="sm" /> : null}
-            <Button variant="outline-primary" onClick={() => holdedSyncMutation.mutate()} disabled={isSaving}>
-              Actualizar Holded
-            </Button>
             <Button variant="primary" onClick={() => syncMutation.mutate()} disabled={isSaving}>
               Actualizar Stock
             </Button>
@@ -879,85 +840,8 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
               )}
             </tbody>
           </Table>
+        </div>
       </div>
-    </div>
-
-      <Modal
-        show={showHoldedModal}
-        onHide={() => setShowHoldedModal(false)}
-        size="lg"
-        centered
-        backdrop={holdedSyncMutation.isPending ? 'static' : true}
-        keyboard={!holdedSyncMutation.isPending}
-      >
-        <Modal.Header closeButton={!holdedSyncMutation.isPending}>
-          <Modal.Title>Actualizar productos en Holded</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <div className="d-grid gap-3">
-            <p className="mb-0 text-muted">
-              Se procesarán todos los productos de la tabla: se crearán los que no tengan ID de Holded y se actualizarán los
-              que ya estén enlazados.
-            </p>
-            {holdedError ? (
-              <Alert variant="danger" className="mb-0">
-                {holdedError}
-              </Alert>
-            ) : null}
-            {holdedSyncMutation.isPending ? (
-              <div className="d-flex align-items-center gap-2">
-                <Spinner animation="border" role="status" size="sm" />
-                <span>Sincronizando productos con Holded...</span>
-              </div>
-            ) : null}
-            {holdedResults.length ? (
-              <div className="table-responsive" style={{ maxHeight: '50vh' }}>
-                <Table hover className="mb-0 align-middle">
-                  <thead>
-                    <tr>
-                      <th>Producto</th>
-                      <th style={{ width: 120 }}>Acción</th>
-                      <th style={{ width: 140 }}>Estado</th>
-                      <th>Mensaje</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {holdedResults.map((result) => (
-                      <tr key={`${result.productId}-${result.action}`}>
-                        <td>
-                          <div className="fw-semibold">{result.name ?? 'Producto sin nombre'}</div>
-                          <div className="text-muted small">ID Pipedrive: {result.idPipe}</div>
-                          {result.holdedId ? (
-                            <div className="text-muted small">ID Holded: {result.holdedId}</div>
-                          ) : null}
-                        </td>
-                        <td className="text-capitalize">{result.action === 'create' ? 'Crear' : 'Actualizar'}</td>
-                        <td>
-                          <Badge bg={result.status === 'success' ? 'success' : 'danger'} className="text-uppercase">
-                            {result.status === 'success' ? 'Correcto' : 'Error'}
-                          </Badge>
-                        </td>
-                        <td>{result.message}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-            ) : !holdedSyncMutation.isPending ? (
-              <p className="mb-0 text-muted">Pulsa "Actualizar Holded" para sincronizar los productos.</p>
-            ) : null}
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="outline-secondary"
-            onClick={() => setShowHoldedModal(false)}
-            disabled={holdedSyncMutation.isPending}
-          >
-            Cerrar
-          </Button>
-        </Modal.Footer>
-      </Modal>
 
       <Modal show={Boolean(attributeEditor)} onHide={handleCloseAttributeEditor} size="lg" centered>
         <Modal.Header closeButton>
