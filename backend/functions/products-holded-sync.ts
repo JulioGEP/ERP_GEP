@@ -8,6 +8,7 @@ const HOLDED_CREATE_URL = 'https://api.holded.com/api/invoicing/v1/products';
 const HOLDED_UPDATE_URL = 'https://api.holded.com/api/invoicing/v1/products';
 
 const DEFAULT_TAX = 21;
+const REQUEST_TIMEOUT_MS = 15_000;
 
 function toSafeNumber(value: Prisma.Decimal | number | null | undefined): number {
   if (value === null || value === undefined) return 0;
@@ -52,31 +53,72 @@ async function sendHoldedRequest(
   apiKey: string,
   payload: Record<string, unknown>,
 ): Promise<HoldedResponse> {
-  const response = await fetch(url, {
-    method,
-    headers: {
-      accept: 'application/json',
-      'content-type': 'application/json',
-      key: apiKey,
-    },
-    body: JSON.stringify(payload),
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        key: apiKey,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    const rawBody = await response.text();
+    let json: any = null;
+    try {
+      json = rawBody ? JSON.parse(rawBody) : null;
+    } catch {
+      json = null;
+    }
+
+    return {
+      ok: response.ok,
+      statusCode: response.status,
+      statusText: response.statusText,
+      json,
+      rawBody,
+    };
+  } catch (error) {
+    if ((error as any)?.name === 'AbortError') {
+      return {
+        ok: false,
+        statusCode: 408,
+        statusText: 'Request Timeout',
+        json: null,
+        rawBody: 'Tiempo de espera agotado comunicando con Holded',
+      };
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      const item = items[currentIndex];
+      if (item === undefined) break;
+      results[currentIndex] = await worker(item, currentIndex);
+    }
   });
 
-  const rawBody = await response.text();
-  let json: any = null;
-  try {
-    json = rawBody ? JSON.parse(rawBody) : null;
-  } catch {
-    json = null;
-  }
-
-  return {
-    ok: response.ok,
-    statusCode: response.status,
-    statusText: response.statusText,
-    json,
-    rawBody,
-  };
+  await Promise.all(runners);
+  return results;
 }
 
 export const handler = createHttpHandler(async (request) => {
@@ -94,10 +136,9 @@ export const handler = createHttpHandler(async (request) => {
     orderBy: [{ name: 'asc' }, { id_pipe: 'asc' }],
   });
 
-  const results: HoldedSyncResult[] = [];
   const now = new Date();
 
-  for (const product of products) {
+  const results = await mapWithConcurrency(products, 5, async (product) => {
     const name = getProductName(product as any);
     const sku = `SKU${product.id_pipe}`;
     const basePayload = {
@@ -122,15 +163,15 @@ export const handler = createHttpHandler(async (request) => {
           data: { id_holded: holdedId, updated_at: now },
         });
 
-        results.push({
+        return {
           productId: product.id,
           idPipe: product.id_pipe,
           holdedId,
-          action: 'create',
-          status: 'success',
+          action: 'create' as const,
+          status: 'success' as const,
           message: 'Producto creado en Holded',
           name,
-        });
+        } satisfies HoldedSyncResult;
       } else {
         const payload = { ...basePayload, subtotal: toSafeNumber(product.price as any) };
         const url = `${HOLDED_UPDATE_URL}/${encodeURIComponent(product.id_holded)}`;
@@ -140,29 +181,30 @@ export const handler = createHttpHandler(async (request) => {
           throw new Error(buildHoldedError(response, 'Error al actualizar producto en Holded'));
         }
 
-        results.push({
+        return {
           productId: product.id,
           idPipe: product.id_pipe,
           holdedId: product.id_holded,
-          action: 'update',
-          status: 'success',
+          action: 'update' as const,
+          status: 'success' as const,
           message: 'Producto actualizado en Holded',
           name,
-        });
+        } satisfies HoldedSyncResult;
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error desconocido al sincronizar con Holded';
-      results.push({
+      const message =
+        error instanceof Error ? error.message : 'Error desconocido al sincronizar con Holded';
+      return {
         productId: product.id,
         idPipe: product.id_pipe,
         holdedId: product.id_holded ?? null,
-        action: product.id_holded ? 'update' : 'create',
-        status: 'error',
+        action: product.id_holded ? ('update' as const) : ('create' as const),
+        status: 'error' as const,
         message,
         name,
-      });
+      } satisfies HoldedSyncResult;
     }
-  }
+  });
 
   return successResponse({ ok: true, results });
 });
