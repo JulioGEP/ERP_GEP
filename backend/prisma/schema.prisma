@@ -167,7 +167,6 @@ model products {
   id                     String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   id_pipe                String     @unique
   id_woo                 BigInt?    @unique
-  id_category            String?
   id_price               Decimal?   @db.Decimal(12, 2)
   id_holded              String?
   name                   String?

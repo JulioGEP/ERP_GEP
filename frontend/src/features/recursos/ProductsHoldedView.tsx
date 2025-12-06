@@ -230,7 +230,7 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
                 </td>
                 <td>{product.name ?? ''}</td>
                 <td>{product.id_pipe}</td>
-                <td>{product.id_category ?? ''}</td>
+                <td>{product.category ?? ''}</td>
                 <td>{formatPrice(product)}</td>
                 <td>{product.id_holded ?? ''}</td>
               </tr>

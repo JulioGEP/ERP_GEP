@@ -10,7 +10,6 @@ type ProductRecord = {
   id: string;
   id_pipe: string;
   id_woo: bigint | number | null;
-  id_category: string | null;
   id_price: Prisma.Decimal | number | null;
   id_holded: string | null;
   name: string | null;
@@ -67,7 +66,6 @@ function normalizeProduct(record: ProductRecord) {
     id: record.id,
     id_pipe: record.id_pipe,
     id_woo: record.id_woo == null ? null : Number(record.id_woo),
-    id_category: record.id_category ?? null,
     id_price: record.id_price == null ? null : Number(record.id_price),
     id_holded: record.id_holded ?? null,
     name: record.name ?? null,
@@ -145,11 +143,6 @@ function buildUpdateData(body: any) {
 
   if (Object.prototype.hasOwnProperty.call(body, 'active')) {
     data.active = Boolean(body.active);
-    hasChanges = true;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'id_category')) {
-    data.id_category = toNullableTrimmedString(body.id_category);
     hasChanges = true;
   }
 
