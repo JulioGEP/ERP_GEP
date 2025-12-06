@@ -4,7 +4,15 @@ import { Alert, Badge, Button, Form, Modal, Spinner, Table } from 'react-bootstr
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product, ProductAttribute } from '../../types/product';
 import type { Provider } from '../../types/provider';
-import { fetchProducts, syncProducts, updateProduct, type ProductUpdatePayload } from './products.api';
+import {
+  fetchProducts,
+  syncProducts,
+  syncProductsWithHolded,
+  type HoldedSyncResult,
+  type HoldedSyncSummary,
+  updateProduct,
+  type ProductUpdatePayload,
+} from './products.api';
 import { fetchProviders } from './providers.api';
 import { ApiError } from '../../api/client';
 import { FilterToolbar, type FilterDefinition } from '../../components/table/FilterToolbar';
@@ -42,6 +50,11 @@ function formatErrorMessage(error: unknown): string {
 function buildSyncSummary(summary: Awaited<ReturnType<typeof syncProducts>>): string {
   if (!summary) return 'Sin resumen de sincronización disponible.';
   return `Productos importados: ${summary.imported}. Nuevos: ${summary.created}. Actualizados: ${summary.updated}. Desactivados: ${summary.deactivated}.`;
+}
+
+function buildHoldedSyncSummary(summary: HoldedSyncSummary | null): string {
+  if (!summary) return 'Sin resumen de sincronización disponible.';
+  return `Total procesados: ${summary.total}. Creados en Holded: ${summary.created}. Actualizados: ${summary.updated}. Errores: ${summary.errors}.`;
 }
 
 function mapProviderNames(providerIds: number[], providers: Provider[]): string[] {
@@ -191,6 +204,9 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
   const [attributeEditor, setAttributeEditor] = useState<AttributeEditorState | null>(null);
   const [attributeError, setAttributeError] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
+  const [holdedSummary, setHoldedSummary] = useState<HoldedSyncSummary | null>(null);
+  const [holdedResults, setHoldedResults] = useState<HoldedSyncResult[]>([]);
+  const [showHoldedModal, setShowHoldedModal] = useState(false);
   const providerDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const {
@@ -278,11 +294,25 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     },
   });
 
+  const holdedSyncMutation = useMutation({
+    mutationFn: () => syncProductsWithHolded(),
+    onSuccess: (result) => {
+      setHoldedSummary(result.summary);
+      setHoldedResults(result.results);
+      setShowHoldedModal(true);
+      onNotify({ variant: 'success', message: buildHoldedSyncSummary(result.summary) });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (error) => {
+      onNotify({ variant: 'danger', message: formatErrorMessage(error) });
+    },
+  });
+
   const products = productsQuery.data ?? [];
   const providers = providersQuery.data ?? [];
   const isLoading = productsQuery.isLoading || providersQuery.isLoading;
   const isFetching = productsQuery.isFetching || providersQuery.isFetching;
-  const isSaving = updateMutation.isPending || syncMutation.isPending;
+  const isSaving = updateMutation.isPending || syncMutation.isPending || holdedSyncMutation.isPending;
 
   const productsError = productsQuery.error || providersQuery.error;
   const errorMessage = productsError ? formatErrorMessage(productsError) : null;
@@ -475,6 +505,10 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
     updateMutation.mutate({ id: product.id, almacenStock: parsed });
   };
 
+  const handleCloseHoldedModal = useCallback(() => {
+    setShowHoldedModal(false);
+  }, []);
+
   const subtitle = useMemo(
     () => 'Consulta el stock de productos importados desde Pipedrive y asigna proveedores.',
     [],
@@ -632,6 +666,13 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
           </div>
           <div className="d-flex align-items-center gap-3 flex-wrap justify-content-lg-end">
             {isFetching || isSaving ? <Spinner animation="border" role="status" size="sm" /> : null}
+            <Button
+              variant="outline-primary"
+              onClick={() => holdedSyncMutation.mutate()}
+              disabled={isSaving}
+            >
+              {holdedSyncMutation.isPending ? 'Sincronizando Holded…' : 'Actualizar Holded'}
+            </Button>
             <Button variant="primary" onClick={() => syncMutation.mutate()} disabled={isSaving}>
               Actualizar Stock
             </Button>
@@ -916,6 +957,65 @@ export function StockProductsView({ onNotify }: StockProductsViewProps) {
           </Button>
           <Button variant="primary" onClick={handleSaveAttributes} disabled={updateMutation.isPending}>
             Guardar
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showHoldedModal} onHide={handleCloseHoldedModal} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Resultado de sincronización con Holded</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {holdedSummary ? (
+            <div className="d-flex flex-wrap gap-3 mb-3">
+              <span className="fw-semibold">Total procesados: {holdedSummary.total}</span>
+              <span className="text-success fw-semibold">Creados: {holdedSummary.created}</span>
+              <span className="fw-semibold">Actualizados: {holdedSummary.updated}</span>
+              <span className="text-danger fw-semibold">Errores: {holdedSummary.errors}</span>
+            </div>
+          ) : (
+            <p className="text-muted">Sin datos de sincronización.</p>
+          )}
+
+          <div className="table-responsive">
+            <Table hover size="sm" className="mb-0 align-middle">
+              <thead className="text-uppercase text-muted small">
+                <tr>
+                  <th scope="col">Id Pipe</th>
+                  <th scope="col">Acción</th>
+                  <th scope="col">Estado Holded</th>
+                  <th scope="col">Mensaje</th>
+                  <th scope="col">Id Holded (antes / después)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {holdedResults.length ? (
+                  holdedResults.map((result) => (
+                    <tr key={`${result.product_id}-${result.id_pipe}`}>
+                      <td>{result.id_pipe}</td>
+                      <td className="text-capitalize">{result.action}</td>
+                      <td>{result.status ?? '—'}</td>
+                      <td className="text-break">{result.message || '—'}</td>
+                      <td>
+                        <div className="small text-muted">Anterior: {result.previous_id_holded ?? '—'}</div>
+                        <div className="fw-semibold">Actual: {result.id_holded ?? '—'}</div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="text-center py-3 text-muted">
+                      Sin resultados disponibles.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="primary" onClick={handleCloseHoldedModal}>
+            Cerrar
           </Button>
         </Modal.Footer>
       </Modal>
