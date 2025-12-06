@@ -1,6 +1,6 @@
 // backend/functions/products-holded-sync.ts
 import { Prisma } from '@prisma/client';
-import { createHttpHandler } from './_shared/http';
+import { createHandler, validateClient } from './_shared/handler';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 
@@ -39,12 +39,14 @@ type HoldedSyncSummary = {
   errors: number;
 };
 
-export const handler = createHttpHandler<any>(async (request) => {
-  if (request.method === 'OPTIONS') {
+export const handler = createHandler(async (event) => {
+  validateClient(event);
+
+  if (event.httpMethod === 'OPTIONS') {
     return preflightResponse();
   }
 
-  if (request.method !== 'POST') {
+  if (String(event.httpMethod || '').toUpperCase() !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
   }
 
