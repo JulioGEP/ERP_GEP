@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchProducts,
   syncProducts,
-  syncProductsWithHolded,
   updateProduct,
 } from './products.api';
 import { requestJson } from '../../api/client';
@@ -32,7 +31,6 @@ describe('products.api', () => {
           id: '1',
           id_pipe: 'p',
           id_woo: '10',
-          id_holded: 'h123',
           name: 'Producto',
           code: 'COD',
           category: 'cat',
@@ -65,10 +63,9 @@ describe('products.api', () => {
 
     expect(result).toEqual([
       {
-      id: '1',
-      id_pipe: 'p',
-      id_woo: 10,
-      id_holded: 'h123',
+        id: '1',
+        id_pipe: 'p',
+        id_woo: 10,
         name: 'Producto',
         code: 'COD',
         category: 'cat',
@@ -95,7 +92,6 @@ describe('products.api', () => {
         id: '2',
         id_pipe: 'pipe',
         id_woo: 20,
-        id_holded: null,
         name: 'Otro',
         code: 'XYZ',
         category: 'cat2',
@@ -138,52 +134,7 @@ describe('products.api', () => {
     expect(result).toMatchObject({
       id: '2',
       id_woo: 20,
-      id_holded: null,
       active: false,
-    });
-  });
-
-  it('syncProductsWithHolded posts request and returns summary and results', async () => {
-    requestJsonMock.mockResolvedValue({
-      ok: true,
-      summary: { total: 1, created: 1, updated: 0, errors: 0 },
-      results: [
-        {
-          product_id: '1',
-          id_pipe: '10',
-          previous_id_holded: null,
-          id_holded: 'h1',
-          action: 'create',
-          status: 200,
-          message: 'ok',
-        },
-      ],
-    });
-
-    const result = await syncProductsWithHolded();
-
-    expect(requestJsonMock).toHaveBeenCalledWith(
-      '/products-holded-sync',
-      expect.objectContaining({ method: 'POST' }),
-      expect.objectContaining({
-        defaultErrorMessage: 'Error inesperado en la solicitud',
-        invalidResponseMessage: 'Respuesta JSON inválida del servidor',
-      }),
-    );
-
-    expect(result).toEqual({
-      summary: { total: 1, created: 1, updated: 0, errors: 0 },
-      results: [
-        {
-          product_id: '1',
-          id_pipe: '10',
-          previous_id_holded: null,
-          id_holded: 'h1',
-          action: 'create',
-          status: 200,
-          message: 'ok',
-        },
-      ],
     });
   });
 

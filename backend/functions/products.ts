@@ -10,7 +10,6 @@ type ProductRecord = {
   id: string;
   id_pipe: string;
   id_woo: bigint | number | null;
-  id_holded: string | null;
   name: string | null;
   code: string | null;
   category: string | null;
@@ -65,7 +64,6 @@ function normalizeProduct(record: ProductRecord) {
     id: record.id,
     id_pipe: record.id_pipe,
     id_woo: record.id_woo == null ? null : Number(record.id_woo),
-    id_holded: record.id_holded ?? null,
     name: record.name ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
