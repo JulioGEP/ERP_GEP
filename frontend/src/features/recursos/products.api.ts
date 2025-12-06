@@ -96,7 +96,6 @@ function normalizeProduct(row: any): Product {
     id: String(row.id ?? ''),
     id_pipe: String(row.id_pipe ?? ''),
     id_woo: row.id_woo == null ? null : Number(row.id_woo),
-    id_category: row.id_category == null ? null : String(row.id_category),
     id_price:
       row.id_price === null || row.id_price === undefined
         ? null
