@@ -20,6 +20,23 @@ export type ProductSyncSummary = {
   deactivated: number | string;
 };
 
+export type HoldedSyncSummary = {
+  total: number;
+  created: number;
+  updated: number;
+  errors: number;
+};
+
+export type HoldedSyncResult = {
+  product_id: string;
+  id_pipe: string;
+  previous_id_holded: string | null;
+  id_holded: string | null;
+  action: 'create' | 'update' | 'error';
+  status: number | null;
+  message: string;
+};
+
 type ProductListResponse = {
   ok: boolean;
   products?: unknown;
@@ -37,6 +54,14 @@ type ProductMutationResponse = {
 type ProductSyncResponse = {
   ok: boolean;
   summary?: ProductSyncSummary;
+  message?: string;
+  error_code?: string;
+};
+
+type HoldedSyncResponse = {
+  ok: boolean;
+  summary?: HoldedSyncSummary;
+  results?: HoldedSyncResult[];
   message?: string;
   error_code?: string;
 };
@@ -82,6 +107,7 @@ function normalizeProduct(row: any): Product {
     id: String(row.id ?? ''),
     id_pipe: String(row.id_pipe ?? ''),
     id_woo: row.id_woo == null ? null : Number(row.id_woo),
+    id_holded: row.id_holded == null ? null : String(row.id_holded),
     name: row.name == null ? null : String(row.name),
     code: row.code == null ? null : String(row.code),
     category: row.category == null ? null : String(row.category),
@@ -216,4 +242,23 @@ export async function syncProducts(): Promise<ProductSyncSummary | null> {
   );
 
   return json.summary ?? null;
+}
+
+export async function syncProductsWithHolded(): Promise<{
+  summary: HoldedSyncSummary;
+  results: HoldedSyncResult[];
+}> {
+  const json = await requestJson<HoldedSyncResponse>(
+    '/products-holded-sync',
+    {
+      method: 'POST',
+    },
+    requestOptions,
+  );
+
+  if (!json.summary || !Array.isArray(json.results)) {
+    throw new ApiError('INVALID_RESPONSE', 'Respuesta de sincronización de Holded no válida');
+  }
+
+  return { summary: json.summary, results: json.results };
 }
