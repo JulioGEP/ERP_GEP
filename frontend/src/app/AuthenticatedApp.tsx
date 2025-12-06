@@ -58,6 +58,7 @@ import type { SalasPageProps } from '../pages/recursos/SalasPage';
 import type { ProveedoresPageProps } from '../pages/recursos/ProveedoresPage';
 import type { TemplatesCertificadosPageProps } from '../pages/recursos/TemplatesCertificadosPage';
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
+import type { ProductsHoldedPageProps } from '../pages/recursos/ProductsHoldedPage';
 import type { StockPageProps } from '../pages/recursos/StockPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
 import type { RecursosFormacionAbiertaPageProps } from '../pages/recursos/FormacionAbiertaPage';
@@ -129,6 +130,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Recursos/Unidades', label: 'Unidades Móviles', path: '/recursos/unidades_moviles' },
       { key: 'Recursos/Salas', label: 'Salas', path: '/recursos/salas' },
       { key: 'Recursos/Formaciones', label: 'Formaciones', path: '/recursos/formaciones' },
+      { key: 'Recursos/ProductsHolded', label: 'Products Holded', path: '/recursos/products_holded' },
       { key: 'Recursos/Stock', label: 'Stock', path: '/recursos/stock' },
       { key: 'Recursos/ImportarSesion', label: 'Importar sesiones', path: '/recursos/importar_sesion' },
       { key: 'Recursos/ImportarEnBucle', label: 'Importar en bucle', path: '/recursos/importar_en_bucle' },
@@ -1580,6 +1582,10 @@ export default function AuthenticatedApp() {
     onNotify: pushToast,
   };
 
+  const productsHoldedPageProps: ProductsHoldedPageProps = {
+    onNotify: pushToast,
+  };
+
   const stockPageProps: StockPageProps = {
     onNotify: pushToast,
   };
@@ -1721,6 +1727,7 @@ export default function AuthenticatedApp() {
             proveedoresPageProps={proveedoresPageProps}
             templatesCertificadosPageProps={templatesCertificadosPageProps}
             productosPageProps={productosPageProps}
+            productsHoldedPageProps={productsHoldedPageProps}
             stockPageProps={stockPageProps}
             recursosConfirmacionesPageProps={recursosConfirmacionesPageProps}
             certificadosPageProps={certificadosPageProps}

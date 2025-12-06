@@ -41,6 +41,20 @@ type ProductSyncResponse = {
   error_code?: string;
 };
 
+export type HoldedSyncResult = {
+  productId: string;
+  status: 'success' | 'skipped' | 'error';
+  holdedId?: string | null;
+  message?: string;
+};
+
+type HoldedSyncResponse = {
+  ok: boolean;
+  results?: HoldedSyncResult[];
+  message?: string;
+  error_code?: string;
+};
+
 function toNullableString(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   const text = String(value).trim();
@@ -82,6 +96,14 @@ function normalizeProduct(row: any): Product {
     id: String(row.id ?? ''),
     id_pipe: String(row.id_pipe ?? ''),
     id_woo: row.id_woo == null ? null : Number(row.id_woo),
+    id_category: row.id_category == null ? null : String(row.id_category),
+    id_price:
+      row.id_price === null || row.id_price === undefined
+        ? null
+        : Number.isFinite(Number(row.id_price))
+        ? Number(row.id_price)
+        : null,
+    id_holded: row.id_holded == null ? null : String(row.id_holded),
     name: row.name == null ? null : String(row.name),
     code: row.code == null ? null : String(row.code),
     category: row.category == null ? null : String(row.category),
@@ -204,6 +226,27 @@ export async function updateProduct(productId: string, payload: ProductUpdatePay
   );
 
   return normalizeProduct(json.product);
+}
+
+export async function syncProductsToHolded(productIds: string[]): Promise<HoldedSyncResult[]> {
+  const ids = Array.isArray(productIds)
+    ? productIds.filter((id) => typeof id === 'string' && id.trim().length)
+    : [];
+
+  if (!ids.length) {
+    throw new ApiError('VALIDATION_ERROR', 'Debe seleccionar al menos un producto para sincronizar');
+  }
+
+  const json = await requestJson<HoldedSyncResponse>(
+    '/products-holded',
+    {
+      method: 'POST',
+      body: JSON.stringify({ productIds: ids }),
+    },
+    requestOptions,
+  );
+
+  return Array.isArray(json.results) ? json.results : [];
 }
 
 export async function syncProducts(): Promise<ProductSyncSummary | null> {

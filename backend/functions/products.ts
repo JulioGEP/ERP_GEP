@@ -10,6 +10,9 @@ type ProductRecord = {
   id: string;
   id_pipe: string;
   id_woo: bigint | number | null;
+  id_category: string | null;
+  id_price: Prisma.Decimal | number | null;
+  id_holded: string | null;
   name: string | null;
   code: string | null;
   category: string | null;
@@ -64,6 +67,9 @@ function normalizeProduct(record: ProductRecord) {
     id: record.id,
     id_pipe: record.id_pipe,
     id_woo: record.id_woo == null ? null : Number(record.id_woo),
+    id_category: record.id_category ?? null,
+    id_price: record.id_price == null ? null : Number(record.id_price),
+    id_holded: record.id_holded ?? null,
     name: record.name ?? null,
     code: record.code ?? null,
     category: record.category ?? null,
@@ -140,6 +146,40 @@ function buildUpdateData(body: any) {
   if (Object.prototype.hasOwnProperty.call(body, 'active')) {
     data.active = Boolean(body.active);
     hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'id_category')) {
+    data.id_category = toNullableTrimmedString(body.id_category);
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'id_holded')) {
+    data.id_holded = toNullableTrimmedString(body.id_holded);
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'id_price')) {
+    const rawValue = body.id_price;
+
+    if (rawValue === '' || rawValue === null || rawValue === undefined) {
+      data.id_price = null;
+      hasChanges = true;
+    } else if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
+      data.id_price = rawValue;
+      hasChanges = true;
+    } else {
+      const text = String(rawValue).trim();
+      const parsed = Number(text);
+
+      if (!Number.isFinite(parsed)) {
+        return {
+          error: errorResponse('VALIDATION_ERROR', 'El campo id_price debe ser un número válido', 400),
+        } as const;
+      }
+
+      data.id_price = parsed;
+      hasChanges = true;
+    }
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'id_woo')) {

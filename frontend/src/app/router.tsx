@@ -19,6 +19,7 @@ import type { UnidadesMovilesPageProps } from '../pages/recursos/UnidadesMoviles
 import type { SalasPageProps } from '../pages/recursos/SalasPage';
 import type { TemplatesCertificadosPageProps } from '../pages/recursos/TemplatesCertificadosPage';
 import type { ProductosPageProps } from '../pages/recursos/ProductosPage';
+import type { ProductsHoldedPageProps } from '../pages/recursos/ProductsHoldedPage';
 import type { StockPageProps } from '../pages/recursos/StockPage';
 import type { ProveedoresPageProps } from '../pages/recursos/ProveedoresPage';
 import type { CertificadosPageProps } from '../pages/certificados/CertificadosPage';
@@ -47,6 +48,7 @@ const UnidadesMovilesPage = lazy(() => import('../pages/recursos/UnidadesMoviles
 const SalasPage = lazy(() => import('../pages/recursos/SalasPage'));
 const TemplatesCertificadosPage = lazy(() => import('../pages/recursos/TemplatesCertificadosPage'));
 const ProductosPage = lazy(() => import('../pages/recursos/ProductosPage'));
+const ProductsHoldedPage = lazy(() => import('../pages/recursos/ProductsHoldedPage'));
 const StockPage = lazy(() => import('../pages/recursos/StockPage'));
 const SessionImportPage = lazy(() => import('../pages/recursos/SessionImportPage'));
 const BulkBudgetImportPage = lazy(() => import('../pages/recursos/BulkBudgetImportPage'));
@@ -110,6 +112,7 @@ type AppRouterProps = {
   proveedoresPageProps: ProveedoresPageProps;
   templatesCertificadosPageProps: TemplatesCertificadosPageProps;
   productosPageProps: ProductosPageProps;
+  productsHoldedPageProps: ProductsHoldedPageProps;
   stockPageProps: StockPageProps;
   recursosConfirmacionesPageProps: ConfirmacionesPageProps;
   certificadosPageProps: CertificadosPageProps;
@@ -139,6 +142,7 @@ export function AppRouter({
   proveedoresPageProps,
   templatesCertificadosPageProps,
   productosPageProps,
+  productsHoldedPageProps,
   stockPageProps,
   recursosConfirmacionesPageProps,
   certificadosPageProps,
@@ -350,6 +354,15 @@ export function AppRouter({
         <Route
           path="/recursos/formaciones"
           element={<GuardedRoute path="/recursos/formaciones" element={<ProductosPage {...productosPageProps} />} />}
+        />
+        <Route
+          path="/recursos/products_holded"
+          element={
+            <GuardedRoute
+              path="/recursos/products_holded"
+              element={<ProductsHoldedPage {...productsHoldedPageProps} />}
+            />
+          }
         />
         <Route path="/recursos/productos" element={<Navigate to="/recursos/formaciones" replace />} />
         <Route
