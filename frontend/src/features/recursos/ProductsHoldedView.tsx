@@ -251,6 +251,7 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
         <Table striped hover size="sm">
           <thead>
             <tr>
+              <th style={{ width: '3rem' }}>#</th>
               <th style={{ width: '3rem' }}>
                 <Form.Check type="checkbox" checked={allSelected} onChange={toggleAll} />
               </th>
@@ -272,8 +273,9 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
             </tr>
           </thead>
           <tbody>
-            {sortedData.map((product) => (
+            {sortedData.map((product, index) => (
               <tr key={product.id}>
+                <td>{index + 1}</td>
                 <td>
                   <Form.Check
                     type="checkbox"
