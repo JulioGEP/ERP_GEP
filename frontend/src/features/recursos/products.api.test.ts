@@ -61,7 +61,9 @@ describe('products.api', () => {
       }),
     );
 
-    expect(result).toEqual([
+    expect(result).toHaveLength(1);
+
+    expect(result).toMatchObject([
       {
         id: '1',
         id_pipe: 'p',

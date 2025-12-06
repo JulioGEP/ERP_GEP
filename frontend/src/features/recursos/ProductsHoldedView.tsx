@@ -16,6 +16,13 @@ type ProductsHoldedViewProps = {
   onNotify: (toast: ToastParams) => void;
 };
 
+type SortKey = 'name' | 'id_pipe' | 'id_category' | 'price' | 'id_holded';
+
+type SortConfig = {
+  key: SortKey;
+  direction: 'asc' | 'desc';
+};
+
 function formatPrice(product: Product): string {
   const value = product.id_price ?? product.price ?? null;
   if (value === null || value === undefined) return '';
@@ -45,6 +52,7 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
   const [modalSteps, setModalSteps] = useState<string[]>([]);
   const [modalErrors, setModalErrors] = useState<string[]>([]);
   const [syncResults, setSyncResults] = useState<HoldedSyncResult[]>([]);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'asc' });
 
   useEffect(() => {
     if (data?.length) {
@@ -104,6 +112,41 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
       return next;
     });
   };
+
+  const toggleSort = (key: SortKey) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const sortedData = useMemo(() => {
+    if (!data) return [];
+
+    const getValue = (product: Product, key: SortKey): string | number => {
+      if (key === 'price') {
+        return Number(product.id_price ?? product.price ?? 0);
+      }
+
+      const value = product[key];
+      if (typeof value === 'number') return value;
+      return value?.toString().toLowerCase() ?? '';
+    };
+
+    const sorted = [...data].sort((a, b) => {
+      const valueA = getValue(a, sortConfig.key);
+      const valueB = getValue(b, sortConfig.key);
+
+      if (valueA < valueB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valueA > valueB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  }, [data, sortConfig]);
 
   const startSync = () => {
     const steps = [
@@ -211,15 +254,25 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
               <th style={{ width: '3rem' }}>
                 <Form.Check type="checkbox" checked={allSelected} onChange={toggleAll} />
               </th>
-              <th>Nombre</th>
-              <th>Id_Pipedrive</th>
-              <th>Categoría</th>
-              <th>Precio</th>
-              <th>Id_Holded</th>
+              <th role="button" onClick={() => toggleSort('name')}>
+                Nombre {sortConfig.key === 'name' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+              </th>
+              <th role="button" onClick={() => toggleSort('id_pipe')}>
+                Id_Pipedrive {sortConfig.key === 'id_pipe' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+              </th>
+              <th role="button" onClick={() => toggleSort('id_category')}>
+                Categoría {sortConfig.key === 'id_category' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+              </th>
+              <th role="button" onClick={() => toggleSort('price')}>
+                Precio {sortConfig.key === 'price' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+              </th>
+              <th role="button" onClick={() => toggleSort('id_holded')}>
+                Id_Holded {sortConfig.key === 'id_holded' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+              </th>
             </tr>
           </thead>
           <tbody>
-            {data?.map((product) => (
+            {sortedData.map((product) => (
               <tr key={product.id}>
                 <td>
                   <Form.Check
