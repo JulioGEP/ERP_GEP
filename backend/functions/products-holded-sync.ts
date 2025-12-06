@@ -5,6 +5,7 @@ import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 
 const HOLDED_BASE_URL = 'https://api.holded.com/api/invoicing/v1/products';
+const MAX_CONCURRENT_REQUESTS = 5;
 
 function normalizeProductPrice(value: Prisma.Decimal | number | null): number | null {
   if (value === null || value === undefined) return null;
@@ -64,7 +65,7 @@ export const handler = createHandler(async (event) => {
   const results: HoldedSyncResult[] = [];
   const summary: HoldedSyncSummary = { total: products.length, created: 0, updated: 0, errors: 0 };
 
-  for (const product of products) {
+  async function syncProduct(product: (typeof products)[number]) {
     const previousIdHolded = (product as any).id_holded ?? null;
     let idHolded = previousIdHolded ?? null;
     let status: number | null = null;
@@ -98,41 +99,70 @@ export const handler = createHandler(async (event) => {
 
       if (!response.ok) {
         action = 'error';
-        summary.errors += 1;
         message = (data as any)?.message ?? (data as any)?.error ?? response.statusText ?? 'Error en Holded';
-      } else {
-        if (previousIdHolded) {
-          summary.updated += 1;
-        } else {
-          summary.created += 1;
-        }
-        message = (data as any)?.message ?? 'Sincronizado correctamente';
-
-        const holdedId = extractHoldedId(data);
-        if (!previousIdHolded && holdedId) {
-          idHolded = holdedId;
-          await prisma.products.update({
-            where: { id: product.id },
-            data: { id_holded: holdedId },
-          });
-        }
+        return {
+          result: {
+            product_id: product.id,
+            id_pipe: product.id_pipe,
+            previous_id_holded: previousIdHolded,
+            id_holded: idHolded,
+            action,
+            status,
+            message,
+          },
+          deltas: { created: 0, updated: 0, errors: 1 },
+        } as const;
       }
-    } catch (error) {
-      action = 'error';
-      summary.errors += 1;
-      status = null;
-      message = error instanceof Error ? error.message : 'Error desconocido al sincronizar con Holded';
-    }
 
-    results.push({
-      product_id: product.id,
-      id_pipe: product.id_pipe,
-      previous_id_holded: previousIdHolded,
-      id_holded: idHolded,
-      action,
-      status,
-      message,
-    });
+      const holdedId = extractHoldedId(data);
+      if (!previousIdHolded && holdedId) {
+        idHolded = holdedId;
+        await prisma.products.update({
+          where: { id: product.id },
+          data: { id_holded: holdedId },
+        });
+      }
+
+      message = (data as any)?.message ?? 'Sincronizado correctamente';
+      return {
+        result: {
+          product_id: product.id,
+          id_pipe: product.id_pipe,
+          previous_id_holded: previousIdHolded,
+          id_holded: idHolded,
+          action,
+          status,
+          message,
+        },
+        deltas: { created: previousIdHolded ? 0 : 1, updated: previousIdHolded ? 1 : 0, errors: 0 },
+      } as const;
+    } catch (error) {
+      message = error instanceof Error ? error.message : 'Error desconocido al sincronizar con Holded';
+      return {
+        result: {
+          product_id: product.id,
+          id_pipe: product.id_pipe,
+          previous_id_holded: previousIdHolded,
+          id_holded: idHolded,
+          action: 'error' as const,
+          status: null,
+          message,
+        },
+        deltas: { created: 0, updated: 0, errors: 1 },
+      } as const;
+    }
+  }
+
+  for (let index = 0; index < products.length; index += MAX_CONCURRENT_REQUESTS) {
+    const chunk = products.slice(index, index + MAX_CONCURRENT_REQUESTS);
+    const chunkResults = await Promise.all(chunk.map((product) => syncProduct(product)));
+
+    for (const { result, deltas } of chunkResults) {
+      summary.created += deltas.created;
+      summary.updated += deltas.updated;
+      summary.errors += deltas.errors;
+      results.push(result);
+    }
   }
 
   return successResponse({
