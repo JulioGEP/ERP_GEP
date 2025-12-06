@@ -17,8 +17,8 @@ type ProductForSync = {
   id: string;
   id_pipe: string;
   name: string | null;
-  id_price: Prisma.Decimal | number | null;
-  default_variant_price?: Prisma.Decimal | number | null;
+  price: Prisma.Decimal | number | null;
+  variant_price?: Prisma.Decimal | number | null;
 };
 
 function parseNumeric(value: unknown): number | null {
@@ -98,8 +98,8 @@ export const handler = createHttpHandler<any>(async (request) => {
       id: true,
       id_pipe: true,
       name: true,
-      id_price: true,
-      default_variant_price: true,
+      price: true,
+      variant_price: true,
     },
   });
 
@@ -112,7 +112,7 @@ export const handler = createHttpHandler<any>(async (request) => {
   }));
 
   for (const product of products as ProductForSync[]) {
-    const price = parseNumeric(product.id_price ?? product.default_variant_price);
+    const price = parseNumeric(product.price ?? product.variant_price);
     if (!product.name || !product.id_pipe) {
       results.push({
         productId: product.id,
