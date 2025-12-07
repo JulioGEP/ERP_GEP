@@ -411,8 +411,15 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       const cliente = typeof payload.cliente === 'string' ? payload.cliente : ''
       const contacto = typeof payload.contacto === 'string' ? payload.contacto : ''
 
+      const defaultSelected = initialSelectedIds.filter((id) =>
+        normalizedSessions.some((session) => session.id === id)
+      )
+
       let selected = null
-      if (normalizedSessions.length === 1) {
+      if (defaultSelected.length) {
+        setSelectedSessionIds(defaultSelected)
+        selected = normalizedSessions.find((session) => session.id === defaultSelected[0]) || null
+      } else if (normalizedSessions.length === 1) {
         selected = normalizedSessions[0]
         setSelectedSessionIds(selected?.id ? [selected.id] : [])
       } else {
