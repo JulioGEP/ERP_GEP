@@ -264,18 +264,16 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
             </ol>
           </div>
 
-          <div>
-            <strong>Errores detectados:</strong>
-            {modalErrors.length === 0 ? (
-              <p className="mb-0">Sin errores reportados.</p>
-            ) : (
+          {modalErrors.length > 0 && (
+            <div>
+              <strong>Errores detectados:</strong>
               <ul className="mb-0">
                 {modalErrors.map((item, index) => (
                   <li key={index}>{item}</li>
                 ))}
               </ul>
-            )}
-          </div>
+            </div>
+          )}
 
           {syncSummary && (
             <div>
