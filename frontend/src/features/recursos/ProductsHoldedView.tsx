@@ -21,7 +21,7 @@ type ProductsHoldedViewProps = {
   onNotify: (toast: ToastParams) => void;
 };
 
-type SortKey = 'name' | 'id_pipe' | 'id_category' | 'price' | 'id_holded';
+type SortKey = 'name' | 'id_pipe' | 'category' | 'price' | 'id_holded';
 
 type SortConfig = {
   key: SortKey;
@@ -69,6 +69,7 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
   });
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastToggledIndex, setLastToggledIndex] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [modalSteps, setModalSteps] = useState<string[]>([]);
   const [modalErrors, setModalErrors] = useState<string[]>([]);
@@ -82,6 +83,7 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
     } else {
       setSelectedIds(new Set());
     }
+    setLastToggledIndex(null);
   }, [data]);
 
   const allSelected = useMemo(() => {
@@ -124,16 +126,34 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
     }
   };
 
-  const toggleItem = (productId: string) => {
+  const toggleItem = (productId: string, index: number, shiftKey: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(productId)) {
-        next.delete(productId);
+      const shouldSelect = !next.has(productId);
+
+      if (shiftKey && lastToggledIndex !== null) {
+        const [start, end] =
+          index > lastToggledIndex ? [lastToggledIndex, index] : [index, lastToggledIndex];
+        const range = sortedData.slice(start, end + 1);
+
+        range.forEach((product) => {
+          if (shouldSelect) {
+            next.add(product.id);
+          } else {
+            next.delete(product.id);
+          }
+        });
       } else {
-        next.add(productId);
+        if (next.has(productId)) {
+          next.delete(productId);
+        } else {
+          next.add(productId);
+        }
       }
+
       return next;
     });
+    setLastToggledIndex(index);
   };
 
   const toggleSort = (key: SortKey) => {
@@ -226,6 +246,10 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
         {isFetching && <Spinner size="sm" animation="border" role="status" />}
       </div>
 
+      <p className="text-muted small mb-0">
+        Consejo: usa Shift + clic en las casillas de selección para marcar o desmarcar rangos completos.
+      </p>
+
       <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
         <Modal.Header closeButton>
           <Modal.Title>Actualización de Holded</Modal.Title>
@@ -309,8 +333,8 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
               <th role="button" onClick={() => toggleSort('id_pipe')}>
                 Id_Pipedrive {sortConfig.key === 'id_pipe' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
               </th>
-              <th role="button" onClick={() => toggleSort('id_category')}>
-                Categoría {sortConfig.key === 'id_category' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
+              <th role="button" onClick={() => toggleSort('category')}>
+                Categoría {sortConfig.key === 'category' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
               </th>
               <th role="button" onClick={() => toggleSort('price')}>
                 Precio {sortConfig.key === 'price' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : ''}
@@ -328,7 +352,10 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
                   <Form.Check
                     type="checkbox"
                     checked={selectedIds.has(product.id)}
-                    onChange={() => toggleItem(product.id)}
+                    onChange={(event) => {
+                      const nativeEvent = event.nativeEvent as KeyboardEvent | MouseEvent;
+                      toggleItem(product.id, index, Boolean(nativeEvent.shiftKey));
+                    }}
                   />
                 </td>
                 <td>{product.name ?? ''}</td>
