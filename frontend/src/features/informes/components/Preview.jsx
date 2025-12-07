@@ -1,9 +1,8 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { generateReportPdfmake } from '../pdf/reportPdfmake'
 import { triesKey, htmlKey } from '../utils/keys'
 import { emitToast } from '../../../utils/toast'
 import { emitSessionDocumentsUpdated } from '../../../utils/sessionDocumentsEvents'
-import { AuthContext } from '../App'
 
 const normalizeDisplay = (value) => {
   if (value === null || value === undefined) return ''
@@ -329,108 +328,6 @@ export default function Preview(props) {
   const [tries, setTries] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [lastUpload, setLastUpload] = useState(null)
-  const [showEmailModal, setShowEmailModal] = useState(false)
-  const [sendingEmail, setSendingEmail] = useState(false)
-  const [emailError, setEmailError] = useState('')
-  const [emailData, setEmailData] = useState({ to: '', cc: '', subject: '', body: '' })
-  const auth = useContext(AuthContext)
-
-  const trainerEmail = useMemo(() => {
-    const email = auth?.user?.email
-    return typeof email === 'string' ? email.trim() : ''
-  }, [auth])
-
-  const reportUrl = lastUpload?.drive_web_view_link || lastUpload?.drive_url || ''
-  const sessionName = useMemo(() => {
-    const title = normalizeDisplay(session?.nombre) || normalizeDisplay(sessionLabel) || normalizeDisplay(datos?.formacionTitulo)
-    return title || 'Sesión'
-  }, [datos?.formacionTitulo, session?.nombre, sessionLabel])
-  const sessionDate = normalizeDisplay(session?.fecha) || normalizeDisplay(datos?.fecha)
-
-  const defaultCc = useMemo(() => {
-    const list = ['jaime@gepgroup.es']
-    const comercial = normalizeDisplay(datos?.comercial)
-    if (comercial && comercial.includes('@')) {
-      list.push(comercial)
-    }
-    return list.join(', ')
-  }, [datos?.comercial])
-
-  const defaultTo = useMemo(() => normalizeDisplay(datos?.contactoEmail), [datos?.contactoEmail])
-
-  const defaultSubject = useMemo(() => {
-    const parts = []
-    if (sessionDate) parts.push(sessionDate)
-    if (sessionName) parts.push(sessionName)
-    return parts.length ? `Informe ${parts.join(' / ')}` : 'Informe de la sesión'
-  }, [sessionDate, sessionName])
-
-  const defaultBody = useMemo(() => {
-    const url = reportUrl || '<enlace no disponible>'
-    const trainerName = normalizeDisplay(formador?.nombre || datos?.formadorNombre)
-    const lines = [
-      'Hola',
-      '',
-      `Adjunto el informe ${url} de la sesión ${sessionName || '—'}`,
-      '',
-      trainerName || trainerEmail || 'Equipo GEP',
-    ]
-    return lines.join('\n')
-  }, [datos?.formadorNombre, formador?.nombre, reportUrl, sessionName, trainerEmail])
-
-  const openEmailModal = () => {
-    setEmailError('')
-    setEmailData({
-      to: defaultTo || '',
-      cc: defaultCc,
-      subject: defaultSubject,
-      body: defaultBody,
-    })
-    setShowEmailModal(true)
-  }
-
-  const handleEmailChange = (field, value) => {
-    setEmailData((current) => ({ ...current, [field]: value }))
-  }
-
-  const sendEmail = async () => {
-    if (!emailData.to.trim()) {
-      setEmailError('Introduce al menos un destinatario.')
-      return
-    }
-
-    setSendingEmail(true)
-    setEmailError('')
-    try {
-      const response = await fetch('/.netlify/functions/sendReportEmail', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: emailData.to,
-          cc: emailData.cc,
-          subject: emailData.subject || defaultSubject,
-          body: emailData.body || defaultBody,
-          sender: trainerEmail,
-        }),
-      })
-
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok || data?.ok === false) {
-        const message = data?.message || 'No se ha podido enviar el email.'
-        throw new Error(message)
-      }
-
-      emitToast({ variant: 'success', message: 'Email enviado correctamente.' })
-      setShowEmailModal(false)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se ha podido enviar el email.'
-      setEmailError(message)
-    } finally {
-      setSendingEmail(false)
-    }
-  }
 
   // Cargar contador + HTML guardado
   useEffect(() => {
@@ -716,14 +613,6 @@ export default function Preview(props) {
         </div>
       )}
 
-      {lastUpload?.drive_web_view_link && (
-        <div>
-          <button className="btn btn-outline-primary" type="button" onClick={openEmailModal}>
-            Enviar por email
-          </button>
-        </div>
-      )}
-
       <div className="card">
         <div className="card-body">
           {/* ===== Datos generales (dos columnas, textos pedidos) ===== */}
@@ -933,87 +822,6 @@ export default function Preview(props) {
           <button className="btn btn-link p-0 align-baseline" onClick={resetLocalForDeal}>
             Reiniciar intentos (solo pruebas)
           </button>
-        </div>
-      )}
-
-      {showEmailModal && (
-        <div className="modal d-block" tabIndex="-1" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Enviar informe por email</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  aria-label="Cerrar"
-                  onClick={() => setShowEmailModal(false)}
-                  disabled={sendingEmail}
-                />
-              </div>
-              <div className="modal-body">
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <label className="form-label">Para</label>
-                    <input
-                      className="form-control"
-                      value={emailData.to}
-                      onChange={(e) => handleEmailChange('to', e.target.value)}
-                      placeholder="Destinatarios principales"
-                      disabled={sendingEmail}
-                    />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">CC</label>
-                    <input
-                      className="form-control"
-                      value={emailData.cc}
-                      onChange={(e) => handleEmailChange('cc', e.target.value)}
-                      placeholder="Correos en copia"
-                      disabled={sendingEmail}
-                    />
-                  </div>
-                  <div className="col-12">
-                    <label className="form-label">Asunto</label>
-                    <input
-                      className="form-control"
-                      value={emailData.subject || defaultSubject}
-                      onChange={(e) => handleEmailChange('subject', e.target.value)}
-                      disabled={sendingEmail}
-                    />
-                  </div>
-                  <div className="col-12">
-                    <label className="form-label">Cuerpo</label>
-                    <textarea
-                      className="form-control"
-                      rows={6}
-                      value={emailData.body || defaultBody}
-                      onChange={(e) => handleEmailChange('body', e.target.value)}
-                      disabled={sendingEmail}
-                    />
-                  </div>
-                </div>
-                {emailError && <div className="alert alert-danger mt-3 mb-0">{emailError}</div>}
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowEmailModal(false)}
-                  disabled={sendingEmail}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={sendEmail}
-                  disabled={sendingEmail}
-                >
-                  {sendingEmail ? 'Enviando…' : 'Enviar'}
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 

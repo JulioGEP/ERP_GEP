@@ -75,7 +75,7 @@ export const handler = async (event: any) => {
       where: { deal_id: dealId },
       include: {
         organizations: { select: { name: true } },
-        persons: { select: { first_name: true, last_name: true, email: true } },
+        persons: { select: { first_name: true, last_name: true } },
         sesiones: {
           select: {
             id: true,
@@ -210,7 +210,6 @@ export const handler = async (event: any) => {
     const organizationName = toStringOrNull(deal.organizations?.name ?? (deal as any)?.organizations?.name)
     const contactFirst = toStringOrNull(deal.persons?.first_name ?? (deal as any)?.persons?.first_name)
     const contactLast = toStringOrNull(deal.persons?.last_name ?? (deal as any)?.persons?.last_name)
-    const contactEmail = toStringOrNull(deal.persons?.email ?? (deal as any)?.persons?.email)
     const contacto = [contactFirst, contactLast].filter(Boolean).join(' ').trim()
 
     return successResponse({
@@ -218,7 +217,6 @@ export const handler = async (event: any) => {
         id: deal.deal_id,
         cliente: organizationName || '',
         contacto: contacto || '',
-        contactoEmail: contactEmail || '',
         comercial: toStringOrNull(deal.comercial) || '',
         sesiones: normalizedSessions,
         products: mappedDealProducts,
