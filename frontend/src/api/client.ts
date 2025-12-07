@@ -85,7 +85,9 @@ export async function requestJson<T = any>(
     try {
       json = options?.parseJson ? options.parseJson(raw) : JSON.parse(raw);
     } catch {
-      const message = options?.invalidResponseMessage ?? 'Respuesta JSON inválida del servidor.';
+      const preview = raw.trim().slice(0, 500);
+      const details = preview ? ` Detalle: ${preview}` : '';
+      const message = `${options?.invalidResponseMessage ?? 'Respuesta JSON inválida del servidor.'}${details}`;
       throw new ApiError('INVALID_RESPONSE', message, response.status || undefined);
     }
   }
