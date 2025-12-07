@@ -88,6 +88,7 @@ const TrainerReportsRecursoPreventivoEbroPage = lazy(
 );
 const UsersVacationsPage = lazy(() => import('../pages/usuarios/UsersVacationsPage'));
 const ProfilePage = lazy(() => import('../pages/perfil/ProfilePage'));
+const ControlHorasPage = lazy(() => import('../pages/perfil/ControlHorasPage'));
 const ForbiddenPage = lazy(() => import('../pages/system/ForbiddenPage'));
 const HorasFormadoresPage = lazy(() => import('../pages/reporting/HorasFormadoresPage'));
 const ControlHorarioPage = lazy(() => import('../pages/reporting/ControlHorarioPage'));
@@ -609,6 +610,16 @@ export function AppRouter({
         />
 
         <Route path="/perfil" element={<GuardedRoute path="/perfil" element={<ProfilePage />} />} />
+        <Route
+          path="/perfil/control_horas"
+          element={
+            <GuardedRoute
+              path="/perfil/control_horas"
+              roles={['Formador']}
+              element={<ControlHorasPage />}
+            />
+          }
+        />
 
         <Route path="*" element={<Navigate to={defaultRedirectPath} replace />} />
       </Routes>

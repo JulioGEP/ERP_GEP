@@ -52,7 +52,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/recursos/confirmaciones',
     '/usuarios/vacaciones',
   ],
-  Formador: ['/usuarios/trainer/*', '/perfil'],
+  Formador: ['/usuarios/trainer/*', '/perfil', '/perfil/control_horas'],
 };
 
 export function normalizeRoleKey(value: string | null | undefined): string | null {
