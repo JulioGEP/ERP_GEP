@@ -116,8 +116,10 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
   }
 
-  const ids = Array.isArray(request.body?.productIds)
-    ? request.body.productIds.filter((id: unknown) => typeof id === 'string' && id.trim().length)
+  const ids: string[] = Array.isArray(request.body?.productIds)
+    ? request.body.productIds.filter(
+        (id: unknown): id is string => typeof id === 'string' && id.trim().length > 0
+      )
     : [];
 
   if (!ids.length) {
