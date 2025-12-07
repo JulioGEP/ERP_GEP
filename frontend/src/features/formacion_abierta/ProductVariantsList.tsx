@@ -962,7 +962,7 @@ export function VariantModal({
   const [editingCommentContent, setEditingCommentContent] = useState('');
   const [updatingCommentId, setUpdatingCommentId] = useState<string | null>(null);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
-  const { userName } = useCurrentUserIdentity();
+  const { userId, userName } = useCurrentUserIdentity();
   const totalDealStudents = useMemo(
     () => {
       if (!deals.length) {
@@ -1636,7 +1636,10 @@ export function VariantModal({
     setCommentsError(null);
     setSavingComment(true);
     try {
-      const created = await createVariantComment(variant.id, { content: trimmedContent });
+      const created = await createVariantComment(variant.id, { content: trimmedContent }, {
+        id: userId,
+        name: userName,
+      });
       setComments((prev) => [created, ...prev]);
       setNewComment('');
     } catch (error) {
@@ -1671,7 +1674,12 @@ export function VariantModal({
     setCommentsError(null);
     setUpdatingCommentId(editingCommentId);
     try {
-      const updated = await updateVariantComment(variant.id, editingCommentId, { content: trimmedContent });
+      const updated = await updateVariantComment(
+        variant.id,
+        editingCommentId,
+        { content: trimmedContent },
+        { id: userId, name: userName },
+      );
       setComments((prev) => prev.map((comment) => (comment.id === updated.id ? updated : comment)));
       setEditingCommentId(null);
       setEditingCommentContent('');
@@ -1688,7 +1696,7 @@ export function VariantModal({
     setCommentsError(null);
     setDeletingCommentId(commentId);
     try {
-      await deleteVariantComment(variant.id, commentId);
+      await deleteVariantComment(variant.id, commentId, { id: userId, name: userName });
       setComments((prev) => prev.filter((comment) => comment.id !== commentId));
       if (editingCommentId === commentId) {
         setEditingCommentId(null);
