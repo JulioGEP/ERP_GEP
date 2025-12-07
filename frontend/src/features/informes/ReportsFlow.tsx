@@ -22,7 +22,6 @@ export type ReportDraft = {
   imagenes?: Array<{ name?: string; dataUrl?: string }>;
   session?: ReportSessionInfo | null;
   sessionOptions?: ReportSessionInfo[];
-  selectedSessions?: ReportSessionInfo[];
 };
 
 type Stage = 'form' | 'preview';
@@ -42,7 +41,6 @@ const createEmptyDraft = (type: ReportType): ReportDraft => ({
   imagenes: [],
   session: null,
   sessionOptions: [],
-  selectedSessions: [],
 });
 
 function mergeReportDraft(
@@ -81,12 +79,6 @@ function mergeReportDraft(
 
   if (Array.isArray(input.sessionOptions)) {
     next.sessionOptions = input.sessionOptions
-      .filter((option): option is ReportSessionInfo => Boolean(option))
-      .map((option) => ({ ...option }));
-  }
-
-  if (Array.isArray(input.selectedSessions)) {
-    next.selectedSessions = input.selectedSessions
       .filter((option): option is ReportSessionInfo => Boolean(option))
       .map((option) => ({ ...option }));
   }

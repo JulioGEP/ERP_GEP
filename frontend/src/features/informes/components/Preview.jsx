@@ -286,7 +286,7 @@ function EditableHtml({ dealId, initialHtml, onChange }) {
 export default function Preview(props) {
   const { onBack, title = 'Informe de Formación', type: propType } = props
   const draft = props.draft ?? props.data ?? {}
-  const { datos, imagenes, formador, dealId, type: draftType, session, selectedSessions = [] } = draft
+  const { datos, imagenes, formador, dealId, type: draftType, session } = draft
   const type = propType || draftType || 'formacion'
   const isSimulacro = type === 'simulacro'
   const isPreventivo = type === 'preventivo' || type === 'preventivo-ebro'
@@ -309,30 +309,7 @@ export default function Preview(props) {
     : isSimulacro
       ? 'Dirección del simulacro'
       : 'Dirección de la formación'
-  const resolvedSessions = useMemo(() => {
-    const unique = new Map()
-    const add = (item) => {
-      if (!item || !item.id) return
-      const id = String(item.id)
-      if (unique.has(id)) return
-      unique.set(id, { ...item, id })
-    }
-    if (Array.isArray(selectedSessions)) {
-      selectedSessions.forEach(add)
-    }
-    add(session)
-    return Array.from(unique.values())
-  }, [selectedSessions, session])
-
   const sessionLabel = useMemo(() => formatSessionLabel(session), [session])
-  const additionalSessionLabels = useMemo(
-    () =>
-      resolvedSessions
-        .filter((item) => !session?.id || item.id !== session.id)
-        .map((item) => formatSessionLabel(item))
-        .filter(Boolean),
-    [resolvedSessions, session?.id],
-  )
   const draftHeading = useMemo(() => {
     const raw = (title || '').trim()
     if (!raw) return 'Borrador del informe'
@@ -480,8 +457,7 @@ export default function Preview(props) {
       emitToast({ variant: 'warning', message: 'El Nº de presupuesto es obligatorio.' })
       return
     }
-    const targetSessions = resolvedSessions.filter((item) => item?.id)
-    if (!targetSessions.length) {
+    if (!session || !session.id) {
       emitToast({ variant: 'warning', message: 'Selecciona la sesión correspondiente en el formulario antes de guardar el informe.' })
       return
     }
@@ -506,6 +482,15 @@ export default function Preview(props) {
         const preparationError = new Error('No se pudo preparar el PDF para subirlo a Drive.')
         preparationError.name = 'PDF_BASE64_ERROR'
         throw preparationError
+      }
+
+      const payload = {
+        dealId,
+        sessionId: session.id,
+        fileName: pdf?.fileName || `Informe-${dealId}.pdf`,
+        pdfBase64: base64,
+        sessionNumber: session.number ?? null,
+        sessionName: session.nombre ?? null,
       }
 
       const uploadWithRetry = async (body) => {
@@ -566,47 +551,20 @@ export default function Preview(props) {
         throw lastError || new Error('Error guardando el PDF en Drive.')
       }
 
-      const lastWarnings = []
-      const uploadedDocuments = []
-      for (const targetSession of targetSessions) {
-        const payload = {
-          dealId,
-          sessionId: targetSession.id,
-          fileName: pdf?.fileName || `Informe-${dealId}.pdf`,
-          pdfBase64: base64,
-          sessionNumber: targetSession.number ?? null,
-          sessionName: targetSession.nombre ?? null,
-        }
+      const data = await uploadWithRetry(payload)
 
-        const data = await uploadWithRetry(payload)
-
-        if (data?.document) {
-          uploadedDocuments.push({ ...data.document, drive_url: data?.drive_url || null })
-          emitSessionDocumentsUpdated({ dealId, sessionId: targetSession.id })
-        }
-
-        const warningMessage = typeof data?.warning?.message === 'string' ? data.warning.message.trim() : ''
-        if (warningMessage) {
-          lastWarnings.push(warningMessage)
-        }
-      }
-
-      if (uploadedDocuments.length) {
-        setLastUpload(uploadedDocuments[uploadedDocuments.length - 1])
+      if (data?.document) {
+        setLastUpload({ ...data.document, drive_url: data?.drive_url || null })
+        emitSessionDocumentsUpdated({ dealId, sessionId: session.id })
       } else {
         setLastUpload(null)
       }
 
-      if (lastWarnings.length) {
-        emitToast({ variant: 'warning', message: lastWarnings[lastWarnings.length - 1] })
+      const warningMessage = typeof data?.warning?.message === 'string' ? data.warning.message.trim() : ''
+      if (warningMessage) {
+        emitToast({ variant: 'warning', message: warningMessage })
       } else {
-        emitToast({
-          variant: 'success',
-          message:
-            targetSessions.length > 1
-              ? 'Documento guardado en todas las sesiones seleccionadas.'
-              : 'Documento guardado en Drive.',
-        })
+        emitToast({ variant: 'success', message: 'Documento guardado en Drive.' })
       }
     } catch (error) {
       console.error('[Preview] Error guardando el informe en Drive', error)
@@ -671,11 +629,6 @@ export default function Preview(props) {
                 <div className="col-12"><strong>Cliente:</strong> {datos?.cliente || '—'}</div>
                 {sessionLabel && (
                   <div className="col-md-6 col-12"><strong>Sesión:</strong> {sessionLabel}</div>
-                )}
-                {additionalSessionLabels.length > 0 && (
-                  <div className="col-12">
-                    <strong>Sesiones adicionales:</strong> {additionalSessionLabels.join(', ')}
-                  </div>
                 )}
                 <div className="col-md-6 col-12"><strong>Persona de contacto:</strong> {datos?.contacto || '—'}</div>
                 <div className="col-md-6 col-12"><strong>{direccionSedeLabel}:</strong> {datos?.sede || '—'}</div>
