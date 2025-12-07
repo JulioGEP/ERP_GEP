@@ -69,7 +69,8 @@ async function createHoldedProduct(apiKey: string, payload: Record<string, unkno
         : typeof json?.message === 'string'
         ? json.message
         : `Error HTTP ${response.status}`;
-    throw new Error(message);
+    const jsonDump = json ? JSON.stringify(json) : 'Respuesta sin JSON';
+    throw new Error(`${message}. Respuesta Holded: ${jsonDump}`);
   }
 
   return String(json.id);
@@ -105,7 +106,8 @@ async function updateHoldedProduct(
         : typeof json?.message === 'string'
         ? json.message
         : `Error HTTP ${response.status}`;
-    throw new Error(message);
+    const jsonDump = json ? JSON.stringify(json) : 'Respuesta sin JSON';
+    throw new Error(`${message}. Respuesta Holded: ${jsonDump}`);
   }
 }
 
