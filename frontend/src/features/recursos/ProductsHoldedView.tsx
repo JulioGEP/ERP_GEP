@@ -24,7 +24,7 @@ type SortConfig = {
 };
 
 function formatPrice(product: Product): string {
-  const value = product.id_price ?? product.price ?? null;
+  const value = product.price ?? null;
   if (value === null || value === undefined) return '';
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(value));
 }
@@ -128,7 +128,7 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
 
     const getValue = (product: Product, key: SortKey): string | number => {
       if (key === 'price') {
-        return Number(product.id_price ?? product.price ?? 0);
+        return Number(product.price ?? 0);
       }
 
       const value = product[key];
