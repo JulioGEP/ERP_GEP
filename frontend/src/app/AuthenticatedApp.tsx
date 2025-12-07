@@ -557,30 +557,8 @@ export default function AuthenticatedApp() {
         { key: 'Trainer/Sessions', label: 'Mis sesiones', path: '/usuarios/trainer/sesiones' },
         {
           key: 'Trainer/Reports',
-          label: 'Mis informes',
-          path: '/usuarios/trainer/informes',
-          children: [
-            {
-              key: 'Trainer/Reports/Formacion',
-              label: 'Formación',
-              path: '/usuarios/trainer/informes/formacion',
-            },
-            {
-              key: 'Trainer/Reports/Preventivo',
-              label: 'Preventivo',
-              path: '/usuarios/trainer/informes/preventivo',
-            },
-            {
-              key: 'Trainer/Reports/Simulacro',
-              label: 'Simulacro',
-              path: '/usuarios/trainer/informes/simulacro',
-            },
-            {
-              key: 'Trainer/Reports/RecursoPreventivoEbro',
-              label: 'Recurso Preventivo EBRO',
-              path: '/usuarios/trainer/informes/recurso_preventivo_ebro',
-            },
-          ],
+          label: 'Informes',
+          path: '/usuarios/trainer/informes/informes',
         },
         { key: 'Trainer/Availability', label: 'Mi disponibilidad', path: '/usuarios/trainer/disponibilidad' },
       );
