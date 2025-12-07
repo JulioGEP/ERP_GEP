@@ -171,7 +171,7 @@ export const handler = createHttpHandler(async (request) => {
             },
             select: {
               sesion_trainers: {
-                select: { id: true },
+                select: { trainer_id: true },
               },
             },
           },
@@ -317,7 +317,7 @@ export const handler = createHttpHandler(async (request) => {
       pipeline_id: string | null;
       pipeline_label: string | null;
       w_id_variation: string | null;
-      sesiones: Array<{ sesion_trainers: Array<{ id: string }> }> | null;
+      sesiones: Array<{ sesion_trainers: Array<{ trainer_id: string }> }> | null;
     };
 
     const normalizedDeals = dealsForPendingTrainer as DealPendingTrainerEntry[];
