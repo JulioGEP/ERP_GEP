@@ -68,6 +68,9 @@ const TrainerDashboardPage = lazy(() => import('../pages/usuarios/trainer/Traine
 const TrainerPendingSessionsPage = lazy(() => import('../pages/usuarios/trainer/TrainerPendingSessionsPage'));
 const TrainerSessionsPage = lazy(() => import('../pages/usuarios/trainer/TrainerSessionsPage'));
 const TrainerAvailabilityPage = lazy(() => import('../pages/usuarios/trainer/TrainerAvailabilityPage'));
+const TrainerReportsListPage = lazy(
+  () => import('../pages/usuarios/trainer/informes/TrainerReportsListPage'),
+);
 const TrainerReportsIndexPage = lazy(
   () => import('../pages/usuarios/trainer/informes/TrainerReportsIndexPage'),
 );
@@ -465,6 +468,16 @@ export function AppRouter({
               path="/usuarios/trainer/informes"
               roles={['Formador']}
               element={<TrainerReportsIndexPage />}
+            />
+          }
+        />
+        <Route
+          path="/usuarios/trainer/informes/informes"
+          element={
+            <GuardedRoute
+              path="/usuarios/trainer/informes/informes"
+              roles={['Formador']}
+              element={<TrainerReportsListPage />}
             />
           }
         />

@@ -51,6 +51,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/trainer/dashboard',
   '/usuarios/trainer/sesiones',
   '/usuarios/trainer/informes',
+  '/usuarios/trainer/informes/informes',
   '/usuarios/trainer/informes/formacion',
   '/usuarios/trainer/informes/preventivo',
   '/usuarios/trainer/informes/simulacro',
