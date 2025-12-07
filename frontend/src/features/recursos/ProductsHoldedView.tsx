@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Product } from '../../types/product';
-import { fetchProducts, syncProductsToHolded, type HoldedSyncResult } from './products.api';
+import {
+  fetchProducts,
+  syncProductsToHolded,
+  type HoldedSyncResult,
+  type SyncProductsToHoldedParams,
+} from './products.api';
 import { ApiError } from '../../api/client';
 
 const PRODUCTS_HOLDED_QUERY_KEY = ['products', 'holded'];
@@ -85,7 +90,7 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
   }, [data, selectedIds]);
 
   const { mutate: syncHolded, isPending: isSyncing } = useMutation({
-    mutationFn: syncProductsToHolded,
+    mutationFn: (params: SyncProductsToHoldedParams) => syncProductsToHolded(params),
     onSuccess: (results) => {
       const summary = summarizeResults(results);
       onNotify({ variant: summary.variant, message: summary.message });
@@ -177,7 +182,24 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
     setSyncResults([]);
     setSyncSummary(null);
     setShowModal(true);
-    syncHolded(Array.from(selectedIds));
+    syncHolded({
+      productIds: Array.from(selectedIds),
+      onBatchResult: (batchResults, batchIndex, totalBatches) => {
+        setSyncResults((prev) => prev.concat(batchResults));
+        setModalSteps((prev) =>
+          prev.concat(
+            `Lote ${batchIndex + 1} de ${totalBatches} procesado (${batchResults.length} resultados).`,
+          ),
+        );
+        setModalErrors((prev) =>
+          prev.concat(
+            batchResults
+              .filter((item) => item.status === 'error')
+              .map((item) => `Producto ${item.productId}: ${item.message ?? 'Error desconocido'}`),
+          ),
+        );
+      },
+    });
   };
 
   if (isLoading) {
