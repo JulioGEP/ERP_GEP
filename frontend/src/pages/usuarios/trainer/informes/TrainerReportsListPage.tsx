@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchReportList, type ReportListEntry } from '../../../../api/reports';
 import { ReportListSection } from '../../../../features/informes/ReportListSection';
-import { useAuth } from '../../../../shared/auth/AuthContext';
+import { useAuth } from '../../../../context/AuthContext';
 
 const normalizeText = (value: string) =>
   value
