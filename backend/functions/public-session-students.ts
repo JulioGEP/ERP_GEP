@@ -129,12 +129,23 @@ function mapSessionInfo(link: any) {
         ? s.deal_products.code
         : null;
 
+  const sessionAddress = (() => {
+    if (typeof s?.direccion === 'string' && s.direccion.trim().length) return s.direccion;
+    if (typeof d?.training_address === 'string' && d.training_address.trim().length) {
+      return d.training_address;
+    }
+    return null;
+  })();
+
   return {
     deal_id: dealId,
     sesion_id: s?.id ?? null,
     session_name: s?.nombre_cache ?? null,
     formation_name: formation,
     title: d?.title ?? null,
+    organization_name: d?.organizations?.name ?? null,
+    comercial: d?.comercial ?? null,
+    session_address: sessionAddress,
   };
 }
 
@@ -150,8 +161,17 @@ async function resolveLink(prisma: ReturnType<typeof getPrisma>, token: string) 
           deal_id: true,
           nombre_cache: true,
           fecha_fin_utc: true,
+          direccion: true,
           deal_products: { select: { id: true, name: true, code: true } },
-          deals: { select: { deal_id: true, title: true } },
+          deals: {
+            select: {
+              deal_id: true,
+              title: true,
+              comercial: true,
+              training_address: true,
+              organizations: { select: { name: true } },
+            },
+          },
         },
       },
     },

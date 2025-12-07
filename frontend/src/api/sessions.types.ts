@@ -133,6 +133,9 @@ export type PublicSessionInfo = {
   session_name: string | null;
   formation_name: string | null;
   title: string | null;
+  organization_name: string | null;
+  comercial: string | null;
+  session_address: string | null;
 };
 
 export type SessionCounts = {

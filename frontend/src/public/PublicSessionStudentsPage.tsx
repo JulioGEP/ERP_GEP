@@ -18,6 +18,7 @@ import {
   fetchPublicSessionStudents,
   updatePublicSessionStudent,
 } from "../features/presupuestos/api/students.api";
+import gepLogo from "../assets/gep-group-logo.png";
 
 const EMPTY_DRAFT = { nombre: '', apellido: '', dni: '' };
 
@@ -314,8 +315,35 @@ export function PublicSessionStudentsPage() {
     <div className="bg-light min-vh-100 py-5">
       <Container className="py-4" style={{ maxWidth: '960px' }}>
         <header className="mb-4">
+          <div className="d-flex flex-column flex-md-row gap-3 align-items-md-center mb-3">
+            <div className="d-flex align-items-center gap-3">
+              <img src={gepLogo} alt="GEP Group" style={{ width: '64px', height: '64px' }} />
+              <div>
+                <div className="fw-bold">GEP Group</div>
+                {sessionInfo?.organization_name ? (
+                  <div className="text-muted small">Organización: {sessionInfo.organization_name}</div>
+                ) : null}
+              </div>
+            </div>
+            <div className="d-flex flex-column gap-1 text-muted small ms-md-auto text-md-end">
+              {sessionInfo?.comercial ? (
+                <span>
+                  <strong>Comercial asignado:</strong> {sessionInfo.comercial}
+                </span>
+              ) : null}
+              {sessionInfo?.session_address ? (
+                <span>
+                  <strong>Dirección de la sesión:</strong> {sessionInfo.session_address}
+                </span>
+              ) : null}
+            </div>
+          </div>
           <h1 className="h4 fw-bold mb-1">{title}</h1>
-          <p className="text-muted mb-0">Completa los datos de los alumnos que asistirán a la sesión.</p>
+          <p className="text-muted mb-0">
+            Añade los datos de los alumnos/as que asistirán a la sesión. Podrás modificar, eliminar o añadir hasta el
+            mismo día y hora de la sesión, después ya no podrán añadir alumnos/as. Si vienen alumnos/as que no están
+            apuntados a la formación, no recibirán los certificados.
+          </p>
         </header>
 
         {tokenMissing ? (
