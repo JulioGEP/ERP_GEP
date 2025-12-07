@@ -4,6 +4,7 @@ import type {
   ProductDefaults,
   ProductDefaultsUpdatePayload,
   ProductInfo,
+  VariantComment,
   VariantInfo,
   VariantUpdatePayload,
 } from './types';
@@ -60,6 +61,13 @@ export type SendVariantTrainerInvitesResponse = {
 
 export type VariantTrainerInviteResponse = {
   invite?: unknown;
+  message?: string;
+};
+
+type VariantCommentsResponse = {
+  ok?: boolean;
+  comment?: unknown;
+  comments?: unknown;
   message?: string;
 };
 
@@ -255,6 +263,23 @@ function toInviteStatus(value: unknown): VariantTrainerInvite['status'] {
   return 'PENDING';
 }
 
+function normalizeVariantComment(raw: any, fallbackId: string): VariantComment {
+  const idValue =
+    typeof raw?.id === 'string'
+      ? raw.id
+      : typeof raw?.id === 'number'
+      ? String(raw.id)
+      : fallbackId;
+  return {
+    id: idValue,
+    variant_id: typeof raw?.variant_id === 'string' ? raw.variant_id : '',
+    content: typeof raw?.content === 'string' ? raw.content : '',
+    author: typeof raw?.author === 'string' ? raw.author : '',
+    created_at: toTrimmed(raw?.created_at),
+    updated_at: toTrimmed(raw?.updated_at),
+  };
+}
+
 function normalizeVariantTrainerInviteRecord(
   raw: unknown,
   fallbackToken: string,
@@ -441,4 +466,97 @@ export async function respondVariantTrainerInvite(
   }
 
   return fetchVariantTrainerInvite(normalizedToken);
+}
+
+export async function fetchVariantComments(variantId: string): Promise<VariantComment[]> {
+  const normalizedId = String(variantId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'ID de variante requerido');
+  }
+
+  const data = await requestJson<VariantCommentsResponse>(
+    apiPath(`variant_comments/${encodeURIComponent(normalizedId)}`),
+    { headers: { Accept: 'application/json' } },
+    { defaultErrorMessage: 'No se pudieron cargar los comentarios.' },
+  );
+
+  const commentsRaw = Array.isArray(data?.comments) ? (data?.comments as unknown[]) : [];
+  return commentsRaw.map((comment, index) => normalizeVariantComment(comment, `${normalizedId}-comment-${index}`));
+}
+
+export async function createVariantComment(variantId: string, payload: { content: string }): Promise<VariantComment> {
+  const normalizedId = String(variantId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'ID de variante requerido');
+  }
+
+  const data = await requestJson<VariantCommentsResponse>(
+    apiPath(`variant_comments/${encodeURIComponent(normalizedId)}`),
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ content: payload.content ?? '' }),
+    },
+    { defaultErrorMessage: 'No se pudo guardar el comentario.' },
+  );
+
+  if (!data?.comment) {
+    throw new ApiError('CREATE_ERROR', 'No se pudo guardar el comentario.');
+  }
+
+  return normalizeVariantComment(data.comment, `${normalizedId}-comment-new`);
+}
+
+export async function updateVariantComment(
+  variantId: string,
+  commentId: string,
+  payload: { content?: string | null },
+): Promise<VariantComment> {
+  const normalizedId = String(variantId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'ID de variante requerido');
+  }
+  const normalizedCommentId = String(commentId ?? '').trim();
+  if (!normalizedCommentId) {
+    throw new ApiError('VALIDATION_ERROR', 'ID de comentario requerido');
+  }
+
+  const data = await requestJson<VariantCommentsResponse>(
+    apiPath(`variant_comments/${encodeURIComponent(normalizedId)}/${encodeURIComponent(normalizedCommentId)}`),
+    {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ content: payload.content ?? undefined }),
+    },
+    { defaultErrorMessage: 'No se pudo actualizar el comentario.' },
+  );
+
+  if (!data?.comment) {
+    throw new ApiError('UPDATE_ERROR', 'No se pudo actualizar el comentario.');
+  }
+
+  return normalizeVariantComment(data.comment, normalizedCommentId);
+}
+
+export async function deleteVariantComment(variantId: string, commentId: string): Promise<void> {
+  const normalizedId = String(variantId ?? '').trim();
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'ID de variante requerido');
+  }
+  const normalizedCommentId = String(commentId ?? '').trim();
+  if (!normalizedCommentId) {
+    throw new ApiError('VALIDATION_ERROR', 'ID de comentario requerido');
+  }
+
+  await requestJson(
+    apiPath(`variant_comments/${encodeURIComponent(normalizedId)}/${encodeURIComponent(normalizedCommentId)}`),
+    { method: 'DELETE', headers: { Accept: 'application/json' } },
+    { defaultErrorMessage: 'No se pudo eliminar el comentario.' },
+  );
 }

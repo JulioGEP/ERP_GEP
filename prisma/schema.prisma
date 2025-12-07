@@ -170,6 +170,7 @@ model variants {
   time_logs       trainer_session_time_logs[]
   extra_costs     trainer_extra_costs[]
   trainer_invites variant_trainer_invites[]
+  comments        variant_comments[]
 
   @@index([id_padre], map: "idx_variants_id_padre")
   @@index([status], map: "idx_variants_status")
@@ -177,6 +178,20 @@ model variants {
   @@index([sala_id], map: "idx_variants_sala_id")
   @@index([unidad_movil_id], map: "idx_variants_unidad_movil_id")
   @@map("variants")
+}
+
+model variant_comments {
+  id         BigInt   @id @default(autoincrement())
+  variant_id String   @db.Uuid
+  content    String
+  author     String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  variant variants @relation(fields: [variant_id], references: [id], onDelete: Cascade, map: "variant_comments_variant_id_fkey")
+
+  @@index([variant_id], map: "idx_variant_comments_variant_id")
+  @@map("variant_comments")
 }
 
 model deal_notes {

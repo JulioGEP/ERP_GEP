@@ -34,6 +34,15 @@ export type VariantInfo = {
   updated_at: string | null;
 };
 
+export type VariantComment = {
+  id: string;
+  variant_id: string;
+  content: string;
+  author: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type ProductDefaults = {
   default_variant_start: string | null;
   default_variant_end: string | null;
