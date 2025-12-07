@@ -231,16 +231,25 @@ export async function syncProductsToHolded(productIds: string[]): Promise<Holded
     throw new ApiError('VALIDATION_ERROR', 'Debe seleccionar al menos un producto para sincronizar');
   }
 
-  const json = await requestJson<HoldedSyncResponse>(
-    '/products-holded',
-    {
-      method: 'POST',
-      body: JSON.stringify({ productIds: ids }),
-    },
-    requestOptions,
-  );
+  const results: HoldedSyncResult[] = [];
 
-  return Array.isArray(json.results) ? json.results : [];
+  for (let start = 0; start < ids.length; start += 100) {
+    const batch = ids.slice(start, start + 100);
+    const json = await requestJson<HoldedSyncResponse>(
+      '/products-holded',
+      {
+        method: 'POST',
+        body: JSON.stringify({ productIds: batch }),
+      },
+      requestOptions,
+    );
+
+    if (Array.isArray(json.results)) {
+      results.push(...json.results);
+    }
+  }
+
+  return results;
 }
 
 export async function syncProducts(): Promise<ProductSyncSummary | null> {
