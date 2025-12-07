@@ -723,6 +723,9 @@ export function normalizePublicSessionInfo(raw: any): PublicSessionInfo {
     session_name: toStringValue(raw?.session_name ?? raw?.sessionName) ?? null,
     formation_name: toStringValue(raw?.formation_name ?? raw?.formationName) ?? null,
     title: toStringValue(raw?.title) ?? null,
+    organization_name: toStringValue(raw?.organization_name ?? raw?.organizationName) ?? null,
+    comercial: toStringValue(raw?.comercial ?? raw?.commercial_name ?? raw?.commercialName) ?? null,
+    session_address: toStringValue(raw?.session_address ?? raw?.sessionAddress) ?? null,
   } satisfies PublicSessionInfo;
 }
 
