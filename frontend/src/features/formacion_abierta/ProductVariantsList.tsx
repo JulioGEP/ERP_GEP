@@ -48,9 +48,13 @@ import {
   createProductVariantsForProduct,
   deleteProductVariant,
   fetchDealsByVariation,
+  fetchVariantComments,
   fetchProductVariant,
   fetchProductsWithVariants,
+  createVariantComment,
+  deleteVariantComment,
   sendVariantTrainerInvites,
+  updateVariantComment,
   updateProductVariant,
   updateProductVariantDefaults,
 } from './api';
@@ -61,12 +65,14 @@ import type {
   ProductDefaultsUpdatePayload,
   ProductInfo,
   TrainerInviteStatus,
+  VariantComment,
   VariantInfo,
   VariantLocationGroup,
   VariantMonthGroup,
   VariantUpdatePayload,
 } from './types';
 import { buildVariantGroups, compareVariants, findDealProductPriceForProduct } from './utils';
+import { useCurrentUserIdentity } from '../presupuestos/useCurrentUserIdentity';
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', {
   dateStyle: 'medium',
@@ -947,6 +953,16 @@ export function VariantModal({
     loading: false,
     error: null,
   });
+  const [comments, setComments] = useState<VariantComment[]>([]);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [savingComment, setSavingComment] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentContent, setEditingCommentContent] = useState('');
+  const [updatingCommentId, setUpdatingCommentId] = useState<string | null>(null);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const { userName } = useCurrentUserIdentity();
   const totalDealStudents = useMemo(
     () => {
       if (!deals.length) {
@@ -1006,6 +1022,7 @@ export function VariantModal({
   const variantSummary = variantSummaryParts.join(' · ');
   const variantIdWoo = variant?.id_woo ? String(variant.id_woo).trim() : '';
   const variantSedeNormalized = (variant?.sede ?? '').trim().toLowerCase();
+  const normalizedUserName = useMemo(() => userName.trim().toLowerCase(), [userName]);
 
   const trainerDisplay = useMemo(() => {
     if (!variant) return '—';
@@ -1249,6 +1266,15 @@ export function VariantModal({
       setTrainerInviteSummary('NOT_SENT');
       setInviteStatus({ sending: false, message: null, error: null });
       setVariantRefreshState({ loading: false, error: null });
+      setComments([]);
+      setCommentsError(null);
+      setCommentsLoading(false);
+      setNewComment('');
+      setSavingComment(false);
+      setEditingCommentId(null);
+      setEditingCommentContent('');
+      setUpdatingCommentId(null);
+      setDeletingCommentId(null);
       return;
     }
 
@@ -1276,6 +1302,49 @@ export function VariantModal({
     setUnitFilter('');
     unitPointerInteractingRef.current = false;
   }, [variant]);
+
+  useEffect(() => {
+    let ignore = false;
+    setComments([]);
+    setCommentsError(null);
+    setNewComment('');
+    setEditingCommentId(null);
+    setEditingCommentContent('');
+    setUpdatingCommentId(null);
+    setDeletingCommentId(null);
+
+    const variantId = variant?.id?.trim();
+    if (!variantId) {
+      setCommentsLoading(false);
+      return () => {
+        ignore = true;
+      };
+    }
+
+    setCommentsLoading(true);
+    (async () => {
+      try {
+        const list = await fetchVariantComments(variantId);
+        if (!ignore) {
+          setComments(list);
+        }
+      } catch (error) {
+        const message =
+          error instanceof ApiError ? error.message : 'No se pudieron cargar los comentarios de la variante.';
+        if (!ignore) {
+          setCommentsError(message);
+        }
+      } finally {
+        if (!ignore) {
+          setCommentsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [variant?.id]);
 
   const loadVariantDetails = useCallback(
     async (variantId: string, options?: { silent?: boolean; keepFormValues?: boolean }) => {
@@ -1552,6 +1621,85 @@ export function VariantModal({
 
     setSelectedDealSummary(summary);
     setSelectedDealId(rawId);
+  };
+
+  const handleSubmitComment = async (event?: ReactMouseEvent<HTMLButtonElement>) => {
+    event?.preventDefault();
+    if (!variant?.id) return;
+
+    const trimmedContent = newComment.trim();
+    if (!trimmedContent.length) {
+      setCommentsError('Escribe un comentario antes de guardarlo.');
+      return;
+    }
+
+    setCommentsError(null);
+    setSavingComment(true);
+    try {
+      const created = await createVariantComment(variant.id, { content: trimmedContent });
+      setComments((prev) => [created, ...prev]);
+      setNewComment('');
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo guardar el comentario.';
+      setCommentsError(message);
+    } finally {
+      setSavingComment(false);
+    }
+  };
+
+  const handleStartEditComment = (comment: VariantComment) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentContent(comment.content);
+    setCommentsError(null);
+  };
+
+  const handleCancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentContent('');
+    setCommentsError(null);
+    setUpdatingCommentId(null);
+  };
+
+  const handleSaveCommentEdit = async () => {
+    if (!variant?.id || !editingCommentId) return;
+    const trimmedContent = editingCommentContent.trim();
+    if (!trimmedContent.length) {
+      setCommentsError('El comentario no puede estar vacío.');
+      return;
+    }
+
+    setCommentsError(null);
+    setUpdatingCommentId(editingCommentId);
+    try {
+      const updated = await updateVariantComment(variant.id, editingCommentId, { content: trimmedContent });
+      setComments((prev) => prev.map((comment) => (comment.id === updated.id ? updated : comment)));
+      setEditingCommentId(null);
+      setEditingCommentContent('');
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo actualizar el comentario.';
+      setCommentsError(message);
+    } finally {
+      setUpdatingCommentId(null);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!variant?.id || !commentId) return;
+    setCommentsError(null);
+    setDeletingCommentId(commentId);
+    try {
+      await deleteVariantComment(variant.id, commentId);
+      setComments((prev) => prev.filter((comment) => comment.id !== commentId));
+      if (editingCommentId === commentId) {
+        setEditingCommentId(null);
+        setEditingCommentContent('');
+      }
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudo eliminar el comentario.';
+      setCommentsError(message);
+    } finally {
+      setDeletingCommentId(null);
+    }
   };
 
   const handleDealClick =
@@ -2620,6 +2768,144 @@ export function VariantModal({
                     ) : (
                       <div className="text-muted small mb-0">No hay deals asociados a esta variación.</div>
                     )}
+                  </Accordion.Body>
+                </Accordion.Item>
+              </Accordion>
+
+              <Accordion className="variant-comments-accordion">
+                <Accordion.Item eventKey="variant-comments">
+                  <Accordion.Header>
+                    <span className="text-uppercase small fw-semibold">Comentarios</span>
+                    {comments.length ? (
+                      <Badge bg="light" text="dark" className="ms-2">
+                        {comments.length}
+                      </Badge>
+                    ) : null}
+                  </Accordion.Header>
+                  <Accordion.Body>
+                    {commentsError ? (
+                      <Alert variant="danger" className="mb-3">
+                        {commentsError}
+                      </Alert>
+                    ) : null}
+
+                    {commentsLoading ? (
+                      <div className="d-flex align-items-center gap-2 text-muted mb-3">
+                        <Spinner animation="border" size="sm" />
+                        <span>Cargando comentarios…</span>
+                      </div>
+                    ) : null}
+
+                    {!commentsLoading && !comments.length ? (
+                      <div className="text-muted small mb-3">Sin comentarios</div>
+                    ) : null}
+
+                    {comments.length ? (
+                      <ListGroup className="mb-3">
+                        {comments.map((comment) => {
+                          const canEdit =
+                            normalizedUserName.length &&
+                            normalizedUserName === comment.author.trim().toLowerCase();
+                          const isEditing = editingCommentId === comment.id;
+                          const isDeleting = deletingCommentId === comment.id;
+                          const isUpdating = updatingCommentId === comment.id;
+                          const createdLabel = comment.created_at ? formatDate(comment.created_at) : null;
+
+                          return (
+                            <ListGroup.Item key={comment.id} className="d-flex flex-column gap-2">
+                              <div className="d-flex justify-content-between align-items-start gap-2">
+                                <div className="d-flex flex-column">
+                                  <span className="fw-semibold">{comment.author || '—'}</span>
+                                  {createdLabel ? <small className="text-muted">{createdLabel}</small> : null}
+                                </div>
+                                {canEdit ? (
+                                  <div className="d-flex gap-2">
+                                    {isEditing ? (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="outline-secondary"
+                                          onClick={handleCancelEditComment}
+                                          disabled={isUpdating}
+                                        >
+                                          Cancelar
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          onClick={handleSaveCommentEdit}
+                                          disabled={isUpdating || !editingCommentContent.trim().length}
+                                        >
+                                          {isUpdating ? (
+                                            <Spinner animation="border" size="sm" className="me-2" />
+                                          ) : null}
+                                          Guardar
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          variant="outline-secondary"
+                                          onClick={() => handleStartEditComment(comment)}
+                                        >
+                                          Editar
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline-danger"
+                                          onClick={() => handleDeleteComment(comment.id)}
+                                          disabled={isDeleting}
+                                        >
+                                          {isDeleting ? (
+                                            <Spinner animation="border" size="sm" className="me-2" />
+                                          ) : null}
+                                          Eliminar
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              {isEditing ? (
+                                <Form.Control
+                                  as="textarea"
+                                  rows={3}
+                                  value={editingCommentContent}
+                                  onChange={(event) => setEditingCommentContent(event.target.value)}
+                                  disabled={isUpdating}
+                                />
+                              ) : (
+                                <div style={{ whiteSpace: 'pre-wrap' }}>{comment.content}</div>
+                              )}
+                            </ListGroup.Item>
+                          );
+                        })}
+                      </ListGroup>
+                    ) : null}
+
+                    <Form onSubmit={(event) => event.preventDefault()}>
+                      <Form.Group className="mb-2">
+                        <Form.Label className="fw-semibold">Añadir comentario</Form.Label>
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          value={newComment}
+                          onChange={(event) => setNewComment(event.target.value)}
+                          disabled={savingComment}
+                        />
+                      </Form.Group>
+                      <div className="d-flex justify-content-end">
+                        <Button
+                          size="sm"
+                          onClick={handleSubmitComment}
+                          disabled={savingComment || !newComment.trim().length}
+                        >
+                          {savingComment ? <Spinner animation="border" size="sm" className="me-2" /> : null}
+                          Guardar comentario
+                        </Button>
+                      </div>
+                    </Form>
                   </Accordion.Body>
                 </Accordion.Item>
               </Accordion>
