@@ -614,6 +614,9 @@ export default function AuthenticatedApp() {
       paths.add(legacy);
     }
     paths.add('/perfil');
+    if (hasPermission('/perfil/control_horas')) {
+      paths.add('/perfil/control_horas');
+    }
     return paths;
   }, [hasPermission, navigationCatalog, permissions]);
 
@@ -1671,6 +1674,11 @@ export default function AuthenticatedApp() {
                     id="nav-user"
                     className="w-100 w-xl-auto"
                   >
+                    {hasPermission('/perfil/control_horas') ? (
+                      <NavDropdown.Item as={NavLink} to="/perfil/control_horas">
+                        Control de horas
+                      </NavDropdown.Item>
+                    ) : null}
                     <NavDropdown.Item as={NavLink} to="/perfil">
                       Mi perfil
                     </NavDropdown.Item>

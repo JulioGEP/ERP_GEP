@@ -44,7 +44,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/perfil',
     '/recursos/confirmaciones',
   ],
-  Formador: ['/usuarios/trainer/*', '/perfil'],
+  Formador: ['/usuarios/trainer/*', '/perfil', '/perfil/control_horas'],
 };
 
 export const DEFAULT_ROUTE_ORDER = [
@@ -76,6 +76,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/reporting/logs',
   '/reporting/costes_extra',
   '/reporting/horas_formadores',
+  '/perfil/control_horas',
   '/reporting/webhooks_pipedrive',
   '/reporting/comparativa',
   '/usuarios',

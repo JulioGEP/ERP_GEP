@@ -79,6 +79,48 @@ export async function fetchTrainerHours(filters: TrainerHoursFilters = {}): Prom
   return getJson<TrainerHoursResponse>(url);
 }
 
+export type TrainerSelfHoursItem = {
+  id: string;
+  sessionName: string | null;
+  sessionDate: string | null;
+  totalHours: number;
+  serviceCost: number;
+  extraCost: number;
+  payrollCost: number;
+};
+
+export type TrainerSelfHoursResponse = {
+  trainer: {
+    id: string;
+    name: string | null;
+    lastName: string | null;
+  };
+  items: TrainerSelfHoursItem[];
+  summary: {
+    totalSessions: number;
+    totalHours: number;
+    totalServiceCost: number;
+    totalExtraCost: number;
+    totalPayrollCost: number;
+  };
+};
+
+export async function fetchTrainerSelfHours(
+  filters: TrainerHoursFilters = {},
+): Promise<TrainerSelfHoursResponse> {
+  const params = new URLSearchParams();
+  if (filters.startDate) {
+    params.set('startDate', filters.startDate);
+  }
+  if (filters.endDate) {
+    params.set('endDate', filters.endDate);
+  }
+
+  const query = params.toString();
+  const url = query.length ? `/trainer-control-horas?${query}` : '/trainer-control-horas';
+  return getJson<TrainerSelfHoursResponse>(url);
+}
+
 export type ControlHorarioRecord = {
   id: string;
   sessionName: string | null;
