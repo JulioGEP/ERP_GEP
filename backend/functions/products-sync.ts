@@ -88,7 +88,8 @@ export const handler = async (event: any) => {
 
     const now = new Date();
 
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const result = await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
       // ⬇️ Tipos relajados: no imponemos boolean estricto en active
       const existing = await tx.products.findMany({
         select: { id: true, id_pipe: true, active: true },
@@ -149,7 +150,10 @@ export const handler = async (event: any) => {
       }
 
       return { created, updated, deactivated };
-    });
+    },
+      // El procesamiento puede tardar más de los 5s por defecto de Prisma
+      { timeout: 60000 },
+    );
 
     return successResponse({
       ok: true,
