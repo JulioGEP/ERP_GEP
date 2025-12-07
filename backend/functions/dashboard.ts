@@ -98,10 +98,6 @@ export const handler = createHttpHandler(async (request) => {
       .toLowerCase();
   };
 
-  const allowedPipelineKeys = new Set<string>(
-    SESSION_PIPELINE_LABELS.map((label) => normalizePipelineLabel(label)),
-  );
-
   const normalizeVariantWooId = (value: unknown): string | null => {
     if (typeof value === 'string') {
       const trimmed = value.trim();
@@ -136,7 +132,7 @@ export const handler = createHttpHandler(async (request) => {
   try {
     const [
       unplannedSessions,
-      dealsForPendingTrainer,
+      sessionsWithoutTrainer,
       draftBudgetsWithDraftSession,
       suspendedBudgets,
       pendingCompletionBudgets,
@@ -157,22 +153,16 @@ export const handler = createHttpHandler(async (request) => {
           deals: { is: { OR: pipelineConditions, w_id_variation: null } },
         },
       }),
-      prisma.deals.findMany({
-        where: { w_id_variation: null },
-        select: {
-          pipeline_id: true,
-          pipeline_label: true,
-          w_id_variation: true,
-          sesiones: {
-            where: {
-              estado: { notIn: ['PLANIFICADA', 'FINALIZADA'] },
-              fecha_inicio_utc: { not: null },
-              fecha_fin_utc: { not: null },
-            },
-            select: {
-              sesion_trainers: {
-                select: { trainer_id: true },
-              },
+      prisma.sesiones.count({
+        where: {
+          estado: { notIn: ['PLANIFICADA', 'FINALIZADA'] },
+          fecha_inicio_utc: { not: null },
+          fecha_fin_utc: { not: null },
+          sesion_trainers: { none: {} },
+          deals: {
+            is: {
+              OR: pipelineConditions,
+              w_id_variation: null,
             },
           },
         },
@@ -312,32 +302,6 @@ export const handler = createHttpHandler(async (request) => {
     ]);
 
     const draftBudgets = draftBudgetsWithDraftSession.length;
-
-    type DealPendingTrainerEntry = {
-      pipeline_id: string | null;
-      pipeline_label: string | null;
-      w_id_variation: string | null;
-      sesiones: Array<{ sesion_trainers: Array<{ trainer_id: string }> }> | null;
-    };
-
-    const normalizedDeals = dealsForPendingTrainer as DealPendingTrainerEntry[];
-
-    const sessionsWithoutTrainer = normalizedDeals.reduce((total, deal) => {
-      const hasVariantId =
-        typeof deal.w_id_variation === 'string' && deal.w_id_variation.trim().length > 0;
-      if (hasVariantId) return total;
-
-      const pipelineKey = normalizePipelineLabel(deal.pipeline_label ?? deal.pipeline_id ?? '');
-      if (!allowedPipelineKeys.has(pipelineKey)) return total;
-
-      const sessions = Array.isArray(deal.sesiones) ? deal.sesiones : [];
-      const pendingCount = sessions.filter((session) => {
-        if (!Array.isArray(session.sesion_trainers)) return false;
-        return session.sesion_trainers.length === 0;
-      }).length;
-
-      return total + pendingCount;
-    }, 0);
 
     type SessionTimelineEntry = {
       id: string;
