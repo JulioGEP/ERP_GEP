@@ -163,7 +163,6 @@ export const handler = createHttpHandler(async (request) => {
             is: {
               OR: pipelineConditions,
               w_id_variation: null,
-              sesiones: { some: { estado: 'BORRADOR' } },
             },
           },
         },
