@@ -23,21 +23,37 @@ type SortConfig = {
   direction: 'asc' | 'desc';
 };
 
+type HoldedSyncSummary = {
+  total: number;
+  success: number;
+  skipped: number;
+  errors: number;
+  created: number;
+  updated: number;
+};
+
 function formatPrice(product: Product): string {
   const value = product.price ?? null;
   if (value === null || value === undefined) return '';
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(value));
 }
 
-function summarizeResults(results: HoldedSyncResult[]): { variant: ToastParams['variant']; message: string } {
+function summarizeResults(
+  results: HoldedSyncResult[],
+): { variant: ToastParams['variant']; message: string; stats: HoldedSyncSummary } {
   const success = results.filter((item) => item.status === 'success').length;
   const skipped = results.filter((item) => item.status === 'skipped').length;
   const errors = results.filter((item) => item.status === 'error').length;
+  const created = results.filter((item) => item.status === 'success' && item.operation === 'created').length;
+  const updated = results.filter((item) => item.status === 'success' && item.operation === 'updated').length;
+  const total = results.length;
 
-  const message = `Sincronización completada. Exitosos: ${success}. Omitidos: ${skipped}. Errores: ${errors}.`;
+  const message =
+    `Sincronización completada. Creados: ${created}. Actualizados: ${updated}. Total procesado: ${total}. ` +
+    `Exitosos: ${success}. Omitidos: ${skipped}. Errores: ${errors}.`;
   const variant: ToastParams['variant'] = errors ? 'danger' : 'success';
 
-  return { variant, message };
+  return { variant, message, stats: { success, skipped, errors, created, updated, total } };
 }
 
 export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
@@ -52,6 +68,7 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
   const [modalSteps, setModalSteps] = useState<string[]>([]);
   const [modalErrors, setModalErrors] = useState<string[]>([]);
   const [syncResults, setSyncResults] = useState<HoldedSyncResult[]>([]);
+  const [syncSummary, setSyncSummary] = useState<HoldedSyncSummary | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'asc' });
 
   useEffect(() => {
@@ -71,7 +88,8 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
     mutationFn: syncProductsToHolded,
     onSuccess: (results) => {
       const summary = summarizeResults(results);
-      onNotify(summary);
+      onNotify({ variant: summary.variant, message: summary.message });
+      setSyncSummary(summary.stats);
       setSyncResults(results);
       const errors = results
         .filter((item) => item.status === 'error')
@@ -157,6 +175,7 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
     setModalSteps(steps);
     setModalErrors([]);
     setSyncResults([]);
+    setSyncSummary(null);
     setShowModal(true);
     syncHolded(Array.from(selectedIds));
   };
@@ -177,75 +196,82 @@ export function ProductsHoldedView({ onNotify }: ProductsHoldedViewProps) {
   const hasSelection = selectedIds.size > 0;
 
   return (
-      <div className="d-flex flex-column gap-3">
-        <div className="d-flex align-items-center gap-2">
-          <Button
-            variant="primary"
-            disabled={!hasSelection || isSyncing}
-            onClick={startSync}
-          >
-            {isSyncing ? 'Actualizando...' : 'Actualizar Holded'}
-          </Button>
-          {isFetching && <Spinner size="sm" animation="border" role="status" />}
-        </div>
+    <div className="d-flex flex-column gap-3">
+      <div className="d-flex align-items-center gap-2">
+        <Button variant="primary" disabled={!hasSelection || isSyncing} onClick={startSync}>
+          {isSyncing ? 'Actualizando...' : 'Actualizar Holded'}
+        </Button>
+        {isFetching && <Spinner size="sm" animation="border" role="status" />}
+      </div>
 
-        <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
-          <Modal.Header closeButton>
-            <Modal.Title>Actualización de Holded</Modal.Title>
-          </Modal.Header>
-          <Modal.Body className="d-flex flex-column gap-3">
-            <div>
-              <strong>Pasos del proceso:</strong>
-              <ol className="mb-0">
-                {modalSteps.map((step, index) => (
-                  <li key={index}>{step}</li>
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Actualización de Holded</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="d-flex flex-column gap-3">
+          <div>
+            <strong>Pasos del proceso:</strong>
+            <ol className="mb-0">
+              {modalSteps.map((step, index) => (
+                <li key={index}>{step}</li>
+              ))}
+            </ol>
+          </div>
+
+          <div>
+            <strong>Errores detectados:</strong>
+            {modalErrors.length === 0 ? (
+              <p className="mb-0">Sin errores reportados.</p>
+            ) : (
+              <ul className="mb-0">
+                {modalErrors.map((item, index) => (
+                  <li key={index}>{item}</li>
                 ))}
-              </ol>
-            </div>
-
-            <div>
-              <strong>Errores detectados:</strong>
-              {modalErrors.length === 0 ? (
-                <p className="mb-0">Sin errores reportados.</p>
-              ) : (
-                <ul className="mb-0">
-                  {modalErrors.map((item, index) => (
-                    <li key={index}>{item}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {syncResults.length > 0 && (
-              <div>
-                <strong>Detalle de sincronización:</strong>
-                <Table striped bordered hover size="sm" className="mb-0 mt-2">
-                  <thead>
-                    <tr>
-                      <th>Producto</th>
-                      <th>Estado</th>
-                      <th>Mensaje</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {syncResults.map((result) => (
-                      <tr key={`${result.productId}-${result.status}`}>
-                        <td>{result.productId}</td>
-                        <td>{result.status}</td>
-                        <td>{result.message ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
+              </ul>
             )}
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowModal(false)}>
-              Cerrar
-            </Button>
-          </Modal.Footer>
-        </Modal>
+          </div>
+
+          {syncSummary && (
+            <div>
+              <strong>Resumen de la ejecución:</strong>
+              <p className="mb-0">
+                Total procesado: {syncSummary.total}. Creados: {syncSummary.created}. Actualizados:{' '}
+                {syncSummary.updated}. Exitosos: {syncSummary.success}. Omitidos: {syncSummary.skipped}. Errores: {' '}
+                {syncSummary.errors}.
+              </p>
+            </div>
+          )}
+
+          {syncResults.length > 0 && (
+            <div>
+              <strong>Detalle de sincronización:</strong>
+              <Table striped bordered hover size="sm" className="mb-0 mt-2">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Estado</th>
+                    <th>Mensaje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncResults.map((result) => (
+                    <tr key={`${result.productId}-${result.status}`}>
+                      <td>{result.productId}</td>
+                      <td>{result.status}</td>
+                      <td>{result.message ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowModal(false)}>
+            Cerrar
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       <div className="table-responsive">
         <Table striped hover size="sm">

@@ -46,6 +46,7 @@ export type HoldedSyncResult = {
   status: 'success' | 'skipped' | 'error';
   holdedId?: string | null;
   message?: string;
+  operation?: 'created' | 'updated';
 };
 
 type HoldedSyncResponse = {

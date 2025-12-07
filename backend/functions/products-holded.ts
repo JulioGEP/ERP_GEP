@@ -11,6 +11,7 @@ type HoldedSyncResult = {
   status: 'success' | 'skipped' | 'error';
   holdedId?: string | null;
   message?: string;
+  operation?: 'created' | 'updated';
 };
 
 type ProductForSync = {
@@ -181,7 +182,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       if (holdedId) {
         const payload = { ...basePayload, subtotal: price };
         await updateHoldedProduct(apiKey, holdedId, payload);
-        results.push({ productId: product.id, status: 'success', holdedId });
+        results.push({ productId: product.id, status: 'success', holdedId, operation: 'updated' });
       } else {
         const payload = { ...basePayload, price };
         const createdHoldedId = await createHoldedProduct(apiKey, payload);
@@ -190,7 +191,12 @@ export const handler = createHttpHandler<any>(async (request) => {
           data: { id_holded: createdHoldedId },
         });
 
-        results.push({ productId: product.id, status: 'success', holdedId: createdHoldedId });
+        results.push({
+          productId: product.id,
+          status: 'success',
+          holdedId: createdHoldedId,
+          operation: 'created',
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
