@@ -222,7 +222,19 @@ export async function updateProduct(productId: string, payload: ProductUpdatePay
   return normalizeProduct(json.product);
 }
 
-export async function syncProductsToHolded(productIds: string[]): Promise<HoldedSyncResult[]> {
+export type SyncProductsToHoldedParams = {
+  productIds: string[];
+  onBatchResult?: (
+    batchResults: HoldedSyncResult[],
+    batchIndex: number,
+    totalBatches: number,
+  ) => void;
+};
+
+export async function syncProductsToHolded({
+  productIds,
+  onBatchResult,
+}: SyncProductsToHoldedParams): Promise<HoldedSyncResult[]> {
   const ids = Array.isArray(productIds)
     ? productIds.filter((id) => typeof id === 'string' && id.trim().length)
     : [];
@@ -232,8 +244,9 @@ export async function syncProductsToHolded(productIds: string[]): Promise<Holded
   }
 
   const results: HoldedSyncResult[] = [];
+  const totalBatches = Math.ceil(ids.length / 100);
 
-  for (let start = 0; start < ids.length; start += 100) {
+  for (let start = 0, batchIndex = 0; start < ids.length; start += 100, batchIndex += 1) {
     const batch = ids.slice(start, start + 100);
     const json = await requestJson<HoldedSyncResponse>(
       '/products-holded',
@@ -244,9 +257,9 @@ export async function syncProductsToHolded(productIds: string[]): Promise<Holded
       requestOptions,
     );
 
-    if (Array.isArray(json.results)) {
-      results.push(...json.results);
-    }
+    const batchResults = Array.isArray(json.results) ? json.results : [];
+    results.push(...batchResults);
+    onBatchResult?.(batchResults, batchIndex, totalBatches);
   }
 
   return results;
