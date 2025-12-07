@@ -19,6 +19,7 @@ type ProductForSync = {
   name: string | null;
   price: Prisma.Decimal | number | null;
   variant_price?: Prisma.Decimal | number | null;
+  id_holded?: string | null;
 };
 
 function parseNumeric(value: unknown): number | null {
@@ -73,6 +74,40 @@ async function createHoldedProduct(apiKey: string, payload: Record<string, unkno
   return String(json.id);
 }
 
+async function updateHoldedProduct(
+  apiKey: string,
+  holdedId: string,
+  payload: Record<string, unknown>,
+) {
+  const url = `${HOLDED_ENDPOINT}/${holdedId}`;
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      key: apiKey,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let json: any = null;
+  try {
+    json = await response.json();
+  } catch (error) {
+    // Mantener json como null si no es JSON válido
+  }
+
+  if (!response.ok || json?.status !== 1) {
+    const message =
+      typeof json?.info === 'string'
+        ? json.info
+        : typeof json?.message === 'string'
+        ? json.message
+        : `Error HTTP ${response.status}`;
+    throw new Error(message);
+  }
+}
+
 export const handler = createHttpHandler<any>(async (request) => {
   if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no soportado', 405);
@@ -100,6 +135,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       name: true,
       price: true,
       variant_price: true,
+      id_holded: true,
     },
   });
 
@@ -134,21 +170,28 @@ export const handler = createHttpHandler<any>(async (request) => {
     }
 
     try {
-      const payload = {
+      const holdedId = typeof product.id_holded === 'string' ? product.id_holded.trim() : null;
+      const basePayload = {
         kind: 'simple',
         name: product.name,
-        price,
         tax: DEFAULT_TAX,
         sku: buildSku(product.id_pipe),
       };
 
-      const holdedId = await createHoldedProduct(apiKey, payload);
-      await prisma.products.update({
-        where: { id: product.id },
-        data: { id_holded: holdedId },
-      });
+      if (holdedId) {
+        const payload = { ...basePayload, subtotal: price };
+        await updateHoldedProduct(apiKey, holdedId, payload);
+        results.push({ productId: product.id, status: 'success', holdedId });
+      } else {
+        const payload = { ...basePayload, price };
+        const createdHoldedId = await createHoldedProduct(apiKey, payload);
+        await prisma.products.update({
+          where: { id: product.id },
+          data: { id_holded: createdHoldedId },
+        });
 
-      results.push({ productId: product.id, status: 'success', holdedId });
+        results.push({ productId: product.id, status: 'success', holdedId: createdHoldedId });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
       results.push({ productId: product.id, status: 'error', message });
