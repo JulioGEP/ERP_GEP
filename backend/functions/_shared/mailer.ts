@@ -12,13 +12,15 @@ type SendEmailParams = {
   html?: string;
   text?: string; // compat: si viene text y no hay html, lo renderizamos simple
   cc?: string | string[];
+  from?: string | null;
+  replyTo?: string | null;
 };
 
 /**
  * Envío de email mediante Gmail API (Service Account + DWD) usando sendGmail().
  * Sin nodemailer/OAuth2: menos superficie y sin problemas de OpenSSL.
  */
-export async function sendEmail({ to, subject, html, text, cc }: SendEmailParams): Promise<void> {
+export async function sendEmail({ to, subject, html, text, cc, from, replyTo }: SendEmailParams): Promise<void> {
   const plainText = text ?? (html ? stripHtml(html) : "");
   const htmlBody =
     html ??
@@ -54,7 +56,8 @@ export async function sendEmail({ to, subject, html, text, cc }: SendEmailParams
       subject,
       body: bodyParts,
       contentType: `multipart/alternative; boundary="${boundary}"`,
-      from: FROM,
+      from: from || FROM,
+      replyTo: replyTo || from || undefined,
     });
     return;
   }
@@ -66,7 +69,8 @@ export async function sendEmail({ to, subject, html, text, cc }: SendEmailParams
     body: chunkBase64(Buffer.from(htmlBody, "utf8").toString("base64")),
     contentType: "text/html; charset=UTF-8",
     transferEncoding: "base64",
-    from: FROM,
+    from: from || FROM,
+    replyTo: replyTo || from || undefined,
   });
 }
 

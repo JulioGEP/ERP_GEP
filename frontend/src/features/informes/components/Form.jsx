@@ -166,6 +166,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     cliente: initial?.datos?.cliente || '',
     sede: initial?.datos?.sede || '',
     contacto: initial?.datos?.contacto || '',
+    contactoEmail: initial?.datos?.contactoEmail || '',
     comercial: initial?.datos?.comercial || '',
     formadorNombre: initial?.datos?.formadorNombre || '',
     idioma: initial?.datos?.idioma || 'ES',
@@ -389,6 +390,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
 
       const cliente = typeof payload.cliente === 'string' ? payload.cliente : ''
       const contacto = typeof payload.contacto === 'string' ? payload.contacto : ''
+      const contactoEmail = typeof payload.contactoEmail === 'string' ? payload.contactoEmail : ''
 
       let selected = null
       if (normalizedSessions.length === 1) {
@@ -414,6 +416,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
         ...d,
         cliente: cliente || d.cliente,
         contacto: contacto || d.contacto,
+        contactoEmail: contactoEmail || d.contactoEmail,
         comercial: '',
         sede: selected?.direccion || (normalizedSessions.length > 1 ? '' : d.sede),
       }))
