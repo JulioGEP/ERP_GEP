@@ -317,7 +317,7 @@ export function PublicSessionStudentsPage() {
         <header className="mb-4">
           <div className="d-flex flex-column flex-md-row gap-3 align-items-md-center mb-3">
             <div className="d-flex align-items-center gap-3">
-              <img src={gepLogo} alt="GEP Group" style={{ width: '64px', height: '64px' }} />
+              <img src={gepLogo} alt="GEP Group" height={64} className="flex-shrink-0" />
               <div>
                 <div className="fw-bold">GEP Group</div>
                 {sessionInfo?.organization_name ? (
