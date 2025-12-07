@@ -158,7 +158,6 @@ export const handler = createHttpHandler(async (request) => {
           estado: { notIn: ['PLANIFICADA', 'FINALIZADA'] },
           fecha_inicio_utc: { not: null },
           fecha_fin_utc: { not: null },
-          sesion_trainers: { none: {} },
           deals: {
             is: {
               OR: pipelineConditions,
