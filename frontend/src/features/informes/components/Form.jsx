@@ -190,11 +190,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   const sanitizedInitialOptions = initialSessionOptionsRaw
     .map((session) => sanitizeSessionOption(session))
     .filter(Boolean)
-  const initialSelectedSessions = Array.isArray(initial?.selectedSessions)
-    ? initial.selectedSessions
-        .map((session) => sanitizeSessionOption(session))
-        .filter(Boolean)
-    : []
   const initialSessionSanitized = initial?.session
     ? sanitizeSessionOption(initial.session)
     : sanitizedInitialOptions.length === 1
@@ -203,23 +198,11 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   const initialOptions = initialSessionSanitized && !sanitizedInitialOptions.some((option) => option.id === initialSessionSanitized.id)
     ? [...sanitizedInitialOptions, initialSessionSanitized]
     : sanitizedInitialOptions
-  const initialSelectedSessionIds = () => {
-    const ids = new Set()
-    initialSelectedSessions.forEach((session) => {
-      if (session?.id) ids.add(String(session.id))
-    })
-    if (initialSessionSanitized?.id) {
-      ids.add(String(initialSessionSanitized.id))
-    }
-    return Array.from(ids)
-  }
   const [sessionOptions, setSessionOptions] = useState(initialOptions)
   const trainingTemplatesApiRef = useRef(null)
   const [trainingTemplates, setTrainingTemplates] = useState([])
   const lastAppliedTemplateRef = useRef({ key: '', theory: [], practice: [] })
   const [selectedSessionId, setSelectedSessionId] = useState(initialSessionSanitized?.id || null)
-  const [selectedSessionIds, setSelectedSessionIds] = useState(initialSelectedSessionIds())
-  const [showSessionSelector, setShowSessionSelector] = useState(false)
   const sessionSelectRef = useRef(null)
   const [selTitulo, setSelTitulo] = useState(isFormacion ? (datos.formacionTitulo || '') : '')
   const [prefillTemplates, setPrefillTemplates] = useState([])
@@ -253,8 +236,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     }
     setSessionOptions([])
     setSelectedSessionId(null)
-    setSelectedSessionIds([])
-    setShowSessionSelector(false)
     setPrefillTemplates([])
   }, [dealId])
 
@@ -263,15 +244,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       sessionSelectRef.current.focus()
     }
   }, [sessionOptions, selectedSessionId])
-
-  useEffect(() => {
-    setSelectedSessionIds((current) => {
-      if (!selectedSessionId) return current
-      const next = new Set(current)
-      next.add(selectedSessionId)
-      return Array.from(next)
-    })
-  }, [selectedSessionId])
 
   useEffect(() => {
     const api = getTrainingTemplatesManager()
@@ -426,8 +398,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
         setSelectedSessionId(null)
       }
 
-      setSelectedSessionIds(selected?.id ? [String(selected.id)] : [])
-
       setSessionOptions(normalizedSessions)
 
       if (!normalizedSessions.length) {
@@ -523,13 +493,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     const normalized = nextId.trim()
     const resolvedId = normalized.length ? normalized : null
     setSelectedSessionId(resolvedId)
-    setSelectedSessionIds((current) => {
-      const next = new Set(current)
-      if (resolvedId) {
-        next.add(resolvedId)
-      }
-      return resolvedId ? Array.from(next) : []
-    })
     const found = resolvedId
       ? sessionOptions.find((session) => session.id === resolvedId) || null
       : null
@@ -541,24 +504,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     } else if (sessionOptions.length) {
       setDatos((d) => ({ ...d, sede: '' }))
     }
-  }
-
-  const toggleSessionSelection = (sessionId, checked) => {
-    setSelectedSessionIds((current) => {
-      const next = new Set(current)
-      if (checked) {
-        next.add(sessionId)
-        if (selectedSessionId) {
-          next.add(selectedSessionId)
-        }
-      } else {
-        next.delete(sessionId)
-        if (selectedSessionId) {
-          next.add(selectedSessionId)
-        }
-      }
-      return Array.from(next)
-    })
   }
 
   const handleDatePickerOpen = useCallback((event) => {
@@ -730,15 +675,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
     const finalImagenes = isPreventivoEbro
       ? flattenPreventivoImagenes(nextDatos.preventivo?.imagenes)
       : imagenes
-    const resolvedSelectedSessions = selectedSessionIds
-      .map((id) => sessionOptions.find((session) => session.id === id) || null)
-      .filter(Boolean)
-    const hasResolvedSelected = resolvedSelectedSessions.length > 0
-    const targetSessions = hasResolvedSelected
-      ? resolvedSelectedSessions
-      : selectedSession
-        ? [selectedSession]
-        : []
     onNext({
       type,
       dealId,
@@ -747,7 +683,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       imagenes: finalImagenes,
       session: selectedSession || null,
       sessionOptions,
-      selectedSessions: targetSessions,
     })
   }
 
@@ -1163,41 +1098,6 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
                           </option>
                         ))}
                       </select>
-                      {sessionOptions.length > 1 && (
-                        <div className="mt-2">
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary btn-sm"
-                            onClick={() => setShowSessionSelector((current) => !current)}
-                          >
-                            {showSessionSelector ? 'Ocultar selector de sesiones' : 'Seleccionar varias sesiones'}
-                          </button>
-                        </div>
-                      )}
-                      {showSessionSelector && sessionOptions.length > 1 && (
-                        <div className="mt-2 border rounded p-2 bg-light">
-                          <div className="form-text mb-2">
-                            Selecciona todas las sesiones en las que quieres duplicar el informe.
-                          </div>
-                          <div className="d-grid gap-2">
-                            {sessionOptions.map((session) => {
-                              const id = String(session.id)
-                              const checked = selectedSessionIds.includes(id)
-                              return (
-                                <label key={id} className="form-check d-flex align-items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    className="form-check-input"
-                                    checked={checked}
-                                    onChange={(event) => toggleSessionSelection(id, event.target.checked)}
-                                  />
-                                  <span className="form-check-label">{buildSessionLabel(session)}</span>
-                                </label>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
