@@ -10,7 +10,6 @@ type ProductRecord = {
   id: string;
   id_pipe: string;
   id_woo: bigint | number | null;
-  id_price: Prisma.Decimal | number | null;
   id_holded: string | null;
   name: string | null;
   code: string | null;
@@ -66,7 +65,6 @@ function normalizeProduct(record: ProductRecord) {
     id: record.id,
     id_pipe: record.id_pipe,
     id_woo: record.id_woo == null ? null : Number(record.id_woo),
-    id_price: record.id_price == null ? null : Number(record.id_price),
     id_holded: record.id_holded ?? null,
     name: record.name ?? null,
     code: record.code ?? null,
@@ -151,14 +149,14 @@ function buildUpdateData(body: any) {
     hasChanges = true;
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, 'id_price')) {
-    const rawValue = body.id_price;
+  if (Object.prototype.hasOwnProperty.call(body, 'price')) {
+    const rawValue = body.price;
 
     if (rawValue === '' || rawValue === null || rawValue === undefined) {
-      data.id_price = null;
+      data.price = null;
       hasChanges = true;
     } else if (typeof rawValue === 'number' && Number.isFinite(rawValue)) {
-      data.id_price = rawValue;
+      data.price = rawValue;
       hasChanges = true;
     } else {
       const text = String(rawValue).trim();
@@ -166,11 +164,11 @@ function buildUpdateData(body: any) {
 
       if (!Number.isFinite(parsed)) {
         return {
-          error: errorResponse('VALIDATION_ERROR', 'El campo id_price debe ser un número válido', 400),
+          error: errorResponse('VALIDATION_ERROR', 'El campo price debe ser un número válido', 400),
         } as const;
       }
 
-      data.id_price = parsed;
+      data.price = parsed;
       hasChanges = true;
     }
   }
