@@ -160,7 +160,7 @@ type SessionDetailCardProps = {
   session: TrainerSessionDetail;
 };
 
-function SessionDetailCard({ session }: SessionDetailCardProps) {
+export function SessionDetailCard({ session }: SessionDetailCardProps) {
   const queryClient = useQueryClient();
   const { userId, userName } = useCurrentUserIdentity();
   const mapsUrl = session.address

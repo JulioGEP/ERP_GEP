@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Alert, Card, Form, Spinner, Table } from 'react-bootstrap';
+import { Alert, Card, Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
 import {
   fetchTrainerSelfHours,
   type TrainerHoursFilters,
   type TrainerSelfHoursItem,
 } from '../../features/reporting/api';
+import { fetchTrainerSessions, type TrainerSessionDetail } from '../../api/trainer-sessions';
+import { SessionDetailCard } from '../usuarios/trainer/TrainerSessionsPage';
 
 function formatDate(value: string | null, formatter: Intl.DateTimeFormat): string {
   if (!value) return '—';
@@ -35,6 +37,7 @@ function getCurrentMonthRange(): { startDate: string; endDate: string } {
 
 export default function ControlHorasPage() {
   const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(getCurrentMonthRange);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   const hasInvalidRange = Boolean(filters.startDate && filters.endDate && filters.startDate > filters.endDate);
 
@@ -54,6 +57,12 @@ export default function ControlHorasPage() {
     enabled: !hasInvalidRange,
     staleTime: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
+  });
+
+  const sessionsQuery = useQuery({
+    queryKey: ['trainer', 'sessions'],
+    queryFn: fetchTrainerSessions,
+    staleTime: 5 * 60 * 1000,
   });
 
   const dateFormatter = useMemo(
@@ -79,6 +88,21 @@ export default function ControlHorasPage() {
   const totalServiceCost = data?.summary.totalServiceCost ?? 0;
   const totalExtraCost = data?.summary.totalExtraCost ?? 0;
   const totalPayrollCost = data?.summary.totalPayrollCost ?? 0;
+
+  const sessionsById = useMemo(() => {
+    const map = new Map<string, TrainerSessionDetail>();
+    const entries = sessionsQuery.data?.dates ?? [];
+    entries.forEach((entry) => {
+      entry.sessions.forEach((session) => {
+        if (session.sessionId) {
+          map.set(session.sessionId, session);
+        }
+      });
+    });
+    return map;
+  }, [sessionsQuery.data]);
+
+  const selectedSession = selectedSessionId ? sessionsById.get(selectedSessionId) ?? null : null;
 
   let content: JSX.Element;
 
@@ -126,7 +150,12 @@ export default function ControlHorasPage() {
           </thead>
           <tbody>
             {items.map((item: TrainerSelfHoursItem) => (
-              <tr key={item.id}>
+              <tr
+                key={item.id}
+                role="button"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setSelectedSessionId(item.id)}
+              >
                 <td className="align-middle">{formatDate(item.sessionDate, dateFormatter)}</td>
                 <td className="align-middle">{item.sessionName || '—'}</td>
                 <td className="text-end align-middle">{hoursFormatter.format(item.totalHours)}</td>
@@ -150,6 +179,25 @@ export default function ControlHorasPage() {
       </div>
     );
   }
+
+  const sessionModalBody = (() => {
+    if (!selectedSessionId) return null;
+    if (sessionsQuery.isLoading) {
+      return (
+        <div className="d-flex align-items-center gap-2">
+          <Spinner animation="border" size="sm" role="status" />
+          <span>Cargando información de la sesión…</span>
+        </div>
+      );
+    }
+    if (sessionsQuery.isError) {
+      return <Alert variant="danger">No se pudo cargar la información de la sesión.</Alert>;
+    }
+    if (!selectedSession) {
+      return <Alert variant="warning">No se encontró información de la sesión seleccionada.</Alert>;
+    }
+    return <SessionDetailCard session={selectedSession} />;
+  })();
 
   return (
     <section className="py-3">
@@ -192,6 +240,19 @@ export default function ControlHorasPage() {
           {content}
         </Card.Body>
       </Card>
+
+      <Modal
+        show={Boolean(selectedSessionId)}
+        onHide={() => setSelectedSessionId(null)}
+        size="lg"
+        centered
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Detalle de la sesión</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>{sessionModalBody}</Modal.Body>
+      </Modal>
     </section>
   );
 }
