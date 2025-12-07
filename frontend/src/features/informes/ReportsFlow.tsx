@@ -21,6 +21,7 @@ export type ReportDraft = {
   formador?: { nombre?: string; idioma?: string };
   imagenes?: Array<{ name?: string; dataUrl?: string }>;
   session?: ReportSessionInfo | null;
+  sessions?: ReportSessionInfo[];
   sessionOptions?: ReportSessionInfo[];
 };
 
@@ -40,6 +41,7 @@ const createEmptyDraft = (type: ReportType): ReportDraft => ({
   datos: { tipo: type, idioma: 'ES' },
   imagenes: [],
   session: null,
+  sessions: [],
   sessionOptions: [],
 });
 
@@ -75,6 +77,12 @@ function mergeReportDraft(
 
   if (input.session && typeof input.session === 'object') {
     next.session = { ...input.session };
+  }
+
+  if (Array.isArray(input.sessions)) {
+    next.sessions = input.sessions
+      .filter((option): option is ReportSessionInfo => Boolean(option))
+      .map((option) => ({ ...option }));
   }
 
   if (Array.isArray(input.sessionOptions)) {

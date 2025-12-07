@@ -190,32 +190,49 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   const sanitizedInitialOptions = initialSessionOptionsRaw
     .map((session) => sanitizeSessionOption(session))
     .filter(Boolean)
+  const initialSessionsSanitized = Array.isArray(initial?.sessions)
+    ? initial.sessions.map((session) => sanitizeSessionOption(session)).filter(Boolean)
+    : []
   const initialSessionSanitized = initial?.session
     ? sanitizeSessionOption(initial.session)
     : sanitizedInitialOptions.length === 1
       ? sanitizedInitialOptions[0]
       : null
-  const initialOptions = initialSessionSanitized && !sanitizedInitialOptions.some((option) => option.id === initialSessionSanitized.id)
-    ? [...sanitizedInitialOptions, initialSessionSanitized]
-    : sanitizedInitialOptions
-  const [sessionOptions, setSessionOptions] = useState(initialOptions)
+  const mergedInitialOptions = [...sanitizedInitialOptions]
+  const pushIfMissing = (session) => {
+    if (!session) return
+    if (!mergedInitialOptions.some((option) => option.id === session.id)) {
+      mergedInitialOptions.push(session)
+    }
+  }
+  initialSessionsSanitized.forEach(pushIfMissing)
+  pushIfMissing(initialSessionSanitized)
+  const initialSelectedIds = initialSessionsSanitized.length
+    ? initialSessionsSanitized.map((session) => session.id)
+    : initialSessionSanitized
+      ? [initialSessionSanitized.id]
+      : []
+  const [sessionOptions, setSessionOptions] = useState(mergedInitialOptions)
   const trainingTemplatesApiRef = useRef(null)
   const [trainingTemplates, setTrainingTemplates] = useState([])
   const lastAppliedTemplateRef = useRef({ key: '', theory: [], practice: [] })
-  const [selectedSessionId, setSelectedSessionId] = useState(initialSessionSanitized?.id || null)
+  const [selectedSessionIds, setSelectedSessionIds] = useState(initialSelectedIds)
   const sessionSelectRef = useRef(null)
   const [selTitulo, setSelTitulo] = useState(isFormacion ? (datos.formacionTitulo || '') : '')
   const [prefillTemplates, setPrefillTemplates] = useState([])
   const [loadingDeal, setLoadingDeal] = useState(false)
   const dealChangeRef = useRef(true)
-  const selectedSession = useMemo(() => {
-    if (!sessionOptions.length) return null
-    if (selectedSessionId) {
-      return sessionOptions.find((s) => s.id === selectedSessionId) || null
-    }
+  const selectedSessions = useMemo(() => {
+    if (!sessionOptions.length || !selectedSessionIds.length) return []
+    const selectedSet = new Set(selectedSessionIds.map((id) => String(id)))
+    return sessionOptions.filter((session) => selectedSet.has(session.id))
+  }, [sessionOptions, selectedSessionIds])
+
+  const primarySession = useMemo(() => {
+    if (selectedSessions.length) return selectedSessions[0]
     if (sessionOptions.length === 1) return sessionOptions[0]
     return null
-  }, [sessionOptions, selectedSessionId])
+  }, [selectedSessions, sessionOptions])
   const autoPrefillDoneRef = useRef(Boolean(initial?.dealId))
 
   // Reset de intentos/HTML si cambia el dealId
@@ -235,15 +252,19 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       return
     }
     setSessionOptions([])
-    setSelectedSessionId(null)
+    setSelectedSessionIds([])
     setPrefillTemplates([])
   }, [dealId])
 
   useEffect(() => {
-    if (sessionOptions.length > 1 && !selectedSessionId && sessionSelectRef.current) {
+    setSelectedSessionIds((ids) => ids.filter((id) => sessionOptions.some((option) => option.id === id)))
+  }, [sessionOptions])
+
+  useEffect(() => {
+    if (sessionOptions.length > 1 && selectedSessionIds.length === 0 && sessionSelectRef.current) {
       sessionSelectRef.current.focus()
     }
-  }, [sessionOptions, selectedSessionId])
+  }, [sessionOptions, selectedSessionIds])
 
   useEffect(() => {
     const api = getTrainingTemplatesManager()
@@ -393,9 +414,9 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       let selected = null
       if (normalizedSessions.length === 1) {
         selected = normalizedSessions[0]
-        setSelectedSessionId(selected?.id || null)
+        setSelectedSessionIds(selected?.id ? [selected.id] : [])
       } else {
-        setSelectedSessionId(null)
+        setSelectedSessionIds([])
       }
 
       setSessionOptions(normalizedSessions)
@@ -488,14 +509,18 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
   }, [dealId, isFormacion])
 
   const handleSessionChange = (event) => {
-    const value = event.target.value
-    const nextId = value ? String(value) : ''
-    const normalized = nextId.trim()
-    const resolvedId = normalized.length ? normalized : null
-    setSelectedSessionId(resolvedId)
-    const found = resolvedId
-      ? sessionOptions.find((session) => session.id === resolvedId) || null
-      : null
+    const { options } = event.target
+    const selected = Array.from(options)
+      .filter((option) => option.selected)
+      .map((option) => option.value)
+      .map((value) => (value ? String(value).trim() : ''))
+      .filter((value) => value.length > 0)
+
+    setSelectedSessionIds(selected)
+
+    const first = selected[0]
+    const found = first ? sessionOptions.find((session) => session.id === first) || null : null
+
     if (found) {
       setDatos((d) => ({
         ...d,
@@ -624,7 +649,7 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       return
     }
 
-    if (!isPreventivoEbro && !selectedSession) {
+    if (!isPreventivoEbro && !primarySession && sessionOptions.length > 0) {
       if (sessionSelectRef.current) {
         sessionSelectRef.current.focus()
       }
@@ -681,7 +706,8 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
       formador: { nombre: datos.formadorNombre, idioma: datos.idioma },
       datos: nextDatos,
       imagenes: finalImagenes,
-      session: selectedSession || null,
+      session: primarySession || null,
+      sessions: selectedSessions,
       sessionOptions,
     })
   }
@@ -1082,22 +1108,23 @@ export default function Form({ initial, onNext, title = 'Informe de Formación',
                   </div>
                   {sessionOptions.length > 0 && (
                     <div className="col-12 col-md-5 col-lg-5 d-flex flex-column justify-content-end">
-                      <label className="form-label">Sesión</label>
+                      <label className="form-label">Sesiones</label>
                       <select
                         ref={sessionSelectRef}
                         className="form-select form-select-sm"
-                        value={selectedSessionId || ''}
+                        value={selectedSessionIds}
                         onChange={handleSessionChange}
+                        multiple
                         required
-                        disabled={sessionOptions.length === 1 && Boolean(selectedSessionId)}
+                        size={Math.min(Math.max(sessionOptions.length, 2), 6)}
                       >
-                        {sessionOptions.length > 1 && <option value="">Selecciona una sesión…</option>}
                         {sessionOptions.map((session) => (
                           <option key={session.id} value={session.id}>
                             {buildSessionLabel(session)}
                           </option>
                         ))}
                       </select>
+                      <div className="form-text">Puedes seleccionar una o varias sesiones para asociar el informe.</div>
                     </div>
                   )}
                 </div>
