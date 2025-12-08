@@ -3,11 +3,12 @@ import { Button, Card, Container, Form, InputGroup, Spinner } from 'react-bootst
 import { useNavigate, Link } from 'react-router-dom';
 import { ApiError, isApiError } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { computeDefaultPath } from '../../shared/auth/utils';
 
 export default function LoginPage() {
-  const { login, isLoading: authLoading, isAuthenticated } = useAuth();
+  const { login, isLoading: authLoading, isAuthenticated, permissions } = useAuth();
   const navigate = useNavigate();
-  const redirectPath = '/dashboard';
+  const redirectPath = useMemo(() => computeDefaultPath(permissions), [permissions]);
 
   const isLoading = authLoading;
 
