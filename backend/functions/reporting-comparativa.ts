@@ -206,6 +206,7 @@ type SessionRow = {
 };
 
 type VariantRow = {
+  id_woo: bigint | number | string | null;
   date: Date | string | null;
   sede: string | null;
   products: {
@@ -216,6 +217,24 @@ type VariantRow = {
     name: string | null;
   } | null;
 };
+
+function normalizeVariantWooId(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : null;
+  }
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (value && typeof value === 'object' && 'toString' in value) {
+    const serialized = String(value).trim();
+    return serialized.length ? serialized : null;
+  }
+  return null;
+}
 
 function normalizePipelineLabel(value: string | null | undefined): string | null {
   if (value == null) return null;
@@ -341,7 +360,14 @@ export const handler = createHttpHandler(async (request) => {
         request.event.multiValueQueryStringParameters?.costCenterId,
     );
 
-  const [currentSessions, previousSessions, currentVariants, previousVariants] = await Promise.all([
+  const [
+    currentSessions,
+    previousSessions,
+    currentVariants,
+    previousVariants,
+    currentVariantDeals,
+    previousVariantDeals,
+  ] = await Promise.all([
     prisma.sesiones.findMany({
       where: {
         fecha_inicio_utc: { gte: currentStart, lt: currentEndExclusive },
@@ -408,6 +434,7 @@ export const handler = createHttpHandler(async (request) => {
         ...(siteFilters ? { sede: { in: siteFilters } } : {}),
       },
       select: {
+        id_woo: true,
         date: true,
         sede: true,
         products: { select: { name: true, code: true } },
@@ -420,13 +447,54 @@ export const handler = createHttpHandler(async (request) => {
         ...(siteFilters ? { sede: { in: siteFilters } } : {}),
       },
       select: {
+        id_woo: true,
         date: true,
         sede: true,
         products: { select: { name: true, code: true } },
         trainers: { select: { name: true } },
       },
     }) as Promise<VariantRow[]>,
+    prisma.deals.findMany({
+      where: {
+        w_id_variation: { not: null },
+        a_fecha: { gte: currentStart, lt: currentEndExclusive },
+        ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
+        ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
+        ...(comerciales ? { comercial: { in: comerciales } } : {}),
+      },
+      select: { w_id_variation: true },
+    }),
+    prisma.deals.findMany({
+      where: {
+        w_id_variation: { not: null },
+        a_fecha: { gte: previousStart, lt: previousEndExclusive },
+        ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
+        ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
+        ...(comerciales ? { comercial: { in: comerciales } } : {}),
+      },
+      select: { w_id_variation: true },
+    }),
   ]);
+
+  const currentVariantDealIds = new Set(
+    (currentVariantDeals as Array<{ w_id_variation: unknown }> )
+      .map((deal) => normalizeVariantWooId(deal.w_id_variation))
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  const previousVariantDealIds = new Set(
+    (previousVariantDeals as Array<{ w_id_variation: unknown }>)
+      .map((deal) => normalizeVariantWooId(deal.w_id_variation))
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  const filteredCurrentVariants = currentVariants.filter((variant) =>
+    currentVariantDealIds.has(normalizeVariantWooId(variant.id_woo)),
+  );
+
+  const filteredPreviousVariants = previousVariants.filter((variant) =>
+    previousVariantDealIds.has(normalizeVariantWooId(variant.id_woo)),
+  );
 
   const weeks = 12;
 
@@ -446,11 +514,11 @@ export const handler = createHttpHandler(async (request) => {
 
   const formacionAbiertaCurrentDates = [
     ...toDateList(currentSessions, (row) => classifySession(row as SessionRow) === 'formacionAbierta'),
-    ...toDateList(currentVariants, () => true),
+    ...toDateList(filteredCurrentVariants, () => true),
   ];
   const formacionAbiertaPrevious =
     toDateList(previousSessions, (row) => classifySession(row as SessionRow) === 'formacionAbierta').length +
-    toDateList(previousVariants, () => true).length;
+    toDateList(filteredPreviousVariants, () => true).length;
 
   const toBoolean = (value: boolean | null | undefined) => Boolean(value);
 
@@ -503,12 +571,12 @@ export const handler = createHttpHandler(async (request) => {
   const formacionAbiertaSiteCurrentCounts = new Map<string, number>();
   const formacionAbiertaSitePreviousCounts = new Map<string, number>();
 
-  for (const variant of currentVariants) {
+  for (const variant of filteredCurrentVariants) {
     const site = (variant.sede ?? '').trim() || 'Sin sede';
     formacionAbiertaSiteCurrentCounts.set(site, (formacionAbiertaSiteCurrentCounts.get(site) ?? 0) + 1);
   }
 
-  for (const variant of previousVariants) {
+  for (const variant of filteredPreviousVariants) {
     const site = (variant.sede ?? '').trim() || 'Sin sede';
     formacionAbiertaSitePreviousCounts.set(site, (formacionAbiertaSitePreviousCounts.get(site) ?? 0) + 1);
   }
@@ -576,14 +644,20 @@ export const handler = createHttpHandler(async (request) => {
     ...currentSessions
       .filter((session) => classifySession(session) === 'formacionAbierta')
       .map((session) => ({ productName: session.deal_products?.name ?? null, productCode: session.deal_products?.code ?? null })),
-    ...currentVariants.map((variant) => ({ productName: variant.products?.name ?? null, productCode: variant.products?.code ?? null })),
+    ...filteredCurrentVariants.map((variant) => ({
+      productName: variant.products?.name ?? null,
+      productCode: variant.products?.code ?? null,
+    })),
   ];
 
   const formacionAbiertaPreviousProducts = [
     ...previousSessions
       .filter((session) => classifySession(session) === 'formacionAbierta')
       .map((session) => ({ productName: session.deal_products?.name ?? null, productCode: session.deal_products?.code ?? null })),
-    ...previousVariants.map((variant) => ({ productName: variant.products?.name ?? null, productCode: variant.products?.code ?? null })),
+    ...filteredPreviousVariants.map((variant) => ({
+      productName: variant.products?.name ?? null,
+      productCode: variant.products?.code ?? null,
+    })),
   ];
 
   const formacionEmpresaCurrentTrainers = currentSessions
@@ -606,14 +680,14 @@ export const handler = createHttpHandler(async (request) => {
     ...currentSessions
       .filter((session) => classifySession(session) === 'formacionAbierta')
       .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers)),
-    ...currentVariants.map((variant) => ({ trainerName: variant.trainers?.name ?? null })),
+    ...filteredCurrentVariants.map((variant) => ({ trainerName: variant.trainers?.name ?? null })),
   ];
 
   const formacionAbiertaPreviousTrainers = [
     ...previousSessions
       .filter((session) => classifySession(session) === 'formacionAbierta')
       .flatMap((session) => normalizeTrainerEntries(session.sesion_trainers)),
-    ...previousVariants.map((variant) => ({ trainerName: variant.trainers?.name ?? null })),
+    ...filteredPreviousVariants.map((variant) => ({ trainerName: variant.trainers?.name ?? null })),
   ];
 
   const ranking = [
