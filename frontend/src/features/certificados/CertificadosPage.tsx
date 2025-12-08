@@ -56,6 +56,10 @@ type CertificateTemplateOption = {
   template: TrainingTemplate;
 };
 
+export type CertificadosPageProps = {
+  onSelectBudget?: (budget: DealSummary) => void;
+};
+
 type PersistedCertificatePageState = {
   dealIdInput?: string;
   selectedSessionId?: string | null;
@@ -674,7 +678,7 @@ function resolveGenerationError(error: unknown): string {
   return 'Ha ocurrido un error inesperado al generar los certificados.';
 }
 
-export function CertificadosPage() {
+export function CertificadosPage({ onSelectBudget }: CertificadosPageProps) {
   const [dealIdInput, setDealIdInput] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
@@ -774,9 +778,10 @@ export function CertificadosPage() {
         return;
       }
       setDealIdInput(normalizedId);
+      onSelectBudget?.(budget);
       void loadDealAndSessions(normalizedId);
     },
-    [loadDealAndSessions, setDealIdInput],
+    [loadDealAndSessions, onSelectBudget, setDealIdInput],
   );
 
   const pendingBudgetsTableLabels = useMemo(
