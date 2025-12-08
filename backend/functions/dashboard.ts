@@ -155,9 +155,8 @@ export const handler = createHttpHandler(async (request) => {
       }),
       prisma.sesiones.count({
         where: {
-          estado: { notIn: ['PLANIFICADA', 'FINALIZADA'] },
-          fecha_inicio_utc: { not: null },
-          fecha_fin_utc: { not: null },
+          fecha_inicio_utc: null,
+          fecha_fin_utc: null,
           sesion_trainers: { none: {} },
           deals: {
             is: {
