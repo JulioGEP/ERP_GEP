@@ -37,6 +37,7 @@ type TrainerSummary = {
 
 type SessionInfo = {
   id: string;
+  deal_id: string | null;
   nombre_cache: string | null;
   fecha_inicio_utc: Date | null;
   fecha_fin_utc: Date | null;
@@ -103,6 +104,15 @@ type TrainerExtraCostResponseItem = {
   notes: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  trainerExpenseDocuments: TrainerExpenseDocument[];
+};
+
+type TrainerExpenseDocument = {
+  id: string;
+  sessionId: string;
+  name: string | null;
+  url: string | null;
+  addedAt: string | null;
 };
 
 type ParsedDateFilters =
@@ -273,8 +283,17 @@ function mapResponseItem(params: {
   assignmentType: 'session' | 'variant';
   sessionInfo?: SessionInfo | null;
   variantInfo?: VariantInfo | null;
+  expenseDocuments?: TrainerExpenseDocument[] | null;
 }): TrainerExtraCostResponseItem {
-  const { key, record, trainer, assignmentType, sessionInfo = null, variantInfo = null } = params;
+  const {
+    key,
+    record,
+    trainer,
+    assignmentType,
+    sessionInfo = null,
+    variantInfo = null,
+    expenseDocuments = [],
+  } = params;
   const costs = createEmptyCosts();
 
   if (record) {
@@ -315,7 +334,28 @@ function mapResponseItem(params: {
     notes: record?.notas ?? null,
     createdAt: toIsoString(record?.created_at ?? null),
     updatedAt: toIsoString(record?.updated_at ?? null),
+    trainerExpenseDocuments: expenseDocuments ?? [],
   };
+}
+
+function mapTrainerExpenseDocument(entry: any): TrainerExpenseDocument | null {
+  const sessionId = normalizeIdentifier(entry?.sesion_id ?? entry?.session_id);
+  const id = normalizeIdentifier(entry?.id);
+
+  if (!sessionId || !id) {
+    return null;
+  }
+
+  const name = toTrimmedString(entry?.drive_file_name);
+  const url = toTrimmedString(entry?.drive_web_view_link);
+
+  return {
+    id,
+    sessionId,
+    name: name.length ? name : null,
+    url: url.length ? url : null,
+    addedAt: toIsoString(entry?.added_at ?? null),
+  } satisfies TrainerExpenseDocument;
 }
 
 function parseAmountInput(value: unknown): number | null {
@@ -583,6 +623,7 @@ export const handler = createHttpHandler(async (request) => {
         sesiones: {
           select: {
             id: true,
+            deal_id: true,
             nombre_cache: true,
             fecha_inicio_utc: true,
             fecha_fin_utc: true,
@@ -624,6 +665,35 @@ export const handler = createHttpHandler(async (request) => {
     const sessionIds = Array.from(
       new Set(sessionAssignments.map((row) => normalizeIdentifier(row.sesion_id)).filter(Boolean) as string[]),
     );
+
+    const trainerExpenseDocumentsRaw = sessionIds.length
+      ? await prisma.sesion_files.findMany({
+          where: {
+            sesion_id: { in: sessionIds },
+            trainer_expense: true,
+          },
+          select: {
+            id: true,
+            sesion_id: true,
+            drive_file_name: true,
+            drive_web_view_link: true,
+            added_at: true,
+          },
+          orderBy: { added_at: 'desc' },
+        })
+      : [];
+
+    const trainerExpenseDocuments = trainerExpenseDocumentsRaw
+      .map(mapTrainerExpenseDocument)
+      .filter((doc): doc is TrainerExpenseDocument => doc !== null);
+
+    const trainerExpenseDocumentMap = new Map<string, TrainerExpenseDocument[]>();
+    for (const doc of trainerExpenseDocuments) {
+      if (!trainerExpenseDocumentMap.has(doc.sessionId)) {
+        trainerExpenseDocumentMap.set(doc.sessionId, []);
+      }
+      trainerExpenseDocumentMap.get(doc.sessionId)!.push(doc);
+    }
 
     const variantDetails = variantIds.length
       ? ((await prisma.variants.findMany({
@@ -693,6 +763,7 @@ export const handler = createHttpHandler(async (request) => {
           trainer,
           assignmentType: 'session',
           sessionInfo: row.sesiones,
+          expenseDocuments: trainerExpenseDocumentMap.get(sessionId) ?? [],
         }),
       );
     }

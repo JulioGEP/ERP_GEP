@@ -314,6 +314,14 @@ export const DEFAULT_TRAINER_EXTRA_COST_VALUES: Partial<
   precioCostePreventivo: 15,
 };
 
+export type TrainerExpenseDocument = {
+  id: string;
+  sessionId: string;
+  name: string | null;
+  url: string | null;
+  addedAt: string | null;
+};
+
 export type TrainerExtraCostRecord = {
   key: string;
   recordId: string | null;
@@ -334,6 +342,7 @@ export type TrainerExtraCostRecord = {
   notes: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  trainerExpenseDocuments: TrainerExpenseDocument[];
 };
 
 export type TrainerExtraCostFilters = {
@@ -377,6 +386,30 @@ function sanitizeAssignmentType(value: unknown): 'session' | 'variant' | null {
   return null;
 }
 
+function sanitizeTrainerExpenseDocument(entry: unknown): TrainerExpenseDocument | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const raw = entry as Record<string, unknown>;
+  const id = sanitizeText(raw.id);
+  const sessionId =
+    sanitizeText(raw.sessionId ?? raw.session_id ?? raw.sesionId ?? raw.sesion_id) ?? null;
+
+  if (!id || !sessionId) {
+    return null;
+  }
+
+  return {
+    id,
+    sessionId,
+    name:
+      sanitizeText(raw.name ?? raw.fileName ?? raw.drive_file_name ?? raw.driveFileName) ?? null,
+    url: sanitizeText(raw.url ?? raw.drive_web_view_link ?? raw.webUrl) ?? null,
+    addedAt: sanitizeDate(raw.addedAt ?? raw.added_at),
+  } satisfies TrainerExpenseDocument;
+}
+
 function sanitizeExtraCostItem(entry: unknown): TrainerExtraCostRecord | null {
   if (!entry || typeof entry !== 'object') {
     return null;
@@ -407,6 +440,13 @@ function sanitizeExtraCostItem(entry: unknown): TrainerExtraCostRecord | null {
     costs[field] = sanitizeNumber(value);
   }
 
+  const trainerExpenseDocumentsInput = Array.isArray(raw.trainerExpenseDocuments)
+    ? raw.trainerExpenseDocuments
+    : [];
+  const trainerExpenseDocuments = trainerExpenseDocumentsInput
+    .map(sanitizeTrainerExpenseDocument)
+    .filter((doc): doc is TrainerExpenseDocument => doc !== null);
+
   const record: TrainerExtraCostRecord = {
     key,
     recordId: sanitizeText(raw.recordId ?? raw.record_id),
@@ -427,6 +467,7 @@ function sanitizeExtraCostItem(entry: unknown): TrainerExtraCostRecord | null {
     notes: sanitizeText(raw.notes) ?? null,
     createdAt: sanitizeDate(raw.createdAt ?? raw.created_at),
     updatedAt: sanitizeDate(raw.updatedAt ?? raw.updated_at),
+    trainerExpenseDocuments,
   };
 
   return record;

@@ -308,6 +308,7 @@ export default function CostesExtraPage() {
       'Ubicación',
       'Inicio planificado',
       'Fin planificado',
+      'Documentos',
       ...COST_FIELD_DEFINITIONS.map((definition) => definition.label),
     ];
 
@@ -322,6 +323,15 @@ export default function CostesExtraPage() {
         : '';
       const scheduledEnd = item.scheduledEnd
         ? dateTimeFormatter.format(new Date(item.scheduledEnd))
+        : '';
+
+      const documentLabel = item.trainerExpenseDocuments.length
+        ? item.trainerExpenseDocuments
+            .map((doc) => {
+              const name = doc.name ?? 'Documento';
+              return doc.url ? `${name}: ${doc.url}` : name;
+            })
+            .join('\n')
         : '';
 
       const costValues = COST_FIELD_DEFINITIONS.map((definition) => {
@@ -340,6 +350,7 @@ export default function CostesExtraPage() {
         item.site ?? '',
         scheduledStart,
         scheduledEnd,
+        documentLabel,
         ...costValues,
       ];
     });
@@ -413,6 +424,7 @@ export default function CostesExtraPage() {
               <th style={{ minWidth: '120px' }}>Fecha</th>
               <th style={{ minWidth: '220px' }}>Formador</th>
               <th style={{ minWidth: '260px' }}>Asignación</th>
+              <th style={{ minWidth: '200px' }}>Documentos</th>
               {COST_FIELD_DEFINITIONS.map((definition) => (
                 <th key={definition.key} className="text-end" style={{ minWidth: '140px' }}>
                   {definition.label}
@@ -513,6 +525,31 @@ export default function CostesExtraPage() {
                         {scheduledEnd ? ` · Fin: ${scheduledEnd}` : ''}
                       </div>
                     ) : null}
+                  </td>
+                  <td className="align-middle">
+                    {item.trainerExpenseDocuments.length ? (
+                      <div className="d-flex flex-column gap-1">
+                        {item.trainerExpenseDocuments.map((doc) => (
+                          doc.url ? (
+                            <a
+                              key={doc.id}
+                              href={doc.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-decoration-none"
+                            >
+                              {doc.name ?? 'Documento'}
+                            </a>
+                          ) : (
+                            <span key={doc.id} className="text-muted">
+                              {doc.name ?? 'Documento'}
+                            </span>
+                          )
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-muted">Sin documentos</span>
+                    )}
                   </td>
                   {COST_FIELD_DEFINITIONS.map((definition) => (
                     <td key={definition.key} className="align-middle">
