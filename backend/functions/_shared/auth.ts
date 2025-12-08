@@ -13,7 +13,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Comercial: [
     '/dashboard',
     '/perfil',
-    '/presupuestos/sinplanificar',
+    '/presupuestos/sinformador',
     '/presupuestos/*',
     '/calendario/*',
     '/materiales/*',
@@ -22,7 +22,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Administracion: [
     '/dashboard',
     '/perfil',
-    '/presupuestos/sinplanificar',
+    '/presupuestos/sinformador',
     '/presupuestos/*',
     '/calendario/*',
     '/materiales/*',
@@ -33,7 +33,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   Logistica: [
     '/dashboard',
     '/perfil',
-    '/presupuestos/sinplanificar',
+    '/presupuestos/sinformador',
     '/presupuestos/*',
     '/calendario/*',
     '/materiales/*',
@@ -44,7 +44,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   People: [
     '/dashboard',
     '/perfil',
-    '/presupuestos/sinplanificar',
+    '/presupuestos/sinformador',
     '/presupuestos/*',
     '/calendario/*',
     '/materiales/*',
@@ -130,7 +130,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/usuarios/trainer/sesiones',
   '/usuarios/trainer/disponibilidad',
   '/dashboard',
-  '/presupuestos/sinplanificar',
+  '/presupuestos/sinformador',
   '/recursos/formadores_bomberos',
   '/recursos/unidades_moviles',
   '/recursos/salas',

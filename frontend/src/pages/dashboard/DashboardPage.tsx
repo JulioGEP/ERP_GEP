@@ -31,7 +31,7 @@ const EMPTY_METRICS: DashboardMetrics = {
 const NETLIFY_BASE_URL = 'https://erpgep.netlify.app';
 
 const ALL_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/todos`;
-const UNPLANNED_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sinplanificar`;
+const TRAINERLESS_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sinformador`;
 const UNPLANNED_SESSIONS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sin_agendar`;
 const UNWORKED_BUDGETS_PATH = `${NETLIFY_BASE_URL}/presupuestos/sintrabajar`;
 
@@ -41,7 +41,7 @@ const encodeBudgetsQueryValue = (value: string) =>
 
 const SESSION_PENDING_COMPLETION_URL = `${ALL_BUDGETS_PATH}?budgets-table__filter__session_estado=PLANIFICADA`;
 
-const SESSION_FORMACION_ABIERTA_URL = `${UNPLANNED_BUDGETS_PATH}?budgets-table__filter__negocio=${encodeBudgetsQueryValue(
+const SESSION_FORMACION_ABIERTA_URL = `${TRAINERLESS_BUDGETS_PATH}?budgets-table__filter__negocio=${encodeBudgetsQueryValue(
   'Formación Empresas||GEP Services',
 )}`;
 
@@ -686,7 +686,7 @@ export default function DashboardPage() {
                   value={metrics.sessions.sinFormador}
                   accent="primary"
                   description="Sesiones de empresa pendientes de asignar formador."
-                  href={UNPLANNED_BUDGETS_PATH}
+                  href={TRAINERLESS_BUDGETS_PATH}
                 />
               </Col>
               <Col>

@@ -97,7 +97,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Presupuestos/Todos', label: 'Todos', path: '/presupuestos/todos' },
       { key: 'Presupuestos/SinTrabajar', label: 'Sin trabajar', path: '/presupuestos/sintrabajar' },
-      { key: 'Presupuestos/SinPlanificar', label: 'Sin planificar', path: '/presupuestos/sinplanificar' },
+      { key: 'Presupuestos/SinFormador', label: 'Sin formador', path: '/presupuestos/sinformador' },
       { key: 'Presupuestos/SinAgendar', label: 'Sin agendar', path: '/presupuestos/sin_agendar' },
     ],
   },
