@@ -98,6 +98,8 @@ const SESSION_STATE_LABELS: Record<SessionEstado, string> = {
 
 const SESSION_ESTADOS_SET = new Set<string>(SESSION_ESTADOS);
 
+const HIDE_ORGANIZATION_FILTER_KEY = 'hidden_organization';
+
 export type BudgetServerQueryOptions = {
   fetcher: (options: DealsListOptions) => Promise<DealSummary[]>;
   queryKey?: readonly unknown[];
@@ -576,6 +578,7 @@ const DEFAULT_BUDGET_FILTERS_CONFIG: BudgetFiltersConfig = {
       const label = formatDateLabel(timestamp);
       return [iso, label].filter(Boolean).join(' ');
     },
+    [HIDE_ORGANIZATION_FILTER_KEY]: (budget) => getOrganizationLabel(budget),
   },
   definitions: [
     { key: 'deal_id', label: 'Presupuesto' },
@@ -600,6 +603,11 @@ const DEFAULT_BUDGET_FILTERS_CONFIG: BudgetFiltersConfig = {
     { key: 'session_estado', label: 'Estado sesión' },
     { key: 'alumnos', label: 'Alumnos' },
     { key: 'fecha_formacion', label: 'Fecha de formación', type: 'date' },
+    {
+      key: HIDE_ORGANIZATION_FILTER_KEY,
+      label: 'Ocultar Empresa',
+      placeholder: 'Selecciona empresas a ocultar',
+    },
   ],
   selectFilterKeys: new Set([
     'session_estado',
@@ -610,6 +618,7 @@ const DEFAULT_BUDGET_FILTERS_CONFIG: BudgetFiltersConfig = {
     'po_val',
     'tipo_servicio',
     'transporte',
+    HIDE_ORGANIZATION_FILTER_KEY,
   ]),
 };
 
@@ -714,6 +723,16 @@ function applyBudgetFilters(
   if (filterEntries.length) {
     filtered = filtered.filter((row) =>
       filterEntries.every(([key, value]) => {
+        if (key === HIDE_ORGANIZATION_FILTER_KEY) {
+          const normalizedTargets = splitFilterValue(value)
+            .map((part) => normalizeText(part))
+            .filter(Boolean);
+          if (!normalizedTargets.length) {
+            return true;
+          }
+          const target = row.normalized[key] ?? '';
+          return !normalizedTargets.some((hiddenValue) => target.includes(hiddenValue));
+        }
         const parts = splitFilterValue(value);
         if (parts.length > 1) {
           return parts.some((part) => {
