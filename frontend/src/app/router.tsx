@@ -198,10 +198,10 @@ export function AppRouter({
         />
 
         <Route
-          path="/presupuestos/sinplanificar"
+          path="/presupuestos/sinformador"
           element={
             <GuardedRoute
-              path="/presupuestos/sinplanificar"
+              path="/presupuestos/sinformador"
               element={<BudgetsPage {...budgetsPageProps} />}
             />
           }
