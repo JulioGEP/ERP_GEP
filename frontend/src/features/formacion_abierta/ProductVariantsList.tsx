@@ -1736,7 +1736,9 @@ export function VariantModal({
         fromVariantModal: true,
       },
     });
-  }, [deals, navigate]);
+
+    onHide();
+  }, [deals, navigate, onHide]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
