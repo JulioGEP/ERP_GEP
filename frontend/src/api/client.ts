@@ -10,6 +10,17 @@ export const API_BASE =
       : '/.netlify/functions'
     : '/.netlify/functions';
 
+export const UNAUTHORIZED_EVENT = 'erp:unauthorized';
+
+function emitUnauthorizedEvent() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+  } catch {
+    // Silenciar errores de dispatch; la redirección se gestiona a nivel de app.
+  }
+}
+
 export class ApiError extends Error {
   code: string;
   status?: number;
@@ -96,6 +107,9 @@ export async function requestJson<T = any>(
   if (!response.ok || (json && typeof json === 'object' && json.ok === false)) {
     const message = json?.message ?? options?.defaultErrorMessage ?? 'No se pudo completar la solicitud.';
     const code = json?.error_code ?? options?.defaultErrorCode ?? `HTTP_${response.status}`;
+    if (response.status === 401 || code === 'HTTP_401') {
+      emitUnauthorizedEvent();
+    }
     throw new ApiError(code, message, response.status || undefined);
   }
 
