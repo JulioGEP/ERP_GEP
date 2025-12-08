@@ -105,6 +105,14 @@ export default function TrainerDashboardPage() {
     pendingConfirmationsFromSessions ?? (typeof pendingConfirmationsFromDashboard === 'number' ? pendingConfirmationsFromDashboard : null);
   const pendingConfirmations = pendingConfirmationsNumber ?? 0;
 
+  const handleSessionNavigation = (sessionId: string) => {
+    navigate('/usuarios/trainer/sesiones', { state: { trainerSessionId: sessionId } });
+  };
+
+  const handleVariantNavigation = (variantId: string) => {
+    navigate('/usuarios/trainer/sesiones', { state: { trainerVariantId: variantId } });
+  };
+
   return (
     <Stack gap={4} className="trainer-dashboard">
 
@@ -186,7 +194,19 @@ export default function TrainerDashboardPage() {
                     </thead>
                     <tbody>
                       {query.data.sessions.map((session) => (
-                        <tr key={session.sessionId}>
+                        <tr
+                          key={session.sessionId}
+                          role="button"
+                          tabIndex={0}
+                          className="table-row-action"
+                          onClick={() => handleSessionNavigation(session.sessionId)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              handleSessionNavigation(session.sessionId);
+                            }
+                          }}
+                        >
                           <td className="align-middle text-nowrap">{session.budgetNumber ?? <span className="text-muted">—</span>}</td>
                           <td className="align-middle">{session.sessionTitle ?? <span className="text-muted">—</span>}</td>
                           <td className="align-middle">{session.productName ?? <span className="text-muted">—</span>}</td>
@@ -228,7 +248,19 @@ export default function TrainerDashboardPage() {
                     </thead>
                     <tbody>
                       {query.data.variants.map((variant) => (
-                        <tr key={variant.variantId}>
+                        <tr
+                          key={variant.variantId}
+                          role="button"
+                          tabIndex={0}
+                          className="table-row-action"
+                          onClick={() => handleVariantNavigation(variant.variantId)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              handleVariantNavigation(variant.variantId);
+                            }
+                          }}
+                        >
                           <td className="align-middle">{variant.productName ?? <span className="text-muted">—</span>}</td>
                           <td className="align-middle">{variant.site ?? <span className="text-muted">—</span>}</td>
                           <td className="align-middle">

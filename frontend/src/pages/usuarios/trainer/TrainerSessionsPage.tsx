@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Accordion,
   Alert,
@@ -3051,6 +3051,15 @@ function selectDefaultDate(entries: TrainerSessionsDateEntry[]): string | null {
 }
 
 export default function TrainerSessionsPage() {
+  const location = useLocation();
+  const locationState = (location.state ?? null) as
+    | { trainerSessionId?: unknown; trainerVariantId?: unknown }
+    | null;
+  const preselectedSessionId =
+    typeof locationState?.trainerSessionId === 'string' ? locationState.trainerSessionId : null;
+  const preselectedVariantId =
+    typeof locationState?.trainerVariantId === 'string' ? locationState.trainerVariantId : null;
+
   const sessionsQuery = useQuery({
     queryKey: ['trainer', 'sessions'],
     queryFn: fetchTrainerSessions,
@@ -3077,6 +3086,23 @@ export default function TrainerSessionsPage() {
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
+  const preselectedDate = useMemo(() => {
+    if (!dateEntries.length) return null;
+    if (preselectedSessionId) {
+      const entry = dateEntries.find((dateEntry) =>
+        dateEntry.sessions.some((session) => session.sessionId === preselectedSessionId),
+      );
+      if (entry) return entry.date;
+    }
+    if (preselectedVariantId) {
+      const entry = dateEntries.find((dateEntry) =>
+        dateEntry.variants.some((variant) => variant.variantId === preselectedVariantId),
+      );
+      if (entry) return entry.date;
+    }
+    return null;
+  }, [dateEntries, preselectedSessionId, preselectedVariantId]);
+
   useEffect(() => {
     if (!dateEntries.length) {
       setSelectedDate(null);
@@ -3089,6 +3115,11 @@ export default function TrainerSessionsPage() {
       return selectDefaultDate(dateEntries);
     });
   }, [dateEntries]);
+
+  useEffect(() => {
+    if (!preselectedDate) return;
+    setSelectedDate(preselectedDate);
+  }, [preselectedDate]);
 
   const handleDateChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value;
