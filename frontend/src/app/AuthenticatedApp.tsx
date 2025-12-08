@@ -1575,7 +1575,7 @@ export default function AuthenticatedApp() {
     onNotify: pushToast,
   };
 
-  const certificadosPageProps: CertificadosPageProps = {};
+  const certificadosPageProps: CertificadosPageProps = { onSelectBudget: handleSelectBudget };
   const recursosFormacionAbiertaPageProps: RecursosFormacionAbiertaPageProps = {};
   const usersPageProps: UsersPageProps = { onNotify: pushToast };
 

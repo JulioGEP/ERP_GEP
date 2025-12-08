@@ -1,8 +1,11 @@
 // frontend/src/pages/certificados/CertificadosPage.tsx
-import { CertificadosPage as CertificadosView } from '../../features/certificados/CertificadosPage';
+import {
+  CertificadosPage as CertificadosView,
+  type CertificadosPageProps as CertificadosViewProps,
+} from '../../features/certificados/CertificadosPage';
 
-export type CertificadosPageProps = Record<string, never>;
+export type CertificadosPageProps = CertificadosViewProps;
 
-export default function CertificadosPage(_props: CertificadosPageProps) {
-  return <CertificadosView />;
+export default function CertificadosPage(props: CertificadosPageProps) {
+  return <CertificadosView {...props} />;
 }
