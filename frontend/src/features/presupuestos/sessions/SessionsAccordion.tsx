@@ -1313,10 +1313,20 @@ function SessionDocumentsAccordionItem({
                   const driveLink = (doc.drive_web_view_link ?? '').trim();
                   const isUpdating = updateSharePending && updatingDocumentId === doc.id;
                   const isDeleting = deletePending && deletingDocumentId === doc.id;
+                  const isExpense = Boolean(doc.trainer_expense);
 
                   return (
-                    <tr key={doc.id}>
-                      <td className="align-middle">{displayName}</td>
+                    <tr key={doc.id} className={isExpense ? 'table-warning' : undefined}>
+                      <td className="align-middle">
+                        <div className="d-flex align-items-center gap-2">
+                          <span>{displayName}</span>
+                          {isExpense ? (
+                            <Badge bg="warning" text="dark" className="text-uppercase fw-semibold">
+                              Gasto
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="align-middle">{typeLabel}</td>
                       <td className="align-middle">{formatAddedAt(doc.added_at)}</td>
                       <td className="align-middle">
