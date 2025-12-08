@@ -1730,13 +1730,15 @@ export function VariantModal({
       .map((deal) => String(deal.deal_id ?? '').trim())
       .filter((dealId) => dealId.length > 0);
 
-    navigate('/certificados', {
+    onHide();
+
+    navigate('https://erpgep.netlify.app/certificados', {
       state: {
         presetPendingBudgetIds: dealIds,
         fromVariantModal: true,
       },
     });
-  }, [deals, navigate]);
+  }, [deals, navigate, onHide]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
