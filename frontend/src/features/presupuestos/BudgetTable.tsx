@@ -584,6 +584,11 @@ const DEFAULT_BUDGET_FILTERS_CONFIG: BudgetFiltersConfig = {
     { key: 'deal_id', label: 'Presupuesto' },
     { key: 'title', label: 'Título' },
     { key: 'organization', label: 'Empresa' },
+    {
+      key: HIDE_ORGANIZATION_FILTER_KEY,
+      label: 'Ocultar Empresa',
+      placeholder: 'Selecciona empresas a ocultar',
+    },
     { key: 'comercial', label: 'Comercial' },
     { key: 'product_names', label: 'Productos' },
     { key: 'training_address', label: 'Dirección de formación' },
@@ -603,11 +608,6 @@ const DEFAULT_BUDGET_FILTERS_CONFIG: BudgetFiltersConfig = {
     { key: 'session_estado', label: 'Estado sesión' },
     { key: 'alumnos', label: 'Alumnos' },
     { key: 'fecha_formacion', label: 'Fecha de formación', type: 'date' },
-    {
-      key: HIDE_ORGANIZATION_FILTER_KEY,
-      label: 'Ocultar Empresa',
-      placeholder: 'Selecciona empresas a ocultar',
-    },
   ],
   selectFilterKeys: new Set([
     'session_estado',
