@@ -1231,9 +1231,11 @@ export function SessionsAccordionServices({
   const normalizedHighlightSessionId = useMemo(() => highlightSessionId?.trim() ?? null, [highlightSessionId]);
   const location = useLocation();
   const isCalendarRoute = useMemo(() => location.pathname.startsWith('/calendario'), [location.pathname]);
+  const [localHighlightSessionId, setLocalHighlightSessionId] = useState<string | null>(null);
+  const effectiveHighlightSessionId = normalizedHighlightSessionId ?? localHighlightSessionId;
   const highlightEnabled = useMemo(
-    () => isCalendarRoute || normalizedHighlightSessionId !== null,
-    [isCalendarRoute, normalizedHighlightSessionId],
+    () => isCalendarRoute || effectiveHighlightSessionId !== null,
+    [effectiveHighlightSessionId, isCalendarRoute],
   );
 
   const mapApplicableProduct = useCallback(
@@ -1315,6 +1317,10 @@ export function SessionsAccordionServices({
   };
 
   useEffect(() => {
+    setLocalHighlightSessionId(normalizedHighlightSessionId);
+  }, [dealId, normalizedHighlightSessionId]);
+
+  useEffect(() => {
     setPageByProduct((current) => {
       const next: Record<string, number> = {};
       for (const product of applicableProducts) {
@@ -1325,7 +1331,7 @@ export function SessionsAccordionServices({
   }, [applicableProducts]);
 
   useEffect(() => {
-    if (!highlightEnabled || !normalizedHighlightSessionId) return;
+    if (!highlightEnabled || !effectiveHighlightSessionId) return;
     setPageByProduct((current) => {
       let changed = false;
       const next: Record<string, number> = {};
@@ -1336,7 +1342,7 @@ export function SessionsAccordionServices({
       }
       return changed ? next : current;
     });
-  }, [applicableProducts, highlightEnabled, normalizedHighlightSessionId]);
+  }, [applicableProducts, effectiveHighlightSessionId, highlightEnabled]);
 
   const [newSessionIds, setNewSessionIds] = useState<Set<string>>(new Set());
 
@@ -1755,6 +1761,7 @@ export function SessionsAccordionServices({
       productName: string;
       displayIndex: number;
     }) => {
+      setLocalHighlightSessionId(sessionId);
       if (activeSession && activeSession.sessionId !== sessionId) {
         const currentId = activeSession.sessionId;
         const status = saveStatus[currentId];
@@ -2029,7 +2036,7 @@ export function SessionsAccordionServices({
           const group = (query?.data as SessionGroupDTO | null) ?? null;
           const sessions = group?.sessions ?? [];
           const sortedSessions = sortSessionsForDisplay(sessions, {
-            highlightSessionId: normalizedHighlightSessionId,
+            highlightSessionId: effectiveHighlightSessionId,
             highlightEnabled,
             newSessionIds,
           });
@@ -2129,7 +2136,7 @@ export function SessionsAccordionServices({
                         action
                         value={displayIndex}
                         className={`session-list-item d-flex justify-content-between align-items-center gap-3${
-                          normalizedHighlightSessionId === session.id ? ' session-list-item-highlight' : ''
+                          effectiveHighlightSessionId === session.id ? ' session-list-item-highlight' : ''
                         }`}
                         onClick={() =>
                           void handleSelectSession({
