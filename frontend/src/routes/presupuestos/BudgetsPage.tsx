@@ -21,8 +21,9 @@ export function BudgetsPage({
       isFetching={isFetching}
       error={error}
       onRetry={onRetry}
-      title="Form. Empresa y GEP Services · Sin planificar"
-      subtitle="Sube tu presupuesto y planifica"
+      title="Form. Empresa y GEP Services · Sin Formador"
+      subtitle={undefined}
+      canImport={false}
       tableContent={(filtersContainer) => (
         <PendingTrainerSessionsTable
           budgets={budgets}
