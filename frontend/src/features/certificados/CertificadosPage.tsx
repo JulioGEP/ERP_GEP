@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Alert, Button, Card, Form, Modal, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Form, Modal, Spinner } from 'react-bootstrap';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -66,9 +66,11 @@ type PersistedCertificatePageState = {
 };
 
 type CertificatesNavigationState = {
-  presetDealId?: string;
+  presetDealId?: string | null;
   presetSessionId?: string | null;
   fromSessionModal?: boolean;
+  presetPendingBudgetIds?: string[];
+  fromVariantModal?: boolean;
 };
 
 function resolveTrainingTemplatesApi(): TrainingTemplatesApi | null {
@@ -683,16 +685,20 @@ export function CertificadosPage() {
     }
 
     const presetDealId = typeof state.presetDealId === 'string' ? state.presetDealId.trim() : '';
-    if (!presetDealId.length) {
-      return null;
-    }
+    const presetPendingBudgetIds = Array.isArray(state.presetPendingBudgetIds)
+      ? state.presetPendingBudgetIds.map((budgetId) => String(budgetId ?? '').trim()).filter(Boolean)
+      : [];
 
     const presetSessionId =
       typeof state.presetSessionId === 'string' && state.presetSessionId.trim().length
         ? state.presetSessionId.trim()
         : null;
 
-    return { presetDealId, presetSessionId };
+    if (!presetDealId.length && !presetPendingBudgetIds.length) {
+      return null;
+    }
+
+    return { presetDealId: presetDealId || null, presetSessionId, presetPendingBudgetIds };
   }, [location.state]);
   const {
     deal,
@@ -734,6 +740,7 @@ export function CertificadosPage() {
   const pendingPersistedExcludedIdsRef = useRef<string[] | null>(null);
   const pendingTemplateManualRef = useRef<boolean | null>(null);
   const pendingPersistedTemplateKeyRef = useRef<string | null>(null);
+  const [pendingBudgetsFilter, setPendingBudgetsFilter] = useState<string[] | null>(null);
 
   const queryClient = useQueryClient();
   const pendingBudgetsQuery = useQuery({
@@ -746,6 +753,19 @@ export function CertificadosPage() {
   const pendingBudgets = pendingBudgetsQuery.data ?? [];
   const isPendingBudgetsRefreshing =
     pendingBudgetsQuery.isFetching && !pendingBudgetsQuery.isLoading;
+  const isPendingBudgetsFiltered = Boolean(pendingBudgetsFilter?.length);
+  const visiblePendingBudgets = useMemo(() => {
+    if (!pendingBudgetsFilter?.length) {
+      return pendingBudgets;
+    }
+
+    const filterSet = new Set(pendingBudgetsFilter);
+
+    return pendingBudgets.filter((budget) => {
+      const normalizedId = String(budget.deal_id ?? budget.dealId ?? '').trim();
+      return normalizedId.length > 0 && filterSet.has(normalizedId);
+    });
+  }, [pendingBudgets, pendingBudgetsFilter]);
 
   const handleSelectPendingBudget = useCallback(
     (budget: DealSummary) => {
@@ -934,21 +954,29 @@ export function CertificadosPage() {
     }
 
     if (navigationPreset) {
-      const normalizedDealId = navigationPreset.presetDealId;
-      setDealIdInput(normalizedDealId);
-      pendingPersistedRowsRef.current = null;
-      pendingPersistedExcludedIdsRef.current = null;
-      pendingTemplateManualRef.current = false;
-      pendingPersistedTemplateKeyRef.current = null;
-      setTemplateSelectionManuallyChanged(false);
-      suppressCertifiedWarningRef.current = false;
-      setShowCertifiedWarning(false);
-      hasLoadedPersistedStateRef.current = true;
-      void loadDealAndSessions(normalizedDealId, {
-        presetSessionId: navigationPreset.presetSessionId ?? null,
-      });
+      if (navigationPreset.presetPendingBudgetIds?.length) {
+        setPendingBudgetsFilter(navigationPreset.presetPendingBudgetIds);
+      }
+
+      if (navigationPreset.presetDealId) {
+        const normalizedDealId = navigationPreset.presetDealId;
+        setDealIdInput(normalizedDealId);
+        pendingPersistedRowsRef.current = null;
+        pendingPersistedExcludedIdsRef.current = null;
+        pendingTemplateManualRef.current = false;
+        pendingPersistedTemplateKeyRef.current = null;
+        setTemplateSelectionManuallyChanged(false);
+        suppressCertifiedWarningRef.current = false;
+        setShowCertifiedWarning(false);
+        hasLoadedPersistedStateRef.current = true;
+        void loadDealAndSessions(normalizedDealId, {
+          presetSessionId: navigationPreset.presetSessionId ?? null,
+        });
+        navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+        return;
+      }
+
       navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-      return;
     }
 
     let parsedState: PersistedCertificatePageState | null = null;
@@ -1895,6 +1923,11 @@ export function CertificadosPage() {
                 </p>
               </div>
               <div className="d-flex align-items-center gap-3">
+                {isPendingBudgetsFiltered ? (
+                  <Badge bg="info" text="dark" pill>
+                    Filtrado por variante
+                  </Badge>
+                ) : null}
                 {isPendingBudgetsRefreshing && (
                   <Spinner animation="border" role="status" size="sm" />
                 )}
@@ -1902,6 +1935,7 @@ export function CertificadosPage() {
                   variant="outline-secondary"
                   size="sm"
                   onClick={() => {
+                    setPendingBudgetsFilter(null);
                     void pendingBudgetsQuery.refetch();
                   }}
                   disabled={pendingBudgetsQuery.isFetching}
@@ -1912,7 +1946,7 @@ export function CertificadosPage() {
             </div>
 
             <BudgetTable
-              budgets={pendingBudgets}
+              budgets={visiblePendingBudgets}
               isLoading={pendingBudgetsQuery.isLoading}
               isFetching={pendingBudgetsQuery.isFetching}
               error={pendingBudgetsQuery.error ?? null}

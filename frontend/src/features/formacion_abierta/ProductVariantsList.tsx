@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import {
   Accordion,
   Alert,
@@ -911,6 +912,7 @@ export function VariantModal({
 }) {
   const variant = active?.variant;
   const product = active?.product;
+  const navigate = useNavigate();
 
   const [formValues, setFormValues] = useState<VariantFormValues>({
     price: '',
@@ -1722,6 +1724,19 @@ export function VariantModal({
     setSelectedDealId(null);
     setSelectedDealSummary(null);
   };
+
+  const handleNavigateToCertificates = useCallback(() => {
+    const dealIds = deals
+      .map((deal) => String(deal.deal_id ?? '').trim())
+      .filter((dealId) => dealId.length > 0);
+
+    navigate('/certificados', {
+      state: {
+        presetPendingBudgetIds: dealIds,
+        fromVariantModal: true,
+      },
+    });
+  }, [deals, navigate]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -2988,20 +3003,29 @@ export function VariantModal({
           </div>
         ) : null}
       </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
-            Cerrar
-          </Button>
-          <Button
-            variant="primary"
+      <Modal.Footer>
+        <Button
+          variant="outline-primary"
+          onClick={handleNavigateToCertificates}
+          disabled={isSaving}
+        >
+          Crear Certificados
+        </Button>
+        <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
+          Cerrar
+        </Button>
+        <Button
+          variant="primary"
           onClick={() => handleSave(false)}
           disabled={isSaving || !isDirty}
         >
-          {isSaving ? <Spinner as="span" animation="border" size="sm" role="status" className="me-2" /> : null}
+          {isSaving ? (
+            <Spinner as="span" animation="border" size="sm" role="status" className="me-2" />
+          ) : null}
           {isSaving ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </Modal.Footer>
-      </Modal>
+    </Modal>
 
       {!onDealOpen ? (
         <BudgetDetailModalAbierta
