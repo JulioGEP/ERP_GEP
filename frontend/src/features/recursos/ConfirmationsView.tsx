@@ -1,6 +1,6 @@
 // frontend/src/features/recursos/ConfirmationsView.tsx
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Badge, Button, Form, Spinner, Table } from 'react-bootstrap';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Badge, Button, Collapse, Form, ListGroup, Spinner, Table } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import {
   RESOURCES_CONFIRMATIONS_QUERY_KEY,
@@ -101,6 +101,109 @@ function VariantCell({ variantName, productName, site }: VariantConfirmationRow)
       <div className="fw-semibold">{variantName ?? 'Variante sin nombre'}</div>
       <div className="text-muted small">{productName ?? 'Sin producto asociado'}</div>
       <div className="text-muted small">{site ?? 'Sede por confirmar'}</div>
+    </div>
+  );
+}
+
+type MultiSelectFilterProps = {
+  label: string;
+  options: Array<{ value: string; label: string }>;
+  selected: string[];
+  placeholder?: string;
+  onChange: (values: string[]) => void;
+};
+
+function MultiSelectFilter({ label, options, selected, placeholder, onChange }: MultiSelectFilterProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) return options;
+    return options.filter((option) => option.label.toLowerCase().includes(normalized));
+  }, [options, search]);
+
+  const selectedLabels = useMemo(() => {
+    const labels = new Map(options.map((option) => [option.value, option.label] as const));
+    return selected.map((value) => labels.get(value) ?? value);
+  }, [options, selected]);
+
+  const summary = selectedLabels.length
+    ? selectedLabels.join(', ')
+    : placeholder ?? 'Selecciona una o más opciones';
+
+  const toggleOption = (value: string, checked: boolean) => {
+    const values = new Set(selected);
+    if (checked) {
+      values.add(value);
+    } else {
+      values.delete(value);
+    }
+    onChange(Array.from(values));
+  };
+
+  return (
+    <div ref={containerRef} className="session-multiselect">
+      <Form.Label className="fw-semibold">{label}</Form.Label>
+      <Form.Control
+        type="text"
+        readOnly
+        value={summary}
+        placeholder={placeholder}
+        className="session-multiselect-summary"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        onFocus={() => setOpen(true)}
+      />
+
+      <Collapse in={open}>
+        <div className="session-multiselect-panel mt-2">
+          <Form.Control
+            type="search"
+            size="sm"
+            placeholder="Buscar"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="mb-2"
+          />
+
+          <div className="border rounded overflow-auto" style={{ maxHeight: 240 }}>
+            <ListGroup variant="flush">
+              {filteredOptions.map((option) => {
+                const checked = selected.includes(option.value);
+                const id = `${label}-${option.value}`;
+                return (
+                  <ListGroup.Item key={option.value} className="py-1">
+                    <Form.Check
+                      type="checkbox"
+                      id={id}
+                      label={option.label}
+                      checked={checked}
+                      onChange={(event) => toggleOption(option.value, event.target.checked)}
+                    />
+                  </ListGroup.Item>
+                );
+              })}
+
+              {filteredOptions.length === 0 ? (
+                <ListGroup.Item className="text-muted small">Sin opciones disponibles</ListGroup.Item>
+              ) : null}
+            </ListGroup>
+          </div>
+        </div>
+      </Collapse>
     </div>
   );
 }
@@ -360,41 +463,23 @@ export function ConfirmationsView({ onNotify }: ConfirmationsViewProps) {
           </div>
 
           <div className="col-12 col-lg-3">
-            <Form.Group controlId="filter-trainers">
-              <Form.Label className="fw-semibold">Formadores</Form.Label>
-              <Form.Select
-                multiple
-                value={selectedTrainers}
-                onChange={(event) =>
-                  setSelectedTrainers(Array.from(event.target.selectedOptions, (option) => option.value))
-                }
-              >
-                {trainerOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
+            <MultiSelectFilter
+              label="Formadores"
+              options={trainerOptions}
+              selected={selectedTrainers}
+              placeholder="Selecciona formadores"
+              onChange={setSelectedTrainers}
+            />
           </div>
 
           <div className="col-12 col-lg-3">
-            <Form.Group controlId="filter-sessions">
-              <Form.Label className="fw-semibold">Sesiones</Form.Label>
-              <Form.Select
-                multiple
-                value={selectedSessions}
-                onChange={(event) =>
-                  setSelectedSessions(Array.from(event.target.selectedOptions, (option) => option.value))
-                }
-              >
-                {sessionOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
+            <MultiSelectFilter
+              label="Sesiones"
+              options={sessionOptions}
+              selected={selectedSessions}
+              placeholder="Selecciona sesiones"
+              onChange={setSelectedSessions}
+            />
           </div>
         </div>
       </div>
