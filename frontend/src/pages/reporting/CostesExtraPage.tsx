@@ -41,6 +41,38 @@ function formatDateForInput(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function startOfIsoWeek(date: Date) {
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  return addDays(date, diff);
+}
+
+function buildWeekRange(reference: Date) {
+  const start = startOfIsoWeek(reference);
+  const end = addDays(start, 6);
+
+  return {
+    startDate: formatDateForInput(start),
+    endDate: formatDateForInput(end),
+  } as const;
+}
+
+function buildMonthRange(reference: Date) {
+  const start = new Date(reference.getFullYear(), reference.getMonth(), 1);
+  const end = new Date(reference.getFullYear(), reference.getMonth() + 1, 0);
+
+  return {
+    startDate: formatDateForInput(start),
+    endDate: formatDateForInput(end),
+  } as const;
+}
+
 type CostDraft = {
   fields: Record<TrainerExtraCostFieldKey, string>;
   dirty: boolean;
@@ -131,6 +163,8 @@ function formatAssignmentLabel(value: 'session' | 'variant'): string {
 }
 
 export default function CostesExtraPage() {
+  const today = useMemo(() => new Date(), []);
+
   const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(() => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -140,6 +174,16 @@ export default function CostesExtraPage() {
       endDate: formatDateForInput(endOfMonth),
     };
   });
+
+  const quickRanges = useMemo(
+    () => [
+      { label: 'Semana pasada', range: buildWeekRange(addDays(today, -7)) },
+      { label: 'Mes pasado', range: buildMonthRange(new Date(today.getFullYear(), today.getMonth() - 1, 1)) },
+      { label: 'Mes actual', range: buildMonthRange(today) },
+      { label: 'Esta semana', range: buildWeekRange(today) },
+    ],
+    [today],
+  );
 
   const hasInvalidRange = Boolean(
     filters.startDate && filters.endDate && filters.startDate > filters.endDate,
@@ -537,6 +581,26 @@ export default function CostesExtraPage() {
                   }}
                 />
               </Form.Group>
+              <div className="d-flex flex-column gap-2">
+                <Form.Label className="mb-0">Filtros rápidos</Form.Label>
+                <div className="d-flex flex-wrap gap-2">
+                  {quickRanges.map((quickRange) => {
+                    const isActive =
+                      filters.startDate === quickRange.range.startDate &&
+                      filters.endDate === quickRange.range.endDate;
+                    return (
+                      <Button
+                        key={quickRange.label}
+                        variant={isActive ? 'primary' : 'outline-secondary'}
+                        size="sm"
+                        onClick={() => setFilters(quickRange.range)}
+                      >
+                        {quickRange.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="ms-auto text-end">
                 <span className="text-muted d-block small">Registros mostrados</span>
                 <span className="fw-semibold h5 mb-0">{numberFormatter.format(items.length)}</span>
