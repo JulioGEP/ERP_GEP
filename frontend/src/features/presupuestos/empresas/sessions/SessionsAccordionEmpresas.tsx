@@ -2060,9 +2060,11 @@ export function SessionsAccordionEmpresas({
   const location = useLocation();
   const navigate = useNavigate();
   const isCalendarRoute = useMemo(() => location.pathname.startsWith('/calendario'), [location.pathname]);
+  const [localHighlightSessionId, setLocalHighlightSessionId] = useState<string | null>(null);
+  const effectiveHighlightSessionId = normalizedHighlightSessionId ?? localHighlightSessionId;
   const highlightEnabled = useMemo(
-    () => isCalendarRoute || normalizedHighlightSessionId !== null,
-    [isCalendarRoute, normalizedHighlightSessionId],
+    () => isCalendarRoute || effectiveHighlightSessionId !== null,
+    [effectiveHighlightSessionId, isCalendarRoute],
   );
 
   const generateMutation = useMutation({
@@ -2107,6 +2109,10 @@ export function SessionsAccordionEmpresas({
   };
 
   useEffect(() => {
+    setLocalHighlightSessionId(normalizedHighlightSessionId);
+  }, [dealId, normalizedHighlightSessionId]);
+
+  useEffect(() => {
     setPageByProduct((current) => {
       const next: Record<string, number> = {};
       for (const product of applicableProducts) {
@@ -2117,7 +2123,7 @@ export function SessionsAccordionEmpresas({
   }, [applicableProducts]);
 
   useEffect(() => {
-    if (!highlightEnabled || !normalizedHighlightSessionId) return;
+    if (!highlightEnabled || !effectiveHighlightSessionId) return;
     setPageByProduct((current) => {
       let changed = false;
       const next: Record<string, number> = {};
@@ -2128,7 +2134,7 @@ export function SessionsAccordionEmpresas({
       }
       return changed ? next : current;
     });
-  }, [applicableProducts, highlightEnabled, normalizedHighlightSessionId]);
+  }, [applicableProducts, effectiveHighlightSessionId, highlightEnabled]);
 
   const [newSessionIds, setNewSessionIds] = useState<Set<string>>(new Set());
 
@@ -2579,6 +2585,7 @@ export function SessionsAccordionEmpresas({
       productName: string;
       displayIndex: number;
     }) => {
+      setLocalHighlightSessionId(sessionId);
       if (activeSession && activeSession.sessionId !== sessionId) {
         const currentId = activeSession.sessionId;
         const status = saveStatus[currentId];
@@ -2855,7 +2862,7 @@ export function SessionsAccordionEmpresas({
           const group = (query?.data as SessionGroupDTO | null) ?? null;
           const sessions = group?.sessions ?? [];
           const sortedSessions = sortSessionsForDisplay(sessions, {
-            highlightSessionId: normalizedHighlightSessionId,
+            highlightSessionId: effectiveHighlightSessionId,
             highlightEnabled,
             newSessionIds,
           });
@@ -2955,7 +2962,7 @@ export function SessionsAccordionEmpresas({
                         action
                         value={displayIndex}
                         className={`session-list-item d-flex justify-content-between align-items-center gap-3${
-                          normalizedHighlightSessionId === session.id ? ' session-list-item-highlight' : ''
+                          effectiveHighlightSessionId === session.id ? ' session-list-item-highlight' : ''
                         }`}
                         onClick={() =>
                           void handleSelectSession({
