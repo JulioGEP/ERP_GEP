@@ -1809,6 +1809,13 @@ function sortSessionsForDisplay(
   const { highlightSessionId, highlightEnabled, newSessionIds } = options;
   const normalizedHighlightId = highlightEnabled ? highlightSessionId : null;
 
+  const getStartMs = (session: SessionDTO) => {
+    const startMs = session.fecha_inicio_utc ? Date.parse(session.fecha_inicio_utc) : Number.NaN;
+    if (Number.isFinite(startMs)) return startMs;
+    const endMs = session.fecha_fin_utc ? Date.parse(session.fecha_fin_utc) : Number.NaN;
+    return Number.isFinite(endMs) ? endMs : Number.MAX_SAFE_INTEGER;
+  };
+
   return [...sessions]
     .map((session, index) => ({ session, index }))
     .sort((a, b) => {
@@ -1819,6 +1826,10 @@ function sortSessionsForDisplay(
       const aNew = newSessionIds.has(a.session.id) && a.session.estado === 'BORRADOR';
       const bNew = newSessionIds.has(b.session.id) && b.session.estado === 'BORRADOR';
       if (aNew !== bNew) return aNew ? -1 : 1;
+
+      const aStartMs = getStartMs(a.session);
+      const bStartMs = getStartMs(b.session);
+      if (aStartMs !== bStartMs) return aStartMs - bStartMs;
 
       const aEstadoOrder = SESSION_ESTADO_ORDER[a.session.estado] ?? Number.MAX_SAFE_INTEGER;
       const bEstadoOrder = SESSION_ESTADO_ORDER[b.session.estado] ?? Number.MAX_SAFE_INTEGER;
