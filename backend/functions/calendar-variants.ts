@@ -42,6 +42,7 @@ type CalendarVariantEvent = {
     id_woo: string | null;
     name: string | null;
     status: string | null;
+    finalizar: string | null;
     price: string | null;
     stock: number | null;
     stock_status: string | null;
@@ -146,6 +147,7 @@ function normalizeVariantRecord(
     id_woo: number | bigint | string;
     name: string | null;
     status: string | null;
+    finalizar: string | null;
     price: number | string | null;
     stock: number | null;
     stock_status: string | null;
@@ -174,6 +176,7 @@ function normalizeVariantRecord(
     id_woo: record.id_woo != null ? record.id_woo.toString() : null,
     name: record.name ?? null,
     status: record.status ?? null,
+    finalizar: record.finalizar ?? 'Activa',
     price:
       record.price == null
         ? null
@@ -351,6 +354,7 @@ const variantSelectionBase = {
   id_woo: true,
   name: true,
   status: true,
+  finalizar: true,
   price: true,
   stock: true,
   stock_status: true,

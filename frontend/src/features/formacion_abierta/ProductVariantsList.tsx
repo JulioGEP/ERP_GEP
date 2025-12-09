@@ -129,6 +129,7 @@ type VariantFormValues = {
   stock: string;
   stock_status: string;
   status: string;
+  finalizar: string;
   sede: string;
   date: string;
   trainer_ids: string[];
@@ -246,6 +247,7 @@ function variantToFormValues(variant: VariantInfo): VariantFormValues {
     stock: variant.stock != null ? String(variant.stock) : '',
     stock_status: variant.stock_status ?? 'instock',
     status: variant.status ?? 'publish',
+    finalizar: variant.finalizar ?? 'Activa',
     sede: variant.sede ?? '',
     date: formatDateForInputValue(variant.date),
     trainer_ids: Array.from(trainerIdSet),
@@ -919,6 +921,7 @@ export function VariantModal({
     stock: '',
     stock_status: 'instock',
     status: 'publish',
+    finalizar: 'Activa',
     sede: '',
     date: '',
     trainer_ids: [],
@@ -930,6 +933,7 @@ export function VariantModal({
     stock: '',
     stock_status: 'instock',
     status: 'publish',
+    finalizar: 'Activa',
     sede: '',
     date: '',
     trainer_ids: [],
@@ -2115,6 +2119,7 @@ export function VariantModal({
       formValues.stock !== initialValues.stock ||
       formValues.stock_status !== initialValues.stock_status ||
       formValues.status !== initialValues.status ||
+      formValues.finalizar !== initialValues.finalizar ||
       formValues.sede !== initialValues.sede ||
       formValues.date !== initialValues.date ||
       !areStringArraysEqual(formValues.trainer_ids, initialValues.trainer_ids) ||
@@ -2156,6 +2161,9 @@ export function VariantModal({
     }
     if (formValues.status !== initialValues.status) {
       payload.status = formValues.status.trim() ? formValues.status.trim() : null;
+    }
+    if (formValues.finalizar !== initialValues.finalizar) {
+      payload.finalizar = formValues.finalizar.trim() || 'Activa';
     }
     if (formValues.sede !== initialValues.sede) {
       payload.sede = formValues.sede.trim() ? formValues.sede.trim() : null;
@@ -2704,6 +2712,19 @@ export function VariantModal({
                           {option.label}
                         </option>
                       ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={3}>
+                  <Form.Group controlId="variantFinalizar" className="mb-0">
+                    <Form.Label>Finalizar</Form.Label>
+                    <Form.Select
+                      value={formValues.finalizar}
+                      onChange={handleChange('finalizar')}
+                      disabled={isSaving}
+                    >
+                      <option value="Activa">Activa</option>
+                      <option value="Finalizada">Finalizada</option>
                     </Form.Select>
                   </Form.Group>
                 </Col>

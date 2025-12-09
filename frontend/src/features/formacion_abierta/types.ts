@@ -12,6 +12,7 @@ export type VariantInfo = {
   id_woo: string;
   name: string | null;
   status: string | null;
+  finalizar: string | null;
   price: string | null;
   stock: number | null;
   stock_status: string | null;
@@ -81,6 +82,7 @@ export type VariantUpdatePayload = {
   stock?: number | null;
   stock_status?: string | null;
   status?: string | null;
+  finalizar?: string | null;
   sede?: string | null;
   date?: string | null;
   trainer_ids?: string[];

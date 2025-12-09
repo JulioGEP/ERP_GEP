@@ -27,6 +27,7 @@ type VariantRecord = {
   id_woo: bigint;
   name: string | null;
   status: string | null;
+  finalizar: string | null;
   price: Decimal | string | null; // ✅ Decimal correcto
   stock: number | null;
   stock_status: string | null;
@@ -122,6 +123,7 @@ function normalizeVariant(record: VariantRecord) {
     id_woo: record.id_woo?.toString() ?? null,
     name: record.name ?? null,
     status: record.status ?? null,
+    finalizar: record.finalizar ?? 'Activa',
     price,
     stock: record.stock ?? null,
     stock_status: record.stock_status ?? null,
@@ -727,6 +729,7 @@ export const handler = async (event: any) => {
           id_padre: product.id_woo,
           name: wooVariant.name ?? `${sedeOption} - ${dateOption}`,
           status: wooVariant.status ?? 'publish',
+          finalizar: 'Activa',
           price: product.variant_price,
           stock: product.variant_stock_quantity ?? null,
           stock_status: wooVariant.stock_status ?? stockStatus,
@@ -740,6 +743,7 @@ export const handler = async (event: any) => {
           id_woo: true,
           name: true,
           status: true,
+          finalizar: true,
           price: true,
           stock: true,
           stock_status: true,

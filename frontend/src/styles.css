@@ -748,6 +748,13 @@ option.session-option-unavailable {
   --erp-calendar-event-bg: #f3edff;
 }
 
+.erp-calendar-event.erp-calendar-event-variant.estado-finalizada {
+  --erp-calendar-accent: #3a7bd5;
+  --erp-calendar-status-bg: rgba(58, 123, 213, 0.16);
+  --erp-calendar-status-color: #2f63ad;
+  --erp-calendar-event-bg: #edf3ff;
+}
+
 .erp-calendar-event.erp-calendar-event-variant.is-cancelled {
   --erp-calendar-accent: var(--color-red);
   --erp-calendar-status-bg: rgba(232, 71, 77, 0.16);
