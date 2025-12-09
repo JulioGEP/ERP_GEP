@@ -1696,7 +1696,7 @@ export function CalendarView({
     const eventTitle =
       mode === 'trainers'
         ? trainerNames.length
-          ? trainerNames
+          ? truncateLabel(trainerNames, 20)
           : 'Sin formador'
       : mode === 'units'
         ? unitNames.length
