@@ -841,6 +841,7 @@ export const handler = createHttpHandler(async (request) => {
         sesiones: {
           select: {
             id: true,
+            deal_id: true,
             nombre_cache: true,
             fecha_inicio_utc: true,
             fecha_fin_utc: true,

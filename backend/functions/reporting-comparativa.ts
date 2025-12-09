@@ -488,13 +488,15 @@ export const handler = createHttpHandler(async (request) => {
       .filter((value): value is string => Boolean(value)),
   );
 
-  const filteredCurrentVariants = currentVariants.filter((variant) =>
-    currentVariantDealIds.has(normalizeVariantWooId(variant.id_woo)),
-  );
+  const filteredCurrentVariants = currentVariants.filter((variant) => {
+    const normalizedIdWoo = normalizeVariantWooId(variant.id_woo);
+    return normalizedIdWoo ? currentVariantDealIds.has(normalizedIdWoo) : false;
+  });
 
-  const filteredPreviousVariants = previousVariants.filter((variant) =>
-    previousVariantDealIds.has(normalizeVariantWooId(variant.id_woo)),
-  );
+  const filteredPreviousVariants = previousVariants.filter((variant) => {
+    const normalizedIdWoo = normalizeVariantWooId(variant.id_woo);
+    return normalizedIdWoo ? previousVariantDealIds.has(normalizedIdWoo) : false;
+  });
 
   const weeks = 12;
 
