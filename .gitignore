@@ -56,7 +56,10 @@ backend/dist/
 
 # Limpieza import puntual trainers
 backend/data/
-backend/scripts/
+# Scripts de backend: ignoramos el resto, pero mantenemos utilidades necesarias
+backend/scripts/*
+!backend/scripts/
+!backend/scripts/typecheck.js
 
 # Auth local
 cookies.txt
