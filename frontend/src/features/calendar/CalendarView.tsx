@@ -679,11 +679,17 @@ function formatVariantUnitNames(units: VariantUnit[]): string {
     .join(', ');
 }
 
-function getVariantStatusClass(status?: string | null): string {
+function getVariantStatusClass(status?: string | null, finalizar?: string | null): string {
+  const normalizedFinalizar = finalizar?.trim().toLowerCase();
+  if (normalizedFinalizar === 'finalizada') {
+    return 'estado-finalizada';
+  }
+
   const normalizedStatus = status?.trim().toLowerCase();
   if (normalizedStatus === 'private') {
     return 'is-cancelled';
   }
+
   return '';
 }
 
@@ -1947,7 +1953,7 @@ export function CalendarView({
                         return (
                           <div
                             key={`variant-${variant.id}`}
-                            className={`erp-calendar-event erp-calendar-month-event erp-calendar-event-variant ${getVariantStatusClass(variant.variant.status)}`.trim()}
+                            className={`erp-calendar-event erp-calendar-month-event erp-calendar-event-variant ${getVariantStatusClass(variant.variant.status, variant.variant.finalizar)}`.trim()}
                             title={variantTitle}
                             role="button"
                             tabIndex={0}
@@ -2086,7 +2092,7 @@ export function CalendarView({
                           );
                         }
 
-                        const className = `${baseClass} erp-calendar-event-variant ${getVariantStatusClass(event.variant.variant.status)} ${continuesClasses}`.trim();
+                        const className = `${baseClass} erp-calendar-event-variant ${getVariantStatusClass(event.variant.variant.status, event.variant.variant.finalizar)} ${continuesClasses}`.trim();
                         return (
                           <div
                             key={`variant-${event.variant.id}-${event.startMinutes}`}

@@ -151,6 +151,7 @@ model variants {
   id_woo          BigInt    @unique(map: "variants_id_woo_key") @db.BigInt
   name            String?
   status          String?
+  finalizar       String    @default("Activa") @db.VarChar(20)
   price           Decimal?  @db.Decimal(12, 2)
   stock           Int?
   stock_status    String?

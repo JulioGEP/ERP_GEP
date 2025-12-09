@@ -256,11 +256,14 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
     });
   });
 
+  const finalizar = toTrimmedString(input?.finalizar) ?? 'Activa';
+
   return {
     id: String(input?.id ?? fallbackId),
     id_woo: input?.id_woo != null ? String(input.id_woo) : '',
     name: input?.name ?? null,
     status: input?.status ?? null,
+    finalizar,
     price: input?.price != null ? String(input.price) : null,
     stock: stockValue,
     stock_status: input?.stock_status ?? null,

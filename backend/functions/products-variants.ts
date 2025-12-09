@@ -782,6 +782,7 @@ type VariantUpdateInput = {
   stock?: number | null;
   stock_status?: string | null;
   status?: string | null;
+  finalizar?: string | null;
   sede?: string | null;
   date?: Date | null;
   trainer_id?: string | null;
@@ -1048,6 +1049,7 @@ type VariantRecord = {
   id_padre: bigint;
   name: string | null;
   status: string | null;
+  finalizar: string | null;
   price: Decimal | string | null;
   stock: number | null;
   stock_status: string | null;
@@ -1133,6 +1135,7 @@ async function findProducts(prisma: PrismaClient): Promise<ProductRecord[]> {
       id_padre: true,
       name: true,
       status: true,
+      finalizar: true,
       price: true,
       stock: true,
       stock_status: true,
@@ -1580,6 +1583,7 @@ function normalizeVariant(record: VariantRecord) {
     id_padre: record.id_padre?.toString(),
     name: record.name ?? null,
     status: record.status ?? null,
+    finalizar: record.finalizar ?? 'Activa',
     price,
     stock: record.stock ?? null,
     stock_status: record.stock_status ?? null,
@@ -1681,6 +1685,21 @@ export const handler = createHttpHandler<any>(async (request) => {
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(payload, 'finalizar')) {
+      if (payload.finalizar == null || payload.finalizar === '') {
+        updates.finalizar = 'Activa';
+      } else {
+        const text = String(payload.finalizar).trim().toLowerCase();
+        if (text === 'activa') {
+          updates.finalizar = 'Activa';
+        } else if (text === 'finalizada') {
+          updates.finalizar = 'Finalizada';
+        } else {
+          return errorResponse('VALIDATION_ERROR', 'Valor de finalización inválido', 400);
+        }
+      }
+    }
+
     if (Object.prototype.hasOwnProperty.call(payload, 'sede')) {
       updates.sede = payload.sede == null ? null : String(payload.sede).trim();
     }
@@ -1740,6 +1759,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         id_padre: true,
         name: true,
         status: true,
+        finalizar: true,
         price: true,
         stock: true,
         stock_status: true,
@@ -1847,6 +1867,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     if ('stock' in updates) data.stock = updates.stock ?? null;
     if ('stock_status' in updates) data.stock_status = updates.stock_status ?? null;
     if ('status' in updates) data.status = updates.status ?? null;
+    if ('finalizar' in updates) data.finalizar = updates.finalizar ?? 'Activa';
     if ('sede' in updates) data.sede = updates.sede ?? null;
     if ('date' in updates) data.date = updates.date ?? null;
     if ('trainer_id' in updates) data.trainer_id = updates.trainer_id ?? null;
@@ -1881,6 +1902,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         id_padre: true,
         name: true,
         status: true,
+        finalizar: true,
         price: true,
         stock: true,
         stock_status: true,
@@ -1949,6 +1971,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         id_padre: true,
         name: true,
         status: true,
+        finalizar: true,
         price: true,
         stock: true,
         stock_status: true,
