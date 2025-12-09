@@ -395,16 +395,10 @@ function formatResourceName(resource: CalendarResource): string {
   return secondary?.length ? `${resource.name} ${secondary}`.trim() : resource.name;
 }
 
-function formatResourceSummary(
-  resources: CalendarResource[],
-  emptyLabel: string,
-  options?: { maxLength?: number },
-): string {
+function formatResourceSummary(resources: CalendarResource[], emptyLabel: string): string {
   if (!resources.length) return emptyLabel;
   const [first, ...rest] = resources;
-  const base = options?.maxLength
-    ? truncateLabel(formatResourceName(first), options.maxLength)
-    : formatResourceName(first);
+  const base = formatResourceName(first);
   return rest.length ? `${base} +${rest.length}` : base;
 }
 
@@ -1655,7 +1649,7 @@ export function CalendarView({
         mode === 'sessions'
           ? session.dealPipelineId ?? session.title
         : mode === 'trainers'
-          ? formatResourceSummary(session.trainers, 'Sin formador', { maxLength: 20 })
+          ? formatResourceSummary(session.trainers, 'Sin formador')
           : mode === 'units'
           ? truncateLabel(formatResourceSummary(session.units, 'Sin unidad móvil'), 20)
           : truncateLabel(formatSessionOrganization(session, 'Sin organización'));
@@ -1702,7 +1696,7 @@ export function CalendarView({
     const eventTitle =
       mode === 'trainers'
         ? trainerNames.length
-          ? truncateLabel(trainerNames, 20)
+          ? trainerNames
           : 'Sin formador'
       : mode === 'units'
         ? unitNames.length
