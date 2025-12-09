@@ -783,6 +783,12 @@ option.session-option-unavailable {
   font-size: 0.95rem;
   font-weight: 600;
   color: inherit;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .erp-calendar-event-meta {
@@ -801,6 +807,10 @@ option.session-option-unavailable {
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--color-gray-dark);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .erp-calendar-chip-icon {
