@@ -471,6 +471,10 @@ export const handler = async (event: any) => {
     }
 
     const events: CalendarVariantEvent[] = [];
+    const variantTemplatesByWooId = new Map<
+      string,
+      { product: ReturnType<typeof normalizeProductRecord>; variant: ReturnType<typeof normalizeVariantRecord>; deals: CalendarVariantDeal[] }
+    >();
 
     // Claves únicas de variación (Woo)
     const variantWooIds = Array.isArray(variants)
@@ -596,6 +600,14 @@ export const handler = async (event: any) => {
         });
       };
 
+      if (wooIdKey) {
+        variantTemplatesByWooId.set(wooIdKey, {
+          product,
+          variant: normalizedVariant,
+          deals: variantDeals,
+        });
+      }
+
       pushEvent(record.id, times.start, times.end);
 
       // duplicado para verticales 2 días
@@ -608,6 +620,44 @@ export const handler = async (event: any) => {
         }
       }
     });
+
+    if (variantTemplatesByWooId.size) {
+      const sessionsForVariants = await prisma.sesiones.findMany({
+        where: {
+          fecha_inicio_utc: { not: null, gte: range.start, lte: range.end },
+          fecha_fin_utc: { not: null },
+          deals: {
+            w_id_variation: { in: Array.from(variantTemplatesByWooId.keys()) },
+          },
+        },
+        select: {
+          id: true,
+          fecha_inicio_utc: true,
+          fecha_fin_utc: true,
+          deals: { select: { w_id_variation: true } },
+        },
+      });
+
+      sessionsForVariants.forEach((session) => {
+        const wooId = toTrimmed(session?.deals?.w_id_variation ?? null);
+        if (!wooId) return;
+        const template = variantTemplatesByWooId.get(wooId);
+        if (!template) return;
+
+        const start = toDate(session?.fecha_inicio_utc ?? null);
+        const end = toDate(session?.fecha_fin_utc ?? null);
+        if (!start || !end) return;
+
+        events.push({
+          id: `${template.variant.id}:session:${session.id}`,
+          start: start.toISOString(),
+          end: end.toISOString(),
+          product: template.product,
+          variant: template.variant,
+          deals: template.deals,
+        });
+      });
+    }
 
     return successResponse({
       range: {
