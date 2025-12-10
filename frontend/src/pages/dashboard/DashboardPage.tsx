@@ -46,15 +46,15 @@ const SESSION_FORMACION_ABIERTA_URL = `${TRAINERLESS_BUDGETS_PATH}?budgets-table
 )}`;
 
 const BUDGETS_PENDING_CAES_URL =
-  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__caes_label=S%C3%AD&budgets-table__filter__caes_val=Pendiente`;
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__caes_label=Si&budgets-table__filter__caes_val=no`;
 const BUDGETS_PENDING_FUNDAE_URL =
-  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__fundae_label=S%C3%AD&budgets-table__filter__fundae_val=Pendiente`;
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__fundae_label=si&budgets-table__filter__fundae_val=no`;
 const BUDGETS_PENDING_HOTEL_URL =
-  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__hotel_label=S%C3%AD&budgets-table__filter__hotel_val=Pendiente`;
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__hotel_label=Si&budgets-table__filter__hotel_val=no`;
 const BUDGETS_PENDING_PO_URL =
-  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__po=S%C3%AD&budgets-table__filter__po_val=Pendiente`;
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__po=Si&budgets-table__filter__po_val=No`;
 const BUDGETS_PENDING_TRANSPORT_URL =
-  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__transporte=S%C3%AD&budgets-table__filter__transporte_val=Pendiente`;
+  `${UNWORKED_BUDGETS_PATH}?budgets-table__filter__transporte=Si&budgets-table__filter__transporte_val=no`;
 
 type MetricCardProps = {
   title: string;
