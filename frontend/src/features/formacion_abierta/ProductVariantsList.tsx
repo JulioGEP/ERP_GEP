@@ -2695,7 +2695,7 @@ export function VariantModal({
               </Row>
 
               <Row className="g-3">
-                <Col md={3}>
+                <Col md={2}>
                   <Form.Group controlId="variantStatus" className="mb-0">
                     <Form.Label>Estado</Form.Label>
                     <Form.Select
@@ -2715,7 +2715,7 @@ export function VariantModal({
                     </Form.Select>
                   </Form.Group>
                 </Col>
-                <Col md={3}>
+                <Col md={2}>
                   <Form.Group controlId="variantFinalizar" className="mb-0">
                     <Form.Label>Finalizar</Form.Label>
                     <Form.Select
@@ -2728,7 +2728,7 @@ export function VariantModal({
                     </Form.Select>
                   </Form.Group>
                 </Col>
-                <Col md={3}>
+                <Col md={2}>
                   <Form.Group controlId="variantPrice" className="mb-0">
                     <Form.Label>Precio</Form.Label>
                     <Form.Control
@@ -2741,7 +2741,7 @@ export function VariantModal({
                     />
                   </Form.Group>
                 </Col>
-                <Col md={3}>
+                <Col md={2}>
                   <Form.Group controlId="variantStock" className="mb-0">
                     <Form.Label>Stock</Form.Label>
                     <Form.Control
@@ -2754,7 +2754,7 @@ export function VariantModal({
                     />
                   </Form.Group>
                 </Col>
-                <Col md={3}>
+                <Col md={2}>
                   <Form.Group controlId="variantStockStatus" className="mb-0">
                     <Form.Label>Estado de stock</Form.Label>
                     <Form.Select
