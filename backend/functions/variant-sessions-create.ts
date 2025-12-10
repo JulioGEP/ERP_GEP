@@ -121,6 +121,16 @@ export const handler = createHttpHandler<any>(async (request) => {
   const startHour = startMatch ? Number.parseInt(startMatch[1], 10) : 9;
   const startMinute = startMatch ? Number.parseInt(startMatch[2], 10) : 0;
 
+  let placeholderCounter = 0;
+
+  const buildPlaceholderIdWoo = () => {
+    // Genera un identificador único (y distinto del de WooCommerce) para evitar colisiones
+    // con la restricción de unicidad en la columna `id_woo` cuando se duplican sesiones.
+    const base = BigInt(Date.now()) * 1000n + BigInt(placeholderCounter % 1000);
+    placeholderCounter += 1;
+    return base;
+  };
+
   for (const session of parsedSessions) {
     const key = formatDateKey(buildMadridDateTime({
       year: session.dateInfo.year,
@@ -147,7 +157,7 @@ export const handler = createHttpHandler<any>(async (request) => {
 
     const created = await prisma.variants.create({
       data: {
-        id_woo: baseVariant.id_woo,
+        id_woo: buildPlaceholderIdWoo(),
         id_padre: baseVariant.id_padre,
         name: baseVariant.name,
         status: baseVariant.status,
