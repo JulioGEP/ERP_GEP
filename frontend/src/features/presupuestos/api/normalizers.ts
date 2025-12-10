@@ -687,6 +687,7 @@ export function normalizeSessionStudent(raw: any): SessionStudent {
     nombre: toStringValue(raw?.nombre ?? raw?.name) ?? '',
     apellido: toStringValue(raw?.apellido ?? raw?.last_name ?? raw?.lastName) ?? '',
     dni: toStringValue(raw?.dni) ?? '',
+    asistencia: Boolean(raw?.asistencia),
     apto: Boolean(raw?.apto),
     certificado: Boolean(raw?.certificado),
     drive_url: toStringValue(raw?.drive_url ?? raw?.driveUrl) ?? null,

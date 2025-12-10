@@ -2752,74 +2752,6 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
             </div>
 
             <div>
-              <h5 className="fw-semibold mb-2">Fichar sesión</h5>
-              {timeLogLoadErrorMessage ? <Alert variant="danger">{timeLogLoadErrorMessage}</Alert> : null}
-              {timeLogError ? <Alert variant="danger">{timeLogError}</Alert> : null}
-              {timeLogSuccess ? (
-                <Alert variant="success">Registro horario guardado correctamente.</Alert>
-              ) : null}
-              {timeLogQuery.isLoading ? (
-                <div className="d-flex align-items-center gap-2">
-                  <Spinner animation="border" size="sm" />
-                  <span>Cargando registro horario…</span>
-                </div>
-              ) : (
-                <Form onSubmit={handleTimeLogSubmit} className="d-grid gap-3">
-                  <Row className="g-3">
-                    <Col xs={12} sm={6}>
-                      <Form.Group controlId={`trainer-variant-${variant.variantId}-time-entry`}>
-                        <Form.Label>Hora de entrada</Form.Label>
-                        <Form.Control
-                          type="datetime-local"
-                          value={timeLogEntryValue}
-                          onChange={(event) => setTimeLogEntryValue(event.target.value)}
-                          disabled={saveTimeLogMutation.isPending}
-                          required
-                        />
-                      </Form.Group>
-                    </Col>
-                    <Col xs={12} sm={6}>
-                      <Form.Group controlId={`trainer-variant-${variant.variantId}-time-exit`}>
-                        <Form.Label>Hora de salida</Form.Label>
-                        <Form.Control
-                          type="datetime-local"
-                          value={timeLogExitValue}
-                          onChange={(event) => setTimeLogExitValue(event.target.value)}
-                          disabled={saveTimeLogMutation.isPending}
-                          required
-                        />
-                      </Form.Group>
-                    </Col>
-                  </Row>
-                  <div className="d-flex justify-content-end">
-                    <Button
-                      type="submit"
-                      disabled={saveTimeLogMutation.isPending}
-                      style={
-                        hasExistingTimeLog
-                          ? {
-                              backgroundColor: '#F5C147',
-                              borderColor: '#F5C147',
-                              color: '#212529',
-                            }
-                          : undefined
-                      }
-                    >
-                      {saveTimeLogMutation.isPending
-                        ? 'Guardando…'
-                        : hasExistingTimeLog
-                        ? 'Modificar'
-                        : 'Guardar registro'}
-                    </Button>
-                  </div>
-                  {formattedTimeLogUpdated ? (
-                    <div className="text-muted small">Última actualización: {formattedTimeLogUpdated}</div>
-                  ) : null}
-                </Form>
-              )}
-            </div>
-
-            <div>
               <h5 className="fw-semibold mb-3">Alumnos</h5>
               {studentError ? <Alert variant="danger">{studentError}</Alert> : null}
               {studentsQuery.isError ? (
@@ -3128,6 +3060,74 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
                 </Accordion>
               </div>
             ) : null}
+
+            <div>
+              <h5 className="fw-semibold mb-2">Fichar sesión</h5>
+              {timeLogLoadErrorMessage ? <Alert variant="danger">{timeLogLoadErrorMessage}</Alert> : null}
+              {timeLogError ? <Alert variant="danger">{timeLogError}</Alert> : null}
+              {timeLogSuccess ? (
+                <Alert variant="success">Registro horario guardado correctamente.</Alert>
+              ) : null}
+              {timeLogQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" />
+                  <span>Cargando registro horario…</span>
+                </div>
+              ) : (
+                <Form onSubmit={handleTimeLogSubmit} className="d-grid gap-3">
+                  <Row className="g-3">
+                    <Col xs={12} sm={6}>
+                      <Form.Group controlId={`trainer-variant-${variant.variantId}-time-entry`}>
+                        <Form.Label>Hora de entrada</Form.Label>
+                        <Form.Control
+                          type="datetime-local"
+                          value={timeLogEntryValue}
+                          onChange={(event) => setTimeLogEntryValue(event.target.value)}
+                          disabled={saveTimeLogMutation.isPending}
+                          required
+                        />
+                      </Form.Group>
+                    </Col>
+                    <Col xs={12} sm={6}>
+                      <Form.Group controlId={`trainer-variant-${variant.variantId}-time-exit`}>
+                        <Form.Label>Hora de salida</Form.Label>
+                        <Form.Control
+                          type="datetime-local"
+                          value={timeLogExitValue}
+                          onChange={(event) => setTimeLogExitValue(event.target.value)}
+                          disabled={saveTimeLogMutation.isPending}
+                          required
+                        />
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                  <div className="d-flex justify-content-end">
+                    <Button
+                      type="submit"
+                      disabled={saveTimeLogMutation.isPending}
+                      style={
+                        hasExistingTimeLog
+                          ? {
+                              backgroundColor: '#F5C147',
+                              borderColor: '#F5C147',
+                              color: '#212529',
+                            }
+                          : undefined
+                      }
+                    >
+                      {saveTimeLogMutation.isPending
+                        ? 'Guardando…'
+                        : hasExistingTimeLog
+                        ? 'Modificar'
+                        : 'Guardar registro'}
+                    </Button>
+                  </div>
+                  {formattedTimeLogUpdated ? (
+                    <div className="text-muted small">Última actualización: {formattedTimeLogUpdated}</div>
+                  ) : null}
+                </Form>
+              )}
+            </div>
           </Stack>
         </Stack>
       </Card.Body>
