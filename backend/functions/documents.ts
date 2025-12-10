@@ -29,15 +29,26 @@ function parsePath(path: string | undefined | null): { isUpload: boolean } {
   return { isUpload: action === 'upload' };
 }
 
-function normalizeIncomingFileName(name: string): string {
-  const trimmed = typeof name === 'string' ? name.trim() : '';
-  if (!trimmed) return '';
-  if (!trimmed.includes('%')) return trimmed;
-  try {
-    return decodeURIComponent(trimmed);
-  } catch {
-    return trimmed;
-  }
+function sanitizeFileNamePart(value: string | null | undefined): string {
+  const normalized = toStringOrNull(value) ?? '';
+  if (!normalized) return '';
+  return normalized.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function formatTrainingDate(value: unknown): string {
+  const date = value instanceof Date ? value : new Date(String(value ?? ''));
+  if (!Number.isFinite(date.getTime())) return 'Fecha desconocida';
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function extractProvince(address: string | null | undefined): string {
+  const normalized = sanitizeFileNamePart(address);
+  if (!normalized) return 'Provincia desconocida';
+  const parts = normalized.split(',').map((part) => part.trim()).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : normalized;
 }
 
 function toBufferFromBase64(contentBase64: string): Buffer {
@@ -92,10 +103,6 @@ export const handler = async (event: any) => {
     const fileInput = typeof payload?.file === 'object' && payload.file
       ? payload.file
       : payload;
-
-    const fileNameRaw =
-      toStringOrNull(fileInput?.fileName ?? fileInput?.name ?? payload?.fileName ?? payload?.name) ??
-      null;
     const mimeType =
       toStringOrNull(fileInput?.mimeType ?? payload?.mimeType ?? payload?.contentType) ??
       'application/pdf';
@@ -171,13 +178,37 @@ export const handler = async (event: any) => {
     const sessionName =
       toStringOrNull(resolvedSession?.nombre_cache) ?? `Sesión ${sessionNumber}`;
 
-    let normalizedFileName = fileNameRaw
-      ? normalizeIncomingFileName(fileNameRaw)
-      : '';
-    if (!normalizedFileName) {
-      const studentName = `${student.nombre} ${student.apellido}`.trim();
-      normalizedFileName = `Certificado - ${studentName || student.dni || student.id}`;
-    }
+    const dealProduct = resolvedSession.deal_product_id
+      ? await prisma.deal_products.findUnique({
+          where: { id: resolvedSession.deal_product_id },
+          select: { name: true, type: true, category: true },
+        })
+      : null;
+
+    const organizationName =
+      sanitizeFileNamePart(
+        deal.organizations?.name ?? (deal as any)?.organizations?.name ?? (deal as any)?.organization?.name,
+      ) || 'Empresa desconocida';
+    const trainingType =
+      sanitizeFileNamePart(dealProduct?.name) ||
+      sanitizeFileNamePart(dealProduct?.type) ||
+      sanitizeFileNamePart(dealProduct?.category) ||
+      'Formación';
+    const trainingDate = formatTrainingDate(resolvedSession.fecha_inicio_utc);
+    const provinceFromSession = extractProvince(resolvedSession.direccion);
+    const provinceFromOrganization = extractProvince((deal as any)?.organizations?.address);
+    const province =
+      (provinceFromSession !== 'Provincia desconocida' ? provinceFromSession : null) ||
+      (provinceFromOrganization !== 'Provincia desconocida' ? provinceFromOrganization : null) ||
+      'Provincia desconocida';
+    const studentName =
+      sanitizeFileNamePart(`${student.nombre ?? ''} ${student.apellido ?? ''}`) ||
+      sanitizeFileNamePart(student.nombre) ||
+      sanitizeFileNamePart(student.apellido) ||
+      sanitizeFileNamePart(student.dni) ||
+      'Alumno sin nombre';
+
+    let normalizedFileName = `Certificado - ${organizationName} - ${trainingType} - ${trainingDate} - ${province} - ${studentName}`;
     if (!normalizedFileName.toLowerCase().endsWith('.pdf')) {
       normalizedFileName = `${normalizedFileName}.pdf`;
     }
