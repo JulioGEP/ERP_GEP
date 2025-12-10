@@ -35,7 +35,10 @@ const BORRADOR_TRANSITION_STATES = new Set<SessionEstado>(['SUSPENDIDA', 'CANCEL
 type AutomaticSessionEstado = Extract<SessionEstado, 'BORRADOR' | 'PLANIFICADA'>;
 
 // Unidades “comodín” que no bloquean disponibilidad
-const ALWAYS_AVAILABLE_UNIT_IDS = new Set(['52377f13-05dd-4830-88aa-0f5c78bee750']);
+const ALWAYS_AVAILABLE_UNIT_IDS = new Set([
+  '52377f13-05dd-4830-88aa-0f5c78bee750',
+  '0000',
+]);
 
 const MADRID_DATE_ONLY_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/Madrid',
@@ -1014,7 +1017,7 @@ export const handler = async (event: any) => {
           (s.trainers as Array<{ trainer_id: string }>).forEach((t) => trainerLocks.add(t.trainer_id));
           (s.unidades as Array<{ unidad_id: string | null; unidad_movil_id?: string | null }>).forEach((u) => {
             const id = toTrimmed(u.unidad_id ?? u.unidad_movil_id);
-            if (id) unitLocks.add(id);
+            if (id && !ALWAYS_AVAILABLE_UNIT_IDS.has(id)) unitLocks.add(id);
           });
           if (s.sala_id) roomLocks.add(s.sala_id as string);
         }
