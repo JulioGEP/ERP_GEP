@@ -35,9 +35,46 @@ function sanitizeFileNamePart(value: string | null | undefined): string {
   return normalized.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function formatTrainingDate(value: unknown): string {
-  const date = value instanceof Date ? value : new Date(String(value ?? ''));
-  if (!Number.isFinite(date.getTime())) return 'Fecha desconocida';
+function parseTrainingDate(value: unknown): Date | null {
+  if (value instanceof Date && Number.isFinite(value.getTime())) {
+    return value;
+  }
+
+  const normalized = toStringOrNull(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const isoCandidate = new Date(normalized);
+  if (Number.isFinite(isoCandidate.getTime())) {
+    return isoCandidate;
+  }
+
+  const dateMatch = normalized.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  if (!dateMatch) {
+    return null;
+  }
+
+  const [, dayStr, monthStr, yearStr] = dateMatch;
+  const day = Number.parseInt(dayStr, 10);
+  const month = Number.parseInt(monthStr, 10) - 1;
+  const year = Number.parseInt(yearStr.length === 2 ? `20${yearStr}` : yearStr, 10);
+  const candidate = new Date(Date.UTC(year, month, day));
+
+  if (
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() !== month ||
+    candidate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return candidate;
+}
+
+function formatTrainingDate(value: unknown, fallback?: unknown): string {
+  const date = parseTrainingDate(value) ?? parseTrainingDate(fallback);
+  if (!date) return 'Fecha desconocida';
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   const day = String(date.getUTCDate()).padStart(2, '0');
@@ -194,10 +231,15 @@ export const handler = async (event: any) => {
       sanitizeFileNamePart(dealProduct?.type) ||
       sanitizeFileNamePart(dealProduct?.category) ||
       'Formación';
-    const trainingDate = formatTrainingDate(resolvedSession.fecha_inicio_utc);
+    const trainingDate = formatTrainingDate(
+      resolvedSession.fecha_inicio_utc,
+      (deal as any)?.a_fecha ?? null,
+    );
+    const provinceFromDeal = sanitizeFileNamePart(toStringOrNull((deal as any)?.sede_label));
     const provinceFromSession = extractProvince(resolvedSession.direccion);
     const provinceFromOrganization = extractProvince((deal as any)?.organizations?.address);
     const province =
+      provinceFromDeal ||
       (provinceFromSession !== 'Provincia desconocida' ? provinceFromSession : null) ||
       (provinceFromOrganization !== 'Provincia desconocida' ? provinceFromOrganization : null) ||
       'Provincia desconocida';
