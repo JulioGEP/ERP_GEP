@@ -136,13 +136,6 @@ function computeExpiration(hours: number): Date {
   return now;
 }
 
-function resolveExpiration(expiresInHours: number, sessionEnd: Date | null | undefined): Date {
-  if (sessionEnd instanceof Date && Number.isFinite(sessionEnd.getTime())) {
-    return sessionEnd;
-  }
-  return computeExpiration(expiresInHours);
-}
-
 async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: string) {
   const now = new Date();
   return prisma.tokens.findFirst({
@@ -153,18 +146,10 @@ async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: st
         { expires_at: null },
         { expires_at: { gt: now } },
       ],
-      AND: [
-        {
-          OR: [
-            { sesiones: { fecha_fin_utc: null } },
-            { sesiones: { fecha_fin_utc: { gt: now } } },
-          ],
-        },
-      ],
     },
     orderBy: { created_at: 'desc' },
     include: {
-      sesiones: { select: { id: true, deal_id: true, fecha_fin_utc: true } },
+      sesiones: { select: { id: true, deal_id: true } },
     },
   });
 }
@@ -203,7 +188,7 @@ export const handler = createHttpHandler(async (request) => {
 
     const sesiones = await prisma.sesiones.findUnique({
       where: { id: sessionId },
-      select: { id: true, deal_id: true, fecha_fin_utc: true },
+      select: { id: true, deal_id: true },
     });
 
     if (!sesiones || sesiones.deal_id !== dealId) {
@@ -241,7 +226,7 @@ export const handler = createHttpHandler(async (request) => {
 
     const sesiones = await prisma.sesiones.findUnique({
       where: { id: sessionId },
-      select: { id: true, deal_id: true, fecha_fin_utc: true },
+      select: { id: true, deal_id: true },
     });
 
     if (!sesiones || sesiones.deal_id !== dealId) {
@@ -263,7 +248,7 @@ export const handler = createHttpHandler(async (request) => {
     });
 
     const token = generateToken();
-    const expiresAt = resolveExpiration(ttlHours, sesiones?.fecha_fin_utc);
+    const expiresAt = computeExpiration(ttlHours);
 
     const created = await prisma.tokens.create({
       data: {
