@@ -77,6 +77,7 @@ export type SessionComment = {
   sesion_id: string;
   content: string;
   author: string | null;
+  author_id: string | null;
   compartir_formador: boolean;
   created_at: string | null;
   updated_at: string | null;
@@ -922,6 +923,7 @@ function normalizeSessionComment(raw: any): SessionComment {
   const sessionId = toStringValue(raw?.sesion_id) ?? '';
   const content = toStringValue(raw?.content) ?? '';
   const author = toStringValue(raw?.author);
+  const authorId = toStringValue(raw?.author_id ?? raw?.authorId);
   const shareWithTrainer = Boolean(raw?.compartir_formador);
   const createdAt = toStringValue(raw?.created_at);
   const updatedAt = toStringValue(raw?.updated_at);
@@ -932,6 +934,7 @@ function normalizeSessionComment(raw: any): SessionComment {
     sesion_id: sessionId,
     content,
     author: author ?? null,
+    author_id: authorId ?? null,
     compartir_formador: shareWithTrainer,
     created_at: createdAt ?? null,
     updated_at: updatedAt ?? null,

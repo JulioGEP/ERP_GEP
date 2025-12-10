@@ -469,6 +469,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
     return documentsQuery.data?.documents.filter((doc) => doc.compartir_formador) ?? [];
   }, [documentsQuery.data]);
 
+  const normalizedUserId = useMemo(() => userId.trim().toLowerCase(), [userId]);
   const normalizedUserName = useMemo(() => userName.trim().toLowerCase(), [userName]);
   const trainerDisplayName = useMemo(() => userName.trim(), [userName]);
 
@@ -1296,8 +1297,10 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                         filteredComments.map((comment) => {
                           const author = (comment.author ?? '—').trim();
                           const authorLower = author.toLowerCase();
+                          const authorId = comment.author_id?.trim().toLowerCase() ?? null;
                           const canEdit =
-                            Boolean(authorLower.length) && authorLower === normalizedUserName;
+                            (authorId && authorId === normalizedUserId) ||
+                            (Boolean(authorLower.length) && authorLower === normalizedUserName);
                           const isEditing = editingCommentId === comment.id;
                           const isSaving =
                             savingCommentId === comment.id && updateCommentMutation.isPending;
