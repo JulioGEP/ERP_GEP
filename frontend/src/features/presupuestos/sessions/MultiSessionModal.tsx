@@ -198,9 +198,6 @@ export function MultiSessionModal({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (calendarTargetRef.current && !calendarTargetRef.current.contains(target)) {
-        setCalendarOpen(false);
-      }
       if (trainerFieldRef.current && !trainerFieldRef.current.contains(target)) {
         setTrainerListOpen(false);
       }
@@ -217,6 +214,12 @@ export function MultiSessionModal({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    if (!show) {
+      setCalendarOpen(false);
+    }
+  }, [show]);
 
   const handleToggleDate = useCallback((dateIso: string) => {
     setDates((current) => {
@@ -443,16 +446,10 @@ export function MultiSessionModal({
                 readOnly
                 value={selectedDatesLabel}
                 placeholder="Selecciona días"
-                onClick={() => setCalendarOpen((open) => !open)}
+                onClick={() => setCalendarOpen(true)}
                 aria-expanded={calendarOpen}
               />
-              <Overlay
-                target={calendarTargetRef.current}
-                show={calendarOpen}
-                placement="bottom-start"
-                rootClose
-                onHide={() => setCalendarOpen(false)}
-              >
+              <Overlay target={calendarTargetRef.current} show={calendarOpen} placement="bottom-start">
                 <Popover id="multi-session-calendar" className="p-3" style={{ maxWidth: 400 }}>
                   <div className="d-flex justify-content-between align-items-center mb-2">
                     <Button
@@ -471,6 +468,9 @@ export function MultiSessionModal({
                     <div className="fw-semibold text-capitalize">
                       {calendarMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
                     </div>
+                    <Button variant="light" size="sm" aria-label="Cerrar calendario" onClick={() => setCalendarOpen(false)}>
+                      ×
+                    </Button>
                     <Button
                       variant="light"
                       size="sm"
