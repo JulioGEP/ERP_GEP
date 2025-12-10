@@ -340,6 +340,7 @@ export function TrainerModal({
                   value={formValues.name}
                   onChange={handleChange("name")}
                   disabled={isSaving}
+                  maxLength={17}
                 />
               </Form.Group>
             </Col>
