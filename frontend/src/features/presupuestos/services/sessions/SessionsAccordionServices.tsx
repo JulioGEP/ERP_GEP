@@ -2253,6 +2253,7 @@ export function SessionsAccordionServices({
           <MultiSessionModal
             show
             productId={multiSessionProductId}
+            productName={applicableProducts.find((product) => product.id === multiSessionProductId)?.name ?? null}
             dealId={dealId}
             dealAddress={dealAddress}
             trainers={trainers}
