@@ -375,19 +375,6 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
   const [savingCommentId, setSavingCommentId] = useState<string | null>(null);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
 
-  const withLocalAuthorFallback = useCallback(
-    (comment: SessionComment): SessionComment => {
-      const authorId = comment.author_id?.trim();
-      const authorName = comment.author?.trim();
-      return {
-        ...comment,
-        author_id: authorId?.length ? authorId : userId,
-        author: authorName?.length ? authorName : trainerDisplayName,
-      };
-    },
-    [trainerDisplayName, userId],
-  );
-
   const commentMutation = useMutation({
     mutationFn: async (content: string) =>
       createSessionComment(
@@ -396,12 +383,11 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
         { id: userId, name: userName },
       ),
     onSuccess: (created) => {
-      const normalizedComment = withLocalAuthorFallback(created);
       setCommentError(null);
       setCommentContent('');
       queryClient.setQueryData<SessionComment[] | undefined>(
         ['trainer', 'session', session.sessionId, 'comments'],
-        (previous) => (previous ? [normalizedComment, ...previous] : [normalizedComment]),
+        (previous) => (previous ? [created, ...previous] : [created]),
       );
     },
     onError: (error: unknown) => {
@@ -430,16 +416,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
         ['trainer', 'session', session.sessionId, 'comments'],
         (previous) =>
           previous
-            ? previous.map((comment) =>
-                comment.id === updated.id
-                  ? withLocalAuthorFallback({
-                      ...comment,
-                      ...updated,
-                      author: updated.author ?? comment.author,
-                      author_id: updated.author_id ?? comment.author_id,
-                    })
-                  : comment,
-              )
+            ? previous.map((comment) => (comment.id === updated.id ? updated : comment))
             : previous,
       );
     },
@@ -1323,8 +1300,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                           const authorId = comment.author_id?.trim().toLowerCase() ?? null;
                           const canEdit =
                             (authorId && authorId === normalizedUserId) ||
-                            (Boolean(authorLower.length) && authorLower === normalizedUserName) ||
-                            authorLower === normalizedUserId;
+                            (Boolean(authorLower.length) && authorLower === normalizedUserName);
                           const isEditing = editingCommentId === comment.id;
                           const isSaving =
                             savingCommentId === comment.id && updateCommentMutation.isPending;
