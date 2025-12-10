@@ -90,6 +90,7 @@ export function CertificateTable({ rows, onRowsChange, disabled }: CertificateTa
             <th>Cliente</th>
             <th>Formación</th>
             <th>Irata</th>
+            <th className="text-center">Asist.</th>
             <th className="text-center">Apto</th>
             <th className="text-center">Cert.</th>
           </tr>
@@ -110,6 +111,15 @@ export function CertificateTable({ rows, onRowsChange, disabled }: CertificateTa
                 <td>{renderInput(row, 'cliente')}</td>
                 <td>{renderInput(row, 'formacion')}</td>
                 <td>{renderInput(row, 'irata')}</td>
+                <td className="text-center align-middle">
+                  <Form.Check
+                    type="checkbox"
+                    checked={Boolean(row.asistencia)}
+                    readOnly
+                    disabled
+                    aria-label={`Asistencia validada para ${fullName}`}
+                  />
+                </td>
                 <td className="text-center align-middle certificate-table-apto">
                   {renderAptoStatus(row)}
                 </td>

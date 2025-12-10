@@ -485,6 +485,7 @@ model alumnos {
   nombre      String
   apellido    String
   dni         String
+  asistencia  Boolean  @default(false)
   apto        Boolean  @default(false)
   certificado Boolean  @default(false)
   drive_url   String?

@@ -184,6 +184,7 @@ type StudentDraft = {
   nombre: string;
   apellido: string;
   dni: string;
+  asistencia: boolean;
   apto: boolean;
   certificado: boolean;
 };
@@ -192,6 +193,7 @@ const EMPTY_STUDENT_DRAFT: StudentDraft = {
   nombre: '',
   apellido: '',
   dni: '',
+  asistencia: false,
   apto: false,
   certificado: false,
 };
@@ -450,6 +452,7 @@ export function SessionStudentsAccordionItem({
       nombre: student.nombre,
       apellido: student.apellido,
       dni: student.dni,
+      asistencia: student.asistencia,
       apto: student.apto,
       certificado: student.certificado,
     });
@@ -468,7 +471,10 @@ export function SessionStudentsAccordionItem({
       if (field === 'dni' && typeof value === 'string') {
         return { ...current, dni: normalizeStudentDniInput(value) };
       }
-      if ((field === 'apto' || field === 'certificado') && typeof value === 'boolean') {
+      if (
+        (field === 'apto' || field === 'certificado' || field === 'asistencia') &&
+        typeof value === 'boolean'
+      ) {
         return { ...current, [field]: value } as StudentDraft;
       }
       if (typeof value === 'string') {
@@ -514,6 +520,7 @@ export function SessionStudentsAccordionItem({
           nombre: draft.nombre.trim(),
           apellido: draft.apellido.trim(),
           dni: normalizedDni,
+          asistencia: draft.asistencia,
           apto: draft.apto,
           certificado: draft.certificado,
         });
@@ -561,7 +568,7 @@ export function SessionStudentsAccordionItem({
 
   const handleToggleBoolean = async (
     student: SessionStudent,
-    field: 'apto' | 'certificado',
+    field: 'asistencia' | 'apto' | 'certificado',
     value: boolean,
   ) => {
     setFormError(null);
@@ -650,6 +657,16 @@ export function SessionStudentsAccordionItem({
           <Form.Check
             type="checkbox"
             label=""
+            checked={draft.asistencia}
+            onChange={(event) => handleDraftChange('asistencia', event.target.checked)}
+            disabled={disableInputs}
+            aria-label="Marcar asistencia"
+          />
+        </td>
+        <td className="align-middle text-center">
+          <Form.Check
+            type="checkbox"
+            label=""
             checked={draft.apto}
             onChange={(event) => handleDraftChange('apto', event.target.checked)}
             disabled={disableInputs}
@@ -710,6 +727,16 @@ export function SessionStudentsAccordionItem({
         </td>
         <td className="align-middle">{student.apellido}</td>
         <td className="align-middle text-uppercase">{student.dni}</td>
+        <td className="align-middle text-center">
+          <Form.Check
+            type="checkbox"
+            label=""
+            checked={student.asistencia}
+            disabled={rowDisabled || isUpdating || isDeleting}
+            onChange={(event) => handleToggleBoolean(student, 'asistencia', event.target.checked)}
+            aria-label={`Cambiar asistencia de ${student.nombre} ${student.apellido}`}
+          />
+        </td>
         <td className="align-middle text-center">
           <Form.Check
             type="checkbox"
@@ -917,6 +944,7 @@ export function SessionStudentsAccordionItem({
                 <th>Nombre</th>
                 <th>Apellidos</th>
                 <th>DNI</th>
+                <th className="text-center">Asistencia</th>
                 <th className="text-center">APTO</th>
                 <th className="text-center">Certificado</th>
                 <th className="text-end">Acciones</th>
@@ -929,7 +957,7 @@ export function SessionStudentsAccordionItem({
               )}
               {!isNewRow && !students.length && !studentsLoading ? (
                 <tr>
-                  <td colSpan={6} className="text-center text-muted py-4">
+                  <td colSpan={7} className="text-center text-muted py-4">
                     Sin alumnos registrados
                   </td>
                 </tr>

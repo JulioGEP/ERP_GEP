@@ -646,6 +646,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
     nombre: '',
     apellido: '',
     dni: '',
+    asistencia: false,
     apto: false,
   });
 
@@ -731,7 +732,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
         ['trainer', 'session', session.sessionId, 'students'],
         (previous) => (previous ? [...previous, created] : [created]),
       );
-      setNewStudent({ nombre: '', apellido: '', dni: '', apto: false });
+      setNewStudent({ nombre: '', apellido: '', dni: '', asistencia: false, apto: false });
     },
     onError: (error: unknown) => {
       if (error instanceof Error) {
@@ -878,6 +879,22 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
     [students, updateStudentMutation],
   );
 
+  const handleStudentAttendanceToggle = useCallback(
+    (studentId: string, checked: boolean) => {
+      setStudents((prev) =>
+        prev.map((student) =>
+          student.id === studentId ? { ...student, asistencia: checked } : student,
+        ),
+      );
+      const original = studentsOriginalRef.current.get(studentId);
+      if (original && original.asistencia === checked) {
+        return;
+      }
+      updateStudentMutation.mutate({ studentId, data: { asistencia: checked } });
+    },
+    [updateStudentMutation],
+  );
+
   const handleStudentAptoToggle = useCallback(
     (studentId: string, checked: boolean) => {
       setStudents((prev) =>
@@ -912,6 +929,10 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
     [],
   );
 
+  const handleNewStudentAttendanceChange = useCallback((checked: boolean) => {
+    setNewStudent((prev) => ({ ...prev, asistencia: checked }));
+  }, []);
+
   const handleNewStudentAptoChange = useCallback((checked: boolean) => {
     setNewStudent((prev) => ({ ...prev, apto: checked }));
   }, []);
@@ -934,6 +955,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
         nombre,
         apellido,
         dni,
+        asistencia: newStudent.asistencia,
         apto: newStudent.apto,
       });
     },
@@ -1096,6 +1118,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                       <th>Nombre</th>
                       <th>Apellidos</th>
                       <th>DNI</th>
+                      <th className="text-center">Asistencia</th>
                       <th className="text-center">Apto</th>
                       <th className="text-center">Acciones</th>
                     </tr>
@@ -1148,6 +1171,16 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                           <td className="text-center">
                             <Form.Check
                               type="checkbox"
+                              checked={Boolean(student.asistencia)}
+                              onChange={(event) =>
+                                handleStudentAttendanceToggle(student.id, event.target.checked)
+                              }
+                              disabled={updateStudentMutation.isPending}
+                            />
+                          </td>
+                          <td className="text-center">
+                            <Form.Check
+                              type="checkbox"
                               checked={Boolean(student.apto)}
                               onChange={(event) =>
                                 handleStudentAptoToggle(student.id, event.target.checked)
@@ -1178,7 +1211,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={5} className="text-center text-muted">
+                        <td colSpan={6} className="text-center text-muted">
                           No hay alumnos registrados para esta sesión.
                         </td>
                       </tr>
@@ -1235,6 +1268,22 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                         value={newStudent.dni}
                         onChange={(event) => handleNewStudentFieldChange('dni', event.target.value)}
                         placeholder="DNI"
+                        disabled={createStudentMutation.isPending}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col xs={12} md="auto">
+                    <Form.Group
+                      controlId={`trainer-session-${session.sessionId}-new-student-asistencia`}
+                      className="mb-0"
+                    >
+                      <Form.Check
+                        type="checkbox"
+                        label="Asistencia"
+                        checked={newStudent.asistencia}
+                        onChange={(event) =>
+                          handleNewStudentAttendanceChange(event.target.checked)
+                        }
                         disabled={createStudentMutation.isPending}
                       />
                     </Form.Group>
@@ -2254,6 +2303,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     nombre: '',
     apellido: '',
     dni: '',
+    asistencia: false,
     apto: false,
   });
 

@@ -14,6 +14,7 @@ export type CertificateRow = {
   nombre: string;
   apellidos: string;
   dni: string;
+  asistencia: boolean;
   apto: boolean;
   fecha: string;
   fecha2: string;
@@ -175,6 +176,7 @@ export function mapStudentsToCertificateRows(params: {
     nombre: student.nombre,
     apellidos: student.apellido,
     dni: student.dni,
+    asistencia: Boolean(student.asistencia),
     apto: Boolean(student.apto),
     fecha,
     fecha2,
