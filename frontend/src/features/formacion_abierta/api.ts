@@ -52,6 +52,13 @@ export type DealsByVariationResponse = {
   message?: string;
 };
 
+export type VariantSessionCreateResponse = {
+  ok?: boolean;
+  created_ids?: unknown;
+  skipped?: number;
+  message?: string | null;
+};
+
 export type SendVariantTrainerInvitesResponse = {
   variant?: unknown;
   invites?: unknown;
@@ -246,6 +253,44 @@ export async function fetchDealsByVariation(variationWooId: string): Promise<Dea
   return deals
     .map((deal) => normalizeDealTag(deal))
     .filter((deal): deal is DealTag => deal !== null);
+}
+
+export async function createVariantSessions(
+  variantId: string,
+  sessions: Array<{ date: string; trainer_ids?: string[] }>,
+): Promise<{ createdIds: string[]; skipped: number; message: string | null }> {
+  const payload = {
+    variant_id: variantId,
+    sessions: sessions.map((session) => ({
+      date: session.date,
+      trainer_ids: Array.isArray(session.trainer_ids) ? session.trainer_ids : [],
+    })),
+  };
+
+  const json = await requestJson<VariantSessionCreateResponse>(
+    apiPath('variant-sessions-create'),
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    },
+    { defaultErrorMessage: 'No se pudieron crear las sesiones de la variante.' },
+  );
+
+  const createdIds = Array.isArray(json.created_ids)
+    ? (json.created_ids as unknown[])
+        .map((value) => (typeof value === 'string' || typeof value === 'number' ? String(value) : ''))
+        .filter((value) => value.length)
+    : [];
+
+  return {
+    createdIds,
+    skipped: typeof json.skipped === 'number' ? json.skipped : 0,
+    message: typeof json.message === 'string' ? json.message : null,
+  };
 }
 
 function toTrimmed(value: unknown): string | null {

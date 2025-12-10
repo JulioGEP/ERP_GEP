@@ -193,7 +193,7 @@ model products {
 
 model variants {
   id               String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  id_woo           BigInt                      @unique
+  id_woo           BigInt
   name             String?
   status           String?
   finalizar        String                      @default("Activa") @db.VarChar(20)
