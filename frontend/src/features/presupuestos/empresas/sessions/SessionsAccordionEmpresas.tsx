@@ -88,6 +88,7 @@ import {
 } from '../../../../utils/sessionDocumentsEvents';
 import { useCurrentUserIdentity } from '../../useCurrentUserIdentity';
 import { useTrainingTemplatePoints } from '../../../../hooks/useTrainingTemplatePoints';
+import { MultiSessionModal } from '../../sessions/MultiSessionModal';
 
 const SESSION_LIMIT = 10;
 const MADRID_TIMEZONE = 'Europe/Madrid';
@@ -2137,6 +2138,7 @@ export function SessionsAccordionEmpresas({
   }, [applicableProducts, effectiveHighlightSessionId, highlightEnabled]);
 
   const [newSessionIds, setNewSessionIds] = useState<Set<string>>(new Set());
+  const [multiSessionProductId, setMultiSessionProductId] = useState<string | null>(null);
 
   const trainersQuery = useQuery({
     queryKey: ['trainers', 'active'],
@@ -2623,6 +2625,14 @@ export function SessionsAccordionEmpresas({
     });
   };
 
+  const handleMultiSessionCreated = useCallback(
+    async (productId: string) => {
+      setPageByProduct((current) => ({ ...current, [productId]: 1 }));
+      await invalidateProductSessions(productId);
+    },
+    [invalidateProductSessions],
+  );
+
   const handleDuplicate = async (sessionId: string) => {
     const session = formsRef.current[sessionId];
     const productId = sessionProductRef.current[sessionId];
@@ -2805,6 +2815,7 @@ export function SessionsAccordionEmpresas({
   if (!shouldShow) return null;
 
   const normalizedDealSede = useMemo(() => formatSedeLabel(dealSedeLabel), [dealSedeLabel]);
+  const isInCompany = normalizedDealSede === 'In Company';
 
   const trainers = trainersQuery.data ? sortOptionsByName(trainersQuery.data) : [];
   const allRooms = roomsQuery.data ? sortOptionsByName(roomsQuery.data) : [];
@@ -2928,6 +2939,13 @@ export function SessionsAccordionEmpresas({
                     ) : (
                       'Añadir sesión'
                     )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline-secondary"
+                    onClick={() => setMultiSessionProductId(product.id)}
+                  >
+                    Múltiples sesiones
                   </Button>
                 </div>
               </div>
@@ -3058,6 +3076,23 @@ export function SessionsAccordionEmpresas({
             </div>
           );
         })}
+        {multiSessionProductId ? (
+          <MultiSessionModal
+            show
+            productId={multiSessionProductId}
+            dealId={dealId}
+            dealAddress={dealAddress}
+            trainers={trainers}
+            units={units}
+            rooms={rooms}
+            isInCompany={isInCompany}
+            onClose={() => setMultiSessionProductId(null)}
+            onCreated={() => {
+              void handleMultiSessionCreated(multiSessionProductId);
+              setMultiSessionProductId(null);
+            }}
+          />
+        ) : null}
         <Modal
           show={!!deleteDialog}
           onHide={handleCloseDeleteDialog}
