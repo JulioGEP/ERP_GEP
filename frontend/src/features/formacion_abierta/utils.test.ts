@@ -16,6 +16,7 @@ const sampleVariant = (overrides: Partial<VariantInfo> = {}): VariantInfo => ({
   id_woo: 'woo-1',
   name: 'Variant',
   status: 'publish',
+  finalizar: 'Activa',
   price: '120',
   stock: 5,
   stock_status: 'instock',

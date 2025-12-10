@@ -494,6 +494,7 @@ function createActiveVariantFromCalendarEvent(event: CalendarVariantEvent): Acti
     price: variantDetails.price ?? null,
     stock: stockValue,
     stock_status: variantDetails.stock_status ?? null,
+    finalizar: variantDetails.finalizar ?? null,
     sede: variantDetails.sede ?? null,
     date: variantDetails.date ?? null,
     trainer_id: resolvedTrainerId,
