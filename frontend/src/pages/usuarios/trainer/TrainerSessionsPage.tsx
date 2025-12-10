@@ -55,7 +55,7 @@ import {
   updateSessionStudent,
   type UpdateSessionStudentInput,
 } from '../../../features/presupuestos/api/students.api';
-import { createVariantComment } from '../../../features/formacion_abierta/api';
+import { createVariantComment, fetchVariantComments } from '../../../features/formacion_abierta/api';
 import type { VariantComment } from '../../../features/formacion_abierta/types';
 import type { SessionComment, SessionStudent } from '../../../api/sessions.types';
 import type { ReportDraft, ReportSessionInfo } from '../../../features/informes/ReportsFlow';
@@ -2025,6 +2025,14 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     [variant.variantId],
   );
 
+  const variantCommentsQuery = useQuery({
+    queryKey: variantCommentsQueryKey,
+    queryFn: () => fetchVariantComments(variant.variantId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const variantComments = variantCommentsQuery.data ?? [];
+
   const [variantCommentContent, setVariantCommentContent] = useState('');
   const [variantCommentError, setVariantCommentError] = useState<string | null>(null);
 
@@ -2976,6 +2984,38 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
             <div>
               <h5 className="fw-semibold mb-3">Comentarios</h5>
               {variantCommentError ? <Alert variant="danger">{variantCommentError}</Alert> : null}
+              {variantCommentsQuery.isError ? (
+                <Alert variant="danger">No se pudieron cargar los comentarios.</Alert>
+              ) : null}
+              {variantCommentsQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" role="status" />
+                  <span>Cargando comentarios…</span>
+                </div>
+              ) : variantComments.length ? (
+                <ListGroup className="mb-3">
+                  {variantComments.map((comment) => {
+                    const timestamp = comment.updated_at ?? comment.created_at ?? null;
+                    const formatted = formatDateTime(timestamp);
+                    return (
+                      <ListGroup.Item key={comment.id}>
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div className="fw-semibold">{comment.author}</div>
+                          {formatted ? (
+                            <div className="text-muted small">{formatted}</div>
+                          ) : null}
+                        </div>
+                        <div className="text-break" style={{ whiteSpace: 'pre-line' }}>
+                          {comment.content}
+                        </div>
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              ) : (
+                <p className="text-muted small mb-3">No hay comentarios registrados.</p>
+              )}
+
               <Form onSubmit={handleVariantCommentSubmit} className="d-grid gap-2">
                 <Form.Group controlId={`variant-${variant.variantId}-comment`}>
                   <Form.Label>Agregar comentario</Form.Label>
