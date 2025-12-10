@@ -117,6 +117,7 @@ export type SessionStudent = {
   nombre: string;
   apellido: string;
   dni: string;
+  asistencia: boolean;
   apto: boolean;
   certificado: boolean;
   drive_url: string | null;
@@ -970,6 +971,7 @@ function normalizeSessionStudent(raw: any): SessionStudent {
   const nombre = toStringValue(raw?.nombre) ?? '';
   const apellido = toStringValue(raw?.apellido) ?? '';
   const dni = toStringValue(raw?.dni) ?? '';
+  const asistencia = Boolean(raw?.asistencia);
   const apto = Boolean(raw?.apto);
   const certificado = Boolean(raw?.certificado);
   const driveUrl = toStringValue(raw?.drive_url);
@@ -983,6 +985,7 @@ function normalizeSessionStudent(raw: any): SessionStudent {
     nombre,
     apellido,
     dni,
+    asistencia,
     apto,
     certificado,
     drive_url: driveUrl ?? null,

@@ -73,6 +73,7 @@ type VariantDealRecord = {
     nombre: string | null;
     apellido: string | null;
     dni: string | null;
+    asistencia: boolean | null;
     apto: boolean | null;
     deal_id: string | null;
   }> | null;
@@ -89,6 +90,7 @@ type VariantDealPayload = {
     nombre: string | null;
     apellido: string | null;
     dni: string | null;
+    asistencia: boolean;
     apto: boolean;
     organizationName: string | null;
     fundaeLabel: string | null;
@@ -115,6 +117,7 @@ type VariantPayload = {
     nombre: string | null;
     apellido: string | null;
     dni: string | null;
+    asistencia: boolean;
     apto: boolean;
     organizationName: string | null;
     fundaeLabel: string | null;
@@ -715,6 +718,7 @@ export const handler = createHttpHandler(async (request) => {
               nombre: true,
               apellido: true,
               dni: true,
+              asistencia: true,
               apto: true,
               deal_id: true,
             },
@@ -742,6 +746,7 @@ export const handler = createHttpHandler(async (request) => {
               nombre: sanitizeString(record.nombre),
               apellido: sanitizeString(record.apellido),
               dni: sanitizeString(record.dni),
+              asistencia: Boolean(record.asistencia),
               apto: Boolean(record.apto),
               organizationName,
               fundaeLabel,

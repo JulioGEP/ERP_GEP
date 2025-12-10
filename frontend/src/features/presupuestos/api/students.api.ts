@@ -76,6 +76,7 @@ export type CreateSessionStudentInput = {
   nombre: string;
   apellido: string;
   dni: string;
+  asistencia?: boolean;
   apto?: boolean;
   certificado?: boolean;
 };
@@ -86,6 +87,7 @@ export async function createSessionStudent(input: CreateSessionStudentInput): Pr
   const nombre = String(input.nombre ?? '').trim();
   const apellido = String(input.apellido ?? '').trim();
   const dni = String(input.dni ?? '').trim();
+  const asistencia = Boolean(input.asistencia);
   const apto = Boolean(input.apto);
   const certificado = Boolean(input.certificado);
 
@@ -104,6 +106,7 @@ export async function createSessionStudent(input: CreateSessionStudentInput): Pr
       nombre,
       apellido,
       dni,
+      asistencia,
       apto,
       certificado,
     }),
@@ -116,6 +119,7 @@ export type UpdateSessionStudentInput = {
   nombre?: string;
   apellido?: string;
   dni?: string;
+  asistencia?: boolean;
   apto?: boolean;
   certificado?: boolean;
   drive_url?: string | null;
@@ -135,6 +139,7 @@ export async function updateSessionStudent(
   if (input.nombre !== undefined) payload.nombre = String(input.nombre ?? '').trim();
   if (input.apellido !== undefined) payload.apellido = String(input.apellido ?? '').trim();
   if (input.dni !== undefined) payload.dni = String(input.dni ?? '').trim();
+  if (input.asistencia !== undefined) payload.asistencia = Boolean(input.asistencia);
   if (input.apto !== undefined) payload.apto = Boolean(input.apto);
   if (input.certificado !== undefined) payload.certificado = Boolean(input.certificado);
   if (input.drive_url !== undefined || input.driveUrl !== undefined) {

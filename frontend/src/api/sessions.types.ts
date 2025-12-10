@@ -101,6 +101,7 @@ export type SessionStudent = {
   nombre: string;
   apellido: string;
   dni: string;
+  asistencia: boolean;
   apto: boolean;
   certificado: boolean;
   drive_url: string | null;

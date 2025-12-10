@@ -56,6 +56,7 @@ export type TrainerVariantStudent = {
   nombre: string | null;
   apellido: string | null;
   dni: string | null;
+  asistencia: boolean;
   apto: boolean;
   organizationName: string | null;
   fundaeLabel: string | null;
@@ -224,6 +225,7 @@ function sanitizeVariantStudents(value: unknown): TrainerVariantStudent[] {
         nombre: sanitizeString(raw.nombre),
         apellido: sanitizeString(raw.apellido),
         dni: sanitizeString(raw.dni),
+        asistencia: Boolean(raw.asistencia),
         apto: Boolean(raw.apto),
         organizationName: sanitizeString(
           raw.organizationName ?? (raw as { organization_name?: unknown }).organization_name ?? null,

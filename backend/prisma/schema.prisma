@@ -293,6 +293,7 @@ model alumnos {
   nombre      String
   apellido    String
   dni         String   @db.VarChar(20)
+  asistencia  Boolean  @default(false)
   apto        Boolean  @default(false)
   certificado Boolean  @default(false)
   created_at  DateTime @default(now()) @db.Timestamptz(6)

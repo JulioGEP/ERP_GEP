@@ -44,6 +44,7 @@ function mapStudentForResponse(student: any) {
     nombre: student.nombre,
     apellido: student.apellido,
     dni: student.dni,
+    asistencia: Boolean(student.asistencia),
     apto: Boolean(student.apto),
     certificado: Boolean(student.certificado),
     drive_url: typeof student.drive_url === 'string' ? student.drive_url : null,
@@ -111,6 +112,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     const nombre = normalizeName(payload.nombre);
     const apellido = normalizeName(payload.apellido);
     const dni = normalizeDni(payload.dni);
+    const asistencia = Boolean(payload.asistencia);
     const apto = Boolean(payload.apto);
     const certificado = Boolean(payload.certificado);
 
@@ -154,6 +156,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         nombre,
         apellido,
         dni,
+        asistencia,
         apto,
         certificado,
         created_at: now,
@@ -186,6 +189,8 @@ export const handler = createHttpHandler<any>(async (request) => {
     const apellido =
       payload.apellido === undefined ? undefined : normalizeName(payload.apellido);
     const dni = payload.dni === undefined ? undefined : normalizeDni(payload.dni);
+    const asistencia =
+      payload.asistencia === undefined ? undefined : Boolean(payload.asistencia);
     const apto = payload.apto === undefined ? undefined : Boolean(payload.apto);
     const certificado =
       payload.certificado === undefined ? undefined : Boolean(payload.certificado);
@@ -235,6 +240,10 @@ export const handler = createHttpHandler<any>(async (request) => {
 
     if (certificado !== undefined) {
       data.certificado = certificado;
+    }
+
+    if (asistencia !== undefined) {
+      data.asistencia = asistencia;
     }
 
     if (driveUrl !== undefined) {

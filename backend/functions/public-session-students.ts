@@ -109,6 +109,7 @@ function mapStudent(student: any) {
     nombre: student.nombre,
     apellido: student.apellido,
     dni: student.dni,
+    asistencia: Boolean(student.asistencia),
     apto: Boolean(student.apto),
     certificado: Boolean(student.certificado),
     drive_url: normalizeDriveUrl(student.drive_url),
