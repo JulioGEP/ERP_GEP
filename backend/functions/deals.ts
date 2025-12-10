@@ -64,6 +64,23 @@ function parsePathId(path: any): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+function normalizeVariantWooId(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+
+  return null;
+}
+
 function normalizeProductId(raw: any): string | null {
   if (raw === null || raw === undefined) return null;
   const id = String(raw).trim();
@@ -1597,8 +1614,34 @@ export const handler = async (event: any) => {
         return successResponse({ deals: [] });
       }
 
+      const variantIdsToSearch = new Set<string>([variationId]);
+
+      try {
+        const wooId = BigInt(variationId);
+        const variant = await prisma.variants.findUnique({
+          where: { id_woo: wooId },
+          select: { id_padre: true },
+        });
+
+        if (variant?.id_padre !== undefined && variant.id_padre !== null) {
+          const siblingVariants = await prisma.variants.findMany({
+            where: { id_padre: variant.id_padre },
+            select: { id_woo: true },
+          });
+
+          siblingVariants.forEach((row: { id_woo: unknown }) => {
+            const normalized = normalizeVariantWooId(row?.id_woo);
+            if (normalized) {
+              variantIdsToSearch.add(normalized);
+            }
+          });
+        }
+      } catch (error) {
+        console.warn("[deals] could not resolve sibling variants for", variationId, error);
+      }
+
       const rowsRaw = await prisma.deals.findMany({
-        where: { w_id_variation: variationId },
+        where: { w_id_variation: { in: Array.from(variantIdsToSearch) } },
         select: {
           deal_id: true,
           title: true,
