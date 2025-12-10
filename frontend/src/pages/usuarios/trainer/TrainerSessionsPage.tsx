@@ -50,12 +50,13 @@ import {
 } from '../../../features/presupuestos/api/documents.api';
 import {
   createSessionStudent,
-  deleteSessionStudent,
   fetchDealStudents,
   fetchSessionStudents,
   updateSessionStudent,
   type UpdateSessionStudentInput,
 } from '../../../features/presupuestos/api/students.api';
+import { createVariantComment, fetchVariantComments } from '../../../features/formacion_abierta/api';
+import type { VariantComment } from '../../../features/formacion_abierta/types';
 import type { SessionComment, SessionStudent } from '../../../api/sessions.types';
 import type { ReportDraft, ReportSessionInfo } from '../../../features/informes/ReportsFlow';
 import { useCurrentUserIdentity } from '../../../features/presupuestos/useCurrentUserIdentity';
@@ -297,6 +298,8 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
     }
     return 'No se pudo cargar el registro horario.';
   }, [timeLogQuery.error, timeLogQuery.isError]);
+
+  const variantComments = variantCommentsQuery.data ?? [];
 
   const formattedTimeLogUpdated = useMemo(
     () => formatDateTime(timeLogQuery.data?.updatedAt ?? null),
@@ -641,7 +644,6 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
   const [students, setStudents] = useState<SessionStudent[]>([]);
   const studentsOriginalRef = useRef<Map<string, SessionStudent>>(new Map());
   const [studentError, setStudentError] = useState<string | null>(null);
-  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
   const [newStudent, setNewStudent] = useState({
     nombre: '',
     apellido: '',
@@ -707,11 +709,13 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
       nombre,
       apellido,
       dni,
+      asistencia,
       apto,
     }: {
       nombre: string;
       apellido: string;
       dni: string;
+      asistencia: boolean;
       apto: boolean;
     }) =>
       createSessionStudent({
@@ -720,6 +724,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
         nombre,
         apellido,
         dni,
+        asistencia,
         apto,
       }),
     onMutate: () => {
@@ -740,31 +745,6 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
       } else {
         setStudentError('No se pudo añadir el alumno.');
       }
-    },
-  });
-
-  const deleteStudentMutation = useMutation({
-    mutationFn: (studentId: string) => deleteSessionStudent(studentId),
-    onMutate: (studentId: string) => {
-      setStudentError(null);
-      setDeletingStudentId(studentId);
-    },
-    onSuccess: (_, studentId) => {
-      studentsOriginalRef.current.delete(studentId);
-      setStudents((prev) => prev.filter((student) => student.id !== studentId));
-      queryClient.setQueryData<SessionStudent[] | undefined>(
-        ['trainer', 'session', session.sessionId, 'students'],
-        (previous) => previous?.filter((student) => student.id !== studentId),
-      );
-      setDeletingStudentId(null);
-    },
-    onError: (error: unknown) => {
-      if (error instanceof Error) {
-        setStudentError(error.message);
-      } else {
-        setStudentError('No se pudo eliminar el alumno.');
-      }
-      setDeletingStudentId(null);
     },
   });
 
@@ -909,17 +889,6 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
       updateStudentMutation.mutate({ studentId, data: { apto: checked } });
     },
     [updateStudentMutation],
-  );
-
-  const handleStudentDelete = useCallback(
-    (studentId: string) => {
-      const confirmed = window.confirm('¿Eliminar este alumno?');
-      if (!confirmed) {
-        return;
-      }
-      deleteStudentMutation.mutate(studentId);
-    },
-    [deleteStudentMutation],
   );
 
   const handleNewStudentFieldChange = useCallback(
@@ -1120,10 +1089,9 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                       <th>DNI</th>
                       <th className="text-center">Asistencia</th>
                       <th className="text-center">Apto</th>
-                      <th className="text-center">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                  </tr>
+                </thead>
+                <tbody>
                     {students.length ? (
                       students.map((student) => (
                         <tr key={student.id}>
@@ -1188,30 +1156,11 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                               disabled={updateStudentMutation.isPending}
                             />
                           </td>
-                          <td className="text-center">
-                            <Button
-                              variant="outline-danger"
-                              size="sm"
-                              onClick={() => handleStudentDelete(student.id)}
-                              disabled={
-                                (deleteStudentMutation.isPending &&
-                                  deletingStudentId === student.id) ||
-                                updateStudentMutation.isPending
-                              }
-                            >
-                              {deleteStudentMutation.isPending &&
-                              deletingStudentId === student.id ? (
-                                <Spinner animation="border" size="sm" />
-                              ) : (
-                                'Eliminar'
-                              )}
-                            </Button>
-                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted">
+                        <td colSpan={5} className="text-center text-muted">
                           No hay alumnos registrados para esta sesión.
                         </td>
                       </tr>
@@ -1220,8 +1169,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                 </Table>
               )}
               <p className="text-muted small mt-2">
-                Si falta algún alumn@ eliminalo de la tabla, y añade un comentario con el nombre de la persona
-                que ha faltado
+                Si falta algún alumn@, añade un comentario con el nombre de la persona que ha faltado.
               </p>
               <h6 className="fw-semibold mt-4">Añadir alumn@ a la sesión</h6>
               <Form className="mt-2" onSubmit={handleNewStudentSubmit}>
@@ -2071,7 +2019,45 @@ type VariantStudentsQueryData = {
 
 function VariantDetailCard({ variant }: VariantDetailCardProps) {
   const queryClient = useQueryClient();
+  const { userId, userName } = useCurrentUserIdentity();
   const formattedDate = useMemo(() => formatDateTime(variant.date), [variant.date]);
+
+  const variantCommentsQueryKey = useMemo(
+    () => ['trainer', 'variant', variant.variantId, 'comments'] as const,
+    [variant.variantId],
+  );
+
+  const variantCommentsQuery = useQuery({
+    queryKey: variantCommentsQueryKey,
+    queryFn: () => fetchVariantComments(variant.variantId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const [variantCommentContent, setVariantCommentContent] = useState('');
+  const [variantCommentError, setVariantCommentError] = useState<string | null>(null);
+
+  const createVariantCommentMutation = useMutation({
+    mutationFn: (content: string) => {
+      const user = userId ? { id: userId, name: userName ?? undefined } : undefined;
+      return createVariantComment(variant.variantId, { content }, user);
+    },
+    onMutate: () => {
+      setVariantCommentError(null);
+    },
+    onSuccess: (created) => {
+      queryClient.setQueryData<VariantComment[] | undefined>(variantCommentsQueryKey, (previous) =>
+        previous ? [...previous, created] : [created],
+      );
+      setVariantCommentContent('');
+    },
+    onError: (error: unknown) => {
+      if (error instanceof Error) {
+        setVariantCommentError(error.message);
+      } else {
+        setVariantCommentError('No se pudo guardar el comentario.');
+      }
+    },
+  });
 
   const timeLogQuery = useQuery<TrainerSessionTimeLog | null>({
     queryKey: ['trainer', 'variant', variant.variantId, 'time-log'],
@@ -2195,6 +2181,16 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     [saveTimeLogMutation, timeLogEntryValue, timeLogExitValue],
   );
 
+  const handleVariantCommentSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmed = variantCommentContent.trim();
+      if (!trimmed.length) return;
+      createVariantCommentMutation.mutate(trimmed);
+    },
+    [createVariantCommentMutation, variantCommentContent],
+  );
+
   const dealsWithKeys = useMemo(() => {
     const seenDealIds = new Set<string>();
     const entries: Array<{ deal: TrainerVariantDeal; eventKey: string }> = [];
@@ -2296,7 +2292,6 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
   const [students, setStudents] = useState<SessionStudent[]>([]);
   const studentsOriginalRef = useRef<Map<string, SessionStudent>>(new Map());
   const [studentError, setStudentError] = useState<string | null>(null);
-  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
   const [dealSessionMap, setDealSessionMap] = useState<Map<string, string>>(() => new Map());
   const [newStudent, setNewStudent] = useState({
     dealId: '',
@@ -2443,6 +2438,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
       nombre,
       apellido,
       dni,
+      asistencia,
       apto,
     }: {
       dealId: string;
@@ -2450,6 +2446,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
       nombre: string;
       apellido: string;
       dni: string;
+      asistencia: boolean;
       apto: boolean;
     }) =>
       createSessionStudent({
@@ -2458,6 +2455,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
         nombre,
         apellido,
         dni,
+        asistencia,
         apto,
       }),
     onMutate: () => {
@@ -2499,6 +2497,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
         nombre: '',
         apellido: '',
         dni: '',
+        asistencia: false,
         apto: false,
       }));
     },
@@ -2508,41 +2507,6 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
       } else {
         setStudentError('No se pudo añadir el alumno.');
       }
-    },
-  });
-
-  const deleteStudentMutation = useMutation({
-    mutationFn: (studentId: string) => deleteSessionStudent(studentId),
-    onMutate: (studentId: string) => {
-      setStudentError(null);
-      setDeletingStudentId(studentId);
-      const student = studentsOriginalRef.current.get(studentId) ?? null;
-      return { student };
-    },
-    onSuccess: (_data, studentId, context) => {
-      studentsOriginalRef.current.delete(studentId);
-      setStudents((prev) => prev.filter((student) => student.id !== studentId));
-      queryClient.setQueryData<VariantStudentsQueryData | undefined>(studentsQueryKey, (previous) => {
-        if (!previous) return previous;
-        const list = previous.list.filter((student) => student.id !== studentId);
-        const byDeal: Record<string, SessionStudent[]> = {};
-        Object.entries(previous.byDeal).forEach(([dealId, entries]) => {
-          byDeal[dealId] = entries.filter((student) => student.id !== studentId);
-        });
-        if (context?.student?.deal_id && !(context.student.deal_id in byDeal)) {
-          byDeal[context.student.deal_id] = [];
-        }
-        return { list, byDeal } satisfies VariantStudentsQueryData;
-      });
-      setDeletingStudentId(null);
-    },
-    onError: (error: unknown) => {
-      if (error instanceof Error) {
-        setStudentError(error.message);
-      } else {
-        setStudentError('No se pudo eliminar el alumno.');
-      }
-      setDeletingStudentId(null);
     },
   });
 
@@ -2574,6 +2538,20 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     [students, updateStudentMutation],
   );
 
+  const handleStudentAttendanceToggle = useCallback(
+    (studentId: string, checked: boolean) => {
+      setStudents((prev) =>
+        prev.map((student) => (student.id === studentId ? { ...student, asistencia: checked } : student)),
+      );
+      const original = studentsOriginalRef.current.get(studentId);
+      if (original && original.asistencia === checked) {
+        return;
+      }
+      updateStudentMutation.mutate({ studentId, data: { asistencia: checked } });
+    },
+    [updateStudentMutation],
+  );
+
   const handleStudentAptoToggle = useCallback(
     (studentId: string, checked: boolean) => {
       setStudents((prev) =>
@@ -2588,19 +2566,6 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     [updateStudentMutation],
   );
 
-  const handleStudentDelete = useCallback(
-    (studentId: string) => {
-      if (typeof window !== 'undefined') {
-        const confirmed = window.confirm('¿Eliminar este alumno?');
-        if (!confirmed) {
-          return;
-        }
-      }
-      deleteStudentMutation.mutate(studentId);
-    },
-    [deleteStudentMutation],
-  );
-
   const handleNewStudentFieldChange = useCallback(
     (field: 'dealId' | 'nombre' | 'apellido' | 'dni', value: string) => {
       setNewStudent((prev) => ({ ...prev, [field]: value }));
@@ -2608,6 +2573,11 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     },
     [],
   );
+
+  const handleNewStudentAttendanceChange = useCallback((checked: boolean) => {
+    setNewStudent((prev) => ({ ...prev, asistencia: checked }));
+    setStudentError(null);
+  }, []);
 
   const handleNewStudentAptoChange = useCallback((checked: boolean) => {
     setNewStudent((prev) => ({ ...prev, apto: checked }));
@@ -2644,6 +2614,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
           nombre,
           apellido,
           dni,
+          asistencia: newStudent.asistencia,
           apto: newStudent.apto,
         });
       } catch (error: unknown) {
@@ -2869,8 +2840,8 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
                       <th>Nombre</th>
                       <th>Apellidos</th>
                       <th>DNI</th>
+                      <th className="text-center">Asistencia</th>
                       <th className="text-center">Apto</th>
-                      <th className="text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2879,7 +2850,6 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
                         const dealId = student.deal_id ?? '';
                         const organizationName = (dealMetadata[dealId]?.organizationName ?? '').trim();
                         const fundaeLabel = (dealMetadata[dealId]?.fundaeLabel ?? '').trim();
-                        const isDeleting = deleteStudentMutation.isPending && deletingStudentId === student.id;
                         return (
                           <tr key={student.id}>
                             <td>{student.deal_id}</td>
@@ -2921,25 +2891,22 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
                             <td className="text-center">
                               <Form.Check
                                 type="checkbox"
+                                checked={Boolean(student.asistencia)}
+                                onChange={(event) =>
+                                  handleStudentAttendanceToggle(student.id, event.target.checked)
+                                }
+                                disabled={updateStudentMutation.isPending}
+                              />
+                            </td>
+                            <td className="text-center">
+                              <Form.Check
+                                type="checkbox"
                                 checked={Boolean(student.apto)}
                                 onChange={(event) =>
                                   handleStudentAptoToggle(student.id, event.target.checked)
                                 }
                                 disabled={updateStudentMutation.isPending}
                               />
-                            </td>
-                            <td className="text-center">
-                              <Button
-                                variant="outline-danger"
-                                size="sm"
-                                onClick={() => handleStudentDelete(student.id)}
-                                disabled={
-                                  (deleteStudentMutation.isPending && deletingStudentId === student.id) ||
-                                  updateStudentMutation.isPending
-                                }
-                              >
-                                {isDeleting ? <Spinner animation="border" size="sm" /> : 'Eliminar'}
-                              </Button>
                             </td>
                           </tr>
                         );
@@ -3030,6 +2997,22 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
                       </Col>
                       <Col xs={12} md="auto">
                         <Form.Group
+                          controlId={`variant-${variant.variantId}-new-student-asistencia`}
+                          className="mb-0"
+                        >
+                          <Form.Check
+                            type="checkbox"
+                            label="Asistencia"
+                            checked={newStudent.asistencia}
+                            onChange={(event) =>
+                              handleNewStudentAttendanceChange(event.target.checked)
+                            }
+                            disabled={createStudentMutation.isPending}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} md="auto">
+                        <Form.Group
                           controlId={`variant-${variant.variantId}-new-student-apto`}
                           className="mb-0"
                         >
@@ -3064,6 +3047,66 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
                   </Form>
                 </>
               ) : null}
+            </div>
+
+            <div>
+              <h5 className="fw-semibold mb-3">Comentarios</h5>
+              {variantCommentError ? <Alert variant="danger">{variantCommentError}</Alert> : null}
+              {variantCommentsQuery.isError ? (
+                <Alert variant="danger">No se pudieron cargar los comentarios.</Alert>
+              ) : null}
+              {variantCommentsQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" role="status" />
+                  <span>Cargando comentarios…</span>
+                </div>
+              ) : variantComments.length ? (
+                <ListGroup className="mb-3">
+                  {variantComments.map((comment) => {
+                    const timestamp = comment.updated_at ?? comment.created_at ?? null;
+                    const formatted = formatDateTime(timestamp);
+                    return (
+                      <ListGroup.Item key={comment.id}>
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div className="fw-semibold">{comment.author}</div>
+                          {formatted ? (
+                            <div className="text-muted small">{formatted}</div>
+                          ) : null}
+                        </div>
+                        <div className="text-break" style={{ whiteSpace: 'pre-line' }}>
+                          {comment.content}
+                        </div>
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              ) : (
+                <p className="text-muted small mb-3">No hay comentarios registrados.</p>
+              )}
+
+              <Form onSubmit={handleVariantCommentSubmit} className="d-grid gap-2">
+                <Form.Group controlId={`variant-${variant.variantId}-comment`}>
+                  <Form.Label>Agregar comentario</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={3}
+                    value={variantCommentContent}
+                    onChange={(event) => setVariantCommentContent(event.target.value)}
+                    placeholder="Escribe tus comentarios sobre la formación abierta"
+                    disabled={createVariantCommentMutation.isPending}
+                  />
+                </Form.Group>
+                <div className="d-flex justify-content-end">
+                  <Button
+                    type="submit"
+                    disabled={
+                      createVariantCommentMutation.isPending || !variantCommentContent.trim().length
+                    }
+                  >
+                    {createVariantCommentMutation.isPending ? 'Guardando…' : 'Añadir comentario'}
+                  </Button>
+                </div>
+              </Form>
             </div>
 
             {dealsWithKeys.length ? (
