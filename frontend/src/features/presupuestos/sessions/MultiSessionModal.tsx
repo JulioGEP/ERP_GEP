@@ -144,7 +144,6 @@ export function MultiSessionModal({
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<AvailabilityConflict[] | null>(null);
   const calendarTargetRef = useRef<HTMLDivElement | null>(null);
-  const calendarPopoverRef = useRef<HTMLDivElement | null>(null);
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const roomFieldRef = useRef<HTMLDivElement | null>(null);
@@ -215,6 +214,12 @@ export function MultiSessionModal({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  useEffect(() => {
+    if (!show) {
+      setCalendarOpen(false);
+    }
+  }, [show]);
 
   const handleToggleDate = useCallback((dateIso: string) => {
     setDates((current) => {
@@ -445,12 +450,7 @@ export function MultiSessionModal({
                 aria-expanded={calendarOpen}
               />
               <Overlay target={calendarTargetRef.current} show={calendarOpen} placement="bottom-start">
-                <Popover
-                  id="multi-session-calendar"
-                  className="p-3"
-                  style={{ maxWidth: 400 }}
-                  ref={calendarPopoverRef}
-                >
+                <Popover id="multi-session-calendar" className="p-3" style={{ maxWidth: 400 }}>
                   <div className="d-flex justify-content-between align-items-center mb-2">
                     <Button
                       variant="light"
