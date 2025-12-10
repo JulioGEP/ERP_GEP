@@ -651,6 +651,7 @@ export function normalizeSessionComment(raw: any): SessionComment {
     sesion_id: toStringValue(raw?.sesion_id ?? raw?.session_id ?? raw?.sessionId) ?? '',
     content: toStringValue(raw?.content) ?? '',
     author: toStringValue(raw?.author) ?? null,
+    author_id: toStringValue(raw?.author_id ?? raw?.authorId) ?? null,
     compartir_formador:
       typeof raw?.compartir_formador === 'boolean' ? raw.compartir_formador : false,
     created_at: toStringValue(raw?.created_at) ?? null,

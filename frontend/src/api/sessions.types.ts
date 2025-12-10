@@ -61,6 +61,7 @@ export type SessionComment = {
   sesion_id: string;
   content: string;
   author: string | null;
+  author_id: string | null;
   compartir_formador: boolean;
   created_at: string | null;
   updated_at: string | null;
