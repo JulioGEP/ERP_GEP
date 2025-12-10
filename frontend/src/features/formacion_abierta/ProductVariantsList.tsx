@@ -49,6 +49,7 @@ import {
   createProductVariantsForProduct,
   deleteProductVariant,
   fetchDealsByVariation,
+  createVariantSessions,
   fetchVariantComments,
   fetchProductVariant,
   fetchProductsWithVariants,
@@ -906,11 +907,13 @@ export function VariantModal({
   onHide,
   onVariantUpdated,
   onDealOpen,
+  onVariantsCreated,
 }: {
   active: ActiveVariant | null;
   onHide: () => void;
   onVariantUpdated: (variant: VariantInfo) => void;
   onDealOpen?: (payload: { dealId: string; summary: DealSummary }) => void;
+  onVariantsCreated?: (productId: string, variants: VariantInfo[]) => void;
 }) {
   const variant = active?.variant;
   const product = active?.product;
@@ -943,6 +946,10 @@ export function VariantModal({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [isCreatingSessions, setIsCreatingSessions] = useState(false);
+  const [sessionCreateFeedback, setSessionCreateFeedback] = useState<
+    { tone: 'success' | 'danger'; text: string } | null
+  >(null);
   const [deals, setDeals] = useState<DealTag[]>([]);
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [isDealsLoading, setIsDealsLoading] = useState(false);
@@ -1220,10 +1227,12 @@ export function VariantModal({
   const mountedRef = useRef(true);
   const hasUnsavedChangesRef = useRef(false);
   const onVariantUpdatedRef = useRef(onVariantUpdated);
+  const onVariantsCreatedRef = useRef(onVariantsCreated);
 
   useEffect(() => {
     onVariantUpdatedRef.current = onVariantUpdated;
-  }, [onVariantUpdated]);
+    onVariantsCreatedRef.current = onVariantsCreated;
+  }, [onVariantUpdated, onVariantsCreated]);
 
   useEffect(() => {
     trainerIdsRef.current = formValues.trainer_ids;
@@ -2165,6 +2174,56 @@ export function VariantModal({
     hasUnsavedChangesRef.current = isDirty;
   }, [isDirty]);
 
+  const handleCreateSessions = useCallback(async () => {
+    if (!variant) return;
+    if (typeof window === 'undefined') return;
+
+    const input = window.prompt(
+      'Introduce las fechas (YYYY-MM-DD) de las sesiones adicionales separadas por comas o saltos de línea.',
+    );
+
+    if (input === null) return;
+
+    const dates = input
+      .split(/[\n,;]+/)
+      .map((value) => value.trim())
+      .filter((value) => /\d{4}-\d{2}-\d{2}/.test(value));
+
+    if (!dates.length) {
+      setSessionCreateFeedback({ tone: 'danger', text: 'Debes indicar al menos una fecha con el formato YYYY-MM-DD.' });
+      return;
+    }
+
+    setSessionCreateFeedback(null);
+    setIsCreatingSessions(true);
+
+    try {
+      const result = await createVariantSessions(
+        variant.id,
+        dates.map((date) => ({ date, trainer_ids: formValues.trainer_ids })),
+      );
+
+      const createdVariants: VariantInfo[] = [];
+      for (const createdId of result.createdIds) {
+        const fresh = await fetchProductVariant(createdId);
+        createdVariants.push(fresh);
+      }
+
+      if (createdVariants.length) {
+        onVariantsCreatedRef.current?.(product?.id ?? '', createdVariants);
+      }
+
+      const baseMessage = result.message ?? 'Sesiones duplicadas correctamente.';
+      const suffix = result.skipped ? ` ${result.skipped} fechas ya existían.` : '';
+      setSessionCreateFeedback({ tone: 'success', text: `${baseMessage}${suffix}`.trim() });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'No se pudieron duplicar las sesiones.';
+      setSessionCreateFeedback({ tone: 'danger', text: message });
+    } finally {
+      setIsCreatingSessions(false);
+    }
+  }, [formValues.trainer_ids, product?.id, variant]);
+
   const handleSave = async (closeAfter: boolean) => {
     if (!variant) return;
     if (isSaving) return;
@@ -2425,6 +2484,11 @@ export function VariantModal({
 
             {saveError && <Alert variant="danger" className="mb-0">{saveError}</Alert>}
             {saveSuccess && <Alert variant="success" className="mb-0">{saveSuccess}</Alert>}
+            {sessionCreateFeedback && (
+              <Alert variant={sessionCreateFeedback.tone} className="mb-0">
+                {sessionCreateFeedback.text}
+              </Alert>
+            )}
 
             <Form className="d-flex flex-column gap-3">
               <Row className="g-3">
@@ -3067,6 +3131,20 @@ export function VariantModal({
         >
           Crear Certificados
         </Button>
+        <Button
+          variant="outline-secondary"
+          onClick={handleCreateSessions}
+          disabled={isSaving || isCreatingSessions || !variant}
+        >
+          {isCreatingSessions ? (
+            <>
+              <Spinner as="span" animation="border" size="sm" role="status" className="me-2" />
+              Duplicando…
+            </>
+          ) : (
+            'Duplicar en nuevas fechas'
+          )}
+        </Button>
         <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
           Cerrar
         </Button>
@@ -3254,6 +3332,32 @@ export default function ProductVariantsList() {
         text: result.message ?? 'Las combinaciones indicadas ya existen.',
       });
     }
+  };
+
+  const handleVariantSessionsCreated = (productId: string, variants: VariantInfo[]) => {
+    if (!variants.length) return;
+
+    setProducts((prev) =>
+      prev.map((product) =>
+        product.id === productId
+          ? { ...product, variants: [...product.variants, ...variants].sort(compareVariants) }
+          : product,
+      ),
+    );
+
+    setActiveVariant((prev) => {
+      if (!prev || prev.product.id !== productId) return prev;
+
+      return {
+        product: { ...prev.product, variants: [...prev.product.variants, ...variants].sort(compareVariants) },
+        variant: prev.variant,
+      };
+    });
+
+    setFeedback({
+      tone: 'success',
+      text: `Se añadieron ${variants.length} sesiones duplicadas para la variante seleccionada.`,
+    });
   };
 
   const handleDeleteVariant = async (product: ProductInfo, variant: VariantInfo) => {
@@ -3581,6 +3685,7 @@ export default function ProductVariantsList() {
         active={activeVariant}
         onHide={handleCloseModal}
         onVariantUpdated={handleVariantUpdated}
+        onVariantsCreated={handleVariantSessionsCreated}
       />
       <ProductDefaultsModal
         product={activeProductConfig}
