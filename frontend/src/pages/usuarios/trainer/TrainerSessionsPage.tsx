@@ -299,8 +299,6 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
     return 'No se pudo cargar el registro horario.';
   }, [timeLogQuery.error, timeLogQuery.isError]);
 
-  const variantComments = variantCommentsQuery.data ?? [];
-
   const formattedTimeLogUpdated = useMemo(
     () => formatDateTime(timeLogQuery.data?.updatedAt ?? null),
     [timeLogQuery.data?.updatedAt],
@@ -2032,6 +2030,8 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
     queryFn: () => fetchVariantComments(variant.variantId),
     staleTime: 5 * 60 * 1000,
   });
+
+  const variantComments = variantCommentsQuery.data ?? [];
 
   const [variantCommentContent, setVariantCommentContent] = useState('');
   const [variantCommentError, setVariantCommentError] = useState<string | null>(null);
