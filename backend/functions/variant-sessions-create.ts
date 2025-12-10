@@ -113,7 +113,10 @@ export const handler = createHttpHandler<any>(async (request) => {
   const createdIds: string[] = [];
   let skipped = 0;
 
-  const defaultStart = baseVariant.products?.hora_inicio;
+  const defaultStart =
+    typeof baseVariant.products?.hora_inicio === 'string'
+      ? baseVariant.products.hora_inicio.trim()
+      : null;
   const startMatch = defaultStart?.match(/^(\d{2}):(\d{2})$/);
   const startHour = startMatch ? Number.parseInt(startMatch[1], 10) : 9;
   const startMinute = startMatch ? Number.parseInt(startMatch[2], 10) : 0;
