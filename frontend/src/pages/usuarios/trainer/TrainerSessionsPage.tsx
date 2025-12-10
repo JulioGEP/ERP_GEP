@@ -2023,14 +2023,16 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
   const { userId, userName } = useCurrentUserIdentity();
   const formattedDate = useMemo(() => formatDateTime(variant.date), [variant.date]);
 
+  const variantCommentTarget = useMemo(() => variant.wooId?.trim() || variant.variantId, [variant.variantId, variant.wooId]);
+
   const variantCommentsQueryKey = useMemo(
-    () => ['trainer', 'variant', variant.variantId, 'comments'] as const,
-    [variant.variantId],
+    () => ['trainer', 'variant', variantCommentTarget, 'comments'] as const,
+    [variantCommentTarget],
   );
 
   const variantCommentsQuery = useQuery({
     queryKey: variantCommentsQueryKey,
-    queryFn: () => fetchVariantComments(variant.variantId),
+    queryFn: () => fetchVariantComments(variantCommentTarget),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -2042,7 +2044,7 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
   const createVariantCommentMutation = useMutation({
     mutationFn: (content: string) => {
       const user = userId ? { id: userId, name: userName ?? undefined } : undefined;
-      return createVariantComment(variant.variantId, { content }, user);
+      return createVariantComment(variantCommentTarget, { content }, user);
     },
     onMutate: () => {
       setVariantCommentError(null);

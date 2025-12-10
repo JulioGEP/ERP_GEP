@@ -1311,6 +1311,17 @@ export function VariantModal({
     unitPointerInteractingRef.current = false;
   }, [variant]);
 
+  const variantCommentTargets = useMemo(() => {
+    const wooId = (variant?.id_woo ?? '').trim();
+    const internalId = (variant?.id ?? '').trim();
+    const ids: string[] = [];
+    if (wooId) ids.push(wooId);
+    if (internalId && internalId !== wooId) ids.push(internalId);
+    return ids;
+  }, [variant?.id, variant?.id_woo]);
+
+  const primaryCommentTarget = useMemo(() => variantCommentTargets[0] ?? '', [variantCommentTargets]);
+
   useEffect(() => {
     let ignore = false;
     setComments([]);
@@ -1321,8 +1332,7 @@ export function VariantModal({
     setUpdatingCommentId(null);
     setDeletingCommentId(null);
 
-    const variantId = variant?.id?.trim();
-    if (!variantId) {
+    if (!variantCommentTargets.length) {
       setCommentsLoading(false);
       return () => {
         ignore = true;
@@ -1331,28 +1341,46 @@ export function VariantModal({
 
     setCommentsLoading(true);
     (async () => {
-      try {
-        const list = await fetchVariantComments(variantId);
-        if (!ignore) {
-          setComments(list);
+      const settled = await Promise.allSettled(
+        variantCommentTargets.map((id) => fetchVariantComments(id)),
+      );
+
+      if (ignore) return;
+
+      const merged: VariantComment[] = [];
+      const seen = new Set<string>();
+      let errorMessage: string | null = null;
+
+      settled.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          result.value.forEach((comment) => {
+            const key = `${comment.id}|${comment.variant_id}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              merged.push(comment);
+            }
+          });
+        } else if (!errorMessage) {
+          errorMessage =
+            result.reason instanceof ApiError
+              ? result.reason.message
+              : 'No se pudieron cargar los comentarios de la variante.';
         }
-      } catch (error) {
-        const message =
-          error instanceof ApiError ? error.message : 'No se pudieron cargar los comentarios de la variante.';
-        if (!ignore) {
-          setCommentsError(message);
-        }
-      } finally {
-        if (!ignore) {
-          setCommentsLoading(false);
-        }
+      });
+
+      if (merged.length) {
+        setComments(merged);
+      } else if (errorMessage) {
+        setCommentsError(errorMessage);
       }
+
+      setCommentsLoading(false);
     })();
 
     return () => {
       ignore = true;
     };
-  }, [variant?.id]);
+  }, [variantCommentTargets]);
 
   const loadVariantDetails = useCallback(
     async (variantId: string, options?: { silent?: boolean; keepFormValues?: boolean }) => {
@@ -1633,7 +1661,10 @@ export function VariantModal({
 
   const handleSubmitComment = async (event?: ReactMouseEvent<HTMLButtonElement>) => {
     event?.preventDefault();
-    if (!variant?.id) return;
+    if (!primaryCommentTarget) {
+      setCommentsError('No se pudo determinar la variante para guardar el comentario.');
+      return;
+    }
 
     const trimmedContent = newComment.trim();
     if (!trimmedContent.length) {
@@ -1644,7 +1675,7 @@ export function VariantModal({
     setCommentsError(null);
     setSavingComment(true);
     try {
-      const created = await createVariantComment(variant.id, { content: trimmedContent }, {
+      const created = await createVariantComment(primaryCommentTarget, { content: trimmedContent }, {
         id: userId,
         name: userName,
       });
@@ -1672,7 +1703,7 @@ export function VariantModal({
   };
 
   const handleSaveCommentEdit = async () => {
-    if (!variant?.id || !editingCommentId) return;
+    if (!primaryCommentTarget || !editingCommentId) return;
     const trimmedContent = editingCommentContent.trim();
     if (!trimmedContent.length) {
       setCommentsError('El comentario no puede estar vacío.');
@@ -1683,7 +1714,7 @@ export function VariantModal({
     setUpdatingCommentId(editingCommentId);
     try {
       const updated = await updateVariantComment(
-        variant.id,
+        primaryCommentTarget,
         editingCommentId,
         { content: trimmedContent },
         { id: userId, name: userName },
@@ -1700,11 +1731,11 @@ export function VariantModal({
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    if (!variant?.id || !commentId) return;
+    if (!primaryCommentTarget || !commentId) return;
     setCommentsError(null);
     setDeletingCommentId(commentId);
     try {
-      await deleteVariantComment(variant.id, commentId, { id: userId, name: userName });
+      await deleteVariantComment(primaryCommentTarget, commentId, { id: userId, name: userName });
       setComments((prev) => prev.filter((comment) => comment.id !== commentId));
       if (editingCommentId === commentId) {
         setEditingCommentId(null);
