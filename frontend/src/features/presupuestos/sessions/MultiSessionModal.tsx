@@ -144,6 +144,7 @@ export function MultiSessionModal({
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<AvailabilityConflict[] | null>(null);
   const calendarTargetRef = useRef<HTMLDivElement | null>(null);
+  const calendarPopoverRef = useRef<HTMLDivElement | null>(null);
   const trainerFieldRef = useRef<HTMLDivElement | null>(null);
   const unitFieldRef = useRef<HTMLDivElement | null>(null);
   const roomFieldRef = useRef<HTMLDivElement | null>(null);
@@ -198,9 +199,6 @@ export function MultiSessionModal({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (calendarTargetRef.current && !calendarTargetRef.current.contains(target)) {
-        setCalendarOpen(false);
-      }
       if (trainerFieldRef.current && !trainerFieldRef.current.contains(target)) {
         setTrainerListOpen(false);
       }
@@ -443,17 +441,16 @@ export function MultiSessionModal({
                 readOnly
                 value={selectedDatesLabel}
                 placeholder="Selecciona días"
-                onClick={() => setCalendarOpen((open) => !open)}
+                onClick={() => setCalendarOpen(true)}
                 aria-expanded={calendarOpen}
               />
-              <Overlay
-                target={calendarTargetRef.current}
-                show={calendarOpen}
-                placement="bottom-start"
-                rootClose
-                onHide={() => setCalendarOpen(false)}
-              >
-                <Popover id="multi-session-calendar" className="p-3" style={{ maxWidth: 400 }}>
+              <Overlay target={calendarTargetRef.current} show={calendarOpen} placement="bottom-start">
+                <Popover
+                  id="multi-session-calendar"
+                  className="p-3"
+                  style={{ maxWidth: 400 }}
+                  ref={calendarPopoverRef}
+                >
                   <div className="d-flex justify-content-between align-items-center mb-2">
                     <Button
                       variant="light"
@@ -471,6 +468,9 @@ export function MultiSessionModal({
                     <div className="fw-semibold text-capitalize">
                       {calendarMonth.toLocaleDateString('es-ES', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
                     </div>
+                    <Button variant="light" size="sm" aria-label="Cerrar calendario" onClick={() => setCalendarOpen(false)}>
+                      ×
+                    </Button>
                     <Button
                       variant="light"
                       size="sm"
