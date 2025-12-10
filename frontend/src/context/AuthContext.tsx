@@ -8,7 +8,7 @@ import React, {
   useState,
   PropsWithChildren,
 } from 'react';
-import { getJson, postJson, ApiError, UNAUTHORIZED_EVENT } from '../api/client';
+import { getJson, postJson, ApiError, isUnauthorized } from '../api/client';
 
 type User = {
   id: string;
@@ -98,21 +98,6 @@ export function AuthProvider({ children }: PropsWithChildren<{}>) {
     // Cargar sesión al montar
     loadSession();
   }, [loadSession]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleUnauthorized = () => {
-      setUser(null);
-      setPermissions([]);
-      if (window.location.pathname !== '/login') {
-        window.location.assign('/login');
-      }
-    };
-
-    window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
-    return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
-  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     // POST login; el backend setea cookie HttpOnly
