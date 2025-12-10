@@ -1649,7 +1649,7 @@ export function CalendarView({
         mode === 'sessions'
           ? session.dealPipelineId ?? session.title
         : mode === 'trainers'
-          ? formatResourceSummary(session.trainers, 'Sin formador')
+          ? truncateLabel(formatResourceSummary(session.trainers, 'Sin formador'), 20)
           : mode === 'units'
           ? truncateLabel(formatResourceSummary(session.units, 'Sin unidad móvil'), 20)
           : truncateLabel(formatSessionOrganization(session, 'Sin organización'));
@@ -1695,9 +1695,7 @@ export function CalendarView({
 
     const eventTitle =
       mode === 'trainers'
-        ? trainerNames.length
-          ? trainerNames
-          : 'Sin formador'
+        ? truncateLabel(trainerNames.length ? trainerNames : 'Sin formador', 20)
       : mode === 'units'
         ? unitNames.length
           ? truncateLabel(unitNames, 20)
@@ -1856,7 +1854,10 @@ export function CalendarView({
                             mode === 'sessions'
                               ? session.dealPipelineId ?? session.title
                             : mode === 'trainers'
-                            ? formatResourceSummary(session.trainers, 'Sin formador')
+                            ? truncateLabel(
+                                formatResourceSummary(session.trainers, 'Sin formador'),
+                                20,
+                              )
                             : mode === 'units'
                             ? truncateLabel(formatResourceSummary(session.units, 'Sin unidad móvil'), 20)
                             : truncateLabel(formatSessionOrganization(session, 'Sin organización'));
@@ -1910,9 +1911,7 @@ export function CalendarView({
                         const unitNames = formatVariantUnitNames(unitResources);
                         const variantLabel =
                           mode === 'trainers'
-                            ? trainerNames.length
-                              ? trainerNames
-                              : 'Sin formador'
+                            ? truncateLabel(trainerNames.length ? trainerNames : 'Sin formador', 20)
                           : mode === 'units'
                             ? unitNames.length
                               ? truncateLabel(unitNames, 20)
