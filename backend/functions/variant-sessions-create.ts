@@ -113,6 +113,8 @@ export const handler = createHttpHandler<any>(async (request) => {
   const createdIds: string[] = [];
   let skipped = 0;
 
+  const parentWooId = baseVariant.id_padre ?? baseVariant.id_woo;
+
   const defaultStart =
     typeof baseVariant.products?.hora_inicio === 'string'
       ? baseVariant.products.hora_inicio.trim()
@@ -158,7 +160,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     const created = await prisma.variants.create({
       data: {
         id_woo: buildPlaceholderIdWoo(),
-        id_padre: baseVariant.id_padre,
+        id_padre: parentWooId,
         name: baseVariant.name,
         status: baseVariant.status,
         finalizar: baseVariant.finalizar,

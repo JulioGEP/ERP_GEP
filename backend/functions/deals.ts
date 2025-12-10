@@ -1620,8 +1620,13 @@ export const handler = async (event: any) => {
         const wooId = BigInt(variationId);
         const variant = await prisma.variants.findUnique({
           where: { id_woo: wooId },
-          select: { id_padre: true },
+          select: { id_padre: true, id_woo: true },
         });
+
+        const normalizedWooId = normalizeVariantWooId(variant?.id_woo ?? null);
+        if (normalizedWooId) {
+          variantIdsToSearch.add(normalizedWooId);
+        }
 
         if (variant?.id_padre !== undefined && variant.id_padre !== null) {
           const siblingVariants = await prisma.variants.findMany({
