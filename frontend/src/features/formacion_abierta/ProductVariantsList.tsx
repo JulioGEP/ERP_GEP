@@ -465,8 +465,8 @@ function ProductDefaultsModal({
     onHide();
   };
 
-  return (
-    <Modal show={!!product} onHide={handleAttemptClose} centered backdrop={isSaving ? 'static' : true}>
+    return (
+      <Modal show={!!product} onHide={handleAttemptClose} centered backdrop={isSaving ? 'static' : true}>
       <Modal.Header closeButton={!isSaving} closeLabel="Cerrar">
         <Modal.Title>Configurar producto</Modal.Title>
       </Modal.Header>
@@ -3187,6 +3187,14 @@ export default function ProductVariantsList() {
   const [activeProductConfig, setActiveProductConfig] = useState<ProductInfo | null>(null);
   const [activeVariantCreator, setActiveVariantCreator] = useState<ProductInfo | null>(null);
 
+  const isDuplicatedSessionVariant = (variant: VariantInfo): boolean => {
+    const wooIdText = typeof variant.id_woo === 'string' ? variant.id_woo.trim() : '';
+    if (!wooIdText) return false;
+
+    const numericWooId = Number(wooIdText);
+    return Number.isFinite(numericWooId) && numericWooId >= 9_000_000_000_000;
+  };
+
   useEffect(() => {
     let ignore = false;
 
@@ -3472,7 +3480,9 @@ export default function ProductVariantsList() {
               <Accordion alwaysOpen>
                 {products.map((product) => {
                   const defaultsSummary = buildProductDefaultsSummary(product);
-                  const variantGroups = buildVariantGroups(product.variants);
+                  const duplicatedVariants = product.variants.filter(isDuplicatedSessionVariant);
+                  const visibleVariants = product.variants.filter((variant) => !isDuplicatedSessionVariant(variant));
+                  const variantGroups = buildVariantGroups(visibleVariants);
 
                   return (
                     <Accordion.Item eventKey={product.id} key={product.id}>
@@ -3514,7 +3524,7 @@ export default function ProductVariantsList() {
                         ) : null}
 
                         {product.variants.length > 0 ? (
-                          variantGroups.length > 0 ? (
+                          variantGroups.length > 0 || duplicatedVariants.length > 0 ? (
                             <Accordion alwaysOpen className="mb-3">
                               {variantGroups.map((locationGroup, locationIndex) => {
                                 const locationEventKey = `${product.id}-location-${locationIndex}`;
@@ -3662,6 +3672,112 @@ export default function ProductVariantsList() {
                                   </Accordion.Item>
                                 );
                               })}
+                              {duplicatedVariants.length > 0 ? (
+                                <Accordion.Item eventKey={`${product.id}-duplicated`}>
+                                  <Accordion.Header>
+                                    <Stack
+                                      direction="horizontal"
+                                      className="w-100 justify-content-between align-items-center"
+                                    >
+                                      <span>Sesiones duplicadas</span>
+                                      <Badge bg="secondary">{duplicatedVariants.length}</Badge>
+                                    </Stack>
+                                  </Accordion.Header>
+                                  <Accordion.Body>
+                                    <ListGroup>
+                                      {duplicatedVariants.map((variant) => {
+                                        const wooId = typeof variant.id_woo === 'string' ? variant.id_woo.trim() : '';
+                                        const isDeleting = !!pendingDeletes[variant.id];
+                                        const leadsCount = wooId ? variantLeadCounts[wooId] ?? 0 : null;
+                                        const isLeadCountLoading = wooId ? !!variantLeadCountsLoading[wooId] : false;
+                                        const budgetsBadgeBg =
+                                          !isLeadCountLoading && typeof leadsCount === 'number' && leadsCount > 0
+                                            ? 'primary'
+                                            : 'light';
+
+                                        return (
+                                          <ListGroup.Item
+                                            action
+                                            key={variant.id}
+                                            onClick={() => handleSelectVariant(product, variant)}
+                                            className="d-flex flex-column gap-1"
+                                          >
+                                            <div className="d-flex justify-content-between align-items-start gap-3">
+                                              <div>
+                                                <div className="fw-semibold">
+                                                  {variant.name ?? 'Variante sin nombre'}
+                                                </div>
+                                                <div className="text-muted small">ID Woo: {variant.id_woo}</div>
+                                              </div>
+                                              <Stack direction="horizontal" gap={2} className="flex-wrap">
+                                                {wooId ? (
+                                                  <Badge
+                                                    bg={budgetsBadgeBg}
+                                                    text={budgetsBadgeBg === 'light' ? 'dark' : undefined}
+                                                    className="d-inline-flex align-items-center gap-2"
+                                                    title={`Presupuestos asociados: ${
+                                                      isLeadCountLoading ? 'cargando…' : leadsCount
+                                                    }`}
+                                                  >
+                                                    <span className="text-uppercase small mb-0">Presupuestos</span>
+                                                    {isLeadCountLoading ? (
+                                                      <Spinner
+                                                        animation="border"
+                                                        size="sm"
+                                                        role="status"
+                                                        aria-hidden="true"
+                                                      />
+                                                    ) : (
+                                                      <span className="fw-semibold">{leadsCount}</span>
+                                                    )}
+                                                  </Badge>
+                                                ) : null}
+                                                {variant.status && (
+                                                  <Badge bg={getStatusBadgeVariant(variant.status)}>
+                                                    {variant.status}
+                                                  </Badge>
+                                                )}
+                                                {variant.date && (
+                                                  <span className="text-muted small">{formatDate(variant.date)}</span>
+                                                )}
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline-danger"
+                                                  onClick={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    handleDeleteVariant(product, variant);
+                                                  }}
+                                                  disabled={isDeleting}
+                                                >
+                                                  {isDeleting ? (
+                                                    <>
+                                                      <Spinner
+                                                        as="span"
+                                                        animation="border"
+                                                        size="sm"
+                                                        role="status"
+                                                        aria-hidden="true"
+                                                        className="me-2"
+                                                      />
+                                                      Eliminando…
+                                                    </>
+                                                  ) : (
+                                                    'Eliminar'
+                                                  )}
+                                                </Button>
+                                              </Stack>
+                                            </div>
+                                            {variant.sede && (
+                                              <div className="text-muted small">Sede: {variant.sede}</div>
+                                            )}
+                                          </ListGroup.Item>
+                                        );
+                                      })}
+                                    </ListGroup>
+                                  </Accordion.Body>
+                                </Accordion.Item>
+                              ) : null}
                             </Accordion>
                           ) : (
                             <p className="text-muted small mb-0">No hay variantes agrupadas para mostrar.</p>
