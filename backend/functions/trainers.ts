@@ -26,6 +26,7 @@ const OPTIONAL_DATE_FIELDS = [
 ] as const;
 
 const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
+const MAX_TRAINER_NAME_LENGTH = 17;
 
 type TrainerRecord = {
   trainer_id: string;
@@ -227,6 +228,16 @@ function buildCreateData(body: any) {
     return { error: errorResponse('VALIDATION_ERROR', 'El campo name es obligatorio', 400) };
   }
 
+  if (name.length > MAX_TRAINER_NAME_LENGTH) {
+    return {
+      error: errorResponse(
+        'VALIDATION_ERROR',
+        `El campo name no puede superar los ${MAX_TRAINER_NAME_LENGTH} caracteres`,
+        400,
+      ),
+    };
+  }
+
   const trainerId = toNullableString(body?.trainer_id) ?? randomUUID();
 
   const data: any = {
@@ -276,6 +287,16 @@ function buildUpdateData(body: any) {
     const name = toNullableString(body.name);
     if (!name) {
       return { error: errorResponse('VALIDATION_ERROR', 'El campo name es obligatorio', 400) };
+    }
+
+    if (name.length > MAX_TRAINER_NAME_LENGTH) {
+      return {
+        error: errorResponse(
+          'VALIDATION_ERROR',
+          `El campo name no puede superar los ${MAX_TRAINER_NAME_LENGTH} caracteres`,
+          400,
+        ),
+      };
     }
     data.name = name;
     hasChanges = true;
