@@ -160,7 +160,6 @@ async function resolveLink(prisma: ReturnType<typeof getPrisma>, token: string) 
           id: true,
           deal_id: true,
           nombre_cache: true,
-          fecha_fin_utc: true,
           direccion: true,
           deal_products: { select: { id: true, name: true, code: true } },
           deals: {
@@ -184,12 +183,8 @@ async function ensureValidLink(prisma: ReturnType<typeof getPrisma>, token: stri
     return { error: errorResponse('TOKEN_INVALID', 'Enlace inválido', 404) } as const;
   }
   const now = new Date();
-  const sessionEnd = link.sesiones?.fecha_fin_utc instanceof Date ? link.sesiones.fecha_fin_utc : null;
   if (!link.active) {
     return { error: errorResponse('TOKEN_REVOKED', 'Este enlace ha sido desactivado', 410) } as const;
-  }
-  if (sessionEnd && now >= sessionEnd) {
-    return { error: errorResponse('TOKEN_EXPIRED', 'Este enlace ha expirado', 410) } as const;
   }
   if (link.expires_at && now >= link.expires_at) {
     return { error: errorResponse('TOKEN_EXPIRED', 'Este enlace ha expirado', 410) } as const;
