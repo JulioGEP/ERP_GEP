@@ -69,27 +69,11 @@ function localInputToUtc(value: string | null): string | null | undefined {
   return new Date(baseDate.getTime() - offset).toISOString();
 }
 
-function buildIsoRange(
-  date: string,
-  startTime: string,
-  endTime: string,
-  options?: { allowOvernight?: boolean },
-): { startIso: string; endIso: string } | null {
-  const allowOvernight = options?.allowOvernight ?? false;
+function buildIsoRange(date: string, startTime: string, endTime: string): { startIso: string; endIso: string } | null {
   const startIso = localInputToUtc(`${date}T${startTime}`);
-  const startDate = new Date(`${date}T00:00:00`);
-  if (typeof startIso !== 'string' || !Number.isFinite(startDate.getTime())) return null;
-
-  let endDate = date;
-  if (allowOvernight && endTime < startTime) {
-    const nextDay = new Date(startDate);
-    nextDay.setUTCDate(startDate.getUTCDate() + 1);
-    endDate = nextDay.toISOString().slice(0, 10);
-  }
-
-  const endIso = localInputToUtc(`${endDate}T${endTime}`);
-  if (typeof endIso !== 'string') return null;
-  if (!allowOvernight && new Date(endIso).getTime() < new Date(startIso).getTime()) return null;
+  const endIso = localInputToUtc(`${date}T${endTime}`);
+  if (typeof startIso !== 'string' || typeof endIso !== 'string') return null;
+  if (new Date(endIso).getTime() < new Date(startIso).getTime()) return null;
   return { startIso, endIso };
 }
 
@@ -158,7 +142,6 @@ export function MultiSessionModal({
   const [trainerIds, setTrainerIds] = useState<string[]>([]);
   const [unitIds, setUnitIds] = useState<string[]>([]);
   const [roomId, setRoomId] = useState<string>('');
-  const [overnightConfirmed, setOvernightConfirmed] = useState<boolean | null>(null);
   const [status, setStatus] = useState<'idle' | 'checking' | 'ready' | 'creating' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<AvailabilityConflict[] | null>(null);
@@ -194,7 +177,6 @@ export function MultiSessionModal({
     setTrainerIds([]);
     setUnitIds([]);
     setRoomId('');
-    setOvernightConfirmed(null);
     setStatus('idle');
     setError(null);
     setConflicts(null);
@@ -390,17 +372,6 @@ export function MultiSessionModal({
     return `${dates.length} días seleccionados`;
   }, [dates]);
 
-  const isOvernightSchedule = useMemo(
-    () => Boolean(startTime && endTime && endTime < startTime),
-    [endTime, startTime],
-  );
-
-  useEffect(() => {
-    if (!isOvernightSchedule) {
-      setOvernightConfirmed(null);
-    }
-  }, [isOvernightSchedule]);
-
   const handleStart = useCallback(async () => {
     setError(null);
     setConflicts(null);
@@ -417,24 +388,11 @@ export function MultiSessionModal({
       return;
     }
 
-    if (isOvernightSchedule) {
-      if (overnightConfirmed === null) {
-        setError('Confirma si el horario es nocturno.');
-        setStatus('error');
-        return;
-      }
-      if (!overnightConfirmed) {
-        setError('Modifica el horario para que la hora fin sea posterior a la hora inicio.');
-        setStatus('error');
-        return;
-      }
-    }
-
     setStatus('checking');
     const newConflicts: AvailabilityConflict[] = [];
 
     for (const date of dates) {
-      const range = buildIsoRange(date, startTime, endTime, { allowOvernight: overnightConfirmed === true });
+      const range = buildIsoRange(date, startTime, endTime);
       if (!range) {
         setError('Rango de fechas u horas no válido.');
         setStatus('error');
@@ -462,14 +420,14 @@ export function MultiSessionModal({
     }
 
     setStatus('ready');
-  }, [dates, endTime, isOvernightSchedule, name, overnightConfirmed, roomId, startTime, trainerIds, unitIds]);
+  }, [dates, endTime, name, roomId, startTime, trainerIds, unitIds]);
 
   const handleConfirm = useCallback(async () => {
     setStatus('creating');
     setError(null);
     try {
       for (const date of dates) {
-        const range = buildIsoRange(date, startTime, endTime, { allowOvernight: overnightConfirmed === true });
+        const range = buildIsoRange(date, startTime, endTime);
         if (!range) throw new Error('Rango de fechas u horas no válido.');
         await createSession({
           deal_id: dealId,
@@ -491,23 +449,7 @@ export function MultiSessionModal({
       setError(createError instanceof Error ? createError.message : 'No se pudieron crear las sesiones.');
       setStatus('error');
     }
-  }, [
-    dates,
-    dealAddress,
-    dealId,
-    endTime,
-    isInCompany,
-    name,
-    onClose,
-    onCreated,
-    overnightConfirmed,
-    productId,
-    resetState,
-    roomId,
-    startTime,
-    trainerIds,
-    unitIds,
-  ]);
+  }, [dates, dealAddress, dealId, endTime, isInCompany, name, onClose, onCreated, productId, resetState, roomId, startTime, trainerIds, unitIds]);
 
   const handleRevert = useCallback(() => {
     resetState();
@@ -547,38 +489,6 @@ export function MultiSessionModal({
               </Form.Group>
             </Col>
           </Row>
-
-          {isOvernightSchedule && (
-            <Alert variant={overnightConfirmed ? 'primary' : 'warning'} className="mb-0">
-              <div className="d-flex flex-column flex-lg-row justify-content-between gap-3">
-                <div>
-                  <div className="fw-semibold">La hora fin es anterior a la hora inicio. ¿Es horario nocturno?</div>
-                  {overnightConfirmed && (
-                    <p className="mb-0 small text-muted">
-                      Si hay varios días seleccionados, la hora fin se asignará al día siguiente de cada sesión.
-                    </p>
-                  )}
-                  {overnightConfirmed === false && (
-                    <p className="mb-0 small text-muted">Ajusta las horas para continuar.</p>
-                  )}
-                </div>
-                <div className="d-flex gap-2">
-                  <Button
-                    variant={overnightConfirmed ? 'primary' : 'outline-primary'}
-                    onClick={() => setOvernightConfirmed(true)}
-                  >
-                    Sí
-                  </Button>
-                  <Button
-                    variant={overnightConfirmed === false ? 'primary' : 'outline-primary'}
-                    onClick={() => setOvernightConfirmed(false)}
-                  >
-                    No
-                  </Button>
-                </div>
-              </div>
-            </Alert>
-          )}
 
           <Form.Group>
             <Form.Label>Días</Form.Label>
