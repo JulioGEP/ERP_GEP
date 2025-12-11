@@ -21,6 +21,7 @@ export type CalendarVariantProduct = {
 export type CalendarVariantDetails = {
   id: string;
   id_woo: string | null;
+  parent_woo_id: string | null;
   name: string | null;
   status: string | null;
   finalizar: string | null;
@@ -457,10 +458,11 @@ function sanitizeVariantDetails(input: any): CalendarVariantDetails | null {
   const finalizar = toOptionalString(input?.finalizar) ?? 'Activa';
 
   return {
-    id,
-    id_woo: toOptionalString(input?.id_woo),
-    name: toOptionalString(input?.name),
-    status: toOptionalString(input?.status),
+  id,
+  id_woo: toOptionalString(input?.id_woo),
+  parent_woo_id: toOptionalString(input?.parent_woo_id ?? input?.parentWooId ?? input?.id_padre),
+  name: toOptionalString(input?.name),
+  status: toOptionalString(input?.status),
     finalizar,
     price: toOptionalString(input?.price),
     stock:

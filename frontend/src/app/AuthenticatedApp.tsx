@@ -489,6 +489,7 @@ function createActiveVariantFromCalendarEvent(event: CalendarVariantEvent): Acti
   const variantInfo: VariantInfo = {
     id: variantDetails.id,
     id_woo: sanitizeString(variantDetails.id_woo) ?? '',
+    parent_woo_id: sanitizeString(variantDetails.parent_woo_id),
     name: variantDetails.name ?? null,
     status: variantDetails.status ?? null,
     price: variantDetails.price ?? null,
