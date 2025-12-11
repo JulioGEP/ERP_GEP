@@ -70,6 +70,7 @@ function toTrainerInviteResponseStatus(value: unknown): VariantTrainerInvite['st
 
 export function normalizeVariantFromResponse(input: any, fallbackId: string): VariantInfo {
   const stockValue = toNumberOrNull(input?.stock);
+  const parentWooId = toTrimmedString(input?.parent_woo_id ?? input?.parentWooId);
 
   const trainerIdRaw = input?.trainer_id;
   const trainerId = trainerIdRaw != null && String(trainerIdRaw).trim().length
@@ -261,6 +262,7 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
   return {
     id: String(input?.id ?? fallbackId),
     id_woo: input?.id_woo != null ? String(input.id_woo) : '',
+    parent_woo_id: parentWooId,
     name: input?.name ?? null,
     status: input?.status ?? null,
     finalizar,

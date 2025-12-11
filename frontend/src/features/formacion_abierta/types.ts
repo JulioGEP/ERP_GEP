@@ -10,6 +10,7 @@ export type VariantTrainerInvite = {
 export type VariantInfo = {
   id: string;
   id_woo: string;
+  parent_woo_id: string | null;
   name: string | null;
   status: string | null;
   finalizar: string | null;
