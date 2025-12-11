@@ -333,15 +333,6 @@ export function MaterialsPendingProductsPage({
   const hasError = !!error;
   const hasRows = pendingProducts.length > 0;
   const errorDetails = useMemo(() => buildErrorDetails(error), [error]);
-  const [filters, setFilters] = useState({
-    budgetId: '',
-    organization: '',
-    supplier: '',
-    product: '',
-    quantity: '',
-    stock: '',
-    estimatedDelivery: '',
-  });
 
   useEffect(() => {
     setNextOrderNumber(initialNextOrderNumber);
@@ -427,7 +418,7 @@ export function MaterialsPendingProductsPage({
   }, [showEmailModal, supplierContactEmail]);
 
   const handleSelectAll = () => {
-    const allSelected = filteredProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
+    const allSelected = pendingProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
       const hasStock = (row.stockValue ?? 0) > 0;
       const remainingStock = getRemainingStockForProduct(row, acc);
       const defaultStockUsage = hasStock ? Math.min(getDefaultStockUsage(row), remainingStock) : 0;
@@ -639,54 +630,11 @@ export function MaterialsPendingProductsPage({
     primaryBudget?.organization?.name ?? '—'
   }"\n\nEl telefono de contacto es "${primaryBudget?.person?.phone ?? '—'}"\n\n¡Gracias!`;
 
-  const filteredProducts = useMemo(() => {
-    const normalize = (value: string | null | undefined) => value?.toString().toLowerCase() ?? '';
-    const filtersNormalized = {
-      budgetId: filters.budgetId.trim().toLowerCase(),
-      organization: filters.organization.trim().toLowerCase(),
-      supplier: filters.supplier.trim().toLowerCase(),
-      product: filters.product.trim().toLowerCase(),
-      quantity: filters.quantity.trim().toLowerCase(),
-      stock: filters.stock.trim().toLowerCase(),
-      estimatedDelivery: filters.estimatedDelivery.trim().toLowerCase(),
-    };
-
-    return pendingProducts.filter((row) => {
-      const matchesBudget =
-        !filtersNormalized.budgetId ||
-        normalize(row.budgetId ? `#${row.budgetId}` : '—').includes(filtersNormalized.budgetId);
-      const matchesOrganization =
-        !filtersNormalized.organization ||
-        normalize(row.organizationName).includes(filtersNormalized.organization);
-      const matchesSupplier =
-        !filtersNormalized.supplier || normalize(row.supplier).includes(filtersNormalized.supplier);
-      const matchesProduct =
-        !filtersNormalized.product || normalize(row.productName).includes(filtersNormalized.product);
-      const matchesQuantity =
-        !filtersNormalized.quantity || normalize(row.quantityLabel).includes(filtersNormalized.quantity);
-      const matchesStock =
-        !filtersNormalized.stock || normalize(row.stockLabel).includes(filtersNormalized.stock);
-      const matchesDelivery =
-        !filtersNormalized.estimatedDelivery ||
-        normalize(row.estimatedDelivery).includes(filtersNormalized.estimatedDelivery);
-
-      return (
-        matchesBudget &&
-        matchesOrganization &&
-        matchesSupplier &&
-        matchesProduct &&
-        matchesQuantity &&
-        matchesStock &&
-        matchesDelivery
-      );
-    });
-  }, [filters, pendingProducts]);
-
   const sortedProducts = useMemo(() => {
-    if (!sortConfig) return filteredProducts;
+    if (!sortConfig) return pendingProducts;
 
     const { key, direction } = sortConfig;
-    const rows = [...filteredProducts];
+    const rows = [...pendingProducts];
 
     rows.sort((a, b) => {
       const valueA = getSortableValue(a, key);
@@ -696,7 +644,7 @@ export function MaterialsPendingProductsPage({
     });
 
     return rows;
-  }, [filteredProducts, sortConfig]);
+  }, [pendingProducts, sortConfig]);
 
   const handleSort = (key: SortableColumn) => {
     setSortConfig((current) => {
@@ -808,103 +756,6 @@ export function MaterialsPendingProductsPage({
       ) : null}
 
       <div className="bg-white rounded-3 shadow-sm border">
-        <div className="px-3 py-3 border-bottom bg-light">
-          <div className="d-flex flex-wrap gap-3 align-items-end">
-            <Form.Group className="flex-grow-1" style={{ minWidth: 160 }}>
-              <Form.Label className="mb-1 small">Presupuesto</Form.Label>
-              <Form.Control
-                size="sm"
-                type="text"
-                placeholder="Buscar número"
-                value={filters.budgetId}
-                onChange={(event) => setFilters((current) => ({ ...current, budgetId: event.target.value }))}
-              />
-            </Form.Group>
-            <Form.Group className="flex-grow-1" style={{ minWidth: 200 }}>
-              <Form.Label className="mb-1 small">Empresa</Form.Label>
-              <Form.Control
-                size="sm"
-                type="text"
-                placeholder="Buscar empresa"
-                value={filters.organization}
-                onChange={(event) =>
-                  setFilters((current) => ({ ...current, organization: event.target.value }))
-                }
-              />
-            </Form.Group>
-            <Form.Group className="flex-grow-1" style={{ minWidth: 200 }}>
-              <Form.Label className="mb-1 small">Proveedor</Form.Label>
-              <Form.Control
-                size="sm"
-                type="text"
-                placeholder="Buscar proveedor"
-                value={filters.supplier}
-                onChange={(event) => setFilters((current) => ({ ...current, supplier: event.target.value }))}
-              />
-            </Form.Group>
-            <Form.Group className="flex-grow-1" style={{ minWidth: 200 }}>
-              <Form.Label className="mb-1 small">Producto</Form.Label>
-              <Form.Control
-                size="sm"
-                type="text"
-                placeholder="Buscar producto"
-                value={filters.product}
-                onChange={(event) => setFilters((current) => ({ ...current, product: event.target.value }))}
-              />
-            </Form.Group>
-            <Form.Group className="flex-grow-1" style={{ minWidth: 140 }}>
-              <Form.Label className="mb-1 small">Cantidad</Form.Label>
-              <Form.Control
-                size="sm"
-                type="text"
-                placeholder="Buscar cantidad"
-                value={filters.quantity}
-                onChange={(event) => setFilters((current) => ({ ...current, quantity: event.target.value }))}
-              />
-            </Form.Group>
-            <Form.Group className="flex-grow-1" style={{ minWidth: 140 }}>
-              <Form.Label className="mb-1 small">Stock</Form.Label>
-              <Form.Control
-                size="sm"
-                type="text"
-                placeholder="Buscar stock"
-                value={filters.stock}
-                onChange={(event) => setFilters((current) => ({ ...current, stock: event.target.value }))}
-              />
-            </Form.Group>
-            <Form.Group className="flex-grow-1" style={{ minWidth: 170 }}>
-              <Form.Label className="mb-1 small">Entrega</Form.Label>
-              <Form.Control
-                size="sm"
-                type="text"
-                placeholder="Buscar entrega"
-                value={filters.estimatedDelivery}
-                onChange={(event) =>
-                  setFilters((current) => ({ ...current, estimatedDelivery: event.target.value }))
-                }
-              />
-            </Form.Group>
-            <div className="d-flex align-items-center gap-2 pb-1">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  setFilters({
-                    budgetId: '',
-                    organization: '',
-                    supplier: '',
-                    product: '',
-                    quantity: '',
-                    stock: '',
-                    estimatedDelivery: '',
-                  })
-                }
-              >
-                Limpiar filtros
-              </Button>
-            </div>
-          </div>
-        </div>
         <div className="table-responsive">
           <Table hover className="mb-0">
             <thead>
@@ -917,7 +768,7 @@ export function MaterialsPendingProductsPage({
                         size="sm"
                         variant="outline-primary"
                         onClick={handleSelectAll}
-                        disabled={!filteredProducts.length}
+                        disabled={!hasRows}
                         className="p-1 d-inline-flex align-items-center justify-content-center"
                         title="Seleccionar todo"
                         aria-label="Seleccionar todo"
@@ -1006,12 +857,6 @@ export function MaterialsPendingProductsPage({
                 <tr>
                   <td colSpan={8} className="text-center py-4 text-muted">
                     No hay productos pendientes del embudo Material.
-                  </td>
-                </tr>
-              ) : !sortedProducts.length ? (
-                <tr>
-                  <td colSpan={8} className="text-center py-4 text-muted">
-                    No hay resultados que coincidan con los filtros aplicados.
                   </td>
                 </tr>
               ) : (
