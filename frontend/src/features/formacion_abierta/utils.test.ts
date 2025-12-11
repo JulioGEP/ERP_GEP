@@ -14,6 +14,7 @@ import type { DealTag, ProductInfo, VariantInfo } from './types';
 const sampleVariant = (overrides: Partial<VariantInfo> = {}): VariantInfo => ({
   id: 'v-1',
   id_woo: 'woo-1',
+  parent_woo_id: null,
   name: 'Variant',
   status: 'publish',
   finalizar: 'Activa',
