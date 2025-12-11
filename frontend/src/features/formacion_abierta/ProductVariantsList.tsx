@@ -95,29 +95,6 @@ function formatDate(value: string | null) {
   return dateFormatter.format(date);
 }
 
-function normalizeWooId(value: string | null | undefined): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function isPlaceholderWooId(value: string | null | undefined): boolean {
-  const normalized = normalizeWooId(value);
-  if (!normalized) return false;
-
-  const numericWooId = Number(normalized);
-  return Number.isFinite(numericWooId) && numericWooId >= 9_000_000_000_000;
-}
-
-function getVariantDealsWooId(variant: VariantInfo | null | undefined): string {
-  const parentWooId = normalizeWooId(variant?.parent_woo_id);
-  const wooId = normalizeWooId(variant?.id_woo);
-
-  if (parentWooId && (!wooId || isPlaceholderWooId(wooId))) {
-    return parentWooId;
-  }
-
-  return wooId || parentWooId;
-}
-
 function buildProductDefaultsSummary(product: ProductInfo): string | null {
   const parts: string[] = [];
 
@@ -1211,8 +1188,6 @@ export function VariantModal({
 
   const availability = availabilityQuery.data;
 
-  const dealsWooId = useMemo(() => getVariantDealsWooId(variant), [variant]);
-
   const availableTrainerSet = useMemo(() => {
     const ids = availability?.availableTrainers ?? null;
     if (!ids || !ids.length) return null;
@@ -1494,7 +1469,7 @@ export function VariantModal({
   useEffect(() => {
     let ignore = false;
 
-    if (!dealsWooId) {
+    if (!variant?.id_woo) {
       setDeals([]);
       setDealsError(null);
       setIsDealsLoading(false);
@@ -1513,7 +1488,7 @@ export function VariantModal({
 
     (async () => {
       try {
-        const items = await fetchDealsByVariation(dealsWooId);
+        const items = await fetchDealsByVariation(variant.id_woo);
         if (!ignore) {
           setDeals(items);
         }
@@ -1533,7 +1508,7 @@ export function VariantModal({
     return () => {
       ignore = true;
     };
-  }, [dealsWooId]);
+  }, [variant?.id_woo]);
 
   useEffect(() => {
     let ignore = false;
@@ -3227,7 +3202,11 @@ export default function ProductVariantsList() {
   const [activeVariantCreator, setActiveVariantCreator] = useState<ProductInfo | null>(null);
 
   const isDuplicatedSessionVariant = (variant: VariantInfo): boolean => {
-    return isPlaceholderWooId(variant.id_woo);
+    const wooIdText = typeof variant.id_woo === 'string' ? variant.id_woo.trim() : '';
+    if (!wooIdText) return false;
+
+    const numericWooId = Number(wooIdText);
+    return Number.isFinite(numericWooId) && numericWooId >= 9_000_000_000_000;
   };
 
   useEffect(() => {
@@ -3263,7 +3242,7 @@ export default function ProductVariantsList() {
 
     products.forEach((product) => {
       product.variants.forEach((variant) => {
-        const wooId = getVariantDealsWooId(variant);
+        const wooId = typeof variant.id_woo === 'string' ? variant.id_woo.trim() : '';
         if (wooId.length && variantLeadCounts[wooId] === undefined && !variantLeadCountsLoading[wooId]) {
           wooIdsToFetch.add(wooId);
         }
@@ -3606,15 +3585,9 @@ export default function ProductVariantsList() {
                                                         typeof variant.id_woo === 'string'
                                                           ? variant.id_woo.trim()
                                                           : '';
-                                                      const dealsWooId = getVariantDealsWooId(variant);
-                                                      const leadsCount =
-                                                        dealsWooId && variantLeadCounts[dealsWooId] !== undefined
-                                                          ? variantLeadCounts[dealsWooId]
-                                                          : dealsWooId
-                                                            ? 0
-                                                            : null;
-                                                      const isLeadCountLoading = dealsWooId
-                                                        ? !!variantLeadCountsLoading[dealsWooId]
+                                                      const leadsCount = wooId ? variantLeadCounts[wooId] ?? 0 : null;
+                                                      const isLeadCountLoading = wooId
+                                                        ? !!variantLeadCountsLoading[wooId]
                                                         : false;
                                                       const budgetsBadgeBg =
                                                         !isLeadCountLoading && typeof leadsCount === 'number' && leadsCount > 0
@@ -3729,16 +3702,8 @@ export default function ProductVariantsList() {
                                       {duplicatedVariants.map((variant) => {
                                         const wooId = typeof variant.id_woo === 'string' ? variant.id_woo.trim() : '';
                                         const isDeleting = !!pendingDeletes[variant.id];
-                                        const dealsWooId = getVariantDealsWooId(variant);
-                                        const leadsCount =
-                                          dealsWooId && variantLeadCounts[dealsWooId] !== undefined
-                                            ? variantLeadCounts[dealsWooId]
-                                            : dealsWooId
-                                              ? 0
-                                              : null;
-                                        const isLeadCountLoading = dealsWooId
-                                          ? !!variantLeadCountsLoading[dealsWooId]
-                                          : false;
+                                        const leadsCount = wooId ? variantLeadCounts[wooId] ?? 0 : null;
+                                        const isLeadCountLoading = wooId ? !!variantLeadCountsLoading[wooId] : false;
                                         const budgetsBadgeBg =
                                           !isLeadCountLoading && typeof leadsCount === 'number' && leadsCount > 0
                                             ? 'primary'
