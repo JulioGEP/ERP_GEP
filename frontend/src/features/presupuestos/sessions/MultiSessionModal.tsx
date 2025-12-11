@@ -162,6 +162,7 @@ export function MultiSessionModal({
   const [unitIds, setUnitIds] = useState<string[]>([]);
   const [roomId, setRoomId] = useState<string>('');
   const [isNightSchedule, setIsNightSchedule] = useState(false);
+  const nightScheduleConfirmedRef = useRef(false);
   const [status, setStatus] = useState<'idle' | 'checking' | 'ready' | 'creating' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<AvailabilityConflict[] | null>(null);
@@ -196,6 +197,7 @@ export function MultiSessionModal({
     setUnitIds([]);
     setRoomId('');
     setIsNightSchedule(false);
+    nightScheduleConfirmedRef.current = false;
     setStatus('idle');
     setError(null);
     setConflicts(null);
@@ -247,6 +249,7 @@ export function MultiSessionModal({
   useEffect(() => {
     if (startTime <= endTime && isNightSchedule) {
       setIsNightSchedule(false);
+      nightScheduleConfirmedRef.current = false;
     }
   }, [endTime, isNightSchedule, startTime]);
 
@@ -377,6 +380,7 @@ export function MultiSessionModal({
       }
       allowOvernight = true;
       setIsNightSchedule(true);
+      nightScheduleConfirmedRef.current = true;
     }
 
     setStatus('checking');
@@ -415,19 +419,20 @@ export function MultiSessionModal({
 
   const handleConfirm = useCallback(async () => {
     setError(null);
-    if (endTime < startTime && !isNightSchedule) {
+    if (endTime < startTime && !nightScheduleConfirmedRef.current) {
       const confirmNight = window.confirm('¿Es horario Nocturno?');
       if (!confirmNight) {
         setError('Confirma el horario nocturno antes de crear las sesiones.');
         setStatus('error');
         return;
       }
+      nightScheduleConfirmedRef.current = true;
       setIsNightSchedule(true);
     }
 
     setStatus('creating');
 
-    const allowOvernight = isNightSchedule || endTime < startTime;
+    const allowOvernight = nightScheduleConfirmedRef.current || endTime < startTime;
     try {
       for (const date of dates) {
         const range = buildIsoRange(date, startTime, endTime, allowOvernight);
