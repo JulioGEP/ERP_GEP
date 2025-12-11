@@ -35,20 +35,14 @@ const BREAKDOWN_CONFIG = [
   },
 ];
 
-const SPAIN_BOUNDS = { minLat: 27.5, maxLat: 44.2, minLng: -18.5, maxLng: 4.5 } as const;
-const SPAIN_OUTLINE: Array<{ lat: number; lng: number }> = [
-  { lat: 43.7, lng: -9.3 },
-  { lat: 43.6, lng: -3.5 },
-  { lat: 43.2, lng: -1.5 },
-  { lat: 42.2, lng: 1.7 },
-  { lat: 41.4, lng: 3.1 },
-  { lat: 39.4, lng: 3.4 },
-  { lat: 37.3, lng: -0.7 },
-  { lat: 36.7, lng: -5.7 },
-  { lat: 36.9, lng: -7.5 },
-  { lat: 37.8, lng: -8.8 },
-  { lat: 39.4, lng: -9.2 },
-];
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+declare global {
+  interface Window {
+    google?: any;
+    googleMapsPromise?: Promise<any>;
+  }
+}
 
 function formatDate(date: Date) {
   const year = date.getFullYear();
@@ -280,6 +274,11 @@ export default function ComparativaDashboardPage() {
   const [mapHeight, setMapHeight] = useState(420);
   const [heatmapRadius, setHeatmapRadius] = useState(14);
   const [heatmapScale, setHeatmapScale] = useState(100);
+  const [mapLoadError, setMapLoadError] = useState<string | null>(null);
+
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const heatmapLayerRef = useRef<any>(null);
 
   const comparisonRangeLabel = useMemo(
     () => formatDisplayRange(filters.previousPeriod),
@@ -700,6 +699,134 @@ export default function ComparativaDashboardPage() {
     return dashboardQuery.data?.trends.find((item) => item.metric === metric) ?? placeholder;
   };
 
+  const heatmapPoints = dashboardQuery.data?.heatmap ?? [];
+
+  const computeZoomFromScale = useCallback((scale: number) => {
+    const normalized = Math.max(80, Math.min(140, scale));
+    return 4.6 + ((normalized - 80) * 2.2) / 60;
+  }, []);
+
+  const loadGoogleMaps = useCallback(() => {
+    if (!GOOGLE_MAPS_API_KEY) {
+      return Promise.reject(new Error('Falta la clave de Google Maps.'));
+    }
+
+    if (window.google?.maps?.visualization) {
+      return Promise.resolve(window.google);
+    }
+
+    if (!window.googleMapsPromise) {
+      window.googleMapsPromise = new Promise((resolve, reject) => {
+        const existingScript = document.querySelector(
+          'script[data-google-maps-script="true"]',
+        ) as HTMLScriptElement | null;
+
+        if (existingScript) {
+          existingScript.addEventListener(
+            'load',
+            () => resolve(window.google),
+            { once: true },
+          );
+          existingScript.addEventListener(
+            'error',
+            () => reject(new Error('No se pudo cargar Google Maps.')),
+            { once: true },
+          );
+        } else {
+          const script = document.createElement('script');
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=visualization`;
+          script.async = true;
+          script.defer = true;
+          script.dataset.googleMapsScript = 'true';
+          script.onload = () => resolve(window.google);
+          script.onerror = () => reject(new Error('No se pudo cargar Google Maps.'));
+          document.head.appendChild(script);
+        }
+      });
+    }
+
+    return window.googleMapsPromise;
+  }, []);
+
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    if (!GOOGLE_MAPS_API_KEY) {
+      setMapLoadError('Configura VITE_GOOGLE_MAPS_API_KEY para ver el mapa de calor.');
+      return;
+    }
+
+    setMapLoadError(null);
+    let cancelled = false;
+
+    loadGoogleMaps()
+      .then((maps) => {
+        if (cancelled || !maps?.maps) return;
+
+        const zoomLevel = computeZoomFromScale(heatmapScale);
+        const mapOptions = {
+          center: { lat: 40.4168, lng: -3.7038 },
+          zoom: zoomLevel,
+          mapTypeId: 'roadmap',
+          disableDefaultUI: true,
+          zoomControl: true,
+          streetViewControl: false,
+          fullscreenControl: false,
+          gestureHandling: 'greedy' as const,
+          backgroundColor: '#f8f9fa',
+          styles: [
+            { featureType: 'administrative', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+            { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+          ],
+        } as const;
+
+        if (!mapInstanceRef.current) {
+          mapInstanceRef.current = new maps.maps.Map(mapContainerRef.current as HTMLElement, mapOptions);
+        } else {
+          mapInstanceRef.current.setOptions(mapOptions);
+        }
+
+        if (!heatmapLayerRef.current) {
+          heatmapLayerRef.current = new maps.maps.visualization.HeatmapLayer({
+            data: [],
+            map: mapInstanceRef.current,
+            dissipating: true,
+          });
+        } else {
+          heatmapLayerRef.current.setMap(mapInstanceRef.current);
+        }
+
+        const weightedData = heatmapPoints.map((point) => ({
+          location: new maps.maps.LatLng(point.latitude, point.longitude),
+          weight: Math.max(1, point.sessions),
+        }));
+
+        heatmapLayerRef.current.set('radius', heatmapRadius);
+        heatmapLayerRef.current.setData(weightedData as any);
+
+        if (weightedData.length > 0) {
+          const bounds = new maps.maps.LatLngBounds();
+          weightedData.forEach((entry) => bounds.extend(entry.location));
+          mapInstanceRef.current.fitBounds(bounds, 32);
+
+          const currentZoom = mapInstanceRef.current.getZoom?.() ?? zoomLevel;
+          if (currentZoom > zoomLevel) {
+            mapInstanceRef.current.setZoom(zoomLevel);
+          }
+        }
+      })
+      .catch((error: Error) => {
+        if (!cancelled) {
+          setMapLoadError(error.message);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [computeZoomFromScale, heatmapPoints, heatmapRadius, heatmapScale, loadGoogleMaps]);
+
   const renderDonutChart = (slices: { label: string; percentage: number; value: number }[]) => {
     if (slices.length === 0) {
       return <div className="text-muted small">Sin datos</div>;
@@ -759,29 +886,6 @@ export default function ComparativaDashboardPage() {
   };
 
   const renderHeatmapCard = () => {
-    const heatmapPoints = dashboardQuery.data?.heatmap ?? [];
-    const maxSessions = heatmapPoints.length ? Math.max(...heatmapPoints.map((item) => item.sessions)) : 0;
-
-    const getHeatColor = (intensity: number) => {
-      const clamped = Math.max(0, Math.min(1, intensity));
-      const r = Math.round(255 * clamped);
-      const g = Math.round(170 * (1 - clamped));
-      const b = 64;
-      return `rgba(${r}, ${g}, ${b}, 0.78)`;
-    };
-
-    const projectPoint = (lat: number, lng: number) => {
-      const x = ((lng - SPAIN_BOUNDS.minLng) / (SPAIN_BOUNDS.maxLng - SPAIN_BOUNDS.minLng)) * 100;
-      const y =
-        ((SPAIN_BOUNDS.maxLat - lat) / (SPAIN_BOUNDS.maxLat - SPAIN_BOUNDS.minLat)) * 100;
-      return { x, y };
-    };
-
-    const outlinePoints = SPAIN_OUTLINE.map((point) => {
-      const projected = projectPoint(point.lat, point.lng);
-      return `${projected.x},${projected.y}`;
-    }).join(' ');
-
     return (
       <Card className="shadow-sm">
         <Card.Body className="d-flex flex-column gap-3">
@@ -824,49 +928,13 @@ export default function ComparativaDashboardPage() {
             </div>
           </div>
 
-          {heatmapPoints.length === 0 ? (
+          {mapLoadError ? (
+            <div className="text-danger small">{mapLoadError}</div>
+          ) : heatmapPoints.length === 0 ? (
             <div className="text-muted small">No hay direcciones con coordenadas en el rango seleccionado.</div>
           ) : (
-            <div
-              className="border rounded position-relative"
-              style={{ height: mapHeight, overflow: 'hidden', background: 'radial-gradient(circle at 20% 20%, #f8f9fa, #e9ecef)' }}
-            >
-              <div
-                className="position-absolute"
-                style={{ inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <svg
-                  viewBox="0 0 100 100"
-                  style={{ width: `${heatmapScale}%`, height: `${heatmapScale}%`, maxWidth: '100%', maxHeight: '100%' }}
-                  role="img"
-                  aria-label="Mapa de calor de España"
-                >
-                  <defs>
-                    <radialGradient id="heatmapGlow" cx="50%" cy="50%" r="80%">
-                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.3" />
-                      <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-                    </radialGradient>
-                  </defs>
-                  <rect x="0" y="0" width="100" height="100" fill="url(#heatmapGlow)" />
-                  <polygon points={outlinePoints} fill="#f1f3f5" stroke="#ced4da" strokeWidth={0.4} />
-                  {heatmapPoints.map((point, index) => {
-                    const intensity = maxSessions > 0 ? point.sessions / maxSessions : 0;
-                    const radius = Math.max(2.6, (heatmapRadius / 10) * (0.6 + intensity));
-                    const color = getHeatColor(intensity);
-                    const { x, y } = projectPoint(point.latitude, point.longitude);
-
-                    return (
-                      <g key={`${point.latitude}-${point.longitude}-${index}`}>
-                        <circle cx={x} cy={y} r={radius * 2.2} fill={color} opacity={0.35} />
-                        <circle cx={x} cy={y} r={radius} fill={color} opacity={0.85} />
-                        <title>
-                          {(point.address || 'Dirección desconocida') + ` · Sesiones: ${numberFormatter.format(point.sessions)}`}
-                        </title>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
+            <div className="border rounded position-relative" style={{ height: mapHeight, overflow: 'hidden' }}>
+              <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
             </div>
           )}
         </Card.Body>
