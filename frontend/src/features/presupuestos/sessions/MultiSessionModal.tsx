@@ -150,8 +150,6 @@ export function MultiSessionModal({
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('11:00');
   const [dates, setDates] = useState<string[]>([today]);
-  const [manualDateInput, setManualDateInput] = useState('');
-  const [manualDateError, setManualDateError] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(`${today}T00:00:00`));
   const [trainerFilter, setTrainerFilter] = useState('');
@@ -186,8 +184,6 @@ export function MultiSessionModal({
     setStartTime('09:00');
     setEndTime('11:00');
     setDates([today]);
-    setManualDateInput('');
-    setManualDateError(null);
     setCalendarMonth(new Date(`${today}T00:00:00`));
     setTrainerFilter('');
     setUnitFilter('');
@@ -269,53 +265,6 @@ export function MultiSessionModal({
   const handleRemoveDate = useCallback((value: string) => {
     setDates((current) => current.filter((item) => item !== value));
   }, []);
-
-  const handleAddManualDates = useCallback(() => {
-    const trimmed = manualDateInput.trim();
-    if (!trimmed) {
-      setManualDateError(null);
-      return;
-    }
-
-    const candidates = trimmed
-      .split(/[\s,;]+/)
-      .map((value) => value.replace(/\//g, '-').trim())
-      .filter(Boolean);
-
-    const invalid: string[] = [];
-    const normalized: string[] = [];
-
-    for (const candidate of candidates) {
-      const match = candidate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (!match) {
-        invalid.push(candidate);
-        continue;
-      }
-
-      const iso = `${match[1]}-${match[2]}-${match[3]}`;
-      const date = new Date(`${iso}T00:00:00`);
-
-      if (!Number.isFinite(date.getTime())) {
-        invalid.push(candidate);
-        continue;
-      }
-
-      normalized.push(iso);
-    }
-
-    if (normalized.length) {
-      setDates((current) => {
-        const next = new Set(current);
-        for (const date of normalized) {
-          next.add(date);
-        }
-        return Array.from(next).sort();
-      });
-    }
-
-    setManualDateInput('');
-    setManualDateError(invalid.length ? `Fechas no válidas: ${invalid.join(', ')}` : null);
-  }, [manualDateInput]);
 
   const calendarCells = useMemo(() => {
     const monthStart = new Date(Date.UTC(calendarMonth.getUTCFullYear(), calendarMonth.getUTCMonth(), 1));
@@ -630,26 +579,6 @@ export function MultiSessionModal({
                 </Badge>
               ))}
             </div>
-            <div className="d-flex gap-2 align-items-start mt-3" style={{ maxWidth: 520 }}>
-              <Form.Control
-                value={manualDateInput}
-                onChange={(event) => setManualDateInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    handleAddManualDates();
-                  }
-                }}
-                placeholder="Ej: 2024-09-20, 2024-09-22 2024-09-25"
-              />
-              <Button variant="outline-primary" onClick={handleAddManualDates}>
-                Añadir días
-              </Button>
-            </div>
-            <Form.Text muted>
-              Introduce varias fechas separadas por comas, espacios o saltos de línea (formato AAAA-MM-DD).
-            </Form.Text>
-            {manualDateError ? <div className="text-danger small">{manualDateError}</div> : null}
           </Form.Group>
 
           <Row>
