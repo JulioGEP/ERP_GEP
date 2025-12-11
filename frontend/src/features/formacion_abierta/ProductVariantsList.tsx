@@ -75,6 +75,7 @@ import type {
 } from './types';
 import { buildVariantGroups, compareVariants, findDealProductPriceForProduct } from './utils';
 import { useCurrentUserIdentity } from '../presupuestos/useCurrentUserIdentity';
+import { useAuth } from '../../context/AuthContext';
 
 const dateFormatter = new Intl.DateTimeFormat('es-ES', {
   dateStyle: 'medium',
@@ -976,6 +977,8 @@ export function VariantModal({
   const [updatingCommentId, setUpdatingCommentId] = useState<string | null>(null);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const { userId, userName } = useCurrentUserIdentity();
+  const { user } = useAuth();
+  const isAdmin = (user?.role ?? '').trim().toLowerCase() === 'admin';
   const totalDealStudents = useMemo(
     () => {
       if (!deals.length) {
@@ -3131,20 +3134,22 @@ export function VariantModal({
         >
           Crear Certificados
         </Button>
-        <Button
-          variant="outline-secondary"
-          onClick={handleCreateSessions}
-          disabled={isSaving || isCreatingSessions || !variant}
-        >
-          {isCreatingSessions ? (
-            <>
-              <Spinner as="span" animation="border" size="sm" role="status" className="me-2" />
-              Duplicando…
-            </>
-          ) : (
-            'Duplicar en nuevas fechas'
-          )}
-        </Button>
+        {isAdmin ? (
+          <Button
+            variant="outline-secondary"
+            onClick={handleCreateSessions}
+            disabled={isSaving || isCreatingSessions || !variant}
+          >
+            {isCreatingSessions ? (
+              <>
+                <Spinner as="span" animation="border" size="sm" role="status" className="me-2" />
+                Duplicando…
+              </>
+            ) : (
+              'Duplicar en nuevas fechas'
+            )}
+          </Button>
+        ) : null}
         <Button variant="secondary" onClick={handleAttemptClose} disabled={isSaving}>
           Cerrar
         </Button>
