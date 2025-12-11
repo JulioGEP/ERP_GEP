@@ -1063,6 +1063,15 @@ export function VariantModal({
   const variantSedeNormalized = (variant?.sede ?? '').trim().toLowerCase();
   const normalizedUserName = useMemo(() => userName.trim().toLowerCase(), [userName]);
 
+  const isDuplicatedChildVariant = useMemo(() => {
+    const parentWooId = normalizeWooId(variant?.parent_woo_id);
+    if (!parentWooId) {
+      return false;
+    }
+
+    return isPlaceholderWooId(variant?.id_woo);
+  }, [variant?.id_woo, variant?.parent_woo_id]);
+
   const trainerDisplay = useMemo(() => {
     if (!variant) return '—';
     const trainers = Array.isArray(variant.trainers) && variant.trainers.length
@@ -2826,7 +2835,7 @@ export function VariantModal({
                     <Form.Select
                       value={formValues.status}
                       onChange={handleChange('status')}
-                      disabled={isSaving}
+                      disabled={isSaving || isDuplicatedChildVariant}
                     >
                       {!PUBLICATION_STATUS_OPTIONS.some((option) => option.value === formValues.status) &&
                         formValues.status && (
@@ -2846,7 +2855,7 @@ export function VariantModal({
                     <Form.Select
                       value={formValues.finalizar}
                       onChange={handleChange('finalizar')}
-                      disabled={isSaving}
+                      disabled={isSaving || isDuplicatedChildVariant}
                     >
                       <option value="Activa">Activa</option>
                       <option value="Finalizada">Finalizada</option>
@@ -2874,7 +2883,7 @@ export function VariantModal({
                       step="1"
                       value={formValues.stock}
                       onChange={handleChange('stock')}
-                      disabled={isSaving}
+                      disabled={isSaving || isDuplicatedChildVariant}
                       placeholder="Cantidad disponible"
                     />
                   </Form.Group>
@@ -2885,7 +2894,7 @@ export function VariantModal({
                     <Form.Select
                       value={formValues.stock_status}
                       onChange={handleChange('stock_status')}
-                      disabled={isSaving}
+                      disabled={isSaving || isDuplicatedChildVariant}
                     >
                       {STOCK_STATUS_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
