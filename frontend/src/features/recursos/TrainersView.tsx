@@ -120,7 +120,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [detailTrainer, setDetailTrainer] = useState<Trainer | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
 
   const queryClient = useQueryClient();
 
