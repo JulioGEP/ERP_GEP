@@ -249,11 +249,21 @@ function parseCoordinate(input: string | null | undefined): { lat: number; lng: 
   const match = input.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
   if (!match) return null;
 
-  const lat = Number.parseFloat(match[1]);
-  const lng = Number.parseFloat(match[2]);
+  const first = Number.parseFloat(match[1]);
+  const second = Number.parseFloat(match[2]);
 
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return null;
+  if (first < -90 || first > 90 || second < -180 || second > 180) return null;
+
+  // Some sources provide the coordinates as lng,lat instead of lat,lng. Detect the swap by
+  // checking whether the values make sense for Spain and flip them when the order is inverted.
+  const isSpainLat = (value: number) => value >= 27 && value <= 44;
+  const isSpainLng = (value: number) => value >= -19 && value <= 5;
+
+  const looksSwapped = isSpainLng(first) && isSpainLat(second) && !isSpainLat(first);
+
+  const lat = looksSwapped ? second : first;
+  const lng = looksSwapped ? first : second;
 
   return { lat, lng };
 }
