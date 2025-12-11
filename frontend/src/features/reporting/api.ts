@@ -600,6 +600,11 @@ export type ComparativaRankingRow = {
   conversionRate?: number;
 };
 
+export type ComparativaSessionLocation = {
+  id: string | null;
+  direccion: string | null;
+};
+
 export type ComparativaDashboardResponse = {
   highlights: ComparativaKpi[];
   trends: ComparativaTrend[];
@@ -638,4 +643,34 @@ export async function fetchComparativaDashboard(
     : '/reporting-comparativa/dashboard';
 
   return getJson<ComparativaDashboardResponse>(url);
+}
+
+export async function fetchComparativaSessions(
+  filters: ComparativaFilters,
+): Promise<ComparativaSessionLocation[]> {
+  const params = new URLSearchParams();
+
+  params.set('currentStartDate', filters.currentPeriod.startDate);
+  params.set('currentEndDate', filters.currentPeriod.endDate);
+  params.set('previousStartDate', filters.previousPeriod.startDate);
+  params.set('previousEndDate', filters.previousPeriod.endDate);
+  params.set('granularity', filters.granularity);
+
+  filters.siteIds?.forEach((siteId) => params.append('siteId', siteId));
+  filters.trainingTypes?.forEach((trainingType) => params.append('trainingType', trainingType));
+  filters.comerciales?.forEach((comercial) => params.append('comercial', comercial));
+  if (filters.serviceType) params.set('serviceType', filters.serviceType);
+
+  const query = params.toString();
+  const url = query.length
+    ? `/reporting-comparativa/sessions?${query}`
+    : '/reporting-comparativa/sessions';
+
+  const response = await getJson<{ sesiones?: unknown[] }>(url);
+  const sessions = Array.isArray(response?.sesiones) ? response.sesiones : [];
+
+  return sessions.map((raw) => ({
+    id: sanitizeText((raw as any)?.id ?? (raw as any)?.sesion_id ?? (raw as any)?.sessionId),
+    direccion: sanitizeText((raw as any)?.direccion),
+  }));
 }

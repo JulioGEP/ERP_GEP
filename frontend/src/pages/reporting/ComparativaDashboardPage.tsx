@@ -5,9 +5,11 @@ import { Badge, Button, Card, Col, Collapse, Form, ListGroup, Row, Spinner } fro
 import { isApiError } from '../../api/client';
 import {
   fetchComparativaDashboard,
+  fetchComparativaSessions,
   type ComparativaFilters,
   type ComparativaKpi,
   type ComparativaBinaryMix,
+  type ComparativaSessionLocation,
   type ComparativaTrend,
 } from '../../features/reporting/api';
 
@@ -16,6 +18,18 @@ const METRIC_CONFIG: { key: string; label: string }[] = [
   { key: 'formacionEmpresaSessions', label: 'Formacion Empresa' },
   { key: 'formacionAbiertaVariantesSessions', label: 'Formación Abierta' },
 ];
+
+const SPAIN_CENTER = { lat: 40.4168, lon: -3.7038 } as const;
+
+type HeatPoint = { lat: number; lon: number };
+
+type GeocodingStatus = 'idle' | 'loading' | 'error' | 'ready';
+
+declare global {
+  interface Window {
+    L?: any;
+  }
+}
 
 const BREAKDOWN_CONFIG = [
   {
@@ -255,6 +269,319 @@ function normalizeSparkline(points?: number[]) {
   return [...padding, ...points];
 }
 
+function ensureLeafletStyles() {
+  if (typeof document === 'undefined') return;
+  const existing = document.getElementById('leaflet-css');
+  if (existing) return;
+
+  const link = document.createElement('link');
+  link.id = 'leaflet-css';
+  link.rel = 'stylesheet';
+  link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+  link.crossOrigin = '';
+  document.head.appendChild(link);
+}
+
+let leafletLoader: Promise<any> | null = null;
+
+async function loadLeafletResources() {
+  if (typeof window === 'undefined') return null;
+  if (window.L?.heatLayer) return window.L;
+  if (leafletLoader) return leafletLoader;
+
+  leafletLoader = new Promise((resolve, reject) => {
+    ensureLeafletStyles();
+
+    const handleHeatReady = () => {
+      if (window.L?.heatLayer) {
+        resolve(window.L);
+      } else {
+        reject(new Error('Leaflet heat plugin could not be loaded'));
+      }
+    };
+
+    const loadHeatPlugin = () => {
+      if (window.L?.heatLayer) {
+        resolve(window.L);
+        return;
+      }
+
+      const existingHeat = document.querySelector<HTMLScriptElement>('script[data-leaflet-heat]');
+      if (existingHeat) {
+        existingHeat.addEventListener('load', handleHeatReady, { once: true });
+        existingHeat.addEventListener('error', () => reject(new Error('Leaflet heat plugin failed to load')), {
+          once: true,
+        });
+        return;
+      }
+
+      const heatScript = document.createElement('script');
+      heatScript.dataset.leafletHeat = 'true';
+      heatScript.src = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
+      heatScript.async = true;
+      heatScript.onload = handleHeatReady;
+      heatScript.onerror = () => reject(new Error('Leaflet heat plugin failed to load'));
+      document.body.appendChild(heatScript);
+    };
+
+    const loadLeafletCore = () => {
+      if (window.L) {
+        loadHeatPlugin();
+        return;
+      }
+
+      const existingScript = document.querySelector<HTMLScriptElement>('script[data-leaflet-core]');
+      if (existingScript) {
+        existingScript.addEventListener('load', loadHeatPlugin, { once: true });
+        existingScript.addEventListener('error', () => reject(new Error('Leaflet failed to load')), { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.dataset.leafletCore = 'true';
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.async = true;
+      script.onload = loadHeatPlugin;
+      script.onerror = () => reject(new Error('Leaflet failed to load'));
+      document.body.appendChild(script);
+    };
+
+    loadLeafletCore();
+  });
+
+  return leafletLoader;
+}
+
+async function geocodeAddress(address: string): Promise<HeatPoint | null> {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&addressdetails=1&limit=1`,
+      {
+        headers: {
+          'Accept-Language': 'es',
+          'User-Agent': 'ERP-GEP/heatmap (ERP reporting)',
+        },
+      },
+    );
+
+    if (!response.ok) return null;
+
+    const results = (await response.json()) as Array<{ lat?: string; lon?: string }>;
+    const match = Array.isArray(results) ? results[0] : undefined;
+    if (!match?.lat || !match?.lon) return null;
+
+    const lat = Number.parseFloat(match.lat);
+    const lon = Number.parseFloat(match.lon);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+    return { lat, lon };
+  } catch (error) {
+    console.error('Error geocoding address', error);
+    return null;
+  }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type ComparativaHeatmapCardProps = {
+  sessions: ComparativaSessionLocation[];
+  isLoading: boolean;
+  isError: boolean;
+};
+
+function ComparativaHeatmapCard({ sessions, isLoading, isError }: ComparativaHeatmapCardProps) {
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const heatLayerRef = useRef<any>(null);
+  const [heatPoints, setHeatPoints] = useState<HeatPoint[]>([]);
+  const [geocodingStatus, setGeocodingStatus] = useState<GeocodingStatus>('idle');
+  const [geocodedCount, setGeocodedCount] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadLeafletResources()
+      .then((leaflet) => {
+        if (cancelled || !mapContainerRef.current || !leaflet) return;
+
+        const map = leaflet.map(mapContainerRef.current, {
+          center: [SPAIN_CENTER.lat, SPAIN_CENTER.lon],
+          zoom: 6,
+          zoomControl: true,
+        });
+
+        mapRef.current = map;
+
+        leaflet
+          .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+          })
+          .addTo(map);
+
+        heatLayerRef.current = leaflet.heatLayer([], {
+          radius: 28,
+          blur: 22,
+          minOpacity: 0.25,
+          maxZoom: 12,
+        });
+
+        heatLayerRef.current.addTo(map);
+      })
+      .catch((error) => {
+        console.error('Error loading Leaflet resources', error);
+      });
+
+    return () => {
+      cancelled = true;
+      heatLayerRef.current = null;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const addresses = Array.from(
+      new Set(
+        sessions
+          .map((session) => session.direccion?.trim())
+          .filter((direccion): direccion is string => Boolean(direccion?.length)),
+      ),
+    );
+
+    if (!addresses.length) {
+      setHeatPoints([]);
+      setGeocodedCount(0);
+      setGeocodingStatus(sessions.length ? 'ready' : 'idle');
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      setGeocodingStatus('loading');
+      setGeocodedCount(0);
+      const coordinates: HeatPoint[] = [];
+      const cache = new Map<string, HeatPoint | null>();
+
+      for (const address of addresses) {
+        if (cancelled) break;
+        const cached = cache.get(address);
+        const match = cached ?? (await geocodeAddress(address));
+        cache.set(address, match ?? null);
+        if (match) {
+          coordinates.push(match);
+          setGeocodedCount(coordinates.length);
+        }
+        await delay(300);
+      }
+
+      if (!cancelled) {
+        setHeatPoints(coordinates);
+        setGeocodingStatus('ready');
+      }
+    })().catch(() => {
+      if (!cancelled) setGeocodingStatus('error');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessions]);
+
+  useEffect(() => {
+    if (!heatLayerRef.current) return;
+    const points = heatPoints.map((point) => [point.lat, point.lon]);
+    heatLayerRef.current.setLatLngs(points);
+    if (mapRef.current) {
+      mapRef.current.invalidateSize();
+    }
+  }, [heatPoints]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const target = hostRef.current;
+      const isFull = Boolean(target && document.fullscreenElement === target);
+      setIsFullscreen(isFull);
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const handleFullscreenToggle = () => {
+    const target = hostRef.current;
+    if (!target) return;
+    if (document.fullscreenElement === target) {
+      document.exitFullscreen().catch(() => undefined);
+    } else {
+      target.requestFullscreen?.().catch(() => undefined);
+    }
+  };
+
+  const totalSessionsWithDireccion = sessions.filter((session) => session.direccion?.trim()).length;
+  const hasHeatData = heatPoints.length > 0;
+
+  return (
+    <Card className="shadow-sm">
+      <Card.Body className="d-flex flex-column gap-3">
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div>
+            <Card.Title as="h6" className="mb-1">
+              Mapa de calor de sesiones
+            </Card.Title>
+            <div className="text-muted small">Direcciones geolocalizadas mediante OpenStreetMap</div>
+          </div>
+
+          <Button variant="outline-secondary" size="sm" onClick={handleFullscreenToggle}>
+            {isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+          </Button>
+        </div>
+
+        <div
+          ref={hostRef}
+          className="rounded border position-relative"
+          style={{ minHeight: 480, height: isFullscreen ? '100vh' : 480, overflow: 'hidden' }}
+        >
+          <div ref={mapContainerRef} style={{ inset: 0, position: 'absolute' }} />
+
+          {!hasHeatData && (
+            <div
+              className="position-absolute top-50 start-50 translate-middle text-center bg-white bg-opacity-75 px-3 py-2 rounded"
+              style={{ zIndex: 500 }}
+            >
+              <div className="fw-semibold">{isLoading ? 'Cargando sesiones...' : 'Geolocalizando direcciones...'}</div>
+              <div className="text-muted small">
+                {geocodingStatus === 'loading'
+                  ? 'Consultando Nominatim para obtener coordenadas'
+                  : 'Añade más sesiones con dirección para ver el mapa'}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="d-flex flex-wrap gap-3 small text-muted">
+          <span>Sesiones con dirección: {totalSessionsWithDireccion}</span>
+          <span>Coordenadas geocodificadas: {geocodedCount}</span>
+          {geocodingStatus === 'error' && <span className="text-danger">Error al geolocalizar direcciones.</span>}
+          {isError && <span className="text-danger">No se pudieron cargar las sesiones para el mapa.</span>}
+        </div>
+      </Card.Body>
+    </Card>
+  );
+}
+
 export default function ComparativaDashboardPage() {
   const today = useMemo(() => new Date(), []);
   const [filters, setFilters] = useState<ComparativaFilters>({
@@ -316,6 +643,25 @@ export default function ComparativaDashboardPage() {
       appliedFilters.comerciales?.join(',') ?? '',
     ],
     queryFn: () => fetchComparativaDashboard(appliedFilters),
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const sessionsQuery = useQuery({
+    queryKey: [
+      'reporting',
+      'comparativa-sessions',
+      appliedFilters.currentPeriod.startDate,
+      appliedFilters.currentPeriod.endDate,
+      appliedFilters.previousPeriod.startDate,
+      appliedFilters.previousPeriod.endDate,
+      appliedFilters.granularity,
+      appliedFilters.siteIds?.join(',') ?? '',
+      appliedFilters.trainingTypes?.join(',') ?? '',
+      appliedFilters.comerciales?.join(',') ?? '',
+      appliedFilters.serviceType ?? '',
+    ],
+    queryFn: () => fetchComparativaSessions(appliedFilters),
     placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000,
   });
@@ -965,6 +1311,12 @@ export default function ComparativaDashboardPage() {
             )}
           </Col>
         </Row>
+
+        <ComparativaHeatmapCard
+          sessions={sessionsQuery.data ?? []}
+          isLoading={sessionsQuery.isLoading}
+          isError={sessionsQuery.isError}
+        />
       </div>
     );
   };
