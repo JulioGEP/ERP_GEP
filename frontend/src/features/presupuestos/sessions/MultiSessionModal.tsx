@@ -414,13 +414,18 @@ export function MultiSessionModal({
   }, [dates, endTime, name, roomId, startTime, trainerIds, unitIds]);
 
   const handleConfirm = useCallback(async () => {
-    setStatus('creating');
     setError(null);
     if (endTime < startTime && !isNightSchedule) {
-      setError('Confirma el horario nocturno antes de crear las sesiones.');
-      setStatus('error');
-      return;
+      const confirmNight = window.confirm('¿Es horario Nocturno?');
+      if (!confirmNight) {
+        setError('Confirma el horario nocturno antes de crear las sesiones.');
+        setStatus('error');
+        return;
+      }
+      setIsNightSchedule(true);
     }
+
+    setStatus('creating');
 
     const allowOvernight = isNightSchedule || endTime < startTime;
     try {
@@ -447,7 +452,23 @@ export function MultiSessionModal({
       setError(createError instanceof Error ? createError.message : 'No se pudieron crear las sesiones.');
       setStatus('error');
     }
-  }, [dates, dealAddress, dealId, endTime, isInCompany, name, onClose, onCreated, productId, resetState, roomId, startTime, trainerIds, unitIds]);
+  }, [
+    dates,
+    dealAddress,
+    dealId,
+    endTime,
+    isInCompany,
+    isNightSchedule,
+    name,
+    onClose,
+    onCreated,
+    productId,
+    resetState,
+    roomId,
+    startTime,
+    trainerIds,
+    unitIds,
+  ]);
 
   const handleRevert = useCallback(() => {
     resetState();
