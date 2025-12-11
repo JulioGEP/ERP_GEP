@@ -578,10 +578,10 @@ export type ComparativaBinaryMix = {
 };
 
 export type ComparativaHeatmapCell = {
-  address: string;
-  latitude: number;
-  longitude: number;
-  sessions: number;
+  site: string;
+  isoWeek: number;
+  isoYear: number;
+  utilization: number;
 };
 
 export type ComparativaFunnelStage = {

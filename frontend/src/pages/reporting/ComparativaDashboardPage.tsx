@@ -35,15 +35,6 @@ const BREAKDOWN_CONFIG = [
   },
 ];
 
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-
-declare global {
-  interface Window {
-    google?: any;
-    googleMapsPromise?: Promise<any>;
-  }
-}
-
 function formatDate(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -271,14 +262,6 @@ export default function ComparativaDashboardPage() {
     previousPeriod: buildComparisonPeriod(today),
     granularity: 'isoWeek',
   });
-  const [mapHeight, setMapHeight] = useState(420);
-  const [heatmapRadius, setHeatmapRadius] = useState(14);
-  const [heatmapScale, setHeatmapScale] = useState(100);
-  const [mapLoadError, setMapLoadError] = useState<string | null>(null);
-
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const heatmapLayerRef = useRef<any>(null);
 
   const comparisonRangeLabel = useMemo(
     () => formatDisplayRange(filters.previousPeriod),
@@ -699,134 +682,6 @@ export default function ComparativaDashboardPage() {
     return dashboardQuery.data?.trends.find((item) => item.metric === metric) ?? placeholder;
   };
 
-  const heatmapPoints = dashboardQuery.data?.heatmap ?? [];
-
-  const computeZoomFromScale = useCallback((scale: number) => {
-    const normalized = Math.max(80, Math.min(140, scale));
-    return 4.6 + ((normalized - 80) * 2.2) / 60;
-  }, []);
-
-  const loadGoogleMaps = useCallback(() => {
-    if (!GOOGLE_MAPS_API_KEY) {
-      return Promise.reject(new Error('Falta la clave de Google Maps.'));
-    }
-
-    if (window.google?.maps?.visualization) {
-      return Promise.resolve(window.google);
-    }
-
-    if (!window.googleMapsPromise) {
-      window.googleMapsPromise = new Promise((resolve, reject) => {
-        const existingScript = document.querySelector(
-          'script[data-google-maps-script="true"]',
-        ) as HTMLScriptElement | null;
-
-        if (existingScript) {
-          existingScript.addEventListener(
-            'load',
-            () => resolve(window.google),
-            { once: true },
-          );
-          existingScript.addEventListener(
-            'error',
-            () => reject(new Error('No se pudo cargar Google Maps.')),
-            { once: true },
-          );
-        } else {
-          const script = document.createElement('script');
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=visualization`;
-          script.async = true;
-          script.defer = true;
-          script.dataset.googleMapsScript = 'true';
-          script.onload = () => resolve(window.google);
-          script.onerror = () => reject(new Error('No se pudo cargar Google Maps.'));
-          document.head.appendChild(script);
-        }
-      });
-    }
-
-    return window.googleMapsPromise;
-  }, []);
-
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
-
-    if (!GOOGLE_MAPS_API_KEY) {
-      setMapLoadError('Configura VITE_GOOGLE_MAPS_API_KEY para ver el mapa de calor.');
-      return;
-    }
-
-    setMapLoadError(null);
-    let cancelled = false;
-
-    loadGoogleMaps()
-      .then((maps) => {
-        if (cancelled || !maps?.maps) return;
-
-        const zoomLevel = computeZoomFromScale(heatmapScale);
-        const mapOptions = {
-          center: { lat: 40.4168, lng: -3.7038 },
-          zoom: zoomLevel,
-          mapTypeId: 'roadmap',
-          disableDefaultUI: true,
-          zoomControl: true,
-          streetViewControl: false,
-          fullscreenControl: false,
-          gestureHandling: 'greedy' as const,
-          backgroundColor: '#f8f9fa',
-          styles: [
-            { featureType: 'administrative', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-            { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-          ],
-        } as const;
-
-        if (!mapInstanceRef.current) {
-          mapInstanceRef.current = new maps.maps.Map(mapContainerRef.current as HTMLElement, mapOptions);
-        } else {
-          mapInstanceRef.current.setOptions(mapOptions);
-        }
-
-        if (!heatmapLayerRef.current) {
-          heatmapLayerRef.current = new maps.maps.visualization.HeatmapLayer({
-            data: [],
-            map: mapInstanceRef.current,
-            dissipating: true,
-          });
-        } else {
-          heatmapLayerRef.current.setMap(mapInstanceRef.current);
-        }
-
-        const weightedData = heatmapPoints.map((point) => ({
-          location: new maps.maps.LatLng(point.latitude, point.longitude),
-          weight: Math.max(1, point.sessions),
-        }));
-
-        heatmapLayerRef.current.set('radius', heatmapRadius);
-        heatmapLayerRef.current.setData(weightedData as any);
-
-        if (weightedData.length > 0) {
-          const bounds = new maps.maps.LatLngBounds();
-          weightedData.forEach((entry) => bounds.extend(entry.location));
-          mapInstanceRef.current.fitBounds(bounds, 32);
-
-          const currentZoom = mapInstanceRef.current.getZoom?.() ?? zoomLevel;
-          if (currentZoom > zoomLevel) {
-            mapInstanceRef.current.setZoom(zoomLevel);
-          }
-        }
-      })
-      .catch((error: Error) => {
-        if (!cancelled) {
-          setMapLoadError(error.message);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [computeZoomFromScale, heatmapPoints, heatmapRadius, heatmapScale, loadGoogleMaps]);
-
   const renderDonutChart = (slices: { label: string; percentage: number; value: number }[]) => {
     if (slices.length === 0) {
       return <div className="text-muted small">Sin datos</div>;
@@ -882,63 +737,6 @@ export default function ComparativaDashboardPage() {
           ))}
         </div>
       </div>
-    );
-  };
-
-  const renderHeatmapCard = () => {
-    return (
-      <Card className="shadow-sm">
-        <Card.Body className="d-flex flex-column gap-3">
-          <div className="d-flex justify-content-between flex-wrap gap-2">
-            <div>
-              <Card.Title as="h6" className="mb-1">
-                Mapa de calor de sesiones
-              </Card.Title>
-              <div className="text-muted small">Direcciones mapeadas de las sesiones registradas</div>
-            </div>
-
-            <div className="d-flex align-items-center gap-3 flex-wrap">
-              <div className="d-flex flex-column" style={{ minWidth: 140 }}>
-                <Form.Label className="small text-muted mb-1">Altura del mapa</Form.Label>
-                <Form.Range
-                  min={280}
-                  max={720}
-                  value={mapHeight}
-                  onChange={(event) => setMapHeight(Number.parseInt(event.target.value, 10))}
-                />
-              </div>
-              <div className="d-flex flex-column" style={{ minWidth: 160 }}>
-                <Form.Label className="small text-muted mb-1">Tamaño del calor</Form.Label>
-                <Form.Range
-                  min={8}
-                  max={28}
-                  value={heatmapRadius}
-                  onChange={(event) => setHeatmapRadius(Number.parseInt(event.target.value, 10))}
-                />
-              </div>
-              <div className="d-flex flex-column" style={{ minWidth: 160 }}>
-                <Form.Label className="small text-muted mb-1">Zoom del mapa</Form.Label>
-                <Form.Range
-                  min={80}
-                  max={140}
-                  value={heatmapScale}
-                  onChange={(event) => setHeatmapScale(Number.parseInt(event.target.value, 10))}
-                />
-              </div>
-            </div>
-          </div>
-
-          {mapLoadError ? (
-            <div className="text-danger small">{mapLoadError}</div>
-          ) : heatmapPoints.length === 0 ? (
-            <div className="text-muted small">No hay direcciones con coordenadas en el rango seleccionado.</div>
-          ) : (
-            <div className="border rounded position-relative" style={{ height: mapHeight, overflow: 'hidden' }}>
-              <div ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
-            </div>
-          )}
-        </Card.Body>
-      </Card>
     );
   };
 
@@ -1167,8 +965,6 @@ export default function ComparativaDashboardPage() {
             )}
           </Col>
         </Row>
-
-        {renderHeatmapCard()}
       </div>
     );
   };
