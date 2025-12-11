@@ -261,6 +261,7 @@ export function normalizeVariantFromResponse(input: any, fallbackId: string): Va
   return {
     id: String(input?.id ?? fallbackId),
     id_woo: input?.id_woo != null ? String(input.id_woo) : '',
+    parent_woo_id: input?.id_padre != null ? String(input.id_padre) : null,
     name: input?.name ?? null,
     status: input?.status ?? null,
     finalizar,
