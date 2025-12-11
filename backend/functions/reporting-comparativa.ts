@@ -185,6 +185,7 @@ function buildTrainerRanking(
 
 type SessionRow = {
   fecha_inicio_utc: Date | null;
+  direccion: string | null;
   deals: {
     pipeline_id: string | null;
     sede_label: string | null;
@@ -241,6 +242,20 @@ function normalizePipelineLabel(value: string | null | undefined): string | null
   const trimmed = String(value).trim();
   if (!trimmed.length) return null;
   return trimmed.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function parseCoordinate(input: string | null | undefined): { lat: number; lng: number } | null {
+  if (!input) return null;
+  const match = input.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+  if (!match) return null;
+
+  const lat = Number.parseFloat(match[1]);
+  const lng = Number.parseFloat(match[2]);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+  return { lat, lng };
 }
 
 function parseStringArrayParam(value: string | string[] | undefined): string[] | undefined {
@@ -379,6 +394,7 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         fecha_inicio_utc: true,
+        direccion: true,
         deals: {
           select: {
             pipeline_id: true,
@@ -409,6 +425,7 @@ export const handler = createHttpHandler(async (request) => {
       },
       select: {
         fecha_inicio_utc: true,
+        direccion: true,
         deals: {
           select: {
             pipeline_id: true,
@@ -497,6 +514,30 @@ export const handler = createHttpHandler(async (request) => {
     const normalizedIdWoo = normalizeVariantWooId(variant.id_woo);
     return normalizedIdWoo ? previousVariantDealIds.has(normalizedIdWoo) : false;
   });
+
+  const heatmap = (() => {
+    const counts = new Map<string, { lat: number; lng: number; address: string; total: number }>();
+
+    for (const session of currentSessions) {
+      const coords = parseCoordinate(session.direccion);
+      if (!coords) continue;
+      const key = `${coords.lat.toFixed(5)}|${coords.lng.toFixed(5)}`;
+      const current = counts.get(key);
+      counts.set(key, {
+        lat: coords.lat,
+        lng: coords.lng,
+        address: session.direccion ?? '',
+        total: (current?.total ?? 0) + 1,
+      });
+    }
+
+    return Array.from(counts.values()).map((item) => ({
+      latitude: item.lat,
+      longitude: item.lng,
+      address: item.address,
+      sessions: item.total,
+    }));
+  })();
 
   const weeks = 12;
 
@@ -806,7 +847,7 @@ export const handler = createHttpHandler(async (request) => {
         no: binaryMixes.gepServicesCaes.no,
       },
     ],
-    heatmap: [],
+    heatmap,
     funnel: [],
     ranking,
     filterOptions,

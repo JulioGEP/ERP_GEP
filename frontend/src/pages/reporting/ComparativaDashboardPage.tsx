@@ -35,6 +35,21 @@ const BREAKDOWN_CONFIG = [
   },
 ];
 
+const SPAIN_BOUNDS = { minLat: 35.9, maxLat: 43.9, minLng: -9.5, maxLng: 4.5 } as const;
+const SPAIN_OUTLINE: Array<{ lat: number; lng: number }> = [
+  { lat: 43.7, lng: -9.3 },
+  { lat: 43.6, lng: -3.5 },
+  { lat: 43.2, lng: -1.5 },
+  { lat: 42.2, lng: 1.7 },
+  { lat: 41.4, lng: 3.1 },
+  { lat: 39.4, lng: 3.4 },
+  { lat: 37.3, lng: -0.7 },
+  { lat: 36.7, lng: -5.7 },
+  { lat: 36.9, lng: -7.5 },
+  { lat: 37.8, lng: -8.8 },
+  { lat: 39.4, lng: -9.2 },
+];
+
 function formatDate(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -262,6 +277,9 @@ export default function ComparativaDashboardPage() {
     previousPeriod: buildComparisonPeriod(today),
     granularity: 'isoWeek',
   });
+  const [mapHeight, setMapHeight] = useState(420);
+  const [heatmapRadius, setHeatmapRadius] = useState(14);
+  const [heatmapScale, setHeatmapScale] = useState(100);
 
   const comparisonRangeLabel = useMemo(
     () => formatDisplayRange(filters.previousPeriod),
@@ -740,6 +758,122 @@ export default function ComparativaDashboardPage() {
     );
   };
 
+  const renderHeatmapCard = () => {
+    const heatmapPoints = dashboardQuery.data?.heatmap ?? [];
+    const maxSessions = heatmapPoints.length ? Math.max(...heatmapPoints.map((item) => item.sessions)) : 0;
+
+    const getHeatColor = (intensity: number) => {
+      const clamped = Math.max(0, Math.min(1, intensity));
+      const r = Math.round(255 * clamped);
+      const g = Math.round(170 * (1 - clamped));
+      const b = 64;
+      return `rgba(${r}, ${g}, ${b}, 0.78)`;
+    };
+
+    const projectPoint = (lat: number, lng: number) => {
+      const x = ((lng - SPAIN_BOUNDS.minLng) / (SPAIN_BOUNDS.maxLng - SPAIN_BOUNDS.minLng)) * 100;
+      const y =
+        ((SPAIN_BOUNDS.maxLat - lat) / (SPAIN_BOUNDS.maxLat - SPAIN_BOUNDS.minLat)) * 100;
+      return { x, y };
+    };
+
+    const outlinePoints = SPAIN_OUTLINE.map((point) => {
+      const projected = projectPoint(point.lat, point.lng);
+      return `${projected.x},${projected.y}`;
+    }).join(' ');
+
+    return (
+      <Card className="shadow-sm">
+        <Card.Body className="d-flex flex-column gap-3">
+          <div className="d-flex justify-content-between flex-wrap gap-2">
+            <div>
+              <Card.Title as="h6" className="mb-1">
+                Mapa de calor de sesiones
+              </Card.Title>
+              <div className="text-muted small">Direcciones mapeadas de las sesiones registradas</div>
+            </div>
+
+            <div className="d-flex align-items-center gap-3 flex-wrap">
+              <div className="d-flex flex-column" style={{ minWidth: 140 }}>
+                <Form.Label className="small text-muted mb-1">Altura del mapa</Form.Label>
+                <Form.Range
+                  min={280}
+                  max={720}
+                  value={mapHeight}
+                  onChange={(event) => setMapHeight(Number.parseInt(event.target.value, 10))}
+                />
+              </div>
+              <div className="d-flex flex-column" style={{ minWidth: 160 }}>
+                <Form.Label className="small text-muted mb-1">Tamaño del calor</Form.Label>
+                <Form.Range
+                  min={8}
+                  max={28}
+                  value={heatmapRadius}
+                  onChange={(event) => setHeatmapRadius(Number.parseInt(event.target.value, 10))}
+                />
+              </div>
+              <div className="d-flex flex-column" style={{ minWidth: 160 }}>
+                <Form.Label className="small text-muted mb-1">Zoom del mapa</Form.Label>
+                <Form.Range
+                  min={80}
+                  max={140}
+                  value={heatmapScale}
+                  onChange={(event) => setHeatmapScale(Number.parseInt(event.target.value, 10))}
+                />
+              </div>
+            </div>
+          </div>
+
+          {heatmapPoints.length === 0 ? (
+            <div className="text-muted small">No hay direcciones con coordenadas en el rango seleccionado.</div>
+          ) : (
+            <div
+              className="border rounded position-relative"
+              style={{ height: mapHeight, overflow: 'hidden', background: 'radial-gradient(circle at 20% 20%, #f8f9fa, #e9ecef)' }}
+            >
+              <div
+                className="position-absolute"
+                style={{ inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <svg
+                  viewBox="0 0 100 100"
+                  style={{ width: `${heatmapScale}%`, height: `${heatmapScale}%`, maxWidth: '100%', maxHeight: '100%' }}
+                  role="img"
+                  aria-label="Mapa de calor de España"
+                >
+                  <defs>
+                    <radialGradient id="heatmapGlow" cx="50%" cy="50%" r="80%">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+                    </radialGradient>
+                  </defs>
+                  <rect x="0" y="0" width="100" height="100" fill="url(#heatmapGlow)" />
+                  <polygon points={outlinePoints} fill="#f1f3f5" stroke="#ced4da" strokeWidth={0.4} />
+                  {heatmapPoints.map((point, index) => {
+                    const intensity = maxSessions > 0 ? point.sessions / maxSessions : 0;
+                    const radius = Math.max(2.6, (heatmapRadius / 10) * (0.6 + intensity));
+                    const color = getHeatColor(intensity);
+                    const { x, y } = projectPoint(point.latitude, point.longitude);
+
+                    return (
+                      <g key={`${point.latitude}-${point.longitude}-${index}`}>
+                        <circle cx={x} cy={y} r={radius * 2.2} fill={color} opacity={0.35} />
+                        <circle cx={x} cy={y} r={radius} fill={color} opacity={0.85} />
+                        <title>
+                          {(point.address || 'Dirección desconocida') + ` · Sesiones: ${numberFormatter.format(point.sessions)}`}
+                        </title>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            </div>
+          )}
+        </Card.Body>
+      </Card>
+    );
+  };
+
   const renderWeeklyTrendCard = (
     title: string,
     description: string,
@@ -965,6 +1099,8 @@ export default function ComparativaDashboardPage() {
             )}
           </Col>
         </Row>
+
+        {renderHeatmapCard()}
       </div>
     );
   };
