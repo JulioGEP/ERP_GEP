@@ -1679,12 +1679,12 @@ export function BudgetDetailModalMaterial({
     {!onShowProductComment ? (
       <Modal show={!!viewingComment} onHide={handleCloseCommentModal} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Comentario de la formación</Modal.Title>
+          <Modal.Title>Comentario del Material</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {viewingComment?.productName ? (
             <div className="mb-2">
-              <strong>Formación:</strong> {viewingComment.productName}
+              <strong>Material:</strong> {viewingComment.productName}
             </div>
           ) : null}
           <div style={{ whiteSpace: 'pre-wrap' }}>{viewingComment?.comment ?? ''}</div>
