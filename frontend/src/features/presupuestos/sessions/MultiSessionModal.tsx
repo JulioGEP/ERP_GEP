@@ -69,11 +69,32 @@ function localInputToUtc(value: string | null): string | null | undefined {
   return new Date(baseDate.getTime() - offset).toISOString();
 }
 
-function buildIsoRange(date: string, startTime: string, endTime: string): { startIso: string; endIso: string } | null {
+function getNextDay(date: string): string | null {
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, yearStr, monthStr, dayStr] = match;
+  const dateObj = new Date(Date.UTC(Number(yearStr), Number(monthStr) - 1, Number(dayStr) + 1));
+  if (!Number.isFinite(dateObj.getTime())) return null;
+  const nextYear = dateObj.getUTCFullYear();
+  const nextMonth = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+  const nextDay = String(dateObj.getUTCDate()).padStart(2, '0');
+  return `${nextYear}-${nextMonth}-${nextDay}`;
+}
+
+function buildIsoRange(
+  date: string,
+  startTime: string,
+  endTime: string,
+  allowOvernight = false,
+): { startIso: string; endIso: string } | null {
+  const useNextDay = allowOvernight && endTime < startTime;
+  const endDate = useNextDay ? getNextDay(date) : date;
+  if (!endDate) return null;
+
   const startIso = localInputToUtc(`${date}T${startTime}`);
-  const endIso = localInputToUtc(`${date}T${endTime}`);
+  const endIso = localInputToUtc(`${endDate}T${endTime}`);
   if (typeof startIso !== 'string' || typeof endIso !== 'string') return null;
-  if (new Date(endIso).getTime() < new Date(startIso).getTime()) return null;
+  if (!useNextDay && new Date(endIso).getTime() < new Date(startIso).getTime()) return null;
   return { startIso, endIso };
 }
 
@@ -142,6 +163,7 @@ export function MultiSessionModal({
   const [trainerIds, setTrainerIds] = useState<string[]>([]);
   const [unitIds, setUnitIds] = useState<string[]>([]);
   const [roomId, setRoomId] = useState<string>('');
+  const [isNightSchedule, setIsNightSchedule] = useState(false);
   const [status, setStatus] = useState<'idle' | 'checking' | 'ready' | 'creating' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<AvailabilityConflict[] | null>(null);
@@ -177,6 +199,7 @@ export function MultiSessionModal({
     setTrainerIds([]);
     setUnitIds([]);
     setRoomId('');
+    setIsNightSchedule(false);
     setStatus('idle');
     setError(null);
     setConflicts(null);
@@ -224,6 +247,12 @@ export function MultiSessionModal({
       setCalendarOpen(false);
     }
   }, [show]);
+
+  useEffect(() => {
+    if (startTime <= endTime && isNightSchedule) {
+      setIsNightSchedule(false);
+    }
+  }, [endTime, isNightSchedule, startTime]);
 
   const handleToggleDate = useCallback((dateIso: string) => {
     setDates((current) => {
@@ -388,11 +417,24 @@ export function MultiSessionModal({
       return;
     }
 
+    const endBeforeStart = endTime < startTime;
+    let allowOvernight = isNightSchedule;
+    if (endBeforeStart && !allowOvernight) {
+      const confirmNight = window.confirm('¿Es horario Nocturno?');
+      if (!confirmNight) {
+        setError('Modifica el horario para que la hora fin sea posterior a la hora inicio.');
+        setStatus('error');
+        return;
+      }
+      allowOvernight = true;
+      setIsNightSchedule(true);
+    }
+
     setStatus('checking');
     const newConflicts: AvailabilityConflict[] = [];
 
     for (const date of dates) {
-      const range = buildIsoRange(date, startTime, endTime);
+      const range = buildIsoRange(date, startTime, endTime, allowOvernight);
       if (!range) {
         setError('Rango de fechas u horas no válido.');
         setStatus('error');
@@ -425,9 +467,16 @@ export function MultiSessionModal({
   const handleConfirm = useCallback(async () => {
     setStatus('creating');
     setError(null);
+    if (endTime < startTime && !isNightSchedule) {
+      setError('Confirma el horario nocturno antes de crear las sesiones.');
+      setStatus('error');
+      return;
+    }
+
+    const allowOvernight = isNightSchedule || endTime < startTime;
     try {
       for (const date of dates) {
-        const range = buildIsoRange(date, startTime, endTime);
+        const range = buildIsoRange(date, startTime, endTime, allowOvernight);
         if (!range) throw new Error('Rango de fechas u horas no válido.');
         await createSession({
           deal_id: dealId,
