@@ -1,5 +1,5 @@
 // frontend/src/features/recursos/TrainerDetailsDrawer.tsx
-import { Alert, Badge, Button, Offcanvas, Spinner, Table } from "react-bootstrap";
+import { Alert, Badge, Button, Offcanvas, Spinner, Stack, Table } from "react-bootstrap";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Trainer, TrainerDocument } from "../../types/trainer";
 import {
@@ -9,6 +9,7 @@ import {
 import { deleteTrainerDocument, fetchTrainerDocuments } from "./api";
 import { ApiError } from "../../api/client";
 import { formatDateForDisplay, isDateNearExpiry } from "./trainerDates";
+import { TrainerAvailabilitySection } from "./TrainerAvailabilitySection";
 
 type TrainerDetailsDrawerProps = {
   trainer: Trainer | null;
@@ -254,6 +255,16 @@ export function TrainerDetailsDrawer({
                 <p className="text-muted mb-0">No hay documentos registrados.</p>
               )}
             </div>
+
+            <Stack gap={3} className="mt-1">
+              <div>
+                <h3 className="h6 mb-3">Disponibilidad</h3>
+                <p className="text-muted small mb-3">
+                  Consulta o ajusta la disponibilidad anual del formador.
+                </p>
+              </div>
+              <TrainerAvailabilitySection trainerId={trainer.trainer_id} />
+            </Stack>
           </div>
         ) : (
           <div className="text-muted">Selecciona un formador para ver sus detalles.</div>
