@@ -88,6 +88,18 @@ const STOCK_STATUS_SUMMARY_LABELS: Record<string, string> = {
   onbackorder: 'Reservar por adelantado',
 };
 
+function normalizeWooId(value: unknown): string {
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+function isPlaceholderWooId(value: unknown): boolean {
+  const normalized = normalizeWooId(value);
+  if (!normalized) return false;
+
+  return normalized.toLowerCase().startsWith('placeholder');
+}
+
 function formatDate(value: string | null) {
   if (!value) return null;
   const date = new Date(value);
