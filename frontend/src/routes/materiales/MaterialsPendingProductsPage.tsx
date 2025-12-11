@@ -45,6 +45,16 @@ type PendingProductRow = {
 
 type ProductHandling = 'stock' | 'supplier';
 
+type PendingProductsFilters = {
+  budgetId: string;
+  organizationName: string;
+  supplier: string;
+  productName: string;
+  quantity: string;
+  stock: string;
+  estimatedDelivery: string;
+};
+
 type SelectedProduct = {
   row: PendingProductRow;
   handling: ProductHandling;
@@ -330,8 +340,16 @@ export function MaterialsPendingProductsPage({
   const [logisticsCcInput, setLogisticsCcInput] = useState('');
   const [logisticsCcEmails, setLogisticsCcEmails] = useState<string[]>([defaultCommercialEmail]);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<PendingProductsFilters>({
+    budgetId: '',
+    organizationName: '',
+    supplier: '',
+    productName: '',
+    quantity: '',
+    stock: '',
+    estimatedDelivery: '',
+  });
   const hasError = !!error;
-  const hasRows = pendingProducts.length > 0;
   const errorDetails = useMemo(() => buildErrorDetails(error), [error]);
 
   useEffect(() => {
@@ -389,6 +407,51 @@ export function MaterialsPendingProductsPage({
 
   const selectedList = useMemo(() => Object.values(selectedProducts), [selectedProducts]);
 
+  const handleFilterChange = (key: keyof PendingProductsFilters, value: string) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const filteredProducts = useMemo(() => {
+    const matchesText = (value: string, filter: string) =>
+      value.toLowerCase().includes(filter.trim().toLowerCase());
+
+    return pendingProducts.filter((row) => {
+      if (filters.budgetId && !(row.budgetId ? matchesText(row.budgetId, filters.budgetId) : false)) {
+        return false;
+      }
+
+      if (filters.organizationName && !matchesText(row.organizationName, filters.organizationName)) {
+        return false;
+      }
+
+      if (filters.supplier && !matchesText(row.supplier, filters.supplier)) {
+        return false;
+      }
+
+      if (filters.productName && !matchesText(row.productName, filters.productName)) {
+        return false;
+      }
+
+      if (filters.quantity && !matchesText(row.quantityLabel, filters.quantity)) {
+        return false;
+      }
+
+      if (filters.stock && !matchesText(row.stockLabel, filters.stock)) {
+        return false;
+      }
+
+      if (filters.estimatedDelivery && !matchesText(row.estimatedDelivery, filters.estimatedDelivery)) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [filters, pendingProducts]);
+
+  const hasRows = pendingProducts.length > 0;
+  const hasFilteredRows = filteredProducts.length > 0;
+  const hasActiveFilters = useMemo(() => Object.values(filters).some((value) => value.trim().length > 0), [filters]);
+
   const primaryBudget = selectedList[0]?.row.budget;
   const supplierInfo =
     (primaryBudget as DealSummary & {
@@ -418,7 +481,7 @@ export function MaterialsPendingProductsPage({
   }, [showEmailModal, supplierContactEmail]);
 
   const handleSelectAll = () => {
-    const allSelected = pendingProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
+    const allSelected = filteredProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
       const hasStock = (row.stockValue ?? 0) > 0;
       const remainingStock = getRemainingStockForProduct(row, acc);
       const defaultStockUsage = hasStock ? Math.min(getDefaultStockUsage(row), remainingStock) : 0;
@@ -631,10 +694,10 @@ export function MaterialsPendingProductsPage({
   }"\n\nEl telefono de contacto es "${primaryBudget?.person?.phone ?? '—'}"\n\n¡Gracias!`;
 
   const sortedProducts = useMemo(() => {
-    if (!sortConfig) return pendingProducts;
+    if (!sortConfig) return filteredProducts;
 
     const { key, direction } = sortConfig;
-    const rows = [...pendingProducts];
+    const rows = [...filteredProducts];
 
     rows.sort((a, b) => {
       const valueA = getSortableValue(a, key);
@@ -644,7 +707,7 @@ export function MaterialsPendingProductsPage({
     });
 
     return rows;
-  }, [pendingProducts, sortConfig]);
+  }, [filteredProducts, sortConfig]);
 
   const handleSort = (key: SortableColumn) => {
     setSortConfig((current) => {
@@ -729,6 +792,28 @@ export function MaterialsPendingProductsPage({
         </div>
       </section>
 
+      <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <p className="mb-0 text-muted small">Usa los filtros bajo cada columna para acotar el listado.</p>
+        <Button
+          size="sm"
+          variant="outline-secondary"
+          onClick={() =>
+            setFilters({
+              budgetId: '',
+              organizationName: '',
+              supplier: '',
+              productName: '',
+              quantity: '',
+              stock: '',
+              estimatedDelivery: '',
+            })
+          }
+          disabled={!hasActiveFilters}
+        >
+          Limpiar filtros
+        </Button>
+      </div>
+
       {hasError ? (
         <Alert variant="danger" className="mb-0">
           <div className="d-flex align-items-center justify-content-between gap-3 flex-wrap">
@@ -768,7 +853,7 @@ export function MaterialsPendingProductsPage({
                         size="sm"
                         variant="outline-primary"
                         onClick={handleSelectAll}
-                        disabled={!hasRows}
+                        disabled={!hasFilteredRows}
                         className="p-1 d-inline-flex align-items-center justify-content-center"
                         title="Seleccionar todo"
                         aria-label="Seleccionar todo"
@@ -845,6 +930,72 @@ export function MaterialsPendingProductsPage({
                   </button>
                 </th>
               </tr>
+              <tr>
+                <th></th>
+                <th>
+                  <Form.Control
+                    size="sm"
+                    type="search"
+                    placeholder="Filtrar presupuesto"
+                    value={filters.budgetId}
+                    onChange={(event) => handleFilterChange('budgetId', event.target.value)}
+                  />
+                </th>
+                <th>
+                  <Form.Control
+                    size="sm"
+                    type="search"
+                    placeholder="Filtrar empresa"
+                    value={filters.organizationName}
+                    onChange={(event) => handleFilterChange('organizationName', event.target.value)}
+                  />
+                </th>
+                <th>
+                  <Form.Control
+                    size="sm"
+                    type="search"
+                    placeholder="Filtrar proveedor"
+                    value={filters.supplier}
+                    onChange={(event) => handleFilterChange('supplier', event.target.value)}
+                  />
+                </th>
+                <th>
+                  <Form.Control
+                    size="sm"
+                    type="search"
+                    placeholder="Filtrar producto"
+                    value={filters.productName}
+                    onChange={(event) => handleFilterChange('productName', event.target.value)}
+                  />
+                </th>
+                <th>
+                  <Form.Control
+                    size="sm"
+                    type="search"
+                    placeholder="Filtrar cantidad"
+                    value={filters.quantity}
+                    onChange={(event) => handleFilterChange('quantity', event.target.value)}
+                  />
+                </th>
+                <th>
+                  <Form.Control
+                    size="sm"
+                    type="search"
+                    placeholder="Filtrar stock"
+                    value={filters.stock}
+                    onChange={(event) => handleFilterChange('stock', event.target.value)}
+                  />
+                </th>
+                <th>
+                  <Form.Control
+                    size="sm"
+                    type="search"
+                    placeholder="Filtrar entrega"
+                    value={filters.estimatedDelivery}
+                    onChange={(event) => handleFilterChange('estimatedDelivery', event.target.value)}
+                  />
+                </th>
+              </tr>
             </thead>
             <tbody>
               {isLoading ? (
@@ -857,6 +1008,12 @@ export function MaterialsPendingProductsPage({
                 <tr>
                   <td colSpan={8} className="text-center py-4 text-muted">
                     No hay productos pendientes del embudo Material.
+                  </td>
+                </tr>
+              ) : !hasFilteredRows ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-4 text-muted">
+                    No hay productos que coincidan con los filtros aplicados.
                   </td>
                 </tr>
               ) : (
