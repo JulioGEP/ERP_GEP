@@ -35,7 +35,7 @@ const BREAKDOWN_CONFIG = [
   },
 ];
 
-const SPAIN_BOUNDS = { minLat: 35.9, maxLat: 43.9, minLng: -9.5, maxLng: 4.5 } as const;
+const SPAIN_BOUNDS = { minLat: 27.5, maxLat: 44.2, minLng: -18.5, maxLng: 4.5 } as const;
 const SPAIN_OUTLINE: Array<{ lat: number; lng: number }> = [
   { lat: 43.7, lng: -9.3 },
   { lat: 43.6, lng: -3.5 },
