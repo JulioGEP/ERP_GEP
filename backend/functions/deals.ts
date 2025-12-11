@@ -64,6 +64,23 @@ function parsePathId(path: any): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+function normalizeDateOnly(value: Date | string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const asString = value instanceof Date ? value.toISOString() : String(value);
+  const trimmed = asString.trim();
+  if (!trimmed.length) return null;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function extractDateFromVariantName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = value.match(/(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
 function normalizeProductId(raw: any): string | null {
   if (raw === null || raw === undefined) return null;
   const id = String(raw).trim();
@@ -1597,8 +1614,60 @@ export const handler = async (event: any) => {
         return successResponse({ deals: [] });
       }
 
+      const variationIdSet = new Set<string>([variationId]);
+
+      try {
+        const variantWooId = BigInt(variationId);
+        const variantRecord = await prisma.variants.findUnique({
+          where: { id_woo: variantWooId },
+          select: { id_woo: true, id_padre: true, name: true, date: true },
+        });
+
+        const nameDate = extractDateFromVariantName(variantRecord?.name ?? null);
+        const variantDate = normalizeDateOnly(variantRecord?.date ?? null);
+
+        const isDuplicatedVariant = Boolean(
+          variantRecord && nameDate && variantDate && nameDate !== variantDate,
+        );
+
+        if (variantRecord && isDuplicatedVariant) {
+          const siblingWhere: Prisma.variantsWhereInput = {
+            id_padre: variantRecord.id_padre,
+          };
+
+          if (variantRecord.name) {
+            siblingWhere.name = variantRecord.name;
+          }
+
+          const siblingVariants = await prisma.variants.findMany({
+            where: siblingWhere,
+            select: { id_woo: true, date: true },
+          });
+
+          const normalizedNameDate = normalizeDateOnly(nameDate);
+
+          const originalVariant = siblingVariants.find((sibling) => {
+            const siblingDate = normalizeDateOnly(sibling.date);
+            return siblingDate && normalizedNameDate && siblingDate === normalizedNameDate;
+          });
+
+          if (originalVariant?.id_woo) {
+            variationIdSet.add(originalVariant.id_woo.toString());
+          }
+        }
+      } catch {
+        // No es un identificador de variante válido, usamos únicamente el recibido.
+      }
+
+      const variationIds = Array.from(variationIdSet);
+
+      const variationWhere: DealsWhere =
+        variationIds.length === 1
+          ? { w_id_variation: variationIds[0] }
+          : { w_id_variation: { in: variationIds } };
+
       const rowsRaw = await prisma.deals.findMany({
-        where: { w_id_variation: variationId },
+        where: variationWhere,
         select: {
           deal_id: true,
           title: true,
