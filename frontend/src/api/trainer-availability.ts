@@ -60,10 +60,16 @@ function parseAvailabilityPayload(raw: any, fallbackYear: number | null): Traine
   return { year, overrides, assignedDates };
 }
 
-export async function fetchTrainerAvailability(params?: { year?: number }): Promise<TrainerAvailabilityResponse> {
+export async function fetchTrainerAvailability(params?: {
+  year?: number;
+  trainerId?: string | null;
+}): Promise<TrainerAvailabilityResponse> {
   const searchParams = new URLSearchParams();
   if (params?.year) {
     searchParams.set('year', String(params.year));
+  }
+  if (params?.trainerId) {
+    searchParams.set('trainer_id', params.trainerId);
   }
 
   const query = searchParams.toString();
@@ -71,9 +77,12 @@ export async function fetchTrainerAvailability(params?: { year?: number }): Prom
   return parseAvailabilityPayload(response?.availability ?? response, params?.year ?? null);
 }
 
-export async function updateTrainerAvailability(updates: TrainerAvailabilityOverride[]): Promise<TrainerAvailabilityResponse> {
+export async function updateTrainerAvailability(
+  updates: TrainerAvailabilityOverride[],
+  options?: { trainerId?: string | null },
+): Promise<TrainerAvailabilityResponse> {
   if (!updates.length) {
-    return fetchTrainerAvailability();
+    return fetchTrainerAvailability(options);
   }
 
   const normalizedUpdates = new Map<string, TrainerAvailabilityOverride>();
@@ -95,6 +104,14 @@ export async function updateTrainerAvailability(updates: TrainerAvailabilityOver
   }
 
   const payload = Array.from(normalizedUpdates.values());
-  const response = await putJson<any>('/trainer-availability', { updates: payload });
-  return parseAvailabilityPayload(response?.availability ?? response, year);
+  const searchParams = new URLSearchParams();
+  if (options?.trainerId) {
+    searchParams.set('trainer_id', options.trainerId);
+  }
+
+  const response = await putJson<any>(
+    searchParams.size ? `/trainer-availability?${searchParams.toString()}` : '/trainer-availability',
+    { updates: payload },
+  );
+  return parseAvailabilityPayload(response?.availability ?? response, year ?? null);
 }

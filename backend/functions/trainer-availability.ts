@@ -1,7 +1,7 @@
 // backend/functions/trainer-availability.ts
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { createHttpHandler } from './_shared/http';
-import { requireAuth } from './_shared/auth';
+import { hasPermission, requireAuth } from './_shared/auth';
 import { getPrisma } from './_shared/prisma';
 import { errorResponse, successResponse } from './_shared/response';
 
@@ -187,18 +187,34 @@ async function buildTrainerAvailability(
 export const handler = createHttpHandler(async (request) => {
   const prisma = getPrisma();
 
-  const auth = await requireAuth(request, prisma, { requireRoles: ['Formador'] });
+  const auth = await requireAuth(request, prisma);
   if ('error' in auth) {
     return auth.error;
   }
 
-  const trainer = await prisma.trainers.findUnique({
+  const canManageOthers = hasPermission('/recursos/formadores_bomberos', auth.permissions);
+
+  const ownTrainer = await prisma.trainers.findUnique({
     where: { user_id: auth.user.id },
     select: { trainer_id: true },
   });
 
-  if (!trainer) {
-    return errorResponse('NOT_FOUND', 'No se encontró el formador asociado al usuario actual', 404);
+  const requestedTrainerId = typeof request.query.trainer_id === 'string' ? request.query.trainer_id.trim() : null;
+
+  if (!canManageOthers && requestedTrainerId && requestedTrainerId !== ownTrainer?.trainer_id) {
+    return errorResponse('FORBIDDEN', 'No tienes permiso para gestionar otros formadores', 403);
+  }
+
+  const trainerId = requestedTrainerId || ownTrainer?.trainer_id;
+
+  if (!trainerId) {
+    return errorResponse('NOT_FOUND', 'No se encontró el formador asociado', 404);
+  }
+
+  const targetTrainer = await prisma.trainers.findUnique({ where: { trainer_id: trainerId }, select: { trainer_id: true } });
+
+  if (!targetTrainer) {
+    return errorResponse('NOT_FOUND', 'No se encontró el formador especificado', 404);
   }
 
   if (request.method === 'GET') {
@@ -207,7 +223,7 @@ export const handler = createHttpHandler(async (request) => {
       return errorResponse('VALIDATION_ERROR', 'El parámetro year es inválido', 400);
     }
 
-    const availability = await buildTrainerAvailability(prisma, trainer.trainer_id, requestedYear);
+    const availability = await buildTrainerAvailability(prisma, trainerId, requestedYear);
 
     return successResponse({ availability });
   }
@@ -252,22 +268,22 @@ export const handler = createHttpHandler(async (request) => {
         if (available === defaultAvailable) {
           try {
             await tx.trainer_availability.delete({
-              where: { trainer_id_date: { trainer_id: trainer.trainer_id, date: dateUtc } },
+              where: { trainer_id_date: { trainer_id: trainerId, date: dateUtc } },
             });
           } catch (_error) {
             // Ignorar si no existe (P2025)
           }
         } else {
           await tx.trainer_availability.upsert({
-            where: { trainer_id_date: { trainer_id: trainer.trainer_id, date: dateUtc } },
+            where: { trainer_id_date: { trainer_id: trainerId, date: dateUtc } },
             update: { available },
-            create: { trainer_id: trainer.trainer_id, date: dateUtc, available },
+            create: { trainer_id: trainerId, date: dateUtc, available },
           });
         }
       }
     });
 
-    const availability = await buildTrainerAvailability(prisma, trainer.trainer_id, year);
+    const availability = await buildTrainerAvailability(prisma, trainerId, year);
 
     return successResponse({ availability });
   }
