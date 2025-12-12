@@ -80,9 +80,16 @@ async function syncSessionsForProduct(
   product: DealProductRecord,
   defaultAddress: string | null,
 ) {
-  const targetQuantity = hasPrevencionPrefix(product.name, product.code)
-    ? 1
-    : toNonNegativeInt(product.quantity, 0);
+  const isSingleSessionProduct =
+    typeof product.name === 'string' &&
+    product.name.trim().toLowerCase() === 'formación esi en campo de fuego 6h' &&
+    typeof product.code === 'string' &&
+    product.code.trim().toLowerCase() === '1';
+
+  const targetQuantity =
+    isSingleSessionProduct || hasPrevencionPrefix(product.name, product.code)
+      ? 1
+      : toNonNegativeInt(product.quantity, 0);
   const baseName = buildNombreBase(product.name, product.code);
 
   const existing = await tx.sesiones.findMany({
