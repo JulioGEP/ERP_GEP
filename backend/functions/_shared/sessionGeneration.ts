@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { errorResponse } from './response';
 
 const APPLICABLE_PREFIXES = ['form-', 'prev-', 'pci-'];
+const SINGLE_SESSION_PIPE_IDS = new Set(['1', '240', '241']);
 
 type DealProductRecord = {
   id: string;
@@ -96,7 +97,7 @@ async function syncSessionsForProduct(
 
   const targetQuantity =
     isSingleSessionProduct ||
-    (hasApplicableCode(product.code) && normalizedPipeId === '1') ||
+    (hasApplicableCode(product.code) && normalizedPipeId && SINGLE_SESSION_PIPE_IDS.has(normalizedPipeId)) ||
     hasPrevencionPrefix(product.name, product.code)
       ? 1
       : toNonNegativeInt(product.quantity, 0);
