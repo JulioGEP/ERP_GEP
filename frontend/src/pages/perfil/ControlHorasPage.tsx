@@ -85,9 +85,7 @@ export default function ControlHorasPage() {
   const items = data?.items ?? [];
   const totalSessions = data?.summary.totalSessions ?? 0;
   const totalHours = data?.summary.totalHours ?? 0;
-  const totalServiceCost = data?.summary.totalServiceCost ?? 0;
   const totalExtraCost = data?.summary.totalExtraCost ?? 0;
-  const totalPayrollCost = data?.summary.totalPayrollCost ?? 0;
 
   const sessionsById = useMemo(() => {
     const map = new Map<string, TrainerSessionDetail>();
@@ -132,19 +130,13 @@ export default function ControlHorasPage() {
         <Table striped bordered hover>
           <thead>
             <tr>
-              <th style={{ width: '18%' }}>Fecha de la sesión</th>
-              <th style={{ width: '32%' }}>Nombre de la sesión</th>
-              <th style={{ width: '12%' }} className="text-end">
+              <th style={{ width: '22%' }}>Fecha de la sesión</th>
+              <th style={{ width: '50%' }}>Nombre de la sesión</th>
+              <th style={{ width: '14%' }} className="text-end">
                 Horas totales
               </th>
-              <th style={{ width: '12%' }} className="text-end">
-                Coste servicio
-              </th>
-              <th style={{ width: '12%' }} className="text-end">
-                Coste extra
-              </th>
               <th style={{ width: '14%' }} className="text-end">
-                Nómina
+                Coste extra
               </th>
             </tr>
           </thead>
@@ -157,11 +149,18 @@ export default function ControlHorasPage() {
                 onClick={() => setSelectedSessionId(item.id)}
               >
                 <td className="align-middle">{formatDate(item.sessionDate, dateFormatter)}</td>
-                <td className="align-middle">{item.sessionName || '—'}</td>
+                <td className="align-middle">
+                  <div className="d-flex flex-column gap-2">
+                    <span>{item.sessionName || '—'}</span>
+                    {!item.hasTimeLog ? (
+                      <span className="badge bg-danger text-wrap lh-base">
+                        No hay fichaje de horas, no se podrán contabilizar
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
                 <td className="text-end align-middle">{hoursFormatter.format(item.totalHours)}</td>
-                <td className="text-end align-middle">{currencyFormatter.format(item.serviceCost)}</td>
                 <td className="text-end align-middle">{currencyFormatter.format(item.extraCost)}</td>
-                <td className="text-end align-middle">{currencyFormatter.format(item.payrollCost)}</td>
               </tr>
             ))}
           </tbody>
@@ -170,9 +169,7 @@ export default function ControlHorasPage() {
               <th scope="row">Total</th>
               <th className="text-end">{totalSessions}</th>
               <th className="text-end">{hoursFormatter.format(totalHours)}</th>
-              <th className="text-end">{currencyFormatter.format(totalServiceCost)}</th>
               <th className="text-end">{currencyFormatter.format(totalExtraCost)}</th>
-              <th className="text-end">{currencyFormatter.format(totalPayrollCost)}</th>
             </tr>
           </tfoot>
         </Table>
