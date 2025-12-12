@@ -67,7 +67,10 @@ type TrainerSessionHours = {
   serviceCost: number;
   extraCost: number;
   payrollCost: number;
+  hasTimeLog: boolean;
 };
+
+type TimeLogRow = { session_id: string | null; variant_id: string | null };
 
 function parseDateParts(value: string): { year: number; month: number; day: number } | null {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -351,6 +354,38 @@ export const handler = createHttpHandler(async (request) => {
     .filter((id): id is string => Boolean(id));
   const variantIds = variantRows.map((row) => row.id);
 
+  let timeLogs: TimeLogRow[] = [];
+
+  if (sessionIds.length > 0 || variantIds.length > 0) {
+    const orConditions: Array<Record<string, unknown>> = [];
+    if (sessionIds.length > 0) {
+      orConditions.push({ session_id: { in: sessionIds } });
+    }
+    if (variantIds.length > 0) {
+      orConditions.push({ variant_id: { in: variantIds } });
+    }
+
+    if (orConditions.length > 0) {
+      timeLogs = (await prisma.trainer_session_time_logs.findMany({
+        where: {
+          trainer_id: trainer.trainer_id,
+          OR: orConditions,
+        },
+        select: { session_id: true, variant_id: true },
+      })) as TimeLogRow[];
+    }
+  }
+
+  const timeLogKeys = new Set<string>();
+  for (const log of timeLogs) {
+    if (log.session_id) {
+      timeLogKeys.add(`session:${log.session_id}`);
+    }
+    if (log.variant_id) {
+      timeLogKeys.add(`variant:${log.variant_id}`);
+    }
+  }
+
   let extraCostRecords: TrainerExtraCostRow[] = [];
   if (sessionIds.length > 0 || variantIds.length > 0) {
     const orConditions: Array<Record<string, unknown>> = [];
@@ -420,6 +455,7 @@ export const handler = createHttpHandler(async (request) => {
       serviceCost: roundToTwoDecimals(serviceCost),
       extraCost: roundToTwoDecimals(extraCost),
       payrollCost: roundToTwoDecimals(serviceCost + extraCost),
+      hasTimeLog: timeLogKeys.has(`session:${sessionId}`),
     });
   }
 
@@ -438,6 +474,7 @@ export const handler = createHttpHandler(async (request) => {
       serviceCost: roundToTwoDecimals(serviceCost),
       extraCost: roundToTwoDecimals(extraCost),
       payrollCost: roundToTwoDecimals(serviceCost + extraCost),
+      hasTimeLog: timeLogKeys.has(`variant:${row.id}`),
     });
   }
 

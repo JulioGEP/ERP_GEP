@@ -87,6 +87,7 @@ export type TrainerSelfHoursItem = {
   serviceCost: number;
   extraCost: number;
   payrollCost: number;
+  hasTimeLog: boolean;
 };
 
 export type TrainerSelfHoursResponse = {

@@ -1606,6 +1606,8 @@ export default function AuthenticatedApp() {
     highlightSessionId: highlightedCalendarSessionId,
   };
 
+  const isFormador = user?.role?.trim().toLowerCase() === 'formador';
+
   return (
     <div className="min-vh-100 d-flex flex-column">
       <Navbar bg="white" expand="xl" className="shadow-sm py-3">
@@ -1676,7 +1678,7 @@ export default function AuthenticatedApp() {
                     id="nav-user"
                     className="w-100 w-xl-auto"
                   >
-                    {hasPermission('/perfil/control_horas') ? (
+                    {isFormador && hasPermission('/perfil/control_horas') ? (
                       <NavDropdown.Item as={NavLink} to="/perfil/control_horas">
                         Control de horas
                       </NavDropdown.Item>
