@@ -80,11 +80,17 @@ async function syncSessionsForProduct(
   product: DealProductRecord,
   defaultAddress: string | null,
 ) {
+  const productCatalogId = (() => {
+    if (!product?.id) return null;
+    const parts = String(product.id).split('_');
+    return parts.length >= 2 ? parts[parts.length - 1] ?? null : null;
+  })();
+
   const isSingleSessionProduct =
     typeof product.name === 'string' &&
     product.name.trim().toLowerCase() === 'formación esi en campo de fuego 6h' &&
-    typeof product.code === 'string' &&
-    product.code.trim().toLowerCase() === '1';
+    ((typeof product.code === 'string' && product.code.trim().toLowerCase() === '1') ||
+      (typeof productCatalogId === 'string' && productCatalogId.trim().toLowerCase() === '1'));
 
   const targetQuantity =
     isSingleSessionProduct || hasPrevencionPrefix(product.name, product.code)
