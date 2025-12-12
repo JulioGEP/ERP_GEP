@@ -10,6 +10,7 @@ type DealProductRecord = {
   quantity: unknown;
   name: string | null;
   code: string | null;
+  id_pipe?: string | null;
 };
 
 export function hasApplicableCode(code: unknown): boolean {
@@ -86,6 +87,7 @@ async function syncSessionsForProduct(
     return parts.length >= 2 ? parts[parts.length - 1] ?? null : null;
   })();
 
+  const normalizedPipeId = product.id_pipe == null ? null : String(product.id_pipe).trim();
   const isSingleSessionProduct =
     typeof product.name === 'string' &&
     product.name.trim().toLowerCase() === 'formación esi en campo de fuego 6h' &&
@@ -93,7 +95,9 @@ async function syncSessionsForProduct(
       (typeof productCatalogId === 'string' && productCatalogId.trim().toLowerCase() === '1'));
 
   const targetQuantity =
-    isSingleSessionProduct || hasPrevencionPrefix(product.name, product.code)
+    isSingleSessionProduct ||
+    (hasApplicableCode(product.code) && normalizedPipeId === '1') ||
+    hasPrevencionPrefix(product.name, product.code)
       ? 1
       : toNonNegativeInt(product.quantity, 0);
   const baseName = buildNombreBase(product.name, product.code);
@@ -143,13 +147,57 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
     return { error: errorResponse('NOT_FOUND', 'Presupuesto no encontrado', 404) } as const;
   }
 
-  const applicableProducts: DealProductRecord[] =
-  (deal.deal_products ?? []).filter(
+  const applicableProducts: DealProductRecord[] = (deal.deal_products ?? []).filter(
     (product: unknown): product is DealProductRecord =>
-      typeof (product as any)?.code === 'string' && hasApplicableCode((product as any).code)
+      typeof (product as any)?.code === 'string' && hasApplicableCode((product as any).code),
   );
 
-  const applicableIds = applicableProducts.map((product: DealProductRecord) => product.id);
+  const productNames = Array.from(
+    new Set(
+      applicableProducts
+        .map((product) => (typeof product?.name === 'string' ? product.name.trim() : ''))
+        .filter((name) => name.length > 0),
+    ),
+  );
+
+  const catalogProducts = productNames.length
+    ? await tx.products.findMany({
+        where: { name: { in: productNames } },
+        select: { name: true, id_pipe: true },
+      })
+    : [];
+
+  const normalizeName = (value: unknown): string | null => {
+    if (value == null) return null;
+    const name = String(value).trim();
+    if (!name.length) return null;
+    return name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  };
+
+  const normalizeIdPipe = (value: unknown): string | null => {
+    if (value == null) return null;
+    const id = String(value).trim();
+    return id.length ? id : null;
+  };
+
+  const idPipeByName = new Map<string, string>();
+  catalogProducts.forEach((product) => {
+    const nameKey = normalizeName(product?.name);
+    const idPipe = normalizeIdPipe(product?.id_pipe);
+    if (!nameKey || !idPipe || idPipeByName.has(nameKey)) return;
+    idPipeByName.set(nameKey, idPipe);
+  });
+
+  const applicableWithPipe: DealProductRecord[] = applicableProducts.map((product) => {
+    const nameKey = normalizeName(product?.name);
+    const resolvedPipeId = nameKey ? idPipeByName.get(nameKey) ?? null : null;
+    return { ...product, id_pipe: resolvedPipeId };
+  });
+
+  const applicableIds = applicableWithPipe.map((product: DealProductRecord) => product.id);
 
   if (applicableIds.length === 0) {
     const result = await tx.sesiones.deleteMany({ where: { deal_id: dealId } });
@@ -164,8 +212,8 @@ export async function generateSessionsForDeal(tx: Prisma.TransactionClient, deal
   });
 
   const syncResults = await Promise.all(
-    applicableProducts.map((product: DealProductRecord) =>
-  syncSessionsForProduct(tx, deal.deal_id, product, deal.training_address ?? null),
+    applicableWithPipe.map((product: DealProductRecord) =>
+      syncSessionsForProduct(tx, deal.deal_id, product, deal.training_address ?? null),
     ),
   );
 
