@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Badge, Button, Card, Col, Collapse, Form, ListGroup, Row, Spinner } from 'react-bootstrap';
+import { Badge, Button, ButtonGroup, Card, Col, Collapse, Form, ListGroup, Row, Spinner } from 'react-bootstrap';
 import { isApiError } from '../../api/client';
 import {
   fetchComparativaDashboard,
@@ -22,6 +22,12 @@ const METRIC_CONFIG: { key: string; label: string }[] = [
 const SPAIN_CENTER = { lat: 40.4168, lon: -3.7038 } as const;
 
 type HeatPoint = { lat: number; lon: number; weight?: number };
+
+const HEATMAP_SERVICE_TYPES: { label: string; value?: string }[] = [
+  { label: 'Ambos' },
+  { label: 'GEP Services', value: 'GEP Services' },
+  { label: 'Formación Empresa', value: 'Formación Empresa' },
+];
 
 type GeocodingStatus = 'idle' | 'loading' | 'error' | 'ready';
 
@@ -421,9 +427,17 @@ type ComparativaHeatmapCardProps = {
   sessions: ComparativaSessionLocation[];
   isLoading: boolean;
   isError: boolean;
+  serviceType?: string;
+  onServiceTypeChange: (value?: string) => void;
 };
 
-function ComparativaHeatmapCard({ sessions, isLoading, isError }: ComparativaHeatmapCardProps) {
+function ComparativaHeatmapCard({
+  sessions,
+  isLoading,
+  isError,
+  serviceType,
+  onServiceTypeChange,
+}: ComparativaHeatmapCardProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -574,9 +588,23 @@ function ComparativaHeatmapCard({ sessions, isLoading, isError }: ComparativaHea
             <div className="text-muted small">Direcciones geolocalizadas mediante OpenStreetMap</div>
           </div>
 
-          <Button variant="outline-secondary" size="sm" onClick={handleFullscreenToggle}>
-            {isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-          </Button>
+          <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+            <ButtonGroup size="sm">
+              {HEATMAP_SERVICE_TYPES.map((item) => (
+                <Button
+                  key={item.label}
+                  variant={serviceType === item.value ? 'primary' : 'outline-primary'}
+                  onClick={() => onServiceTypeChange(item.value)}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </ButtonGroup>
+
+            <Button variant="outline-secondary" size="sm" onClick={handleFullscreenToggle}>
+              {isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+            </Button>
+          </div>
         </div>
 
         <div
@@ -656,8 +684,12 @@ export default function ComparativaDashboardPage() {
       badges.push({ label: 'Tipo de formación', value: filters.trainingTypes.join(', ') });
     }
 
+    if (filters.serviceType) {
+      badges.push({ label: 'Embudo', value: filters.serviceType });
+    }
+
     return badges;
-  }, [filters.comerciales, filters.siteIds, filters.trainingTypes]);
+  }, [filters.comerciales, filters.serviceType, filters.siteIds, filters.trainingTypes]);
 
   const dashboardQuery = useQuery({
     queryKey: [
@@ -744,6 +776,13 @@ export default function ComparativaDashboardPage() {
 
       return updated;
     });
+  };
+
+  const handleHeatmapServiceTypeChange = (value?: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      serviceType: value,
+    }));
   };
 
   const renderSparkline = (points: number[]) => {
@@ -1346,6 +1385,8 @@ export default function ComparativaDashboardPage() {
           sessions={sessionsQuery.data ?? []}
           isLoading={sessionsQuery.isLoading}
           isError={sessionsQuery.isError}
+          serviceType={filters.serviceType}
+          onServiceTypeChange={handleHeatmapServiceTypeChange}
         />
       </div>
     );
