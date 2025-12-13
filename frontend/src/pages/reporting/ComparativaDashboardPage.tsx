@@ -21,7 +21,7 @@ const METRIC_CONFIG: { key: string; label: string }[] = [
 
 const SPAIN_CENTER = { lat: 40.4168, lon: -3.7038 } as const;
 
-type HeatPoint = { lat: number; lon: number; weight?: number };
+type HeatPoint = { lat: number; lon: number };
 
 const HEATMAP_SERVICE_TYPES: { label: string; value?: string }[] = [
   { label: 'Ambos' },
@@ -388,37 +388,6 @@ async function geocodeAddress(address: string): Promise<HeatPoint | null> {
   }
 }
 
-function normalizeAddress(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-
-  let address = raw
-    .normalize('NFC')
-    .replace(/[;|]/g, ',')
-    .replace(/\s*-\s*/g, ', ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!address) return null;
-
-  address = address
-    .replace(/^c\/?\s*/i, 'Calle ')
-    .replace(/^avd?a?\.?\s*/i, 'Avenida ')
-    .replace(/^av\.\s*/i, 'Avenida ')
-    .replace(/^pza\.?\s*/i, 'Plaza ');
-
-  const parts = address
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (!parts.length) return null;
-
-  const countryIncluded = parts.some((part) => /espa(ña|in)a?/i.test(part));
-  const normalizedParts = countryIncluded ? parts : [...parts, 'España'];
-
-  return normalizedParts.join(', ');
-}
-
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -492,14 +461,15 @@ function ComparativaHeatmapCard({
   }, []);
 
   useEffect(() => {
-    const normalizedAddresses = new Map<string, number>();
-    sessions.forEach((session) => {
-      const normalized = normalizeAddress(session.direccion);
-      if (!normalized) return;
-      normalizedAddresses.set(normalized, (normalizedAddresses.get(normalized) ?? 0) + 1);
-    });
+    const addresses = Array.from(
+      new Set(
+        sessions
+          .map((session) => session.direccion?.trim())
+          .filter((direccion): direccion is string => Boolean(direccion?.length)),
+      ),
+    );
 
-    if (!normalizedAddresses.size) {
+    if (!addresses.length) {
       setHeatPoints([]);
       setGeocodedCount(0);
       setGeocodingStatus(sessions.length ? 'ready' : 'idle');
@@ -514,13 +484,13 @@ function ComparativaHeatmapCard({
       const coordinates: HeatPoint[] = [];
       const cache = new Map<string, HeatPoint | null>();
 
-      for (const [address, weight] of normalizedAddresses) {
+      for (const address of addresses) {
         if (cancelled) break;
         const cached = cache.get(address);
         const match = cached ?? (await geocodeAddress(address));
         cache.set(address, match ?? null);
         if (match) {
-          coordinates.push({ ...match, weight });
+          coordinates.push(match);
           setGeocodedCount(coordinates.length);
         }
         await delay(300);
@@ -541,7 +511,7 @@ function ComparativaHeatmapCard({
 
   useEffect(() => {
     if (!heatLayerRef.current) return;
-    const points = heatPoints.map((point) => [point.lat, point.lon, point.weight ?? 1]);
+    const points = heatPoints.map((point) => [point.lat, point.lon]);
     heatLayerRef.current.setLatLngs(points);
     if (mapRef.current) {
       mapRef.current.invalidateSize();
