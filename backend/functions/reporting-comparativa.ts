@@ -205,12 +205,6 @@ type SessionRow = {
   }>;
 };
 
-type SessionAddressRow = {
-  id: string;
-  direccion: string | null;
-  deals: { training_address: string | null } | null;
-};
-
 type VariantRow = {
   id_woo: bigint | number | string | null;
   date: Date | string | null;
@@ -309,12 +303,6 @@ function computeDeltaPercentage(current: number, previous: number): number {
   return (diff / previous) * 100;
 }
 
-function sanitizeString(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length ? trimmed : null;
-}
-
 function mergeCounts(
   currentCounts: Map<string, number>,
   previousCounts: Map<string, number>,
@@ -358,9 +346,6 @@ export const handler = createHttpHandler(async (request) => {
   const currentEndExclusive = addDays(currentEnd, 1);
   const previousEndExclusive = addDays(previousEnd, 1);
 
-  const normalizedPath = request.path.replace(/\/+$/, '');
-  const isSessionsRequest = normalizedPath.endsWith('/reporting-comparativa/sessions');
-
   const siteFilters =
     parseStringArrayParam(request.query.siteId ?? request.query.siteIds) ??
     parseStringArrayParam(request.event.multiValueQueryStringParameters?.siteId);
@@ -374,31 +359,6 @@ export const handler = createHttpHandler(async (request) => {
         request.event.multiValueQueryStringParameters?.comerciales ??
         request.event.multiValueQueryStringParameters?.costCenterId,
     );
-
-  if (isSessionsRequest) {
-    const currentSessionsWithAddress = (await prisma.sesiones.findMany({
-      where: {
-        fecha_inicio_utc: { gte: currentStart, lt: currentEndExclusive },
-        deals: {
-          ...(siteFilters ? { sede_label: { in: siteFilters } } : {}),
-          ...(trainingTypes ? { pipeline_id: { in: trainingTypes } } : {}),
-          ...(comerciales ? { comercial: { in: comerciales } } : {}),
-        },
-      },
-      select: {
-        id: true,
-        direccion: true,
-        deals: { select: { training_address: true } },
-      },
-    })) as SessionAddressRow[];
-
-    const sesiones = currentSessionsWithAddress.map((session) => ({
-      id: sanitizeString(session.id),
-      direccion: sanitizeString(session.direccion ?? session.deals?.training_address ?? null),
-    }));
-
-    return successResponse({ sesiones });
-  }
 
   const [
     currentSessions,
