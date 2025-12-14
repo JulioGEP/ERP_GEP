@@ -414,6 +414,7 @@ function ComparativaHeatmapCard({
   const [heatPoints, setHeatPoints] = useState<HeatPoint[]>([]);
   const [geocodingStatus, setGeocodingStatus] = useState<GeocodingStatus>('idle');
   const [geocodedCount, setGeocodedCount] = useState(0);
+  const [geocodingResults, setGeocodingResults] = useState<Record<string, HeatPoint | null>>({});
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -472,6 +473,7 @@ function ComparativaHeatmapCard({
     if (!addresses.length) {
       setHeatPoints([]);
       setGeocodedCount(0);
+      setGeocodingResults({});
       setGeocodingStatus(sessions.length ? 'ready' : 'idle');
       return;
     }
@@ -483,12 +485,14 @@ function ComparativaHeatmapCard({
       setGeocodedCount(0);
       const coordinates: HeatPoint[] = [];
       const cache = new Map<string, HeatPoint | null>();
+      const results = new Map<string, HeatPoint | null>();
 
       for (const address of addresses) {
         if (cancelled) break;
         const cached = cache.get(address);
         const match = cached ?? (await geocodeAddress(address));
         cache.set(address, match ?? null);
+        results.set(address, match ?? null);
         if (match) {
           coordinates.push(match);
           setGeocodedCount(coordinates.length);
@@ -497,6 +501,7 @@ function ComparativaHeatmapCard({
       }
 
       if (!cancelled) {
+        setGeocodingResults(Object.fromEntries(results));
         setHeatPoints(coordinates);
         setGeocodingStatus('ready');
       }
@@ -546,6 +551,31 @@ function ComparativaHeatmapCard({
 
   const totalSessionsWithDireccion = sessions.filter((session) => session.direccion?.trim()).length;
   const hasHeatData = heatPoints.length > 0;
+  const sessionRows = useMemo(
+    () =>
+      sessions.map((session) => {
+        const direccion = session.direccion?.trim() ?? '';
+        const coordinates = direccion ? geocodingResults[direccion] : null;
+        const visible = Boolean(coordinates);
+        const status = direccion.length
+          ? coordinates
+            ? 'Con coordenadas'
+            : geocodingStatus === 'loading'
+              ? 'Geocodificando...'
+              : 'Sin coordenadas'
+          : 'Sin dirección';
+
+        return {
+          id: session.id ?? 'Sin ID',
+          direccion: direccion || 'Sin dirección',
+          coordinates,
+          visible,
+          status,
+        };
+      }),
+    [geocodingResults, geocodingStatus, sessions],
+  );
+  const visibleSessionsCount = sessionRows.filter((row) => row.visible).length;
 
   return (
     <Card className="shadow-sm">
@@ -604,6 +634,53 @@ function ComparativaHeatmapCard({
           <span>Coordenadas geocodificadas: {geocodedCount}</span>
           {geocodingStatus === 'error' && <span className="text-danger">Error al geolocalizar direcciones.</span>}
           {isError && <span className="text-danger">No se pudieron cargar las sesiones para el mapa.</span>}
+        </div>
+
+        <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+          <div>
+            <h6 className="mb-0">Sesiones con dirección</h6>
+            <div className="text-muted small">Listado de direcciones y estado de geocodificación</div>
+          </div>
+          <div className="text-muted small">
+            {visibleSessionsCount} de {sessionRows.length} sesiones visibles en el mapa
+          </div>
+        </div>
+
+        <div className="table-responsive">
+          <table className="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th className="text-nowrap">Sesión</th>
+                <th>Dirección</th>
+                <th className="text-nowrap">Coordenadas geocodificadas</th>
+                <th className="text-nowrap">Visible en mapa</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessionRows.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-center text-muted">
+                    No hay sesiones para mostrar en el periodo seleccionado.
+                  </td>
+                </tr>
+              )}
+
+              {sessionRows.map((row, index) => (
+                <tr key={`${row.id}-${index}`}>
+                  <td className="text-nowrap">{row.id}</td>
+                  <td>{row.direccion}</td>
+                  <td className="text-nowrap">
+                    {row.coordinates
+                      ? `${row.coordinates.lat.toFixed(4)}, ${row.coordinates.lon.toFixed(4)}`
+                      : row.status}
+                  </td>
+                  <td>
+                    <Badge bg={row.visible ? 'success' : 'secondary'}>{row.visible ? 'Sí' : 'No'}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card.Body>
     </Card>
