@@ -337,12 +337,18 @@ function sanitizeVariant(value: unknown): TrainerVariantDetail | null {
   );
   const studentCount = studentCountSanitized || students.length;
 
+  const wooIdRaw = raw.wooId ?? (raw as { woo_id?: unknown }).woo_id ?? null;
+  const wooId =
+    typeof wooIdRaw === 'number'
+      ? String(wooIdRaw)
+      : sanitizeString(wooIdRaw);
+
   return {
     variantId,
     productName: sanitizeString(raw.productName),
     site: sanitizeString(raw.site),
     date: sanitizeDate(raw.date),
-    wooId: sanitizeString(raw.wooId ?? (raw as { woo_id?: unknown }).woo_id ?? null),
+    wooId,
     studentCount,
     organizationNames,
     deals,
