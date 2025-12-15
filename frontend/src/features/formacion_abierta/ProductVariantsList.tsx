@@ -1784,7 +1784,7 @@ export function VariantModal({
 
   const handleDealClick =
     (deal: DealTag) =>
-    (event: ReactMouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+    (event: ReactMouseEvent<HTMLButtonElement | HTMLAnchorElement | HTMLTableRowElement>) => {
       event.preventDefault();
       event.stopPropagation();
       handleOpenDealModal(deal);
@@ -3105,27 +3105,52 @@ export function VariantModal({
                             <th>Nombre Empresa</th>
                             <th>Nombre Alumno</th>
                             <th>Apellido Alumno</th>
+                            <th>Val. FUNDAE</th>
                             <th>Valor de Fundae</th>
                             <th>Valor de PO</th>
                             <th className="text-end">Alumnos</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {dealSummaryRows.map(({ deal, student, key }) => (
-                            <tr key={key}>
-                              <td>{deal.deal_id}</td>
-                              <td>{deal.organization?.name ?? '—'}</td>
-                              <td>{student.nombre.trim().length ? student.nombre : '—'}</td>
-                              <td>{student.apellido.trim().length ? student.apellido : '—'}</td>
-                              <td>{deal.fundae_label ?? '—'}</td>
-                              <td>{deal.po ?? '—'}</td>
-                              <td className="text-end">1</td>
-                            </tr>
-                          ))}
+                          {dealSummaryRows.map(({ deal, student, key }) => {
+                            const isFundaeValidated = deal.fundae_val === true;
+
+                            return (
+                              <tr
+                                key={key}
+                                onClick={handleDealClick(deal)}
+                                role="button"
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <td>{deal.deal_id}</td>
+                                <td>{deal.organization?.name ?? '—'}</td>
+                                <td>{student.nombre.trim().length ? student.nombre : '—'}</td>
+                                <td>{student.apellido.trim().length ? student.apellido : '—'}</td>
+                                <td className="text-center">
+                                  <Form.Check
+                                    type="checkbox"
+                                    checked={isFundaeValidated}
+                                    readOnly
+                                    onChange={() => {}}
+                                    className="mb-0"
+                                    style={isFundaeValidated ? { accentColor: '#198754' } : undefined}
+                                    aria-label={
+                                      isFundaeValidated
+                                        ? 'Presupuesto validado por FUNDAE'
+                                        : 'Presupuesto pendiente de validación FUNDAE'
+                                    }
+                                  />
+                                </td>
+                                <td>{deal.fundae_label ?? '—'}</td>
+                                <td>{deal.po ?? '—'}</td>
+                                <td className="text-end">1</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                         <tfoot>
                           <tr>
-                            <td colSpan={6} className="fw-semibold text-end">
+                            <td colSpan={7} className="fw-semibold text-end">
                               Total alumnos
                             </td>
                             <td className="text-end fw-semibold">{totalDealStudents}</td>
