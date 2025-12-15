@@ -3101,13 +3101,13 @@ export function VariantModal({
                       >
                         <thead>
                           <tr>
-                            <th>Presupuesto</th>
-                            <th>Nombre Empresa</th>
-                            <th>Nombre Alumno</th>
-                            <th>Apellido Alumno</th>
+                            <th>Presu</th>
+                            <th>Empresa</th>
+                            <th>Nombre</th>
+                            <th>Apellido</th>
+                            <th>FUNDAE</th>
                             <th>Val. FUNDAE</th>
-                            <th>Valor de Fundae</th>
-                            <th>Valor de PO</th>
+                            <th>PO</th>
                             <th className="text-end">Alumnos</th>
                           </tr>
                         </thead>
@@ -3126,6 +3126,7 @@ export function VariantModal({
                                 <td>{deal.organization?.name ?? '—'}</td>
                                 <td>{student.nombre.trim().length ? student.nombre : '—'}</td>
                                 <td>{student.apellido.trim().length ? student.apellido : '—'}</td>
+                                <td>{deal.fundae_label ?? '—'}</td>
                                 <td className="text-center">
                                   <Form.Check
                                     type="checkbox"
@@ -3141,7 +3142,6 @@ export function VariantModal({
                                     }
                                   />
                                 </td>
-                                <td>{deal.fundae_label ?? '—'}</td>
                                 <td>{deal.po ?? '—'}</td>
                                 <td className="text-end">1</td>
                               </tr>
