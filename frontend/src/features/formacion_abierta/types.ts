@@ -108,6 +108,7 @@ export type DealTag = {
   organization: { name: string | null } | null;
   person: { first_name: string | null; last_name: string | null } | null;
   fundae_label: string | null;
+  fundae_val?: boolean | null;
   po: string | null;
 };
 

@@ -48,6 +48,30 @@ function toNumberOrNull(value: unknown): number | null {
   return null;
 }
 
+function toBooleanOrNull(value: unknown): boolean | null {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'sí' || normalized === 'si' || normalized === 'yes') {
+      return true;
+    }
+
+    if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+      return false;
+    }
+  }
+
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+
+  return null;
+}
+
 function toTrainerInviteStatus(value: unknown): TrainerInviteStatus {
   if (typeof value !== 'string') {
     return 'NOT_SENT';
@@ -503,6 +527,7 @@ export function normalizeDealTag(raw: any): DealTag | null {
       : null;
 
   const fundaeLabel = toTrimmedString((raw as any)?.fundae_label);
+  const fundaeValidated = toBooleanOrNull((raw as any)?.fundae_val);
   const poValue = toTrimmedString((raw as any)?.po);
 
   return {
@@ -515,6 +540,7 @@ export function normalizeDealTag(raw: any): DealTag | null {
     organization,
     person,
     fundae_label: fundaeLabel,
+    fundae_val: fundaeValidated,
     po: poValue,
   } satisfies DealTag;
 }
