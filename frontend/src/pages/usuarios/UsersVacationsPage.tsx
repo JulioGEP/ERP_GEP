@@ -58,6 +58,7 @@ export default function UsersVacationsPage() {
   const [bulkDate, setBulkDate] = useState('');
   const [bulkType, setBulkType] = useState<VacationType>('V');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [selectionManuallyChanged, setSelectionManuallyChanged] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [feedback, setFeedback] = useState<{ variant: 'success' | 'danger'; message: string } | null>(
     null,
@@ -95,10 +96,10 @@ export default function UsersVacationsPage() {
   }, [users]);
 
   useEffect(() => {
-    if (users.length && !selectedUsers.length) {
-      setSelectedUsers(users.map((user) => user.userId));
-    }
-  }, [selectedUsers.length, users]);
+    if (selectionManuallyChanged || !users.length || selectedUsers.length) return;
+
+    setSelectedUsers(users.map((user) => user.userId));
+  }, [selectionManuallyChanged, selectedUsers.length, users]);
 
   const bulkMutation = useMutation({
     mutationFn: applyBulkVacationDay,
@@ -172,6 +173,7 @@ export default function UsersVacationsPage() {
   const requests = requestsQuery.data ?? [];
 
   const handleUserToggle = (userId: string, checked: boolean) => {
+    setSelectionManuallyChanged(true);
     setSelectedUsers((prev) => {
       if (checked) return [...new Set([...prev, userId])];
       return prev.filter((id) => id !== userId);
@@ -437,7 +439,10 @@ export default function UsersVacationsPage() {
             <Button
               variant="outline-secondary"
               size="sm"
-              onClick={() => setSelectedUsers([])}
+              onClick={() => {
+                setSelectionManuallyChanged(true);
+                setSelectedUsers([]);
+              }}
               disabled={!selectedUsers.length}
             >
               Borrar Selección
@@ -445,7 +450,10 @@ export default function UsersVacationsPage() {
             <Button
               variant="outline-secondary"
               size="sm"
-              onClick={() => setSelectedUsers(users.map((user) => user.userId))}
+              onClick={() => {
+                setSelectionManuallyChanged(true);
+                setSelectedUsers(users.map((user) => user.userId));
+              }}
               disabled={!users.length}
             >
               Seleccionar todo
