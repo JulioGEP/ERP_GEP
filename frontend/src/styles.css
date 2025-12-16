@@ -1380,6 +1380,15 @@ option.session-option-unavailable {
   background: #65a30d;
 }
 
+.vacation-calendar .vacation-day.type-N {
+  background: #fef9c3;
+  border-color: #facc15;
+}
+
+.vacation-calendar .vacation-day.type-N .day-type {
+  background: #facc15;
+}
+
 .vacation-calendar .vacation-day.type-C {
   background: #ffe4e6;
   border-color: #e11d48;

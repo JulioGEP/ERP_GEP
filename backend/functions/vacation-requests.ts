@@ -7,7 +7,7 @@ import { sendEmail } from './_shared/mailer';
 import { formatDateOnly, VACATION_TYPES } from './_shared/vacations';
 
 const RECIPIENT = 'people@gepgroup.es';
-const VACATION_TAG_LABELS: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I', string> = {
+const VACATION_TAG_LABELS: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I' | 'N', string> = {
   V: 'Vacaciones',
   L: 'Festivo local',
   A: 'Día aniversario',
@@ -18,6 +18,7 @@ const VACATION_TAG_LABELS: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' 
   R: 'Traslado del domicilio habitual',
   P: 'Exámenes prenatales',
   I: 'Incapacidad temporal',
+  N: 'Festivos nacionales',
 };
 
 function parseDateOnly(value: unknown): string | null {
@@ -74,7 +75,7 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
   const endDate = parseDateOnly(request.body.endDate ?? request.body.end_date);
   const notes = typeof request.body.notes === 'string' ? request.body.notes.trim() : '';
   const rawTag = typeof request.body.tag === 'string' ? request.body.tag.trim().toUpperCase() : '';
-  const tag = (['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'I'] as const).includes(rawTag as any)
+  const tag = (['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'I', 'N'] as const).includes(rawTag as any)
     ? (rawTag as keyof typeof VACATION_TAG_LABELS)
     : null;
 

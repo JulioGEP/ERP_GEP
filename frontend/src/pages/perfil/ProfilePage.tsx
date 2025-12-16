@@ -44,6 +44,7 @@ const VACATION_LABELS: Record<VacationType, string> = {
   R: 'Traslado del domicilio habitual',
   P: 'Exámenes prenatales',
   I: 'Incapacidad temporal',
+  N: 'Festivos nacionales',
 };
 
 const VACATION_COLORS: Record<VacationType, string> = {
@@ -57,6 +58,7 @@ const VACATION_COLORS: Record<VacationType, string> = {
   R: '#0f766e',
   P: '#a855f7',
   I: '#475569',
+  N: '#facc15',
 };
 
 const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> = [
@@ -71,6 +73,7 @@ const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> =
   { value: 'R', label: VACATION_LABELS.R },
   { value: 'P', label: VACATION_LABELS.P },
   { value: 'I', label: VACATION_LABELS.I },
+  { value: 'N', label: VACATION_LABELS.N },
 ];
 
 async function fileToBase64(file: File): Promise<string> {
