@@ -4,7 +4,10 @@ CREATE TABLE IF NOT EXISTS public.user_vacation_balances (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     year integer NOT NULL,
-    allowance_days integer NOT NULL DEFAULT 0,
+    allowance_days integer NOT NULL DEFAULT 24,
+    anniversary_days integer NOT NULL DEFAULT 1,
+    local_holiday_days integer NOT NULL DEFAULT 2,
+    previous_year_days integer NOT NULL DEFAULT 0,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );

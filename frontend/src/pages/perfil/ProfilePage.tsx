@@ -310,6 +310,9 @@ export default function ProfilePage() {
     vacationData?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0 };
   const vacationSummary = [
     { label: 'Vacaciones', value: vacationData?.allowance ?? 'Sin definir' },
+    { label: 'Aniversario', value: vacationData?.anniversaryAllowance ?? 'Sin definir' },
+    { label: 'Festivos locales', value: vacationData?.localHolidayAllowance ?? 'Sin definir' },
+    { label: 'Vacaciones año anterior', value: vacationData?.previousYearAllowance ?? 'Sin definir' },
     { label: 'Disfrutadas', value: vacationData?.enjoyed ?? 0 },
     { label: 'Restantes', value: vacationData?.remaining ?? '—' },
   ];
