@@ -458,20 +458,19 @@ export default function UsersVacationsPage() {
             </Col>
             <Col md={4}>
               <Form.Label>Personas</Form.Label>
-              <Form.Select
-                multiple
-                value={selectedUsers}
-                onChange={(event) =>
-                  setSelectedUsers(Array.from(event.target.selectedOptions, (option) => option.value))
-                }
-                style={{ minHeight: '160px' }}
-              >
+              <div className="border rounded p-2" style={{ maxHeight: '200px', overflowY: 'auto' }}>
                 {users.map((user) => (
-                  <option value={user.userId} key={user.userId}>
-                    {user.fullName}
-                  </option>
+                  <Form.Check
+                    key={user.userId}
+                    type="checkbox"
+                    id={`bulk-user-${user.userId}`}
+                    label={user.fullName}
+                    checked={selectedUsers.includes(user.userId)}
+                    onChange={(event) => handleUserToggle(user.userId, event.target.checked)}
+                    className="mb-2"
+                  />
                 ))}
-              </Form.Select>
+              </div>
             </Col>
           </Row>
           <div className="d-flex justify-content-end mt-3">
