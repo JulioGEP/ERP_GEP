@@ -3,7 +3,14 @@ import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { normalizeRoleKey, requireAuth } from './_shared/auth';
-import { formatDateOnly, parseYear } from './_shared/vacations';
+import {
+  DEFAULT_ANNIVERSARY_ALLOWANCE,
+  DEFAULT_LOCAL_HOLIDAY_ALLOWANCE,
+  DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
+  DEFAULT_VACATION_ALLOWANCE,
+  formatDateOnly,
+  parseYear,
+} from './_shared/vacations';
 
 export const handler = createHttpHandler<any>(async (request) => {
   const prisma = getPrisma();
@@ -77,9 +84,15 @@ export const handler = createHttpHandler<any>(async (request) => {
       return { date: formatDateOnly(day.date), type: day.type };
     });
 
+    const balance = balanceMap.get(user.id);
+    const allowance = balance?.allowance_days ?? DEFAULT_VACATION_ALLOWANCE;
+    const anniversaryAllowance = balance?.anniversary_days ?? DEFAULT_ANNIVERSARY_ALLOWANCE;
+    const localHolidayAllowance = balance?.local_holiday_days ?? DEFAULT_LOCAL_HOLIDAY_ALLOWANCE;
+    const previousYearAllowance = balance?.previous_year_days ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
+
+    const totalAllowance = allowance + anniversaryAllowance + localHolidayAllowance + previousYearAllowance;
     const enjoyed = counts.V + counts.L + counts.A + counts.M + counts.H + counts.F + counts.R + counts.P + counts.I;
-    const allowance = balanceMap.get(user.id)?.allowance_days ?? null;
-    const remaining = allowance !== null ? allowance - enjoyed : null;
+    const remaining = totalAllowance - enjoyed;
 
     const upcomingDates = normalizedDays
       .filter((day: (typeof normalizedDays)[number]) => day.date >= todayIso)
@@ -92,8 +105,12 @@ export const handler = createHttpHandler<any>(async (request) => {
       role: user.role,
       active: user.active,
       allowance,
+      anniversaryAllowance,
+      localHolidayAllowance,
+      previousYearAllowance,
+      totalAllowance,
       enjoyed,
-      remaining,
+      remaining: remaining >= 0 ? remaining : 0,
       counts,
       upcomingDates,
       days: normalizedDays,

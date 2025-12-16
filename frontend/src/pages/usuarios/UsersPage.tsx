@@ -9,7 +9,6 @@ import {
   Col,
   Form,
   Accordion,
-  InputGroup,
   Modal,
   Pagination,
   Row,
@@ -780,6 +779,12 @@ const VACATION_TYPE_COLORS: Record<VacationType, string> = {
   I: '#475569',
 };
 
+const DEFAULT_VACATION_ALLOWANCE = 24;
+const DEFAULT_ANNIVERSARY_ALLOWANCE = 1;
+const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
+const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
+type AllowanceFieldKey = 'allowance' | 'anniversaryAllowance' | 'localHolidayAllowance' | 'previousYearAllowance';
+
 function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerModalProps) {
   const queryClient = useQueryClient();
   const currentYear = new Date().getFullYear();
@@ -787,7 +792,36 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
   const [selectionStart, setSelectionStart] = useState<string | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<VacationType | ''>('');
-  const [allowanceInput, setAllowanceInput] = useState<number | ''>('');
+  const [allowances, setAllowances] = useState<{
+    allowance: number | '';
+    anniversaryAllowance: number | '';
+    localHolidayAllowance: number | '';
+    previousYearAllowance: number | '';
+    remaining: number | '';
+  }>({
+    allowance: DEFAULT_VACATION_ALLOWANCE,
+    anniversaryAllowance: DEFAULT_ANNIVERSARY_ALLOWANCE,
+    localHolidayAllowance: DEFAULT_LOCAL_HOLIDAY_ALLOWANCE,
+    previousYearAllowance: DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
+    remaining:
+      DEFAULT_VACATION_ALLOWANCE +
+      DEFAULT_ANNIVERSARY_ALLOWANCE +
+      DEFAULT_LOCAL_HOLIDAY_ALLOWANCE +
+      DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
+  });
+  const normalizeNumber = (value: number | '') => (typeof value === 'number' ? value : 0);
+  const computeRemaining = useCallback(
+    (state: typeof allowances, enjoyedValue: number) =>
+      Math.max(
+        0,
+        normalizeNumber(state.allowance) +
+          normalizeNumber(state.anniversaryAllowance) +
+          normalizeNumber(state.localHolidayAllowance) +
+          normalizeNumber(state.previousYearAllowance) -
+          enjoyedValue,
+      ),
+    [],
+  );
 
   const userId = user?.id ?? null;
 
@@ -801,10 +835,32 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
     setSelectionStart(null);
     setSelectionEnd(null);
     setSelectedType('');
-    if (vacationsQuery.data?.allowance !== undefined) {
-      setAllowanceInput(vacationsQuery.data.allowance ?? '');
-    }
-  }, [vacationsQuery.data?.allowance, userId]);
+    const allowanceValue = vacationsQuery.data?.allowance ?? DEFAULT_VACATION_ALLOWANCE;
+    const anniversaryValue = vacationsQuery.data?.anniversaryAllowance ?? DEFAULT_ANNIVERSARY_ALLOWANCE;
+    const localHolidayValue = vacationsQuery.data?.localHolidayAllowance ?? DEFAULT_LOCAL_HOLIDAY_ALLOWANCE;
+    const previousYearValue = vacationsQuery.data?.previousYearAllowance ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
+    const enjoyedValue = vacationsQuery.data?.enjoyed ?? 0;
+    const remainingValue =
+      vacationsQuery.data?.remaining ??
+      computeRemaining(
+        {
+          allowance: allowanceValue,
+          anniversaryAllowance: anniversaryValue,
+          localHolidayAllowance: localHolidayValue,
+          previousYearAllowance: previousYearValue,
+          remaining: 0,
+        },
+        enjoyedValue,
+      );
+
+    setAllowances({
+      allowance: allowanceValue,
+      anniversaryAllowance: anniversaryValue,
+      localHolidayAllowance: localHolidayValue,
+      previousYearAllowance: previousYearValue,
+      remaining: remainingValue,
+    });
+  }, [computeRemaining, vacationsQuery.data, userId]);
 
   useEffect(() => {
     if (!show) {
@@ -832,10 +888,20 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
       updateVacationAllowance({
         userId: userId as string,
         year,
-        allowance: Number(allowanceInput || 0),
+        allowance: normalizeNumber(allowances.allowance),
+        anniversaryAllowance: normalizeNumber(allowances.anniversaryAllowance),
+        localHolidayAllowance: normalizeNumber(allowances.localHolidayAllowance),
+        previousYearAllowance: normalizeNumber(allowances.previousYearAllowance),
       }),
     onSuccess: (data) => {
       queryClient.setQueryData(['user-vacations', userId, year], data);
+      setAllowances({
+        allowance: data.allowance,
+        anniversaryAllowance: data.anniversaryAllowance,
+        localHolidayAllowance: data.localHolidayAllowance,
+        previousYearAllowance: data.previousYearAllowance,
+        remaining: data.remaining,
+      });
       onNotify?.({ variant: 'success', message: 'Balance actualizado' });
     },
     onError: (error: unknown) => {
@@ -847,9 +913,9 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
   const data = vacationsQuery.data;
   const counts =
     data?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0 };
-  const allowance = data?.allowance ?? null;
   const enjoyed = data?.enjoyed ?? 0;
-  const remaining = data?.remaining ?? null;
+  const remaining = allowances.remaining === '' ? computeRemaining(allowances, enjoyed) : allowances.remaining;
+  const totalAllowance = computeRemaining(allowances, enjoyed) + enjoyed;
 
   const selectedDates = useMemo(() => {
     if (!selectionStart) return [] as string[];
@@ -898,15 +964,82 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
     setSelectedType('');
   };
 
+  const handleAllowanceChange = (field: AllowanceFieldKey, value: string) => {
+    const parsed = value === '' ? '' : Math.max(0, Number(value));
+    const enjoyedValue = vacationsQuery.data?.enjoyed ?? 0;
+    const nextState = { ...allowances, [field]: parsed } as typeof allowances;
+    const remainingValue = computeRemaining(nextState, enjoyedValue);
+    setAllowances({ ...nextState, remaining: remainingValue });
+  };
+
+  const handleRemainingChange = (value: string) => {
+    const parsed = value === '' ? '' : Math.max(0, Number(value));
+    if (parsed === '') {
+      setAllowances({ ...allowances, remaining: '' });
+      return;
+    }
+
+    const enjoyedValue = vacationsQuery.data?.enjoyed ?? 0;
+    const extraAllowances =
+      normalizeNumber(allowances.anniversaryAllowance) +
+      normalizeNumber(allowances.localHolidayAllowance) +
+      normalizeNumber(allowances.previousYearAllowance);
+    const updatedAllowance = Math.max(0, parsed + enjoyedValue - extraAllowances);
+
+    setAllowances({ ...allowances, allowance: updatedAllowance, remaining: parsed });
+  };
+
   const handleAllowanceSave = async () => {
     if (!userId) return;
     await allowanceMutation.mutateAsync();
   };
 
-  const summaryItems = [
-    { label: 'Vacaciones', value: allowance ?? 'Sin definir' },
-    { label: 'Disfrutadas', value: enjoyed },
-    { label: 'Restantes', value: remaining ?? '—' },
+  const allowanceCards: Array<{
+    key: string;
+    label: string;
+    value: number | '';
+    description?: string;
+    readOnly?: boolean;
+    isRemaining?: boolean;
+  }> = [
+    {
+      key: 'allowance',
+      label: 'Vacaciones',
+      value: allowances.allowance,
+      description: 'Por defecto 24 días de vacaciones (editable).',
+    },
+    {
+      key: 'remaining',
+      label: 'Restantes',
+      value: remaining,
+      description: 'Añade o ajusta días directamente aquí.',
+      isRemaining: true,
+    },
+    {
+      key: 'anniversaryAllowance',
+      label: 'Aniversario',
+      value: allowances.anniversaryAllowance,
+      description: 'Días asignados por aniversario (por defecto 1).',
+    },
+    {
+      key: 'localHolidayAllowance',
+      label: 'Festivos locales',
+      value: allowances.localHolidayAllowance,
+      description: 'Días de festivos locales (por defecto 2).',
+    },
+    {
+      key: 'previousYearAllowance',
+      label: 'Vacaciones año anterior',
+      value: allowances.previousYearAllowance,
+      description: 'Saldo arrastrado de años anteriores.',
+    },
+    {
+      key: 'enjoyed',
+      label: 'Disfrutadas',
+      value: enjoyed,
+      readOnly: true,
+      description: 'Incluye vacaciones, festivos y otros permisos.',
+    },
   ];
 
   return (
@@ -935,33 +1068,44 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
             </Button>
           </div>
 
-          <div className="d-flex gap-3 flex-wrap">
-            {summaryItems.map((item) => (
-              <div key={item.label} className="border rounded px-3 py-2">
-                <div className="text-muted small text-uppercase">{item.label}</div>
-                <div className="fw-semibold">{item.value}</div>
+          <div className="d-flex flex-column gap-3 flex-grow-1">
+            <div className="d-flex gap-3 flex-wrap">
+              {allowanceCards.map((item) => (
+                <div key={item.key} className="border rounded px-3 py-2" style={{ minWidth: '190px' }}>
+                  <div className="text-muted small text-uppercase">{item.label}</div>
+                  {item.readOnly ? (
+                    <div className="fw-semibold">{item.value}</div>
+                  ) : (
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      value={item.value}
+                      onChange={(event) =>
+                        item.isRemaining
+                          ? handleRemainingChange(event.target.value)
+                          : handleAllowanceChange(
+                              item.key as AllowanceFieldKey,
+                              event.target.value,
+                            )
+                      }
+                    />
+                  )}
+                  {item.description ? <Form.Text className="text-muted">{item.description}</Form.Text> : null}
+                </div>
+              ))}
+            </div>
+            <div className="d-flex align-items-center gap-3 flex-wrap">
+              <div className="text-muted">
+                Total disponible: <span className="fw-semibold">{totalAllowance} días</span>
               </div>
-            ))}
+              <Button onClick={handleAllowanceSave} disabled={allowanceMutation.isPending || !userId}>
+                {allowanceMutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="d-flex flex-column flex-lg-row gap-3 align-items-lg-end">
-          <Form.Group className="mb-0" style={{ maxWidth: '260px' }}>
-            <Form.Label>Balance de vacaciones</Form.Label>
-            <InputGroup>
-              <Form.Control
-                type="number"
-                value={allowanceInput}
-                onChange={(event) => setAllowanceInput(event.target.value ? Number(event.target.value) : '')}
-                min={0}
-              />
-              <Button onClick={handleAllowanceSave} disabled={allowanceMutation.isPending || !userId}>
-                {allowanceMutation.isPending ? 'Guardando…' : 'Guardar'}
-              </Button>
-            </InputGroup>
-            <Form.Text className="text-muted">Define el total de días disponibles para el año.</Form.Text>
-          </Form.Group>
-
+        <div className="d-flex flex-column flex-lg-row gap-3 align-items-lg-start">
           <div className="d-flex gap-2 align-items-stretch flex-wrap">
             {Object.entries(VACATION_TYPE_LABELS).map(([key, label]) => (
               <div key={key} className="border rounded px-3 py-2 d-flex gap-2 align-items-center">

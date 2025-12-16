@@ -10,9 +10,13 @@ export type UserVacationDay = {
 
 export type UserVacationsResponse = {
   year: number;
-  allowance: number | null;
+  allowance: number;
+  anniversaryAllowance: number;
+  localHolidayAllowance: number;
+  previousYearAllowance: number;
+  totalAllowance: number;
   enjoyed: number;
-  remaining: number | null;
+  remaining: number;
   counts: Record<VacationType, number>;
   days: UserVacationDay[];
   updatedDate?: string;
@@ -23,9 +27,13 @@ export type VacationSummaryUser = {
   fullName: string;
   role: string;
   active: boolean;
-  allowance: number | null;
+  allowance: number;
+  anniversaryAllowance: number;
+  localHolidayAllowance: number;
+  previousYearAllowance: number;
+  totalAllowance: number;
   enjoyed: number;
-  remaining: number | null;
+  remaining: number;
   counts: Record<VacationType, number>;
   upcomingDates: string[];
   days: UserVacationDay[];
@@ -68,6 +76,9 @@ export async function updateVacationAllowance(payload: {
   userId: string;
   year: number;
   allowance: number;
+  anniversaryAllowance: number;
+  localHolidayAllowance: number;
+  previousYearAllowance: number;
 }): Promise<UserVacationsResponse> {
   return patchJson<UserVacationsResponse>('/user-vacations', payload);
 }

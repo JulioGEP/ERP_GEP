@@ -3,7 +3,17 @@ import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
 import { getPrisma } from './_shared/prisma';
 import { requireAuth, normalizeRoleKey, type AuthenticatedContext } from './_shared/auth';
-import { buildVacationPayload, parseDateOnly, parseYear, VACATION_TYPES, formatDateOnly } from './_shared/vacations';
+import {
+  DEFAULT_ANNIVERSARY_ALLOWANCE,
+  DEFAULT_LOCAL_HOLIDAY_ALLOWANCE,
+  DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
+  DEFAULT_VACATION_ALLOWANCE,
+  VACATION_TYPES,
+  buildVacationPayload,
+  formatDateOnly,
+  parseDateOnly,
+  parseYear,
+} from './_shared/vacations';
 
 function canManageUser(auth: AuthenticatedContext, userId: string): boolean {
   return normalizeRoleKey(auth.user.role) === 'admin' || auth.user.id === userId;
@@ -113,8 +123,21 @@ async function handleAllowance(
   const userId = String(request.body.userId || request.body.user_id || '').trim();
   const year = parseYear(request.body.year, new Date().getUTCFullYear());
   const allowance = Number(request.body.allowance ?? request.body.allowance_days);
+  const anniversaryAllowance = Number(request.body.anniversaryAllowance ?? request.body.anniversary_days);
+  const localHolidayAllowance = Number(request.body.localHolidayAllowance ?? request.body.local_holiday_days);
+  const previousYearAllowance = Number(request.body.previousYearAllowance ?? request.body.previous_year_days);
 
-  if (!userId || !Number.isFinite(allowance) || allowance < 0) {
+  if (
+    !userId ||
+    !Number.isFinite(allowance) ||
+    allowance < 0 ||
+    !Number.isFinite(anniversaryAllowance) ||
+    anniversaryAllowance < 0 ||
+    !Number.isFinite(localHolidayAllowance) ||
+    localHolidayAllowance < 0 ||
+    !Number.isFinite(previousYearAllowance) ||
+    previousYearAllowance < 0
+  ) {
     return errorResponse('VALIDATION_ERROR', 'Datos inválidos', 400);
   }
 
@@ -129,8 +152,20 @@ async function handleAllowance(
 
   await prisma.user_vacation_balances.upsert({
     where: { user_id_year: { user_id: userId, year } },
-    update: { allowance_days: Math.floor(allowance) },
-    create: { user_id: userId, year, allowance_days: Math.floor(allowance) },
+    update: {
+      allowance_days: Math.floor(allowance),
+      anniversary_days: Math.floor(anniversaryAllowance ?? DEFAULT_ANNIVERSARY_ALLOWANCE),
+      local_holiday_days: Math.floor(localHolidayAllowance ?? DEFAULT_LOCAL_HOLIDAY_ALLOWANCE),
+      previous_year_days: Math.floor(previousYearAllowance ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE),
+    },
+    create: {
+      user_id: userId,
+      year,
+      allowance_days: Math.floor(allowance ?? DEFAULT_VACATION_ALLOWANCE),
+      anniversary_days: Math.floor(anniversaryAllowance ?? DEFAULT_ANNIVERSARY_ALLOWANCE),
+      local_holiday_days: Math.floor(localHolidayAllowance ?? DEFAULT_LOCAL_HOLIDAY_ALLOWANCE),
+      previous_year_days: Math.floor(previousYearAllowance ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE),
+    },
   });
 
   const payload = await buildVacationPayload(prisma, userId, year);

@@ -115,6 +115,10 @@ export default function UsersVacationsPage() {
             updatedUsers.set(entry.userId, {
               ...existing,
               allowance: entry.allowance,
+              anniversaryAllowance: entry.anniversaryAllowance,
+              localHolidayAllowance: entry.localHolidayAllowance,
+              previousYearAllowance: entry.previousYearAllowance,
+              totalAllowance: entry.totalAllowance,
               enjoyed: entry.enjoyed,
               remaining: entry.remaining,
               counts: entry.counts as VacationSummaryUser['counts'],
@@ -355,10 +359,7 @@ export default function UsersVacationsPage() {
                     const upcomingLabel = user.upcomingDates.length
                       ? user.upcomingDates.join(', ')
                       : 'Sin próximas ausencias';
-                    const allowanceLabel =
-                      user.allowance !== null
-                        ? `${user.enjoyed} / ${user.allowance} días (${user.remaining ?? 0} restantes)`
-                        : `${user.enjoyed} días`;
+                    const allowanceLabel = `${user.enjoyed} / ${user.totalAllowance} días (${user.remaining} restantes)`;
 
                     return (
                       <tr key={user.userId}>

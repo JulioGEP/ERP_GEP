@@ -5,6 +5,11 @@ export const VACATION_TYPES = new Set(['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', '
 
 export type VacationCounts = Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I', number>;
 
+export const DEFAULT_VACATION_ALLOWANCE = 24;
+export const DEFAULT_ANNIVERSARY_ALLOWANCE = 1;
+export const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
+export const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
+
 export function parseDateOnly(value: unknown): Date | null {
   if (!value) return null;
   const input = typeof value === 'string' ? value.trim() : String(value);
@@ -34,6 +39,10 @@ export async function buildVacationPayload(
 ): Promise<{
   year: number;
   allowance: number | null;
+  anniversaryAllowance: number;
+  localHolidayAllowance: number;
+  previousYearAllowance: number;
+  totalAllowance: number;
   enjoyed: number;
   remaining: number | null;
   counts: VacationCounts;
@@ -64,14 +73,26 @@ export async function buildVacationPayload(
   }
 
   const enjoyed = counts.V + counts.L + counts.A + counts.M + counts.H + counts.F + counts.R + counts.P + counts.I;
-  const allowance = typeof balance?.allowance_days === 'number' ? balance.allowance_days : null;
-  const remaining = allowance !== null ? allowance - enjoyed : null;
+  const allowance = typeof balance?.allowance_days === 'number' ? balance.allowance_days : DEFAULT_VACATION_ALLOWANCE;
+  const anniversaryAllowance =
+    typeof balance?.anniversary_days === 'number' ? balance.anniversary_days : DEFAULT_ANNIVERSARY_ALLOWANCE;
+  const localHolidayAllowance =
+    typeof balance?.local_holiday_days === 'number' ? balance.local_holiday_days : DEFAULT_LOCAL_HOLIDAY_ALLOWANCE;
+  const previousYearAllowance =
+    typeof balance?.previous_year_days === 'number' ? balance.previous_year_days : DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
+
+  const totalAllowance = allowance + anniversaryAllowance + localHolidayAllowance + previousYearAllowance;
+  const remaining = totalAllowance - enjoyed;
 
   return {
     year,
     allowance,
+    anniversaryAllowance,
+    localHolidayAllowance,
+    previousYearAllowance,
+    totalAllowance,
     enjoyed,
-    remaining,
+    remaining: remaining >= 0 ? remaining : 0,
     counts,
     days: days.map((day: typeof days[number]) => ({ date: formatDateOnly(day.date), type: day.type })),
   };
