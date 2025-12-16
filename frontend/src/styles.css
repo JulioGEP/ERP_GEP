@@ -1389,6 +1389,60 @@ option.session-option-unavailable {
   background: #e11d48;
 }
 
+.vacation-calendar .vacation-day.type-V {
+  background: #dbeafe;
+  border-color: #2563eb;
+}
+
+.vacation-calendar .vacation-day.type-V .day-type {
+  background: #2563eb;
+}
+
+.vacation-calendar .vacation-day.type-M {
+  background: #ffedd5;
+  border-color: #f97316;
+}
+
+.vacation-calendar .vacation-day.type-M .day-type {
+  background: #f97316;
+}
+
+.vacation-calendar .vacation-day.type-H {
+  background: #fee2e2;
+  border-color: #ef4444;
+}
+
+.vacation-calendar .vacation-day.type-H .day-type {
+  background: #ef4444;
+}
+
+.vacation-calendar .vacation-day.type-R {
+  background: #ccfbf1;
+  border-color: #0f766e;
+}
+
+.vacation-calendar .vacation-day.type-R .day-type {
+  background: #0f766e;
+}
+
+.vacation-calendar .vacation-day.type-P {
+  background: #f3e8ff;
+  border-color: #a855f7;
+}
+
+.vacation-calendar .vacation-day.type-P .day-type {
+  background: #a855f7;
+}
+
+.vacation-calendar .vacation-day.type-I {
+  background: #e2e8f0;
+  border-color: #475569;
+}
+
+.vacation-calendar .vacation-day.type-I .day-type {
+  background: #475569;
+}
+
 .vacation-calendar .vacation-day.type-T {
   background: #ede9fe;
   border-color: #7c3aed;
