@@ -431,14 +431,24 @@ export default function UsersVacationsPage() {
             Aplicar festivo de forma masiva
             <div className="text-muted small">Marca la misma ausencia en los calendarios seleccionados.</div>
           </div>
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            onClick={() => setSelectedUsers(users.map((user) => user.userId))}
-            disabled={!users.length}
-          >
-            Seleccionar todo
-          </Button>
+          <div className="d-flex align-items-center gap-2">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => setSelectedUsers([])}
+              disabled={!selectedUsers.length}
+            >
+              Borrar Selección
+            </Button>
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => setSelectedUsers(users.map((user) => user.userId))}
+              disabled={!users.length}
+            >
+              Seleccionar todo
+            </Button>
+          </div>
         </Card.Header>
         <Card.Body>
           <Row className="g-3 align-items-end">
