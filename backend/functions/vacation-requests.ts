@@ -7,12 +7,17 @@ import { sendEmail } from './_shared/mailer';
 import { formatDateOnly, VACATION_TYPES } from './_shared/vacations';
 
 const RECIPIENT = 'people@gepgroup.es';
-const VACATION_TAG_LABELS: Record<'A' | 'F' | 'L' | 'C' | 'T', string> = {
-  A: 'Ausencia legal',
-  F: 'Fiestas nacionales y autonómicas',
-  L: 'Festivos locales',
-  C: 'Día aniversario',
+const VACATION_TAG_LABELS: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I', string> = {
+  V: 'Vacaciones',
+  L: 'Festivo local',
+  A: 'Día aniversario',
   T: 'Teletrabajo',
+  M: 'Matrimonio o registro de pareja de hecho',
+  H: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
+  F: 'Fallecimiento de un familiar',
+  R: 'Traslado del domicilio habitual',
+  P: 'Exámenes prenatales',
+  I: 'Incapacidad temporal',
 };
 
 function parseDateOnly(value: unknown): string | null {
@@ -69,7 +74,7 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
   const endDate = parseDateOnly(request.body.endDate ?? request.body.end_date);
   const notes = typeof request.body.notes === 'string' ? request.body.notes.trim() : '';
   const rawTag = typeof request.body.tag === 'string' ? request.body.tag.trim().toUpperCase() : '';
-  const tag = (['A', 'F', 'L', 'C', 'T'] as const).includes(rawTag as any)
+  const tag = (['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'I'] as const).includes(rawTag as any)
     ? (rawTag as keyof typeof VACATION_TAG_LABELS)
     : null;
 
@@ -170,7 +175,7 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
 
   const start = new Date(existing.start_date);
   const end = new Date(existing.end_date);
-  const effectiveType = existing.tag && VACATION_TYPES.has(existing.tag) ? existing.tag : 'A';
+  const effectiveType = existing.tag && VACATION_TYPES.has(existing.tag) ? existing.tag : 'V';
 
   if (end < start) {
     return errorResponse('VALIDATION_ERROR', 'La solicitud tiene un rango de fechas inválido', 400);

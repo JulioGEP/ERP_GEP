@@ -755,19 +755,29 @@ type VacationManagerModalProps = {
 };
 
 const VACATION_TYPE_LABELS: Record<VacationType, string> = {
-  A: 'Ausencia legal',
-  F: 'Fiestas nacionales y autonómicas',
-  L: 'Festivos locales',
-  C: 'Día aniversario',
+  V: 'Vacaciones',
+  L: 'Festivo local',
+  A: 'Día aniversario',
   T: 'Teletrabajo',
+  M: 'Matrimonio o registro de pareja de hecho',
+  H: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
+  F: 'Fallecimiento de un familiar',
+  R: 'Traslado del domicilio habitual',
+  P: 'Exámenes prenatales',
+  I: 'Incapacidad temporal',
 };
 
 const VACATION_TYPE_COLORS: Record<VacationType, string> = {
-  A: '#f59e0b',
-  F: '#0284c7',
+  V: '#2563eb',
   L: '#65a30d',
-  C: '#e11d48',
+  A: '#e11d48',
   T: '#7c3aed',
+  M: '#f97316',
+  H: '#ef4444',
+  F: '#0ea5e9',
+  R: '#0f766e',
+  P: '#a855f7',
+  I: '#475569',
 };
 
 function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerModalProps) {
@@ -835,7 +845,8 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
   });
 
   const data = vacationsQuery.data;
-  const counts = data?.counts ?? { A: 0, F: 0, L: 0, C: 0, T: 0 };
+  const counts =
+    data?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0 };
   const allowance = data?.allowance ?? null;
   const enjoyed = data?.enjoyed ?? 0;
   const remaining = data?.remaining ?? null;
@@ -951,21 +962,23 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
             <Form.Text className="text-muted">Define el total de días disponibles para el año.</Form.Text>
           </Form.Group>
 
-          <div className="d-flex gap-2 align-items-center flex-wrap">
+          <div className="d-flex gap-2 align-items-stretch flex-wrap">
             {Object.entries(VACATION_TYPE_LABELS).map(([key, label]) => (
-              <Badge key={key} bg="light" text="dark">
+              <div key={key} className="border rounded px-3 py-2 d-flex gap-2 align-items-center">
                 <span
-                  className="me-1"
+                  className="d-inline-block"
                   style={{
-                    display: 'inline-block',
                     width: '10px',
                     height: '10px',
                     borderRadius: '999px',
                     backgroundColor: VACATION_TYPE_COLORS[key as VacationType],
                   }}
                 ></span>
-                {label} ({counts[key as VacationType] ?? 0})
-              </Badge>
+                <div>
+                  <div className="text-muted small text-uppercase">{label}</div>
+                  <div className="fw-semibold">{counts[key as VacationType] ?? 0} días</div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
@@ -1035,8 +1048,7 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
             </div>
           </div>
           <p className="text-muted mb-0">
-            A, F, L y C se contabilizan como vacaciones disfrutadas. T permite seguir el teletrabajo sin restar
-            vacaciones.
+            Todas las categorías salvo Teletrabajo descuentan días del balance de vacaciones disponible.
           </p>
         </div>
       </Modal.Body>
