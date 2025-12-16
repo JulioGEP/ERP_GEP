@@ -34,28 +34,43 @@ type ProfileUser = {
 };
 
 const VACATION_LABELS: Record<VacationType, string> = {
-  A: 'Ausencia legal',
-  F: 'Fiestas nacionales y autonómicas',
-  L: 'Festivos locales',
-  C: 'Día aniversario',
+  V: 'Vacaciones',
+  L: 'Festivo local',
+  A: 'Día aniversario',
   T: 'Teletrabajo',
+  M: 'Matrimonio o registro de pareja de hecho',
+  H: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
+  F: 'Fallecimiento de un familiar',
+  R: 'Traslado del domicilio habitual',
+  P: 'Exámenes prenatales',
+  I: 'Incapacidad temporal',
 };
 
 const VACATION_COLORS: Record<VacationType, string> = {
-  A: '#f59e0b',
-  F: '#0284c7',
+  V: '#2563eb',
   L: '#65a30d',
-  C: '#e11d48',
+  A: '#e11d48',
   T: '#7c3aed',
+  M: '#f97316',
+  H: '#ef4444',
+  F: '#0ea5e9',
+  R: '#0f766e',
+  P: '#a855f7',
+  I: '#475569',
 };
 
 const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> = [
   { value: '', label: 'Sin marca' },
-  { value: 'A', label: VACATION_LABELS.A },
-  { value: 'F', label: VACATION_LABELS.F },
+  { value: 'V', label: VACATION_LABELS.V },
   { value: 'L', label: VACATION_LABELS.L },
-  { value: 'C', label: VACATION_LABELS.C },
+  { value: 'A', label: VACATION_LABELS.A },
   { value: 'T', label: VACATION_LABELS.T },
+  { value: 'M', label: VACATION_LABELS.M },
+  { value: 'H', label: VACATION_LABELS.H },
+  { value: 'F', label: VACATION_LABELS.F },
+  { value: 'R', label: VACATION_LABELS.R },
+  { value: 'P', label: VACATION_LABELS.P },
+  { value: 'I', label: VACATION_LABELS.I },
 ];
 
 async function fileToBase64(file: File): Promise<string> {
@@ -291,7 +306,8 @@ export default function ProfilePage() {
   const driveFolderLink = trainerId ? trainerDocumentsQuery.data?.driveFolderWebViewLink ?? null : null;
 
   const vacationData = vacationsQuery.data;
-  const vacationCounts = vacationData?.counts ?? { A: 0, F: 0, L: 0, C: 0, T: 0 };
+  const vacationCounts =
+    vacationData?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0 };
   const vacationSummary = [
     { label: 'Vacaciones', value: vacationData?.allowance ?? 'Sin definir' },
     { label: 'Disfrutadas', value: vacationData?.enjoyed ?? 0 },
@@ -481,21 +497,23 @@ export default function ProfilePage() {
             ))}
           </div>
 
-          <div className="d-flex flex-wrap gap-2 align-items-center">
+          <div className="d-flex flex-wrap gap-2 align-items-stretch">
             {Object.entries(VACATION_LABELS).map(([key, label]) => (
-              <Badge key={key} bg="light" text="dark">
+              <div key={key} className="border rounded px-3 py-2 d-flex gap-2 align-items-center">
                 <span
-                  className="me-1"
+                  className="d-inline-block"
                   style={{
-                    display: 'inline-block',
                     width: '10px',
                     height: '10px',
                     borderRadius: '999px',
                     backgroundColor: VACATION_COLORS[key as VacationType],
                   }}
                 ></span>
-                {label} ({vacationCounts[key as VacationType] ?? 0})
-              </Badge>
+                <div>
+                  <div className="text-muted small text-uppercase">{label}</div>
+                  <div className="fw-semibold">{vacationCounts[key as VacationType] ?? 0} días</div>
+                </div>
+              </div>
             ))}
           </div>
 

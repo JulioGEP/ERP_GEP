@@ -1,9 +1,9 @@
 // backend/functions/_shared/vacations.ts
 import type { PrismaClient } from '@prisma/client';
 
-export const VACATION_TYPES = new Set(['A', 'F', 'L', 'C', 'T']);
+export const VACATION_TYPES = new Set(['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'I']);
 
-export type VacationCounts = Record<'A' | 'F' | 'L' | 'C' | 'T', number>;
+export type VacationCounts = Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I', number>;
 
 export function parseDateOnly(value: unknown): Date | null {
   if (!value) return null;
@@ -55,7 +55,7 @@ export async function buildVacationPayload(
     }),
   ]);
 
-  const counts: VacationCounts = { A: 0, F: 0, L: 0, C: 0, T: 0 };
+  const counts: VacationCounts = { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0 };
   for (const day of days) {
     const key = day.type as keyof VacationCounts;
     if (counts[key] !== undefined) {
@@ -63,7 +63,7 @@ export async function buildVacationPayload(
     }
   }
 
-  const enjoyed = counts.A + counts.F + counts.L + counts.C;
+  const enjoyed = counts.V + counts.L + counts.A + counts.M + counts.H + counts.F + counts.R + counts.P + counts.I;
   const allowance = typeof balance?.allowance_days === 'number' ? balance.allowance_days : null;
   const remaining = allowance !== null ? allowance - enjoyed : null;
 

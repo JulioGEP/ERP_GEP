@@ -58,7 +58,18 @@ export const handler = createHttpHandler<any>(async (request) => {
   const todayIso = formatDateOnly(new Date());
   const userSummaries = users.map((user: (typeof users)[number]) => {
     const userDays = daysByUser.get(user.id) ?? [];
-    const counts: Record<'A' | 'F' | 'L' | 'C' | 'T', number> = { A: 0, F: 0, L: 0, C: 0, T: 0 };
+    const counts: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I', number> = {
+      V: 0,
+      L: 0,
+      A: 0,
+      T: 0,
+      M: 0,
+      H: 0,
+      F: 0,
+      R: 0,
+      P: 0,
+      I: 0,
+    };
 
     const normalizedDays = userDays.map((day: (typeof userDays)[number]) => {
       const key = day.type as keyof typeof counts;
@@ -66,7 +77,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       return { date: formatDateOnly(day.date), type: day.type };
     });
 
-    const enjoyed = counts.A + counts.F + counts.L + counts.C;
+    const enjoyed = counts.V + counts.L + counts.A + counts.M + counts.H + counts.F + counts.R + counts.P + counts.I;
     const allowance = balanceMap.get(user.id)?.allowance_days ?? null;
     const remaining = allowance !== null ? allowance - enjoyed : null;
 

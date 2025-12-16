@@ -14,19 +14,29 @@ import {
 } from '../../api/userVacations';
 
 const VACATION_TYPE_LABELS: Record<VacationType, string> = {
-  A: 'Vacaciones',
-  F: 'Festivo',
-  L: 'Libre',
-  C: 'Compensado',
-  T: 'Turno',
+  V: 'Vacaciones',
+  L: 'Festivo local',
+  A: 'Día aniversario',
+  T: 'Teletrabajo',
+  M: 'Matrimonio o registro de pareja de hecho',
+  H: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
+  F: 'Fallecimiento de un familiar',
+  R: 'Traslado del domicilio habitual',
+  P: 'Exámenes prenatales',
+  I: 'Incapacidad temporal',
 };
 
 const VACATION_TYPE_COLORS: Record<VacationType, string> = {
-  A: '#f59e0b',
-  F: '#0284c7',
+  V: '#2563eb',
   L: '#65a30d',
-  C: '#e11d48',
+  A: '#e11d48',
   T: '#7c3aed',
+  M: '#f97316',
+  H: '#ef4444',
+  F: '#0ea5e9',
+  R: '#0f766e',
+  P: '#a855f7',
+  I: '#475569',
 };
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('es-ES', { month: 'long' });
@@ -44,7 +54,7 @@ export default function UsersVacationsPage() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [bulkDate, setBulkDate] = useState('');
-  const [bulkType, setBulkType] = useState<VacationType>('F');
+  const [bulkType, setBulkType] = useState<VacationType>('V');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [showCalendar, setShowCalendar] = useState(false);
   const [feedback, setFeedback] = useState<{ variant: 'success' | 'danger'; message: string } | null>(
@@ -91,7 +101,7 @@ export default function UsersVacationsPage() {
   const bulkMutation = useMutation({
     mutationFn: applyBulkVacationDay,
     onSuccess: (payload) => {
-      setFeedback({ variant: 'success', message: `Festivo aplicado el ${payload.date}.` });
+      setFeedback({ variant: 'success', message: `Marca aplicada el ${payload.date}.` });
       setBulkDate('');
       queryClient.setQueryData(['vacations-summary', year], (previous: any) => {
         if (!previous) return previous;
@@ -167,7 +177,8 @@ export default function UsersVacationsPage() {
     void bulkMutation.mutate({ date: bulkDate, type: bulkType, userIds: selectedUsers });
   };
 
-  const totalWithVacations = users.filter((user) => user.enjoyed > 0 || user.counts.A > 0).length;
+  const totalWithVacations = users.filter((user) => user.enjoyed > 0 || Object.values(user.counts).some(Boolean))
+    .length;
   const summaryYear = summaryQuery.data?.year ?? year;
   const generatedAt = summaryQuery.data?.generatedAt ?? null;
 
@@ -371,9 +382,21 @@ export default function UsersVacationsPage() {
                         <td>
                           <div className="d-flex flex-wrap gap-2">
                             {Object.entries(user.counts).map(([key, value]) => (
-                              <Badge bg="light" text="dark" key={key} className="border">
-                                {key}: {value}
-                              </Badge>
+                              <div key={key} className="border rounded px-2 py-1 d-flex gap-2 align-items-center">
+                                <span
+                                  className="d-inline-block"
+                                  style={{
+                                    width: '10px',
+                                    height: '10px',
+                                    borderRadius: '999px',
+                                    backgroundColor: VACATION_TYPE_COLORS[key as VacationType],
+                                  }}
+                                ></span>
+                                <div className="small">
+                                  <div className="text-muted text-uppercase">{VACATION_TYPE_LABELS[key as VacationType]}</div>
+                                  <div className="fw-semibold">{value} días</div>
+                                </div>
+                              </div>
                             ))}
                             {totalAbsences === 0 ? (
                               <Badge bg="secondary" className="text-uppercase">
