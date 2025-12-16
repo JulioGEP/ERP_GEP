@@ -5,10 +5,11 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   PropsWithChildren,
 } from 'react';
-import { getJson, postJson, ApiError, isUnauthorized } from '../api/client';
+import { getJson, postJson, ApiError, SESSION_EXPIRED_EVENT } from '../api/client';
 
 type User = {
   id: string;
@@ -75,6 +76,8 @@ export function AuthProvider({ children }: PropsWithChildren<{}>) {
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<readonly string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [sessionExpired, setSessionExpired] = useState<boolean>(false);
+  const hadValidSessionRef = useRef<boolean>(false);
 
   const loadSession = useCallback(async () => {
     setIsLoading(true);
@@ -82,16 +85,36 @@ export function AuthProvider({ children }: PropsWithChildren<{}>) {
       const data = await getJson<SessionPayload>('/auth-session');
       setUser(data.user);
       setPermissions(data.permissions || []);
+      hadValidSessionRef.current = Boolean(data.user);
+      setSessionExpired(false);
     } catch (err) {
       // Si el backend devolviese 500, mostramos estado no autenticado
       if (err instanceof ApiError && err.status && err.status >= 500) {
         console.error('[auth-session] error', err);
       }
+      const expired = hadValidSessionRef.current && err instanceof ApiError && err.status === 401;
       setUser(null);
       setPermissions([]);
+      setSessionExpired(expired);
     } finally {
       setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      if (!hadValidSessionRef.current) return;
+      setSessionExpired(true);
+      setUser(null);
+      setPermissions([]);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+      return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    }
+
+    return undefined;
   }, []);
 
   useEffect(() => {
@@ -116,6 +139,8 @@ export function AuthProvider({ children }: PropsWithChildren<{}>) {
       // Limpiar estado siempre
       setUser(null);
       setPermissions([]);
+      setSessionExpired(false);
+      hadValidSessionRef.current = false;
     }
   }, []);
 
@@ -144,7 +169,12 @@ export function AuthProvider({ children }: PropsWithChildren<{}>) {
     [user, permissions, isLoading, refresh, login, logout, isAuthenticated, hasPermission]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {sessionExpired && <SessionExpiredOverlay />}
+    </AuthContext.Provider>
+  );
 }
 
 // --- Hook de consumo ---
@@ -221,6 +251,25 @@ function Forbidden403() {
     <div className="container py-5">
       <h2 className="mb-2">403 – No autorizado</h2>
       <p>No tienes permisos para acceder a esta sección.</p>
+    </div>
+  );
+}
+
+function SessionExpiredOverlay() {
+  return (
+    <div className="session-expired-backdrop" role="alert" aria-live="assertive">
+      <div className="session-expired-panel">
+        <div className="session-expired-icon" aria-hidden>
+          ⚠️
+        </div>
+        <h1 className="session-expired-title">
+          Por tu seguridad, la sesión ha caducado, tienes que recargar la página y volver a loguearte
+        </h1>
+        <p className="session-expired-subtitle">Recarga ahora para seguir trabajando con tu cuenta.</p>
+        <button type="button" className="btn btn-light btn-lg fw-semibold" onClick={() => window.location.reload()}>
+          Recargar la página
+        </button>
+      </div>
     </div>
   );
 }

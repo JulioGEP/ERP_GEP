@@ -46,6 +46,13 @@ function resolveRequestInput(input: RequestInfo | URL): RequestInfo | URL {
   return input;
 }
 
+export const SESSION_EXPIRED_EVENT = 'erp:session-expired';
+
+function notifySessionExpired() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+}
+
 /**
  * requestJson: hace fetch JSON con credenciales incluidas por defecto.
  * - Fuerza 'include' en credentials para enviar/recibir cookie HttpOnly (erp_session).
@@ -96,6 +103,9 @@ export async function requestJson<T = any>(
   if (!response.ok || (json && typeof json === 'object' && json.ok === false)) {
     const message = json?.message ?? options?.defaultErrorMessage ?? 'No se pudo completar la solicitud.';
     const code = json?.error_code ?? options?.defaultErrorCode ?? `HTTP_${response.status}`;
+    if (response.status === 401) {
+      notifySessionExpired();
+    }
     throw new ApiError(code, message, response.status || undefined);
   }
 
