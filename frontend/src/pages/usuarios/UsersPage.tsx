@@ -935,6 +935,15 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
     return dates;
   }, [selectionEnd, selectionStart]);
 
+  const workingSelectedDates = useMemo(
+    () =>
+      selectedDates.filter((date) => {
+        const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+        return day !== 0 && day !== 6;
+      }),
+    [selectedDates],
+  );
+
   const handleDayClick = (date: string, type: VacationType | '') => {
     if (!selectionStart || selectionEnd) {
       setSelectionStart(date);
@@ -951,8 +960,23 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
 
   const handleSaveDays = async () => {
     if (!selectedDates.length || !userId) return;
-    for (const date of selectedDates) {
+
+    if (!selectedType) {
+      onNotify?.({ variant: 'warning', message: 'Selecciona una categoría antes de guardar.' });
+      return;
+    }
+
+    if (!workingSelectedDates.length) {
+      onNotify?.({ variant: 'warning', message: 'Solo puedes guardar días laborables.' });
+      return;
+    }
+
+    for (const date of workingSelectedDates) {
       await dayMutation.mutateAsync({ date, type: selectedType });
+    }
+
+    if (workingSelectedDates.length < selectedDates.length) {
+      onNotify?.({ variant: 'info', message: 'Los fines de semana se han excluido automáticamente.' });
     }
   };
 
@@ -1161,9 +1185,17 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
                 style={{ maxWidth: '260px' }}
               />
               {selectedDates.length ? (
-                <Badge bg="secondary" className="text-uppercase">
-                  {selectedDates.length} {selectedDates.length === 1 ? 'día' : 'días'}
-                </Badge>
+                <div className="d-flex align-items-center gap-2 flex-wrap">
+                  <Badge bg="secondary" className="text-uppercase">
+                    {workingSelectedDates.length}{' '}
+                    {workingSelectedDates.length === 1 ? 'día laborable' : 'días laborables'}
+                  </Badge>
+                  {selectedDates.length !== workingSelectedDates.length ? (
+                    <Badge bg="light" text="dark" className="text-uppercase">
+                      Excluye fines de semana
+                    </Badge>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <div className="d-flex align-items-center gap-2 flex-wrap">
