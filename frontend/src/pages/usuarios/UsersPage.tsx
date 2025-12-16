@@ -764,6 +764,7 @@ const VACATION_TYPE_LABELS: Record<VacationType, string> = {
   R: 'Traslado del domicilio habitual',
   P: 'Exámenes prenatales',
   I: 'Incapacidad temporal',
+  N: 'Festivos nacionales',
 };
 
 const VACATION_TYPE_COLORS: Record<VacationType, string> = {
@@ -777,6 +778,7 @@ const VACATION_TYPE_COLORS: Record<VacationType, string> = {
   R: '#0f766e',
   P: '#a855f7',
   I: '#475569',
+  N: '#facc15',
 };
 
 const DEFAULT_VACATION_ALLOWANCE = 24;
