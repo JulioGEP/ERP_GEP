@@ -514,7 +514,6 @@ export default function UsersVacationsPage() {
                 </thead>
                 <tbody>
                   {users.map((user) => {
-                    const totalAbsences = Object.values(user.counts).reduce((acc, value) => acc + value, 0);
                     const upcomingLabel = user.upcomingDates.length
                       ? user.upcomingDates.join(', ')
                       : 'Sin próximas ausencias';
@@ -540,18 +539,6 @@ export default function UsersVacationsPage() {
                         </td>
                         <td>
                           <div>{upcomingLabel}</div>
-                          <div className="text-muted small d-flex flex-wrap gap-2 mt-2">
-                            {Object.entries(user.counts).map(([key, value]) => (
-                              <span key={key} className="badge bg-light text-dark text-uppercase border">
-                                {renderVacationTypeLabel(key as VacationType)}: {value} días
-                              </span>
-                            ))}
-                            {totalAbsences === 0 ? (
-                              <Badge bg="secondary" className="text-uppercase">
-                                Sin ausencias
-                              </Badge>
-                            ) : null}
-                          </div>
                         </td>
                         <td className="text-end">
                           <Button
