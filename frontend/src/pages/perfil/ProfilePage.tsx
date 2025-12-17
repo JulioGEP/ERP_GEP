@@ -515,12 +515,20 @@ export default function ProfilePage() {
           </div>
 
           <div className="d-flex gap-3 flex-wrap">
-            {vacationSummary.map((item) => (
-              <div key={item.label} className="border rounded px-3 py-2">
-                <div className="text-muted small text-uppercase">{item.label}</div>
-                <div className="fw-semibold">{item.value}</div>
-              </div>
-            ))}
+            {vacationSummary.map((item) => {
+              const isBalanceMetric = item.label === 'Disfrutadas' || item.label === 'Restantes';
+
+              return (
+                <div
+                  key={item.label}
+                  className="border rounded px-3 py-2"
+                  style={isBalanceMetric ? { borderWidth: '2px' } : undefined}
+                >
+                  <div className="text-muted small text-uppercase">{item.label}</div>
+                  <div className={isBalanceMetric ? 'fw-bold' : 'fw-semibold'}>{item.value}</div>
+                </div>
+              );
+            })}
           </div>
 
           <div className="d-flex flex-wrap gap-2 align-items-stretch">
