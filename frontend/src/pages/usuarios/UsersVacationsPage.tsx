@@ -273,6 +273,20 @@ export default function UsersVacationsPage() {
     void bulkMutation.mutate({ date: bulkDate, type: bulkType, userIds: selectedUsers });
   };
 
+  const roles = useMemo(() => {
+    const roleSet = new Set<string>();
+    for (const user of users) {
+      if (user.role) roleSet.add(user.role);
+    }
+    return Array.from(roleSet).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  }, [users]);
+
+  const handleSelectRole = (role: string) => {
+    setSelectionManuallyChanged(true);
+    const roleUsers = users.filter((user) => user.role === role).map((user) => user.userId);
+    setSelectedUsers(roleUsers);
+  };
+
   const totalWithVacations = users.filter((user) => user.enjoyed > 0 || Object.values(user.counts).some(Boolean))
     .length;
   const summaryYear = summaryQuery.data?.year ?? year;
@@ -425,6 +439,32 @@ export default function UsersVacationsPage() {
             <div className="text-muted small mt-1">
               {generatedAt ? `Generado el ${new Date(generatedAt).toLocaleDateString('es-ES')}` : 'Pendiente de generar'}
             </div>
+            {roles.length ? (
+              <div className="d-flex flex-wrap gap-2 mt-2">
+                {roles.map((role) => {
+                  const roleUserIds = users
+                    .filter((user) => user.role === role)
+                    .map((user) => user.userId);
+                  const isActive =
+                    roleUserIds.length > 0 &&
+                    roleUserIds.every((id) => selectedUsers.includes(id)) &&
+                    selectedUsers.length === roleUserIds.length;
+
+                  return (
+                    <Badge
+                      key={role}
+                      bg={isActive ? 'primary' : 'light'}
+                      text={isActive ? undefined : 'dark'}
+                      className="text-uppercase small border px-2 py-1"
+                      role="button"
+                      onClick={() => handleSelectRole(role)}
+                    >
+                      {role}
+                    </Badge>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
           <div className="d-flex align-items-center gap-2 flex-wrap">
             <Badge bg="light" text="dark" className="text-uppercase border">
