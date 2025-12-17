@@ -81,7 +81,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
-  const [vacationUser, setVacationUser] = useState<UserSummary | null>(null);
   const [includeTrainers, setIncludeTrainers] = useState(false);
   const [tableFilter, setTableFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -121,17 +120,9 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
     setShowModal(true);
   }, []);
 
-  const openVacations = useCallback((user: UserSummary) => {
-    setVacationUser(user);
-  }, []);
-
   const closeModal = useCallback(() => {
     setShowModal(false);
     setEditingUser(null);
-  }, []);
-
-  const closeVacationModal = useCallback(() => {
-    setVacationUser(null);
   }, []);
 
   const createMutation = useMutation({
@@ -362,9 +353,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
                           </td>
                           <td>
                             <div className="d-flex justify-content-end gap-2">
-                              <Button variant="outline-primary" size="sm" onClick={() => openVacations(user)}>
-                                Vacaciones
-                              </Button>
                               <Button variant="outline-secondary" size="sm" onClick={() => openEditModal(user)}>
                                 Editar
                               </Button>
@@ -408,13 +396,6 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
         onSubmit={handleModalSubmit}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
         initialValue={editingUser}
-      />
-
-      <VacationManagerModal
-        show={Boolean(vacationUser)}
-        user={vacationUser}
-        onHide={closeVacationModal}
-        onNotify={notify}
       />
     </div>
   );
