@@ -539,7 +539,7 @@ export default function ProfilePage() {
             {Object.entries(VACATION_LABELS).map(([key, { label, fullLabel }]) => (
               <div
                 key={key}
-                className="border rounded px-3 py-2 d-flex gap-2 align-items-center"
+                className="border rounded px-2 py-2 d-flex gap-2 align-items-center"
                 title={fullLabel}
               >
                 <span
@@ -554,13 +554,13 @@ export default function ProfilePage() {
                 <div>
                   <div
                     className="text-muted small text-uppercase text-truncate"
-                    style={{ maxWidth: '160px', fontSize: '0.75rem' }}
+                    style={{ maxWidth: '150px', fontSize: '0.7rem' }}
                   >
                     {label}
                   </div>
                   <div
                     className="fw-semibold text-truncate"
-                    style={{ maxWidth: '160px', fontSize: '0.95rem' }}
+                    style={{ maxWidth: '150px', fontSize: '0.9rem' }}
                   >
                     {vacationCounts[key as VacationType] ?? 0} días
                   </div>
