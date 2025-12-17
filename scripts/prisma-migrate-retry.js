@@ -38,29 +38,40 @@ console.log('Prisma advisory lock timeouts (ms):', {
 });
 
 const backendDir = path.join(__dirname, '..', 'backend');
-const failedMigration = '20251120000002_add_atributos_to_products';
+const migrationsToResolve = [
+  {
+    name: '20251120000002_add_atributos_to_products',
+    resolution: 'applied',
+  },
+  {
+    name: '20260602110000_add_nomina_contrato_to_trainers',
+    resolution: 'rolled-back',
+  },
+];
 
-console.log(`Attempting to resolve failed migration "${failedMigration}" (if present)...`);
-const resolveResult = spawnSync(
-  'npx',
-  [
-    'prisma',
-    'migrate',
-    'resolve',
-    '--applied',
-    failedMigration,
-    '--schema',
-    'prisma/schema.prisma',
-  ],
-  { cwd: backendDir, env, stdio: 'inherit' }
-);
-
-if (resolveResult.status === 0) {
-  console.log(`Migration "${failedMigration}" marked as applied.`);
-} else {
-  console.warn(
-    `Could not mark migration "${failedMigration}" as applied (it may already be resolved); continuing with deploy.`
+for (const migration of migrationsToResolve) {
+  console.log(`Attempting to resolve migration "${migration.name}" as ${migration.resolution} (if present)...`);
+  const resolveResult = spawnSync(
+    'npx',
+    [
+      'prisma',
+      'migrate',
+      'resolve',
+      `--${migration.resolution}`,
+      migration.name,
+      '--schema',
+      'prisma/schema.prisma',
+    ],
+    { cwd: backendDir, env, stdio: 'inherit' }
   );
+
+  if (resolveResult.status === 0) {
+    console.log(`Migration "${migration.name}" marked as ${migration.resolution}.`);
+  } else {
+    console.warn(
+      `Could not mark migration "${migration.name}" as ${migration.resolution} (it may already be resolved); continuing with deploy.`
+    );
+  }
 }
 
 for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
