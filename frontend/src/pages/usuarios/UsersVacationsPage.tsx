@@ -1,13 +1,15 @@
 import type React from 'react';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Badge,
   Button,
   Card,
+  Collapse,
   Col,
   Form,
+  ListGroup,
   Modal,
   OverlayTrigger,
   Row,
@@ -93,6 +95,10 @@ export default function UsersVacationsPage() {
   );
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
   const [expandedUsers, setExpandedUsers] = useState<string[]>([]);
+  const [bulkUserFilter, setBulkUserFilter] = useState('');
+  const [bulkUserListOpen, setBulkUserListOpen] = useState(false);
+  const bulkUserFieldRef = useRef<HTMLDivElement | null>(null);
+  const bulkUserPointerInteractingRef = useRef(false);
 
   const summaryQuery = useQuery({
     queryKey: ['vacations-summary', year],
@@ -142,6 +148,17 @@ export default function UsersVacationsPage() {
 
     setSelectedUsers(users.map((user) => user.userId));
   }, [selectionManuallyChanged, selectedUsers.length, users]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (bulkUserFieldRef.current && !bulkUserFieldRef.current.contains(event.target as Node)) {
+        setBulkUserListOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const bulkMutation = useMutation({
     mutationFn: applyBulkVacationDay,
@@ -231,6 +248,20 @@ export default function UsersVacationsPage() {
   };
 
   const allUsersSelected = users.length > 0 && selectedUsers.length === users.length;
+
+  const filteredBulkUsers = useMemo(() => {
+    const search = bulkUserFilter.trim().toLowerCase();
+    if (!search) return users;
+    return users.filter((user) => user.fullName.toLowerCase().includes(search));
+  }, [bulkUserFilter, users]);
+
+  const selectedUsersSummary = useMemo(() => {
+    const selected = new Set(selectedUsers);
+    return users
+      .filter((user) => selected.has(user.userId))
+      .map((user) => user.fullName)
+      .join(', ');
+  }, [selectedUsers, users]);
 
   const handleBulkSubmit = () => {
     if (!bulkDate || !bulkType || selectedUsers.length === 0) return;
@@ -581,18 +612,71 @@ export default function UsersVacationsPage() {
             </Col>
             <Col md={4}>
               <Form.Label>Personas</Form.Label>
-              <div className="border rounded p-2" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                {users.map((user) => (
-                  <Form.Check
-                    key={user.userId}
-                    type="checkbox"
-                    id={`bulk-user-${user.userId}`}
-                    label={user.fullName}
-                    checked={selectedUsers.includes(user.userId)}
-                    onChange={(event) => handleUserToggle(user.userId, event.target.checked)}
-                    className="mb-2"
-                  />
-                ))}
+              <div ref={bulkUserFieldRef} className="session-multiselect">
+                <Form.Control
+                  type="text"
+                  readOnly
+                  placeholder="Selecciona personas"
+                  value={selectedUsersSummary}
+                  className="session-multiselect-summary"
+                  aria-expanded={bulkUserListOpen}
+                  aria-controls="bulk-users-options"
+                  onMouseDown={() => {
+                    bulkUserPointerInteractingRef.current = true;
+                  }}
+                  onClick={() => {
+                    setBulkUserListOpen((open) => !open);
+                    bulkUserPointerInteractingRef.current = false;
+                  }}
+                  onFocus={() => {
+                    if (!bulkUserPointerInteractingRef.current) {
+                      setBulkUserListOpen(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    bulkUserPointerInteractingRef.current = false;
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setBulkUserListOpen((open) => !open);
+                    }
+                  }}
+                  title={selectedUsersSummary}
+                />
+                <Collapse in={bulkUserListOpen}>
+                  <div id="bulk-users-options" className="session-multiselect-panel mt-2">
+                    <Form.Control
+                      type="search"
+                      placeholder="Buscar"
+                      value={bulkUserFilter}
+                      onChange={(event) => setBulkUserFilter(event.target.value)}
+                      className="mb-2"
+                      title={bulkUserFilter}
+                    />
+                    <div className="border rounded overflow-auto" style={{ maxHeight: 200 }}>
+                      <ListGroup variant="flush">
+                        {filteredBulkUsers.map((user) => {
+                          const checked = selectedUsers.includes(user.userId);
+                          return (
+                            <ListGroup.Item key={user.userId} className="py-1">
+                              <Form.Check
+                                type="checkbox"
+                                id={`bulk-user-${user.userId}`}
+                                label={user.fullName}
+                                checked={checked}
+                                onChange={(event) => handleUserToggle(user.userId, event.target.checked)}
+                              />
+                            </ListGroup.Item>
+                          );
+                        })}
+                        {!filteredBulkUsers.length ? (
+                          <ListGroup.Item className="text-muted py-2">Sin resultados</ListGroup.Item>
+                        ) : null}
+                      </ListGroup>
+                    </div>
+                  </div>
+                </Collapse>
               </div>
             </Col>
           </Row>
