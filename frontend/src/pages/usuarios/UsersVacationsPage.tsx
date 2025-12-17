@@ -537,7 +537,7 @@ export default function UsersVacationsPage() {
                         <td>
                           <div>{allowanceLabel}</div>
                           {user.lastUpdated ? (
-                            <div className="text-muted small">Última marca: {user.lastUpdated}</div>
+                            <div className="text-muted small">{user.lastUpdated}</div>
                           ) : null}
                         </td>
                         <td>
