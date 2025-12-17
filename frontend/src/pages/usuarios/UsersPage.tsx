@@ -1181,7 +1181,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
                   ></span>
                   <div>
                     <div className="text-muted text-uppercase vacation-type-label">{info.label}</div>
-                    <div className="fw-semibold">{counts[key as VacationType] ?? 0} días</div>
+                    <div className="fw-semibold vacation-type-value">{counts[key as VacationType] ?? 0} días</div>
                   </div>
                 </div>
               </OverlayTrigger>
