@@ -42,6 +42,7 @@ import {
   createSession,
   deleteSession,
   sendSessionTrainerInvites,
+  sendSessionTrainerCancellation,
   fetchSessionComments,
   createSessionComment,
   updateSessionComment,
@@ -2138,6 +2139,10 @@ export function SessionsAccordionEmpresas({
   }, [applicableProducts, effectiveHighlightSessionId, highlightEnabled]);
 
   const [newSessionIds, setNewSessionIds] = useState<Set<string>>(new Set());
+  const [cancellationPrompt, setCancellationPrompt] = useState<
+    | { sessionId: string; estado: Extract<SessionEstado, 'SUSPENDIDA' | 'CANCELADA'>; options?: { notifyOnSuccess?: boolean } }
+    | null
+  >(null);
   const [multiSessionProductId, setMultiSessionProductId] = useState<string | null>(null);
 
   const trainersQuery = useQuery({
@@ -2285,6 +2290,11 @@ export function SessionsAccordionEmpresas({
     mutationFn: (sessionId: string) => sendSessionTrainerInvites(sessionId),
   });
 
+  const cancellationMutation = useMutation({
+    mutationFn: (input: { sessionId: string; estado: Extract<SessionEstado, 'SUSPENDIDA' | 'CANCELADA'> }) =>
+      sendSessionTrainerCancellation(input.sessionId, input.estado),
+  });
+
   const handleFieldChange = (sessionId: string, updater: (current: SessionFormState) => SessionFormState) => {
     setForms((current) => {
       const existing = current[sessionId];
@@ -2392,9 +2402,63 @@ export function SessionsAccordionEmpresas({
     [onNotify, patchMutation, qc],
   );
 
+  const shouldPromptCancellationEmail = useCallback((sessionId: string) => {
+    const form = formsRef.current[sessionId];
+    const saved = lastSavedRef.current[sessionId];
+    if (!form || !saved) return false;
+    if (saved.estado !== 'PLANIFICADA') return false;
+    if (form.estado !== 'SUSPENDIDA' && form.estado !== 'CANCELADA') return false;
+    const statuses = saved.trainer_invite_statuses;
+    return Object.values(statuses ?? {}).some((status) => status === 'CONFIRMED');
+  }, []);
+
   const handleSaveSession = useCallback(
-    (sessionId: string, options?: { notifyOnSuccess?: boolean }) => runSave(sessionId, options),
-    [runSave],
+    (sessionId: string, options?: { notifyOnSuccess?: boolean }) => {
+      const form = formsRef.current[sessionId];
+      if (
+        form &&
+        (form.estado === 'SUSPENDIDA' || form.estado === 'CANCELADA') &&
+        shouldPromptCancellationEmail(sessionId)
+      ) {
+        setCancellationPrompt({ sessionId, estado: form.estado, options });
+        return false;
+      }
+
+      return runSave(sessionId, options);
+    },
+    [runSave, shouldPromptCancellationEmail],
+  );
+
+  const handleRespondCancellationPrompt = useCallback(
+    async (sendEmails: boolean) => {
+      const prompt = cancellationPrompt;
+      if (!prompt) return;
+      setCancellationPrompt(null);
+
+      const saved = await runSave(prompt.sessionId, prompt.options);
+      if (!saved) return;
+
+      if (sendEmails) {
+        try {
+          const response = await cancellationMutation.mutateAsync({
+            sessionId: prompt.sessionId,
+            estado: prompt.estado,
+          });
+          const sentLabel = response.sent === 1 ? 'formador' : 'formadores';
+          onNotify?.({
+            variant: response.sent > 0 ? 'success' : 'info',
+            message:
+              response.sent > 0
+                ? `Aviso enviado a ${response.sent} ${sentLabel}.`
+                : 'No se enviaron avisos a formadores.',
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'No se pudo enviar el aviso.';
+          onNotify?.({ variant: 'danger', message });
+        }
+      }
+    },
+    [cancellationPrompt, cancellationMutation, onNotify, runSave],
   );
 
   const revertSessionChanges = useCallback((sessionId: string) => {
@@ -3244,6 +3308,41 @@ export function SessionsAccordionEmpresas({
               <p className="text-muted mb-0">No se ha especificado una dirección.</p>
             )}
           </Modal.Body>
+        </Modal>
+
+        <Modal
+          show={Boolean(cancellationPrompt)}
+          onHide={() => handleRespondCancellationPrompt(false)}
+          centered
+        >
+          <Modal.Header closeButton>
+            <Modal.Title>Aviso a formadores</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            El formador ya había confirmado la sesión, ¿quieres enviar un mail de aviso de cancelación?
+          </Modal.Body>
+          <Modal.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => handleRespondCancellationPrompt(false)}
+              disabled={cancellationMutation.isLoading}
+            >
+              No
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => handleRespondCancellationPrompt(true)}
+              disabled={cancellationMutation.isLoading}
+            >
+              {cancellationMutation.isLoading ? (
+                <span className="d-inline-flex align-items-center gap-2">
+                  <Spinner size="sm" animation="border" /> Enviando…
+                </span>
+              ) : (
+                'Sí'
+              )}
+            </Button>
+          </Modal.Footer>
         </Modal>
       </Accordion.Body>
     </Accordion.Item>

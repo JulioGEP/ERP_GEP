@@ -2613,6 +2613,32 @@ export async function fetchSessionTrainerInvite(token: string): Promise<SessionT
   return normalizeSessionTrainerInvite(data?.invite ?? {});
 }
 
+export async function sendSessionTrainerCancellation(
+  sessionId: string,
+  estado: Extract<SessionDTO['estado'], 'SUSPENDIDA' | 'CANCELADA'>,
+): Promise<{ sent: number; skipped: number }> {
+  const normalizedId = String(sessionId ?? '').trim();
+  const normalizedEstado = estado === 'SUSPENDIDA' || estado === 'CANCELADA' ? estado : '';
+
+  if (!normalizedId) {
+    throw new ApiError('VALIDATION_ERROR', 'sessionId es obligatorio');
+  }
+
+  if (!normalizedEstado) {
+    throw new ApiError('VALIDATION_ERROR', 'estado es obligatorio');
+  }
+
+  const data = await request('/session-trainer-cancellations', {
+    method: 'POST',
+    body: JSON.stringify({ sessionId: normalizedId, estado: normalizedEstado }),
+  });
+
+  const sent = Number(data?.sent ?? 0);
+  const skipped = Number(data?.skipped ?? 0);
+
+  return { sent: Number.isFinite(sent) ? sent : 0, skipped: Number.isFinite(skipped) ? skipped : 0 };
+}
+
 export async function respondSessionTrainerInvite(
   token: string,
   action: 'confirm' | 'decline',
