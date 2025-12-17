@@ -530,12 +530,14 @@ export default function UsersVacationsPage() {
                         </td>
                         <td>
                           <div className="fw-semibold">{user.fullName}</div>
-                          <div className="text-muted small">{user.active ? 'Activo' : 'Inactivo'}</div>
+                          {user.active ? null : <div className="text-muted small">Inactivo</div>}
                         </td>
                         <td>{user.role}</td>
                         <td>
                           <div>{allowanceLabel}</div>
-                          <div className="text-muted small">Última marca: {user.lastUpdated ?? '—'}</div>
+                          {user.lastUpdated ? (
+                            <div className="text-muted small">Última marca: {user.lastUpdated}</div>
+                          ) : null}
                         </td>
                         <td>
                           <div>{upcomingLabel}</div>
