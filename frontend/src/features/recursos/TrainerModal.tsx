@@ -45,8 +45,6 @@ export type TrainerFormValues = {
   direccion: string;
   especialidad: string;
   titulacion: string;
-  nomina: string;
-  contrato_fijo: boolean;
   activo: boolean;
   sede: string[];
   revision_medica_caducidad: string;
@@ -75,8 +73,6 @@ const EMPTY_FORM: TrainerFormValues = {
   direccion: "",
   especialidad: "",
   titulacion: "",
-  nomina: "",
-  contrato_fijo: false,
   activo: true,
   sede: [],
   revision_medica_caducidad: "",
@@ -98,8 +94,6 @@ function trainerToFormValues(trainer?: Trainer | null): TrainerFormValues {
     direccion: trainer.direccion ?? "",
     especialidad: trainer.especialidad ?? "",
     titulacion: trainer.titulacion ?? "",
-    nomina: trainer.nomina !== null && trainer.nomina !== undefined ? String(trainer.nomina) : "",
-    contrato_fijo: trainer.contrato_fijo ?? false,
     activo: trainer.activo ?? false,
     sede: Array.isArray(trainer.sede) ? trainer.sede : [],
     revision_medica_caducidad: formatDateForInput(trainer.revision_medica_caducidad),
@@ -183,17 +177,7 @@ export function TrainerModal({
 
   const handleChange = (field: keyof TrainerFormValues) =>
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if (field === "activo" || field === "contrato_fijo") {
-        const checked = (event.target as HTMLInputElement).checked;
-        setFormValues((prev) => ({
-          ...prev,
-          [field]: checked,
-          ...(field === "contrato_fijo" && !checked ? { nomina: "" } : null),
-        }));
-        return;
-      }
-
-      const value = event.target.value;
+      const value = field === "activo" ? (event.target as HTMLInputElement).checked : event.target.value;
       setFormValues((prev) => ({ ...prev, [field]: value }));
     };
 
@@ -271,8 +255,6 @@ export function TrainerModal({
 
     setError(null);
 
-    const sanitizedNomina = formValues.nomina.trim();
-
     const payload: TrainerFormValues = {
       ...formValues,
       name: trimmedName,
@@ -283,7 +265,6 @@ export function TrainerModal({
       direccion: formValues.direccion.trim(),
       especialidad: formValues.especialidad.trim(),
       titulacion: formValues.titulacion.trim(),
-      nomina: formValues.contrato_fijo ? sanitizedNomina : "",
       sede: formValues.sede.filter((value) => SEDE_OPTIONS.includes(value as (typeof SEDE_OPTIONS)[number])),
     };
 
@@ -472,34 +453,6 @@ export function TrainerModal({
                   onChange={handleChange("titulacion")}
                   disabled={isSaving}
                 />
-              </Form.Group>
-            </Col>
-            <Col md={6}>
-              <Form.Group controlId="trainerContratoFijo">
-                <Form.Check
-                  type="switch"
-                  label="Contrato fijo"
-                  checked={formValues.contrato_fijo}
-                  onChange={handleChange("contrato_fijo")}
-                  disabled={isSaving}
-                />
-              </Form.Group>
-            </Col>
-            <Col md={6}>
-              <Form.Group controlId="trainerNomina">
-                <Form.Label>Nómina (€)</Form.Label>
-                <Form.Control
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  value={formValues.nomina}
-                  onChange={handleChange("nomina")}
-                  disabled={isSaving || !formValues.contrato_fijo}
-                  placeholder="0,00"
-                />
-                {!formValues.contrato_fijo && (
-                  <Form.Text className="text-muted">Solo aplica a contratos fijos.</Form.Text>
-                )}
               </Form.Group>
             </Col>
             <Col md={12}>

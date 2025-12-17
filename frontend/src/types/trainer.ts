@@ -9,8 +9,6 @@ export type Trainer = {
   direccion: string | null;
   especialidad: string | null;
   titulacion: string | null;
-  nomina: number | null;
-  contrato_fijo: boolean;
   revision_medica_caducidad: string | null;
   epis_caducidad: string | null;
   dni_caducidad: string | null;
