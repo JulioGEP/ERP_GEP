@@ -149,9 +149,6 @@ export default function IssuedCertificatesPage() {
               <tr key={record.id}>
                 <td>
                   <div className="fw-semibold">{record.presupuesto}</div>
-                  {record.presupuesto_titulo && (
-                    <div className="text-muted small">{record.presupuesto_titulo}</div>
-                  )}
                 </td>
                 <td>
                   {record.alumno_nombre} {record.alumno_apellido}
