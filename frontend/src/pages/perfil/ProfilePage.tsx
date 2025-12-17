@@ -517,8 +517,20 @@ export default function ProfilePage() {
           <div className="d-flex gap-3 flex-wrap">
             {vacationSummary.map((item) => (
               <div key={item.label} className="border rounded px-3 py-2">
-                <div className="text-muted small text-uppercase">{item.label}</div>
-                <div className="fw-semibold">{item.value}</div>
+                <div
+                  className="text-muted text-uppercase text-truncate"
+                  style={{ maxWidth: '180px', fontSize: '0.75rem' }}
+                  title={item.label}
+                >
+                  {item.label}
+                </div>
+                <div
+                  className="fw-semibold text-truncate"
+                  style={{ maxWidth: '180px', fontSize: '0.95rem' }}
+                  title={String(item.value)}
+                >
+                  {item.value}
+                </div>
               </div>
             ))}
           </div>
@@ -542,11 +554,16 @@ export default function ProfilePage() {
                 <div>
                   <div
                     className="text-muted small text-uppercase text-truncate"
-                    style={{ maxWidth: '160px' }}
+                    style={{ maxWidth: '160px', fontSize: '0.75rem' }}
                   >
                     {label}
                   </div>
-                  <div className="fw-semibold">{vacationCounts[key as VacationType] ?? 0} días</div>
+                  <div
+                    className="fw-semibold text-truncate"
+                    style={{ maxWidth: '160px', fontSize: '0.95rem' }}
+                  >
+                    {vacationCounts[key as VacationType] ?? 0} días
+                  </div>
                 </div>
               </div>
             ))}
