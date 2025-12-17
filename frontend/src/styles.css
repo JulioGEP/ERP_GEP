@@ -1313,21 +1313,21 @@ option.session-option-unavailable {
 }
 
 .vacation-allowance-card--secondary .vacation-allowance-value {
-  font-size: 1rem;
+  font-size: calc(1rem - 0.25rem);
 }
 
 .vacation-allowance-value {
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: calc(1.1rem - 0.25rem);
 }
 
 .vacation-allowance-label {
-  font-size: 0.82rem;
+  font-size: calc(0.82rem - 0.25rem);
   letter-spacing: 0.04em;
 }
 
 .vacation-allowance-label--small {
-  font-size: 0.72rem;
+  font-size: calc(0.72rem - 0.25rem);
 }
 
 .vacation-type-label {
