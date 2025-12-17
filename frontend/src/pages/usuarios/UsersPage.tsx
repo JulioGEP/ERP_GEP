@@ -82,15 +82,22 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
   const [includeTrainers, setIncludeTrainers] = useState(false);
+  const [trainerFixedOnly, setTrainerFixedOnly] = useState(false);
   const [tableFilter, setTableFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   useEffect(() => {
     setPage(1);
-  }, [includeTrainers, statusFilter, tableFilter]);
+  }, [includeTrainers, statusFilter, tableFilter, trainerFixedOnly]);
+
+  useEffect(() => {
+    if (trainerFixedOnly && !includeTrainers) {
+      setIncludeTrainers(true);
+    }
+  }, [includeTrainers, trainerFixedOnly]);
 
   const usersQuery = useQuery<UsersListResponse>({
-    queryKey: ['users', page, searchTerm, includeTrainers, statusFilter],
+    queryKey: ['users', page, searchTerm, includeTrainers, statusFilter, trainerFixedOnly],
     queryFn: () =>
       fetchUsers({
         page,
@@ -98,6 +105,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
         search: searchTerm || undefined,
         includeTrainers,
         status: statusFilter === 'all' ? undefined : statusFilter,
+        trainerFixedOnly: trainerFixedOnly || undefined,
       }),
     placeholderData: keepPreviousData,
   });
@@ -118,6 +126,21 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const openEditModal = useCallback((user: UserSummary) => {
     setEditingUser(user);
     setShowModal(true);
+  }, []);
+
+  const handleToggleIncludeTrainers = useCallback(() => {
+    setIncludeTrainers((previous) => {
+      const nextValue = !previous;
+      if (!nextValue && trainerFixedOnly) {
+        setTrainerFixedOnly(false);
+      }
+      return nextValue;
+    });
+  }, [trainerFixedOnly]);
+
+  const handleToggleTrainerFixedOnly = useCallback(() => {
+    setTrainerFixedOnly((previous) => !previous);
+    setIncludeTrainers(true);
   }, []);
 
   const closeModal = useCallback(() => {
@@ -199,6 +222,16 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
         return false;
       }
 
+      if (trainerFixedOnly) {
+        if (user.role !== 'Formador') {
+          return false;
+        }
+
+        if (!user.trainerFixedContract) {
+          return false;
+        }
+      }
+
       if (statusFilter === 'active' && !user.active) {
         return false;
       }
@@ -216,7 +249,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
 
       return true;
     });
-  }, [includeTrainers, statusFilter, tableFilter, users]);
+  }, [includeTrainers, statusFilter, tableFilter, trainerFixedOnly, users]);
 
   const paginationItems = useMemo(() => {
     const items: JSX.Element[] = [];
@@ -289,9 +322,15 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
                   <div className="d-flex gap-2 flex-wrap">
                     <Button
                       variant={includeTrainers ? 'outline-secondary' : 'outline-primary'}
-                      onClick={() => setIncludeTrainers((prev) => !prev)}
+                      onClick={handleToggleIncludeTrainers}
                     >
                       {includeTrainers ? 'Ocultar formadores' : 'Mostrar Formadores'}
+                    </Button>
+                    <Button
+                      variant={trainerFixedOnly ? 'primary' : 'outline-secondary'}
+                      onClick={handleToggleTrainerFixedOnly}
+                    >
+                      Formadores fijos
                     </Button>
                     <ButtonGroup>
                       <Button
