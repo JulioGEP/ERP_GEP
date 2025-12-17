@@ -1035,6 +1035,7 @@ export function VacationManagerModal({ show, user, onHide, onNotify }: VacationM
     value: number | '';
     readOnly?: boolean;
     isRemaining?: boolean;
+    description?: string;
   }> = [
     {
       key: 'allowance',
@@ -1121,6 +1122,7 @@ export function VacationManagerModal({ show, user, onHide, onNotify }: VacationM
                         }
                       />
                     )}
+                    {item.description && <div className="text-muted small">{item.description}</div>}
                   </div>
                 ))}
               </div>
