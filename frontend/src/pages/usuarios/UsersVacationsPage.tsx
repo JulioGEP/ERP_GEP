@@ -316,9 +316,7 @@ export default function UsersVacationsPage() {
       <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
         <div>
           <h1 className="h3 mb-1">Vacaciones del equipo</h1>
-          <div className="text-muted">
-            Resumen rápido de ausencias para todo el equipo (excluye roles de formador).
-          </div>
+          <div className="text-muted">Resumen rápido de ausencias para todo el equipo.</div>
         </div>
         <Form className="d-flex align-items-center gap-2">
           <Form.Label className="mb-0">Año</Form.Label>

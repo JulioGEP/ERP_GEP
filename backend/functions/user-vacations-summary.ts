@@ -28,7 +28,13 @@ export const handler = createHttpHandler<any>(async (request) => {
   const year = parseYear(request.query.year, new Date().getUTCFullYear());
 
   const users = await prisma.users.findMany({
-    where: { role: { not: 'Formador' }, active: true },
+    where: {
+      active: true,
+      OR: [
+        { role: { not: 'Formador' } },
+        { role: 'Formador', trainer: { is: { contrato_fijo: true } } },
+      ],
+    },
     select: { id: true, first_name: true, last_name: true, role: true, active: true },
     orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
   });
