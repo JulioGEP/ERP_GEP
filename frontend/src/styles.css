@@ -1304,8 +1304,8 @@ option.session-option-unavailable {
   padding: 8px 10px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  min-width: max-content;
-  flex: 1 0 140px;
+  min-width: 0;
+  flex: 1 1 140px;
 }
 
 .vacation-allowance-card--secondary {
@@ -1333,6 +1333,27 @@ option.session-option-unavailable {
 .vacation-type-label {
   font-size: 0.7rem;
   letter-spacing: 0.05em;
+}
+
+.vacations-modal .modal-dialog {
+  max-width: 1200px;
+}
+
+.vacations-modal-body {
+  max-height: 80vh;
+  overflow: auto;
+}
+
+.vacation-type-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.vacation-type-card {
+  flex: 1 1 220px;
+  min-width: 180px;
 }
 
 .vacation-calendar .vacation-month {
