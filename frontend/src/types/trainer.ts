@@ -11,6 +11,9 @@ export type Trainer = {
   titulacion: string | null;
   contrato_fijo: boolean;
   nomina: number | null;
+  irpf: number | null;
+  ss: number | null;
+  horas_contratadas: number | null;
   revision_medica_caducidad: string | null;
   epis_caducidad: string | null;
   dni_caducidad: string | null;

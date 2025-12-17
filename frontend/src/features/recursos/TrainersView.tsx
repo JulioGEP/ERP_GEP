@@ -87,6 +87,14 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     return Number(parsed.toFixed(2));
   };
 
+  const toNullableNumber = (value: string): number | null => {
+    const normalized = value.replace(",", ".").trim();
+    if (!normalized.length) return null;
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return Number(parsed.toFixed(2));
+  };
+
   return {
     name: values.name.trim(),
     apellido: toNullable(values.apellido),
@@ -105,6 +113,9 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     certificado_bombero_caducidad: toNullableDate(values.certificado_bombero_caducidad),
     contrato_fijo: values.contrato_fijo,
     nomina: values.contrato_fijo ? toNullableSalary(values.nomina) : null,
+    irpf: values.contrato_fijo ? toNullableNumber(values.irpf) : null,
+    ss: values.contrato_fijo ? toNullableNumber(values.ss) : null,
+    horas_contratadas: values.contrato_fijo ? toNullableNumber(values.horas_contratadas) : null,
   };
 }
 
