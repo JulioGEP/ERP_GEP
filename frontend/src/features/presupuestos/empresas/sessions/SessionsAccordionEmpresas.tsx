@@ -3325,16 +3325,16 @@ export function SessionsAccordionEmpresas({
             <Button
               variant="secondary"
               onClick={() => handleRespondCancellationPrompt(false)}
-              disabled={cancellationMutation.isLoading}
+              disabled={cancellationMutation.isPending}
             >
               No
             </Button>
             <Button
               variant="primary"
               onClick={() => handleRespondCancellationPrompt(true)}
-              disabled={cancellationMutation.isLoading}
+              disabled={cancellationMutation.isPending}
             >
-              {cancellationMutation.isLoading ? (
+              {cancellationMutation.isPending ? (
                 <span className="d-inline-flex align-items-center gap-2">
                   <Spinner size="sm" animation="border" /> Enviando…
                 </span>
