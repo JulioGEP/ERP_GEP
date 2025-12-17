@@ -8,7 +8,6 @@ import { getPrisma } from './_shared/prisma';
 import { errorResponse, preflightResponse, successResponse } from './_shared/response';
 import { nowInMadridDate, toMadridISOString } from './_shared/timezone';
 
-const DEFAULT_TTL_HOURS = Number(process.env.PUBLIC_SESSION_LINK_TTL_HOURS ?? 24 * 30);
 const MAX_TOKEN_LENGTH = 128;
 const ALLOWED_ROLES = ['Admin', 'Administracion', 'Logistica', 'People'] as const;
 
@@ -129,23 +128,11 @@ function generateToken(): string {
   return randomBytes(32).toString('base64url').slice(0, MAX_TOKEN_LENGTH);
 }
 
-function computeExpiration(hours: number): Date {
-  const ttl = Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_TTL_HOURS;
-  const now = nowInMadridDate();
-  now.setHours(now.getHours() + ttl);
-  return now;
-}
-
 async function getActiveLink(prisma: ReturnType<typeof getPrisma>, sessionId: string) {
-  const now = new Date();
   return prisma.tokens.findFirst({
     where: {
       session_id: sessionId,
       active: true,
-      OR: [
-        { expires_at: null },
-        { expires_at: { gt: now } },
-      ],
     },
     orderBy: { created_at: 'desc' },
     include: {
@@ -215,7 +202,6 @@ export const handler = createHttpHandler(async (request) => {
       normalizeBoolean(payload.regenerate) ||
       normalizeBoolean(payload.force) ||
       normalizeBoolean(payload.forceRegenerate);
-    const ttlHours = Number(payload.ttl_hours ?? payload.ttlHours ?? payload.ttl) || DEFAULT_TTL_HOURS;
 
     if (!dealId) {
       return errorResponse('VALIDATION_ERROR', 'deal_id requerido', 400);
@@ -248,7 +234,7 @@ export const handler = createHttpHandler(async (request) => {
     });
 
     const token = generateToken();
-    const expiresAt = computeExpiration(ttlHours);
+    const expiresAt = null;
 
     const created = await prisma.tokens.create({
       data: {
