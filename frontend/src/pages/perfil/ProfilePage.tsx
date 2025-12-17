@@ -550,11 +550,11 @@ export default function ProfilePage() {
                 <div>
                   <div
                     className="text-muted text-uppercase text-truncate"
-                    style={{ maxWidth: '160px', fontSize: '0.8rem' }}
+                    style={{ maxWidth: '160px', fontSize: '0.7rem' }}
                   >
                     {label}
                   </div>
-                  <div className="fw-semibold" style={{ fontSize: '0.9rem' }}>
+                  <div className="fw-semibold" style={{ fontSize: '1rem' }}>
                     {vacationCounts[key as VacationType] ?? 0} días
                   </div>
                 </div>
