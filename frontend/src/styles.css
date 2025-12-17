@@ -1336,10 +1336,7 @@ option.session-option-unavailable {
 }
 
 .vacation-calendar .vacation-month {
-  flex: 1 1 260px;
-  min-width: 240px;
-  max-width: 320px;
-  width: 100%;
+  width: min(320px, 100%);
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 12px;
