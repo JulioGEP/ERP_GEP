@@ -28,18 +28,6 @@ const OPTIONAL_DATE_FIELDS = [
 const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
 const MAX_TRAINER_NAME_LENGTH = 17;
 
-function normalizeNomina(value: Prisma.Decimal | number | string | null): number | null {
-  if (value === undefined || value === null) return null;
-
-  try {
-    const decimalValue = value instanceof Prisma.Decimal ? value : new Prisma.Decimal(value);
-    return decimalValue.toNumber();
-  } catch (error) {
-    console.error('normalizeNomina error', error);
-    return null;
-  }
-}
-
 type TrainerRecord = {
   trainer_id: string;
   name: string;
@@ -50,8 +38,6 @@ type TrainerRecord = {
   direccion: string | null;
   especialidad: string | null;
   titulacion: string | null;
-  nomina: Prisma.Decimal | number | string | null;
-  contrato_fijo: boolean;
   revision_medica_caducidad: Date | string | null;
   epis_caducidad: Date | string | null;
   dni_caducidad: Date | string | null;
@@ -93,8 +79,6 @@ function normalizeTrainer(row: TrainerRecord) {
     direccion: row.direccion,
     especialidad: row.especialidad,
     titulacion: row.titulacion,
-    nomina: normalizeNomina(row.nomina),
-    contrato_fijo: Boolean(row.contrato_fijo),
     revision_medica_caducidad: toMadridISOString(row.revision_medica_caducidad),
     epis_caducidad: toMadridISOString(row.epis_caducidad),
     dni_caducidad: toMadridISOString(row.dni_caducidad),
@@ -238,47 +222,6 @@ function parseDateField(
   };
 }
 
-type ParseNominaResult =
-  | { value: Prisma.Decimal | null }
-  | { error: ReturnType<typeof errorResponse> };
-
-function parseNominaField(input: unknown): ParseNominaResult {
-  if (input === undefined || input === null) {
-    return { value: null };
-  }
-
-  if (input instanceof Prisma.Decimal) {
-    return { value: input };
-  }
-
-  if (typeof input === 'number') {
-    if (!Number.isFinite(input)) {
-      return {
-        error: errorResponse('VALIDATION_ERROR', 'El campo nomina debe ser un número válido', 400),
-      };
-    }
-    return { value: new Prisma.Decimal(input) };
-  }
-
-  if (typeof input === 'string') {
-    const trimmed = input.trim();
-    if (!trimmed.length) return { value: null };
-
-    const normalized = trimmed.replace('€', '').replace(',', '.');
-    const parsed = Number(normalized);
-    if (Number.isNaN(parsed) || !Number.isFinite(parsed)) {
-      return {
-        error: errorResponse('VALIDATION_ERROR', 'El campo nomina debe ser un número válido', 400),
-      };
-    }
-    return { value: new Prisma.Decimal(parsed) };
-  }
-
-  return {
-    error: errorResponse('VALIDATION_ERROR', 'El campo nomina debe ser un número válido', 400),
-  };
-}
-
 function buildCreateData(body: any) {
   const name = toNullableString(body?.name);
   if (!name) {
@@ -320,15 +263,6 @@ function buildCreateData(body: any) {
     return { error: sedeResult.error };
   }
   data.sede = sedeResult.values;
-
-  const nominaResult = parseNominaField(body?.nomina);
-  if ('error' in nominaResult) {
-    return { error: nominaResult.error };
-  }
-
-  const contratoFijo = Boolean(body?.contrato_fijo);
-  data.contrato_fijo = contratoFijo;
-  data.nomina = contratoFijo ? nominaResult.value : null;
 
   return { data };
 }
@@ -400,24 +334,6 @@ function buildUpdateData(body: any) {
     hasChanges = true;
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, 'nomina')) {
-    const nominaResult = parseNominaField(body.nomina);
-    if ('error' in nominaResult) {
-      return { error: nominaResult.error };
-    }
-    data.nomina = nominaResult.value;
-    hasChanges = true;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'contrato_fijo')) {
-    const contratoFijo = Boolean(body.contrato_fijo);
-    data.contrato_fijo = contratoFijo;
-    hasChanges = true;
-    if (!contratoFijo && !Object.prototype.hasOwnProperty.call(body, 'nomina')) {
-      data.nomina = null;
-    }
-  }
-
   if (!hasChanges) {
     return { error: errorResponse('VALIDATION_ERROR', 'No se han proporcionado cambios', 400) };
   }
@@ -481,8 +397,6 @@ export const handler = createHttpHandler<any>(async (request) => {
           direccion: true,
           especialidad: true,
           titulacion: true,
-          nomina: true,
-          contrato_fijo: true,
           revision_medica_caducidad: true,
           epis_caducidad: true,
           dni_caducidad: true,

@@ -56,13 +56,6 @@ function formatDateTimeLabel(iso: string | null): string {
   }).format(date);
 }
 
-const currencyFormatter = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
-
-function formatCurrency(value: number | null): string {
-  if (value === null || value === undefined) return "—";
-  return currencyFormatter.format(value);
-}
-
 const DOCUMENT_TYPE_LABEL = new Map(
   TRAINER_DOCUMENT_TYPES.map(({ value, label }) => [value, label]),
 );
@@ -179,16 +172,6 @@ export function TrainerDetailsDrawer({
                     );
                   })}
                 </div>
-                <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
-                  <Badge bg={trainer.contrato_fijo ? "success" : "secondary"}>
-                    {trainer.contrato_fijo ? "Contrato fijo" : "Sin contrato fijo"}
-                  </Badge>
-                  {trainer.contrato_fijo && (
-                    <Badge bg="info" text="dark">
-                      Nómina: {formatCurrency(trainer.nomina)}
-                    </Badge>
-                  )}
-                </div>
               </div>
               <Button variant="outline-primary" size="sm" onClick={handleEditClick}>
                 Editar datos
@@ -273,17 +256,15 @@ export function TrainerDetailsDrawer({
               )}
             </div>
 
-            {trainer.contrato_fijo && (
-              <Stack gap={3} className="mt-1">
-                <div>
-                  <h3 className="h6 mb-3">Vacaciones y teletrabajo</h3>
-                  <p className="text-muted small mb-3">
-                    Gestiona la disponibilidad anual y las ausencias del formador con contrato fijo.
-                  </p>
-                </div>
-                <TrainerAvailabilitySection trainerId={trainer.trainer_id} />
-              </Stack>
-            )}
+            <Stack gap={3} className="mt-1">
+              <div>
+                <h3 className="h6 mb-3">Disponibilidad</h3>
+                <p className="text-muted small mb-3">
+                  Consulta o ajusta la disponibilidad anual del formador.
+                </p>
+              </div>
+              <TrainerAvailabilitySection trainerId={trainer.trainer_id} />
+            </Stack>
           </div>
         ) : (
           <div className="text-muted">Selecciona un formador para ver sus detalles.</div>
