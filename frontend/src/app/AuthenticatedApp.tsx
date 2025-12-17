@@ -145,6 +145,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Certificados/Principal', label: 'Certificados', path: '/certificados' },
       {
+        key: 'Certificados/Emitidos',
+        label: 'Certificados emitidos',
+        path: '/certificados_emitidos',
+      },
+      {
         key: 'Certificados/Templates',
         label: 'Plantillas de Certificados',
         path: '/certificados/templates_certificados',

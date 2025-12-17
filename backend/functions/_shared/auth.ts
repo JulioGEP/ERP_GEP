@@ -27,6 +27,7 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     '/materiales/*',
     '/certificados',
     '/certificados/*',
+    '/certificados_emitidos',
     '/recursos/confirmaciones',
   ],
   Logistica: [
@@ -135,6 +136,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/recursos/salas',
   '/recursos/confirmaciones',
   '/certificados',
+  '/certificados_emitidos',
   '/certificados/templates_certificados',
   '/calendario/por_sesiones',
   '/calendario/por_formador',
