@@ -1097,13 +1097,13 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
   ];
 
   return (
-    <Modal show={show && Boolean(user)} onHide={onHide} size="xl" centered>
+    <Modal show={show && Boolean(user)} onHide={onHide} size="xl" centered className="vacations-modal">
       <Modal.Header closeButton>
         <Modal.Title>
           Vacaciones · {user ? `${user.firstName} ${user.lastName}` : ''}
         </Modal.Title>
       </Modal.Header>
-      <Modal.Body className="d-grid gap-3">
+      <Modal.Body className="vacations-modal-body d-grid gap-3">
         <div className="d-flex flex-column gap-3">
           <div className="vacation-allowance-grid vacation-allowance-grid--primary">
             {primaryAllowanceCards.map((item) => (
@@ -1159,7 +1159,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
         </div>
 
         <div className="d-flex flex-column flex-lg-row gap-3 align-items-lg-start">
-          <div className="d-flex gap-2 align-items-stretch flex-wrap flex-lg-nowrap">
+          <div className="vacation-type-list">
             {Object.entries(VACATION_TYPE_INFO).map(([key, info]) => (
               <OverlayTrigger
                 key={key}
@@ -1167,7 +1167,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
                 overlay={<Tooltip id={`vacation-type-${key}`}>{info.fullLabel}</Tooltip>}
               >
                 <div
-                  className="border rounded px-3 py-2 d-flex gap-2 align-items-center"
+                  className="vacation-type-card border rounded px-3 py-2 d-flex gap-2 align-items-center"
                   title={info.fullLabel}
                 >
                   <span
