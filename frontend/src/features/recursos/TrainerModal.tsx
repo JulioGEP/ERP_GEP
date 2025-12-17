@@ -45,6 +45,8 @@ export type TrainerFormValues = {
   direccion: string;
   especialidad: string;
   titulacion: string;
+  contrato_fijo: boolean;
+  nomina: string;
   activo: boolean;
   sede: string[];
   revision_medica_caducidad: string;
@@ -73,6 +75,8 @@ const EMPTY_FORM: TrainerFormValues = {
   direccion: "",
   especialidad: "",
   titulacion: "",
+  contrato_fijo: false,
+  nomina: "",
   activo: true,
   sede: [],
   revision_medica_caducidad: "",
@@ -94,6 +98,11 @@ function trainerToFormValues(trainer?: Trainer | null): TrainerFormValues {
     direccion: trainer.direccion ?? "",
     especialidad: trainer.especialidad ?? "",
     titulacion: trainer.titulacion ?? "",
+    contrato_fijo: Boolean(trainer.contrato_fijo),
+    nomina:
+      typeof trainer.nomina === "number" && Number.isFinite(trainer.nomina)
+        ? String(trainer.nomina)
+        : "",
     activo: trainer.activo ?? false,
     sede: Array.isArray(trainer.sede) ? trainer.sede : [],
     revision_medica_caducidad: formatDateForInput(trainer.revision_medica_caducidad),
@@ -177,7 +186,8 @@ export function TrainerModal({
 
   const handleChange = (field: keyof TrainerFormValues) =>
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const value = field === "activo" ? (event.target as HTMLInputElement).checked : event.target.value;
+      const isBooleanField = field === "activo" || field === "contrato_fijo";
+      const value = isBooleanField ? (event.target as HTMLInputElement).checked : event.target.value;
       setFormValues((prev) => ({ ...prev, [field]: value }));
     };
 
@@ -265,6 +275,8 @@ export function TrainerModal({
       direccion: formValues.direccion.trim(),
       especialidad: formValues.especialidad.trim(),
       titulacion: formValues.titulacion.trim(),
+      contrato_fijo: formValues.contrato_fijo,
+      nomina: formValues.contrato_fijo ? formValues.nomina.trim() : "",
       sede: formValues.sede.filter((value) => SEDE_OPTIONS.includes(value as (typeof SEDE_OPTIONS)[number])),
     };
 
@@ -454,6 +466,36 @@ export function TrainerModal({
                   disabled={isSaving}
                 />
               </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group controlId="trainerContratoFijo">
+                <Form.Label>Contrato fijo</Form.Label>
+                <div>
+                  <Form.Check
+                    type="switch"
+                    label={formValues.contrato_fijo ? "Sí" : "No"}
+                    checked={formValues.contrato_fijo}
+                    onChange={handleChange("contrato_fijo")}
+                    disabled={isSaving}
+                  />
+                </div>
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              {formValues.contrato_fijo && (
+                <Form.Group controlId="trainerNomina">
+                  <Form.Label>Nómina (€)</Form.Label>
+                  <Form.Control
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formValues.nomina}
+                    onChange={handleChange("nomina")}
+                    disabled={isSaving}
+                    placeholder="Ej. 1800.00"
+                  />
+                </Form.Group>
+              )}
             </Col>
             <Col md={12}>
               <Form.Group controlId="trainerDireccion">

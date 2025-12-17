@@ -1,5 +1,5 @@
 // backend/functions/trainers.ts
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
 import { getPrisma } from './_shared/prisma';
@@ -38,6 +38,8 @@ type TrainerRecord = {
   direccion: string | null;
   especialidad: string | null;
   titulacion: string | null;
+  contrato_fijo: boolean;
+  nomina: Prisma.Decimal | number | string | null;
   revision_medica_caducidad: Date | string | null;
   epis_caducidad: Date | string | null;
   dni_caducidad: Date | string | null;
@@ -69,6 +71,9 @@ function normalizeTrainer(row: TrainerRecord) {
       typeof value === 'string' && VALID_SEDES.includes(value as (typeof VALID_SEDES)[number])
   );
 
+  const salaryValue =
+    row.nomina === null || row.nomina === undefined ? null : Number(new Prisma.Decimal(row.nomina));
+
   return {
     trainer_id: row.trainer_id,
     name: row.name,
@@ -84,6 +89,8 @@ function normalizeTrainer(row: TrainerRecord) {
     dni_caducidad: toMadridISOString(row.dni_caducidad),
     carnet_conducir_caducidad: toMadridISOString(row.carnet_conducir_caducidad),
     certificado_bombero_caducidad: toMadridISOString(row.certificado_bombero_caducidad),
+    contrato_fijo: Boolean(row.contrato_fijo),
+    nomina: salaryValue,
     activo: Boolean(row.activo),
     sede: normalizedSede,
     created_at: toMadridISOString(row.created_at),
@@ -222,6 +229,40 @@ function parseDateField(
   };
 }
 
+type ParseNominaResult =
+  | { value: Prisma.Decimal | null }
+  | { error: ReturnType<typeof errorResponse> };
+
+function parseNominaField(input: unknown): ParseNominaResult {
+  if (input === undefined) return { value: null };
+  if (input === null) return { value: null };
+
+  const normalize = (value: string | number): ParseNominaResult => {
+    const numericValue = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
+    if (Number.isNaN(numericValue) || !Number.isFinite(numericValue)) {
+      return {
+        error: errorResponse('VALIDATION_ERROR', 'El campo nomina debe ser numérico', 400),
+      };
+    }
+
+    if (numericValue < 0) {
+      return {
+        error: errorResponse('VALIDATION_ERROR', 'El campo nomina no puede ser negativo', 400),
+      };
+    }
+
+    return { value: new Prisma.Decimal(numericValue) };
+  };
+
+  if (typeof input === 'string' || typeof input === 'number') {
+    return normalize(input);
+  }
+
+  return {
+    error: errorResponse('VALIDATION_ERROR', 'El campo nomina debe ser numérico', 400),
+  };
+}
+
 function buildCreateData(body: any) {
   const name = toNullableString(body?.name);
   if (!name) {
@@ -244,6 +285,7 @@ function buildCreateData(body: any) {
     trainer_id: trainerId,
     name,
     activo: body?.activo === undefined || body?.activo === null ? true : Boolean(body.activo),
+    contrato_fijo: Boolean(body?.contrato_fijo),
   };
 
   for (const field of OPTIONAL_STRING_FIELDS) {
@@ -257,6 +299,12 @@ function buildCreateData(body: any) {
     }
     data[field] = result.value;
   }
+
+  const salaryResult = parseNominaField(body?.nomina);
+  if ('error' in salaryResult) {
+    return { error: salaryResult.error };
+  }
+  data.nomina = salaryResult.value;
 
   const sedeResult = parseSedeInput(body?.sede);
   if ('error' in sedeResult) {
@@ -334,6 +382,20 @@ function buildUpdateData(body: any) {
     hasChanges = true;
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, 'contrato_fijo')) {
+    data.contrato_fijo = Boolean(body.contrato_fijo);
+    hasChanges = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'nomina')) {
+    const salaryResult = parseNominaField(body.nomina);
+    if ('error' in salaryResult) {
+      return { error: salaryResult.error };
+    }
+    data.nomina = salaryResult.value;
+    hasChanges = true;
+  }
+
   if (!hasChanges) {
     return { error: errorResponse('VALIDATION_ERROR', 'No se han proporcionado cambios', 400) };
   }
@@ -397,6 +459,8 @@ export const handler = createHttpHandler<any>(async (request) => {
           direccion: true,
           especialidad: true,
           titulacion: true,
+          contrato_fijo: true,
+          nomina: true,
           revision_medica_caducidad: true,
           epis_caducidad: true,
           dni_caducidad: true,
