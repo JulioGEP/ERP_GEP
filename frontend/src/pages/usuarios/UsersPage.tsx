@@ -913,8 +913,8 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
   });
 
   const data = vacationsQuery.data;
-  const counts =
-    data?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0 };
+  const counts: Record<VacationType, number> =
+    data?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0 };
   const enjoyed = data?.enjoyed ?? 0;
   const remaining = allowances.remaining === '' ? computeRemaining(allowances, enjoyed) : allowances.remaining;
   const totalAllowance = computeRemaining(allowances, enjoyed) + enjoyed;
