@@ -1,3 +1,4 @@
+import type React from 'react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
@@ -183,6 +184,16 @@ export default function UsersVacationsPage() {
     });
   };
 
+  const handleToggleAllUsers = () => {
+    setSelectionManuallyChanged(true);
+    setSelectedUsers((prev) => {
+      const allSelected = users.length > 0 && prev.length === users.length;
+      return allSelected ? [] : users.map((user) => user.userId);
+    });
+  };
+
+  const allUsersSelected = users.length > 0 && selectedUsers.length === users.length;
+
   const handleBulkSubmit = () => {
     if (!bulkDate || !bulkType || selectedUsers.length === 0) return;
     void bulkMutation.mutate({ date: bulkDate, type: bulkType, userIds: selectedUsers });
@@ -352,7 +363,18 @@ export default function UsersVacationsPage() {
               <Table hover className="mb-0 align-middle">
                 <thead>
                   <tr>
-                    <th>Seleccionar</th>
+                    <th className="text-center" style={{ width: '80px' }}>
+                      <Button
+                        variant="light"
+                        size="sm"
+                        className="border"
+                        onClick={handleToggleAllUsers}
+                        aria-label={allUsersSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                        title={allUsersSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                      >
+                        {allUsersSelected ? <DeselectIcon width={18} height={18} /> : <SelectIcon width={18} height={18} />}
+                      </Button>
+                    </th>
                     <th>Persona</th>
                     <th>Rol</th>
                     <th>Vacaciones</th>
@@ -665,5 +687,25 @@ function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: Vacat
           : null}
       </Modal.Body>
     </Modal>
+  );
+}
+
+type IconProps = React.SVGProps<SVGSVGElement>;
+
+function SelectIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden focusable="false" {...props}>
+      <path d="M1.5 2A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h9A1.5 1.5 0 0 0 12 12.5V10h1v2.5A2.5 2.5 0 0 1 10.5 15h-9A2.5 2.5 0 0 1-1 12.5v-9A2.5 2.5 0 0 1 1.5 1h9A2.5 2.5 0 0 1 13 3.5V6h-1V3.5A1.5 1.5 0 0 0 10.5 2z" />
+      <path d="M15.854 4.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 .708-.708L8.5 11.293l6.646-6.647a.5.5 0 0 1 .708 0" />
+    </svg>
+  );
+}
+
+function DeselectIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden focusable="false" {...props}>
+      <path d="M1.5 2A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h9A1.5 1.5 0 0 0 12 12.5V10h1v2.5A2.5 2.5 0 0 1 10.5 15h-9A2.5 2.5 0 0 1-1 12.5v-9A2.5 2.5 0 0 1 1.5 1h9A2.5 2.5 0 0 1 13 3.5V6h-1V3.5A1.5 1.5 0 0 0 10.5 2z" />
+      <path d="M4.146 4.146a.5.5 0 0 1 .708 0L8 7.293l3.146-3.147a.5.5 0 0 1 .708.708L8.707 8l3.147 3.146a.5.5 0 0 1-.708.708L8 8.707l-3.146 3.147a.5.5 0 0 1-.708-.708L7.293 8 4.146 4.854a.5.5 0 0 1 0-.708" />
+    </svg>
   );
 }
