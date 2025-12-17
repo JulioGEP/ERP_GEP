@@ -260,8 +260,6 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
         return trainer.email ?? "";
       case "contrato_fijo":
         return trainer.contrato_fijo ? 1 : 0;
-      case "nomina":
-        return trainer.nomina ?? 0;
       default:
         return null;
     }
@@ -353,7 +351,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
               onClick={() => setContractFixedOnly((current) => !current)}
               active={contractFixedOnly}
             >
-              Contrato Fijo
+              Fijos
             </Button>
           </div>
         </div>
@@ -385,12 +383,6 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                   sortState={sortState}
                   onSort={requestSort}
                 />
-                <SortableHeader
-                  columnKey="nomina"
-                  label={<span className="fw-semibold">Nómina (€)</span>}
-                  sortState={sortState}
-                  onSort={requestSort}
-                />
                 <th className="text-end">
                   <span className="fw-semibold">Acciones</span>
                 </th>
@@ -399,7 +391,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="py-5 text-center">
+                  <td colSpan={5} className="py-5 text-center">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
@@ -422,11 +414,6 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                       <td>{trainer.especialidad ?? "—"}</td>
                       <td>{trainer.email ?? "—"}</td>
                       <td>{trainer.contrato_fijo ? "Sí" : "No"}</td>
-                      <td>
-                        {trainer.contrato_fijo && typeof trainer.nomina === "number"
-                          ? EURO_FORMATTER.format(trainer.nomina)
-                          : "—"}
-                      </td>
                       <td className="text-end">
                         <div className="d-inline-flex gap-2">
                           <Button
@@ -456,7 +443,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                 })
               ) : trainers.length ? (
                 <tr>
-                  <td colSpan={6} className="py-5 text-center text-muted">
+                  <td colSpan={5} className="py-5 text-center text-muted">
                     {hasFiltersApplied
                       ? "No se encontraron formadores que coincidan con los filtros aplicados."
                       : "No hay formadores registrados todavía."}
@@ -464,7 +451,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                 </tr>
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-5 text-center text-muted">
+                  <td colSpan={5} className="py-5 text-center text-muted">
                     No hay formadores registrados todavía.
                   </td>
                 </tr>
