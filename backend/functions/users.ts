@@ -35,6 +35,7 @@ function serializeUser(user: any) {
     createdAt: user.created_at,
     updatedAt: user.updated_at,
     trainerId: user.trainer?.trainer_id ?? null,
+    trainerFixedContract: user.trainer?.contrato_fijo ?? null,
   };
 }
 
@@ -233,7 +234,9 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
     const statusInput =
       typeof request.query?.status === 'string' ? request.query.status.trim().toLowerCase() : '';
     const statusFilter = statusInput === 'active' || statusInput === 'inactive' ? statusInput : null;
-    const includeTrainers = parseBooleanParam(request.query?.includeTrainers, false);
+    const trainerFixedOnly = parseBooleanParam(request.query?.trainerFixedOnly, false);
+    const includeTrainers =
+      parseBooleanParam(request.query?.includeTrainers, false) || trainerFixedOnly;
 
     const whereFilters: Array<Record<string, any>> = [];
 
@@ -260,6 +263,10 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
       }
     }
 
+    if (trainerFixedOnly) {
+      whereFilters.push({ trainer: { is: { contrato_fijo: true } } });
+    }
+
     const where = whereFilters.length > 0 ? { AND: whereFilters } : undefined;
 
     const [total, users] = await Promise.all([
@@ -269,6 +276,7 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
         skip: (page - 1) * pageSize,
         take: pageSize,
         where: where as any,
+        include: { trainer: true },
       }),
     ]);
 

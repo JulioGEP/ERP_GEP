@@ -307,6 +307,7 @@ export default function UsersVacationsPage() {
       createdAt: '',
       updatedAt: '',
       trainerId: null,
+      trainerFixedContract: null,
     });
   };
 

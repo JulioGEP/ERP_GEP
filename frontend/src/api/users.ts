@@ -14,6 +14,7 @@ export type UserSummary = {
   createdAt: string;
   updatedAt: string;
   trainerId: string | null;
+  trainerFixedContract: boolean | null;
 };
 
 export type UsersListResponse = {
@@ -50,6 +51,7 @@ export async function fetchUsers(params: {
   search?: string;
   status?: 'active' | 'inactive';
   includeTrainers?: boolean;
+  trainerFixedOnly?: boolean;
 } = {}): Promise<UsersListResponse> {
   const searchParams = new URLSearchParams();
   if (params.page) searchParams.set('page', String(params.page));
@@ -58,6 +60,9 @@ export async function fetchUsers(params: {
   if (params.status) searchParams.set('status', params.status);
   if (params.includeTrainers !== undefined) {
     searchParams.set('includeTrainers', params.includeTrainers ? '1' : '0');
+  }
+  if (params.trainerFixedOnly !== undefined) {
+    searchParams.set('trainerFixedOnly', params.trainerFixedOnly ? '1' : '0');
   }
 
   const query = searchParams.toString();
