@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import {
@@ -64,6 +64,7 @@ export default function UsersVacationsPage() {
     null,
   );
   const [requestActionId, setRequestActionId] = useState<string | null>(null);
+  const [expandedUsers, setExpandedUsers] = useState<string[]>([]);
 
   const summaryQuery = useQuery({
     queryKey: ['vacations-summary', year],
@@ -355,7 +356,6 @@ export default function UsersVacationsPage() {
                     <th>Persona</th>
                     <th>Rol</th>
                     <th>Vacaciones</th>
-                    <th>Ausencias</th>
                     <th>Próximas fechas</th>
                   </tr>
                 </thead>
@@ -366,54 +366,93 @@ export default function UsersVacationsPage() {
                       ? user.upcomingDates.join(', ')
                       : 'Sin próximas ausencias';
                     const allowanceLabel = `${user.enjoyed} / ${user.totalAllowance} días (${user.remaining} restantes)`;
+                    const isExpanded = expandedUsers.includes(user.userId);
+
+                    const handleToggleDetails = () => {
+                      setExpandedUsers((prev) =>
+                        prev.includes(user.userId)
+                          ? prev.filter((id) => id !== user.userId)
+                          : [...prev, user.userId],
+                      );
+                    };
 
                     return (
-                      <tr key={user.userId}>
-                        <td>
-                          <Form.Check
-                            type="checkbox"
-                            aria-label={`Seleccionar ${user.fullName}`}
-                            checked={selectedUsers.includes(user.userId)}
-                            onChange={(event) => handleUserToggle(user.userId, event.target.checked)}
-                          />
-                        </td>
-                        <td>
-                          <div className="fw-semibold">{user.fullName}</div>
-                          <div className="text-muted small">{user.active ? 'Activo' : 'Inactivo'}</div>
-                        </td>
-                        <td>{user.role}</td>
-                        <td>
-                          <div>{allowanceLabel}</div>
-                          <div className="text-muted small">Última marca: {user.lastUpdated ?? '—'}</div>
-                        </td>
-                        <td>
-                          <div className="d-flex flex-wrap gap-2">
-                            {Object.entries(user.counts).map(([key, value]) => (
-                              <div key={key} className="border rounded px-2 py-1 d-flex gap-2 align-items-center">
-                                <span
-                                  className="d-inline-block"
-                                  style={{
-                                    width: '10px',
-                                    height: '10px',
-                                    borderRadius: '999px',
-                                    backgroundColor: VACATION_TYPE_COLORS[key as VacationType],
-                                  }}
-                                ></span>
-                                <div className="small">
-                                  <div className="text-muted text-uppercase">{VACATION_TYPE_LABELS[key as VacationType]}</div>
-                                  <div className="fw-semibold">{value} días</div>
+                      <Fragment key={user.userId}>
+                        <tr>
+                          <td>
+                            <Form.Check
+                              type="checkbox"
+                              aria-label={`Seleccionar ${user.fullName}`}
+                              checked={selectedUsers.includes(user.userId)}
+                              onChange={(event) => handleUserToggle(user.userId, event.target.checked)}
+                            />
+                          </td>
+                          <td>
+                            <Button
+                              variant="link"
+                              className="p-0 text-start fw-semibold d-flex align-items-center gap-2"
+                              onClick={handleToggleDetails}
+                              aria-expanded={isExpanded}
+                              aria-controls={`vacations-user-${user.userId}`}
+                            >
+                              <span aria-hidden>{isExpanded ? '▾' : '▸'}</span>
+                              <span>{user.fullName}</span>
+                            </Button>
+                            <div className="text-muted small">{user.active ? 'Activo' : 'Inactivo'}</div>
+                          </td>
+                          <td>{user.role}</td>
+                          <td>
+                            <div>{allowanceLabel}</div>
+                            <div className="text-muted small">Última marca: {user.lastUpdated ?? '—'}</div>
+                          </td>
+                          <td>{upcomingLabel}</td>
+                        </tr>
+                        {isExpanded ? (
+                          <tr className="bg-light" id={`vacations-user-${user.userId}`}>
+                            <td colSpan={5}>
+                              <div className="d-flex flex-column gap-3">
+                                <div className="d-flex flex-wrap gap-4">
+                                  <div>
+                                    <div className="text-muted small">Estado</div>
+                                    <div className="fw-semibold">{user.active ? 'Activo' : 'Inactivo'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-muted small">Última marca</div>
+                                    <div>{user.lastUpdated ?? '—'}</div>
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-muted text-uppercase small mb-2">Ausencias</div>
+                                  <div className="d-flex flex-wrap gap-2">
+                                    {Object.entries(user.counts).map(([key, value]) => (
+                                      <div key={key} className="border rounded px-2 py-1 d-flex gap-2 align-items-center">
+                                        <span
+                                          className="d-inline-block"
+                                          style={{
+                                            width: '10px',
+                                            height: '10px',
+                                            borderRadius: '999px',
+                                            backgroundColor: VACATION_TYPE_COLORS[key as VacationType],
+                                          }}
+                                        ></span>
+                                        <div className="small">
+                                          <div className="text-muted text-uppercase">{VACATION_TYPE_LABELS[key as VacationType]}</div>
+                                          <div className="fw-semibold">{value} días</div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {totalAbsences === 0 ? (
+                                      <Badge bg="secondary" className="text-uppercase">
+                                        Sin ausencias
+                                      </Badge>
+                                    ) : null}
+                                  </div>
                                 </div>
                               </div>
-                            ))}
-                            {totalAbsences === 0 ? (
-                              <Badge bg="secondary" className="text-uppercase">
-                                Sin ausencias
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td>{upcomingLabel}</td>
-                      </tr>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
                     );
                   })}
                 </tbody>
