@@ -748,7 +748,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
   );
 }
 
-type VacationManagerModalProps = {
+export type VacationManagerModalProps = {
   show: boolean;
   user: UserSummary | null;
   onHide: () => void;
@@ -796,7 +796,7 @@ const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
 const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
 type AllowanceFieldKey = 'allowance' | 'anniversaryAllowance' | 'localHolidayAllowance' | 'previousYearAllowance';
 
-function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerModalProps) {
+export function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerModalProps) {
   const queryClient = useQueryClient();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);

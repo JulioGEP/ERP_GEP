@@ -28,6 +28,8 @@ import {
   type UserVacationDay,
   type VacationRequestItem,
 } from '../../api/userVacations';
+import { type UserSummary } from '../../api/users';
+import { VacationManagerModal } from './UsersPage';
 
 const VACATION_TYPE_LABELS: Record<VacationType, string> = {
   V: 'Vacaciones',
@@ -97,6 +99,7 @@ export default function UsersVacationsPage() {
   const [expandedUsers, setExpandedUsers] = useState<string[]>([]);
   const [bulkUserFilter, setBulkUserFilter] = useState('');
   const [bulkUserListOpen, setBulkUserListOpen] = useState(false);
+  const [vacationUser, setVacationUser] = useState<UserSummary | null>(null);
   const bulkUserFieldRef = useRef<HTMLDivElement | null>(null);
   const bulkUserPointerInteractingRef = useRef(false);
 
@@ -263,6 +266,8 @@ export default function UsersVacationsPage() {
       .join(', ');
   }, [selectedUsers, users]);
 
+  const handleCloseVacationModal = () => setVacationUser(null);
+
   const handleBulkSubmit = () => {
     if (!bulkDate || !bulkType || selectedUsers.length === 0) return;
     void bulkMutation.mutate({ date: bulkDate, type: bulkType, userIds: selectedUsers });
@@ -272,6 +277,25 @@ export default function UsersVacationsPage() {
     .length;
   const summaryYear = summaryQuery.data?.year ?? year;
   const generatedAt = summaryQuery.data?.generatedAt ?? null;
+
+  const handleOpenVacationModal = (user: VacationSummaryUser) => {
+    const [firstName, ...rest] = user.fullName.split(' ');
+    setVacationUser({
+      id: user.userId,
+      firstName,
+      lastName: rest.join(' ') || '',
+      email: '',
+      role: user.role,
+      active: user.active,
+      bankAccount: null,
+      address: null,
+      position: null,
+      startDate: null,
+      createdAt: '',
+      updatedAt: '',
+      trainerId: null,
+    });
+  };
 
   return (
     <div className="d-grid gap-4">
@@ -448,6 +472,7 @@ export default function UsersVacationsPage() {
                     <th>Rol</th>
                     <th>Vacaciones</th>
                     <th>Próximas fechas</th>
+                    <th className="text-end">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -497,10 +522,19 @@ export default function UsersVacationsPage() {
                             <div className="text-muted small">Última marca: {user.lastUpdated ?? '—'}</div>
                           </td>
                           <td>{upcomingLabel}</td>
+                          <td className="text-end">
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={() => handleOpenVacationModal(user)}
+                            >
+                              Vacaciones
+                            </Button>
+                          </td>
                         </tr>
                         {isExpanded ? (
                           <tr className="bg-light" id={`vacations-user-${user.userId}`}>
-                            <td colSpan={5}>
+                            <td colSpan={6}>
                               <div className="d-flex flex-column gap-3">
                                 <div className="d-flex flex-wrap gap-4">
                                   <div>
@@ -562,6 +596,8 @@ export default function UsersVacationsPage() {
         year={summaryYear}
         userDayMap={userDayMap}
       />
+
+      <VacationManagerModal show={Boolean(vacationUser)} user={vacationUser} onHide={handleCloseVacationModal} />
 
       <Card>
         <Card.Header className="d-flex justify-content-between align-items-center">
