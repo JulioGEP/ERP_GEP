@@ -518,6 +518,9 @@ model trainers {
   activo                        Boolean   @default(true)
   contrato_fijo                 Boolean   @default(false)
   nomina                        Decimal?  @db.Decimal(12, 2)
+  irpf                          Decimal?  @db.Decimal(12, 2)
+  ss                            Decimal?  @db.Decimal(12, 2)
+  horas_contratadas             Decimal?  @db.Decimal(12, 2)
   apellido                      String?
   dni                           String?   @unique
   direccion                     String?

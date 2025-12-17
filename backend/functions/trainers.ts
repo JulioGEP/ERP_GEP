@@ -25,6 +25,8 @@ const OPTIONAL_DATE_FIELDS = [
   'certificado_bombero_caducidad',
 ] as const;
 
+const OPTIONAL_DECIMAL_FIELDS = ['nomina', 'irpf', 'ss', 'horas_contratadas'] as const;
+
 const VALID_SEDES = ['GEP Arganda', 'GEP Sabadell', 'In company'] as const;
 const MAX_TRAINER_NAME_LENGTH = 17;
 
@@ -40,6 +42,9 @@ type TrainerRecord = {
   titulacion: string | null;
   contrato_fijo: boolean;
   nomina: Prisma.Decimal | number | string | null;
+  irpf: Prisma.Decimal | number | string | null;
+  ss: Prisma.Decimal | number | string | null;
+  horas_contratadas: Prisma.Decimal | number | string | null;
   revision_medica_caducidad: Date | string | null;
   epis_caducidad: Date | string | null;
   dni_caducidad: Date | string | null;
@@ -64,6 +69,13 @@ function toNullableString(value: unknown): string | null {
   return text.length ? text : null;
 }
 
+type DecimalFieldName = (typeof OPTIONAL_DECIMAL_FIELDS)[number];
+
+function normalizeDecimalField(value: TrainerRecord[DecimalFieldName]) {
+  if (value === null || value === undefined) return null;
+  return Number(new Prisma.Decimal(value));
+}
+
 function normalizeTrainer(row: TrainerRecord) {
   const sedeValues = Array.isArray(row.sede) ? row.sede : [];
   const normalizedSede = sedeValues.filter(
@@ -71,8 +83,10 @@ function normalizeTrainer(row: TrainerRecord) {
       typeof value === 'string' && VALID_SEDES.includes(value as (typeof VALID_SEDES)[number])
   );
 
-  const salaryValue =
-    row.nomina === null || row.nomina === undefined ? null : Number(new Prisma.Decimal(row.nomina));
+  const salaryValue = normalizeDecimalField(row.nomina);
+  const irpfValue = normalizeDecimalField(row.irpf);
+  const ssValue = normalizeDecimalField(row.ss);
+  const horasContratadasValue = normalizeDecimalField(row.horas_contratadas);
 
   return {
     trainer_id: row.trainer_id,
@@ -91,6 +105,9 @@ function normalizeTrainer(row: TrainerRecord) {
     certificado_bombero_caducidad: toMadridISOString(row.certificado_bombero_caducidad),
     contrato_fijo: Boolean(row.contrato_fijo),
     nomina: salaryValue,
+    irpf: irpfValue,
+    ss: ssValue,
+    horas_contratadas: horasContratadasValue,
     activo: Boolean(row.activo),
     sede: normalizedSede,
     created_at: toMadridISOString(row.created_at),
@@ -229,25 +246,25 @@ function parseDateField(
   };
 }
 
-type ParseNominaResult =
+type ParseDecimalResult =
   | { value: Prisma.Decimal | null }
   | { error: ReturnType<typeof errorResponse> };
 
-function parseNominaField(input: unknown): ParseNominaResult {
+function parseDecimalField(fieldName: DecimalFieldName, input: unknown): ParseDecimalResult {
   if (input === undefined) return { value: null };
   if (input === null) return { value: null };
 
-  const normalize = (value: string | number): ParseNominaResult => {
+  const normalize = (value: string | number): ParseDecimalResult => {
     const numericValue = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
     if (Number.isNaN(numericValue) || !Number.isFinite(numericValue)) {
       return {
-        error: errorResponse('VALIDATION_ERROR', 'El campo nomina debe ser numérico', 400),
+        error: errorResponse('VALIDATION_ERROR', `El campo ${fieldName} debe ser numérico`, 400),
       };
     }
 
     if (numericValue < 0) {
       return {
-        error: errorResponse('VALIDATION_ERROR', 'El campo nomina no puede ser negativo', 400),
+        error: errorResponse('VALIDATION_ERROR', `El campo ${fieldName} no puede ser negativo`, 400),
       };
     }
 
@@ -259,7 +276,7 @@ function parseNominaField(input: unknown): ParseNominaResult {
   }
 
   return {
-    error: errorResponse('VALIDATION_ERROR', 'El campo nomina debe ser numérico', 400),
+    error: errorResponse('VALIDATION_ERROR', `El campo ${fieldName} debe ser numérico`, 400),
   };
 }
 
@@ -300,11 +317,13 @@ function buildCreateData(body: any) {
     data[field] = result.value;
   }
 
-  const salaryResult = parseNominaField(body?.nomina);
-  if ('error' in salaryResult) {
-    return { error: salaryResult.error };
+  for (const field of OPTIONAL_DECIMAL_FIELDS) {
+    const decimalResult = parseDecimalField(field, body?.[field]);
+    if ('error' in decimalResult) {
+      return { error: decimalResult.error };
+    }
+    data[field] = decimalResult.value;
   }
-  data.nomina = salaryResult.value;
 
   const sedeResult = parseSedeInput(body?.sede);
   if ('error' in sedeResult) {
@@ -387,13 +406,15 @@ function buildUpdateData(body: any) {
     hasChanges = true;
   }
 
-  if (Object.prototype.hasOwnProperty.call(body, 'nomina')) {
-    const salaryResult = parseNominaField(body.nomina);
-    if ('error' in salaryResult) {
-      return { error: salaryResult.error };
+  for (const field of OPTIONAL_DECIMAL_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(body, field)) {
+      const decimalResult = parseDecimalField(field, body[field]);
+      if ('error' in decimalResult) {
+        return { error: decimalResult.error };
+      }
+      data[field] = decimalResult.value;
+      hasChanges = true;
     }
-    data.nomina = salaryResult.value;
-    hasChanges = true;
   }
 
   if (!hasChanges) {
@@ -461,6 +482,9 @@ export const handler = createHttpHandler<any>(async (request) => {
           titulacion: true,
           contrato_fijo: true,
           nomina: true,
+          irpf: true,
+          ss: true,
+          horas_contratadas: true,
           revision_medica_caducidad: true,
           epis_caducidad: true,
           dni_caducidad: true,
