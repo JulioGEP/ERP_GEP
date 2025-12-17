@@ -549,12 +549,14 @@ export default function ProfilePage() {
                 ></span>
                 <div>
                   <div
-                    className="text-muted small text-uppercase text-truncate"
-                    style={{ maxWidth: '160px' }}
+                    className="text-muted text-uppercase text-truncate"
+                    style={{ maxWidth: '160px', fontSize: '0.8rem' }}
                   >
                     {label}
                   </div>
-                  <div className="fw-semibold">{vacationCounts[key as VacationType] ?? 0} días</div>
+                  <div className="fw-semibold" style={{ fontSize: '0.9rem' }}>
+                    {vacationCounts[key as VacationType] ?? 0} días
+                  </div>
                 </div>
               </div>
             ))}
