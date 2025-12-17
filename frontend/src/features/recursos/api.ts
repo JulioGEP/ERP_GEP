@@ -13,6 +13,8 @@ export type TrainerPayload = {
   direccion?: string | null;
   especialidad?: string | null;
   titulacion?: string | null;
+  nomina?: number | string | null;
+  contrato_fijo?: boolean | null;
   activo?: boolean | null;
   sede?: string[] | null;
   revision_medica_caducidad?: string | null;
@@ -123,6 +125,14 @@ function normalizeTrainer(row: any): Trainer {
     row.certificado_bombero_caducidad instanceof Date
       ? row.certificado_bombero_caducidad.toISOString()
       : row.certificado_bombero_caducidad ?? null;
+  const rawNomina = row.nomina;
+  const nominaValue =
+    typeof rawNomina === "number"
+      ? rawNomina
+      : typeof rawNomina === "string"
+        ? Number(rawNomina)
+        : null;
+  const nomina = Number.isFinite(nominaValue) ? nominaValue : null;
 
   return {
     trainer_id: String(row.trainer_id ?? row.id ?? ""),
@@ -134,6 +144,8 @@ function normalizeTrainer(row: any): Trainer {
     direccion: row.direccion ?? null,
     especialidad: row.especialidad ?? null,
     titulacion: row.titulacion ?? null,
+    nomina,
+    contrato_fijo: Boolean(row.contrato_fijo ?? false),
     revision_medica_caducidad: revisionMedicaCaducidad,
     epis_caducidad: episCaducidad,
     dni_caducidad: dniCaducidad,
@@ -196,6 +208,27 @@ function buildRequestBody(payload: TrainerPayload): Record<string, any> {
       const value = toNullableString(payload[field]);
       body[field] = value;
     }
+  }
+
+  if ("nomina" in payload) {
+    const rawNomina = payload.nomina;
+    if (rawNomina === null || rawNomina === undefined) {
+      body.nomina = null;
+    } else if (typeof rawNomina === "number") {
+      body.nomina = Number.isFinite(rawNomina) ? rawNomina : null;
+    } else {
+      const normalized = toNullableString(rawNomina);
+      if (normalized) {
+        const parsed = Number(normalized.replace(",", "."));
+        body.nomina = Number.isFinite(parsed) ? parsed : null;
+      } else {
+        body.nomina = null;
+      }
+    }
+  }
+
+  if ("contrato_fijo" in payload) {
+    body.contrato_fijo = Boolean(payload.contrato_fijo);
   }
 
   if ("activo" in payload) {
