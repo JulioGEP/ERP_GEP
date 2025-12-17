@@ -33,18 +33,21 @@ type ProfileUser = {
   trainerId?: string | null;
 };
 
-const VACATION_LABELS: Record<VacationType, string> = {
-  V: 'Vacaciones',
-  L: 'Festivo local',
-  A: 'Día aniversario',
-  T: 'Teletrabajo',
-  M: 'Matrimonio o registro de pareja de hecho',
-  H: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
-  F: 'Fallecimiento de un familiar',
-  R: 'Traslado del domicilio habitual',
-  P: 'Exámenes prenatales',
-  I: 'Incapacidad temporal',
-  N: 'Festivos nacionales',
+const VACATION_LABELS: Record<VacationType, { label: string; fullLabel: string }> = {
+  V: { label: 'Vacaciones', fullLabel: 'Vacaciones' },
+  L: { label: 'Festivo local', fullLabel: 'Festivo local' },
+  A: { label: 'Día aniversario', fullLabel: 'Día aniversario' },
+  T: { label: 'Teletrabajo', fullLabel: 'Teletrabajo' },
+  M: { label: 'Matrimonio', fullLabel: 'Matrimonio o registro de pareja de hecho' },
+  H: {
+    label: 'Accidente',
+    fullLabel: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
+  },
+  F: { label: 'Fallecimiento', fullLabel: 'Fallecimiento de un familiar' },
+  R: { label: 'Traslado', fullLabel: 'Traslado del domicilio habitual' },
+  P: { label: 'Exámenes', fullLabel: 'Exámenes prenatales' },
+  I: { label: 'Incapacidad', fullLabel: 'Incapacidad temporal' },
+  N: { label: 'Festivos nacionales', fullLabel: 'Festivos nacionales' },
 };
 
 const VACATION_COLORS: Record<VacationType, string> = {
@@ -63,17 +66,17 @@ const VACATION_COLORS: Record<VacationType, string> = {
 
 const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> = [
   { value: '', label: 'Sin marca' },
-  { value: 'V', label: VACATION_LABELS.V },
-  { value: 'L', label: VACATION_LABELS.L },
-  { value: 'A', label: VACATION_LABELS.A },
-  { value: 'T', label: VACATION_LABELS.T },
-  { value: 'M', label: VACATION_LABELS.M },
-  { value: 'H', label: VACATION_LABELS.H },
-  { value: 'F', label: VACATION_LABELS.F },
-  { value: 'R', label: VACATION_LABELS.R },
-  { value: 'P', label: VACATION_LABELS.P },
-  { value: 'I', label: VACATION_LABELS.I },
-  { value: 'N', label: VACATION_LABELS.N },
+  { value: 'V', label: VACATION_LABELS.V.fullLabel },
+  { value: 'L', label: VACATION_LABELS.L.fullLabel },
+  { value: 'A', label: VACATION_LABELS.A.fullLabel },
+  { value: 'T', label: VACATION_LABELS.T.fullLabel },
+  { value: 'M', label: VACATION_LABELS.M.fullLabel },
+  { value: 'H', label: VACATION_LABELS.H.fullLabel },
+  { value: 'F', label: VACATION_LABELS.F.fullLabel },
+  { value: 'R', label: VACATION_LABELS.R.fullLabel },
+  { value: 'P', label: VACATION_LABELS.P.fullLabel },
+  { value: 'I', label: VACATION_LABELS.I.fullLabel },
+  { value: 'N', label: VACATION_LABELS.N.fullLabel },
 ];
 
 async function fileToBase64(file: File): Promise<string> {
@@ -521,8 +524,12 @@ export default function ProfilePage() {
           </div>
 
           <div className="d-flex flex-wrap gap-2 align-items-stretch">
-            {Object.entries(VACATION_LABELS).map(([key, label]) => (
-              <div key={key} className="border rounded px-3 py-2 d-flex gap-2 align-items-center">
+            {Object.entries(VACATION_LABELS).map(([key, { label, fullLabel }]) => (
+              <div
+                key={key}
+                className="border rounded px-3 py-2 d-flex gap-2 align-items-center"
+                title={fullLabel}
+              >
                 <span
                   className="d-inline-block"
                   style={{
@@ -533,7 +540,12 @@ export default function ProfilePage() {
                   }}
                 ></span>
                 <div>
-                  <div className="text-muted small text-uppercase">{label}</div>
+                  <div
+                    className="text-muted small text-uppercase text-truncate"
+                    style={{ maxWidth: '160px' }}
+                  >
+                    {label}
+                  </div>
                   <div className="fw-semibold">{vacationCounts[key as VacationType] ?? 0} días</div>
                 </div>
               </div>
