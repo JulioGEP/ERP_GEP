@@ -15,6 +15,9 @@ export type TrainerPayload = {
   titulacion?: string | null;
   contrato_fijo?: boolean | null;
   nomina?: number | null;
+  irpf?: number | null;
+  ss?: number | null;
+  horas_contratadas?: number | null;
   activo?: boolean | null;
   sede?: string[] | null;
   revision_medica_caducidad?: string | null;
@@ -127,6 +130,13 @@ function normalizeTrainer(row: any): Trainer {
       : row.certificado_bombero_caducidad ?? null;
   const nominaValue =
     row.nomina === null || row.nomina === undefined ? null : Number.parseFloat(String(row.nomina));
+  const irpfValue =
+    row.irpf === null || row.irpf === undefined ? null : Number.parseFloat(String(row.irpf));
+  const ssValue = row.ss === null || row.ss === undefined ? null : Number.parseFloat(String(row.ss));
+  const horasContratadasValue =
+    row.horas_contratadas === null || row.horas_contratadas === undefined
+      ? null
+      : Number.parseFloat(String(row.horas_contratadas));
 
   return {
     trainer_id: String(row.trainer_id ?? row.id ?? ""),
@@ -145,6 +155,9 @@ function normalizeTrainer(row: any): Trainer {
     certificado_bombero_caducidad: certificadoBomberoCaducidad,
     contrato_fijo: Boolean(row.contrato_fijo ?? false),
     nomina: Number.isNaN(nominaValue) ? null : nominaValue,
+    irpf: Number.isNaN(irpfValue) ? null : irpfValue,
+    ss: Number.isNaN(ssValue) ? null : ssValue,
+    horas_contratadas: Number.isNaN(horasContratadasValue) ? null : horasContratadasValue,
     activo: Boolean(row.activo ?? false),
     sede: Array.isArray(row.sede)
       ? row.sede.filter((value: unknown): value is string => typeof value === "string")
@@ -218,6 +231,33 @@ function buildRequestBody(payload: TrainerPayload): Record<string, any> {
       body.nomina = salary;
     } else if (salary === null) {
       body.nomina = null;
+    }
+  }
+
+  if ("irpf" in payload) {
+    const value = payload.irpf;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      body.irpf = value;
+    } else if (value === null) {
+      body.irpf = null;
+    }
+  }
+
+  if ("ss" in payload) {
+    const value = payload.ss;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      body.ss = value;
+    } else if (value === null) {
+      body.ss = null;
+    }
+  }
+
+  if ("horas_contratadas" in payload) {
+    const value = payload.horas_contratadas;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      body.horas_contratadas = value;
+    } else if (value === null) {
+      body.horas_contratadas = null;
     }
   }
 
