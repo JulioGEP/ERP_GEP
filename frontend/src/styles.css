@@ -1331,8 +1331,12 @@ option.session-option-unavailable {
 }
 
 .vacation-type-label {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   letter-spacing: 0.05em;
+}
+
+.vacation-type-value {
+  font-size: 0.9rem;
 }
 
 .vacations-modal .modal-dialog {
