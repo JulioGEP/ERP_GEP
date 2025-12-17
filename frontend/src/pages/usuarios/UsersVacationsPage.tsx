@@ -1,7 +1,20 @@
 import type React from 'react';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Col,
+  Form,
+  Modal,
+  OverlayTrigger,
+  Row,
+  Spinner,
+  Table,
+  Tooltip,
+} from 'react-bootstrap';
 import {
   acceptVacationRequest,
   deleteVacationRequest,
@@ -15,6 +28,20 @@ import {
 } from '../../api/userVacations';
 
 const VACATION_TYPE_LABELS: Record<VacationType, string> = {
+  V: 'Vacaciones',
+  L: 'Festivo local',
+  A: 'Día aniversario',
+  T: 'Teletrabajo',
+  M: 'Matrimonio',
+  H: 'Accidente',
+  F: 'Fallecimiento',
+  R: 'Traslado',
+  P: 'Exámenes',
+  I: 'Incapacidad',
+  N: 'Festivos nacionales',
+};
+
+const VACATION_TYPE_FULL_LABELS: Record<VacationType, string> = {
   V: 'Vacaciones',
   L: 'Festivo local',
   A: 'Día aniversario',
@@ -76,6 +103,17 @@ export default function UsersVacationsPage() {
     queryKey: ['vacation-requests'],
     queryFn: fetchVacationRequests,
   });
+
+  const renderVacationTypeLabel = (type: VacationType) => {
+    const label = VACATION_TYPE_LABELS[type];
+    const fullLabel = VACATION_TYPE_FULL_LABELS[type];
+
+    return (
+      <OverlayTrigger placement="top" overlay={<Tooltip id={`vacation-type-${type}`}>{fullLabel}</Tooltip>}>
+        <span className="text-nowrap">{label}</span>
+      </OverlayTrigger>
+    );
+  };
 
   const users = useMemo<VacationSummaryUser[]>(() => {
     return [...(summaryQuery.data?.users ?? [])].sort((a, b) =>
@@ -286,7 +324,7 @@ export default function UsersVacationsPage() {
                           <td>{dateRangeLabel}</td>
                           <td>
                             <Badge bg="light" text="dark" className="border" style={{ borderColor: typeColor }}>
-                              {tagLabel}
+                              {request.tag ? renderVacationTypeLabel(request.tag) : tagLabel}
                             </Badge>
                           </td>
                           <td>{request.notes?.length ? request.notes : '—'}</td>
@@ -458,7 +496,9 @@ export default function UsersVacationsPage() {
                                           }}
                                         ></span>
                                         <div className="small">
-                                          <div className="text-muted text-uppercase">{VACATION_TYPE_LABELS[key as VacationType]}</div>
+                                          <div className="text-muted text-uppercase">
+                                            {renderVacationTypeLabel(key as VacationType)}
+                                          </div>
                                           <div className="fw-semibold">{value} días</div>
                                         </div>
                                       </div>
@@ -533,7 +573,7 @@ export default function UsersVacationsPage() {
               <Form.Label>Marca</Form.Label>
               <Form.Select value={bulkType} onChange={(event) => setBulkType(event.target.value as VacationType)}>
                 {Object.entries(VACATION_TYPE_LABELS).map(([key, label]) => (
-                  <option value={key} key={key}>
+                  <option value={key} key={key} title={VACATION_TYPE_FULL_LABELS[key as VacationType]}>
                     {label} ({key})
                   </option>
                 ))}
@@ -606,7 +646,13 @@ function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: Vacat
                   backgroundColor: VACATION_TYPE_COLORS[key as VacationType],
                 }}
               ></span>
-              {label} ({key})
+              <OverlayTrigger
+                placement="top"
+                overlay={<Tooltip id={`vacation-type-legend-${key}`}>{VACATION_TYPE_FULL_LABELS[key as VacationType]}</Tooltip>}
+              >
+                <span className="text-nowrap">{label}</span>
+              </OverlayTrigger>{' '}
+              ({key})
             </Badge>
           ))}
         </div>
@@ -669,7 +715,7 @@ function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: Vacat
                                       backgroundColor: color,
                                       color: type ? '#ffffff' : undefined,
                                     }}
-                                    title={type ? `${VACATION_TYPE_LABELS[type as VacationType]} (${type})` : undefined}
+                                    title={type ? `${VACATION_TYPE_FULL_LABELS[type as VacationType]} (${type})` : undefined}
                                   >
                                     {type || ''}
                                   </td>
