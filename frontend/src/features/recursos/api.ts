@@ -13,6 +13,8 @@ export type TrainerPayload = {
   direccion?: string | null;
   especialidad?: string | null;
   titulacion?: string | null;
+  contrato_fijo?: boolean | null;
+  nomina?: number | null;
   activo?: boolean | null;
   sede?: string[] | null;
   revision_medica_caducidad?: string | null;
@@ -123,6 +125,8 @@ function normalizeTrainer(row: any): Trainer {
     row.certificado_bombero_caducidad instanceof Date
       ? row.certificado_bombero_caducidad.toISOString()
       : row.certificado_bombero_caducidad ?? null;
+  const nominaValue =
+    row.nomina === null || row.nomina === undefined ? null : Number.parseFloat(String(row.nomina));
 
   return {
     trainer_id: String(row.trainer_id ?? row.id ?? ""),
@@ -139,6 +143,8 @@ function normalizeTrainer(row: any): Trainer {
     dni_caducidad: dniCaducidad,
     carnet_conducir_caducidad: carnetConducirCaducidad,
     certificado_bombero_caducidad: certificadoBomberoCaducidad,
+    contrato_fijo: Boolean(row.contrato_fijo ?? false),
+    nomina: Number.isNaN(nominaValue) ? null : nominaValue,
     activo: Boolean(row.activo ?? false),
     sede: Array.isArray(row.sede)
       ? row.sede.filter((value: unknown): value is string => typeof value === "string")
@@ -200,6 +206,19 @@ function buildRequestBody(payload: TrainerPayload): Record<string, any> {
 
   if ("activo" in payload) {
     body.activo = Boolean(payload.activo);
+  }
+
+  if ("contrato_fijo" in payload) {
+    body.contrato_fijo = Boolean(payload.contrato_fijo);
+  }
+
+  if ("nomina" in payload) {
+    const salary = payload.nomina;
+    if (typeof salary === "number" && Number.isFinite(salary)) {
+      body.nomina = salary;
+    } else if (salary === null) {
+      body.nomina = null;
+    }
   }
 
   if ("sede" in payload) {

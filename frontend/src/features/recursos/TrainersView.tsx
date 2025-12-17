@@ -21,6 +21,8 @@ type TrainersViewProps = {
   onNotify: (toast: ToastParams) => void;
 };
 
+const EURO_FORMATTER = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
+
 const EXPIRATION_FIELDS = [
   "revision_medica_caducidad",
   "epis_caducidad",
@@ -77,6 +79,14 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     return trimmed.length ? trimmed : null;
   };
 
+  const toNullableSalary = (value: string): number | null => {
+    const normalized = value.replace(",", ".").trim();
+    if (!normalized.length) return null;
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return Number(parsed.toFixed(2));
+  };
+
   return {
     name: values.name.trim(),
     apellido: toNullable(values.apellido),
@@ -93,6 +103,8 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     dni_caducidad: toNullableDate(values.dni_caducidad),
     carnet_conducir_caducidad: toNullableDate(values.carnet_conducir_caducidad),
     certificado_bombero_caducidad: toNullableDate(values.certificado_bombero_caducidad),
+    contrato_fijo: values.contrato_fijo,
+    nomina: values.contrato_fijo ? toNullableSalary(values.nomina) : null,
   };
 }
 
@@ -121,6 +133,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
   const [detailTrainer, setDetailTrainer] = useState<Trainer | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
+  const [contractFixedOnly, setContractFixedOnly] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -178,6 +191,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
     return trainers.filter((trainer) => {
       if (statusFilter === "active" && !trainer.activo) return false;
       if (statusFilter === "inactive" && trainer.activo) return false;
+      if (contractFixedOnly && !trainer.contrato_fijo) return false;
 
       if (!normalizedTerm) return true;
 
@@ -186,11 +200,11 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
 
       return name.includes(normalizedTerm) || lastName.includes(normalizedTerm);
     });
-  }, [trainers, searchTerm, statusFilter]);
+  }, [contractFixedOnly, trainers, searchTerm, statusFilter]);
 
   const hasFiltersApplied = useMemo(
-    () => searchTerm.trim().length > 0 || statusFilter !== "all",
-    [searchTerm, statusFilter]
+    () => searchTerm.trim().length > 0 || statusFilter !== "all" || contractFixedOnly,
+    [contractFixedOnly, searchTerm, statusFilter]
   );
 
   const expirationThreshold = getExpirationThreshold();
@@ -244,6 +258,10 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
         return trainer.especialidad ?? "";
       case "email":
         return trainer.email ?? "";
+      case "contrato_fijo":
+        return trainer.contrato_fijo ? 1 : 0;
+      case "nomina":
+        return trainer.nomina ?? 0;
       default:
         return null;
     }
@@ -306,29 +324,38 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
           />
-          <ButtonGroup>
+          <div className="d-flex gap-2">
+            <ButtonGroup>
+              <Button
+                variant={statusFilter === "all" ? "primary" : "outline-primary"}
+                onClick={() => setStatusFilter("all")}
+                active={statusFilter === "all"}
+              >
+                Todos
+              </Button>
+              <Button
+                variant={statusFilter === "active" ? "primary" : "outline-primary"}
+                onClick={() => setStatusFilter("active")}
+                active={statusFilter === "active"}
+              >
+                Activos
+              </Button>
+              <Button
+                variant={statusFilter === "inactive" ? "primary" : "outline-primary"}
+                onClick={() => setStatusFilter("inactive")}
+                active={statusFilter === "inactive"}
+              >
+                Inactivos
+              </Button>
+            </ButtonGroup>
             <Button
-              variant={statusFilter === "all" ? "primary" : "outline-primary"}
-              onClick={() => setStatusFilter("all")}
-              active={statusFilter === "all"}
+              variant={contractFixedOnly ? "primary" : "outline-primary"}
+              onClick={() => setContractFixedOnly((current) => !current)}
+              active={contractFixedOnly}
             >
-              Todos
+              Contrato Fijo
             </Button>
-            <Button
-              variant={statusFilter === "active" ? "primary" : "outline-primary"}
-              onClick={() => setStatusFilter("active")}
-              active={statusFilter === "active"}
-            >
-              Activos
-            </Button>
-            <Button
-              variant={statusFilter === "inactive" ? "primary" : "outline-primary"}
-              onClick={() => setStatusFilter("inactive")}
-              active={statusFilter === "inactive"}
-            >
-              Inactivos
-            </Button>
-          </ButtonGroup>
+          </div>
         </div>
         <div className="table-responsive">
           <Table hover className="mb-0 align-middle">
@@ -352,6 +379,18 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                   sortState={sortState}
                   onSort={requestSort}
                 />
+                <SortableHeader
+                  columnKey="contrato_fijo"
+                  label={<span className="fw-semibold">Contrato fijo</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
+                <SortableHeader
+                  columnKey="nomina"
+                  label={<span className="fw-semibold">Nómina (€)</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
                 <th className="text-end">
                   <span className="fw-semibold">Acciones</span>
                 </th>
@@ -360,7 +399,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="py-5 text-center">
+                  <td colSpan={6} className="py-5 text-center">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
@@ -382,6 +421,12 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                       <td className="fw-semibold">{fullName}</td>
                       <td>{trainer.especialidad ?? "—"}</td>
                       <td>{trainer.email ?? "—"}</td>
+                      <td>{trainer.contrato_fijo ? "Sí" : "No"}</td>
+                      <td>
+                        {trainer.contrato_fijo && typeof trainer.nomina === "number"
+                          ? EURO_FORMATTER.format(trainer.nomina)
+                          : "—"}
+                      </td>
                       <td className="text-end">
                         <div className="d-inline-flex gap-2">
                           <Button
@@ -411,7 +456,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                 })
               ) : trainers.length ? (
                 <tr>
-                  <td colSpan={4} className="py-5 text-center text-muted">
+                  <td colSpan={6} className="py-5 text-center text-muted">
                     {hasFiltersApplied
                       ? "No se encontraron formadores que coincidan con los filtros aplicados."
                       : "No hay formadores registrados todavía."}
@@ -419,7 +464,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                 </tr>
               ) : (
                 <tr>
-                  <td colSpan={4} className="py-5 text-center text-muted">
+                  <td colSpan={6} className="py-5 text-center text-muted">
                     No hay formadores registrados todavía.
                   </td>
                 </tr>

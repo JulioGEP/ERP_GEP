@@ -60,6 +60,8 @@ const DOCUMENT_TYPE_LABEL = new Map(
   TRAINER_DOCUMENT_TYPES.map(({ value, label }) => [value, label]),
 );
 
+const EURO_FORMATTER = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
+
 export function TrainerDetailsDrawer({
   trainer,
   show,
@@ -163,6 +165,12 @@ export function TrainerDetailsDrawer({
                   <span>Email: {trainer.email ?? "—"}</span>
                   <span>Teléfono: {trainer.phone ?? "—"}</span>
                   <span>DNI: {trainer.dni ?? "—"}</span>
+                  <span>Contrato fijo: {trainer.contrato_fijo ? "Sí" : "No"}</span>
+                  {trainer.contrato_fijo && (
+                    <span>
+                      Nómina: {typeof trainer.nomina === "number" ? EURO_FORMATTER.format(trainer.nomina) : "—"}
+                    </span>
+                  )}
                   {trainerExpiryDates.map(({ label, value }) => {
                     const isExpiring = isDateNearExpiry(value);
                     return (
@@ -256,15 +264,17 @@ export function TrainerDetailsDrawer({
               )}
             </div>
 
-            <Stack gap={3} className="mt-1">
-              <div>
-                <h3 className="h6 mb-3">Disponibilidad</h3>
-                <p className="text-muted small mb-3">
-                  Consulta o ajusta la disponibilidad anual del formador.
-                </p>
-              </div>
-              <TrainerAvailabilitySection trainerId={trainer.trainer_id} />
-            </Stack>
+            {trainer.contrato_fijo && (
+              <Stack gap={3} className="mt-1">
+                <div>
+                  <h3 className="h6 mb-3">Vacaciones y teletrabajo</h3>
+                  <p className="text-muted small mb-3">
+                    Consulta o ajusta la disponibilidad anual del formador.
+                  </p>
+                </div>
+                <TrainerAvailabilitySection trainerId={trainer.trainer_id} />
+              </Stack>
+            )}
           </div>
         ) : (
           <div className="text-muted">Selecciona un formador para ver sus detalles.</div>
