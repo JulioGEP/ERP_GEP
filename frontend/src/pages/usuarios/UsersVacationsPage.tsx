@@ -76,7 +76,9 @@ export default function UsersVacationsPage() {
   });
 
   const users = useMemo<VacationSummaryUser[]>(() => {
-    return [...(summaryQuery.data?.users ?? [])].sort((a, b) => a.fullName.localeCompare(b.fullName));
+    return [...(summaryQuery.data?.users ?? [])].sort((a, b) =>
+      a.fullName.localeCompare(b.fullName, 'es', { sensitivity: 'base' }),
+    );
   }, [summaryQuery.data?.users]);
 
   const selectedCalendarUsers = useMemo(() => {
