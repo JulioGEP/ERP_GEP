@@ -83,15 +83,16 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
   const [vacationUser, setVacationUser] = useState<UserSummary | null>(null);
   const [includeTrainers, setIncludeTrainers] = useState(false);
+  const [fixedTrainersOnly, setFixedTrainersOnly] = useState(false);
   const [tableFilter, setTableFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
   useEffect(() => {
     setPage(1);
-  }, [includeTrainers, statusFilter, tableFilter]);
+  }, [includeTrainers, statusFilter, tableFilter, fixedTrainersOnly]);
 
   const usersQuery = useQuery<UsersListResponse>({
-    queryKey: ['users', page, searchTerm, includeTrainers, statusFilter],
+    queryKey: ['users', page, searchTerm, includeTrainers, statusFilter, fixedTrainersOnly],
     queryFn: () =>
       fetchUsers({
         page,
@@ -99,6 +100,7 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
         search: searchTerm || undefined,
         includeTrainers,
         status: statusFilter === 'all' ? undefined : statusFilter,
+        fixedTrainersOnly,
       }),
     placeholderData: keepPreviousData,
   });
@@ -120,6 +122,26 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
     setEditingUser(user);
     setShowModal(true);
   }, []);
+
+  const toggleIncludeTrainers = useCallback(() => {
+    setIncludeTrainers((prev) => {
+      const next = !prev;
+      if (!next) {
+        setFixedTrainersOnly(false);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleFixedTrainersOnly = useCallback(() => {
+    setFixedTrainersOnly((prev) => {
+      const next = !prev;
+      if (next && !includeTrainers) {
+        setIncludeTrainers(true);
+      }
+      return next;
+    });
+  }, [includeTrainers]);
 
   const openVacations = useCallback((user: UserSummary) => {
     setVacationUser(user);
@@ -298,9 +320,15 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
                   <div className="d-flex gap-2 flex-wrap">
                     <Button
                       variant={includeTrainers ? 'outline-secondary' : 'outline-primary'}
-                      onClick={() => setIncludeTrainers((prev) => !prev)}
+                      onClick={toggleIncludeTrainers}
                     >
                       {includeTrainers ? 'Ocultar formadores' : 'Mostrar Formadores'}
+                    </Button>
+                    <Button
+                      variant={fixedTrainersOnly ? 'primary' : 'outline-secondary'}
+                      onClick={toggleFixedTrainersOnly}
+                    >
+                      Formadores fijos
                     </Button>
                     <ButtonGroup>
                       <Button

@@ -50,6 +50,7 @@ export async function fetchUsers(params: {
   search?: string;
   status?: 'active' | 'inactive';
   includeTrainers?: boolean;
+  fixedTrainersOnly?: boolean;
 } = {}): Promise<UsersListResponse> {
   const searchParams = new URLSearchParams();
   if (params.page) searchParams.set('page', String(params.page));
@@ -58,6 +59,9 @@ export async function fetchUsers(params: {
   if (params.status) searchParams.set('status', params.status);
   if (params.includeTrainers !== undefined) {
     searchParams.set('includeTrainers', params.includeTrainers ? '1' : '0');
+  }
+  if (params.fixedTrainersOnly !== undefined) {
+    searchParams.set('fixedTrainersOnly', params.fixedTrainersOnly ? '1' : '0');
   }
 
   const query = searchParams.toString();

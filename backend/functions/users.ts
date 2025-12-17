@@ -233,7 +233,8 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
     const statusInput =
       typeof request.query?.status === 'string' ? request.query.status.trim().toLowerCase() : '';
     const statusFilter = statusInput === 'active' || statusInput === 'inactive' ? statusInput : null;
-    const includeTrainers = parseBooleanParam(request.query?.includeTrainers, false);
+    const fixedTrainersOnly = parseBooleanParam(request.query?.fixedTrainersOnly, false);
+    const includeTrainers = fixedTrainersOnly || parseBooleanParam(request.query?.includeTrainers, false);
 
     const whereFilters: Array<Record<string, any>> = [];
 
@@ -258,6 +259,10 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
       if (formadorRole) {
         whereFilters.push({ NOT: { role: formadorRole } });
       }
+    }
+
+    if (fixedTrainersOnly) {
+      whereFilters.push({ trainer: { is: { contrato_fijo: true } } });
     }
 
     const where = whereFilters.length > 0 ? { AND: whereFilters } : undefined;
