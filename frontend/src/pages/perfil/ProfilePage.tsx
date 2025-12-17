@@ -11,7 +11,7 @@ import {
   type UserVacationsResponse,
   type VacationType,
 } from '../../api/userVacations';
-import { fetchTrainerDocuments, uploadTrainerDocument } from '../../features/recursos/api';
+import { fetchTrainerDocuments, fetchTrainers, uploadTrainerDocument } from '../../features/recursos/api';
 import { TRAINER_DOCUMENT_TYPES, type TrainerDocumentTypeValue } from '../../features/recursos/trainers.constants';
 import { VacationCalendar } from '../../components/vacations/VacationCalendar';
 import { useAuth } from '../../context/AuthContext';
@@ -141,25 +141,43 @@ export default function ProfilePage() {
     enabled: !!user?.id,
   });
 
+  const trainerId = useMemo(() => profileQuery.data?.trainerId ?? user?.trainerId ?? null, [
+    profileQuery.data?.trainerId,
+    user?.trainerId,
+  ]);
+
   const documentsQuery = useQuery({
     queryKey: ['user-documents', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
       return fetchUserDocuments(user.id);
     },
-    enabled: !!user?.id && !profileQuery.data?.trainerId,
+    enabled: !!user?.id && !trainerId,
   });
 
   const trainerDocumentsQuery = useQuery({
-    queryKey: ['trainer-documents-profile', profileQuery.data?.trainerId],
+    queryKey: ['trainer-documents-profile', trainerId],
     queryFn: async () => {
-      if (!profileQuery.data?.trainerId) {
+      if (!trainerId) {
         return { documents: [] as TrainerDocument[], driveFolderWebViewLink: null as string | null };
       }
-      return fetchTrainerDocuments(profileQuery.data.trainerId);
+      return fetchTrainerDocuments(trainerId);
     },
-    enabled: Boolean(profileQuery.data?.trainerId),
+    enabled: Boolean(trainerId),
   });
+
+  const trainerDetailsQuery = useQuery({
+    queryKey: ['trainer-details-profile', trainerId],
+    queryFn: async () => {
+      if (!trainerId) return null;
+      const trainers = await fetchTrainers();
+      return trainers.find((trainer) => trainer.trainer_id === trainerId) ?? null;
+    },
+    enabled: Boolean(trainerId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const shouldShowVacations = trainerId ? trainerDetailsQuery.data?.contrato_fijo === true : true;
 
   const vacationsQuery = useQuery<UserVacationsResponse>({
     queryKey: ['user-vacations-profile', user?.id, vacationYear],
@@ -167,7 +185,7 @@ export default function ProfilePage() {
       if (!user?.id) throw new Error('Usuario no encontrado');
       return fetchUserVacations(user.id, vacationYear);
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && shouldShowVacations,
   });
 
   const mutation = useMutation({
@@ -222,8 +240,6 @@ export default function ProfilePage() {
 
   const canRequestVacation =
     Boolean(vacationStart && vacationEnd) && !vacationRequestMutation.isPending && Boolean(user?.email);
-
-  const trainerId = useMemo(() => profileQuery.data?.trainerId ?? user?.trainerId ?? null, [profileQuery.data?.trainerId, user?.trainerId]);
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -332,8 +348,9 @@ export default function ProfilePage() {
 
   return (
     <div className="d-grid gap-4">
-      <Card className="shadow-sm">
-        <Card.Body className="d-grid gap-4">
+      {shouldShowVacations ? (
+        <Card className="shadow-sm">
+          <Card.Body className="d-grid gap-4">
           <div>
             <h1 className="h3 fw-bold mb-1">Mi perfil</h1>
             <p className="text-muted mb-0">Consulta tu información y gestiona tu contraseña.</p>
@@ -469,8 +486,9 @@ export default function ProfilePage() {
         </Card.Body>
       </Card>
 
-      <Card className="shadow-sm">
-        <Card.Body className="d-grid gap-4">
+      {shouldShowVacations ? (
+        <Card className="shadow-sm">
+          <Card.Body className="d-grid gap-4">
           <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
               <h2 className="h5 fw-bold mb-1">Vacaciones y teletrabajo</h2>
@@ -593,6 +611,7 @@ export default function ProfilePage() {
           </div>
         </Card.Body>
       </Card>
+      ) : null}
 
       <Card className="shadow-sm">
         <Card.Body className="d-grid gap-4">
