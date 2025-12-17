@@ -1024,7 +1024,6 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
     key: string;
     label: string;
     value: number | '';
-    description?: string;
     readOnly?: boolean;
     isRemaining?: boolean;
   }> = [
@@ -1032,32 +1031,27 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
       key: 'allowance',
       label: 'Vacaciones',
       value: allowances.allowance,
-      description: 'Por defecto 24 días de vacaciones (editable).',
     },
     {
       key: 'remaining',
       label: 'Restantes',
       value: remaining,
-      description: 'Añade o ajusta días directamente aquí.',
       isRemaining: true,
     },
     {
       key: 'anniversaryAllowance',
       label: 'Aniversario',
       value: allowances.anniversaryAllowance,
-      description: 'Días asignados por aniversario (por defecto 1).',
     },
     {
       key: 'localHolidayAllowance',
       label: 'Festivos locales',
       value: allowances.localHolidayAllowance,
-      description: 'Días de festivos locales (por defecto 2).',
     },
     {
       key: 'previousYearAllowance',
       label: 'Vacaciones año anterior',
       value: allowances.previousYearAllowance,
-      description: 'Saldo arrastrado de años anteriores.',
     },
     {
       key: 'enjoyed',
@@ -1095,17 +1089,19 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
           </div>
 
           <div className="d-flex flex-column gap-3 flex-grow-1">
-            <div className="d-flex gap-3 flex-wrap">
+            <div className="vacation-allowance-grid">
               {allowanceCards.map((item) => (
-                <div key={item.key} className="border rounded px-3 py-2" style={{ minWidth: '190px' }}>
+                <div key={item.key} className="vacation-allowance-card">
                   <div className="text-muted small text-uppercase">{item.label}</div>
                   {item.readOnly ? (
-                    <div className="fw-semibold">{item.value}</div>
+                    <div className="fw-semibold vacation-allowance-value">{item.value}</div>
                   ) : (
                     <Form.Control
                       type="number"
                       min={0}
                       value={item.value}
+                      size="sm"
+                      className="vacation-allowance-value"
                       onChange={(event) =>
                         item.isRemaining
                           ? handleRemainingChange(event.target.value)
@@ -1116,7 +1112,6 @@ function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerM
                       }
                     />
                   )}
-                  {item.description ? <Form.Text className="text-muted">{item.description}</Form.Text> : null}
                 </div>
               ))}
             </div>
