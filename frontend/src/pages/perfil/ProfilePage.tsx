@@ -348,9 +348,8 @@ export default function ProfilePage() {
 
   return (
     <div className="d-grid gap-4">
-      {shouldShowVacations ? (
-        <Card className="shadow-sm">
-          <Card.Body className="d-grid gap-4">
+      <Card className="shadow-sm">
+        <Card.Body className="d-grid gap-4">
           <div>
             <h1 className="h3 fw-bold mb-1">Mi perfil</h1>
             <p className="text-muted mb-0">Consulta tu información y gestiona tu contraseña.</p>
