@@ -183,12 +183,8 @@ async function ensureValidLink(prisma: ReturnType<typeof getPrisma>, token: stri
   if (!link) {
     return { error: errorResponse('TOKEN_INVALID', 'Enlace inválido', 404) } as const;
   }
-  const now = new Date();
   if (!link.active) {
     return { error: errorResponse('TOKEN_REVOKED', 'Este enlace ha sido desactivado', 410) } as const;
-  }
-  if (link.expires_at && now >= link.expires_at) {
-    return { error: errorResponse('TOKEN_EXPIRED', 'Este enlace ha expirado', 410) } as const;
   }
   return { link } as const;
 }
