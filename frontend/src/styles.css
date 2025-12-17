@@ -1284,10 +1284,18 @@ option.session-option-unavailable {
 
 /* === Vacaciones === */
 .vacation-allowance-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 10px;
   align-items: stretch;
+}
+
+.vacation-allowance-grid--primary {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.vacation-allowance-grid--secondary {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
 .vacation-allowance-card {
@@ -1300,9 +1308,31 @@ option.session-option-unavailable {
   flex: 1 0 140px;
 }
 
+.vacation-allowance-card--secondary {
+  padding: 8px;
+}
+
+.vacation-allowance-card--secondary .vacation-allowance-value {
+  font-size: 1rem;
+}
+
 .vacation-allowance-value {
   font-weight: 700;
   font-size: 1.1rem;
+}
+
+.vacation-allowance-label {
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+.vacation-allowance-label--small {
+  font-size: 0.72rem;
+}
+
+.vacation-type-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
 }
 
 .vacation-calendar .vacation-month {

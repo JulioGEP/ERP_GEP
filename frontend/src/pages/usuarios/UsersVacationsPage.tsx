@@ -567,7 +567,12 @@ export default function UsersVacationsPage() {
         userDayMap={userDayMap}
       />
 
-      <VacationManagerModal show={Boolean(vacationUser)} user={vacationUser} onHide={handleCloseVacationModal} />
+      <VacationManagerModal
+        show={Boolean(vacationUser)}
+        user={vacationUser}
+        year={summaryYear}
+        onHide={handleCloseVacationModal}
+      />
 
       <Card>
         <Card.Header className="d-flex justify-content-between align-items-center">

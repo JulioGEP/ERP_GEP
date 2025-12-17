@@ -771,6 +771,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
 export type VacationManagerModalProps = {
   show: boolean;
   user: UserSummary | null;
+  year: number;
   onHide: () => void;
   onNotify?: UsersPageProps['onNotify'];
 };
@@ -816,10 +817,8 @@ const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
 const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
 type AllowanceFieldKey = 'allowance' | 'anniversaryAllowance' | 'localHolidayAllowance' | 'previousYearAllowance';
 
-export function VacationManagerModal({ show, user, onHide, onNotify }: VacationManagerModalProps) {
+export function VacationManagerModal({ show, user, year, onHide, onNotify }: VacationManagerModalProps) {
   const queryClient = useQueryClient();
-  const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear);
   const [selectionStart, setSelectionStart] = useState<string | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<VacationType | ''>('');
@@ -946,8 +945,6 @@ export function VacationManagerModal({ show, user, onHide, onNotify }: VacationM
     data?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0 };
   const enjoyed = data?.enjoyed ?? 0;
   const remaining = allowances.remaining === '' ? computeRemaining(allowances, enjoyed) : allowances.remaining;
-  const totalAllowance = computeRemaining(allowances, enjoyed) + enjoyed;
-
   const selectedDates = useMemo(() => {
     if (!selectionStart) return [] as string[];
 
@@ -1049,7 +1046,7 @@ export function VacationManagerModal({ show, user, onHide, onNotify }: VacationM
     await allowanceMutation.mutateAsync();
   };
 
-  const allowanceCards: Array<{
+  const primaryAllowanceCards: Array<{
     key: string;
     label: string;
     value: number | '';
@@ -1063,18 +1060,25 @@ export function VacationManagerModal({ show, user, onHide, onNotify }: VacationM
       value: allowances.allowance,
     },
     {
-      key: 'remaining',
-      label: 'Restantes',
-      value: remaining,
-      isRemaining: true,
-    },
-    {
       key: 'enjoyed',
       label: 'Disfrutadas',
       value: enjoyed,
       readOnly: true,
       description: 'Incluye vacaciones, festivos y otros permisos.',
     },
+    {
+      key: 'remaining',
+      label: 'Restantes',
+      value: remaining,
+      isRemaining: true,
+    },
+  ];
+
+  const secondaryAllowanceCards: Array<{
+    key: AllowanceFieldKey;
+    label: string;
+    value: number | '';
+  }> = [
     {
       key: 'anniversaryAllowance',
       label: 'Aniversario',
@@ -1100,65 +1104,62 @@ export function VacationManagerModal({ show, user, onHide, onNotify }: VacationM
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="d-grid gap-3">
-        <div className="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            <Form.Label className="mb-0">Año</Form.Label>
-            <Form.Control
-              type="number"
-              value={year}
-              onChange={(event) => setYear(Number(event.target.value) || currentYear)}
-              style={{ maxWidth: '120px' }}
-            />
+        <div className="d-flex flex-column gap-3">
+          <div className="vacation-allowance-grid vacation-allowance-grid--primary">
+            {primaryAllowanceCards.map((item) => (
+              <div key={item.key} className="vacation-allowance-card">
+                <div className="text-muted text-uppercase vacation-allowance-label">{item.label}</div>
+                {item.readOnly ? (
+                  <div className="fw-semibold vacation-allowance-value">{item.value}</div>
+                ) : (
+                  <Form.Control
+                    type="number"
+                    min={0}
+                    value={item.value}
+                    size="sm"
+                    className="vacation-allowance-value"
+                    onChange={(event) =>
+                      item.isRemaining
+                        ? handleRemainingChange(event.target.value)
+                        : handleAllowanceChange(item.key as AllowanceFieldKey, event.target.value)
+                    }
+                  />
+                )}
+                {item.description && <div className="text-muted small">{item.description}</div>}
+              </div>
+            ))}
+          </div>
+
+          <div className="d-flex flex-column flex-lg-row gap-3 align-items-start align-items-lg-center">
+            <div className="vacation-allowance-grid vacation-allowance-grid--secondary flex-grow-1">
+              {secondaryAllowanceCards.map((item) => (
+                <div key={item.key} className="vacation-allowance-card vacation-allowance-card--secondary">
+                  <div className="text-muted text-uppercase vacation-allowance-label vacation-allowance-label--small">
+                    {item.label}
+                  </div>
+                  <Form.Control
+                    type="number"
+                    min={0}
+                    value={item.value}
+                    size="sm"
+                    className="vacation-allowance-value"
+                    onChange={(event) => handleAllowanceChange(item.key, event.target.value)}
+                  />
+                </div>
+              ))}
+            </div>
             <Button
-              variant="outline-secondary"
-              onClick={() => vacationsQuery.refetch()}
-              disabled={!userId || vacationsQuery.isFetching}
+              className="ms-lg-auto"
+              onClick={handleAllowanceSave}
+              disabled={allowanceMutation.isPending || !userId}
             >
-              {vacationsQuery.isFetching ? 'Actualizando…' : 'Actualizar'}
+              {allowanceMutation.isPending ? 'Guardando…' : 'Guardar cambios'}
             </Button>
           </div>
-
-          <div className="d-flex flex-column gap-3 flex-grow-1">
-              <div className="vacation-allowance-grid">
-                {allowanceCards.map((item) => (
-                  <div key={item.key} className="vacation-allowance-card">
-                    <div className="text-muted small text-uppercase">{item.label}</div>
-                    {item.readOnly ? (
-                      <div className="fw-semibold vacation-allowance-value">{item.value}</div>
-                    ) : (
-                      <Form.Control
-                        type="number"
-                        min={0}
-                        value={item.value}
-                        size="sm"
-                        className="vacation-allowance-value"
-                        onChange={(event) =>
-                          item.isRemaining
-                            ? handleRemainingChange(event.target.value)
-                            : handleAllowanceChange(
-                                item.key as AllowanceFieldKey,
-                                event.target.value,
-                              )
-                        }
-                      />
-                    )}
-                    {item.description && <div className="text-muted small">{item.description}</div>}
-                  </div>
-                ))}
-              </div>
-              <div className="d-flex align-items-center gap-3 flex-wrap justify-content-end text-end">
-                <div className="text-muted mb-0">
-                  Total disponible: <span className="fw-semibold">{totalAllowance} días</span>
-                </div>
-                <Button onClick={handleAllowanceSave} disabled={allowanceMutation.isPending || !userId}>
-                  {allowanceMutation.isPending ? 'Guardando…' : 'Guardar cambios'}
-                </Button>
-              </div>
-            </div>
-          </div>
+        </div>
 
         <div className="d-flex flex-column flex-lg-row gap-3 align-items-lg-start">
-          <div className="d-flex gap-2 align-items-stretch flex-wrap">
+          <div className="d-flex gap-2 align-items-stretch flex-wrap flex-lg-nowrap">
             {Object.entries(VACATION_TYPE_INFO).map(([key, info]) => (
               <OverlayTrigger
                 key={key}
@@ -1179,7 +1180,7 @@ export function VacationManagerModal({ show, user, onHide, onNotify }: VacationM
                     }}
                   ></span>
                   <div>
-                    <div className="text-muted small text-uppercase">{info.label}</div>
+                    <div className="text-muted text-uppercase vacation-type-label">{info.label}</div>
                     <div className="fw-semibold">{counts[key as VacationType] ?? 0} días</div>
                   </div>
                 </div>
