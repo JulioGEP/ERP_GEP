@@ -1,6 +1,6 @@
 // frontend/src/features/recursos/TrainersView.tsx
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Button, ButtonGroup, Form, Spinner, Table } from "react-bootstrap";
+import { Alert, Badge, Button, ButtonGroup, Form, Spinner, Table } from "react-bootstrap";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TrainerModal, type TrainerFormValues } from "./TrainerModal";
 import { createTrainer, fetchTrainers, updateTrainer, type TrainerPayload } from "./api";
@@ -77,6 +77,13 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     return trimmed.length ? trimmed : null;
   };
 
+  const parseNomina = (value: string): number | null => {
+    const normalized = value.replace('€', '').replace(',', '.').trim();
+    if (!normalized.length) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
   return {
     name: values.name.trim(),
     apellido: toNullable(values.apellido),
@@ -93,6 +100,8 @@ function buildPayload(values: TrainerFormValues): TrainerPayload {
     dni_caducidad: toNullableDate(values.dni_caducidad),
     carnet_conducir_caducidad: toNullableDate(values.carnet_conducir_caducidad),
     certificado_bombero_caducidad: toNullableDate(values.certificado_bombero_caducidad),
+    contrato_fijo: values.contrato_fijo,
+    nomina: values.contrato_fijo ? parseNomina(values.nomina) : null,
   };
 }
 
@@ -121,6 +130,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
   const [detailTrainer, setDetailTrainer] = useState<Trainer | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("active");
+  const [fixedContractOnly, setFixedContractOnly] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -178,6 +188,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
     return trainers.filter((trainer) => {
       if (statusFilter === "active" && !trainer.activo) return false;
       if (statusFilter === "inactive" && trainer.activo) return false;
+      if (fixedContractOnly && !trainer.contrato_fijo) return false;
 
       if (!normalizedTerm) return true;
 
@@ -186,14 +197,18 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
 
       return name.includes(normalizedTerm) || lastName.includes(normalizedTerm);
     });
-  }, [trainers, searchTerm, statusFilter]);
+  }, [trainers, searchTerm, statusFilter, fixedContractOnly]);
 
   const hasFiltersApplied = useMemo(
-    () => searchTerm.trim().length > 0 || statusFilter !== "all",
-    [searchTerm, statusFilter]
+    () => searchTerm.trim().length > 0 || statusFilter !== "all" || fixedContractOnly,
+    [searchTerm, statusFilter, fixedContractOnly]
   );
 
   const expirationThreshold = getExpirationThreshold();
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }),
+    [],
+  );
 
   const handleAddTrainer = () => {
     setSelectedTrainer(null);
@@ -244,6 +259,10 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
         return trainer.especialidad ?? "";
       case "email":
         return trainer.email ?? "";
+      case "contrato":
+        return trainer.contrato_fijo ? 1 : 0;
+      case "nomina":
+        return trainer.nomina ?? 0;
       default:
         return null;
     }
@@ -329,6 +348,13 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
               Inactivos
             </Button>
           </ButtonGroup>
+          <Button
+            variant={fixedContractOnly ? "primary" : "outline-primary"}
+            onClick={() => setFixedContractOnly((current) => !current)}
+            active={fixedContractOnly}
+          >
+            Contrato Fijo
+          </Button>
         </div>
         <div className="table-responsive">
           <Table hover className="mb-0 align-middle">
@@ -352,6 +378,18 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                   sortState={sortState}
                   onSort={requestSort}
                 />
+                <SortableHeader
+                  columnKey="contrato"
+                  label={<span className="fw-semibold">Contrato fijo</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
+                <SortableHeader
+                  columnKey="nomina"
+                  label={<span className="fw-semibold">Nómina</span>}
+                  sortState={sortState}
+                  onSort={requestSort}
+                />
                 <th className="text-end">
                   <span className="fw-semibold">Acciones</span>
                 </th>
@@ -360,7 +398,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={4} className="py-5 text-center">
+                  <td colSpan={6} className="py-5 text-center">
                     <Spinner animation="border" role="status" />
                   </td>
                 </tr>
@@ -382,6 +420,18 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                       <td className="fw-semibold">{fullName}</td>
                       <td>{trainer.especialidad ?? "—"}</td>
                       <td>{trainer.email ?? "—"}</td>
+                      <td>
+                        {trainer.contrato_fijo ? (
+                          <Badge bg="success">Sí</Badge>
+                        ) : (
+                          <span className="text-muted">No</span>
+                        )}
+                      </td>
+                      <td>
+                        {trainer.contrato_fijo && trainer.nomina !== null
+                          ? currencyFormatter.format(trainer.nomina)
+                          : "—"}
+                      </td>
                       <td className="text-end">
                         <div className="d-inline-flex gap-2">
                           <Button
@@ -411,7 +461,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                 })
               ) : trainers.length ? (
                 <tr>
-                  <td colSpan={4} className="py-5 text-center text-muted">
+                  <td colSpan={6} className="py-5 text-center text-muted">
                     {hasFiltersApplied
                       ? "No se encontraron formadores que coincidan con los filtros aplicados."
                       : "No hay formadores registrados todavía."}
@@ -419,7 +469,7 @@ export function TrainersView({ onNotify }: TrainersViewProps) {
                 </tr>
               ) : (
                 <tr>
-                  <td colSpan={4} className="py-5 text-center text-muted">
+                  <td colSpan={6} className="py-5 text-center text-muted">
                     No hay formadores registrados todavía.
                   </td>
                 </tr>

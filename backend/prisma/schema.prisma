@@ -527,6 +527,8 @@ model trainers {
   carnet_conducir_caducidad     DateTime? @db.Date
   certificado_bombero_caducidad DateTime? @db.Date
   sede                          String[]  @default([])
+  nomina                        Decimal?  @db.Decimal(12, 2)
+  contrato_fijo                 Boolean   @default(false)
 
   // FK a users para relación 1:1 (la PK de users es id UUID)
   user_id String? @db.Uuid

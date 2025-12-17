@@ -267,6 +267,8 @@ model trainers {
   direccion    String?
   especialidad String?
   titulacion   String?
+  nomina       Decimal? @db.Decimal(12, 2)
+  contrato_fijo Boolean @default(false)
   user_id      String?  @db.Uuid
 
   user         users?  @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: Cascade)
