@@ -509,7 +509,7 @@ export default function UsersVacationsPage() {
                     <th>Persona</th>
                     <th>Rol</th>
                     <th>Vacaciones</th>
-                    <th>Próximas fechas</th>
+                    <th>Siguientes Vacaciones</th>
                     <th className="text-end">Acciones</th>
                   </tr>
                 </thead>
@@ -536,9 +536,6 @@ export default function UsersVacationsPage() {
                         <td>{user.role}</td>
                         <td>
                           <div>{allowanceLabel}</div>
-                          {user.lastUpdated ? (
-                            <div className="text-muted small">{user.lastUpdated}</div>
-                          ) : null}
                         </td>
                         <td>
                           <div>{upcomingLabel}</div>
