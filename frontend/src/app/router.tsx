@@ -55,6 +55,7 @@ const BulkBudgetImportPage = lazy(() => import('../pages/recursos/BulkBudgetImpo
 const ProveedoresPage = lazy(() => import('../pages/recursos/ProveedoresPage'));
 const ConfirmacionesPage = lazy(() => import('../pages/recursos/ConfirmacionesPage'));
 const CertificadosPage = lazy(() => import('../pages/certificados/CertificadosPage'));
+const IssuedCertificatesPage = lazy(() => import('../pages/certificados/IssuedCertificatesPage'));
 const RecursosFormacionAbiertaPage = lazy(() => import('../pages/recursos/FormacionAbiertaPage'));
 const InformesFormacionPage = lazy(() => import('../pages/informes/FormacionReportPage'));
 const InformesPreventivoPage = lazy(() => import('../pages/informes/PreventivoReportPage'));
@@ -431,6 +432,10 @@ export function AppRouter({
         <Route
           path="/certificados"
           element={<GuardedRoute path="/certificados" element={<CertificadosPage {...(certificadosPageProps as CertificadosPageProps & Record<string, unknown>)} />} />}
+        />
+        <Route
+          path="/certificados_emitidos"
+          element={<GuardedRoute path="/certificados_emitidos" element={<IssuedCertificatesPage />} />}
         />
         <Route
           path="/usuarios/trainer/dashboard"
