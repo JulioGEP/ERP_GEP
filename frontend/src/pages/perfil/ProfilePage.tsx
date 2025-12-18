@@ -584,7 +584,12 @@ export default function ProfilePage() {
                   style={isBalanceMetric ? { borderWidth: '2px' } : undefined}
                 >
                   <div className="text-muted small text-uppercase">{item.label}</div>
-                  <div className={isBalanceMetric ? 'fw-bold' : 'fw-semibold'}>{item.value}</div>
+                  <div
+                    className={isBalanceMetric ? 'fw-bold' : 'fw-semibold'}
+                    style={{ fontSize: '0.875rem' }}
+                  >
+                    {item.value}
+                  </div>
                 </div>
               );
             })}
@@ -613,7 +618,7 @@ export default function ProfilePage() {
                   >
                     {label}
                   </div>
-                  <div className="fw-semibold" style={{ fontSize: '1rem' }}>
+                  <div className="fw-semibold" style={{ fontSize: '0.875rem' }}>
                     {vacationCounts[key as VacationType] ?? 0} días
                   </div>
                 </div>
