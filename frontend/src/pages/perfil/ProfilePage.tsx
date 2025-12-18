@@ -552,7 +552,9 @@ export default function ProfilePage() {
           <Card.Body className="d-grid gap-4">
           <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
-              <h2 className="h5 fw-bold mb-1">Vacaciones y teletrabajo</h2>
+              <h2 className="h5 fw-bold mb-1" style={{ fontSize: '1.125rem' }}>
+                Vacaciones y teletrabajo
+              </h2>
               <p className="text-muted mb-0">Consulta tu calendario anual y el balance disponible.</p>
             </div>
             <div className="d-flex align-items-center gap-2">
