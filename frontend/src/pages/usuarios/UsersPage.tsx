@@ -41,6 +41,8 @@ import {
   type UserDocument,
 } from '../../api/userDocuments';
 import { VacationCalendar } from '../../components/vacations/VacationCalendar';
+import { fetchTrainerDocuments } from '../../features/recursos/api';
+import { type TrainerDocument } from '../../types/trainer';
 
 const PAGE_SIZE = 10;
 const ROLE_OPTIONS = ['Admin', 'Comercial', 'Administracion', 'Logistica', 'People', 'Formador'] as const;
@@ -854,11 +856,27 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
   );
 
   const userId = user?.id ?? null;
+  const trainerId = user?.trainerId ?? null;
 
   const vacationsQuery = useQuery<UserVacationsResponse>({
     queryKey: ['user-vacations', userId, year],
     queryFn: () => fetchUserVacations(userId as string, year),
     enabled: Boolean(show && userId),
+  });
+
+  const userDocumentsQuery = useQuery<UserDocument[]>({
+    queryKey: ['vacation-user-documents', userId],
+    queryFn: () => fetchUserDocuments(userId as string),
+    enabled: Boolean(show && userId && !trainerId),
+  });
+
+  const trainerDocumentsQuery = useQuery<{ documents: TrainerDocument[] }>({
+    queryKey: ['trainer-documents', trainerId],
+    queryFn: async () => {
+      if (!trainerId) return { documents: [] };
+      return fetchTrainerDocuments(trainerId);
+    },
+    enabled: Boolean(show && trainerId),
   });
 
   useEffect(() => {
@@ -971,6 +989,53 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       }),
     [selectedDates],
   );
+
+  const resolveUserDocumentUrl = (document: UserDocument) =>
+    document.drive_web_view_link ?? document.drive_web_content_link ?? document.download_url;
+
+  const formatFileSize = (size: number | null) => {
+    if (!size) return '';
+    const kb = size / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    return `${(kb / 1024).toFixed(1)} MB`;
+  };
+
+  const justificationDocuments = useMemo(() => {
+    const prefix = 'justificante -';
+    const normalize = (value: string | null | undefined) => value?.trim().toLowerCase() ?? '';
+
+    if (trainerId) {
+      return (trainerDocumentsQuery.data?.documents ?? [])
+        .filter((doc) => normalize(doc.file_name ?? doc.original_file_name).startsWith(prefix))
+        .map((doc) => ({
+          id: doc.id,
+          name: doc.file_name ?? doc.original_file_name ?? doc.id,
+          url: doc.drive_web_view_link ?? null,
+          size: doc.file_size ?? null,
+        }));
+    }
+
+    return (userDocumentsQuery.data ?? [])
+      .filter((doc) => normalize(doc.file_name).startsWith(prefix))
+      .map((doc) => ({
+        id: doc.id,
+        name: doc.file_name,
+        url: resolveUserDocumentUrl(doc),
+        size: doc.file_size,
+      }));
+  }, [trainerDocumentsQuery.data?.documents, trainerId, userDocumentsQuery.data]);
+
+  const justificationDocumentsLoading = trainerId
+    ? trainerDocumentsQuery.isLoading
+    : userDocumentsQuery.isLoading;
+
+  const justificationErrorMessage = trainerId
+    ? trainerDocumentsQuery.isError
+      ? (trainerDocumentsQuery.error as Error | undefined)?.message ?? 'No se pudieron cargar los documentos.'
+      : null
+    : userDocumentsQuery.isError
+      ? (userDocumentsQuery.error as Error | undefined)?.message ?? 'No se pudieron cargar los documentos.'
+      : null;
 
   const handleDayClick = (date: string, type: VacationType | '') => {
     if (!selectionStart || selectionEnd) {
@@ -1264,6 +1329,61 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
           <p className="text-muted mb-0">
             Todas las categorías salvo Teletrabajo descuentan días del balance de vacaciones disponible.
           </p>
+        </div>
+
+        <div className="border rounded p-3 d-grid gap-3">
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div className="d-flex align-items-center gap-2">
+              <h3 className="h6 mb-0">Justificantes relacionados</h3>
+              {justificationDocumentsLoading ? (
+                <div className="d-flex align-items-center gap-2 text-muted">
+                  <Spinner size="sm" animation="border" />
+                  <span>Cargando…</span>
+                </div>
+              ) : null}
+            </div>
+            <Badge bg="light" text="dark">
+              {trainerId ? 'Formador' : 'Usuario'}
+            </Badge>
+          </div>
+
+          {justificationErrorMessage ? <Alert variant="danger" className="mb-0">{justificationErrorMessage}</Alert> : null}
+
+          {!justificationDocumentsLoading && !justificationErrorMessage ? (
+            justificationDocuments.length ? (
+              <ListGroup>
+                {justificationDocuments.map((document) => (
+                  <ListGroup.Item
+                    key={document.id}
+                    className="d-flex justify-content-between align-items-center gap-3 flex-wrap"
+                  >
+                    <div className="me-auto">
+                      <div className="fw-semibold">{document.name}</div>
+                      {document.size ? (
+                        <div className="text-muted small">{formatFileSize(document.size)}</div>
+                      ) : null}
+                    </div>
+                    {document.url ? (
+                      <Button
+                        as="a"
+                        href={document.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        variant="outline-primary"
+                        size="sm"
+                      >
+                        Ver
+                      </Button>
+                    ) : (
+                      <span className="text-muted small">Enlace no disponible</span>
+                    )}
+                  </ListGroup.Item>
+                ))}
+              </ListGroup>
+            ) : (
+              <p className="text-muted mb-0">No hay justificantes disponibles.</p>
+            )
+          ) : null}
         </div>
       </Modal.Body>
     </Modal>
