@@ -2120,11 +2120,14 @@ export async function uploadTrainerDocumentToGoogleDrive(params: {
   fileName: string;
   mimeType?: string | null;
   data: Buffer;
+  subfolderName?: string | null;
 }): Promise<{
   driveFileId: string;
   driveFileName: string;
   driveWebViewLink: string | null;
   trainerFolderWebViewLink: string | null;
+  destinationFolderId: string;
+  destinationFolderWebViewLink: string | null;
 }> {
   const driveId = resolveDriveSharedId();
   if (!driveId) {
@@ -2166,8 +2169,19 @@ export async function uploadTrainerDocumentToGoogleDrive(params: {
   const safeName = sanitizeName(params.fileName || "documento") || "documento";
   const mimeType = params.mimeType?.trim() || "application/octet-stream";
 
+  let destinationFolderId = trainerFolder.folderId;
+  if (params.subfolderName) {
+    const sanitized = sanitizeName(params.subfolderName) || params.subfolderName;
+    destinationFolderId = await ensureUniqueSubfolder({
+      driveId,
+      parentId: trainerFolder.folderId,
+      folderName: sanitized,
+      context: { trainerId, scope: "trainerDocuments" },
+    });
+  }
+
   const uploadResult = await uploadBufferToDrive({
-    parentId: trainerFolder.folderId,
+    parentId: destinationFolderId,
     name: safeName,
     mimeType,
     data: params.data,
@@ -2186,17 +2200,17 @@ export async function uploadTrainerDocumentToGoogleDrive(params: {
 
   let folderLink: string | null = null;
   try {
-    folderLink = await ensureFilePublicWebViewLink(trainerFolder.folderId);
+    folderLink = await ensureFilePublicWebViewLink(destinationFolderId);
   } catch (err) {
     console.warn("[google-drive-sync] No se pudo generar enlace público de carpeta de formador", {
       trainerId,
-      folderId: trainerFolder.folderId,
+      folderId: destinationFolderId,
       error: err instanceof Error ? err.message : String(err),
     });
   }
 
   if (!folderLink) {
-    folderLink = `https://drive.google.com/drive/folders/${trainerFolder.folderId}`;
+    folderLink = `https://drive.google.com/drive/folders/${destinationFolderId}`;
   }
 
   return {
@@ -2204,6 +2218,8 @@ export async function uploadTrainerDocumentToGoogleDrive(params: {
     driveFileName: uploadResult.name || safeName,
     driveWebViewLink: publicLink ?? uploadResult.webViewLink ?? null,
     trainerFolderWebViewLink: folderLink,
+    destinationFolderId,
+    destinationFolderWebViewLink: folderLink,
   };
 }
 
@@ -2669,6 +2685,7 @@ export async function uploadUserDocumentToGoogleDrive(params: {
   data: Buffer;
   driveIdOverride?: string | null;
   baseFolderName?: string | null;
+  subfolderName?: string | null;
 }): Promise<{
   driveFileId: string;
   driveFileName: string;
@@ -2676,6 +2693,8 @@ export async function uploadUserDocumentToGoogleDrive(params: {
   driveFolderId: string;
   driveFolderWebViewLink: string | null;
   driveFolderContentLink: string | null;
+  destinationFolderId: string;
+  destinationFolderWebViewLink: string | null;
 }> {
   const preferredDriveId = params.driveIdOverride?.trim();
   const driveId =
@@ -2723,10 +2742,21 @@ export async function uploadUserDocumentToGoogleDrive(params: {
     context: { userId: params.user?.id },
   });
 
+  let destinationFolderId = userFolderId;
+  if (params.subfolderName) {
+    const sanitized = sanitizeName(params.subfolderName) || params.subfolderName;
+    destinationFolderId = await ensureUniqueSubfolder({
+      driveId,
+      parentId: userFolderId,
+      folderName: sanitized,
+      context: { userId: params.user?.id, scope: 'userDocuments' },
+    });
+  }
+
   const safeFileName = sanitizeName(params.fileName || 'documento') || 'documento';
   const mimeType = params.mimeType?.trim() || 'application/octet-stream';
   const uploadResult = await uploadBufferToDrive({
-    parentId: userFolderId,
+    parentId: destinationFolderId,
     name: safeFileName,
     mimeType,
     data: params.data,
@@ -2748,11 +2778,11 @@ export async function uploadUserDocumentToGoogleDrive(params: {
 
   let folderWebViewLink: string | null = null;
   try {
-    folderWebViewLink = (await ensureFilePublicWebViewLink(userFolderId)) ?? null;
+    folderWebViewLink = (await ensureFilePublicWebViewLink(destinationFolderId)) ?? null;
   } catch (permissionError) {
     console.warn('[google-drive-sync] No se pudo generar enlace público de carpeta de usuario', {
       userId: params.user?.id,
-      folderId: userFolderId,
+      folderId: destinationFolderId,
       error: permissionError instanceof Error ? permissionError.message : String(permissionError),
     });
   }
@@ -2764,5 +2794,7 @@ export async function uploadUserDocumentToGoogleDrive(params: {
     driveFolderId: userFolderId,
     driveFolderWebViewLink: folderWebViewLink,
     driveFolderContentLink: contentLink,
+    destinationFolderId,
+    destinationFolderWebViewLink: folderWebViewLink,
   };
 }

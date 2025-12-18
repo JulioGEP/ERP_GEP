@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Col, Form, InputGroup, ListGroup, Row, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Col, Form, InputGroup, ListGroup, Modal, Row, Spinner } from 'react-bootstrap';
 import { changePassword } from '../../api/auth';
 import { ApiError } from '../../api/client';
 import { fetchUserDocuments, type UserDocument } from '../../api/userDocuments';
@@ -8,6 +8,8 @@ import { fetchUserById } from '../../api/users';
 import {
   fetchUserVacations,
   sendVacationRequest,
+  type VacationJustificationUpload,
+  type VacationRequestPayload,
   type UserVacationsResponse,
   type VacationType,
 } from '../../api/userVacations';
@@ -112,6 +114,7 @@ function resolveDocumentLink(doc: ProfileDocument): string | null {
 export default function ProfilePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const MAX_JUSTIFICATION_SIZE = 10 * 1024 * 1024;
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -133,6 +136,10 @@ export default function ProfilePage() {
   const [selectedDocument, setSelectedDocument] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [showJustificationModal, setShowJustificationModal] = useState(false);
+  const [justificationFile, setJustificationFile] = useState<File | null>(null);
+  const [justificationError, setJustificationError] = useState<string | null>(null);
+  const [isDraggingJustification, setIsDraggingJustification] = useState(false);
 
   const profileQuery = useQuery<ProfileUser | undefined>({
     queryKey: ['profile', user?.id],
@@ -208,8 +215,7 @@ export default function ProfilePage() {
   });
 
   const vacationRequestMutation = useMutation({
-    mutationFn: () =>
-      sendVacationRequest({ startDate: vacationStart, endDate: vacationEnd, notes: vacationNotes, tag: vacationTag }),
+    mutationFn: (payload: VacationRequestPayload) => sendVacationRequest(payload),
     onSuccess: (response) => {
       setVacationRequestMessage(response.message || 'Petición enviada correctamente.');
       setVacationRequestError(null);
@@ -217,6 +223,10 @@ export default function ProfilePage() {
       setVacationEnd('');
       setVacationNotes('');
       setVacationTag('');
+      setJustificationFile(null);
+      setJustificationError(null);
+      setIsDraggingJustification(false);
+      setShowJustificationModal(false);
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
@@ -229,6 +239,36 @@ export default function ProfilePage() {
   const passwordsMatch = newPassword === confirmPassword;
   const canSubmit =
     currentPassword.length > 0 && passwordLengthValid && passwordsMatch && !mutation.isPending;
+
+  const handleJustificationSelect = useCallback(
+    (file: File | null) => {
+      if (!file) {
+        setJustificationFile(null);
+        setJustificationError(null);
+        return;
+      }
+
+      if (file.size > MAX_JUSTIFICATION_SIZE) {
+        setJustificationError('El justificante no puede superar los 10 MB.');
+        return;
+      }
+
+      setJustificationFile(file);
+      setJustificationError(null);
+    },
+    [MAX_JUSTIFICATION_SIZE],
+  );
+
+  const buildJustificationPayload = useCallback(async (): Promise<VacationJustificationUpload | null> => {
+    if (!justificationFile) return null;
+    const contentBase64 = await fileToBase64(justificationFile);
+    return {
+      fileName: justificationFile.name,
+      mimeType: justificationFile.type || 'application/octet-stream',
+      fileSize: justificationFile.size,
+      contentBase64,
+    };
+  }, [justificationFile]);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -293,9 +333,24 @@ export default function ProfilePage() {
         return;
       }
 
-      await vacationRequestMutation.mutateAsync();
+      let justification: VacationJustificationUpload | null = null;
+      try {
+        justification = await buildJustificationPayload();
+      } catch (err) {
+        console.error(err);
+        setVacationRequestError('No se pudo preparar el justificante.');
+        return;
+      }
+
+      await vacationRequestMutation.mutateAsync({
+        startDate: vacationStart,
+        endDate: vacationEnd,
+        notes: vacationNotes,
+        tag: vacationTag,
+        justification,
+      });
     },
-    [vacationEnd, vacationRequestMutation, vacationStart],
+    [buildJustificationPayload, vacationEnd, vacationNotes, vacationRequestMutation, vacationStart, vacationTag],
   );
 
   const userDetails = useMemo<ProfileUser | null>(() => {
@@ -350,6 +405,7 @@ export default function ProfilePage() {
   ];
 
   return (
+    <>
     <div className="d-grid gap-4">
       <Card className="shadow-sm">
         <Card.Body className="d-grid gap-4">
@@ -576,7 +632,8 @@ export default function ProfilePage() {
           <div className="border-top pt-3">
             <h3 className="h6 fw-bold mb-2">Petición de vacaciones</h3>
             <p className="text-muted mb-3">
-              Selecciona el rango de fechas y enviaremos una petición a People. El correo se enviará a julio.garcia.becerra@gmail.com con tu email en copia.
+              Selecciona el rango de fechas y enviaremos una petición a People (people@gepgroup.es) con tu email en
+              copia. Puedes añadir un justificante en PDF o imagen (máximo 10 MB).
             </p>
             {vacationRequestMessage ? <Alert variant="success">{vacationRequestMessage}</Alert> : null}
             {vacationRequestError ? <Alert variant="danger">{vacationRequestError}</Alert> : null}
@@ -623,7 +680,36 @@ export default function ProfilePage() {
                   />
                 </Col>
               </Row>
-              <div className="d-flex justify-content-end">
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div className="d-flex align-items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline-secondary"
+                    type="button"
+                    onClick={() => {
+                      setJustificationError(null);
+                      setShowJustificationModal(true);
+                    }}
+                  >
+                    {justificationFile ? 'Cambiar justificante' : 'Añadir justificante'}
+                  </Button>
+                  {justificationFile ? (
+                    <div className="small text-muted d-flex align-items-center gap-2">
+                      <span>
+                        {justificationFile.name} ({formatFileSize(justificationFile)})
+                      </span>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0"
+                        onClick={() => setJustificationFile(null)}
+                      >
+                        Quitar
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-muted small">Añade justificante si aplica</span>
+                  )}
+                </div>
                 <Button type="submit" disabled={!canRequestVacation}>
                   {vacationRequestMutation.isPending ? 'Enviando…' : 'Solicitar vacaciones'}
                 </Button>
@@ -742,5 +828,73 @@ export default function ProfilePage() {
         </Card.Body>
       </Card>
     </div>
+
+    <Modal
+      show={showJustificationModal}
+      onHide={() => {
+        setShowJustificationModal(false);
+        setIsDraggingJustification(false);
+      }}
+      centered
+    >
+      <Modal.Header closeButton>
+        <Modal.Title>Añadir justificante</Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="d-grid gap-3">
+        <div
+          className={`border rounded p-3 text-center ${isDraggingJustification ? 'bg-light' : ''}`}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDraggingJustification(true);
+          }}
+          onDragLeave={() => setIsDraggingJustification(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsDraggingJustification(false);
+            const file = event.dataTransfer.files?.[0] ?? null;
+            handleJustificationSelect(file);
+          }}
+        >
+          <p className="mb-2 fw-semibold">Arrastra el justificante o selecciónalo desde tu equipo</p>
+          <p className="text-muted small mb-3">Formatos habituales (PDF o imagen). Tamaño máximo 10 MB.</p>
+          <Form.Control
+            type="file"
+            accept=".pdf,image/*"
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              handleJustificationSelect(event.target.files?.[0] ?? null)
+            }
+          />
+          {justificationFile ? (
+            <div className="small text-muted mt-2">
+              Archivo seleccionado: {justificationFile.name} ({formatFileSize(justificationFile)})
+            </div>
+          ) : null}
+        </div>
+        {justificationError ? <Alert variant="danger" className="mb-0">{justificationError}</Alert> : null}
+      </Modal.Body>
+      <Modal.Footer className="d-flex justify-content-between">
+        <Button
+          variant="outline-secondary"
+          onClick={() => {
+            setShowJustificationModal(false);
+            setIsDraggingJustification(false);
+          }}
+        >
+          Cancelar
+        </Button>
+        <Button
+          onClick={() => {
+            if (!justificationFile) {
+              setJustificationError('Añade un archivo para continuar.');
+              return;
+            }
+            setShowJustificationModal(false);
+          }}
+        >
+          Guardar justificante
+        </Button>
+      </Modal.Footer>
+    </Modal>
+    </>
   );
 }
