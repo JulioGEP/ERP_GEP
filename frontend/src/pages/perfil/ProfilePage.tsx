@@ -586,7 +586,7 @@ export default function ProfilePage() {
                   <div className="text-muted small text-uppercase">{item.label}</div>
                   <div
                     className={isBalanceMetric ? 'fw-bold' : 'fw-semibold'}
-                    style={{ fontSize: '0.875rem' }}
+                    style={{ fontSize: '0.75rem' }}
                   >
                     {item.value}
                   </div>
@@ -618,7 +618,7 @@ export default function ProfilePage() {
                   >
                     {label}
                   </div>
-                  <div className="fw-semibold" style={{ fontSize: '0.875rem' }}>
+                  <div className="fw-semibold" style={{ fontSize: '0.75rem' }}>
                     {vacationCounts[key as VacationType] ?? 0} días
                   </div>
                 </div>
