@@ -278,7 +278,7 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
 
   const html = `
     <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height:1.5; max-width:640px">
-      <h2>Petición de vacaciones</h2>
+      <h2>Petición de vacaciones y justificación de ausencias y Teletrabajo</h2>
       <p><strong>Usuario:</strong> ${auth.user.first_name} ${auth.user.last_name ?? ''} (${auth.user.email})</p>
       <p><strong>Fechas solicitadas:</strong> ${formatHumanDate(startDate)} → ${formatHumanDate(endDate)}</p>
       ${tag ? `<p><strong>Tipo:</strong> ${VACATION_TAG_LABELS[tag]}</p>` : ''}
@@ -305,9 +305,9 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
   await sendEmail({
     to: RECIPIENT,
     cc,
-    subject: 'Petición de vacaciones',
+    subject: 'Petición de vacaciones y justificación de ausencias y Teletrabajo',
     html,
-    text: `Petición de vacaciones\nUsuario: ${auth.user.first_name} ${auth.user.last_name ?? ''} (${auth.user.email})\nFechas: ${startDate} -> ${endDate}${
+    text: `Petición de vacaciones y justificación de ausencias y Teletrabajo\nUsuario: ${auth.user.first_name} ${auth.user.last_name ?? ''} (${auth.user.email})\nFechas: ${startDate} -> ${endDate}${
       tag ? `\nTipo: ${VACATION_TAG_LABELS[tag]}` : ''
     }${notes ? `\nNotas: ${notes}` : ''}${justificationLink ? `\nJustificante: ${justificationLink}` : ''}`,
   });
