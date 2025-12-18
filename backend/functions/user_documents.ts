@@ -140,7 +140,7 @@ export const handler = async (event: any) => {
         file_name: fileName,
         mime_type: mimeType,
         file_size: buffer.byteLength,
-        drive_folder_id: driveUpload.driveFolderId,
+        drive_folder_id: driveUpload.destinationFolderId ?? driveUpload.driveFolderId,
         drive_web_view_link: driveUpload.driveWebViewLink,
         drive_web_content_link: driveUpload.driveFolderContentLink,
         file_data: buffer,

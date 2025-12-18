@@ -46,6 +46,21 @@ export type VacationSummaryResponse = {
   users: VacationSummaryUser[];
 };
 
+export type VacationJustificationUpload = {
+  fileName: string;
+  mimeType?: string | null;
+  fileSize?: number;
+  contentBase64: string;
+};
+
+export type VacationRequestPayload = {
+  startDate: string;
+  endDate: string;
+  notes?: string;
+  tag?: VacationType | '';
+  justification?: VacationJustificationUpload | null;
+};
+
 export type VacationRequestItem = {
   id: string;
   userId: string;
@@ -83,12 +98,7 @@ export async function updateVacationAllowance(payload: {
   return patchJson<UserVacationsResponse>('/user-vacations', payload);
 }
 
-export async function sendVacationRequest(payload: {
-  startDate: string;
-  endDate: string;
-  notes?: string;
-  tag?: VacationType | '';
-}): Promise<{ message: string }> {
+export async function sendVacationRequest(payload: VacationRequestPayload): Promise<{ message: string }> {
   return postJson<{ message: string }>('/vacation-requests', payload);
 }
 

@@ -5,6 +5,7 @@ import { getPrisma } from './_shared/prisma';
 import { normalizeRoleKey, requireAuth } from './_shared/auth';
 import { sendEmail } from './_shared/mailer';
 import { formatDateOnly, VACATION_TYPES } from './_shared/vacations';
+import { uploadTrainerDocumentToGoogleDrive, uploadUserDocumentToGoogleDrive } from './_shared/googleDrive';
 
 const RECIPIENT = 'people@gepgroup.es';
 const VACATION_TAG_LABELS: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I' | 'N', string> = {
@@ -21,6 +22,15 @@ const VACATION_TAG_LABELS: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' 
   N: 'Festivos nacionales',
 };
 
+const JUSTIFICATION_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const JUSTIFICATION_FOLDER_NAME = 'Justificantes';
+
+type ParsedJustification = {
+  buffer: Buffer;
+  originalFileName: string;
+  mimeType: string;
+};
+
 function parseDateOnly(value: unknown): string | null {
   if (!value) return null;
   const input = typeof value === 'string' ? value.trim() : String(value);
@@ -35,6 +45,101 @@ function formatHumanDate(value: string): string {
   const date = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function toStringOrNull(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text.length ? text : null;
+}
+
+function sanitizeFileName(value: string): string {
+  return value.replace(/[\r\n\t]+/g, ' ').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeIncomingFileName(name: unknown): string {
+  const raw = typeof name === 'string' ? name : String(name || '');
+  if (!raw.includes('%')) return raw.trim();
+  try {
+    return decodeURIComponent(raw).trim();
+  } catch {
+    return raw.trim();
+  }
+}
+
+function buildDisplayName(user: any, trainer?: any): string {
+  const pieces: string[] = [];
+  if (trainer?.name) pieces.push(String(trainer.name));
+  if (trainer?.apellido) pieces.push(String(trainer.apellido));
+
+  if (!pieces.length) {
+    if (user?.first_name) pieces.push(String(user.first_name));
+    if (user?.last_name) pieces.push(String(user.last_name));
+  }
+
+  if (!pieces.length && user?.email) {
+    pieces.push(String(user.email));
+  }
+
+  return pieces.join(' ').trim() || 'Usuario';
+}
+
+function parseJustification(payload: any): { error?: ReturnType<typeof errorResponse>; data?: ParsedJustification } {
+  if (!payload) return {};
+
+  const rawFileName =
+    toStringOrNull(payload.fileName ?? payload.file_name ?? payload.name) ?? 'Justificante';
+  const originalFileName = sanitizeFileName(normalizeIncomingFileName(rawFileName) || 'Justificante');
+  const mimeType = toStringOrNull(payload.mimeType ?? payload.mime_type ?? payload.type) ?? 'application/octet-stream';
+  const contentBase64 =
+    toStringOrNull(payload.contentBase64 ?? payload.base64 ?? payload.data ?? payload.fileData ?? payload.file_data) ??
+    null;
+  const declaredSize =
+    typeof payload.fileSize === 'number'
+      ? payload.fileSize
+      : Number(payload.fileSize ?? payload.size ?? payload.file_size);
+
+  if (!contentBase64) {
+    return { error: errorResponse('VALIDATION_ERROR', 'El justificante adjunto no es válido', 400) };
+  }
+
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(contentBase64, 'base64');
+  } catch {
+    return { error: errorResponse('VALIDATION_ERROR', 'El justificante adjunto no es válido', 400) };
+  }
+
+  if (!buffer.length) {
+    return { error: errorResponse('VALIDATION_ERROR', 'El justificante recibido está vacío', 400) };
+  }
+
+  if (buffer.length > JUSTIFICATION_MAX_BYTES) {
+    return {
+      error: errorResponse(
+        'PAYLOAD_TOO_LARGE',
+        'El justificante supera el tamaño máximo permitido (10 MB)',
+        413,
+      ),
+    };
+  }
+
+  if (Number.isFinite(declaredSize) && declaredSize > 0) {
+    const delta = Math.abs(buffer.length - Number(declaredSize));
+    if (delta > Math.max(512, Number(declaredSize) * 0.05)) {
+      return {
+        error: errorResponse('VALIDATION_ERROR', 'El tamaño del justificante no coincide con el contenido recibido', 400),
+      };
+    }
+  }
+
+  return {
+    data: {
+      buffer,
+      originalFileName,
+      mimeType,
+    },
+  };
 }
 
 export const handler = createHttpHandler<any>(async (request) => {
@@ -88,6 +193,88 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
   }
 
   const cc = auth.user.email ? auth.user.email : undefined;
+  const role = normalizeRoleKey(auth.user.role);
+  const justificationInput = request.body.justification ?? null;
+  let justificationLink: string | null = null;
+  let justificationFileName: string | null = null;
+
+  if (justificationInput) {
+    const parsed = parseJustification(justificationInput);
+    if (parsed.error) {
+      return parsed.error;
+    }
+    if (parsed.data) {
+      const displayName = buildDisplayName(auth.user, auth.user.trainer);
+      const justificationDate = startDate;
+      const finalFileName = sanitizeFileName(`Justificante - ${justificationDate} - ${displayName}`) || 'Justificante';
+
+      if (role === 'formador') {
+        const trainer =
+          auth.user.trainer ??
+          (await prisma.trainers.findFirst({
+            where: { user_id: auth.user.id },
+          }));
+        if (!trainer) {
+          return errorResponse('NOT_FOUND', 'No se encontró tu ficha de formador para guardar el justificante', 404);
+        }
+
+        const uploadResult = await uploadTrainerDocumentToGoogleDrive({
+          trainer,
+          documentTypeLabel: 'Justificante',
+          fileName: finalFileName,
+          mimeType: parsed.data.mimeType,
+          data: parsed.data.buffer,
+          subfolderName: JUSTIFICATION_FOLDER_NAME,
+        });
+
+        await prisma.trainer_documents.create({
+          data: {
+            trainer_id: trainer.trainer_id,
+            document_type: 'justificante',
+            file_name: finalFileName,
+            original_file_name: parsed.data.originalFileName,
+            mime_type: parsed.data.mimeType,
+            file_size: parsed.data.buffer.length,
+            drive_file_id: uploadResult.driveFileId,
+            drive_file_name: uploadResult.driveFileName,
+            drive_web_view_link: uploadResult.driveWebViewLink,
+            uploaded_at: new Date(),
+          },
+        });
+
+        justificationLink = uploadResult.driveWebViewLink ?? null;
+        justificationFileName = finalFileName;
+      } else {
+        const uploadResult = await uploadUserDocumentToGoogleDrive({
+          user: auth.user,
+          title: finalFileName,
+          fileName: finalFileName,
+          mimeType: parsed.data.mimeType,
+          data: parsed.data.buffer,
+          subfolderName: JUSTIFICATION_FOLDER_NAME,
+          baseFolderName: 'Equipo GEP Group',
+        });
+
+        await prisma.user_documents.create({
+          data: {
+            user_id: auth.user.id,
+            title: finalFileName,
+            file_name: finalFileName,
+            mime_type: parsed.data.mimeType,
+            file_size: parsed.data.buffer.length,
+            drive_folder_id: uploadResult.destinationFolderId ?? uploadResult.driveFolderId,
+            drive_web_view_link: uploadResult.driveWebViewLink,
+            drive_web_content_link: uploadResult.driveFolderContentLink,
+            file_data: parsed.data.buffer,
+            created_at: new Date(),
+          },
+        });
+
+        justificationLink = uploadResult.driveWebViewLink ?? uploadResult.driveFolderContentLink ?? null;
+        justificationFileName = finalFileName;
+      }
+    }
+  }
 
   const html = `
     <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; line-height:1.5; max-width:640px">
@@ -96,6 +283,11 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
       <p><strong>Fechas solicitadas:</strong> ${formatHumanDate(startDate)} → ${formatHumanDate(endDate)}</p>
       ${tag ? `<p><strong>Tipo:</strong> ${VACATION_TAG_LABELS[tag]}</p>` : ''}
       ${notes ? `<p><strong>Notas:</strong> ${notes}</p>` : ''}
+      ${
+        justificationLink
+          ? `<p><strong>Justificante:</strong> <a href="${justificationLink}" target="_blank" rel="noreferrer">${justificationFileName ?? 'Ver documento'}</a></p>`
+          : ''
+      }
       <p style="margin-top:16px;color:#555">Enviado automáticamente desde ERP.</p>
     </div>
   `;
@@ -117,7 +309,7 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
     html,
     text: `Petición de vacaciones\nUsuario: ${auth.user.first_name} ${auth.user.last_name ?? ''} (${auth.user.email})\nFechas: ${startDate} -> ${endDate}${
       tag ? `\nTipo: ${VACATION_TAG_LABELS[tag]}` : ''
-    }${notes ? `\nNotas: ${notes}` : ''}`,
+    }${notes ? `\nNotas: ${notes}` : ''}${justificationLink ? `\nJustificante: ${justificationLink}` : ''}`,
   });
 
   return successResponse({ message: 'Petición enviada correctamente' });

@@ -18,6 +18,7 @@ const ALLOWED_DOCUMENT_TYPES = new Map([
   ['personales', 'Personales'],
   ['certificados', 'Certificados'],
   ['otros', 'Otros'],
+  ['justificante', 'Justificante'],
 ]);
 
 const MAX_TRAINER_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
