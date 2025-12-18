@@ -267,7 +267,9 @@ export function TrainerDetailsDrawer({
             {trainer.contrato_fijo && (
               <Stack gap={3} className="mt-1">
                 <div>
-                  <h3 className="h6 mb-3">Vacaciones y teletrabajo</h3>
+                  <h3 className="h6 mb-3" style={{ fontSize: '0.875rem' }}>
+                    Vacaciones y teletrabajo
+                  </h3>
                   <p className="text-muted small mb-3">
                     Consulta o ajusta la disponibilidad anual del formador.
                   </p>
