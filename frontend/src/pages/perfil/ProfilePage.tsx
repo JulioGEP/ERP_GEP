@@ -81,6 +81,9 @@ const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> =
   { value: 'N', label: VACATION_LABELS.N.fullLabel },
 ];
 
+const VACATION_REQUEST_SECTION_TITLE = 'Petición de vacaciones y justificación de ausencias y Teletrabajo';
+const VACATION_REQUEST_BUTTON_LABEL = 'Enviar Petición';
+
 async function fileToBase64(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   let binary = '';
@@ -630,7 +633,7 @@ export default function ProfilePage() {
           )}
 
           <div className="border-top pt-3">
-            <h3 className="h6 fw-bold mb-2">Petición de vacaciones y justificación de ausencias y Teletrabajo</h3>
+            <h3 className="h6 fw-bold mb-2">{VACATION_REQUEST_SECTION_TITLE}</h3>
             <p className="text-muted mb-3">
               Selecciona el rango de fechas y enviaremos una petición a People (people@gepgroup.es) con tu email en
               copia. Puedes añadir un justificante en PDF o imagen (máximo 10 MB).
@@ -710,8 +713,8 @@ export default function ProfilePage() {
                     <span className="text-muted small">Añade justificante si aplica</span>
                   )}
                 </div>
-                <Button type="submit" disabled={!canRequestVacation}>
-                  {vacationRequestMutation.isPending ? 'Enviando…' : 'Enviar Petición'}
+                <Button type="submit" disabled={!canRequestVacation} aria-label={VACATION_REQUEST_BUTTON_LABEL}>
+                  {vacationRequestMutation.isPending ? 'Enviando…' : VACATION_REQUEST_BUTTON_LABEL}
                 </Button>
               </div>
             </Form>
