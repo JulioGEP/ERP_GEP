@@ -24,18 +24,31 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('VALIDATION_ERROR', 'Body requerido', 400);
   }
 
-  const dateInput = parseDateOnly(request.body.date);
+  const dateInputs = Array.isArray(request.body.dates)
+    ? request.body.dates
+    : request.body.date
+      ? [request.body.date]
+      : [];
+  const parsedDates = dateInputs
+    .map((date) => parseDateOnly(date))
+    .filter((date): date is Date => Boolean(date));
+
   const type = request.body.type ? String(request.body.type).trim().toUpperCase() : '';
   const userIds: string[] = Array.isArray(request.body.userIds)
     ? request.body.userIds.map((id: unknown) => String(id).trim()).filter(Boolean)
     : [];
 
-  if (!dateInput || !type || !VACATION_TYPES.has(type)) {
+  if (!parsedDates.length || !type || !VACATION_TYPES.has(type)) {
     return errorResponse('VALIDATION_ERROR', 'Fecha o tipo inválido', 400);
   }
 
   if (!userIds.length) {
     return errorResponse('VALIDATION_ERROR', 'Debes seleccionar al menos un usuario', 400);
+  }
+
+  const years = new Set(parsedDates.map((date) => date.getUTCFullYear()));
+  if (years.size > 1) {
+    return errorResponse('VALIDATION_ERROR', 'Todas las fechas deben ser del mismo año', 400);
   }
 
   const users = await prisma.users.findMany({ where: { id: { in: userIds }, role: { not: 'Formador' }, active: true } });
@@ -47,21 +60,23 @@ export const handler = createHttpHandler<any>(async (request) => {
 
   const ignoredUserIds = userIds.filter((id) => !validUserIds.includes(id));
 
-  const dateOnly = formatDateOnly(dateInput);
-  const year = dateInput.getUTCFullYear();
+  const uniqueDates = Array.from(new Set(parsedDates.map((date) => formatDateOnly(date)))).sort();
+  const year = parsedDates[0].getUTCFullYear();
 
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     for (const userId of validUserIds) {
-      await tx.user_vacation_days.upsert({
-        where: { user_id_date: { user_id: userId, date: dateInput } },
-        update: { type },
-        create: { user_id: userId, date: dateInput, type },
-      });
+      for (const date of parsedDates) {
+        await tx.user_vacation_days.upsert({
+          where: { user_id_date: { user_id: userId, date } },
+          update: { type },
+          create: { user_id: userId, date, type },
+        });
+      }
     }
   });
 
   const updated = await Promise.all(validUserIds.map((userId) => buildVacationPayload(prisma, userId, year)));
   const responsePayload = updated.map((summary, index) => ({ ...summary, userId: validUserIds[index] }));
 
-  return successResponse({ date: dateOnly, updated: responsePayload, ignoredUserIds });
+  return successResponse({ dates: uniqueDates, updated: responsePayload, ignoredUserIds });
 });

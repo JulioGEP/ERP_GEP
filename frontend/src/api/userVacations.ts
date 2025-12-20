@@ -111,16 +111,16 @@ export async function fetchVacationsSummary(year?: number): Promise<VacationSumm
 }
 
 export async function applyBulkVacationDay(payload: {
-  date: string;
+  dates: string[];
   type: VacationType;
   userIds: string[];
 }): Promise<{
-  date: string;
+  dates: string[];
   updated: Array<UserVacationsResponse & { userId: string }>;
   ignoredUserIds?: string[];
 }> {
   return postJson<{
-    date: string;
+    dates: string[];
     updated: Array<UserVacationsResponse & { userId: string }>;
     ignoredUserIds?: string[];
   }>('/user-vacations-bulk', payload);
