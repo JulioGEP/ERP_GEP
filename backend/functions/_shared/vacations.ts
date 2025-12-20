@@ -138,6 +138,7 @@ export async function buildVacationPayload(
   prisma: PrismaClient,
   userId: string,
   year: number,
+  options?: { skipCarryoverUpdate?: boolean },
 ): Promise<{
   year: number;
   allowance: number | null;
@@ -150,7 +151,9 @@ export async function buildVacationPayload(
   counts: VacationCounts;
   days: Array<{ date: string; type: string }>;
 }> {
-  await ensurePreviousYearCarryover(prisma, userId, year);
+  if (!options?.skipCarryoverUpdate) {
+    await ensurePreviousYearCarryover(prisma, userId, year);
+  }
 
   const {
     days,
