@@ -85,6 +85,11 @@ function buildIsoDate(year: number, monthIndex: number, day: number): string {
   return new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
 }
 
+function isWeekend(year: number, monthIndex: number, day: number): boolean {
+  const weekday = new Date(Date.UTC(year, monthIndex, day)).getUTCDay();
+  return weekday === 0 || weekday === 6;
+}
+
 function getDaysInMonth(year: number, monthIndex: number): number {
   return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
 }
@@ -825,7 +830,14 @@ function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: Vacat
         {users.length
           ? Array.from({ length: 12 }, (_, monthIndex) => {
               const daysInMonth = getDaysInMonth(year, monthIndex);
-              const dayLabels = Array.from({ length: daysInMonth }, (_, index) => index + 1);
+              const dayEntries = Array.from({ length: daysInMonth }, (_, index) => {
+                const dayLabel = index + 1;
+                return {
+                  dayLabel,
+                  iso: buildIsoDate(year, monthIndex, dayLabel),
+                  isWeekend: isWeekend(year, monthIndex, dayLabel),
+                };
+              });
               const monthName = MONTH_FORMATTER.format(new Date(Date.UTC(year, monthIndex, 1)));
 
               return (
@@ -845,8 +857,12 @@ function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: Vacat
                           <th className="text-start" style={{ minWidth: '200px' }}>
                             Persona
                           </th>
-                          {dayLabels.map((dayLabel) => (
-                            <th key={dayLabel} className="text-muted small" style={{ minWidth: '34px' }}>
+                          {dayEntries.map(({ dayLabel, isWeekend }) => (
+                            <th
+                              key={dayLabel}
+                              className={`text-muted small${isWeekend ? ' weekend-header' : ''}`}
+                              style={{ minWidth: '34px' }}
+                            >
                               {dayLabel}
                             </th>
                           ))}
@@ -861,15 +877,16 @@ function VacationsCalendarModal({ show, onHide, users, year, userDayMap }: Vacat
                                 <div className="fw-semibold">{user.fullName}</div>
                                 <div className="text-muted small">{user.role}</div>
                               </td>
-                              {dayLabels.map((dayLabel) => {
-                                const iso = buildIsoDate(year, monthIndex, dayLabel);
+                              {dayEntries.map(({ dayLabel, iso, isWeekend }) => {
                                 const type = dayMap?.get(iso) ?? '';
                                 const color = type ? VACATION_TYPE_COLORS[type as VacationType] : undefined;
 
                                 return (
                                   <td
                                     key={dayLabel}
-                                    className="vacation-calendar-cell text-uppercase"
+                                    className={`vacation-calendar-cell text-uppercase${
+                                      isWeekend ? ' weekend' : ''
+                                    }`}
                                     style={{
                                       backgroundColor: color,
                                       color: type ? '#ffffff' : undefined,
