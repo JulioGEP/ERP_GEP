@@ -844,6 +844,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     remaining:
       DEFAULT_VACATION_ALLOWANCE +
       DEFAULT_ANNIVERSARY_ALLOWANCE +
+      DEFAULT_LOCAL_HOLIDAY_ALLOWANCE +
       DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
   });
   const normalizeNumber = (value: number | '') => (typeof value === 'number' ? value : 0);
@@ -853,6 +854,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
         0,
         normalizeNumber(state.allowance) +
           normalizeNumber(state.anniversaryAllowance) +
+          normalizeNumber(state.localHolidayAllowance) +
           normalizeNumber(state.previousYearAllowance) -
           enjoyedValue,
       ),
@@ -1113,6 +1115,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     const enjoyedValue = vacationsQuery.data?.enjoyed ?? 0;
     const extraAllowances =
       normalizeNumber(allowances.anniversaryAllowance) +
+      normalizeNumber(allowances.localHolidayAllowance) +
       normalizeNumber(allowances.previousYearAllowance);
     const updatedAllowance = Math.max(0, parsed + enjoyedValue - extraAllowances);
 
