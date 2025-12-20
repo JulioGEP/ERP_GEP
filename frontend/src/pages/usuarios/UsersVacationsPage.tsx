@@ -44,6 +44,7 @@ const VACATION_TYPE_LABELS: Record<VacationType, string> = {
   I: 'Incapacidad',
   N: 'Festivos nacionales',
   C: 'Fiesta autonómica',
+  Y: 'Año anterior',
 };
 
 const VACATION_TYPE_FULL_LABELS: Record<VacationType, string> = {
@@ -59,6 +60,7 @@ const VACATION_TYPE_FULL_LABELS: Record<VacationType, string> = {
   I: 'Incapacidad temporal',
   N: 'Festivos nacionales',
   C: 'Fiesta autonómica',
+  Y: 'Vacaciones año anterior',
 };
 
 const VACATION_TYPE_COLORS: Record<VacationType, string> = {
@@ -74,6 +76,7 @@ const VACATION_TYPE_COLORS: Record<VacationType, string> = {
   I: '#475569',
   N: '#facc15',
   C: '#14b8a6',
+  Y: '#0891b2',
 };
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('es-ES', { month: 'long' });

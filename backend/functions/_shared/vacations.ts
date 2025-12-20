@@ -1,9 +1,9 @@
 // backend/functions/_shared/vacations.ts
 import type { PrismaClient } from '@prisma/client';
 
-export const VACATION_TYPES = new Set(['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'I', 'N', 'C']);
+export const VACATION_TYPES = new Set(['V', 'L', 'A', 'T', 'M', 'H', 'F', 'R', 'P', 'I', 'N', 'C', 'Y']);
 
-export type VacationCounts = Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I' | 'N' | 'C', number>;
+export type VacationCounts = Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I' | 'N' | 'C' | 'Y', number>;
 
 export const DEFAULT_VACATION_ALLOWANCE = 24;
 export const DEFAULT_ANNIVERSARY_ALLOWANCE = 1;
@@ -64,7 +64,7 @@ export async function buildVacationPayload(
     }),
   ]);
 
-  const counts: VacationCounts = { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0 };
+  const counts: VacationCounts = { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0, Y: 0 };
   for (const day of days) {
     const key = day.type as keyof VacationCounts;
     if (counts[key] !== undefined) {
@@ -72,7 +72,7 @@ export async function buildVacationPayload(
     }
   }
 
-  const enjoyed = counts.V + counts.A;
+  const enjoyed = counts.V + counts.A + counts.Y;
   const allowance = typeof balance?.allowance_days === 'number' ? balance.allowance_days : DEFAULT_VACATION_ALLOWANCE;
   const anniversaryAllowance =
     typeof balance?.anniversary_days === 'number' ? balance.anniversary_days : DEFAULT_ANNIVERSARY_ALLOWANCE;

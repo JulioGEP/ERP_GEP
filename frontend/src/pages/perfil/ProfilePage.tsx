@@ -51,6 +51,7 @@ const VACATION_LABELS: Record<VacationType, { label: string; fullLabel: string }
   I: { label: 'Incapacidad', fullLabel: 'Incapacidad temporal' },
   N: { label: 'Festivos nacionales', fullLabel: 'Festivos nacionales' },
   C: { label: 'Fiesta autonómica', fullLabel: 'Fiesta autonómica' },
+  Y: { label: 'Año anterior', fullLabel: 'Vacaciones año anterior' },
 };
 
 const VACATION_COLORS: Record<VacationType, string> = {
@@ -66,6 +67,7 @@ const VACATION_COLORS: Record<VacationType, string> = {
   I: '#475569',
   N: '#facc15',
   C: '#14b8a6',
+  Y: '#0891b2',
 };
 
 const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> = [
@@ -82,6 +84,7 @@ const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> =
   { value: 'I', label: VACATION_LABELS.I.fullLabel },
   { value: 'N', label: VACATION_LABELS.N.fullLabel },
   { value: 'C', label: VACATION_LABELS.C.fullLabel },
+  { value: 'Y', label: VACATION_LABELS.Y.fullLabel },
 ];
 
 const VACATION_REQUEST_SECTION_TITLE = 'Petición de vacaciones y justificación de ausencias y Teletrabajo';
@@ -390,7 +393,7 @@ export default function ProfilePage() {
 
   const vacationData = vacationsQuery.data;
   const vacationCounts: Record<VacationType, number> =
-    vacationData?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0 };
+    vacationData?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0, Y: 0 };
   const vacationSummary = [
     { label: 'Vacaciones', value: vacationData?.allowance ?? 'Sin definir' },
     { label: 'Aniversario', value: vacationData?.anniversaryAllowance ?? 'Sin definir' },
