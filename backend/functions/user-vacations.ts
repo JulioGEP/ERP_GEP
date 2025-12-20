@@ -168,6 +168,6 @@ async function handleAllowance(
     },
   });
 
-  const payload = await buildVacationPayload(prisma, userId, year, { skipCarryoverUpdate: true });
+  const payload = await buildVacationPayload(prisma, userId, year);
   return successResponse(payload);
 }
