@@ -10,6 +10,19 @@ export const DEFAULT_ANNIVERSARY_ALLOWANCE = 1;
 export const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
 export const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
 
+type VacationYearData = {
+  days: Array<{ date: Date; type: string }>;
+  counts: VacationCounts;
+  allowance: number;
+  anniversaryAllowance: number;
+  localHolidayAllowance: number;
+  previousYearAllowance: number;
+  totalAllowance: number;
+  enjoyed: number;
+  remaining: number;
+  balance: Awaited<ReturnType<PrismaClient['user_vacation_balances']['findUnique']>>;
+};
+
 export function parseDateOnly(value: unknown): Date | null {
   if (!value) return null;
   const input = typeof value === 'string' ? value.trim() : String(value);
@@ -32,22 +45,11 @@ export function formatDateOnly(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-export async function buildVacationPayload(
+async function computeVacationYearData(
   prisma: PrismaClient,
   userId: string,
   year: number,
-): Promise<{
-  year: number;
-  allowance: number | null;
-  anniversaryAllowance: number;
-  localHolidayAllowance: number;
-  previousYearAllowance: number;
-  totalAllowance: number;
-  enjoyed: number;
-  remaining: number | null;
-  counts: VacationCounts;
-  days: Array<{ date: string; type: string }>;
-}> {
+): Promise<VacationYearData> {
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year + 1, 0, 1));
 
@@ -72,7 +74,6 @@ export async function buildVacationPayload(
     }
   }
 
-  const enjoyed = counts.V + counts.A + counts.Y;
   const allowance = typeof balance?.allowance_days === 'number' ? balance.allowance_days : DEFAULT_VACATION_ALLOWANCE;
   const anniversaryAllowance =
     typeof balance?.anniversary_days === 'number' ? balance.anniversary_days : DEFAULT_ANNIVERSARY_ALLOWANCE;
@@ -82,7 +83,80 @@ export async function buildVacationPayload(
     typeof balance?.previous_year_days === 'number' ? balance.previous_year_days : DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
 
   const totalAllowance = allowance + anniversaryAllowance + previousYearAllowance;
+  const enjoyed = counts.V + counts.A + counts.Y;
   const remaining = totalAllowance - enjoyed;
+
+  return {
+    days,
+    counts,
+    allowance,
+    anniversaryAllowance,
+    localHolidayAllowance,
+    previousYearAllowance,
+    totalAllowance,
+    enjoyed,
+    remaining: remaining >= 0 ? remaining : 0,
+    balance,
+  };
+}
+
+export async function ensurePreviousYearCarryover(prisma: PrismaClient, userId: string, year: number) {
+  const startOfYear = Date.UTC(year, 0, 1);
+  if (Date.now() < startOfYear || year <= 1970) return null;
+
+  const previousYearData = await computeVacationYearData(prisma, userId, year - 1);
+  const carryoverDays = Math.max(Math.floor(previousYearData.remaining), 0);
+
+  const currentBalance = await prisma.user_vacation_balances.findUnique({
+    where: { user_id_year: { user_id: userId, year } },
+  });
+
+  if (!currentBalance && carryoverDays === 0) return null;
+  if (currentBalance && currentBalance.previous_year_days === carryoverDays) return currentBalance;
+
+  return prisma.user_vacation_balances.upsert({
+    where: { user_id_year: { user_id: userId, year } },
+    update: { previous_year_days: carryoverDays },
+    create: {
+      user_id: userId,
+      year,
+      allowance_days: DEFAULT_VACATION_ALLOWANCE,
+      anniversary_days: DEFAULT_ANNIVERSARY_ALLOWANCE,
+      local_holiday_days: DEFAULT_LOCAL_HOLIDAY_ALLOWANCE,
+      previous_year_days: carryoverDays,
+    },
+  });
+}
+
+export async function buildVacationPayload(
+  prisma: PrismaClient,
+  userId: string,
+  year: number,
+): Promise<{
+  year: number;
+  allowance: number | null;
+  anniversaryAllowance: number;
+  localHolidayAllowance: number;
+  previousYearAllowance: number;
+  totalAllowance: number;
+  enjoyed: number;
+  remaining: number | null;
+  counts: VacationCounts;
+  days: Array<{ date: string; type: string }>;
+}> {
+  await ensurePreviousYearCarryover(prisma, userId, year);
+
+  const {
+    days,
+    counts,
+    allowance,
+    anniversaryAllowance,
+    localHolidayAllowance,
+    previousYearAllowance,
+    totalAllowance,
+    enjoyed,
+    remaining,
+  } = await computeVacationYearData(prisma, userId, year);
 
   return {
     year,
