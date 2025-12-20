@@ -677,7 +677,6 @@ export default function UsersVacationsPage() {
                     </Button>
                   </Badge>
                 ))}
-                {!bulkDates.length ? <div className="text-muted small">Selecciona una o más fechas.</div> : null}
               </div>
             </Col>
             <Col md={4}>
