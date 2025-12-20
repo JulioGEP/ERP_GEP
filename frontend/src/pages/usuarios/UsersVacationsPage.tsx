@@ -89,11 +89,16 @@ function getDaysInMonth(year: number, monthIndex: number): number {
   return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
 }
 
+function formatLocaleDateLabel(dateIso: string): string {
+  return new Date(`${dateIso}T00:00:00Z`).toLocaleDateString('es-ES', { timeZone: 'UTC' });
+}
+
 export default function UsersVacationsPage() {
   const queryClient = useQueryClient();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
-  const [bulkDate, setBulkDate] = useState('');
+  const [bulkDateInput, setBulkDateInput] = useState('');
+  const [bulkDates, setBulkDates] = useState<string[]>([]);
   const [bulkType, setBulkType] = useState<VacationType>('V');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [selectionManuallyChanged, setSelectionManuallyChanged] = useState(false);
@@ -172,12 +177,14 @@ export default function UsersVacationsPage() {
     mutationFn: applyBulkVacationDay,
     onSuccess: (payload) => {
       const ignoredCount = payload.ignoredUserIds?.length ?? 0;
+      const datesLabel = payload.dates.join(', ');
       const message =
         ignoredCount > 0
-          ? `Marca aplicada el ${payload.date}. ${ignoredCount} usuario${ignoredCount === 1 ? '' : 's'} ignorado${ignoredCount === 1 ? '' : 's'} por estar inactivo o ser formador.`
-          : `Marca aplicada el ${payload.date}.`;
+          ? `Marca aplicada en ${datesLabel}. ${ignoredCount} usuario${ignoredCount === 1 ? '' : 's'} ignorado${ignoredCount === 1 ? '' : 's'} por estar inactivo o ser formador.`
+          : `Marca aplicada en ${datesLabel}.`;
       setFeedback({ variant: 'success', message });
-      setBulkDate('');
+      setBulkDates([]);
+      setBulkDateInput('');
       queryClient.setQueryData(['vacations-summary', year], (previous: any) => {
         if (!previous) return previous;
         const updatedUsers = new Map<string, VacationSummaryUser>();
@@ -278,9 +285,23 @@ export default function UsersVacationsPage() {
 
   const handleCloseVacationModal = () => setVacationUser(null);
 
+  const addBulkDate = (value: string) => {
+    if (!value) return;
+    setBulkDates((previous) => {
+      const nextDates = new Set(previous);
+      nextDates.add(value);
+      return Array.from(nextDates).sort();
+    });
+    setBulkDateInput('');
+  };
+
+  const removeBulkDate = (value: string) => {
+    setBulkDates((previous) => previous.filter((date) => date !== value));
+  };
+
   const handleBulkSubmit = () => {
-    if (!bulkDate || !bulkType || selectedUsers.length === 0) return;
-    void bulkMutation.mutate({ date: bulkDate, type: bulkType, userIds: selectedUsers });
+    if (!bulkDates.length || !bulkType || selectedUsers.length === 0) return;
+    void bulkMutation.mutate({ dates: bulkDates, type: bulkType, userIds: selectedUsers });
   };
 
   const roles = useMemo(() => {
@@ -619,8 +640,40 @@ export default function UsersVacationsPage() {
         <Card.Body>
           <Row className="g-3 align-items-end">
             <Col md={4}>
-              <Form.Label>Fecha</Form.Label>
-              <Form.Control type="date" value={bulkDate} onChange={(event) => setBulkDate(event.target.value)} />
+              <Form.Label>Fechas</Form.Label>
+              <div className="d-flex gap-2">
+                <Form.Control
+                  type="date"
+                  value={bulkDateInput}
+                  onChange={(event) => setBulkDateInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && bulkDateInput) {
+                      event.preventDefault();
+                      addBulkDate(bulkDateInput);
+                    }
+                  }}
+                />
+                <Button variant="outline-secondary" onClick={() => addBulkDate(bulkDateInput)} disabled={!bulkDateInput}>
+                  Añadir
+                </Button>
+              </div>
+              <div className="d-flex flex-wrap gap-2 mt-2">
+                {bulkDates.map((date) => (
+                  <Badge key={date} bg="light" text="dark" className="border d-flex align-items-center gap-2">
+                    <span>{formatLocaleDateLabel(date)}</span>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="p-0"
+                      onClick={() => removeBulkDate(date)}
+                      aria-label={`Quitar ${formatLocaleDateLabel(date)}`}
+                    >
+                      ×
+                    </Button>
+                  </Badge>
+                ))}
+                {!bulkDates.length ? <div className="text-muted small">Selecciona una o más fechas.</div> : null}
+              </div>
             </Col>
             <Col md={4}>
               <Form.Label>Categoría</Form.Label>
@@ -705,7 +758,7 @@ export default function UsersVacationsPage() {
           <div className="d-flex justify-content-end mt-3">
             <Button
               onClick={handleBulkSubmit}
-              disabled={!bulkDate || !bulkType || selectedUsers.length === 0 || bulkMutation.isPending}
+              disabled={!bulkDates.length || !bulkType || selectedUsers.length === 0 || bulkMutation.isPending}
             >
               {bulkMutation.isPending ? 'Aplicando…' : 'Aplicar en calendarios seleccionados'}
             </Button>
