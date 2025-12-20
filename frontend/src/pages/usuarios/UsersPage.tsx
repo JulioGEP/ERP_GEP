@@ -1126,11 +1126,6 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       value: allowances.anniversaryAllowance,
     },
     {
-      key: 'localHolidayAllowance',
-      label: 'Festivos locales',
-      value: allowances.localHolidayAllowance,
-    },
-    {
       key: 'previousYearAllowance',
       label: 'Año anterior',
       value: allowances.previousYearAllowance,
