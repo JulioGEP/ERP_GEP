@@ -844,7 +844,6 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     remaining:
       DEFAULT_VACATION_ALLOWANCE +
       DEFAULT_ANNIVERSARY_ALLOWANCE +
-      DEFAULT_LOCAL_HOLIDAY_ALLOWANCE +
       DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
   });
   const normalizeNumber = (value: number | '') => (typeof value === 'number' ? value : 0);
@@ -854,7 +853,6 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
         0,
         normalizeNumber(state.allowance) +
           normalizeNumber(state.anniversaryAllowance) +
-          normalizeNumber(state.localHolidayAllowance) +
           normalizeNumber(state.previousYearAllowance) -
           enjoyedValue,
       ),
@@ -938,14 +936,15 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
   });
 
   const allowanceMutation = useMutation({
-    mutationFn: (payload: {
-      userId: string;
-      year: number;
-      allowance: number;
-      anniversaryAllowance: number;
-      localHolidayAllowance: number;
-      previousYearAllowance: number;
-    }) => updateVacationAllowance(payload),
+    mutationFn: () =>
+      updateVacationAllowance({
+        userId: userId as string,
+        year,
+        allowance: normalizeNumber(allowances.allowance),
+        anniversaryAllowance: normalizeNumber(allowances.anniversaryAllowance),
+        localHolidayAllowance: normalizeNumber(allowances.localHolidayAllowance),
+        previousYearAllowance: normalizeNumber(allowances.previousYearAllowance),
+      }),
     onSuccess: (data) => {
       queryClient.setQueryData(['user-vacations', userId, year], data);
       setAllowances({
@@ -1115,7 +1114,6 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     const enjoyedValue = vacationsQuery.data?.enjoyed ?? 0;
     const extraAllowances =
       normalizeNumber(allowances.anniversaryAllowance) +
-      normalizeNumber(allowances.localHolidayAllowance) +
       normalizeNumber(allowances.previousYearAllowance);
     const updatedAllowance = Math.max(0, parsed + enjoyedValue - extraAllowances);
 
@@ -1124,15 +1122,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
 
   const handleAllowanceSave = async () => {
     if (!userId) return;
-    const payload = {
-      userId,
-      year,
-      allowance: normalizeNumber(allowances.allowance),
-      anniversaryAllowance: normalizeNumber(allowances.anniversaryAllowance),
-      localHolidayAllowance: normalizeNumber(allowances.localHolidayAllowance),
-      previousYearAllowance: normalizeNumber(allowances.previousYearAllowance),
-    };
-    await allowanceMutation.mutateAsync(payload);
+    await allowanceMutation.mutateAsync();
   };
 
   const compactAllowanceCards: Array<{
