@@ -168,7 +168,12 @@ export default function UsersVacationsPage() {
   const bulkMutation = useMutation({
     mutationFn: applyBulkVacationDay,
     onSuccess: (payload) => {
-      setFeedback({ variant: 'success', message: `Marca aplicada el ${payload.date}.` });
+      const ignoredCount = payload.ignoredUserIds?.length ?? 0;
+      const message =
+        ignoredCount > 0
+          ? `Marca aplicada el ${payload.date}. ${ignoredCount} usuario${ignoredCount === 1 ? '' : 's'} ignorado${ignoredCount === 1 ? '' : 's'} por estar inactivo o ser formador.`
+          : `Marca aplicada el ${payload.date}.`;
+      setFeedback({ variant: 'success', message });
       setBulkDate('');
       queryClient.setQueryData(['vacations-summary', year], (previous: any) => {
         if (!previous) return previous;
