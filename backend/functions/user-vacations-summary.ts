@@ -71,7 +71,7 @@ export const handler = createHttpHandler<any>(async (request) => {
   const todayIso = formatDateOnly(new Date());
   const userSummaries = users.map((user: (typeof users)[number]) => {
     const userDays = daysByUser.get(user.id) ?? [];
-    const counts: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I', number> = {
+    const counts: Record<'V' | 'L' | 'A' | 'T' | 'M' | 'H' | 'F' | 'R' | 'P' | 'I' | 'N' | 'C', number> = {
       V: 0,
       L: 0,
       A: 0,
@@ -82,6 +82,8 @@ export const handler = createHttpHandler<any>(async (request) => {
       R: 0,
       P: 0,
       I: 0,
+      N: 0,
+      C: 0,
     };
 
     const normalizedDays = userDays.map((day: (typeof userDays)[number]) => {
@@ -97,7 +99,18 @@ export const handler = createHttpHandler<any>(async (request) => {
     const previousYearAllowance = balance?.previous_year_days ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
 
     const totalAllowance = allowance + anniversaryAllowance + localHolidayAllowance + previousYearAllowance;
-    const enjoyed = counts.V + counts.L + counts.A + counts.M + counts.H + counts.F + counts.R + counts.P + counts.I;
+    const enjoyed =
+      counts.V +
+      counts.L +
+      counts.A +
+      counts.M +
+      counts.H +
+      counts.F +
+      counts.R +
+      counts.P +
+      counts.I +
+      counts.N +
+      counts.C;
     const remaining = totalAllowance - enjoyed;
 
     const upcomingDates = normalizedDays
