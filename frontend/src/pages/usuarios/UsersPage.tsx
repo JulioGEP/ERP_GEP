@@ -936,15 +936,14 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
   });
 
   const allowanceMutation = useMutation({
-    mutationFn: () =>
-      updateVacationAllowance({
-        userId: userId as string,
-        year,
-        allowance: normalizeNumber(allowances.allowance),
-        anniversaryAllowance: normalizeNumber(allowances.anniversaryAllowance),
-        localHolidayAllowance: normalizeNumber(allowances.localHolidayAllowance),
-        previousYearAllowance: normalizeNumber(allowances.previousYearAllowance),
-      }),
+    mutationFn: (payload: {
+      userId: string;
+      year: number;
+      allowance: number;
+      anniversaryAllowance: number;
+      localHolidayAllowance: number;
+      previousYearAllowance: number;
+    }) => updateVacationAllowance(payload),
     onSuccess: (data) => {
       queryClient.setQueryData(['user-vacations', userId, year], data);
       setAllowances({
@@ -1122,7 +1121,15 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
 
   const handleAllowanceSave = async () => {
     if (!userId) return;
-    await allowanceMutation.mutateAsync();
+    const payload = {
+      userId,
+      year,
+      allowance: normalizeNumber(allowances.allowance),
+      anniversaryAllowance: normalizeNumber(allowances.anniversaryAllowance),
+      localHolidayAllowance: normalizeNumber(allowances.localHolidayAllowance),
+      previousYearAllowance: normalizeNumber(allowances.previousYearAllowance),
+    };
+    await allowanceMutation.mutateAsync(payload);
   };
 
   const compactAllowanceCards: Array<{
