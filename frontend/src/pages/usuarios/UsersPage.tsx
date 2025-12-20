@@ -1111,39 +1111,16 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     await allowanceMutation.mutateAsync();
   };
 
-  const primaryAllowanceCards: Array<{
-    key: string;
+  const compactAllowanceCards: Array<{
+    key: AllowanceFieldKey | 'allowance';
     label: string;
     value: number | '';
-    readOnly?: boolean;
-    isRemaining?: boolean;
-    description?: string;
   }> = [
     {
       key: 'allowance',
       label: 'Vacaciones',
       value: allowances.allowance,
     },
-    {
-      key: 'enjoyed',
-      label: 'Disfrutadas',
-      value: enjoyed,
-      readOnly: true,
-      description: 'Incluye vacaciones, festivos y otros permisos.',
-    },
-    {
-      key: 'remaining',
-      label: 'Restantes',
-      value: remaining,
-      isRemaining: true,
-    },
-  ];
-
-  const secondaryAllowanceCards: Array<{
-    key: AllowanceFieldKey;
-    label: string;
-    value: number | '';
-  }> = [
     {
       key: 'anniversaryAllowance',
       label: 'Aniversario',
@@ -1156,6 +1133,27 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     },
   ];
 
+  const highlightAllowanceCards: Array<{
+    key: string;
+    label: string;
+    value: number | '';
+    readOnly?: boolean;
+    isRemaining?: boolean;
+  }> = [
+    {
+      key: 'enjoyed',
+      label: 'Disfrutadas',
+      value: enjoyed,
+      readOnly: true,
+    },
+    {
+      key: 'remaining',
+      label: 'Restantes',
+      value: remaining,
+      isRemaining: true,
+    },
+  ];
+
   return (
     <Modal show={show && Boolean(user)} onHide={onHide} size="xl" centered className="vacations-modal">
       <Modal.Header closeButton>
@@ -1165,54 +1163,50 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       </Modal.Header>
       <Modal.Body className="vacations-modal-body d-grid gap-3">
         <div className="d-flex flex-column gap-3">
-          <div className="vacation-allowance-grid vacation-allowance-grid--primary">
-            {primaryAllowanceCards.map((item) => (
-              <div key={item.key} className="vacation-allowance-card">
-                <div className="text-muted text-uppercase vacation-allowance-label">{item.label}</div>
-                {item.readOnly ? (
-                  <div className="fw-semibold vacation-allowance-value">{item.value}</div>
-                ) : (
+          <div className="vacation-allowance-layout">
+            <div className="vacation-allowance-column vacation-allowance-column--compact">
+              {compactAllowanceCards.map((item) => (
+                <div key={item.key} className="vacation-allowance-card">
+                  <div className="text-muted text-uppercase vacation-allowance-label">{item.label}</div>
                   <Form.Control
                     type="number"
                     min={0}
                     value={item.value}
                     size="sm"
                     className="vacation-allowance-value"
-                    onChange={(event) =>
-                      item.isRemaining
-                        ? handleRemainingChange(event.target.value)
-                        : handleAllowanceChange(item.key as AllowanceFieldKey, event.target.value)
-                    }
-                  />
-                )}
-                {item.description && <div className="text-muted small">{item.description}</div>}
-              </div>
-            ))}
-          </div>
-
-          <div className="d-flex flex-column flex-lg-row gap-3 align-items-start align-items-lg-center">
-            <div className="vacation-allowance-grid vacation-allowance-grid--secondary flex-grow-1">
-              {secondaryAllowanceCards.map((item) => (
-                <div key={item.key} className="vacation-allowance-card vacation-allowance-card--secondary">
-                  <div className="text-muted text-uppercase vacation-allowance-label vacation-allowance-label--small">
-                    {item.label}
-                  </div>
-                  <Form.Control
-                    type="number"
-                    min={0}
-                    value={item.value}
-                    size="sm"
-                    className="vacation-allowance-value"
-                    onChange={(event) => handleAllowanceChange(item.key, event.target.value)}
+                    onChange={(event) => handleAllowanceChange(item.key as AllowanceFieldKey, event.target.value)}
                   />
                 </div>
               ))}
             </div>
-            <Button
-              className="ms-lg-auto"
-              onClick={handleAllowanceSave}
-              disabled={allowanceMutation.isPending || !userId}
-            >
+
+            <div className="vacation-allowance-column vacation-allowance-column--highlight">
+              {highlightAllowanceCards.map((item) => (
+                <div key={item.key} className="vacation-allowance-card">
+                  <div className="text-muted text-uppercase vacation-allowance-label">{item.label}</div>
+                  {item.readOnly ? (
+                    <div className="fw-semibold vacation-allowance-value">{item.value}</div>
+                  ) : (
+                    <Form.Control
+                      type="number"
+                      min={0}
+                      value={item.value}
+                      size="sm"
+                      className="vacation-allowance-value"
+                      onChange={(event) =>
+                        item.isRemaining
+                          ? handleRemainingChange(event.target.value)
+                          : handleAllowanceChange(item.key as AllowanceFieldKey, event.target.value)
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="d-flex justify-content-end">
+            <Button onClick={handleAllowanceSave} disabled={allowanceMutation.isPending || !userId}>
               {allowanceMutation.isPending ? 'Guardando…' : 'Guardar cambios'}
             </Button>
           </div>
