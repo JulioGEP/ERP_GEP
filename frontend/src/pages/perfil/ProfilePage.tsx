@@ -69,7 +69,7 @@ const VACATION_COLORS: Record<VacationType, string> = {
 };
 
 const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> = [
-  { value: '', label: 'Sin marca' },
+  { value: '', label: 'Sin categoria' },
   { value: 'V', label: VACATION_LABELS.V.fullLabel },
   { value: 'L', label: VACATION_LABELS.L.fullLabel },
   { value: 'A', label: VACATION_LABELS.A.fullLabel },

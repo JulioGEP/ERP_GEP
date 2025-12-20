@@ -1295,7 +1295,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
                 onChange={(event) => setSelectedType(event.target.value as VacationType | '')}
                 style={{ minWidth: '240px' }}
               >
-                <option value="">Sin marca</option>
+                <option value="">Sin categoria</option>
                 {Object.entries(VACATION_TYPE_INFO).map(([value, info]) => (
                   <option key={value} value={value} title={info.fullLabel}>
                     {info.label}
