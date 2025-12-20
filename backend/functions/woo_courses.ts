@@ -515,6 +515,7 @@ async function fetchWooVariations(productId: bigint): Promise<SanitizedVariation
 }
 
 type ExistingVariant = {
+  id: string;
   id_woo: bigint;
   name: string | null;
   status: string | null;
@@ -611,6 +612,7 @@ async function syncProductVariations(
     const existing = (await client.variants.findMany({
       where: { id_padre: product.id_woo },
       select: {
+        id: true,
         id_woo: true,
         name: true,
         status: true,
@@ -660,7 +662,7 @@ async function syncProductVariations(
       const { data: updateData, changes } = buildUpdateData(current, incoming, timestamp);
       if (changes.length > 0) {
         await client.variants.update({
-          where: { id_woo: incoming.idWoo },
+          where: { id: current.id },
           data: updateData,
         });
 
