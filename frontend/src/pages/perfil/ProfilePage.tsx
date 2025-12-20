@@ -582,18 +582,30 @@ export default function ProfilePage() {
           <div className="d-flex gap-3 flex-wrap">
             {vacationSummary.map((item) => {
               const isBalanceMetric = item.label === 'Disfrutadas' || item.label === 'Restantes';
+              const containerStyle = {
+                borderWidth: isBalanceMetric ? '2px' : undefined,
+                backgroundColor: isBalanceMetric ? '#f7f8fa' : undefined,
+                padding: isBalanceMetric ? '0.9rem 1.1rem' : '0.75rem 1rem',
+                marginInline: isBalanceMetric ? '0.25rem' : undefined,
+              } as const;
+              const labelStyle = {
+                fontSize: isBalanceMetric ? '0.95rem' : '0.75rem',
+                letterSpacing: '0.02em',
+              } as const;
+              const valueStyle = {
+                fontSize: isBalanceMetric ? '0.92rem' : '0.75rem',
+              } as const;
 
               return (
                 <div
                   key={item.label}
-                  className="border rounded px-3 py-2"
-                  style={isBalanceMetric ? { borderWidth: '2px' } : undefined}
+                  className="border rounded"
+                  style={containerStyle}
                 >
-                  <div className="text-muted small text-uppercase">{item.label}</div>
-                  <div
-                    className={isBalanceMetric ? 'fw-bold' : 'fw-semibold'}
-                    style={{ fontSize: '0.75rem' }}
-                  >
+                  <div className="text-muted text-uppercase" style={labelStyle}>
+                    {item.label}
+                  </div>
+                  <div className={isBalanceMetric ? 'fw-bold' : 'fw-semibold'} style={valueStyle}>
                     {item.value}
                   </div>
                 </div>
