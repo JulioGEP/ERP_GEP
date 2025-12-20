@@ -79,18 +79,18 @@ function buildEmailContent({
 }
 
 export const handler = createHttpHandler(async (request) => {
-  await requireAuth(request);
+  const prisma = getPrisma();
+  const auth = await requireAuth(request, prisma);
 
-  if (request.httpMethod !== 'POST') {
+  if ('error' in auth) {
+    return auth.error;
+  }
+
+  if (request.method !== 'POST') {
     return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
   }
 
-  let body: any = {};
-  try {
-    body = request.body ? JSON.parse(request.body) : {};
-  } catch {
-    body = {};
-  }
+  const body: any = request.body && typeof request.body === 'object' ? request.body : {};
 
   const sessionId = toStringOrNull(body?.sessionId);
   const estado = toStringOrNull(body?.estado);
@@ -102,8 +102,6 @@ export const handler = createHttpHandler(async (request) => {
   if (estado !== 'SUSPENDIDA' && estado !== 'CANCELADA') {
     return errorResponse('VALIDATION_ERROR', 'estado debe ser SUSPENDIDA o CANCELADA', 400);
   }
-
-  const prisma = getPrisma();
 
   const session = await prisma.sesiones.findUnique({
     where: { id: sessionId },

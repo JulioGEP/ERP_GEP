@@ -30,8 +30,8 @@ export const handler = createHttpHandler<any>(async (request) => {
       ? [request.body.date]
       : [];
   const parsedDates = dateInputs
-    .map((date) => parseDateOnly(date))
-    .filter((date): date is Date => Boolean(date));
+    .map((dateInput: unknown) => parseDateOnly(dateInput))
+    .filter((date: Date | null): date is Date => Boolean(date));
 
   const type = request.body.type ? String(request.body.type).trim().toUpperCase() : '';
   const userIds: string[] = Array.isArray(request.body.userIds)
@@ -46,7 +46,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('VALIDATION_ERROR', 'Debes seleccionar al menos un usuario', 400);
   }
 
-  const years = new Set(parsedDates.map((date) => date.getUTCFullYear()));
+  const years = new Set(parsedDates.map((date: Date) => date.getUTCFullYear()));
   if (years.size > 1) {
     return errorResponse('VALIDATION_ERROR', 'Todas las fechas deben ser del mismo año', 400);
   }
@@ -60,7 +60,9 @@ export const handler = createHttpHandler<any>(async (request) => {
 
   const ignoredUserIds = userIds.filter((id) => !validUserIds.includes(id));
 
-  const uniqueDates = Array.from(new Set(parsedDates.map((date) => formatDateOnly(date)))).sort();
+  const uniqueDates = Array.from(
+    new Set(parsedDates.map((date: Date) => formatDateOnly(date))),
+  ).sort();
   const year = parsedDates[0].getUTCFullYear();
 
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
