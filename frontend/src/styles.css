@@ -1283,19 +1283,29 @@ option.session-option-unavailable {
 }
 
 /* === Vacaciones === */
-.vacation-allowance-grid {
+.vacation-allowance-layout {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 992px) {
+  .vacation-allowance-layout {
+    grid-template-columns: 1.1fr 1fr;
+  }
+}
+
+.vacation-allowance-column {
   display: grid;
   gap: 10px;
-  align-items: stretch;
 }
 
-.vacation-allowance-grid--primary {
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
+.vacation-allowance-column--compact {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.vacation-allowance-grid--secondary {
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+.vacation-allowance-column--highlight {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .vacation-allowance-card {
@@ -1308,26 +1318,26 @@ option.session-option-unavailable {
   flex: 1 1 140px;
 }
 
-.vacation-allowance-card--secondary {
-  padding: 8px;
-}
-
-.vacation-allowance-card--secondary .vacation-allowance-value {
+.vacation-allowance-value {
+  font-weight: 700;
   font-size: 1rem;
 }
 
-.vacation-allowance-value {
-  font-weight: 700;
-  font-size: 1.1rem;
-}
-
 .vacation-allowance-label {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   letter-spacing: 0.04em;
 }
 
-.vacation-allowance-label--small {
-  font-size: 0.72rem;
+.vacation-allowance-column--highlight .vacation-allowance-card {
+  padding: 12px 14px;
+}
+
+.vacation-allowance-column--highlight .vacation-allowance-value {
+  font-size: 1.3rem;
+}
+
+.vacation-allowance-column--highlight .vacation-allowance-label {
+  font-size: 0.98rem;
 }
 
 .vacation-type-label {
