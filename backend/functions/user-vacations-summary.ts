@@ -98,19 +98,8 @@ export const handler = createHttpHandler<any>(async (request) => {
     const localHolidayAllowance = balance?.local_holiday_days ?? DEFAULT_LOCAL_HOLIDAY_ALLOWANCE;
     const previousYearAllowance = balance?.previous_year_days ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
 
-    const totalAllowance = allowance + anniversaryAllowance + localHolidayAllowance + previousYearAllowance;
-    const enjoyed =
-      counts.V +
-      counts.L +
-      counts.A +
-      counts.M +
-      counts.H +
-      counts.F +
-      counts.R +
-      counts.P +
-      counts.I +
-      counts.N +
-      counts.C;
+    const totalAllowance = allowance + anniversaryAllowance + previousYearAllowance;
+    const enjoyed = counts.V + counts.A;
     const remaining = totalAllowance - enjoyed;
 
     const upcomingDates = normalizedDays

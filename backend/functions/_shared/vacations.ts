@@ -72,18 +72,7 @@ export async function buildVacationPayload(
     }
   }
 
-  const enjoyed =
-    counts.V +
-    counts.L +
-    counts.A +
-    counts.M +
-    counts.H +
-    counts.F +
-    counts.R +
-    counts.P +
-    counts.I +
-    counts.N +
-    counts.C;
+  const enjoyed = counts.V + counts.A;
   const allowance = typeof balance?.allowance_days === 'number' ? balance.allowance_days : DEFAULT_VACATION_ALLOWANCE;
   const anniversaryAllowance =
     typeof balance?.anniversary_days === 'number' ? balance.anniversary_days : DEFAULT_ANNIVERSARY_ALLOWANCE;
@@ -92,7 +81,7 @@ export async function buildVacationPayload(
   const previousYearAllowance =
     typeof balance?.previous_year_days === 'number' ? balance.previous_year_days : DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
 
-  const totalAllowance = allowance + anniversaryAllowance + localHolidayAllowance + previousYearAllowance;
+  const totalAllowance = allowance + anniversaryAllowance + previousYearAllowance;
   const remaining = totalAllowance - enjoyed;
 
   return {
