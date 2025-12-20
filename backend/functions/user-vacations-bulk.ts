@@ -39,15 +39,19 @@ export const handler = createHttpHandler<any>(async (request) => {
   }
 
   const users = await prisma.users.findMany({ where: { id: { in: userIds }, role: { not: 'Formador' }, active: true } });
-  if (users.length !== userIds.length) {
-    return errorResponse('NOT_FOUND', 'Algún usuario seleccionado no es válido', 404);
+  const validUserIds = users.map((user) => user.id);
+
+  if (!validUserIds.length) {
+    return errorResponse('VALIDATION_ERROR', 'Ninguno de los usuarios seleccionados está activo o es válido', 400);
   }
+
+  const ignoredUserIds = userIds.filter((id) => !validUserIds.includes(id));
 
   const dateOnly = formatDateOnly(dateInput);
   const year = dateInput.getUTCFullYear();
 
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    for (const userId of userIds) {
+    for (const userId of validUserIds) {
       await tx.user_vacation_days.upsert({
         where: { user_id_date: { user_id: userId, date: dateInput } },
         update: { type },
@@ -56,8 +60,8 @@ export const handler = createHttpHandler<any>(async (request) => {
     }
   });
 
-  const updated = await Promise.all(userIds.map((userId) => buildVacationPayload(prisma, userId, year)));
-  const responsePayload = updated.map((summary, index) => ({ ...summary, userId: userIds[index] }));
+  const updated = await Promise.all(validUserIds.map((userId) => buildVacationPayload(prisma, userId, year)));
+  const responsePayload = updated.map((summary, index) => ({ ...summary, userId: validUserIds[index] }));
 
-  return successResponse({ date: dateOnly, updated: responsePayload });
+  return successResponse({ date: dateOnly, updated: responsePayload, ignoredUserIds });
 });

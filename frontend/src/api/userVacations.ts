@@ -114,11 +114,16 @@ export async function applyBulkVacationDay(payload: {
   date: string;
   type: VacationType;
   userIds: string[];
-}): Promise<{ date: string; updated: Array<UserVacationsResponse & { userId: string }> }> {
-  return postJson<{ date: string; updated: Array<UserVacationsResponse & { userId: string }> }>(
-    '/user-vacations-bulk',
-    payload,
-  );
+}): Promise<{
+  date: string;
+  updated: Array<UserVacationsResponse & { userId: string }>;
+  ignoredUserIds?: string[];
+}> {
+  return postJson<{
+    date: string;
+    updated: Array<UserVacationsResponse & { userId: string }>;
+    ignoredUserIds?: string[];
+  }>('/user-vacations-bulk', payload);
 }
 
 export async function fetchVacationRequests(): Promise<VacationRequestItem[]> {
