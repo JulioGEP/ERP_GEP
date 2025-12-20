@@ -837,7 +837,11 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     anniversaryAllowance: DEFAULT_ANNIVERSARY_ALLOWANCE,
     localHolidayAllowance: DEFAULT_LOCAL_HOLIDAY_ALLOWANCE,
     previousYearAllowance: DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
-    remaining: DEFAULT_VACATION_ALLOWANCE + DEFAULT_ANNIVERSARY_ALLOWANCE + DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
+    remaining:
+      DEFAULT_VACATION_ALLOWANCE +
+      DEFAULT_ANNIVERSARY_ALLOWANCE +
+      DEFAULT_LOCAL_HOLIDAY_ALLOWANCE +
+      DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
   });
   const normalizeNumber = (value: number | '') => (typeof value === 'number' ? value : 0);
   const computeRemaining = useCallback(
@@ -846,6 +850,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
         0,
         normalizeNumber(state.allowance) +
           normalizeNumber(state.anniversaryAllowance) +
+          normalizeNumber(state.localHolidayAllowance) +
           normalizeNumber(state.previousYearAllowance) -
           enjoyedValue,
       ),
@@ -956,12 +961,8 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
   });
 
   const data = vacationsQuery.data;
-  const counts: Record<VacationType, number> = useMemo(() => {
-    const baseCounts =
-      data?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0 };
-
-    return { ...baseCounts, N: (baseCounts.N ?? 0) + (baseCounts.L ?? 0) };
-  }, [data?.counts]);
+  const counts: Record<VacationType, number> =
+    data?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0 };
   const enjoyed = data?.enjoyed ?? 0;
   const remaining = allowances.remaining === '' ? computeRemaining(allowances, enjoyed) : allowances.remaining;
   const selectedDates = useMemo(() => {
@@ -1100,6 +1101,7 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     const enjoyedValue = vacationsQuery.data?.enjoyed ?? 0;
     const extraAllowances =
       normalizeNumber(allowances.anniversaryAllowance) +
+      normalizeNumber(allowances.localHolidayAllowance) +
       normalizeNumber(allowances.previousYearAllowance);
     const updatedAllowance = Math.max(0, parsed + enjoyedValue - extraAllowances);
 
@@ -1125,6 +1127,11 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       key: 'anniversaryAllowance',
       label: 'Aniversario',
       value: allowances.anniversaryAllowance,
+    },
+    {
+      key: 'localHolidayAllowance',
+      label: 'Festivos locales',
+      value: allowances.localHolidayAllowance,
     },
     {
       key: 'previousYearAllowance',
