@@ -103,10 +103,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     const previousYearAllowance = balance?.previous_year_days ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
 
     const totalAllowance = allowance + anniversaryAllowance + previousYearAllowance;
-    const enjoyedAnniversaryDays = normalizedDays.filter(
-      (day: (typeof normalizedDays)[number]) => day.type === 'A' && day.date <= todayIso,
-    ).length;
-    const enjoyed = counts.V + enjoyedAnniversaryDays + counts.Y;
+    const enjoyed = counts.V + counts.A + counts.Y;
     const remaining = totalAllowance - enjoyed;
 
     const upcomingDates = normalizedDays

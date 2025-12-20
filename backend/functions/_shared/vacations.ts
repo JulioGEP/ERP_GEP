@@ -83,9 +83,7 @@ async function computeVacationYearData(
     typeof balance?.previous_year_days === 'number' ? balance.previous_year_days : DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
 
   const totalAllowance = allowance + anniversaryAllowance + previousYearAllowance;
-  const todayIso = formatDateOnly(new Date());
-  const enjoyedAnniversaryDays = days.filter((day) => day.type === 'A' && formatDateOnly(day.date) <= todayIso).length;
-  const enjoyed = counts.V + enjoyedAnniversaryDays + counts.Y;
+  const enjoyed = counts.V + counts.A + counts.Y;
   const remaining = totalAllowance - enjoyed;
 
   return {
