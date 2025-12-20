@@ -10,6 +10,25 @@ export const DEFAULT_ANNIVERSARY_ALLOWANCE = 1;
 export const DEFAULT_LOCAL_HOLIDAY_ALLOWANCE = 2;
 export const DEFAULT_PREVIOUS_YEAR_ALLOWANCE = 0;
 
+export function calculateAnniversaryAutoConsumption(
+  startDate: Date | null | undefined,
+  year: number,
+  allowance: number,
+  today: Date = new Date(),
+): number {
+  if (!startDate || allowance <= 0) return 0;
+
+  const anniversaryDate = new Date(Date.UTC(year, startDate.getUTCMonth(), startDate.getUTCDate()));
+  if (Number.isNaN(anniversaryDate.getTime())) return 0;
+
+  const todayYear = today.getUTCFullYear();
+  if (todayYear > year) return allowance;
+  if (todayYear < year) return 0;
+
+  const todayDateOnly = new Date(Date.UTC(todayYear, today.getUTCMonth(), today.getUTCDate()));
+  return todayDateOnly >= anniversaryDate ? allowance : 0;
+}
+
 export function parseDateOnly(value: unknown): Date | null {
   if (!value) return null;
   const input = typeof value === 'string' ? value.trim() : String(value);
@@ -51,7 +70,7 @@ export async function buildVacationPayload(
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year + 1, 0, 1));
 
-  const [days, balance] = await Promise.all([
+  const [days, balance, user] = await Promise.all([
     prisma.user_vacation_days.findMany({
       where: {
         user_id: userId,
@@ -61,6 +80,10 @@ export async function buildVacationPayload(
     }),
     prisma.user_vacation_balances.findUnique({
       where: { user_id_year: { user_id: userId, year } },
+    }),
+    prisma.users.findUnique({
+      where: { id: userId },
+      select: { start_date: true },
     }),
   ]);
 
@@ -72,7 +95,6 @@ export async function buildVacationPayload(
     }
   }
 
-  const enjoyed = counts.V + counts.A;
   const allowance = typeof balance?.allowance_days === 'number' ? balance.allowance_days : DEFAULT_VACATION_ALLOWANCE;
   const anniversaryAllowance =
     typeof balance?.anniversary_days === 'number' ? balance.anniversary_days : DEFAULT_ANNIVERSARY_ALLOWANCE;
@@ -81,8 +103,14 @@ export async function buildVacationPayload(
   const previousYearAllowance =
     typeof balance?.previous_year_days === 'number' ? balance.previous_year_days : DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
 
+  const anniversaryAutoConsumed = calculateAnniversaryAutoConsumption(
+    user?.start_date ?? null,
+    year,
+    anniversaryAllowance,
+  );
+  const anniversaryEnjoyed = Math.max(counts.A, anniversaryAutoConsumed);
   const totalAllowance = allowance + anniversaryAllowance + previousYearAllowance;
-  const remaining = totalAllowance - enjoyed;
+  const remaining = totalAllowance - (counts.V + anniversaryEnjoyed);
 
   return {
     year,
@@ -91,9 +119,9 @@ export async function buildVacationPayload(
     localHolidayAllowance,
     previousYearAllowance,
     totalAllowance,
-    enjoyed,
+    enjoyed: counts.V + anniversaryEnjoyed,
     remaining: remaining >= 0 ? remaining : 0,
-    counts,
+    counts: { ...counts, A: anniversaryEnjoyed },
     days: days.map((day: typeof days[number]) => ({ date: formatDateOnly(day.date), type: day.type })),
   };
 }

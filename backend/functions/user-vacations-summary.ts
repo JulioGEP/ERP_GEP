@@ -8,6 +8,7 @@ import {
   DEFAULT_LOCAL_HOLIDAY_ALLOWANCE,
   DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
   DEFAULT_VACATION_ALLOWANCE,
+  calculateAnniversaryAutoConsumption,
   formatDateOnly,
   parseYear,
 } from './_shared/vacations';
@@ -35,7 +36,7 @@ export const handler = createHttpHandler<any>(async (request) => {
         { role: 'Formador', trainer: { is: { contrato_fijo: true } } },
       ],
     },
-    select: { id: true, first_name: true, last_name: true, role: true, active: true },
+    select: { id: true, first_name: true, last_name: true, role: true, active: true, start_date: true },
     orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
   });
 
@@ -98,8 +99,14 @@ export const handler = createHttpHandler<any>(async (request) => {
     const localHolidayAllowance = balance?.local_holiday_days ?? DEFAULT_LOCAL_HOLIDAY_ALLOWANCE;
     const previousYearAllowance = balance?.previous_year_days ?? DEFAULT_PREVIOUS_YEAR_ALLOWANCE;
 
+    const anniversaryAutoConsumed = calculateAnniversaryAutoConsumption(
+      user.start_date,
+      year,
+      anniversaryAllowance,
+    );
+    const anniversaryEnjoyed = Math.max(counts.A, anniversaryAutoConsumed);
     const totalAllowance = allowance + anniversaryAllowance + previousYearAllowance;
-    const enjoyed = counts.V + counts.A;
+    const enjoyed = counts.V + anniversaryEnjoyed;
     const remaining = totalAllowance - enjoyed;
 
     const upcomingDates = normalizedDays
@@ -119,7 +126,7 @@ export const handler = createHttpHandler<any>(async (request) => {
       totalAllowance,
       enjoyed,
       remaining: remaining >= 0 ? remaining : 0,
-      counts,
+      counts: { ...counts, A: anniversaryEnjoyed },
       upcomingDates,
       days: normalizedDays,
       lastUpdated: normalizedDays.at(-1)?.date ?? null,
