@@ -1575,6 +1575,10 @@ option.session-option-unavailable {
   padding: 6px;
 }
 
+.vacation-summary-calendar-table th.weekend-header {
+  background-color: #eef2f6;
+}
+
 .vacation-summary-calendar-table .vacation-calendar-cell {
   min-width: 34px;
   font-weight: 700;
@@ -1585,6 +1589,10 @@ option.session-option-unavailable {
 .vacation-summary-calendar-table .vacation-calendar-cell:not([style*='background-color:']) {
   background-color: #f8f9fa;
   color: #6c757d;
+}
+
+.vacation-summary-calendar-table .vacation-calendar-cell.weekend:not([style*='background-color:']) {
+  background-color: #e9ecef;
 }
 
 .trainer-session-actions {
