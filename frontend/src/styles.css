@@ -1556,6 +1556,15 @@ option.session-option-unavailable {
   background: #7c3aed;
 }
 
+.vacation-calendar .vacation-day.type-Y {
+  background: #cffafe;
+  border-color: #0891b2;
+}
+
+.vacation-calendar .vacation-day.type-Y .day-type {
+  background: #0891b2;
+}
+
 .vacations-calendar-modal .modal-body {
   max-height: 80vh;
 }
