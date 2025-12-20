@@ -25,7 +25,7 @@ export function VacationCalendar({ year, days, onDayClick, selectedDates = [], r
 
   return (
     <div className="vacation-calendar d-grid gap-3">
-      <div className="d-flex flex-wrap gap-3">
+      <div className="vacation-months-grid">
         {Array.from({ length: 12 }, (_, monthIndex) => {
           const monthStart = new Date(Date.UTC(year, monthIndex, 1));
           const monthName = MONTH_FORMATTER.format(monthStart);
