@@ -180,7 +180,7 @@ export default function UsersVacationsPage() {
       const datesLabel = payload.dates.join(', ');
       const message =
         ignoredCount > 0
-          ? `Marca aplicada en ${datesLabel}. ${ignoredCount} usuario${ignoredCount === 1 ? '' : 's'} ignorado${ignoredCount === 1 ? '' : 's'} por estar inactivo o ser formador.`
+          ? `Marca aplicada en ${datesLabel}. ${ignoredCount} usuario${ignoredCount === 1 ? '' : 's'} ignorado${ignoredCount === 1 ? '' : 's'} por estar inactivo.`
           : `Marca aplicada en ${datesLabel}.`;
       setFeedback({ variant: 'success', message });
       setBulkDates([]);
@@ -763,9 +763,7 @@ export default function UsersVacationsPage() {
               {bulkMutation.isPending ? 'Aplicando…' : 'Aplicar en calendarios seleccionados'}
             </Button>
           </div>
-          <div className="text-muted small mt-2">
-            Se ignorarán automáticamente los formadores y solo se marcarán usuarios activos.
-          </div>
+          <div className="text-muted small mt-2">Se ignorarán automáticamente los usuarios inactivos.</div>
         </Card.Body>
       </Card>
     </div>

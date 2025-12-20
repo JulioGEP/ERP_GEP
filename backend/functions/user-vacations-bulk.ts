@@ -51,7 +51,7 @@ export const handler = createHttpHandler<any>(async (request) => {
     return errorResponse('VALIDATION_ERROR', 'Todas las fechas deben ser del mismo año', 400);
   }
 
-  const users = await prisma.users.findMany({ where: { id: { in: userIds }, role: { not: 'Formador' }, active: true } });
+  const users = await prisma.users.findMany({ where: { id: { in: userIds }, active: true } });
   const validUserIds = users.map((user) => user.id);
 
   if (!validUserIds.length) {
