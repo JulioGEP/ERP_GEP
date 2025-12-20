@@ -100,12 +100,18 @@ async function computeVacationYearData(
   };
 }
 
+// The carryover rules start applying after 2025. That year is considered the base
+// year, so it should never accumulate vacation days from 2024.
+const VACATION_CARRYOVER_BASE_YEAR = 2025;
+
 export async function ensurePreviousYearCarryover(prisma: PrismaClient, userId: string, year: number) {
   const startOfYear = Date.UTC(year, 0, 1);
   if (Date.now() < startOfYear || year <= 1970) return null;
 
-  const previousYearData = await computeVacationYearData(prisma, userId, year - 1);
-  const carryoverDays = Math.max(Math.floor(previousYearData.remaining), 0);
+  const carryoverDays =
+    year <= VACATION_CARRYOVER_BASE_YEAR
+      ? 0
+      : Math.max(Math.floor((await computeVacationYearData(prisma, userId, year - 1)).remaining), 0);
 
   const currentBalance = await prisma.user_vacation_balances.findUnique({
     where: { user_id_year: { user_id: userId, year } },
