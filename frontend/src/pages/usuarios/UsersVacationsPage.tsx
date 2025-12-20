@@ -615,7 +615,7 @@ export default function UsersVacationsPage() {
               <Form.Control type="date" value={bulkDate} onChange={(event) => setBulkDate(event.target.value)} />
             </Col>
             <Col md={4}>
-              <Form.Label>Marca</Form.Label>
+              <Form.Label>Categoría</Form.Label>
               <Form.Select value={bulkType} onChange={(event) => setBulkType(event.target.value as VacationType)}>
                 {Object.entries(VACATION_TYPE_LABELS).map(([key, label]) => (
                   <option value={key} key={key} title={VACATION_TYPE_FULL_LABELS[key as VacationType]}>
