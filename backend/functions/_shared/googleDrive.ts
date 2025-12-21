@@ -989,7 +989,7 @@ async function ensureTrainersRootFolder(params: {
   createIfMissing?: boolean;
 }): Promise<string | null> {
   const sanitizedName = sanitizeName(TRAINERS_FOLDER_NAME) || TRAINERS_FOLDER_NAME;
-  const parentId = params.driveId;
+  const parentId = params.baseFolderId || params.driveId;
 
   if (params.createIfMissing === false) {
     return findFolder({
