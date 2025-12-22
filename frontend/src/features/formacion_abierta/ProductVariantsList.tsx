@@ -82,6 +82,8 @@ const dateFormatter = new Intl.DateTimeFormat('es-ES', {
   timeStyle: 'short',
 });
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const STOCK_STATUS_SUMMARY_LABELS: Record<string, string> = {
   instock: 'En stock',
   outofstock: 'Sin stock',
@@ -98,6 +100,12 @@ function isPlaceholderWooId(value: unknown): boolean {
   if (!normalized) return false;
 
   return normalized.toLowerCase().startsWith('placeholder');
+}
+
+function isValidUuid(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && UUID_REGEX.test(trimmed);
 }
 
 function formatDate(value: string | null) {
@@ -1345,13 +1353,11 @@ export function VariantModal({
   }, [variant]);
 
   const variantCommentTargets = useMemo(() => {
-    const wooId = (variant?.id_woo ?? '').trim();
     const internalId = (variant?.id ?? '').trim();
     const ids: string[] = [];
-    if (internalId) ids.push(internalId);
-    if (wooId && wooId !== internalId) ids.push(wooId);
+    if (isValidUuid(internalId)) ids.push(internalId);
     return ids;
-  }, [variant?.id, variant?.id_woo]);
+  }, [variant?.id]);
 
   const primaryCommentTarget = useMemo(() => variantCommentTargets[0] ?? '', [variantCommentTargets]);
 
