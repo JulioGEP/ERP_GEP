@@ -31,8 +31,10 @@ type SerializedPayroll = {
   salarioBrutoTotal: number | null;
   retencion: number | null;
   aportacionSsIrpf: number | null;
+  aportacionSsIrpfDetalle: string | null;
   salarioLimpio: number | null;
   contingenciasComunes: number | null;
+  contingenciasComunesDetalle: string | null;
   totalEmpresa: number | null;
 };
 
@@ -63,6 +65,7 @@ function serializePayroll(payroll: any | null | undefined): SerializedPayroll {
       payroll?.aportacion_ss_irpf === undefined || payroll?.aportacion_ss_irpf === null
         ? null
         : Number(payroll.aportacion_ss_irpf),
+    aportacionSsIrpfDetalle: payroll?.aportacion_ss_irpf_detalle ?? null,
     salarioLimpio:
       payroll?.salario_limpio === undefined || payroll?.salario_limpio === null
         ? null
@@ -71,6 +74,7 @@ function serializePayroll(payroll: any | null | undefined): SerializedPayroll {
       payroll?.contingencias_comunes === undefined || payroll?.contingencias_comunes === null
         ? null
         : Number(payroll.contingencias_comunes),
+    contingenciasComunesDetalle: payroll?.contingencias_comunes_detalle ?? null,
     totalEmpresa:
       payroll?.total_empresa === undefined || payroll?.total_empresa === null
         ? null
@@ -579,6 +583,16 @@ async function handleUpdate(
       return errorResponse('INVALID_INPUT', 'Fecha de antigüedad inválida', 400);
     }
     payrollUpdate.antiguedad = antiguedad;
+    payrollFieldsProvided += 1;
+  }
+
+  if ('aportacionSsIrpfDetalle' in payrollInput) {
+    payrollUpdate.aportacion_ss_irpf_detalle = sanitizeText(payrollInput.aportacionSsIrpfDetalle);
+    payrollFieldsProvided += 1;
+  }
+
+  if ('contingenciasComunesDetalle' in payrollInput) {
+    payrollUpdate.contingencias_comunes_detalle = sanitizeText(payrollInput.contingenciasComunesDetalle);
     payrollFieldsProvided += 1;
   }
 
