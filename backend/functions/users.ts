@@ -31,8 +31,10 @@ type SerializedPayroll = {
   salarioBrutoTotal: number | null;
   retencion: number | null;
   aportacionSsIrpf: number | null;
+  aportacionSsIrpfDetalle: string | null;
   salarioLimpio: number | null;
   contingenciasComunes: number | null;
+  contingenciasComunesDetalle: string | null;
   totalEmpresa: number | null;
 };
 
@@ -63,6 +65,7 @@ function serializePayroll(payroll: any | null | undefined): SerializedPayroll {
       payroll?.aportacion_ss_irpf === undefined || payroll?.aportacion_ss_irpf === null
         ? null
         : Number(payroll.aportacion_ss_irpf),
+    aportacionSsIrpfDetalle: payroll?.aportacion_ss_irpf_detalle ?? null,
     salarioLimpio:
       payroll?.salario_limpio === undefined || payroll?.salario_limpio === null
         ? null
@@ -71,6 +74,7 @@ function serializePayroll(payroll: any | null | undefined): SerializedPayroll {
       payroll?.contingencias_comunes === undefined || payroll?.contingencias_comunes === null
         ? null
         : Number(payroll.contingencias_comunes),
+    contingenciasComunesDetalle: payroll?.contingencias_comunes_detalle ?? null,
     totalEmpresa:
       payroll?.total_empresa === undefined || payroll?.total_empresa === null
         ? null
@@ -487,7 +491,8 @@ async function handleUpdate(
   let activeProvided = false;
   let fieldsProvided = 0;
   const payrollInput = (request.body ?? {}).payroll ?? {};
-  const payrollUpdate: Prisma.user_payrollsUpdateInput = {};
+  const payrollUpdate: Prisma.user_payrollsUncheckedUpdateInput = {};
+  const payrollCreate: Prisma.user_payrollsUncheckedCreateInput = { user_id: userId };
   let payrollFieldsProvided = 0;
 
   if ('firstName' in (request.body ?? {})) {
@@ -579,11 +584,26 @@ async function handleUpdate(
       return errorResponse('INVALID_INPUT', 'Fecha de antigüedad inválida', 400);
     }
     payrollUpdate.antiguedad = antiguedad;
+    payrollCreate.antiguedad = antiguedad;
+    payrollFieldsProvided += 1;
+  }
+
+  if ('aportacionSsIrpfDetalle' in payrollInput) {
+    const aportacionDetalle = sanitizeText(payrollInput.aportacionSsIrpfDetalle);
+    payrollUpdate.aportacion_ss_irpf_detalle = aportacionDetalle;
+    payrollCreate.aportacion_ss_irpf_detalle = aportacionDetalle;
+    payrollFieldsProvided += 1;
+  }
+
+  if ('contingenciasComunesDetalle' in payrollInput) {
+    const contingenciasDetalle = sanitizeText(payrollInput.contingenciasComunesDetalle);
+    payrollUpdate.contingencias_comunes_detalle = contingenciasDetalle;
+    payrollCreate.contingencias_comunes_detalle = contingenciasDetalle;
     payrollFieldsProvided += 1;
   }
 
   const decimalFields: Array<{
-    key: keyof Prisma.user_payrollsUpdateInput;
+    key: keyof Prisma.user_payrollsUncheckedUpdateInput & keyof Prisma.user_payrollsUncheckedCreateInput;
     inputKey: string;
     label: string;
     scale?: number;
@@ -605,7 +625,9 @@ async function handleUpdate(
       if (parsed.error) {
         return errorResponse('INVALID_INPUT', `${field.label} inválido`, 400);
       }
-      payrollUpdate[field.key] = parsed.value as Prisma.Decimal | null | undefined;
+      const decimalValue = parsed.value as Prisma.Decimal | null | undefined;
+      payrollUpdate[field.key] = decimalValue as any;
+      payrollCreate[field.key] = decimalValue as any;
       payrollFieldsProvided += 1;
     }
   }
@@ -650,10 +672,7 @@ async function handleUpdate(
       if (payrollFieldsProvided > 0) {
         await tx.user_payrolls.upsert({
           where: { user_id: userId },
-          create: {
-            user_id: userId,
-            ...payrollUpdate,
-          },
+          create: payrollCreate,
           update: payrollUpdate,
         });
       }
