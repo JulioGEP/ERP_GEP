@@ -47,6 +47,10 @@ const migrationsToResolve = [
     name: '20260602110000_add_nomina_contrato_to_trainers',
     resolution: 'rolled-back',
   },
+  {
+    name: '20251120000003_add_payroll_detail_fields',
+    resolution: 'rolled-back',
+  },
 ];
 
 for (const migration of migrationsToResolve) {
