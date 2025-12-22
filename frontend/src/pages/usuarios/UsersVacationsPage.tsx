@@ -355,10 +355,8 @@ export default function UsersVacationsPage() {
         salarioBrutoTotal: null,
         retencion: null,
         aportacionSsIrpf: null,
-        aportacionSsIrpfDetalle: null,
         salarioLimpio: null,
         contingenciasComunes: null,
-        contingenciasComunesDetalle: null,
         totalEmpresa: null,
       },
     });
