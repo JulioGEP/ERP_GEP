@@ -110,14 +110,33 @@ function normalizeNumber(value: string, fallback: number | null = null): number 
   return Number(parsed.toFixed(2));
 }
 
+function calculateBaseRetencionMonthly(value: string): number | null {
+  const normalized = normalizeNumber(value);
+  if (normalized === null) return null;
+  return Number((normalized / 12).toFixed(2));
+}
+
+function calculateSalarioBruto(baseRetencion: string, horasSemana: string): number | null {
+  const baseMensual = calculateBaseRetencionMonthly(baseRetencion);
+  const horas = normalizeNumber(horasSemana, Number(DEFAULT_WEEKLY_HOURS));
+
+  if (baseMensual === null || horas === null) return null;
+
+  return Number(((baseMensual / 40) * horas).toFixed(2));
+}
+
 function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
+  const horasSemana = normalizeNumber(payroll.horasSemana, Number(DEFAULT_WEEKLY_HOURS)) ?? Number(DEFAULT_WEEKLY_HOURS);
+  const baseRetencion = calculateBaseRetencionMonthly(payroll.baseRetencion);
+  const salarioBrutoCalculado = calculateSalarioBruto(payroll.baseRetencion, payroll.horasSemana);
+
   return {
     convenio: payroll.convenio.trim(),
     categoria: payroll.categoria.trim(),
     antiguedad: payroll.antiguedad ? payroll.antiguedad : null,
-    horasSemana: normalizeNumber(payroll.horasSemana, Number(DEFAULT_WEEKLY_HOURS)) ?? Number(DEFAULT_WEEKLY_HOURS),
-    baseRetencion: normalizeNumber(payroll.baseRetencion),
-    salarioBruto: normalizeNumber(payroll.salarioBruto),
+    horasSemana,
+    baseRetencion,
+    salarioBruto: salarioBrutoCalculado,
     salarioBrutoTotal: normalizeNumber(payroll.salarioBrutoTotal),
     retencion: normalizeNumber(payroll.retencion),
     aportacionSsIrpf: normalizeNumber(payroll.aportacionSsIrpf),
@@ -634,8 +653,20 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
     setValues((prev) => ({ ...prev, [field]: value }));
   };
 
+  const applyPayrollCalculations = (payroll: PayrollFormValues) => {
+    const salarioBrutoCalculado = calculateSalarioBruto(payroll.baseRetencion, payroll.horasSemana);
+
+    return {
+      ...payroll,
+      salarioBruto: salarioBrutoCalculado !== null ? salarioBrutoCalculado.toFixed(2) : payroll.salarioBruto,
+    };
+  };
+
   const handlePayrollChange = (field: keyof PayrollFormValues, value: string) => {
-    setValues((prev) => ({ ...prev, payroll: { ...prev.payroll, [field]: value } }));
+    setValues((prev) => ({
+      ...prev,
+      payroll: applyPayrollCalculations({ ...prev.payroll, [field]: value }),
+    }));
   };
 
   const formatPayrollValue = (value: string) => {
@@ -646,7 +677,10 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
   };
 
   const handlePayrollBlur = (field: keyof PayrollFormValues, value: string) => {
-    setValues((prev) => ({ ...prev, payroll: { ...prev.payroll, [field]: formatPayrollValue(value) } }));
+    setValues((prev) => ({
+      ...prev,
+      payroll: applyPayrollCalculations({ ...prev.payroll, [field]: formatPayrollValue(value) }),
+    }));
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
