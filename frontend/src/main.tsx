@@ -7,6 +7,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import './styles.css';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import { cleanupServiceWorkers } from './utils/serviceWorkerCleanup';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,6 +19,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+cleanupServiceWorkers();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
