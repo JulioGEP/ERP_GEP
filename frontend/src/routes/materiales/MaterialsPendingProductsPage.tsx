@@ -454,21 +454,6 @@ export function MaterialsPendingProductsPage({
   const hasActiveFilters = useMemo(() => Object.values(filters).some((value) => value.trim().length > 0), [filters]);
 
   const primaryBudget = selectedList[0]?.row.budget;
-  const supplierInfo =
-    (primaryBudget as DealSummary & {
-      proveedores?: { mail_contacto?: string | null; nombre_contacto?: string | null; contact_name?: string | null };
-      mail_contacto?: string | null;
-      proveedor_contacto?: string | null;
-      contacto_proveedor?: string | null;
-    })?.proveedores ?? null;
-
-  const supplierContactName =
-    supplierInfo?.nombre_contacto ??
-    supplierInfo?.contact_name ??
-    (primaryBudget as { proveedor_contacto?: string | null } | undefined)?.proveedor_contacto ??
-    (primaryBudget as { contacto_proveedor?: string | null } | undefined)?.contacto_proveedor ??
-    selectedList[0]?.row.supplier ??
-    'proveedor';
 
   useEffect(() => {
     if (showEmailModal) {
@@ -655,7 +640,10 @@ export function MaterialsPendingProductsPage({
 
   const supplierProductLines = productRequests
     .filter((product) => product.supplierQuantity > 0)
-    .map((product) => `- ${product.productName} ${formatQuantity(product.supplierQuantity)}`)
+    .map(
+      (product) =>
+        `- ${product.productName} y la cantidad ${formatQuantity(product.supplierQuantity)}`,
+    )
     .join('\n');
 
   const budgetIdForSubject = primaryBudget?.deal_id ?? primaryBudget?.dealId ?? selectedList[0]?.row.budgetId ?? '—';
@@ -664,9 +652,9 @@ export function MaterialsPendingProductsPage({
   const logisticsSubject = `Uso de stock para presupuesto ${budgetIdForSubject} (Pedido Nº ${orderNumberLabel})`;
   const supplierSubject = `Nuevo Pedido de GEP Group con Nº ${orderNumberLabel} para ${supplierName}`;
 
-  const emailBody = `Hola ${supplierContactName}\n\nNº de pedido: ${orderNumberLabel}\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${
+  const emailBody = `Hola Administración\n\nNº de pedido: ${orderNumberLabel}\nDesde el Sales necesitamos un nuevo pedido\n${
     supplierProductLines || '- Sin productos para pedir (se cubrirá con stock disponible).'
-  }\n\nDime si tienes disponibilidad y por favor, indícanos fechas estimadas de entrega.\n\nMuchas gracias de antemano.\n\nEquipo de GEP Group.`;
+  }\n\nActualizar el pedido cuando tengáis numero de orden o de seguimiento`;
 
   const hasStockUsage = productRequests.some((product) => product.stockQuantity > 0);
 
