@@ -1015,7 +1015,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                       <Form.Control
                         type="number"
                         step="0.01"
-                        min="0"
                         value={values.payroll.horasSemana}
                         onChange={(event) => handlePayrollChange('horasSemana', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('horasSemana', event.target.value)}
@@ -1030,7 +1029,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                       <Form.Control
                         type="number"
                         step="0.01"
-                        min="0"
                         value={values.payroll.baseRetencion}
                         onChange={(event) => handlePayrollChange('baseRetencion', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('baseRetencion', event.target.value)}
@@ -1045,7 +1043,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                       <Form.Control
                         type="number"
                         step="0.01"
-                        min="0"
                         value={values.payroll.salarioBruto}
                         onChange={(event) => handlePayrollChange('salarioBruto', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('salarioBruto', event.target.value)}
@@ -1066,7 +1063,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                       <Form.Control
                         type="number"
                         step="0.01"
-                        min="0"
                         value={values.payroll.salarioBrutoTotal}
                         onChange={(event) => handlePayrollChange('salarioBrutoTotal', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('salarioBrutoTotal', event.target.value)}
@@ -1081,7 +1077,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                       <Form.Control
                         type="number"
                         step="0.01"
-                        min="0"
                         value={values.payroll.retencion}
                         onChange={(event) => handlePayrollChange('retencion', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('retencion', event.target.value)}
@@ -1109,7 +1104,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                       <Form.Control
                         type="number"
                         step="0.01"
-                        min="0"
                         value={values.payroll.aportacionSsIrpf}
                         onChange={(event) => handlePayrollChange('aportacionSsIrpf', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('aportacionSsIrpf', event.target.value)}
@@ -1124,7 +1118,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                       <Form.Control
                         type="number"
                         step="0.01"
-                        min="0"
                         value={values.payroll.salarioLimpio}
                         onChange={(event) => handlePayrollChange('salarioLimpio', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('salarioLimpio', event.target.value)}
@@ -1152,7 +1145,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                       <Form.Control
                         type="number"
                         step="0.01"
-                        min="0"
                         value={values.payroll.contingenciasComunes}
                         onChange={(event) => handlePayrollChange('contingenciasComunes', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('contingenciasComunes', event.target.value)}
@@ -1167,7 +1159,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                       <Form.Control
                         type="number"
                         step="0.01"
-                        min="0"
                         value={values.payroll.totalEmpresa}
                         onChange={(event) => handlePayrollChange('totalEmpresa', event.target.value)}
                         onBlur={(event) => handlePayrollBlur('totalEmpresa', event.target.value)}
