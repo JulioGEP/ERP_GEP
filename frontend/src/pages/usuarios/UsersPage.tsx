@@ -718,7 +718,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
             </div>
           </div>
         </Modal.Header>
-        <Modal.Body className="d-grid gap-4">
+        <Modal.Body className="user-form-modal-body d-grid gap-4">
           {saveSuccess ? <Alert variant="success" className="mb-0">{saveSuccess}</Alert> : null}
           {saveError ? <Alert variant="danger" className="mb-0">{saveError}</Alert> : null}
 
