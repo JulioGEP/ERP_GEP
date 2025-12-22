@@ -1348,8 +1348,8 @@ export function VariantModal({
     const wooId = (variant?.id_woo ?? '').trim();
     const internalId = (variant?.id ?? '').trim();
     const ids: string[] = [];
-    if (wooId) ids.push(wooId);
-    if (internalId && internalId !== wooId) ids.push(internalId);
+    if (internalId) ids.push(internalId);
+    if (wooId && wooId !== internalId) ids.push(wooId);
     return ids;
   }, [variant?.id, variant?.id_woo]);
 
