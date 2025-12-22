@@ -33,8 +33,6 @@ type ProfileUser = {
   active: boolean;
   bankAccount?: string | null;
   address?: string | null;
-  position?: string | null;
-  startDate?: string | null;
   trainerId?: string | null;
 };
 
@@ -406,12 +404,6 @@ export default function ProfilePage() {
     return name.length ? name : userDetails.email;
   }, [userDetails]);
 
-  const formattedStartDate = useMemo(() => {
-    if (!userDetails?.startDate) return null;
-    const date = new Date(userDetails.startDate);
-    return Number.isNaN(date.getTime()) ? userDetails.startDate : date.toLocaleDateString();
-  }, [userDetails?.startDate]);
-
   const documents = useMemo<ProfileDocument[]>(
     () =>
       trainerId
@@ -440,8 +432,6 @@ export default function ProfilePage() {
     { label: 'Rol', value: userDetails?.role ?? null },
     { label: 'Cuenta bancaria', value: userDetails?.bankAccount ?? null },
     { label: 'Dirección', value: userDetails?.address ?? null },
-    { label: 'Posición', value: userDetails?.position ?? null },
-    { label: 'Fecha alta', value: formattedStartDate },
   ];
 
   return (

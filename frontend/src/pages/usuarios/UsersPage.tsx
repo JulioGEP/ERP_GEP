@@ -211,8 +211,6 @@ type UserFormValues = {
   active: boolean;
   bankAccount: string;
   address: string;
-  position: string;
-  startDate: string;
   payroll: PayrollFormValues;
 };
 
@@ -351,38 +349,32 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
 
   const handleModalSubmit = useCallback(
     async (values: UserFormValues) => {
-      const normalizedPayload = {
-        ...values,
-        bankAccount: values.bankAccount.trim(),
-        address: values.address.trim(),
-        position: values.position.trim(),
-        startDate: values.startDate.trim(),
-      };
-      const payrollPayload = buildPayrollPayload(values.payroll);
-      if (editingUser) {
-        return updateMutation.mutateAsync({
-          id: editingUser.id,
-          payload: {
-            ...normalizedPayload,
-            bankAccount: normalizedPayload.bankAccount || null,
-            address: normalizedPayload.address || null,
-            position: normalizedPayload.position || null,
-            startDate: normalizedPayload.startDate || null,
-            payroll: payrollPayload,
-          },
-        });
-      } else {
-        return createMutation.mutateAsync({
+    const normalizedPayload = {
+      ...values,
+      bankAccount: values.bankAccount.trim(),
+      address: values.address.trim(),
+    };
+    const payrollPayload = buildPayrollPayload(values.payroll);
+    if (editingUser) {
+      return updateMutation.mutateAsync({
+        id: editingUser.id,
+        payload: {
           ...normalizedPayload,
           bankAccount: normalizedPayload.bankAccount || null,
           address: normalizedPayload.address || null,
-          position: normalizedPayload.position || null,
-          startDate: normalizedPayload.startDate || null,
           payroll: payrollPayload,
-        });
-      }
-    },
-    [createMutation, editingUser, updateMutation],
+        },
+      });
+    } else {
+      return createMutation.mutateAsync({
+        ...normalizedPayload,
+        bankAccount: normalizedPayload.bankAccount || null,
+        address: normalizedPayload.address || null,
+        payroll: payrollPayload,
+      });
+    }
+  },
+  [createMutation, editingUser, updateMutation],
   );
 
   const totalUsers = usersQuery.data?.total ?? 0;
@@ -638,8 +630,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
       active: user?.active ?? true,
       bankAccount: user?.bankAccount ?? '',
       address: user?.address ?? '',
-      position: user?.position ?? '',
-      startDate: user?.startDate ? user.startDate.slice(0, 10) : '',
       payroll: mapPayrollToForm(user?.payroll ?? null),
     }),
     [],
@@ -927,29 +917,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                     rows={2}
                     value={values.address}
                     onChange={(event) => handleChange('address', event.target.value)}
-                    disabled={disableForm}
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group controlId="user-position">
-                  <Form.Label>Posición</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={values.position}
-                    onChange={(event) => handleChange('position', event.target.value)}
-                    disabled={disableForm}
-                    placeholder="Ejemplo: Responsable de logística"
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={3}>
-                <Form.Group controlId="user-start-date">
-                  <Form.Label>Fecha Alta</Form.Label>
-                  <Form.Control
-                    type="date"
-                    value={values.startDate}
-                    onChange={(event) => handleChange('startDate', event.target.value)}
                     disabled={disableForm}
                   />
                 </Form.Group>
