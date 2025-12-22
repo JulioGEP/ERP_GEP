@@ -21,11 +21,13 @@ import {
 import { ApiError } from '../../api/client';
 import {
   createUser,
+  fetchUserById,
   fetchUsers,
   updateUser,
   type CreateUserPayload,
   type UpdateUserPayload,
   type UserSummary,
+  type UserPayroll,
 } from '../../api/users';
 import {
   fetchUserVacations,
@@ -46,6 +48,84 @@ import { type TrainerDocument } from '../../types/trainer';
 
 const PAGE_SIZE = 10;
 const ROLE_OPTIONS = ['Admin', 'Comercial', 'Administracion', 'Logistica', 'People', 'Formador'] as const;
+const DEFAULT_WEEKLY_HOURS = '40';
+
+type PayrollPayload = {
+  convenio: string;
+  categoria: string;
+  antiguedad: string | null;
+  horasSemana: number;
+  baseRetencion: number | null;
+  salarioBruto: number | null;
+  salarioBrutoTotal: number | null;
+  retencion: number | null;
+  aportacionSsIrpf: number | null;
+  salarioLimpio: number | null;
+  contingenciasComunes: number | null;
+  totalEmpresa: number | null;
+};
+
+const defaultPayrollValues: PayrollFormValues = {
+  convenio: '',
+  categoria: '',
+  antiguedad: '',
+  horasSemana: DEFAULT_WEEKLY_HOURS,
+  baseRetencion: '',
+  salarioBruto: '',
+  salarioBrutoTotal: '',
+  retencion: '',
+  aportacionSsIrpf: '',
+  salarioLimpio: '',
+  contingenciasComunes: '',
+  totalEmpresa: '',
+};
+
+function mapPayrollToForm(payroll?: UserPayroll | null): PayrollFormValues {
+  if (!payroll) return { ...defaultPayrollValues };
+
+  const format = (value: number | null, fallback = '') =>
+    value === null || value === undefined ? fallback : value.toFixed(2);
+
+  return {
+    convenio: payroll.convenio ?? '',
+    categoria: payroll.categoria ?? '',
+    antiguedad: payroll.antiguedad ?? '',
+    horasSemana: payroll.horasSemana?.toString() ?? DEFAULT_WEEKLY_HOURS,
+    baseRetencion: format(payroll.baseRetencion),
+    salarioBruto: format(payroll.salarioBruto),
+    salarioBrutoTotal: format(payroll.salarioBrutoTotal),
+    retencion: format(payroll.retencion),
+    aportacionSsIrpf: format(payroll.aportacionSsIrpf),
+    salarioLimpio: format(payroll.salarioLimpio),
+    contingenciasComunes: format(payroll.contingenciasComunes),
+    totalEmpresa: format(payroll.totalEmpresa),
+  };
+}
+
+function normalizeNumber(value: string, fallback: number | null = null): number | null {
+  const trimmed = value.trim();
+  if (!trimmed.length) return fallback;
+  const parsed = Number(trimmed);
+  if (Number.isNaN(parsed)) return fallback;
+  return Number(parsed.toFixed(2));
+}
+
+function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
+  return {
+    convenio: payroll.convenio.trim(),
+    categoria: payroll.categoria.trim(),
+    antiguedad: payroll.antiguedad ? payroll.antiguedad : null,
+    horasSemana: normalizeNumber(payroll.horasSemana, Number(DEFAULT_WEEKLY_HOURS)) ?? Number(DEFAULT_WEEKLY_HOURS),
+    baseRetencion: normalizeNumber(payroll.baseRetencion),
+    salarioBruto: normalizeNumber(payroll.salarioBruto),
+    salarioBrutoTotal: normalizeNumber(payroll.salarioBrutoTotal),
+    retencion: normalizeNumber(payroll.retencion),
+    aportacionSsIrpf: normalizeNumber(payroll.aportacionSsIrpf),
+    salarioLimpio: normalizeNumber(payroll.salarioLimpio),
+    contingenciasComunes: normalizeNumber(payroll.contingenciasComunes),
+    totalEmpresa: normalizeNumber(payroll.totalEmpresa),
+  };
+}
 
 export type UsersPageProps = {
   onNotify?: (payload: { variant: 'success' | 'danger' | 'info' | 'warning'; message: string }) => void;
@@ -61,6 +141,22 @@ type UserFormValues = {
   address: string;
   position: string;
   startDate: string;
+  payroll: PayrollFormValues;
+};
+
+type PayrollFormValues = {
+  convenio: string;
+  categoria: string;
+  antiguedad: string;
+  horasSemana: string;
+  baseRetencion: string;
+  salarioBruto: string;
+  salarioBrutoTotal: string;
+  retencion: string;
+  aportacionSsIrpf: string;
+  salarioLimpio: string;
+  contingenciasComunes: string;
+  totalEmpresa: string;
 };
 
 type UsersListResponse = { total: number; page: number; pageSize: number; users: UserSummary[] };
@@ -166,10 +262,11 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdateUserPayload }) => updateUser(id, payload),
-    onSuccess: () => {
+    onSuccess: (user) => {
       notify({ variant: 'success', message: 'Usuario actualizado correctamente' });
       void queryClient.invalidateQueries({ queryKey: ['users'] });
-      closeModal();
+      queryClient.setQueryData(['user-details', user.id], user);
+      setEditingUser(user);
     },
     onError: (error: unknown) => {
       const apiError = error instanceof ApiError ? error : null;
@@ -180,15 +277,16 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
 
   const handleModalSubmit = useCallback(
     async (values: UserFormValues) => {
-      const normalizedPayload: UserFormValues = {
+      const normalizedPayload = {
         ...values,
         bankAccount: values.bankAccount.trim(),
         address: values.address.trim(),
         position: values.position.trim(),
         startDate: values.startDate.trim(),
       };
+      const payrollPayload = buildPayrollPayload(values.payroll);
       if (editingUser) {
-        await updateMutation.mutateAsync({
+        return updateMutation.mutateAsync({
           id: editingUser.id,
           payload: {
             ...normalizedPayload,
@@ -196,15 +294,17 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
             address: normalizedPayload.address || null,
             position: normalizedPayload.position || null,
             startDate: normalizedPayload.startDate || null,
+            payroll: payrollPayload,
           },
         });
       } else {
-        await createMutation.mutateAsync({
+        return createMutation.mutateAsync({
           ...normalizedPayload,
           bankAccount: normalizedPayload.bankAccount || null,
           address: normalizedPayload.address || null,
           position: normalizedPayload.position || null,
           startDate: normalizedPayload.startDate || null,
+          payroll: payrollPayload,
         });
       }
     },
@@ -445,67 +545,49 @@ export default function UsersPage({ onNotify }: UsersPageProps) {
 type UserFormModalProps = {
   show: boolean;
   onHide: () => void;
-  onSubmit: (values: UserFormValues) => Promise<void>;
+  onSubmit: (values: UserFormValues) => Promise<UserSummary>;
   isSubmitting: boolean;
   initialValue: UserSummary | null;
 };
 
+
 function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: UserFormModalProps) {
   const queryClient = useQueryClient();
   const userId = initialValue?.id ?? null;
-  const [values, setValues] = useState<UserFormValues>(() =>
-    initialValue
-      ? {
-          firstName: initialValue.firstName,
-          lastName: initialValue.lastName,
-          email: initialValue.email,
-          role: initialValue.role,
-          active: initialValue.active,
-          bankAccount: initialValue.bankAccount ?? '',
-          address: initialValue.address ?? '',
-          position: initialValue.position ?? '',
-          startDate: initialValue.startDate ? initialValue.startDate.slice(0, 10) : '',
-        }
-      : {
-          firstName: '',
-          lastName: '',
-          email: '',
-          role: ROLE_OPTIONS[0],
-          active: true,
-          bankAccount: '',
-          address: '',
-          position: '',
-          startDate: '',
-        },
+
+  const buildFormValuesFromUser = useCallback(
+    (user?: UserSummary | null): UserFormValues => ({
+      firstName: user?.firstName ?? '',
+      lastName: user?.lastName ?? '',
+      email: user?.email ?? '',
+      role: user?.role ?? ROLE_OPTIONS[0],
+      active: user?.active ?? true,
+      bankAccount: user?.bankAccount ?? '',
+      address: user?.address ?? '',
+      position: user?.position ?? '',
+      startDate: user?.startDate ? user.startDate.slice(0, 10) : '',
+      payroll: mapPayrollToForm(user?.payroll ?? null),
+    }),
+    [],
   );
 
+  const [values, setValues] = useState<UserFormValues>(() => buildFormValuesFromUser(initialValue));
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const userDetailsQuery = useQuery<UserSummary>({
+    queryKey: ['user-details', userId],
+    queryFn: async () => fetchUserById(userId as string),
+    enabled: Boolean(userId && show),
+  });
+
+  const effectiveUser = userDetailsQuery.data ?? initialValue;
+
   useEffect(() => {
-    if (initialValue) {
-      setValues({
-        firstName: initialValue.firstName,
-        lastName: initialValue.lastName,
-        email: initialValue.email,
-        role: initialValue.role,
-        active: initialValue.active,
-        bankAccount: initialValue.bankAccount ?? '',
-        address: initialValue.address ?? '',
-        position: initialValue.position ?? '',
-        startDate: initialValue.startDate ? initialValue.startDate.slice(0, 10) : '',
-      });
-    } else {
-      setValues({
-        firstName: '',
-        lastName: '',
-        email: '',
-        role: ROLE_OPTIONS[0],
-        active: true,
-        bankAccount: '',
-        address: '',
-        position: '',
-        startDate: '',
-      });
-    }
-  }, [initialValue]);
+    setValues(buildFormValuesFromUser(effectiveUser));
+    setSaveSuccess(null);
+    setSaveError(null);
+  }, [buildFormValuesFromUser, effectiveUser, show]);
 
   const [documentError, setDocumentError] = useState<string | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
@@ -548,13 +630,36 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
     },
   });
 
-  const handleChange = (field: keyof UserFormValues, value: string | boolean) => {
+  const handleChange = (field: keyof Omit<UserFormValues, 'payroll'>, value: string | boolean) => {
     setValues((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handlePayrollChange = (field: keyof PayrollFormValues, value: string) => {
+    setValues((prev) => ({ ...prev, payroll: { ...prev.payroll, [field]: value } }));
+  };
+
+  const formatPayrollValue = (value: string) => {
+    if (!value.trim()) return '';
+    const parsed = Number(value);
+    if (Number.isNaN(parsed)) return value;
+    return parsed.toFixed(2);
+  };
+
+  const handlePayrollBlur = (field: keyof PayrollFormValues, value: string) => {
+    setValues((prev) => ({ ...prev, payroll: { ...prev.payroll, [field]: formatPayrollValue(value) } }));
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await onSubmit(values);
+    setSaveSuccess(null);
+    setSaveError(null);
+    try {
+      await onSubmit(values);
+      setSaveSuccess('Cambios guardados correctamente.');
+    } catch (error: unknown) {
+      const apiError = error instanceof ApiError ? error : null;
+      setSaveError(apiError?.message ?? 'No se pudieron guardar los cambios.');
+    }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -573,6 +678,9 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
   };
 
   const title = initialValue ? 'Editar usuario' : 'Crear usuario';
+  const headerName = values.firstName || values.lastName ? `${values.firstName} ${values.lastName}`.trim() : title;
+  const isLoadingDetails = userDetailsQuery.isFetching && !userDetailsQuery.data;
+  const disableForm = isSubmitting || isLoadingDetails;
 
   const resolveDocumentUrl = (document: UserDocument) =>
     document.drive_web_view_link ?? document.drive_web_content_link ?? document.download_url;
@@ -586,103 +694,337 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
   };
 
   return (
-    <Modal show={show} onHide={onHide} backdrop="static" centered>
-      <Form onSubmit={handleSubmit}>
-        <Modal.Header closeButton>
-          <Modal.Title>{title}</Modal.Title>
+    <Modal show={show} onHide={onHide} backdrop="static" centered scrollable size="xl">
+      <Form onSubmit={handleSubmit} className="h-100">
+        <Modal.Header closeButton className="position-sticky top-0 bg-white z-3 border-bottom">
+          <div className="w-100 d-grid gap-2">
+            <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
+              <div>
+                <div className="h4 mb-0">{headerName}</div>
+                <div className="text-muted">{values.email || effectiveUser?.email || ''}</div>
+              </div>
+              <div className="d-flex flex-wrap gap-2">
+                <Button variant="outline-secondary" onClick={onHide} disabled={isSubmitting}>
+                  Cerrar
+                </Button>
+                <Button type="submit" disabled={disableForm} className="d-flex align-items-center gap-2">
+                  {isSubmitting ? <Spinner size="sm" animation="border" /> : null}
+                  Guardar cambios
+                </Button>
+              </div>
+            </div>
+            <div className="text-muted small">
+              {isLoadingDetails ? 'Cargando detalles del usuario…' : 'Todos los campos son editables desde este panel.'}
+            </div>
+          </div>
         </Modal.Header>
-        <Modal.Body className="d-grid gap-3">
-          <Form.Group controlId="user-first-name">
-            <Form.Label>Nombre</Form.Label>
-            <Form.Control
-              type="text"
-              value={values.firstName}
-              onChange={(event) => handleChange('firstName', event.target.value)}
-              required
-              disabled={isSubmitting}
-            />
-          </Form.Group>
-          <Form.Group controlId="user-last-name">
-            <Form.Label>Apellido</Form.Label>
-            <Form.Control
-              type="text"
-              value={values.lastName}
-              onChange={(event) => handleChange('lastName', event.target.value)}
-              required
-              disabled={isSubmitting}
-            />
-          </Form.Group>
-          <Form.Group controlId="user-email">
-            <Form.Label>Email</Form.Label>
-            <Form.Control
-              type="email"
-              value={values.email}
-              onChange={(event) => handleChange('email', event.target.value)}
-              required
-              disabled={isSubmitting}
-            />
-          </Form.Group>
-          <Form.Group controlId="user-bank-account">
-            <Form.Label>Cuenta bancaria</Form.Label>
-            <Form.Control
-              type="text"
-              value={values.bankAccount}
-              onChange={(event) => handleChange('bankAccount', event.target.value)}
-              disabled={isSubmitting}
-              placeholder="IBAN o número de cuenta"
-            />
-          </Form.Group>
-          <Form.Group controlId="user-address">
-            <Form.Label>Dirección</Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={2}
-              value={values.address}
-              onChange={(event) => handleChange('address', event.target.value)}
-              disabled={isSubmitting}
-            />
-          </Form.Group>
-          <Form.Group controlId="user-position">
-            <Form.Label>Posición</Form.Label>
-            <Form.Control
-              type="text"
-              value={values.position}
-              onChange={(event) => handleChange('position', event.target.value)}
-              disabled={isSubmitting}
-              placeholder="Ejemplo: Responsable de logística"
-            />
-          </Form.Group>
-          <Form.Group controlId="user-start-date">
-            <Form.Label>Fecha Alta</Form.Label>
-            <Form.Control
-              type="date"
-              value={values.startDate}
-              onChange={(event) => handleChange('startDate', event.target.value)}
-              disabled={isSubmitting}
-            />
-          </Form.Group>
-          <Form.Group controlId="user-role">
-            <Form.Label>Rol</Form.Label>
-            <Form.Select
-              value={values.role}
-              onChange={(event) => handleChange('role', event.target.value)}
-              disabled={isSubmitting}
-            >
-              {ROLE_OPTIONS.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </Form.Select>
-          </Form.Group>
-          <Form.Check
-            type="switch"
-            id="user-active"
-            label="Activo"
-            checked={values.active}
-            onChange={(event) => handleChange('active', event.target.checked)}
-            disabled={isSubmitting}
-          />
+        <Modal.Body className="d-grid gap-4">
+          {saveSuccess ? <Alert variant="success" className="mb-0">{saveSuccess}</Alert> : null}
+          {saveError ? <Alert variant="danger" className="mb-0">{saveError}</Alert> : null}
+
+          <div className="d-grid gap-3">
+            <h5 className="mb-0">Datos básicos</h5>
+            <Row className="g-3">
+              <Col md={6}>
+                <Form.Group controlId="user-first-name">
+                  <Form.Label>Nombre</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={values.firstName}
+                    onChange={(event) => handleChange('firstName', event.target.value)}
+                    required
+                    disabled={disableForm}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group controlId="user-last-name">
+                  <Form.Label>Apellido</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={values.lastName}
+                    onChange={(event) => handleChange('lastName', event.target.value)}
+                    required
+                    disabled={disableForm}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group controlId="user-email">
+                  <Form.Label>Email</Form.Label>
+                  <Form.Control
+                    type="email"
+                    value={values.email}
+                    onChange={(event) => handleChange('email', event.target.value)}
+                    required
+                    disabled={disableForm}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group controlId="user-role">
+                  <Form.Label>Rol</Form.Label>
+                  <Form.Select
+                    value={values.role}
+                    onChange={(event) => handleChange('role', event.target.value)}
+                    disabled={disableForm}
+                  >
+                    {ROLE_OPTIONS.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group controlId="user-bank-account">
+                  <Form.Label>Cuenta bancaria</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={values.bankAccount}
+                    onChange={(event) => handleChange('bankAccount', event.target.value)}
+                    disabled={disableForm}
+                    placeholder="IBAN o número de cuenta"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group controlId="user-address">
+                  <Form.Label>Dirección</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    value={values.address}
+                    onChange={(event) => handleChange('address', event.target.value)}
+                    disabled={disableForm}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group controlId="user-position">
+                  <Form.Label>Posición</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={values.position}
+                    onChange={(event) => handleChange('position', event.target.value)}
+                    disabled={disableForm}
+                    placeholder="Ejemplo: Responsable de logística"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={3}>
+                <Form.Group controlId="user-start-date">
+                  <Form.Label>Fecha Alta</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={values.startDate}
+                    onChange={(event) => handleChange('startDate', event.target.value)}
+                    disabled={disableForm}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={3} className="d-flex align-items-center">
+                <Form.Check
+                  type="switch"
+                  id="user-active"
+                  label="Activo"
+                  checked={values.active}
+                  onChange={(event) => handleChange('active', event.target.checked)}
+                  disabled={disableForm}
+                />
+              </Col>
+            </Row>
+          </div>
+
+          <div className="d-grid gap-3">
+            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <h5 className="mb-0">Datos nómina</h5>
+              {isLoadingDetails ? <span className="text-muted small">Cargando datos…</span> : null}
+            </div>
+            <div className="border rounded p-3 d-grid gap-3">
+              <div>
+                <div className="text-uppercase text-muted small mb-2">Datos base</div>
+                <Row className="g-3">
+                  <Col md={6}>
+                    <Form.Group controlId="payroll-convenio">
+                      <Form.Label>Convenio</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={values.payroll.convenio}
+                        onChange={(event) => handlePayrollChange('convenio', event.target.value)}
+                        disabled={disableForm}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group controlId="payroll-categoria">
+                      <Form.Label>Categoría</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={values.payroll.categoria}
+                        onChange={(event) => handlePayrollChange('categoria', event.target.value)}
+                        disabled={disableForm}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-antiguedad">
+                      <Form.Label>Antigüedad</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={values.payroll.antiguedad}
+                        onChange={(event) => handlePayrollChange('antiguedad', event.target.value)}
+                        disabled={disableForm}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-horas">
+                      <Form.Label>Horas semana</Form.Label>
+                      <Form.Control
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={values.payroll.horasSemana}
+                        onChange={(event) => handlePayrollChange('horasSemana', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('horasSemana', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-base-retencion">
+                      <Form.Label>Base de retención</Form.Label>
+                      <Form.Control
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={values.payroll.baseRetencion}
+                        onChange={(event) => handlePayrollChange('baseRetencion', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('baseRetencion', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-salario-bruto">
+                      <Form.Label>Salario bruto</Form.Label>
+                      <Form.Control
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={values.payroll.salarioBruto}
+                        onChange={(event) => handlePayrollChange('salarioBruto', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('salarioBruto', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+              </div>
+
+              <div>
+                <div className="text-uppercase text-muted small mb-2">Resultados</div>
+                <Row className="g-3">
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-salario-bruto-total">
+                      <Form.Label>Salario bruto total</Form.Label>
+                      <Form.Control
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={values.payroll.salarioBrutoTotal}
+                        onChange={(event) => handlePayrollChange('salarioBrutoTotal', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('salarioBrutoTotal', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-retencion">
+                      <Form.Label>Retención</Form.Label>
+                      <Form.Control
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={values.payroll.retencion}
+                        onChange={(event) => handlePayrollChange('retencion', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('retencion', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-aportacion">
+                      <Form.Label>Aportación SS e IRPF</Form.Label>
+                      <Form.Control
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={values.payroll.aportacionSsIrpf}
+                        onChange={(event) => handlePayrollChange('aportacionSsIrpf', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('aportacionSsIrpf', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-salario-limpio">
+                      <Form.Label>Salario limpio</Form.Label>
+                      <Form.Control
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={values.payroll.salarioLimpio}
+                        onChange={(event) => handlePayrollChange('salarioLimpio', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('salarioLimpio', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-contingencias">
+                      <Form.Label>Contingencias comunes</Form.Label>
+                      <Form.Control
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={values.payroll.contingenciasComunes}
+                        onChange={(event) => handlePayrollChange('contingenciasComunes', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('contingenciasComunes', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-total-empresa">
+                      <Form.Label>Total empresa</Form.Label>
+                      <Form.Control
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={values.payroll.totalEmpresa}
+                        onChange={(event) => handlePayrollChange('totalEmpresa', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('totalEmpresa', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+              </div>
+            </div>
+          </div>
+
           <Accordion defaultActiveKey="documents">
             <Accordion.Item eventKey="documents">
               <Accordion.Header>Documentos</Accordion.Header>
@@ -757,14 +1099,6 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
             </Accordion.Item>
           </Accordion>
         </Modal.Body>
-        <Modal.Footer>
-          <Button variant="outline-secondary" onClick={onHide} disabled={isSubmitting}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? 'Guardando…' : 'Guardar'}
-          </Button>
-        </Modal.Footer>
       </Form>
     </Modal>
   );

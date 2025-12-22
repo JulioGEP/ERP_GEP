@@ -19,6 +19,64 @@ const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 50;
 const DEFAULT_PASSWORD = '123456';
 const BCRYPT_SALT_ROUNDS = 10;
+const DEFAULT_WEEKLY_HOURS = 40;
+
+type SerializedPayroll = {
+  convenio: string;
+  categoria: string;
+  antiguedad: string | null;
+  horasSemana: number;
+  baseRetencion: number | null;
+  salarioBruto: number | null;
+  salarioBrutoTotal: number | null;
+  retencion: number | null;
+  aportacionSsIrpf: number | null;
+  salarioLimpio: number | null;
+  contingenciasComunes: number | null;
+  totalEmpresa: number | null;
+};
+
+function serializePayroll(payroll: any | null | undefined): SerializedPayroll {
+  return {
+    convenio: payroll?.convenio ?? '',
+    categoria: payroll?.categoria ?? '',
+    antiguedad: payroll?.antiguedad ? payroll.antiguedad.toISOString().slice(0, 10) : null,
+    horasSemana:
+      payroll?.horas_semana === undefined || payroll?.horas_semana === null
+        ? DEFAULT_WEEKLY_HOURS
+        : Number(payroll.horas_semana),
+    baseRetencion:
+      payroll?.base_retencion === undefined || payroll?.base_retencion === null
+        ? null
+        : Number(payroll.base_retencion),
+    salarioBruto:
+      payroll?.salario_bruto === undefined || payroll?.salario_bruto === null
+        ? null
+        : Number(payroll.salario_bruto),
+    salarioBrutoTotal:
+      payroll?.salario_bruto_total === undefined || payroll?.salario_bruto_total === null
+        ? null
+        : Number(payroll.salario_bruto_total),
+    retencion:
+      payroll?.retencion === undefined || payroll?.retencion === null ? null : Number(payroll.retencion),
+    aportacionSsIrpf:
+      payroll?.aportacion_ss_irpf === undefined || payroll?.aportacion_ss_irpf === null
+        ? null
+        : Number(payroll.aportacion_ss_irpf),
+    salarioLimpio:
+      payroll?.salario_limpio === undefined || payroll?.salario_limpio === null
+        ? null
+        : Number(payroll.salario_limpio),
+    contingenciasComunes:
+      payroll?.contingencias_comunes === undefined || payroll?.contingencias_comunes === null
+        ? null
+        : Number(payroll.contingencias_comunes),
+    totalEmpresa:
+      payroll?.total_empresa === undefined || payroll?.total_empresa === null
+        ? null
+        : Number(payroll.total_empresa),
+  };
+}
 
 function serializeUser(user: any) {
   return {
@@ -36,6 +94,7 @@ function serializeUser(user: any) {
     updatedAt: user.updated_at,
     trainerId: user.trainer?.trainer_id ?? null,
     trainerFixedContract: user.trainer?.contrato_fijo ?? null,
+    payroll: serializePayroll(user.payroll),
   };
 }
 
@@ -77,6 +136,24 @@ function parseDateOnly(value: unknown): Date | null {
   const result = new Date(`${normalized}T00:00:00Z`);
   if (Number.isNaN(result.getTime())) return null;
   return result;
+}
+
+function parseDecimalField(
+  value: unknown,
+  { allowNull = true, scale = 2 }: { allowNull?: boolean; scale?: number } = {},
+): { provided: boolean; value?: Prisma.Decimal | null; error?: string } {
+  if (value === undefined) return { provided: false };
+  if (value === null || value === '') {
+    return allowNull ? { provided: true, value: null } : { provided: true, value: new Prisma.Decimal(0) };
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return { provided: true, error: 'INVALID_NUMBER' };
+  }
+
+  const normalized = numeric.toFixed(scale);
+  return { provided: true, value: new Prisma.Decimal(normalized) };
 }
 
 function parseUserId(path: string): string | null {
@@ -204,7 +281,10 @@ async function handleGet(
       return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
     }
 
-    const user = await prisma.users.findUnique({ where: { id: userId }, include: { trainer: true } });
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      include: { trainer: true, payroll: true },
+    });
 
     if (!user) {
       return errorResponse('NOT_FOUND', 'Usuario no encontrado', 404);
@@ -276,7 +356,7 @@ async function handleList(request: any, prisma: ReturnType<typeof getPrisma>) {
         skip: (page - 1) * pageSize,
         take: pageSize,
         where: where as any,
-        include: { trainer: true },
+        include: { trainer: true, payroll: true },
       }),
     ]);
 
@@ -406,6 +486,9 @@ async function handleUpdate(
   const data: UserUpdateData = {};
   let activeProvided = false;
   let fieldsProvided = 0;
+  const payrollInput = (request.body ?? {}).payroll ?? {};
+  const payrollUpdate: Prisma.user_payrollsUpdateInput = {};
+  let payrollFieldsProvided = 0;
 
   if ('firstName' in (request.body ?? {})) {
     const firstName = sanitizeName(request.body?.firstName);
@@ -480,7 +563,54 @@ async function handleUpdate(
     fieldsProvided += 1;
   }
 
-  if (Object.keys(data).length === 0 || fieldsProvided === 0) {
+  if ('convenio' in payrollInput) {
+    payrollUpdate.convenio = sanitizeText(payrollInput.convenio);
+    payrollFieldsProvided += 1;
+  }
+
+  if ('categoria' in payrollInput) {
+    payrollUpdate.categoria = sanitizeText(payrollInput.categoria);
+    payrollFieldsProvided += 1;
+  }
+
+  if ('antiguedad' in payrollInput) {
+    const antiguedad = parseDateOnly(payrollInput.antiguedad);
+    if (payrollInput.antiguedad && !antiguedad) {
+      return errorResponse('INVALID_INPUT', 'Fecha de antigüedad inválida', 400);
+    }
+    payrollUpdate.antiguedad = antiguedad;
+    payrollFieldsProvided += 1;
+  }
+
+  const decimalFields: Array<{
+    key: keyof Prisma.user_payrollsUpdateInput;
+    inputKey: string;
+    label: string;
+    scale?: number;
+  }> = [
+    { key: 'horas_semana', inputKey: 'horasSemana', label: 'Horas semana', scale: 2 },
+    { key: 'base_retencion', inputKey: 'baseRetencion', label: 'Base de retención' },
+    { key: 'salario_bruto', inputKey: 'salarioBruto', label: 'Salario bruto' },
+    { key: 'salario_bruto_total', inputKey: 'salarioBrutoTotal', label: 'Salario bruto total' },
+    { key: 'retencion', inputKey: 'retencion', label: 'Retención' },
+    { key: 'aportacion_ss_irpf', inputKey: 'aportacionSsIrpf', label: 'Aportación SS e IRPF' },
+    { key: 'salario_limpio', inputKey: 'salarioLimpio', label: 'Salario limpio' },
+    { key: 'contingencias_comunes', inputKey: 'contingenciasComunes', label: 'Contingencias comunes' },
+    { key: 'total_empresa', inputKey: 'totalEmpresa', label: 'Total empresa' },
+  ];
+
+  for (const field of decimalFields) {
+    if (field.inputKey in payrollInput) {
+      const parsed = parseDecimalField(payrollInput[field.inputKey], { scale: field.scale ?? 2 });
+      if (parsed.error) {
+        return errorResponse('INVALID_INPUT', `${field.label} inválido`, 400);
+      }
+      payrollUpdate[field.key] = parsed.value as Prisma.Decimal | null | undefined;
+      payrollFieldsProvided += 1;
+    }
+  }
+
+  if (fieldsProvided === 0 && payrollFieldsProvided === 0) {
     return errorResponse('NO_UPDATES', 'No se enviaron cambios', 400);
   }
 
@@ -488,10 +618,18 @@ async function handleUpdate(
 
   try {
     const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const user = await tx.users.update({
-        where: { id: userId },
-        data,
-      });
+      const existingUser = await tx.users.findUnique({ where: { id: userId }, include: { trainer: true } });
+      if (!existingUser) {
+        throw new Error('USER_NOT_FOUND');
+      }
+
+      const user =
+        fieldsProvided > 0
+          ? await tx.users.update({
+              where: { id: userId },
+              data,
+            })
+          : existingUser;
 
       if (activeProvided && data.active === false) {
         await tx.auth_sessions.updateMany({
@@ -509,11 +647,34 @@ async function handleUpdate(
         active: user.active,
       });
 
-      return user;
+      if (payrollFieldsProvided > 0) {
+        await tx.user_payrolls.upsert({
+          where: { user_id: userId },
+          create: {
+            user_id: userId,
+            ...payrollUpdate,
+          },
+          update: payrollUpdate,
+        });
+      }
+
+      const refreshed = await tx.users.findUnique({
+        where: { id: userId },
+        include: { trainer: true, payroll: true },
+      });
+
+      if (!refreshed) {
+        throw new Error('USER_NOT_FOUND');
+      }
+
+      return refreshed;
     });
 
     return successResponse({ user: serializeUser(updated) });
   } catch (error) {
+    if (error instanceof Error && error.message === 'USER_NOT_FOUND') {
+      return errorResponse('NOT_FOUND', 'Usuario no encontrado', 404);
+    }
     if (error instanceof PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
         return errorResponse('EMAIL_EXISTS', 'El email ya está registrado', 409);
