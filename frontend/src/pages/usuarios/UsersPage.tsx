@@ -737,6 +737,13 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
         ? salarioBrutoTotal * contingenciasPorcentaje
         : null;
 
+    const contingenciasComunesNumero =
+      contingenciasCalculadas !== null ? contingenciasCalculadas : parseLocaleNumber(payroll.contingenciasComunes);
+    const totalEmpresaCalculado =
+      salarioBrutoTotal !== null && contingenciasComunesNumero !== null
+        ? salarioBrutoTotal + contingenciasComunesNumero
+        : null;
+
     const salarioLimpioCalculado =
       salarioBrutoTotal !== null && aporteCalculado !== null ? salarioBrutoTotal + aporteCalculado : null;
 
@@ -747,6 +754,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
       salarioLimpio: salarioLimpioCalculado !== null ? salarioLimpioCalculado.toFixed(2) : payroll.salarioLimpio,
       contingenciasComunes:
         contingenciasCalculadas !== null ? contingenciasCalculadas.toFixed(2) : payroll.contingenciasComunes,
+      totalEmpresa: totalEmpresaCalculado !== null ? totalEmpresaCalculado.toFixed(2) : payroll.totalEmpresa,
     };
   };
 
