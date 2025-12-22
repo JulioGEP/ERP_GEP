@@ -28,10 +28,8 @@ export type UserPayroll = {
   salarioBrutoTotal: number | null;
   retencion: number | null;
   aportacionSsIrpf: number | null;
-  aportacionSsIrpfDetalle: string | null;
   salarioLimpio: number | null;
   contingenciasComunes: number | null;
-  contingenciasComunesDetalle: string | null;
   totalEmpresa: number | null;
 };
 
