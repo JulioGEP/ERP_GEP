@@ -9,8 +9,6 @@ export type UserSummary = {
   active: boolean;
   bankAccount: string | null;
   address: string | null;
-  position: string | null;
-  startDate: string | null;
   createdAt: string;
   updatedAt: string;
   trainerId: string | null;
@@ -50,8 +48,6 @@ export type CreateUserPayload = {
   active: boolean;
   bankAccount?: string | null;
   address?: string | null;
-  position?: string | null;
-  startDate?: string | null;
   payroll?: Partial<UserPayroll>;
 };
 

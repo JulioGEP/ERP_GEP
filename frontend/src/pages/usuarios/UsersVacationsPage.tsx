@@ -339,8 +339,6 @@ export default function UsersVacationsPage() {
       active: user.active,
       bankAccount: null,
       address: null,
-      position: null,
-      startDate: null,
       createdAt: '',
       updatedAt: '',
       trainerId: null,
