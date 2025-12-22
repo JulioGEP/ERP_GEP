@@ -60,8 +60,10 @@ type PayrollPayload = {
   salarioBrutoTotal: number | null;
   retencion: number | null;
   aportacionSsIrpf: number | null;
+  aportacionSsIrpfDetalle: string | null;
   salarioLimpio: number | null;
   contingenciasComunes: number | null;
+  contingenciasComunesDetalle: string | null;
   totalEmpresa: number | null;
 };
 
@@ -75,8 +77,10 @@ const defaultPayrollValues: PayrollFormValues = {
   salarioBrutoTotal: '',
   retencion: '',
   aportacionSsIrpf: '',
+  aportacionSsIrpfDetalle: '',
   salarioLimpio: '',
   contingenciasComunes: '',
+  contingenciasComunesDetalle: '',
   totalEmpresa: '',
 };
 
@@ -96,8 +100,10 @@ function mapPayrollToForm(payroll?: UserPayroll | null): PayrollFormValues {
     salarioBrutoTotal: format(payroll.salarioBrutoTotal),
     retencion: format(payroll.retencion),
     aportacionSsIrpf: format(payroll.aportacionSsIrpf),
+    aportacionSsIrpfDetalle: payroll.aportacionSsIrpfDetalle ?? '',
     salarioLimpio: format(payroll.salarioLimpio),
     contingenciasComunes: format(payroll.contingenciasComunes),
+    contingenciasComunesDetalle: payroll.contingenciasComunesDetalle ?? '',
     totalEmpresa: format(payroll.totalEmpresa),
   };
 }
@@ -171,6 +177,8 @@ function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
   const horasSemana = normalizeNumber(payroll.horasSemana, Number(DEFAULT_WEEKLY_HOURS)) ?? Number(DEFAULT_WEEKLY_HOURS);
   const baseRetencion = calculateBaseRetencionMonthly(payroll.baseRetencion);
   const salarioBrutoCalculado = calculateSalarioBruto(payroll.baseRetencion, payroll.horasSemana);
+  const aportacionSsIrpfDetalle = payroll.aportacionSsIrpfDetalle.trim();
+  const contingenciasComunesDetalle = payroll.contingenciasComunesDetalle.trim();
 
   return {
     convenio: payroll.convenio.trim(),
@@ -182,8 +190,10 @@ function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
     salarioBrutoTotal: normalizeNumber(payroll.salarioBrutoTotal),
     retencion: normalizeNumber(payroll.retencion),
     aportacionSsIrpf: normalizeNumber(payroll.aportacionSsIrpf),
+    aportacionSsIrpfDetalle: aportacionSsIrpfDetalle || null,
     salarioLimpio: normalizeNumber(payroll.salarioLimpio),
     contingenciasComunes: normalizeNumber(payroll.contingenciasComunes),
+    contingenciasComunesDetalle: contingenciasComunesDetalle || null,
     totalEmpresa: normalizeNumber(payroll.totalEmpresa),
   };
 }
@@ -215,8 +225,10 @@ type PayrollFormValues = {
   salarioBrutoTotal: string;
   retencion: string;
   aportacionSsIrpf: string;
+  aportacionSsIrpfDetalle: string;
   salarioLimpio: string;
   contingenciasComunes: string;
+  contingenciasComunesDetalle: string;
   totalEmpresa: string;
 };
 
@@ -699,9 +711,11 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
     const salarioBrutoCalculado = calculateSalarioBruto(payroll.baseRetencion, payroll.horasSemana);
     const salarioBrutoTotal = parseLocaleNumber(payroll.salarioBrutoTotal);
     const retencionPorcentaje = parsePercentageInput(payroll.retencion ?? '');
+    const aportacionExpresion = payroll.aportacionSsIrpfDetalle || payroll.aportacionSsIrpf;
+    const contingenciasExpresion = payroll.contingenciasComunesDetalle || payroll.contingenciasComunes;
 
-    const aportacionExpressionIncludesRetention = /retenci[oó]n/i.test(payroll.aportacionSsIrpf);
-    const aportacionPorcentaje = parseSumExpression(payroll.aportacionSsIrpf, (value) => {
+    const aportacionExpressionIncludesRetention = /retenci[oó]n/i.test(aportacionExpresion);
+    const aportacionPorcentaje = parseSumExpression(aportacionExpresion, (value) => {
       if (/retenci[oó]n/i.test(value)) return retencionPorcentaje ?? 0;
       return parsePercentageInput(value);
     });
@@ -716,7 +730,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
         ? -(salarioBrutoTotal * totalAportacionPorcentaje)
         : null;
 
-    const contingenciasPorcentaje = parseSumExpression(payroll.contingenciasComunes, parsePercentageInput);
+    const contingenciasPorcentaje = parseSumExpression(contingenciasExpresion, parsePercentageInput);
     const contingenciasCalculadas =
       salarioBrutoTotal !== null && contingenciasPorcentaje !== null
         ? salarioBrutoTotal * contingenciasPorcentaje
@@ -1036,6 +1050,36 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
 
               <div>
                 <div className="text-uppercase text-muted small mb-2">Resultados</div>
+                <Row className="g-3">
+                  <Col md={6}>
+                    <Form.Group controlId="payroll-aportacion-detalle">
+                      <Form.Label>Detalle aportación SS e IRPF</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={values.payroll.aportacionSsIrpfDetalle}
+                        onChange={(event) => handlePayrollChange('aportacionSsIrpfDetalle', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('aportacionSsIrpfDetalle', event.target.value)}
+                        placeholder="Ej.: 4,8%+1,65%"
+                        disabled={disableForm}
+                      />
+                      <Form.Text className="text-muted">Se usa para calcular el valor mostrado en "Aportación SS e IRPF".</Form.Text>
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group controlId="payroll-contingencias-detalle">
+                      <Form.Label>Detalle contingencias comunes</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={values.payroll.contingenciasComunesDetalle}
+                        onChange={(event) => handlePayrollChange('contingenciasComunesDetalle', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('contingenciasComunesDetalle', event.target.value)}
+                        placeholder="Ej.: 4,8%+1,65%"
+                        disabled={disableForm}
+                      />
+                      <Form.Text className="text-muted">Se usa para calcular el valor mostrado en "Contingencias comunes".</Form.Text>
+                    </Form.Group>
+                  </Col>
+                </Row>
                 <Row className="g-3">
                   <Col md={4}>
                     <Form.Group controlId="payroll-salario-bruto-total">
