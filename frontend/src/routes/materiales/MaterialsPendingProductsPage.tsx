@@ -330,9 +330,10 @@ export function MaterialsPendingProductsPage({
   const [nextOrderNumber, setNextOrderNumber] = useState(initialNextOrderNumber);
   const [currentOrderNumber, setCurrentOrderNumber] = useState<number | null>(null);
   const defaultCommercialEmail = 'sales@gepgroup.es';
+  const defaultAdministrationEmail = 'administracion@gepgroup.es';
   const [ccInput, setCcInput] = useState('');
   const [ccEmails, setCcEmails] = useState<string[]>([defaultCommercialEmail]);
-  const [toEmail, setToEmail] = useState('');
+  const [toEmail, setToEmail] = useState(defaultAdministrationEmail);
   const [mailSent, setMailSent] = useState(false);
   const defaultLogisticsEmail = 'logistica@gepgroup.es';
   const [logisticsToInput, setLogisticsToInput] = useState('');
@@ -461,11 +462,6 @@ export function MaterialsPendingProductsPage({
       contacto_proveedor?: string | null;
     })?.proveedores ?? null;
 
-  const supplierContactEmail =
-    supplierInfo?.mail_contacto ??
-    (primaryBudget as { mail_contacto?: string | null } | undefined)?.mail_contacto ??
-    '';
-
   const supplierContactName =
     supplierInfo?.nombre_contacto ??
     supplierInfo?.contact_name ??
@@ -476,9 +472,9 @@ export function MaterialsPendingProductsPage({
 
   useEffect(() => {
     if (showEmailModal) {
-      setToEmail(supplierContactEmail || '');
+      setToEmail(defaultAdministrationEmail);
     }
-  }, [showEmailModal, supplierContactEmail]);
+  }, [defaultAdministrationEmail, showEmailModal]);
 
   const handleSelectAll = () => {
     const allSelected = filteredProducts.reduce<Record<string, SelectedProduct>>((acc, row) => {
@@ -662,7 +658,13 @@ export function MaterialsPendingProductsPage({
     .map((product) => `- ${product.productName} ${formatQuantity(product.supplierQuantity)}`)
     .join('\n');
 
-  const emailBody = `Hola ${supplierContactName}\n\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${
+  const budgetIdForSubject = primaryBudget?.deal_id ?? primaryBudget?.dealId ?? selectedList[0]?.row.budgetId ?? '—';
+  const orderNumberForModal = currentOrderNumber ?? nextOrderNumber;
+  const orderNumberLabel = orderNumberForModal ?? '—';
+  const logisticsSubject = `Uso de stock para presupuesto ${budgetIdForSubject} (Pedido Nº ${orderNumberLabel})`;
+  const supplierSubject = `Nuevo Pedido de GEP Group con Nº ${orderNumberLabel} para ${supplierName}`;
+
+  const emailBody = `Hola ${supplierContactName}\n\nNº de pedido: ${orderNumberLabel}\nDesde el equipo de GEP Group necesitamos un nuevo pedido\n${
     supplierProductLines || '- Sin productos para pedir (se cubrirá con stock disponible).'
   }\n\nDime si tienes disponibilidad y por favor, indícanos fechas estimadas de entrega.\n\nMuchas gracias de antemano.\n\nEquipo de GEP Group.`;
 
@@ -676,14 +678,9 @@ export function MaterialsPendingProductsPage({
   const contactFullName = [primaryBudget?.person?.first_name, primaryBudget?.person?.last_name]
     .filter(Boolean)
     .join(' ');
-
-  const budgetIdForSubject = primaryBudget?.deal_id ?? primaryBudget?.dealId ?? selectedList[0]?.row.budgetId ?? '—';
-  const logisticsSubject = `Uso de stock para presupuesto ${budgetIdForSubject}`;
-  const orderNumberForModal = currentOrderNumber ?? nextOrderNumber;
-  const supplierSubject = `Nuevo Pedido de GEP Group con Nº ${orderNumberForModal} para ${supplierName}`;
   const isSendingEmails = createOrderMutation.isPending;
 
-  const logisticsEmailBody = `Hola Logistica\n\nEl comercial asignado de este presupuesto es "${
+  const logisticsEmailBody = `Hola Logistica\n\nNº de pedido: ${orderNumberLabel}\nEl comercial asignado de este presupuesto es "${
     primaryBudget?.comercial ?? '—'
   }"\nNecesito utilizar inventario para enviar a cliente. \n${
     logisticsProductLines || '- Sin productos para descontar de stock.'
@@ -723,10 +720,10 @@ export function MaterialsPendingProductsPage({
     setEmailError(null);
     if (!selectedList.length || isSendingEmails) return;
 
-    const supplierEmailAddress = (toEmail || supplierContactEmail || '').trim();
+    const supplierEmailAddress = (toEmail || defaultAdministrationEmail).trim();
 
     if (!supplierEmailAddress) {
-      setEmailError('Indica el correo de contacto del proveedor.');
+      setEmailError('Indica el correo de contacto de administración.');
       return;
     }
 
@@ -1146,7 +1143,7 @@ export function MaterialsPendingProductsPage({
                           type="radio"
                           id={`${row.key}-supplier`}
                           name={`${row.key}-handling`}
-                          label="Pedido a proveedor"
+                          label="Pedido a administración"
                           checked={handling === 'supplier'}
                           onChange={() => handleHandlingChange(row.key, 'supplier')}
                         />
@@ -1166,7 +1163,7 @@ export function MaterialsPendingProductsPage({
                 Cancelar
               </Button>
               <Button variant="primary" onClick={openEmailModal}>
-                Generar mail a proveedor
+                Generar mail a administración
               </Button>
             </div>
           </div>
@@ -1184,13 +1181,13 @@ export function MaterialsPendingProductsPage({
             </Alert>
           ) : null}
           <div className="d-grid gap-3">
-            <h5 className="mb-0">Email a proveedor</h5>
+            <h5 className="mb-0">Email a administración</h5>
             <Form.Group>
               <Form.Label>Para</Form.Label>
               <Form.Control
                 type="email"
                 value={toEmail}
-                placeholder="Correo de contacto del proveedor"
+                placeholder="Correo de administración"
                 onChange={(event) => setToEmail(event.target.value)}
               />
             </Form.Group>
@@ -1330,7 +1327,7 @@ export function MaterialsPendingProductsPage({
                   Enviando correos…
                 </span>
               ) : (
-                'Enviar correo a proveedor'
+                'Enviar correo a administración'
               )}
             </Button>
             {hasStockUsage ? (
