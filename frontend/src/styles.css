@@ -271,6 +271,11 @@ body {
   opacity: 0.45;
 }
 
+.user-form-modal-body {
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+}
+
 body > .modal-backdrop.show:nth-of-type(2) {
   opacity: 0.65;
 }
