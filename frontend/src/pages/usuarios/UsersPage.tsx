@@ -60,8 +60,10 @@ type PayrollPayload = {
   salarioBrutoTotal: number | null;
   retencion: number | null;
   aportacionSsIrpf: number | null;
+  aportacionSsIrpfDetalle: string | null;
   salarioLimpio: number | null;
   contingenciasComunes: number | null;
+  contingenciasComunesDetalle: string | null;
   totalEmpresa: number | null;
 };
 
@@ -74,8 +76,10 @@ const defaultPayrollValues: PayrollFormValues = {
   salarioBruto: '',
   salarioBrutoTotal: '',
   retencion: '',
+  aportacionSsIrpfDetalle: '',
   aportacionSsIrpf: '',
   salarioLimpio: '',
+  contingenciasComunesDetalle: '',
   contingenciasComunes: '',
   totalEmpresa: '',
 };
@@ -95,8 +99,10 @@ function mapPayrollToForm(payroll?: UserPayroll | null): PayrollFormValues {
     salarioBruto: format(payroll.salarioBruto),
     salarioBrutoTotal: format(payroll.salarioBrutoTotal),
     retencion: format(payroll.retencion),
+    aportacionSsIrpfDetalle: payroll.aportacionSsIrpfDetalle ?? '',
     aportacionSsIrpf: format(payroll.aportacionSsIrpf),
     salarioLimpio: format(payroll.salarioLimpio),
+    contingenciasComunesDetalle: payroll.contingenciasComunesDetalle ?? '',
     contingenciasComunes: format(payroll.contingenciasComunes),
     totalEmpresa: format(payroll.totalEmpresa),
   };
@@ -171,6 +177,8 @@ function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
   const horasSemana = normalizeNumber(payroll.horasSemana, Number(DEFAULT_WEEKLY_HOURS)) ?? Number(DEFAULT_WEEKLY_HOURS);
   const baseRetencion = calculateBaseRetencionMonthly(payroll.baseRetencion);
   const salarioBrutoCalculado = calculateSalarioBruto(payroll.baseRetencion, payroll.horasSemana);
+  const aportacionSsIrpfDetalle = payroll.aportacionSsIrpfDetalle.trim();
+  const contingenciasComunesDetalle = payroll.contingenciasComunesDetalle.trim();
 
   return {
     convenio: payroll.convenio.trim(),
@@ -181,8 +189,11 @@ function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
     salarioBruto: salarioBrutoCalculado,
     salarioBrutoTotal: normalizeNumber(payroll.salarioBrutoTotal),
     retencion: normalizeNumber(payroll.retencion),
+    aportacionSsIrpfDetalle: aportacionSsIrpfDetalle.length ? aportacionSsIrpfDetalle : null,
     aportacionSsIrpf: normalizeNumber(payroll.aportacionSsIrpf),
     salarioLimpio: normalizeNumber(payroll.salarioLimpio),
+    contingenciasComunesDetalle:
+      contingenciasComunesDetalle.length ? contingenciasComunesDetalle : null,
     contingenciasComunes: normalizeNumber(payroll.contingenciasComunes),
     totalEmpresa: normalizeNumber(payroll.totalEmpresa),
   };
@@ -214,8 +225,10 @@ type PayrollFormValues = {
   salarioBruto: string;
   salarioBrutoTotal: string;
   retencion: string;
+  aportacionSsIrpfDetalle: string;
   aportacionSsIrpf: string;
   salarioLimpio: string;
+  contingenciasComunesDetalle: string;
   contingenciasComunes: string;
   totalEmpresa: string;
 };
@@ -700,8 +713,9 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
     const salarioBrutoTotal = parseLocaleNumber(payroll.salarioBrutoTotal);
     const retencionPorcentaje = parsePercentageInput(payroll.retencion ?? '');
 
-    const aportacionExpressionIncludesRetention = /retenci[oó]n/i.test(payroll.aportacionSsIrpf);
-    const aportacionPorcentaje = parseSumExpression(payroll.aportacionSsIrpf, (value) => {
+    const aportacionExpression = payroll.aportacionSsIrpfDetalle || payroll.aportacionSsIrpf;
+    const aportacionExpressionIncludesRetention = /retenci[oó]n/i.test(aportacionExpression);
+    const aportacionPorcentaje = parseSumExpression(aportacionExpression, (value) => {
       if (/retenci[oó]n/i.test(value)) return retencionPorcentaje ?? 0;
       return parsePercentageInput(value);
     });
@@ -716,7 +730,8 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
         ? -(salarioBrutoTotal * totalAportacionPorcentaje)
         : null;
 
-    const contingenciasPorcentaje = parseSumExpression(payroll.contingenciasComunes, parsePercentageInput);
+    const contingenciasExpression = payroll.contingenciasComunesDetalle || payroll.contingenciasComunes;
+    const contingenciasPorcentaje = parseSumExpression(contingenciasExpression, parsePercentageInput);
     const contingenciasCalculadas =
       salarioBrutoTotal !== null && contingenciasPorcentaje !== null
         ? salarioBrutoTotal * contingenciasPorcentaje
@@ -1068,6 +1083,19 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                     </Form.Group>
                   </Col>
                   <Col md={4}>
+                    <Form.Group controlId="payroll-aportacion-detalle">
+                      <Form.Label>Detalle aportación SS e IRPF</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={values.payroll.aportacionSsIrpfDetalle}
+                        onChange={(event) => handlePayrollChange('aportacionSsIrpfDetalle', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('aportacionSsIrpfDetalle', event.target.value)}
+                        disabled={disableForm}
+                        placeholder="4,8%+1,65%"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
                     <Form.Group controlId="payroll-aportacion">
                       <Form.Label>Aportación SS e IRPF</Form.Label>
                       <Form.Control
@@ -1094,6 +1122,19 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                         onBlur={(event) => handlePayrollBlur('salarioLimpio', event.target.value)}
                         disabled={disableForm}
                         inputMode="decimal"
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group controlId="payroll-contingencias-detalle">
+                      <Form.Label>Detalle contingencias comunes</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={values.payroll.contingenciasComunesDetalle}
+                        onChange={(event) => handlePayrollChange('contingenciasComunesDetalle', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('contingenciasComunesDetalle', event.target.value)}
+                        disabled={disableForm}
+                        placeholder="4,8%+1,65%"
                       />
                     </Form.Group>
                   </Col>
