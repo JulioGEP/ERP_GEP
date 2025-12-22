@@ -6,9 +6,12 @@ import { ApiError } from '../../api/client';
 import { fetchUserDocuments, type UserDocument } from '../../api/userDocuments';
 import { fetchUserById } from '../../api/users';
 import {
+  deleteVacationRequest,
   fetchUserVacations,
+  fetchVacationRequests,
   sendVacationRequest,
   type VacationJustificationUpload,
+  type VacationRequestItem,
   type VacationRequestPayload,
   type UserVacationsResponse,
   type VacationType,
@@ -149,6 +152,8 @@ export default function ProfilePage() {
   const [justificationFile, setJustificationFile] = useState<File | null>(null);
   const [justificationError, setJustificationError] = useState<string | null>(null);
   const [isDraggingJustification, setIsDraggingJustification] = useState(false);
+  const [vacationRequestsMessage, setVacationRequestsMessage] = useState<string | null>(null);
+  const [vacationRequestsError, setVacationRequestsError] = useState<string | null>(null);
 
   const profileQuery = useQuery<ProfileUser | undefined>({
     queryKey: ['profile', user?.id],
@@ -241,6 +246,33 @@ export default function ProfilePage() {
       const apiError = error instanceof ApiError ? error : null;
       setVacationRequestError(apiError?.message ?? 'No se pudo enviar la petición.');
       setVacationRequestMessage(null);
+    },
+  });
+
+  const vacationRequestsQuery = useQuery<VacationRequestItem[]>({
+    queryKey: ['vacation-requests', user?.id],
+    queryFn: async () => {
+      const requests = await fetchVacationRequests();
+      if (!user?.id) return [];
+      return requests.filter((request) => request.userId === user.id);
+    },
+    enabled: !!user?.id && shouldShowVacations,
+  });
+
+  const deleteVacationRequestMutation = useMutation({
+    mutationFn: (id: string) => deleteVacationRequest(id),
+    onSuccess: (_, id) => {
+      setVacationRequestsMessage('Petición eliminada correctamente.');
+      setVacationRequestsError(null);
+      queryClient.setQueryData<VacationRequestItem[]>(['vacation-requests', user?.id], (previous) => {
+        if (!previous) return previous;
+        return previous.filter((request) => request.id !== id);
+      });
+    },
+    onError: (error: unknown) => {
+      const apiError = error instanceof ApiError ? error.message : null;
+      setVacationRequestsError(apiError ?? 'No se pudo eliminar la petición.');
+      setVacationRequestsMessage(null);
     },
   });
 
@@ -742,6 +774,62 @@ export default function ProfilePage() {
                 </Button>
               </div>
             </Form>
+
+            <div className="mt-4 pt-3 border-top">
+              <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+                <h4 className="h6 fw-bold mb-0">Peticiones enviadas</h4>
+                {vacationRequestsQuery.isFetching ? (
+                  <div className="text-muted small d-flex align-items-center gap-2">
+                    <Spinner size="sm" animation="border" />
+                    <span>Actualizando…</span>
+                  </div>
+                ) : null}
+              </div>
+              <p className="text-muted mb-3">Revisa y elimina las solicitudes que no sean correctas.</p>
+              {vacationRequestsMessage ? <Alert variant="success">{vacationRequestsMessage}</Alert> : null}
+              {vacationRequestsError ? <Alert variant="danger">{vacationRequestsError}</Alert> : null}
+              {vacationRequestsQuery.isError ? (
+                <Alert variant="danger" className="mb-0">No se pudieron cargar las peticiones.</Alert>
+              ) : null}
+              {vacationRequestsQuery.isLoading ? (
+                <div className="d-flex align-items-center gap-2 text-muted">
+                  <Spinner size="sm" animation="border" />
+                  <span>Cargando peticiones…</span>
+                </div>
+              ) : vacationRequestsQuery.data?.length ? (
+                <ListGroup className="mb-0">
+                  {vacationRequestsQuery.data.map((request) => {
+                    const typeLabel = request.tag ? VACATION_LABELS[request.tag].label : 'Sin categoría';
+                    const createdAtLabel = new Date(request.createdAt).toLocaleDateString('es-ES');
+                    return (
+                      <ListGroup.Item
+                        key={request.id}
+                        className="d-flex flex-wrap gap-3 align-items-center justify-content-between"
+                      >
+                        <div className="flex-grow-1">
+                          <div className="fw-semibold">
+                            {request.startDate} - {request.endDate}
+                          </div>
+                          <div className="text-muted small">{typeLabel}</div>
+                          {request.notes ? <div className="small mt-1">{request.notes}</div> : null}
+                          <div className="text-muted small">Enviada el {createdAtLabel}</div>
+                        </div>
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          onClick={() => deleteVacationRequestMutation.mutate(request.id)}
+                          disabled={deleteVacationRequestMutation.isPending}
+                        >
+                          {deleteVacationRequestMutation.isPending ? 'Eliminando…' : 'Eliminar petición'}
+                        </Button>
+                      </ListGroup.Item>
+                    );
+                  })}
+                </ListGroup>
+              ) : (
+                <p className="text-muted mb-0">No tienes peticiones enviadas.</p>
+              )}
+            </div>
           </div>
         </Card.Body>
       </Card>
