@@ -102,11 +102,19 @@ function mapPayrollToForm(payroll?: UserPayroll | null): PayrollFormValues {
   };
 }
 
-function normalizeNumber(value: string, fallback: number | null = null): number | null {
+function parseLocaleNumber(value: string): number | null {
   const trimmed = value.trim();
-  if (!trimmed.length) return fallback;
-  const parsed = Number(trimmed);
-  if (Number.isNaN(parsed)) return fallback;
+  if (!trimmed.length) return null;
+
+  const cleaned = trimmed.replace(/%/g, '').replace(/,/g, '.');
+  const parsed = Number(cleaned);
+
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function normalizeNumber(value: string, fallback: number | null = null): number | null {
+  const parsed = parseLocaleNumber(value);
+  if (parsed === null) return fallback;
   return Number(parsed.toFixed(2));
 }
 
@@ -123,6 +131,40 @@ function calculateSalarioBruto(baseRetencion: string, horasSemana: string): numb
   if (baseMensual === null || horas === null) return null;
 
   return Number(((baseMensual / 40) * horas).toFixed(2));
+}
+
+function parsePercentageInput(value: string): number | null {
+  const parsed = parseLocaleNumber(value);
+  if (parsed === null) return null;
+
+  const hasPercentSymbol = value.includes('%');
+  const shouldNormalizeToPercent = hasPercentSymbol || parsed > 1;
+
+  return shouldNormalizeToPercent ? parsed / 100 : parsed;
+}
+
+function parseSumExpression(
+  expression: string,
+  parser: (value: string) => number | null,
+): number | null {
+  if (!expression.trim()) return 0;
+
+  const parts = expression.split('+');
+  let total = 0;
+  let parsedAny = false;
+
+  for (const part of parts) {
+    const normalized = part.trim();
+    if (!normalized) continue;
+
+    const parsed = parser(normalized);
+    if (parsed === null) return null;
+
+    parsedAny = true;
+    total += parsed;
+  }
+
+  return parsedAny ? total : 0;
 }
 
 function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
@@ -655,10 +697,41 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
 
   const applyPayrollCalculations = (payroll: PayrollFormValues) => {
     const salarioBrutoCalculado = calculateSalarioBruto(payroll.baseRetencion, payroll.horasSemana);
+    const salarioBrutoTotal = parseLocaleNumber(payroll.salarioBrutoTotal);
+    const retencionPorcentaje = parsePercentageInput(payroll.retencion ?? '');
+
+    const aportacionExpressionIncludesRetention = /retenci[oó]n/i.test(payroll.aportacionSsIrpf);
+    const aportacionPorcentaje = parseSumExpression(payroll.aportacionSsIrpf, (value) => {
+      if (/retenci[oó]n/i.test(value)) return retencionPorcentaje ?? 0;
+      return parsePercentageInput(value);
+    });
+
+    const totalAportacionPorcentaje =
+      aportacionPorcentaje === null
+        ? null
+        : aportacionPorcentaje + (aportacionExpressionIncludesRetention ? 0 : retencionPorcentaje ?? 0);
+
+    const aporteCalculado =
+      salarioBrutoTotal !== null && totalAportacionPorcentaje !== null
+        ? -(salarioBrutoTotal * totalAportacionPorcentaje)
+        : null;
+
+    const contingenciasPorcentaje = parseSumExpression(payroll.contingenciasComunes, parsePercentageInput);
+    const contingenciasCalculadas =
+      salarioBrutoTotal !== null && contingenciasPorcentaje !== null
+        ? salarioBrutoTotal * contingenciasPorcentaje
+        : null;
+
+    const salarioLimpioCalculado =
+      salarioBrutoTotal !== null && aporteCalculado !== null ? salarioBrutoTotal + aporteCalculado : null;
 
     return {
       ...payroll,
       salarioBruto: salarioBrutoCalculado !== null ? salarioBrutoCalculado.toFixed(2) : payroll.salarioBruto,
+      aportacionSsIrpf: aporteCalculado !== null ? aporteCalculado.toFixed(2) : payroll.aportacionSsIrpf,
+      salarioLimpio: salarioLimpioCalculado !== null ? salarioLimpioCalculado.toFixed(2) : payroll.salarioLimpio,
+      contingenciasComunes:
+        contingenciasCalculadas !== null ? contingenciasCalculadas.toFixed(2) : payroll.contingenciasComunes,
     };
   };
 
