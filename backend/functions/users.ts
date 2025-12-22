@@ -1,6 +1,6 @@
 // backend/functions/users.ts
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { $Enums, type Prisma } from '@prisma/client';
+import { Prisma, $Enums } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { createHttpHandler } from './_shared/http';
