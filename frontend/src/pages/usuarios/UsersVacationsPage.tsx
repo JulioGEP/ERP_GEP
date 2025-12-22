@@ -345,6 +345,20 @@ export default function UsersVacationsPage() {
       updatedAt: '',
       trainerId: null,
       trainerFixedContract: null,
+      payroll: {
+        convenio: '',
+        categoria: '',
+        antiguedad: null,
+        horasSemana: 40,
+        baseRetencion: null,
+        salarioBruto: null,
+        salarioBrutoTotal: null,
+        retencion: null,
+        aportacionSsIrpf: null,
+        salarioLimpio: null,
+        contingenciasComunes: null,
+        totalEmpresa: null,
+      },
     });
   };
 

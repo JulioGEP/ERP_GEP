@@ -15,6 +15,22 @@ export type UserSummary = {
   updatedAt: string;
   trainerId: string | null;
   trainerFixedContract: boolean | null;
+  payroll: UserPayroll;
+};
+
+export type UserPayroll = {
+  convenio: string;
+  categoria: string;
+  antiguedad: string | null;
+  horasSemana: number;
+  baseRetencion: number | null;
+  salarioBruto: number | null;
+  salarioBrutoTotal: number | null;
+  retencion: number | null;
+  aportacionSsIrpf: number | null;
+  salarioLimpio: number | null;
+  contingenciasComunes: number | null;
+  totalEmpresa: number | null;
 };
 
 export type UsersListResponse = {
@@ -34,6 +50,7 @@ export type CreateUserPayload = {
   address?: string | null;
   position?: string | null;
   startDate?: string | null;
+  payroll?: Partial<UserPayroll>;
 };
 
 export type UpdateUserPayload = Partial<CreateUserPayload>;
