@@ -157,6 +157,25 @@ const extrasInitialFields = {
 
 type ExtrasFieldKey = keyof typeof extrasInitialFields;
 
+function calculateExtrasTotal(fields: Record<ExtrasFieldKey, string>): number | null {
+  const values = [
+    fields.dietas,
+    fields.kilometrajes,
+    fields.pernocta,
+    fields.nocturnidad,
+    fields.festivo,
+    fields.horasExtras,
+    fields.otrosGastos,
+  ]
+    .map((value) => parseLocaleNumber(value))
+    .filter((value): value is number => value !== null);
+
+  if (!values.length) return null;
+
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return Number(total.toFixed(2));
+}
+
 function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
   const [fields, setFields] = useState<typeof extrasInitialFields>(extrasInitialFields);
 
@@ -179,6 +198,8 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
     });
   }, [entry]);
 
+  const totalExtras = useMemo(() => calculateExtrasTotal(fields), [fields]);
+
   const handleFieldChange = (field: ExtrasFieldKey, value: string) => {
     setFields((prev) => ({ ...prev, [field]: value }));
   };
@@ -196,6 +217,7 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
         festivo: fields.festivo,
         horasExtras: fields.horasExtras,
         otrosGastos: fields.otrosGastos,
+        totalExtras,
       }),
     onSuccess: (saved) => {
       onSaved(saved);
@@ -205,6 +227,7 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
 
   if (!entry) return null;
 
+  const totalExtrasDisplay = totalExtras === null ? '' : totalExtras.toFixed(2);
   const monthLabel = MONTH_LABELS[entry.month - 1] ?? `${entry.month}`;
 
   return (
@@ -300,6 +323,12 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
               />
             </Form.Group>
           </Col>
+          <Col md={12}>
+            <Form.Group controlId="extras-total">
+              <Form.Label>Total Extras</Form.Label>
+              <Form.Control type="number" step="0.01" value={totalExtrasDisplay} readOnly disabled />
+            </Form.Group>
+          </Col>
         </Row>
         <div className="d-flex justify-content-end gap-2">
           <Button variant="secondary" onClick={onHide} disabled={mutation.isPending}>
@@ -371,6 +400,7 @@ const payrollInitialFields = {
   baseRetencion: '',
   baseRetencionDetalle: '',
   salarioBruto: '',
+  totalExtras: '',
   salarioBrutoTotal: '',
   retencion: '',
   aportacionSsIrpfDetalle: '',
@@ -386,7 +416,12 @@ type PayrollFieldKey = keyof typeof payrollInitialFields;
 function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof payrollInitialFields {
   const baseRetencionMensual = calculateBaseRetencionMonthly(fields);
   const salarioBrutoCalculado = calculateSalarioBruto(baseRetencionMensual, fields.horasSemana);
-  const salarioBrutoTotal = parseLocaleNumber(fields.salarioBrutoTotal);
+  const salarioBruto = salarioBrutoCalculado !== null ? salarioBrutoCalculado : normalizeNumber(fields.salarioBruto);
+  const extrasTotal = normalizeNumber(fields.totalExtras);
+  const salarioBrutoTotalCalculado =
+    salarioBruto === null && extrasTotal === null ? null : (salarioBruto ?? 0) + (extrasTotal ?? 0);
+  const salarioBrutoTotal =
+    salarioBrutoTotalCalculado !== null ? salarioBrutoTotalCalculado : parseLocaleNumber(fields.salarioBrutoTotal);
   const retencionPorcentaje = parsePercentageInput(fields.retencion ?? '');
 
   const aportacionExpression = fields.aportacionSsIrpfDetalle || fields.aportacionSsIrpf;
@@ -427,6 +462,8 @@ function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof p
     ...fields,
     baseRetencion: baseRetencionMensual !== null ? baseRetencionMensual.toFixed(2) : fields.baseRetencion,
     salarioBruto: salarioBrutoCalculado !== null ? salarioBrutoCalculado.toFixed(2) : fields.salarioBruto,
+    totalExtras: extrasTotal !== null ? extrasTotal.toFixed(2) : fields.totalExtras,
+    salarioBrutoTotal: salarioBrutoTotal !== null ? salarioBrutoTotal.toFixed(2) : fields.salarioBrutoTotal,
     aportacionSsIrpf: aporteCalculado !== null ? aporteCalculado.toFixed(2) : fields.aportacionSsIrpf,
     salarioLimpio: salarioLimpioCalculado !== null ? salarioLimpioCalculado.toFixed(2) : fields.salarioLimpio,
     contingenciasComunes:
@@ -455,6 +492,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
         baseRetencion: resolveValue(entry.baseRetencion, entry.defaultBaseRetencion ?? entry.salarioBruto),
         baseRetencionDetalle: resolveValue(entry.baseRetencionDetalle, entry.defaultBaseRetencionDetalle),
         salarioBruto: resolveValue(entry.salarioBruto, entry.defaultSalarioBruto),
+        totalExtras: resolveValue(entry.totalExtras),
         salarioBrutoTotal: resolveValue(entry.salarioBrutoTotal, entry.defaultSalarioBrutoTotal),
         retencion: resolveValue(entry.retencion, entry.defaultRetencion),
         aportacionSsIrpfDetalle: resolveValue(
@@ -490,6 +528,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
         baseRetencion: fields.baseRetencion,
         baseRetencionDetalle: fields.baseRetencionDetalle,
         salarioBruto: fields.salarioBruto,
+        totalExtras: fields.totalExtras,
         salarioBrutoTotal: fields.salarioBrutoTotal,
         retencion: fields.retencion,
         aportacionSsIrpfDetalle: fields.aportacionSsIrpfDetalle,
@@ -607,13 +646,19 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
             <div className="text-uppercase text-muted small mb-2">Resultados</div>
             <Row className="g-3">
               <Col md={4}>
+                <Form.Group controlId="payroll-total-extras">
+                  <Form.Label>Total Extras</Form.Label>
+                  <Form.Control type="number" step="0.01" value={fields.totalExtras} readOnly disabled />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
                 <Form.Group controlId="payroll-salario-bruto-total">
                   <Form.Label>Salario bruto total</Form.Label>
                   <Form.Control
                     type="number"
                     step="0.01"
                     value={fields.salarioBrutoTotal}
-                    onChange={(event) => handleFieldChange('salarioBrutoTotal', event.target.value)}
+                    readOnly
                     inputMode="decimal"
                   />
                 </Form.Group>
