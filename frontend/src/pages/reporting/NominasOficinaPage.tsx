@@ -948,8 +948,8 @@ export default function NominasOficinaPage() {
                                 <thead>
                                   <tr>
                                     <th>Usuario</th>
-                                    <th>Categoría</th>
                                     <th>Salario bruto</th>
+                                    <th>Total Extras</th>
                                     <th>Aportación SS e IRPF</th>
                                     <th>Salario limpio</th>
                                     <th style={{ width: '140px' }}>Estado</th>
@@ -960,8 +960,8 @@ export default function NominasOficinaPage() {
                                 </thead>
                                 <tbody>
                                   {items.map((entry) => {
-                                    const categoria = resolveDisplayValue(entry.categoria, entry.defaultCategoria);
                                     const salarioBruto = resolveDisplayValue(entry.salarioBruto, entry.defaultSalarioBruto);
+                                    const totalExtras = resolveDisplayValue(entry.totalExtras);
                                     const aportacion = resolveDisplayValue(
                                       entry.aportacionSsIrpf,
                                       entry.defaultAportacionSsIrpf,
@@ -987,8 +987,8 @@ export default function NominasOficinaPage() {
                                             </Badge>
                                           ) : null}
                                         </td>
-                                        <td>{categoria}</td>
                                         <td>{salarioBruto}</td>
+                                        <td>{totalExtras}</td>
                                         <td>{aportacion}</td>
                                         <td>{salarioLimpio}</td>
                                         <td>{entry.isSaved ? 'Guardada' : 'Sin guardar'}</td>
