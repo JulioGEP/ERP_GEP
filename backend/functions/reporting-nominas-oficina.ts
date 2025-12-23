@@ -13,6 +13,7 @@ const NON_TRAINER_ROLE_BLOCKLIST: $Enums.erp_role[] = ['formador', 'Formador'];
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
 type OfficePayrollRow = office_payrolls & {
+  total_extras?: DecimalLike;
   dietas?: DecimalLike;
   kilometrajes?: DecimalLike;
   pernocta?: DecimalLike;
@@ -48,6 +49,7 @@ type OfficePayrollResponseItem = {
   festivo: number | null;
   horasExtras: number | null;
   otrosGastos: number | null;
+  totalExtras: number | null;
   startDate: string | null;
   convenio: string | null;
   categoria: string | null;
@@ -100,6 +102,7 @@ type OfficePayrollPayload = {
   festivo?: unknown;
   horasExtras?: unknown;
   otrosGastos?: unknown;
+  totalExtras?: unknown;
   convenio?: unknown;
   antiguedad?: unknown;
   horasSemana?: unknown;
@@ -187,6 +190,36 @@ function buildFullName(firstName: string | null | undefined, lastName: string | 
   return parts.length ? parts.join(' ') : (firstName || lastName || '').trim();
 }
 
+function calculateExtrasTotal(record: {
+  total_extras?: DecimalLike;
+  dietas?: DecimalLike;
+  kilometrajes?: DecimalLike;
+  pernocta?: DecimalLike;
+  nocturnidad?: DecimalLike;
+  festivo?: DecimalLike;
+  horas_extras?: DecimalLike;
+  otros_gastos?: DecimalLike;
+}): number | null {
+  const persistedTotal = decimalToNumber(record.total_extras);
+  if (persistedTotal !== null) return persistedTotal;
+
+  const values = [
+    record.dietas,
+    record.kilometrajes,
+    record.pernocta,
+    record.nocturnidad,
+    record.festivo,
+    record.horas_extras,
+    record.otros_gastos,
+  ]
+    .map((value) => decimalToNumber(value))
+    .filter((value): value is number => value !== null);
+
+  if (values.length === 0) return null;
+
+  return Number(values.reduce((total, value) => total + value, 0));
+}
+
 function serializeRecord(
   record: OfficePayrollRow,
   user: {
@@ -199,6 +232,13 @@ function serializeRecord(
   },
   startDate: Date | null,
 ): OfficePayrollResponseItem {
+  const totalExtras = calculateExtrasTotal(record);
+  const salarioBruto = decimalToNumber(record.salario_bruto);
+  const salarioBrutoTotalPersisted = decimalToNumber(record.salario_bruto_total);
+  const salarioBrutoTotalCalculated =
+    salarioBruto === null && totalExtras === null ? null : (salarioBruto ?? 0) + (totalExtras ?? 0);
+  const salarioBrutoTotal = salarioBrutoTotalPersisted ?? salarioBrutoTotalCalculated;
+
   return {
     id: record.id,
     userId: user.id,
@@ -214,6 +254,7 @@ function serializeRecord(
     festivo: decimalToNumber(record.festivo),
     horasExtras: decimalToNumber(record.horas_extras),
     otrosGastos: decimalToNumber(record.otros_gastos),
+    totalExtras,
     startDate: toIsoDateString(record.antiguedad ?? startDate),
     convenio: sanitizeText(record.convenio),
     categoria: sanitizeText(record.categoria),
@@ -221,8 +262,8 @@ function serializeRecord(
     horasSemana: decimalToNumber(record.horas_semana),
     baseRetencion: decimalToNumber(record.base_retencion),
     baseRetencionDetalle: sanitizeText(record.base_retencion_detalle),
-    salarioBruto: decimalToNumber(record.salario_bruto),
-    salarioBrutoTotal: decimalToNumber(record.salario_bruto_total),
+    salarioBruto,
+    salarioBrutoTotal,
     retencion: decimalToNumber(record.retencion),
     aportacionSsIrpf: decimalToNumber(record.aportacion_ss_irpf),
     aportacionSsIrpfDetalle: sanitizeText(record.aportacion_ss_irpf_detalle),
@@ -352,6 +393,7 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
             contingenciasComunes: null,
             contingenciasComunesDetalle: null,
             totalEmpresa: null,
+            totalExtras: null,
             defaultConvenio: sanitizeText(user.payroll?.convenio),
             defaultCategoria: sanitizeText(user.payroll?.categoria),
             defaultAntiguedad: toIsoDateString(user.payroll?.antiguedad as Date | null | undefined),
@@ -412,12 +454,23 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const festivo = parseDecimal(payload.festivo);
   const horasExtras = parseDecimal(payload.horasExtras);
   const otrosGastos = parseDecimal(payload.otrosGastos);
+  const totalExtras = calculateExtrasTotal({
+    total_extras: parseDecimal(payload.totalExtras),
+    dietas,
+    kilometrajes,
+    pernocta,
+    nocturnidad,
+    festivo,
+    horas_extras: horasExtras,
+    otros_gastos: otrosGastos,
+  });
   const antiguedad = parseDateOnly(payload.antiguedad);
   const horasSemana = parseDecimal(payload.horasSemana);
   const baseRetencion = parseDecimal(payload.baseRetencion);
   const baseRetencionDetalle = sanitizeText(payload.baseRetencionDetalle);
   const salarioBruto = parseDecimal(payload.salarioBruto);
-  const salarioBrutoTotal = parseDecimal(payload.salarioBrutoTotal);
+  const salarioBrutoTotal =
+    salarioBruto === null && totalExtras === null ? null : (salarioBruto ?? 0) + (totalExtras ?? 0);
   const retencion = parseDecimal(payload.retencion);
   const aportacionSsIrpf = parseDecimal(payload.aportacionSsIrpf);
   const aportacionSsIrpfDetalle = sanitizeText(payload.aportacionSsIrpfDetalle);
@@ -472,6 +525,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
       festivo: festivo === null ? null : new Prisma.Decimal(festivo),
       horas_extras: horasExtras === null ? null : new Prisma.Decimal(horasExtras),
       otros_gastos: otrosGastos === null ? null : new Prisma.Decimal(otrosGastos),
+      total_extras: totalExtras === null ? null : new Prisma.Decimal(totalExtras),
       antiguedad,
       horas_semana: horasSemana === null ? null : new Prisma.Decimal(horasSemana),
       base_retencion: baseRetencion === null ? null : new Prisma.Decimal(baseRetencion),
@@ -499,6 +553,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
       festivo: festivo === null ? null : new Prisma.Decimal(festivo),
       horas_extras: horasExtras === null ? null : new Prisma.Decimal(horasExtras),
       otros_gastos: otrosGastos === null ? null : new Prisma.Decimal(otrosGastos),
+      total_extras: totalExtras === null ? null : new Prisma.Decimal(totalExtras),
       antiguedad,
       horas_semana: horasSemana === null ? null : new Prisma.Decimal(horasSemana),
       base_retencion: baseRetencion === null ? null : new Prisma.Decimal(baseRetencion),

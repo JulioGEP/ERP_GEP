@@ -94,6 +94,7 @@ model office_payrolls {
   festivo            Decimal?  @db.Decimal(12, 2)
   horas_extras       Decimal?  @db.Decimal(12, 2)
   otros_gastos       Decimal?  @db.Decimal(12, 2)
+  total_extras       Decimal?  @db.Decimal(12, 2)
   convenio           String?
   categoria          String?
   antiguedad         DateTime? @db.Date
