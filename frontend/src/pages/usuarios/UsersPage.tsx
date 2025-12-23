@@ -994,7 +994,7 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                     <Form.Group controlId="payroll-base-retencion">
                       <Form.Label>
                         Base de retención{' '}
-                        <small className="text-muted">(Salario Bruto Anual)</small>
+                        <small className="text-muted">(Salario Bruto Anual / 12)</small>
                       </Form.Label>
                       <Form.Control
                         type="number"
