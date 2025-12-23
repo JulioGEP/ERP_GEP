@@ -180,7 +180,10 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
   const [fields, setFields] = useState<typeof extrasInitialFields>(extrasInitialFields);
 
   useEffect(() => {
-    if (!entry) return;
+    if (!entry) {
+      setFields(extrasInitialFields);
+      return;
+    }
 
     const resolveValue = (value: number | null | undefined) => {
       if (value === null || value === undefined) return '';
@@ -205,20 +208,23 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
   };
 
   const mutation = useMutation({
-    mutationFn: () =>
-      saveOfficePayroll({
+    mutationFn: () => {
+      const normalizeExtrasNumber = (value: string) => parseLocaleNumber(value);
+
+      return saveOfficePayroll({
         userId: entry?.userId as string,
         year: entry?.year as number,
         month: entry?.month as number,
-        dietas: fields.dietas,
-        kilometrajes: fields.kilometrajes,
-        pernocta: fields.pernocta,
-        nocturnidad: fields.nocturnidad,
-        festivo: fields.festivo,
-        horasExtras: fields.horasExtras,
-        otrosGastos: fields.otrosGastos,
+        dietas: normalizeExtrasNumber(fields.dietas),
+        kilometrajes: normalizeExtrasNumber(fields.kilometrajes),
+        pernocta: normalizeExtrasNumber(fields.pernocta),
+        nocturnidad: normalizeExtrasNumber(fields.nocturnidad),
+        festivo: normalizeExtrasNumber(fields.festivo),
+        horasExtras: normalizeExtrasNumber(fields.horasExtras),
+        otrosGastos: normalizeExtrasNumber(fields.otrosGastos),
         totalExtras,
-      }),
+      });
+    },
     onSuccess: (saved) => {
       onSaved(saved);
       onHide();
