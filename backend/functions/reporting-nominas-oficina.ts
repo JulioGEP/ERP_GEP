@@ -13,6 +13,13 @@ const NON_TRAINER_ROLE_BLOCKLIST: $Enums.erp_role[] = ['formador', 'Formador'];
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
 type OfficePayrollRow = office_payrolls & {
+  dietas?: DecimalLike;
+  kilometrajes?: DecimalLike;
+  pernocta?: DecimalLike;
+  nocturnidad?: DecimalLike;
+  festivo?: DecimalLike;
+  horas_extras?: DecimalLike;
+  otros_gastos?: DecimalLike;
   convenio?: string | null;
   antiguedad?: Date | null;
   horas_semana?: DecimalLike;
@@ -34,6 +41,13 @@ type OfficePayrollResponseItem = {
   role: string | null;
   year: number;
   month: number;
+  dietas: number | null;
+  kilometrajes: number | null;
+  pernocta: number | null;
+  nocturnidad: number | null;
+  festivo: number | null;
+  horasExtras: number | null;
+  otrosGastos: number | null;
   startDate: string | null;
   convenio: string | null;
   categoria: string | null;
@@ -79,6 +93,13 @@ type OfficePayrollPayload = {
   year?: unknown;
   month?: unknown;
   categoria?: unknown;
+  dietas?: unknown;
+  kilometrajes?: unknown;
+  pernocta?: unknown;
+  nocturnidad?: unknown;
+  festivo?: unknown;
+  horasExtras?: unknown;
+  otrosGastos?: unknown;
   convenio?: unknown;
   antiguedad?: unknown;
   horasSemana?: unknown;
@@ -186,6 +207,13 @@ function serializeRecord(
     role: user.role,
     year: record.year,
     month: record.month,
+    dietas: decimalToNumber(record.dietas),
+    kilometrajes: decimalToNumber(record.kilometrajes),
+    pernocta: decimalToNumber(record.pernocta),
+    nocturnidad: decimalToNumber(record.nocturnidad),
+    festivo: decimalToNumber(record.festivo),
+    horasExtras: decimalToNumber(record.horas_extras),
+    otrosGastos: decimalToNumber(record.otros_gastos),
     startDate: toIsoDateString(record.antiguedad ?? startDate),
     convenio: sanitizeText(record.convenio),
     categoria: sanitizeText(record.categoria),
@@ -301,6 +329,13 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
             role: user.role,
             year,
             month,
+            dietas: null,
+            kilometrajes: null,
+            pernocta: null,
+            nocturnidad: null,
+            festivo: null,
+            horasExtras: null,
+            otrosGastos: null,
             startDate: toIsoDateString(periodStart),
             convenio: null,
             categoria: null,
@@ -370,6 +405,13 @@ async function handlePut(prisma = getPrisma(), request: any) {
 
   const convenio = sanitizeText(payload.convenio);
   const categoria = sanitizeText(payload.categoria);
+  const dietas = parseDecimal(payload.dietas);
+  const kilometrajes = parseDecimal(payload.kilometrajes);
+  const pernocta = parseDecimal(payload.pernocta);
+  const nocturnidad = parseDecimal(payload.nocturnidad);
+  const festivo = parseDecimal(payload.festivo);
+  const horasExtras = parseDecimal(payload.horasExtras);
+  const otrosGastos = parseDecimal(payload.otrosGastos);
   const antiguedad = parseDateOnly(payload.antiguedad);
   const horasSemana = parseDecimal(payload.horasSemana);
   const baseRetencion = parseDecimal(payload.baseRetencion);
@@ -423,6 +465,13 @@ async function handlePut(prisma = getPrisma(), request: any) {
     update: {
       convenio,
       categoria,
+      dietas: dietas === null ? null : new Prisma.Decimal(dietas),
+      kilometrajes: kilometrajes === null ? null : new Prisma.Decimal(kilometrajes),
+      pernocta: pernocta === null ? null : new Prisma.Decimal(pernocta),
+      nocturnidad: nocturnidad === null ? null : new Prisma.Decimal(nocturnidad),
+      festivo: festivo === null ? null : new Prisma.Decimal(festivo),
+      horas_extras: horasExtras === null ? null : new Prisma.Decimal(horasExtras),
+      otros_gastos: otrosGastos === null ? null : new Prisma.Decimal(otrosGastos),
       antiguedad,
       horas_semana: horasSemana === null ? null : new Prisma.Decimal(horasSemana),
       base_retencion: baseRetencion === null ? null : new Prisma.Decimal(baseRetencion),
@@ -443,6 +492,13 @@ async function handlePut(prisma = getPrisma(), request: any) {
       month,
       convenio,
       categoria,
+      dietas: dietas === null ? null : new Prisma.Decimal(dietas),
+      kilometrajes: kilometrajes === null ? null : new Prisma.Decimal(kilometrajes),
+      pernocta: pernocta === null ? null : new Prisma.Decimal(pernocta),
+      nocturnidad: nocturnidad === null ? null : new Prisma.Decimal(nocturnidad),
+      festivo: festivo === null ? null : new Prisma.Decimal(festivo),
+      horas_extras: horasExtras === null ? null : new Prisma.Decimal(horasExtras),
+      otros_gastos: otrosGastos === null ? null : new Prisma.Decimal(otrosGastos),
       antiguedad,
       horas_semana: horasSemana === null ? null : new Prisma.Decimal(horasSemana),
       base_retencion: baseRetencion === null ? null : new Prisma.Decimal(baseRetencion),

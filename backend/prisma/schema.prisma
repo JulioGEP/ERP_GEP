@@ -87,6 +87,13 @@ model office_payrolls {
   user_id            String    @db.Uuid
   year               Int
   month              Int
+  dietas             Decimal?  @db.Decimal(12, 2)
+  kilometrajes       Decimal?  @db.Decimal(12, 2)
+  pernocta           Decimal?  @db.Decimal(12, 2)
+  nocturnidad        Decimal?  @db.Decimal(12, 2)
+  festivo            Decimal?  @db.Decimal(12, 2)
+  horas_extras       Decimal?  @db.Decimal(12, 2)
+  otros_gastos       Decimal?  @db.Decimal(12, 2)
   convenio           String?
   categoria          String?
   antiguedad         DateTime? @db.Date
