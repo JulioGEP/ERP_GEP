@@ -540,6 +540,17 @@ export function AppRouter({
         />
 
         <Route
+          path="/usuarios/nominas_oficina"
+          element={
+            <GuardedRoute
+              path="/usuarios/nominas_oficina"
+              roles={['Admin', 'Administracion', 'People']}
+              element={<NominasOficinaPage />}
+            />
+          }
+        />
+
+        <Route
           path="/usuarios/vacaciones"
           element={<GuardedRoute path="/usuarios/vacaciones" element={<UsersVacationsPage />} />}
         />
@@ -556,17 +567,6 @@ export function AppRouter({
               path="/reporting/horas_formadores"
               roles={['Admin']}
               element={<HorasFormadoresPage />}
-            />
-          }
-        />
-
-        <Route
-          path="/reporting/nominas_oficina"
-          element={
-            <GuardedRoute
-              path="/reporting/nominas_oficina"
-              roles={['Admin', 'Administracion', 'People']}
-              element={<NominasOficinaPage />}
             />
           }
         />

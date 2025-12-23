@@ -191,11 +191,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/reporting/horas_formadores',
       },
       {
-        key: 'Reporting/NominasOficina',
-        label: 'Nóminas Oficina',
-        path: '/reporting/nominas_oficina',
-      },
-      {
         key: 'Reporting/Comparativa',
         label: 'Comparativa Formaciones y Servicios',
         path: '/reporting/comparativa',
@@ -219,6 +214,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Usuarios/Principal', label: 'Gestión de usuarios', path: '/usuarios' },
       { key: 'Usuarios/Vacaciones', label: 'Vacaciones', path: '/usuarios/vacaciones' },
+      {
+        key: 'Usuarios/NominasOficina',
+        label: 'Nóminas Oficina',
+        path: '/usuarios/nominas_oficina',
+      },
     ],
   },
 ];
