@@ -151,21 +151,22 @@ export const handler = createHttpHandler<any>(async (request) => {
     return auth.error;
   }
 
+  const role = normalizeRoleKey(auth.user.role);
+  const isAdmin = role === 'admin' || role === 'people';
+
   if (request.method === 'POST') {
     return handleCreateRequest(request, prisma, auth);
   }
 
-  const role = normalizeRoleKey(auth.user.role);
-  if (role !== 'admin' && role !== 'people') {
-    return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
-  }
-
   switch (request.method) {
     case 'GET':
-      return handleListRequests(prisma);
+      return handleListRequests(prisma, auth, isAdmin);
     case 'DELETE':
-      return handleDeleteRequest(request, prisma);
+      return handleDeleteRequest(request, prisma, auth, isAdmin);
     case 'PATCH':
+      if (!isAdmin) {
+        return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
+      }
       return handleAcceptRequest(request, prisma);
     default:
       return errorResponse('METHOD_NOT_ALLOWED', 'Método no permitido', 405);
@@ -316,8 +317,15 @@ async function handleCreateRequest(request: any, prisma: ReturnType<typeof getPr
   return successResponse({ message: 'Petición enviada correctamente' });
 }
 
-async function handleListRequests(prisma: ReturnType<typeof getPrisma>) {
+async function handleListRequests(
+  prisma: ReturnType<typeof getPrisma>,
+  auth: any,
+  isAdmin: boolean,
+) {
+  const where = isAdmin ? {} : { user_id: auth.user.id };
+
   const requests = await prisma.vacation_requests.findMany({
+    where,
     orderBy: { created_at: 'desc' },
     include: { user: { select: { id: true, first_name: true, last_name: true, email: true } } },
   });
@@ -337,7 +345,12 @@ async function handleListRequests(prisma: ReturnType<typeof getPrisma>) {
   return successResponse({ requests: formattedRequests });
 }
 
-async function handleDeleteRequest(request: any, prisma: ReturnType<typeof getPrisma>) {
+async function handleDeleteRequest(
+  request: any,
+  prisma: ReturnType<typeof getPrisma>,
+  auth: any,
+  isAdmin: boolean,
+) {
   const id = String(request.query.id || '').trim();
   if (!id) {
     return errorResponse('VALIDATION_ERROR', 'id es obligatorio', 400);
@@ -346,6 +359,10 @@ async function handleDeleteRequest(request: any, prisma: ReturnType<typeof getPr
   const existing = await prisma.vacation_requests.findUnique({ where: { id } });
   if (!existing) {
     return errorResponse('NOT_FOUND', 'Petición no encontrada', 404);
+  }
+
+  if (!isAdmin && existing.user_id !== auth.user.id) {
+    return errorResponse('FORBIDDEN', 'No tienes permisos para esta operación', 403);
   }
 
   await prisma.vacation_requests.delete({ where: { id } });
