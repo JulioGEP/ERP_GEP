@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
+import { Accordion, Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import {
   fetchOfficePayrolls,
   saveOfficePayroll,
   type OfficePayrollRecord,
   type OfficePayrollResponse,
 } from '../../features/reporting/api';
+import { type UserSummary, updateUser } from '../../api/users';
+import { UserFormModal, buildPayrollPayload, type UserFormValues } from '../usuarios/UsersPage';
 function formatCurrencyValue(value: number): string {
   return new Intl.NumberFormat('es-ES', {
     minimumFractionDigits: 2,
@@ -34,6 +36,65 @@ function resolveDisplayValue(value: string | number | null, fallback?: string | 
   if (raw === null || raw === undefined) return '—';
   if (typeof raw === 'number') return formatCurrencyValue(raw);
   return String(raw);
+}
+
+function resolveNumericValue(value: number | null, fallback?: number | null): number | null {
+  const raw = value ?? fallback;
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+}
+
+function calculateTotals(entries: OfficePayrollRecord[]) {
+  return entries.reduce(
+    (acc, entry) => {
+      const salarioBruto = resolveNumericValue(entry.salarioBruto, entry.defaultSalarioBruto);
+      const aportacion = resolveNumericValue(entry.aportacionSsIrpf, entry.defaultAportacionSsIrpf);
+      const salarioLimpio = resolveNumericValue(entry.salarioLimpio, entry.defaultSalarioLimpio);
+
+      acc.count += 1;
+      acc.salarioBruto += salarioBruto ?? 0;
+      acc.aportacion += aportacion ?? 0;
+      acc.salarioLimpio += salarioLimpio ?? 0;
+      return acc;
+    },
+    { count: 0, salarioBruto: 0, aportacion: 0, salarioLimpio: 0 },
+  );
+}
+
+function buildUserSummaryFromPayroll(entry: OfficePayrollRecord): UserSummary {
+  const [firstName, ...lastNameParts] = entry.fullName.split(' ');
+  const lastName = lastNameParts.join(' ').trim();
+
+  return {
+    id: entry.userId,
+    firstName: firstName ?? entry.fullName,
+    lastName: lastName || '',
+    email: entry.email ?? '',
+    role: entry.role ?? 'Empleado',
+    active: true,
+    bankAccount: null,
+    address: null,
+    createdAt: '',
+    updatedAt: '',
+    trainerId: null,
+    trainerFixedContract: null,
+    payroll: {
+      convenio: '',
+      categoria: entry.categoria ?? entry.defaultCategoria ?? '',
+      antiguedad: entry.startDate,
+      horasSemana: 0,
+      baseRetencion: entry.salarioBruto,
+      baseRetencionDetalle: null,
+      salarioBruto: entry.salarioBruto,
+      salarioBrutoTotal: null,
+      retencion: null,
+      aportacionSsIrpf: entry.aportacionSsIrpf,
+      aportacionSsIrpfDetalle: null,
+      salarioLimpio: entry.salarioLimpio,
+      contingenciasComunes: null,
+      contingenciasComunesDetalle: null,
+      totalEmpresa: null,
+    },
+  };
 }
 
 type PayrollModalProps = {
@@ -162,20 +223,6 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
   );
 }
 
-function groupByPeriod(entries: OfficePayrollRecord[]) {
-  return entries.reduce<Record<string, { year: number; month: number; items: OfficePayrollRecord[] }>>(
-    (acc, entry) => {
-      const key = `${entry.year}-${entry.month}`;
-      if (!acc[key]) {
-        acc[key] = { year: entry.year, month: entry.month, items: [] };
-      }
-      acc[key].items.push(entry);
-      return acc;
-    },
-    {},
-  );
-}
-
 export default function NominasOficinaPage() {
   const queryClient = useQueryClient();
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
@@ -193,16 +240,61 @@ export default function NominasOficinaPage() {
     }
   }, [payrollQuery.data, selectedYear]);
 
-  const periodGroups = useMemo(() => {
-    return groupByPeriod(payrollQuery.data?.entries ?? []);
+  const groupedByYear = useMemo(() => {
+    const entries = payrollQuery.data?.entries ?? [];
+    return entries.reduce<Record<number, Record<number, OfficePayrollRecord[]>>>((acc, entry) => {
+      if (!acc[entry.year]) acc[entry.year] = {};
+      if (!acc[entry.year][entry.month]) acc[entry.year][entry.month] = [];
+      acc[entry.year][entry.month].push(entry);
+      return acc;
+    }, {});
   }, [payrollQuery.data?.entries]);
 
-  const sortedPeriods = useMemo(() => {
-    return Object.values(periodGroups).sort((a, b) => {
-      if (a.year !== b.year) return b.year - a.year;
-      return b.month - a.month;
+  const sortedYears = useMemo(() => {
+    return Object.keys(groupedByYear)
+      .map((year) => Number(year))
+      .sort((a, b) => b - a);
+  }, [groupedByYear]);
+
+  const [editingUser, setEditingUser] = useState<UserSummary | null>(null);
+
+  const userUpdateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof updateUser>[1] }) =>
+      updateUser(id, payload),
+    onSuccess: (user) => {
+      setEditingUser(user);
+      queryClient.invalidateQueries({ queryKey: ['users'] }).catch(() => {});
+      queryClient.setQueryData(['user-details', user.id], user);
+    },
+  });
+
+  const handleUserModalSubmit = async (values: UserFormValues) => {
+    if (!editingUser) {
+      throw new Error('No hay usuario seleccionado para editar.');
+    }
+
+    const normalizedPayload = {
+      firstName: values.firstName.trim(),
+      lastName: values.lastName.trim(),
+      email: values.email.trim(),
+      role: values.role,
+      active: values.active,
+      bankAccount: values.bankAccount.trim(),
+      address: values.address.trim(),
+      payroll: buildPayrollPayload(values.payroll),
+    };
+
+    const updatedUser = await userUpdateMutation.mutateAsync({
+      id: editingUser.id,
+      payload: {
+        ...normalizedPayload,
+        bankAccount: normalizedPayload.bankAccount || null,
+        address: normalizedPayload.address || null,
+      },
     });
-  }, [periodGroups]);
+
+    return updatedUser;
+  };
 
   const handleEntrySaved = (entry: OfficePayrollRecord) => {
     setSelectedEntry(null);
@@ -222,84 +314,6 @@ export default function NominasOficinaPage() {
         return { ...previous, entries: finalEntries };
       },
     );
-  };
-
-  const renderTableBody = () => {
-    if (payrollQuery.isLoading) {
-      return (
-        <tr>
-          <td colSpan={8} className="text-center py-4">
-            <Spinner animation="border" size="sm" className="me-2" /> Cargando nóminas…
-          </td>
-        </tr>
-      );
-    }
-
-    if (payrollQuery.isError) {
-      return (
-        <tr>
-          <td colSpan={8}>
-            <Alert variant="danger" className="mb-0">
-              No se pudo cargar la información de nóminas de oficina.
-            </Alert>
-          </td>
-        </tr>
-      );
-    }
-
-    if (!sortedPeriods.length) {
-      return (
-        <tr>
-          <td colSpan={8} className="text-center text-muted py-4">
-            No hay nóminas registradas para los filtros seleccionados.
-          </td>
-        </tr>
-      );
-    }
-
-    return sortedPeriods.flatMap(({ year, month, items }) => {
-      const monthLabel = MONTH_LABELS[month - 1] ?? `${month}`;
-      return items.map((entry) => {
-        const categoria = resolveDisplayValue(entry.categoria, entry.defaultCategoria);
-        const salarioBruto = resolveDisplayValue(entry.salarioBruto, entry.defaultSalarioBruto);
-        const aportacion = resolveDisplayValue(entry.aportacionSsIrpf, entry.defaultAportacionSsIrpf);
-        const salarioLimpio = resolveDisplayValue(entry.salarioLimpio, entry.defaultSalarioLimpio);
-
-        return (
-          <tr key={`${year}-${month}-${entry.userId}`}>
-            <td>{year}</td>
-            <td>{monthLabel}</td>
-            <td>
-              <Button variant="link" className="p-0" onClick={() => setSelectedEntry(entry)}>
-                {entry.fullName}
-              </Button>
-              {!entry.isSaved ? <Badge bg="warning" text="dark" className="ms-2">Pendiente</Badge> : null}
-            </td>
-            <td>
-              <Button variant="link" className="p-0" onClick={() => setSelectedEntry(entry)}>
-                {categoria}
-              </Button>
-            </td>
-            <td>
-              <Button variant="link" className="p-0" onClick={() => setSelectedEntry(entry)}>
-                {salarioBruto}
-              </Button>
-            </td>
-            <td>
-              <Button variant="link" className="p-0" onClick={() => setSelectedEntry(entry)}>
-                {aportacion}
-              </Button>
-            </td>
-            <td>
-              <Button variant="link" className="p-0" onClick={() => setSelectedEntry(entry)}>
-                {salarioLimpio}
-              </Button>
-            </td>
-            <td>{entry.isSaved ? 'Guardada' : 'Sin guardar'}</td>
-          </tr>
-        );
-      });
-    });
   };
 
   return (
@@ -329,25 +343,140 @@ export default function NominasOficinaPage() {
         meses anteriores.
       </Alert>
 
-      <div className="table-responsive">
-        <Table hover className="align-middle mb-0">
-          <thead>
-            <tr>
-              <th style={{ width: '90px' }}>Año</th>
-              <th style={{ width: '120px' }}>Mes</th>
-              <th>Usuario</th>
-              <th>Categoría</th>
-              <th>Salario bruto</th>
-              <th>Aportación SS e IRPF</th>
-              <th>Salario limpio</th>
-              <th style={{ width: '140px' }}>Estado</th>
-            </tr>
-          </thead>
-          <tbody>{renderTableBody()}</tbody>
-        </Table>
-      </div>
+      {payrollQuery.isLoading ? (
+        <div className="text-center py-4">
+          <Spinner animation="border" size="sm" className="me-2" /> Cargando nóminas…
+        </div>
+      ) : payrollQuery.isError ? (
+        <Alert variant="danger" className="mb-0">
+          No se pudo cargar la información de nóminas de oficina.
+        </Alert>
+      ) : !sortedYears.length ? (
+        <div className="text-center text-muted py-4">No hay nóminas registradas para los filtros seleccionados.</div>
+      ) : (
+        <Accordion alwaysOpen>
+          {sortedYears.map((year) => {
+            const months = Object.keys(groupedByYear[year])
+              .map((month) => Number(month))
+              .sort((a, b) => b - a);
+            const yearTotals = calculateTotals(Object.values(groupedByYear[year]).flat());
+
+            return (
+              <Accordion.Item eventKey={String(year)} key={year}>
+                <Accordion.Header>
+                  <div className="d-flex justify-content-between align-items-center w-100 flex-wrap gap-2">
+                    <span className="fw-semibold">{year}</span>
+                    <div className="d-flex flex-wrap gap-3 text-muted small">
+                      <span>Bruto: {formatCurrencyValue(yearTotals.salarioBruto)}</span>
+                      <span>Aportación: {formatCurrencyValue(yearTotals.aportacion)}</span>
+                      <span>Salario limpio: {formatCurrencyValue(yearTotals.salarioLimpio)}</span>
+                      <span>Registros: {yearTotals.count}</span>
+                    </div>
+                  </div>
+                </Accordion.Header>
+                <Accordion.Body className="bg-light-subtle">
+                  <Accordion alwaysOpen>
+                    {months.map((month) => {
+                      const items = groupedByYear[year][month];
+                      const monthTotals = calculateTotals(items);
+                      const monthLabel = MONTH_LABELS[month - 1] ?? `${month}`;
+
+                      return (
+                        <Accordion.Item eventKey={`${year}-${month}`} key={`${year}-${month}`}>
+                          <Accordion.Header>
+                            <div className="d-flex justify-content-between align-items-center w-100 flex-wrap gap-2">
+                              <span>
+                                {monthLabel} {year}
+                              </span>
+                              <div className="d-flex flex-wrap gap-3 text-muted small">
+                                <span>Bruto: {formatCurrencyValue(monthTotals.salarioBruto)}</span>
+                                <span>Aportación: {formatCurrencyValue(monthTotals.aportacion)}</span>
+                                <span>Salario limpio: {formatCurrencyValue(monthTotals.salarioLimpio)}</span>
+                                <span>Registros: {monthTotals.count}</span>
+                              </div>
+                            </div>
+                          </Accordion.Header>
+                          <Accordion.Body>
+                            <div className="table-responsive">
+                              <Table hover className="align-middle mb-0">
+                                <thead>
+                                  <tr>
+                                    <th>Usuario</th>
+                                    <th>Categoría</th>
+                                    <th>Salario bruto</th>
+                                    <th>Aportación SS e IRPF</th>
+                                    <th>Salario limpio</th>
+                                    <th style={{ width: '140px' }}>Estado</th>
+                                    <th style={{ width: '160px' }} className="text-end">
+                                      Acciones
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {items.map((entry) => {
+                                    const categoria = resolveDisplayValue(entry.categoria, entry.defaultCategoria);
+                                    const salarioBruto = resolveDisplayValue(entry.salarioBruto, entry.defaultSalarioBruto);
+                                    const aportacion = resolveDisplayValue(
+                                      entry.aportacionSsIrpf,
+                                      entry.defaultAportacionSsIrpf,
+                                    );
+                                    const salarioLimpio = resolveDisplayValue(
+                                      entry.salarioLimpio,
+                                      entry.defaultSalarioLimpio,
+                                    );
+
+                                    return (
+                                      <tr key={`${year}-${month}-${entry.userId}`}>
+                                        <td>
+                                          <Button
+                                            variant="link"
+                                            className="p-0"
+                                            onClick={() => setEditingUser(buildUserSummaryFromPayroll(entry))}
+                                          >
+                                            {entry.fullName}
+                                          </Button>
+                                          {!entry.isSaved ? (
+                                            <Badge bg="warning" text="dark" className="ms-2">
+                                              Pendiente
+                                            </Badge>
+                                          ) : null}
+                                        </td>
+                                        <td>{categoria}</td>
+                                        <td>{salarioBruto}</td>
+                                        <td>{aportacion}</td>
+                                        <td>{salarioLimpio}</td>
+                                        <td>{entry.isSaved ? 'Guardada' : 'Sin guardar'}</td>
+                                        <td className="text-end">
+                                          <Button size="sm" variant="outline-primary" onClick={() => setSelectedEntry(entry)}>
+                                            Editar nómina
+                                          </Button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </Table>
+                            </div>
+                          </Accordion.Body>
+                        </Accordion.Item>
+                      );
+                    })}
+                  </Accordion>
+                </Accordion.Body>
+              </Accordion.Item>
+            );
+          })}
+        </Accordion>
+      )}
 
       <PayrollModal entry={selectedEntry} onHide={() => setSelectedEntry(null)} onSaved={handleEntrySaved} />
+      <UserFormModal
+        show={Boolean(editingUser)}
+        onHide={() => setEditingUser(null)}
+        onSubmit={handleUserModalSubmit}
+        isSubmitting={userUpdateMutation.isPending}
+        initialValue={editingUser}
+      />
     </div>
   );
 }

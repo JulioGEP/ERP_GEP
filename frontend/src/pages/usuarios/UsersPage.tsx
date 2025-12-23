@@ -86,7 +86,7 @@ const defaultPayrollValues: PayrollFormValues = {
   totalEmpresa: '',
 };
 
-function mapPayrollToForm(payroll?: UserPayroll | null): PayrollFormValues {
+export function mapPayrollToForm(payroll?: UserPayroll | null): PayrollFormValues {
   if (!payroll) return { ...defaultPayrollValues };
 
   const format = (value: number | null, fallback = '') =>
@@ -191,7 +191,7 @@ function parseSumExpression(
   return parsedAny ? total : 0;
 }
 
-function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
+export function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
   const horasSemana = normalizeNumber(payroll.horasSemana, Number(DEFAULT_WEEKLY_HOURS)) ?? Number(DEFAULT_WEEKLY_HOURS);
   const baseRetencion = calculateBaseRetencionMonthly(payroll);
   const salarioBrutoCalculado = calculateSalarioBruto(baseRetencion, payroll.horasSemana);
@@ -223,7 +223,7 @@ export type UsersPageProps = {
   onNotify?: (payload: { variant: 'success' | 'danger' | 'info' | 'warning'; message: string }) => void;
 };
 
-type UserFormValues = {
+export type UserFormValues = {
   firstName: string;
   lastName: string;
   email: string;
@@ -638,7 +638,7 @@ type UserFormModalProps = {
 };
 
 
-function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: UserFormModalProps) {
+export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: UserFormModalProps) {
   const queryClient = useQueryClient();
   const userId = initialValue?.id ?? null;
 
