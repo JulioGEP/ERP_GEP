@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Accordion, Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
 import {
@@ -772,6 +772,7 @@ export default function NominasOficinaPage() {
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<OfficePayrollRecord | null>(null);
   const [selectedExtrasEntry, setSelectedExtrasEntry] = useState<OfficePayrollRecord | null>(null);
+  const [hasInitializedYear, setHasInitializedYear] = useState(false);
 
   const payrollQuery = useQuery<OfficePayrollResponse>({
     queryKey: ['reporting', 'nominas-oficina', selectedYear],
@@ -780,10 +781,17 @@ export default function NominasOficinaPage() {
   });
 
   useEffect(() => {
-    if (selectedYear === null && payrollQuery.data?.latestMonth?.year) {
+    if (!hasInitializedYear && selectedYear === null && payrollQuery.data?.latestMonth?.year) {
       setSelectedYear(payrollQuery.data.latestMonth.year);
+      setHasInitializedYear(true);
     }
-  }, [payrollQuery.data, selectedYear]);
+  }, [hasInitializedYear, payrollQuery.data, selectedYear]);
+
+  const handleYearChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value ? Number(event.target.value) : null;
+    setSelectedYear(value);
+    setHasInitializedYear(true);
+  };
 
   const groupedByYear = useMemo(() => {
     const entries = payrollQuery.data?.entries ?? [];
@@ -872,7 +880,7 @@ export default function NominasOficinaPage() {
         <Form.Select
           style={{ maxWidth: '240px' }}
           value={selectedYear ?? ''}
-          onChange={(event) => setSelectedYear(event.target.value ? Number(event.target.value) : null)}
+          onChange={handleYearChange}
         >
           <option value="">Todos los años</option>
           {(payrollQuery.data?.availableYears ?? []).map((year: number) => (
