@@ -418,10 +418,7 @@ function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof p
   const salarioBrutoCalculado = calculateSalarioBruto(baseRetencionMensual, fields.horasSemana);
   const salarioBruto = salarioBrutoCalculado !== null ? salarioBrutoCalculado : normalizeNumber(fields.salarioBruto);
   const extrasTotal = normalizeNumber(fields.totalExtras);
-  const salarioBrutoTotalCalculado =
-    salarioBruto === null && extrasTotal === null ? null : (salarioBruto ?? 0) + (extrasTotal ?? 0);
-  const salarioBrutoTotal =
-    salarioBrutoTotalCalculado !== null ? salarioBrutoTotalCalculado : parseLocaleNumber(fields.salarioBrutoTotal);
+  const salarioBrutoTotal = salarioBruto;
   const retencionPorcentaje = parsePercentageInput(fields.retencion ?? '');
 
   const aportacionExpression = fields.aportacionSsIrpfDetalle || fields.aportacionSsIrpf;
