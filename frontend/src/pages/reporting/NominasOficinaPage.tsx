@@ -139,6 +139,186 @@ function calculateTotals(entries: OfficePayrollRecord[]) {
   );
 }
 
+type ExtrasModalProps = {
+  entry: OfficePayrollRecord | null;
+  onHide: () => void;
+  onSaved: (entry: OfficePayrollRecord) => void;
+};
+
+const extrasInitialFields = {
+  dietas: '',
+  kilometrajes: '',
+  pernocta: '',
+  nocturnidad: '',
+  festivo: '',
+  horasExtras: '',
+  otrosGastos: '',
+};
+
+type ExtrasFieldKey = keyof typeof extrasInitialFields;
+
+function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
+  const [fields, setFields] = useState<typeof extrasInitialFields>(extrasInitialFields);
+
+  useEffect(() => {
+    if (!entry) return;
+
+    const resolveValue = (value: number | null | undefined) => {
+      if (value === null || value === undefined) return '';
+      return value.toString();
+    };
+
+    setFields({
+      dietas: resolveValue(entry.dietas),
+      kilometrajes: resolveValue(entry.kilometrajes),
+      pernocta: resolveValue(entry.pernocta),
+      nocturnidad: resolveValue(entry.nocturnidad),
+      festivo: resolveValue(entry.festivo),
+      horasExtras: resolveValue(entry.horasExtras),
+      otrosGastos: resolveValue(entry.otrosGastos),
+    });
+  }, [entry]);
+
+  const handleFieldChange = (field: ExtrasFieldKey, value: string) => {
+    setFields((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      saveOfficePayroll({
+        userId: entry?.userId as string,
+        year: entry?.year as number,
+        month: entry?.month as number,
+        dietas: fields.dietas,
+        kilometrajes: fields.kilometrajes,
+        pernocta: fields.pernocta,
+        nocturnidad: fields.nocturnidad,
+        festivo: fields.festivo,
+        horasExtras: fields.horasExtras,
+        otrosGastos: fields.otrosGastos,
+      }),
+    onSuccess: (saved) => {
+      onSaved(saved);
+      onHide();
+    },
+  });
+
+  if (!entry) return null;
+
+  const monthLabel = MONTH_LABELS[entry.month - 1] ?? `${entry.month}`;
+
+  return (
+    <Modal show={Boolean(entry)} onHide={onHide} centered backdrop="static">
+      <Modal.Header closeButton>
+        <Modal.Title>
+          Extras de {entry.fullName} · {monthLabel} {entry.year}
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="d-grid gap-3">
+        <Row className="g-3">
+          <Col md={6}>
+            <Form.Group controlId="extras-dietas">
+              <Form.Label>Dietas</Form.Label>
+              <Form.Control
+                type="number"
+                step="0.01"
+                value={fields.dietas}
+                onChange={(event) => handleFieldChange('dietas', event.target.value)}
+                inputMode="decimal"
+              />
+            </Form.Group>
+          </Col>
+          <Col md={6}>
+            <Form.Group controlId="extras-kilometrajes">
+              <Form.Label>Kilometrajes</Form.Label>
+              <Form.Control
+                type="number"
+                step="0.01"
+                value={fields.kilometrajes}
+                onChange={(event) => handleFieldChange('kilometrajes', event.target.value)}
+                inputMode="decimal"
+              />
+            </Form.Group>
+          </Col>
+          <Col md={6}>
+            <Form.Group controlId="extras-pernocta">
+              <Form.Label>Pernocta</Form.Label>
+              <Form.Control
+                type="number"
+                step="0.01"
+                value={fields.pernocta}
+                onChange={(event) => handleFieldChange('pernocta', event.target.value)}
+                inputMode="decimal"
+              />
+            </Form.Group>
+          </Col>
+          <Col md={6}>
+            <Form.Group controlId="extras-nocturnidad">
+              <Form.Label>Nocturnidad</Form.Label>
+              <Form.Control
+                type="number"
+                step="0.01"
+                value={fields.nocturnidad}
+                onChange={(event) => handleFieldChange('nocturnidad', event.target.value)}
+                inputMode="decimal"
+              />
+            </Form.Group>
+          </Col>
+          <Col md={6}>
+            <Form.Group controlId="extras-festivo">
+              <Form.Label>Festivo</Form.Label>
+              <Form.Control
+                type="number"
+                step="0.01"
+                value={fields.festivo}
+                onChange={(event) => handleFieldChange('festivo', event.target.value)}
+                inputMode="decimal"
+              />
+            </Form.Group>
+          </Col>
+          <Col md={6}>
+            <Form.Group controlId="extras-horas-extras">
+              <Form.Label>Horas extras</Form.Label>
+              <Form.Control
+                type="number"
+                step="0.01"
+                value={fields.horasExtras}
+                onChange={(event) => handleFieldChange('horasExtras', event.target.value)}
+                inputMode="decimal"
+              />
+            </Form.Group>
+          </Col>
+          <Col md={12}>
+            <Form.Group controlId="extras-otros-gastos">
+              <Form.Label>Otros gastos</Form.Label>
+              <Form.Control
+                type="number"
+                step="0.01"
+                value={fields.otrosGastos}
+                onChange={(event) => handleFieldChange('otrosGastos', event.target.value)}
+                inputMode="decimal"
+              />
+            </Form.Group>
+          </Col>
+        </Row>
+        <div className="d-flex justify-content-end gap-2">
+          <Button variant="secondary" onClick={onHide} disabled={mutation.isPending}>
+            Cancelar
+          </Button>
+          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            {mutation.isPending ? 'Guardando…' : 'Guardar cambios'}
+          </Button>
+        </div>
+        {mutation.isError ? (
+          <Alert variant="danger" className="mb-0">
+            No se pudieron guardar los extras. Revisa los campos e inténtalo de nuevo.
+          </Alert>
+        ) : null}
+      </Modal.Body>
+    </Modal>
+  );
+}
+
 function buildUserSummaryFromPayroll(entry: OfficePayrollRecord): UserSummary {
   const [firstName, ...lastNameParts] = entry.fullName.split(' ');
   const lastName = lastNameParts.join(' ').trim();
@@ -543,6 +723,7 @@ export default function NominasOficinaPage() {
   const queryClient = useQueryClient();
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<OfficePayrollRecord | null>(null);
+  const [selectedExtrasEntry, setSelectedExtrasEntry] = useState<OfficePayrollRecord | null>(null);
 
   const payrollQuery = useQuery<OfficePayrollResponse>({
     queryKey: ['reporting', 'nominas-oficina', selectedYear],
@@ -614,6 +795,7 @@ export default function NominasOficinaPage() {
 
   const handleEntrySaved = (entry: OfficePayrollRecord) => {
     setSelectedEntry(null);
+    setSelectedExtrasEntry(null);
     queryClient.setQueryData<OfficePayrollResponse | undefined>(
       ['reporting', 'nominas-oficina', selectedYear],
       (previous) => {
@@ -723,7 +905,7 @@ export default function NominasOficinaPage() {
                                     <th>Aportación SS e IRPF</th>
                                     <th>Salario limpio</th>
                                     <th style={{ width: '140px' }}>Estado</th>
-                                    <th style={{ width: '160px' }} className="text-end">
+                                    <th style={{ width: '220px' }} className="text-end">
                                       Acciones
                                     </th>
                                   </tr>
@@ -763,9 +945,22 @@ export default function NominasOficinaPage() {
                                         <td>{salarioLimpio}</td>
                                         <td>{entry.isSaved ? 'Guardada' : 'Sin guardar'}</td>
                                         <td className="text-end">
-                                          <Button size="sm" variant="outline-primary" onClick={() => setSelectedEntry(entry)}>
-                                            Editar nómina
-                                          </Button>
+                                          <div className="d-inline-flex gap-2">
+                                            <Button
+                                              size="sm"
+                                              variant="outline-primary"
+                                              onClick={() => setSelectedEntry(entry)}
+                                            >
+                                              Editar nómina
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="outline-secondary"
+                                              onClick={() => setSelectedExtrasEntry(entry)}
+                                            >
+                                              Extras
+                                            </Button>
+                                          </div>
                                         </td>
                                       </tr>
                                     );
@@ -786,6 +981,11 @@ export default function NominasOficinaPage() {
       )}
 
       <PayrollModal entry={selectedEntry} onHide={() => setSelectedEntry(null)} onSaved={handleEntrySaved} />
+      <ExtrasModal
+        entry={selectedExtrasEntry}
+        onHide={() => setSelectedExtrasEntry(null)}
+        onSaved={handleEntrySaved}
+      />
       <UserFormModal
         show={Boolean(editingUser)}
         onHide={() => setEditingUser(null)}

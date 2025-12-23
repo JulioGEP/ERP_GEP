@@ -649,6 +649,13 @@ export type OfficePayrollRecord = {
   role: string | null;
   year: number;
   month: number;
+  dietas: number | null;
+  kilometrajes: number | null;
+  pernocta: number | null;
+  nocturnidad: number | null;
+  festivo: number | null;
+  horasExtras: number | null;
+  otrosGastos: number | null;
   startDate: string | null;
   convenio: string | null;
   categoria: string | null;
@@ -714,6 +721,13 @@ export type OfficePayrollUpsertPayload = {
   month: number;
   convenio?: string | null;
   categoria?: string | null;
+  dietas?: number | string | null;
+  kilometrajes?: number | string | null;
+  pernocta?: number | string | null;
+  nocturnidad?: number | string | null;
+  festivo?: number | string | null;
+  horasExtras?: number | string | null;
+  otrosGastos?: number | string | null;
   antiguedad?: string | null;
   horasSemana?: number | string | null;
   baseRetencion?: number | string | null;
