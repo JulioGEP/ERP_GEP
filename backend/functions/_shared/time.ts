@@ -10,6 +10,16 @@ function toTrimmedString(value: unknown): string {
 
 const MADRID_TIMEZONE = 'Europe/Madrid';
 
+const madridNowFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: MADRID_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 const madridOffsetFormatter = new Intl.DateTimeFormat('en-GB', {
   timeZone: MADRID_TIMEZONE,
   hour: '2-digit',
@@ -48,19 +58,30 @@ function getMadridOffsetMinutes(year: number, month: number, day: number): numbe
   return parseOffsetMinutes(offsetName);
 }
 
-export function buildMadridDateTime({
-  year,
-  month,
-  day,
-  hour,
-  minute,
-}: {
+function getCurrentMadridParts(): { year: number; month: number; day: number; hour: number; minute: number } {
+  const parts = madridNowFormatter.formatToParts(new Date());
+
+  const year = Number.parseInt(parts.find((part) => part.type === 'year')?.value ?? 'NaN', 10);
+  const month = Number.parseInt(parts.find((part) => part.type === 'month')?.value ?? 'NaN', 10);
+  const day = Number.parseInt(parts.find((part) => part.type === 'day')?.value ?? 'NaN', 10);
+  const hour = Number.parseInt(parts.find((part) => part.type === 'hour')?.value ?? 'NaN', 10);
+  const minute = Number.parseInt(parts.find((part) => part.type === 'minute')?.value ?? 'NaN', 10);
+
+  return { year, month, day, hour, minute };
+}
+
+type MadridDateParams = {
   year: number;
   month: number;
   day: number;
   hour: number;
   minute: number;
-}): Date {
+};
+
+export function buildMadridDateTime(): Date;
+export function buildMadridDateTime(params: MadridDateParams): Date;
+export function buildMadridDateTime(params?: MadridDateParams): Date {
+  const { year, month, day, hour, minute } = params ?? getCurrentMadridParts();
   const offsetMinutes = getMadridOffsetMinutes(year, month, day);
   const iso = `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00${formatOffset(offsetMinutes)}`;
   return new Date(iso);
