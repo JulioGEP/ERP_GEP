@@ -9,6 +9,85 @@ import {
 } from '../../features/reporting/api';
 import { type UserSummary, updateUser } from '../../api/users';
 import { UserFormModal, buildPayrollPayload, type UserFormValues } from '../usuarios/UsersPage';
+
+const DEFAULT_WEEKLY_HOURS = '40';
+
+function parseLocaleNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+
+  const cleaned = trimmed.replace(/%/g, '').replace(/,/g, '.');
+  const parsed = Number(cleaned);
+
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function normalizeNumber(value: string, fallback: number | null = null): number | null {
+  const parsed = parseLocaleNumber(value);
+  if (parsed === null) return fallback;
+  return Number(parsed.toFixed(2));
+}
+
+function parseAnnualBaseRetencion(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+
+  const normalized = trimmed.replace(/\./g, '').replace(/,/g, '.');
+  const parsed = Number(normalized);
+
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function calculateBaseRetencionMonthly(payroll: { baseRetencion: string; baseRetencionDetalle: string }): number | null {
+  const annualBase = parseAnnualBaseRetencion(payroll.baseRetencionDetalle);
+  if (annualBase !== null) {
+    return Number((annualBase / 12).toFixed(2));
+  }
+
+  const monthlyBase = normalizeNumber(payroll.baseRetencion);
+  if (monthlyBase === null) return null;
+
+  return Number(monthlyBase.toFixed(2));
+}
+
+function calculateSalarioBruto(baseRetencionMensual: number | null, horasSemana: string): number | null {
+  const horas = normalizeNumber(horasSemana, Number(DEFAULT_WEEKLY_HOURS));
+
+  if (baseRetencionMensual === null || horas === null) return null;
+
+  return Number(((baseRetencionMensual / 40) * horas).toFixed(2));
+}
+
+function parsePercentageInput(value: string): number | null {
+  const parsed = parseLocaleNumber(value);
+  if (parsed === null) return null;
+
+  const hasPercentSymbol = value.includes('%');
+  const shouldNormalizeToPercent = hasPercentSymbol || parsed > 1;
+
+  return shouldNormalizeToPercent ? parsed / 100 : parsed;
+}
+
+function parseSumExpression(expression: string, parser: (value: string) => number | null): number | null {
+  if (!expression.trim()) return 0;
+
+  const parts = expression.split('+');
+  let total = 0;
+  let parsedAny = false;
+
+  for (const part of parts) {
+    const normalized = part.trim();
+    if (!normalized) continue;
+
+    const parsed = parser(normalized);
+    if (parsed === null) return null;
+
+    parsedAny = true;
+    total += parsed;
+  }
+
+  return parsedAny ? total : 0;
+}
 function formatCurrencyValue(value: number): string {
   return new Intl.NumberFormat('es-ES', {
     minimumFractionDigits: 2,
@@ -104,28 +183,80 @@ type PayrollModalProps = {
   onSaved: (entry: OfficePayrollRecord) => void;
 };
 
-function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
-  const initialFields = {
-    convenio: '',
-    categoria: '',
-    antiguedad: '',
-    horasSemana: '',
-    baseRetencion: '',
-    baseRetencionDetalle: '',
-    salarioBruto: '',
-    salarioBrutoTotal: '',
-    retencion: '',
-    aportacionSsIrpfDetalle: '',
-    aportacionSsIrpf: '',
-    salarioLimpio: '',
-    contingenciasComunesDetalle: '',
-    contingenciasComunes: '',
-    totalEmpresa: '',
+const payrollInitialFields = {
+  convenio: '',
+  categoria: '',
+  antiguedad: '',
+  horasSemana: '',
+  baseRetencion: '',
+  baseRetencionDetalle: '',
+  salarioBruto: '',
+  salarioBrutoTotal: '',
+  retencion: '',
+  aportacionSsIrpfDetalle: '',
+  aportacionSsIrpf: '',
+  salarioLimpio: '',
+  contingenciasComunesDetalle: '',
+  contingenciasComunes: '',
+  totalEmpresa: '',
+};
+
+type PayrollFieldKey = keyof typeof payrollInitialFields;
+
+function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof payrollInitialFields {
+  const baseRetencionMensual = calculateBaseRetencionMonthly(fields);
+  const salarioBrutoCalculado = calculateSalarioBruto(baseRetencionMensual, fields.horasSemana);
+  const salarioBrutoTotal = parseLocaleNumber(fields.salarioBrutoTotal);
+  const retencionPorcentaje = parsePercentageInput(fields.retencion ?? '');
+
+  const aportacionExpression = fields.aportacionSsIrpfDetalle || fields.aportacionSsIrpf;
+  const aportacionExpressionIncludesRetention = /retenci[oó]n/i.test(aportacionExpression);
+  const aportacionPorcentaje = parseSumExpression(aportacionExpression, (value) => {
+    if (/retenci[oó]n/i.test(value)) return retencionPorcentaje ?? 0;
+    return parsePercentageInput(value);
+  });
+
+  const totalAportacionPorcentaje =
+    aportacionPorcentaje === null
+      ? null
+      : aportacionPorcentaje + (aportacionExpressionIncludesRetention ? 0 : retencionPorcentaje ?? 0);
+
+  const aporteCalculado =
+    salarioBrutoTotal !== null && totalAportacionPorcentaje !== null
+      ? -(salarioBrutoTotal * totalAportacionPorcentaje)
+      : null;
+
+  const contingenciasExpression = fields.contingenciasComunesDetalle || fields.contingenciasComunes;
+  const contingenciasPorcentaje = parseSumExpression(contingenciasExpression, parsePercentageInput);
+  const contingenciasCalculadas =
+    salarioBrutoTotal !== null && contingenciasPorcentaje !== null
+      ? salarioBrutoTotal * contingenciasPorcentaje
+      : null;
+
+  const contingenciasComunesNumero =
+    contingenciasCalculadas !== null ? contingenciasCalculadas : parseLocaleNumber(fields.contingenciasComunes);
+  const totalEmpresaCalculado =
+    salarioBrutoTotal !== null && contingenciasComunesNumero !== null
+      ? salarioBrutoTotal + contingenciasComunesNumero
+      : null;
+
+  const salarioLimpioCalculado =
+    salarioBrutoTotal !== null && aporteCalculado !== null ? salarioBrutoTotal + aporteCalculado : null;
+
+  return {
+    ...fields,
+    baseRetencion: baseRetencionMensual !== null ? baseRetencionMensual.toFixed(2) : fields.baseRetencion,
+    salarioBruto: salarioBrutoCalculado !== null ? salarioBrutoCalculado.toFixed(2) : fields.salarioBruto,
+    aportacionSsIrpf: aporteCalculado !== null ? aporteCalculado.toFixed(2) : fields.aportacionSsIrpf,
+    salarioLimpio: salarioLimpioCalculado !== null ? salarioLimpioCalculado.toFixed(2) : fields.salarioLimpio,
+    contingenciasComunes:
+      contingenciasCalculadas !== null ? contingenciasCalculadas.toFixed(2) : fields.contingenciasComunes,
+    totalEmpresa: totalEmpresaCalculado !== null ? totalEmpresaCalculado.toFixed(2) : fields.totalEmpresa,
   };
+}
 
-  type PayrollFieldKey = keyof typeof initialFields;
-
-  const [fields, setFields] = useState<typeof initialFields>(initialFields);
+function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
+  const [fields, setFields] = useState<typeof payrollInitialFields>(payrollInitialFields);
 
   useEffect(() => {
     if (!entry) return;
@@ -135,33 +266,35 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
       return typeof raw === 'number' ? raw.toString() : raw;
     };
 
-    setFields({
-      convenio: resolveValue(entry.convenio, entry.defaultConvenio),
-      categoria: resolveValue(entry.categoria, entry.defaultCategoria),
-      antiguedad: resolveValue(entry.antiguedad, entry.defaultAntiguedad ?? entry.startDate),
-      horasSemana: resolveValue(entry.horasSemana, entry.defaultHorasSemana),
-      baseRetencion: resolveValue(entry.baseRetencion, entry.defaultBaseRetencion ?? entry.salarioBruto),
-      baseRetencionDetalle: resolveValue(entry.baseRetencionDetalle, entry.defaultBaseRetencionDetalle),
-      salarioBruto: resolveValue(entry.salarioBruto, entry.defaultSalarioBruto),
-      salarioBrutoTotal: resolveValue(entry.salarioBrutoTotal, entry.defaultSalarioBrutoTotal),
-      retencion: resolveValue(entry.retencion, entry.defaultRetencion),
-      aportacionSsIrpfDetalle: resolveValue(
-        entry.aportacionSsIrpfDetalle,
-        entry.defaultAportacionSsIrpfDetalle,
-      ),
-      aportacionSsIrpf: resolveValue(entry.aportacionSsIrpf, entry.defaultAportacionSsIrpf),
-      salarioLimpio: resolveValue(entry.salarioLimpio, entry.defaultSalarioLimpio),
-      contingenciasComunesDetalle: resolveValue(
-        entry.contingenciasComunesDetalle,
-        entry.defaultContingenciasComunesDetalle,
-      ),
-      contingenciasComunes: resolveValue(entry.contingenciasComunes, entry.defaultContingenciasComunes),
-      totalEmpresa: resolveValue(entry.totalEmpresa, entry.defaultTotalEmpresa),
-    });
+    setFields(
+      applyPayrollCalculations({
+        convenio: resolveValue(entry.convenio, entry.defaultConvenio),
+        categoria: resolveValue(entry.categoria, entry.defaultCategoria),
+        antiguedad: resolveValue(entry.antiguedad, entry.defaultAntiguedad ?? entry.startDate),
+        horasSemana: resolveValue(entry.horasSemana, entry.defaultHorasSemana),
+        baseRetencion: resolveValue(entry.baseRetencion, entry.defaultBaseRetencion ?? entry.salarioBruto),
+        baseRetencionDetalle: resolveValue(entry.baseRetencionDetalle, entry.defaultBaseRetencionDetalle),
+        salarioBruto: resolveValue(entry.salarioBruto, entry.defaultSalarioBruto),
+        salarioBrutoTotal: resolveValue(entry.salarioBrutoTotal, entry.defaultSalarioBrutoTotal),
+        retencion: resolveValue(entry.retencion, entry.defaultRetencion),
+        aportacionSsIrpfDetalle: resolveValue(
+          entry.aportacionSsIrpfDetalle,
+          entry.defaultAportacionSsIrpfDetalle,
+        ),
+        aportacionSsIrpf: resolveValue(entry.aportacionSsIrpf, entry.defaultAportacionSsIrpf),
+        salarioLimpio: resolveValue(entry.salarioLimpio, entry.defaultSalarioLimpio),
+        contingenciasComunesDetalle: resolveValue(
+          entry.contingenciasComunesDetalle,
+          entry.defaultContingenciasComunesDetalle,
+        ),
+        contingenciasComunes: resolveValue(entry.contingenciasComunes, entry.defaultContingenciasComunes),
+        totalEmpresa: resolveValue(entry.totalEmpresa, entry.defaultTotalEmpresa),
+      }),
+    );
   }, [entry]);
 
   const handleFieldChange = (field: PayrollFieldKey, value: string) => {
-    setFields((prev) => ({ ...prev, [field]: value }));
+    setFields((prev) => applyPayrollCalculations({ ...prev, [field]: value }));
   };
 
   const mutation = useMutation({
