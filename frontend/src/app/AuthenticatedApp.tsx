@@ -191,6 +191,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/reporting/horas_formadores',
       },
       {
+        key: 'Reporting/NominasOficina',
+        label: 'Nóminas Oficina',
+        path: '/reporting/nominas_oficina',
+      },
+      {
         key: 'Reporting/Comparativa',
         label: 'Comparativa Formaciones y Servicios',
         path: '/reporting/comparativa',

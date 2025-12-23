@@ -640,3 +640,71 @@ export async function fetchComparativaDashboard(
 
   return getJson<ComparativaDashboardResponse>(url);
 }
+
+export type OfficePayrollRecord = {
+  id: string | null;
+  userId: string;
+  fullName: string;
+  email: string | null;
+  role: string | null;
+  year: number;
+  month: number;
+  startDate: string | null;
+  categoria: string | null;
+  salarioBruto: number | null;
+  aportacionSsIrpf: number | null;
+  salarioLimpio: number | null;
+  defaultCategoria: string | null;
+  defaultSalarioBruto: number | null;
+  defaultAportacionSsIrpf: number | null;
+  defaultSalarioLimpio: number | null;
+  isSaved: boolean;
+};
+
+export type OfficePayrollResponse = {
+  entries: OfficePayrollRecord[];
+  availableYears: number[];
+  latestMonth: { year: number; month: number } | null;
+};
+
+export async function fetchOfficePayrolls(year?: number | null): Promise<OfficePayrollResponse> {
+  const params = new URLSearchParams();
+  if (typeof year === 'number' && Number.isFinite(year)) {
+    params.set('year', String(year));
+  }
+
+  const query = params.toString();
+  const url = query.length ? `/reporting-nominas-oficina?${query}` : '/reporting-nominas-oficina';
+  const response = await getJson<OfficePayrollResponse>(url);
+  if (!response || !Array.isArray(response.entries)) {
+    throw new Error('Respuesta inválida al cargar las nóminas de oficina');
+  }
+  return {
+    entries: response.entries,
+    availableYears: Array.isArray(response.availableYears) ? response.availableYears : [],
+    latestMonth: response.latestMonth ?? null,
+  };
+}
+
+export type OfficePayrollUpsertPayload = {
+  userId: string;
+  year: number;
+  month: number;
+  categoria?: string | null;
+  salarioBruto?: number | string | null;
+  aportacionSsIrpf?: number | string | null;
+  salarioLimpio?: number | string | null;
+};
+
+export async function saveOfficePayroll(
+  payload: OfficePayrollUpsertPayload,
+): Promise<OfficePayrollRecord> {
+  const response = await putJson<{ entry?: OfficePayrollRecord }>(
+    '/reporting-nominas-oficina',
+    payload,
+  );
+  if (response?.entry) {
+    return response.entry;
+  }
+  throw new Error('No se pudo guardar la nómina de oficina');
+}

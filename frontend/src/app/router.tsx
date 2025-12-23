@@ -97,6 +97,7 @@ const CostesExtraPage = lazy(() => import('../pages/reporting/CostesExtraPage'))
 const LogsPage = lazy(() => import('../pages/reporting/LogsPage'));
 const ComparativaDashboardPage = lazy(() => import('../pages/reporting/ComparativaDashboardPage'));
 const WebhooksPipedrivePage = lazy(() => import('../pages/reporting/WebhooksPipedrivePage'));
+const NominasOficinaPage = lazy(() => import('../pages/reporting/NominasOficinaPage'));
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -555,6 +556,17 @@ export function AppRouter({
               path="/reporting/horas_formadores"
               roles={['Admin']}
               element={<HorasFormadoresPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/reporting/nominas_oficina"
+          element={
+            <GuardedRoute
+              path="/reporting/nominas_oficina"
+              roles={['Admin', 'Administracion', 'People']}
+              element={<NominasOficinaPage />}
             />
           }
         />
