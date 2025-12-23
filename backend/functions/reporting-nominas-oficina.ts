@@ -1,4 +1,4 @@
-import { Prisma, type office_payrolls } from '@prisma/client';
+import { Prisma, $Enums, type office_payrolls } from '@prisma/client';
 
 import { createHttpHandler } from './_shared/http';
 import { errorResponse, successResponse } from './_shared/response';
@@ -8,7 +8,7 @@ import { buildMadridDateTime } from './_shared/time';
 
 const ALLOWED_ROLES = ['Admin', 'Administracion', 'People'] as const;
 
-const NON_TRAINER_ROLE_BLOCKLIST = ['formador', 'Formador'];
+const NON_TRAINER_ROLE_BLOCKLIST: $Enums.erp_role[] = ['formador', 'Formador'];
 
 type DecimalLike = Prisma.Decimal | number | string | null | undefined;
 
@@ -145,10 +145,30 @@ function serializeRecord(
 async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType<typeof successResponse> | ReturnType<typeof errorResponse>> {
   const filterYear = parseInteger(request.query?.year || request.event?.queryStringParameters?.year, null);
 
-  const now = buildMadridDateTime();
+  const nowUtc = new Date();
+  const now = buildMadridDateTime({
+    year: nowUtc.getUTCFullYear(),
+    month: nowUtc.getUTCMonth() + 1,
+    day: nowUtc.getUTCDate(),
+    hour: nowUtc.getUTCHours(),
+    minute: nowUtc.getUTCMinutes(),
+  });
   const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-  const users = await prisma.users.findMany({
+  type UserWithOfficePayrolls = Prisma.usersGetPayload<{
+    select: {
+      id: true;
+      first_name: true;
+      last_name: true;
+      email: true;
+      role: true;
+      created_at: true;
+      payroll: true;
+      office_payrolls: true;
+    };
+  }>;
+
+  const users: UserWithOfficePayrolls[] = await prisma.users.findMany({
     where: {
       AND: [
         { role: { notIn: NON_TRAINER_ROLE_BLOCKLIST } },
