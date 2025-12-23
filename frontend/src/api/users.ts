@@ -22,6 +22,7 @@ export type UserPayroll = {
   antiguedad: string | null;
   horasSemana: number;
   baseRetencion: number | null;
+  baseRetencionDetalle: string | null;
   salarioBruto: number | null;
   salarioBrutoTotal: number | null;
   retencion: number | null;

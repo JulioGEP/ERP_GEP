@@ -63,6 +63,7 @@ model user_payrolls {
   antiguedad             DateTime? @db.Date
   horas_semana           Decimal?  @db.Decimal(6, 2)
   base_retencion         Decimal?  @db.Decimal(12, 2)
+  base_retencion_detalle String?
   salario_bruto          Decimal?  @db.Decimal(12, 2)
   salario_bruto_total    Decimal?  @db.Decimal(12, 2)
   retencion              Decimal?  @db.Decimal(12, 2)

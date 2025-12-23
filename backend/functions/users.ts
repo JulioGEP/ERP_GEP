@@ -27,6 +27,7 @@ type SerializedPayroll = {
   antiguedad: string | null;
   horasSemana: number;
   baseRetencion: number | null;
+  baseRetencionDetalle: string | null;
   salarioBruto: number | null;
   salarioBrutoTotal: number | null;
   retencion: number | null;
@@ -51,6 +52,7 @@ function serializePayroll(payroll: any | null | undefined): SerializedPayroll {
       payroll?.base_retencion === undefined || payroll?.base_retencion === null
         ? null
         : Number(payroll.base_retencion),
+    baseRetencionDetalle: sanitizeText(payroll?.base_retencion_detalle),
     salarioBruto:
       payroll?.salario_bruto === undefined || payroll?.salario_bruto === null
         ? null
@@ -556,6 +558,11 @@ async function handleUpdate(
       return errorResponse('INVALID_INPUT', 'Fecha de antigüedad inválida', 400);
     }
     payrollUpdate.antiguedad = antiguedad;
+    payrollFieldsProvided += 1;
+  }
+
+  if ('baseRetencionDetalle' in payrollInput) {
+    payrollUpdate.base_retencion_detalle = sanitizeText(payrollInput.baseRetencionDetalle);
     payrollFieldsProvided += 1;
   }
 
