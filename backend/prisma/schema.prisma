@@ -87,10 +87,21 @@ model office_payrolls {
   user_id            String    @db.Uuid
   year               Int
   month              Int
+  convenio           String?
   categoria          String?
+  antiguedad         DateTime? @db.Date
+  horas_semana       Decimal?  @db.Decimal(6, 2)
+  base_retencion     Decimal?  @db.Decimal(12, 2)
+  base_retencion_detalle String?
   salario_bruto      Decimal?  @db.Decimal(12, 2)
+  salario_bruto_total Decimal?  @db.Decimal(12, 2)
+  retencion          Decimal?  @db.Decimal(12, 2)
   aportacion_ss_irpf Decimal?  @db.Decimal(12, 2)
+  aportacion_ss_irpf_detalle String?
   salario_limpio     Decimal?  @db.Decimal(12, 2)
+  contingencias_comunes Decimal?  @db.Decimal(12, 2)
+  contingencias_comunes_detalle String?
+  total_empresa      Decimal?  @db.Decimal(12, 2)
   created_at         DateTime  @default(now()) @db.Timestamptz(6)
   updated_at         DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
 
