@@ -349,6 +349,7 @@ export default function UsersVacationsPage() {
         antiguedad: null,
         horasSemana: 40,
         baseRetencion: null,
+        baseRetencionDetalle: null,
         salarioBruto: null,
         salarioBrutoTotal: null,
         retencion: null,

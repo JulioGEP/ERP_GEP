@@ -56,6 +56,7 @@ type PayrollPayload = {
   antiguedad: string | null;
   horasSemana: number;
   baseRetencion: number | null;
+  baseRetencionDetalle: string | null;
   salarioBruto: number | null;
   salarioBrutoTotal: number | null;
   retencion: number | null;
@@ -73,6 +74,7 @@ const defaultPayrollValues: PayrollFormValues = {
   antiguedad: '',
   horasSemana: DEFAULT_WEEKLY_HOURS,
   baseRetencion: '',
+  baseRetencionDetalle: '',
   salarioBruto: '',
   salarioBrutoTotal: '',
   retencion: '',
@@ -96,6 +98,7 @@ function mapPayrollToForm(payroll?: UserPayroll | null): PayrollFormValues {
     antiguedad: payroll.antiguedad ?? '',
     horasSemana: payroll.horasSemana?.toString() ?? DEFAULT_WEEKLY_HOURS,
     baseRetencion: format(payroll.baseRetencion),
+    baseRetencionDetalle: payroll.baseRetencionDetalle ?? '',
     salarioBruto: format(payroll.salarioBruto),
     salarioBrutoTotal: format(payroll.salarioBrutoTotal),
     retencion: format(payroll.retencion),
@@ -124,19 +127,34 @@ function normalizeNumber(value: string, fallback: number | null = null): number 
   return Number(parsed.toFixed(2));
 }
 
-function calculateBaseRetencionMonthly(value: string): number | null {
-  const normalized = normalizeNumber(value);
-  if (normalized === null) return null;
-  return Number((normalized / 12).toFixed(2));
+function parseAnnualBaseRetencion(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+
+  const normalized = trimmed.replace(/\./g, '').replace(/,/g, '.');
+  const parsed = Number(normalized);
+
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
-function calculateSalarioBruto(baseRetencion: string, horasSemana: string): number | null {
-  const baseMensual = calculateBaseRetencionMonthly(baseRetencion);
+function calculateBaseRetencionMonthly(payroll: Pick<PayrollFormValues, 'baseRetencion' | 'baseRetencionDetalle'>): number | null {
+  const annualBase = parseAnnualBaseRetencion(payroll.baseRetencionDetalle);
+  if (annualBase !== null) {
+    return Number((annualBase / 12).toFixed(2));
+  }
+
+  const monthlyBase = normalizeNumber(payroll.baseRetencion);
+  if (monthlyBase === null) return null;
+
+  return Number(monthlyBase.toFixed(2));
+}
+
+function calculateSalarioBruto(baseRetencionMensual: number | null, horasSemana: string): number | null {
   const horas = normalizeNumber(horasSemana, Number(DEFAULT_WEEKLY_HOURS));
 
-  if (baseMensual === null || horas === null) return null;
+  if (baseRetencionMensual === null || horas === null) return null;
 
-  return Number(((baseMensual / 40) * horas).toFixed(2));
+  return Number(((baseRetencionMensual / 40) * horas).toFixed(2));
 }
 
 function parsePercentageInput(value: string): number | null {
@@ -175,10 +193,11 @@ function parseSumExpression(
 
 function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
   const horasSemana = normalizeNumber(payroll.horasSemana, Number(DEFAULT_WEEKLY_HOURS)) ?? Number(DEFAULT_WEEKLY_HOURS);
-  const baseRetencion = calculateBaseRetencionMonthly(payroll.baseRetencion);
-  const salarioBrutoCalculado = calculateSalarioBruto(payroll.baseRetencion, payroll.horasSemana);
+  const baseRetencion = calculateBaseRetencionMonthly(payroll);
+  const salarioBrutoCalculado = calculateSalarioBruto(baseRetencion, payroll.horasSemana);
   const aportacionSsIrpfDetalle = payroll.aportacionSsIrpfDetalle.trim();
   const contingenciasComunesDetalle = payroll.contingenciasComunesDetalle.trim();
+  const baseRetencionDetalle = payroll.baseRetencionDetalle.trim();
 
   return {
     convenio: payroll.convenio.trim(),
@@ -186,6 +205,7 @@ function buildPayrollPayload(payroll: PayrollFormValues): PayrollPayload {
     antiguedad: payroll.antiguedad ? payroll.antiguedad : null,
     horasSemana,
     baseRetencion,
+    baseRetencionDetalle: baseRetencionDetalle.length ? baseRetencionDetalle : null,
     salarioBruto: salarioBrutoCalculado,
     salarioBrutoTotal: normalizeNumber(payroll.salarioBrutoTotal),
     retencion: normalizeNumber(payroll.retencion),
@@ -220,6 +240,7 @@ type PayrollFormValues = {
   antiguedad: string;
   horasSemana: string;
   baseRetencion: string;
+  baseRetencionDetalle: string;
   salarioBruto: string;
   salarioBrutoTotal: string;
   retencion: string;
@@ -699,7 +720,8 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
   };
 
   const applyPayrollCalculations = (payroll: PayrollFormValues) => {
-    const salarioBrutoCalculado = calculateSalarioBruto(payroll.baseRetencion, payroll.horasSemana);
+    const baseRetencionMensual = calculateBaseRetencionMonthly(payroll);
+    const salarioBrutoCalculado = calculateSalarioBruto(baseRetencionMensual, payroll.horasSemana);
     const salarioBrutoTotal = parseLocaleNumber(payroll.salarioBrutoTotal);
     const retencionPorcentaje = parsePercentageInput(payroll.retencion ?? '');
 
@@ -739,6 +761,8 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
 
     return {
       ...payroll,
+      baseRetencion:
+        baseRetencionMensual !== null ? baseRetencionMensual.toFixed(2) : payroll.baseRetencion,
       salarioBruto: salarioBrutoCalculado !== null ? salarioBrutoCalculado.toFixed(2) : payroll.salarioBruto,
       aportacionSsIrpf: aporteCalculado !== null ? aporteCalculado.toFixed(2) : payroll.aportacionSsIrpf,
       salarioLimpio: salarioLimpioCalculado !== null ? salarioLimpioCalculado.toFixed(2) : payroll.salarioLimpio,
@@ -763,9 +787,11 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
   };
 
   const handlePayrollBlur = (field: keyof PayrollFormValues, value: string) => {
+    const formattedValue =
+      field === 'baseRetencionDetalle' ? value.trim() : formatPayrollValue(value);
     setValues((prev) => ({
       ...prev,
-      payroll: applyPayrollCalculations({ ...prev.payroll, [field]: formatPayrollValue(value) }),
+      payroll: applyPayrollCalculations({ ...prev.payroll, [field]: formattedValue }),
     }));
   };
 
@@ -991,10 +1017,24 @@ function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialValue }: U
                     </Form.Group>
                   </Col>
                   <Col md={4}>
+                    <Form.Group controlId="payroll-base-retencion-detalle">
+                      <Form.Label>Base de retención (detalle anual)</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={values.payroll.baseRetencionDetalle}
+                        onChange={(event) => handlePayrollChange('baseRetencionDetalle', event.target.value)}
+                        onBlur={(event) => handlePayrollBlur('baseRetencionDetalle', event.target.value)}
+                        disabled={disableForm}
+                        inputMode="decimal"
+                      />
+                      <Form.Text className="text-muted">Usa este valor para calcular la base mensual.</Form.Text>
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
                     <Form.Group controlId="payroll-base-retencion">
                       <Form.Label>
                         Base de retención{' '}
-                        <small className="text-muted">(Salario Bruto Anual / 12)</small>
+                        <small className="text-muted">(Detalle anual / 12)</small>
                       </Form.Label>
                       <Form.Control
                         type="number"
