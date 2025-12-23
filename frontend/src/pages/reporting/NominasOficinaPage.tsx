@@ -78,21 +78,22 @@ function buildUserSummaryFromPayroll(entry: OfficePayrollRecord): UserSummary {
     trainerId: null,
     trainerFixedContract: null,
     payroll: {
-      convenio: '',
+      convenio: entry.convenio ?? entry.defaultConvenio ?? '',
       categoria: entry.categoria ?? entry.defaultCategoria ?? '',
-      antiguedad: entry.startDate,
-      horasSemana: 0,
-      baseRetencion: entry.salarioBruto,
-      baseRetencionDetalle: null,
-      salarioBruto: entry.salarioBruto,
-      salarioBrutoTotal: null,
-      retencion: null,
-      aportacionSsIrpf: entry.aportacionSsIrpf,
-      aportacionSsIrpfDetalle: null,
-      salarioLimpio: entry.salarioLimpio,
-      contingenciasComunes: null,
-      contingenciasComunesDetalle: null,
-      totalEmpresa: null,
+      antiguedad: entry.antiguedad ?? entry.defaultAntiguedad ?? entry.startDate,
+      horasSemana: entry.horasSemana ?? entry.defaultHorasSemana ?? 0,
+      baseRetencion: entry.baseRetencion ?? entry.defaultBaseRetencion ?? entry.salarioBruto,
+      baseRetencionDetalle: entry.baseRetencionDetalle ?? entry.defaultBaseRetencionDetalle,
+      salarioBruto: entry.salarioBruto ?? entry.defaultSalarioBruto,
+      salarioBrutoTotal: entry.salarioBrutoTotal ?? entry.defaultSalarioBrutoTotal,
+      retencion: entry.retencion ?? entry.defaultRetencion,
+      aportacionSsIrpf: entry.aportacionSsIrpf ?? entry.defaultAportacionSsIrpf,
+      aportacionSsIrpfDetalle: entry.aportacionSsIrpfDetalle ?? entry.defaultAportacionSsIrpfDetalle,
+      salarioLimpio: entry.salarioLimpio ?? entry.defaultSalarioLimpio,
+      contingenciasComunes: entry.contingenciasComunes ?? entry.defaultContingenciasComunes,
+      contingenciasComunesDetalle:
+        entry.contingenciasComunesDetalle ?? entry.defaultContingenciasComunesDetalle,
+      totalEmpresa: entry.totalEmpresa ?? entry.defaultTotalEmpresa,
     },
   };
 }
@@ -104,30 +105,64 @@ type PayrollModalProps = {
 };
 
 function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
-  const [categoria, setCategoria] = useState('');
-  const [salarioBruto, setSalarioBruto] = useState('');
-  const [aportacionSsIrpf, setAportacionSsIrpf] = useState('');
-  const [salarioLimpio, setSalarioLimpio] = useState('');
+  const initialFields = {
+    convenio: '',
+    categoria: '',
+    antiguedad: '',
+    horasSemana: '',
+    baseRetencion: '',
+    baseRetencionDetalle: '',
+    salarioBruto: '',
+    salarioBrutoTotal: '',
+    retencion: '',
+    aportacionSsIrpfDetalle: '',
+    aportacionSsIrpf: '',
+    salarioLimpio: '',
+    contingenciasComunesDetalle: '',
+    contingenciasComunes: '',
+    totalEmpresa: '',
+  };
+
+  type PayrollFieldKey = keyof typeof initialFields;
+
+  const [fields, setFields] = useState<typeof initialFields>(initialFields);
 
   useEffect(() => {
     if (!entry) return;
-    setCategoria(entry.categoria ?? entry.defaultCategoria ?? '');
-    setSalarioBruto(
-      entry.salarioBruto !== null && entry.salarioBruto !== undefined
-        ? entry.salarioBruto.toString()
-        : entry.defaultSalarioBruto?.toString() ?? '',
-    );
-    setAportacionSsIrpf(
-      entry.aportacionSsIrpf !== null && entry.aportacionSsIrpf !== undefined
-        ? entry.aportacionSsIrpf.toString()
-        : entry.defaultAportacionSsIrpf?.toString() ?? '',
-    );
-    setSalarioLimpio(
-      entry.salarioLimpio !== null && entry.salarioLimpio !== undefined
-        ? entry.salarioLimpio.toString()
-        : entry.defaultSalarioLimpio?.toString() ?? '',
-    );
+    const resolveValue = (value: string | number | null | undefined, fallback?: string | number | null) => {
+      const raw = value ?? fallback;
+      if (raw === null || raw === undefined) return '';
+      return typeof raw === 'number' ? raw.toString() : raw;
+    };
+
+    setFields({
+      convenio: resolveValue(entry.convenio, entry.defaultConvenio),
+      categoria: resolveValue(entry.categoria, entry.defaultCategoria),
+      antiguedad: resolveValue(entry.antiguedad, entry.defaultAntiguedad ?? entry.startDate),
+      horasSemana: resolveValue(entry.horasSemana, entry.defaultHorasSemana),
+      baseRetencion: resolveValue(entry.baseRetencion, entry.defaultBaseRetencion ?? entry.salarioBruto),
+      baseRetencionDetalle: resolveValue(entry.baseRetencionDetalle, entry.defaultBaseRetencionDetalle),
+      salarioBruto: resolveValue(entry.salarioBruto, entry.defaultSalarioBruto),
+      salarioBrutoTotal: resolveValue(entry.salarioBrutoTotal, entry.defaultSalarioBrutoTotal),
+      retencion: resolveValue(entry.retencion, entry.defaultRetencion),
+      aportacionSsIrpfDetalle: resolveValue(
+        entry.aportacionSsIrpfDetalle,
+        entry.defaultAportacionSsIrpfDetalle,
+      ),
+      aportacionSsIrpf: resolveValue(entry.aportacionSsIrpf, entry.defaultAportacionSsIrpf),
+      salarioLimpio: resolveValue(entry.salarioLimpio, entry.defaultSalarioLimpio),
+      contingenciasComunesDetalle: resolveValue(
+        entry.contingenciasComunesDetalle,
+        entry.defaultContingenciasComunesDetalle,
+      ),
+      contingenciasComunes: resolveValue(entry.contingenciasComunes, entry.defaultContingenciasComunes),
+      totalEmpresa: resolveValue(entry.totalEmpresa, entry.defaultTotalEmpresa),
+    });
   }, [entry]);
+
+  const handleFieldChange = (field: PayrollFieldKey, value: string) => {
+    setFields((prev) => ({ ...prev, [field]: value }));
+  };
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -135,10 +170,21 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
         userId: entry?.userId as string,
         year: entry?.year as number,
         month: entry?.month as number,
-        categoria,
-        salarioBruto,
-        aportacionSsIrpf,
-        salarioLimpio,
+        convenio: fields.convenio,
+        categoria: fields.categoria,
+        antiguedad: fields.antiguedad,
+        horasSemana: fields.horasSemana,
+        baseRetencion: fields.baseRetencion,
+        baseRetencionDetalle: fields.baseRetencionDetalle,
+        salarioBruto: fields.salarioBruto,
+        salarioBrutoTotal: fields.salarioBrutoTotal,
+        retencion: fields.retencion,
+        aportacionSsIrpfDetalle: fields.aportacionSsIrpfDetalle,
+        aportacionSsIrpf: fields.aportacionSsIrpf,
+        salarioLimpio: fields.salarioLimpio,
+        contingenciasComunesDetalle: fields.contingenciasComunesDetalle,
+        contingenciasComunes: fields.contingenciasComunes,
+        totalEmpresa: fields.totalEmpresa,
       }),
     onSuccess: (saved) => {
       onSaved(saved);
@@ -148,6 +194,7 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
   if (!entry) return null;
 
   const monthLabel = MONTH_LABELS[entry.month - 1] ?? `${entry.month}`;
+  const antiguedadLabel = entry.antiguedad ?? entry.defaultAntiguedad ?? entry.startDate;
 
   return (
     <Modal show={Boolean(entry)} onHide={onHide} centered size="lg" backdrop="static">
@@ -158,53 +205,189 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
       </Modal.Header>
       <Modal.Body className="d-grid gap-3">
         <p className="mb-0 text-muted">
-          Antigüedad: {entry.startDate ? entry.startDate : 'No indicada'} · Usuario: {entry.email ?? 'Sin email'}
+          Antigüedad: {antiguedadLabel ?? 'No indicada'} · Usuario: {entry.email ?? 'Sin email'}
         </p>
-        <Row className="g-3">
-          <Col md={6}>
-            <Form.Group controlId="payroll-categoria">
-              <Form.Label>Categoría</Form.Label>
-              <Form.Control
-                type="text"
-                value={categoria}
-                onChange={(event) => setCategoria(event.target.value)}
-              />
-            </Form.Group>
-          </Col>
-          <Col md={6}>
-            <Form.Group controlId="payroll-salario-bruto">
-              <Form.Label>Salario bruto</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={salarioBruto}
-                onChange={(event) => setSalarioBruto(event.target.value)}
-              />
-            </Form.Group>
-          </Col>
-          <Col md={6}>
-            <Form.Group controlId="payroll-aportacion">
-              <Form.Label>Aportación SS e IRPF</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={aportacionSsIrpf}
-                onChange={(event) => setAportacionSsIrpf(event.target.value)}
-              />
-            </Form.Group>
-          </Col>
-          <Col md={6}>
-            <Form.Group controlId="payroll-salario-limpio">
-              <Form.Label>Salario limpio</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={salarioLimpio}
-                onChange={(event) => setSalarioLimpio(event.target.value)}
-              />
-            </Form.Group>
-          </Col>
-        </Row>
+        <div className="d-grid gap-3">
+          <div>
+            <div className="text-uppercase text-muted small mb-2">Datos base</div>
+            <Row className="g-3">
+              <Col md={6}>
+                <Form.Group controlId="payroll-convenio">
+                  <Form.Label>Convenio</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={fields.convenio}
+                    onChange={(event) => handleFieldChange('convenio', event.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={6}>
+                <Form.Group controlId="payroll-categoria">
+                  <Form.Label>Categoría</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={fields.categoria}
+                    onChange={(event) => handleFieldChange('categoria', event.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-antiguedad">
+                  <Form.Label>Antigüedad</Form.Label>
+                  <Form.Control
+                    type="date"
+                    value={fields.antiguedad}
+                    onChange={(event) => handleFieldChange('antiguedad', event.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-horas">
+                  <Form.Label>Horas semana</Form.Label>
+                  <Form.Control
+                    type="number"
+                    step="0.01"
+                    value={fields.horasSemana}
+                    onChange={(event) => handleFieldChange('horasSemana', event.target.value)}
+                    inputMode="decimal"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-base-retencion-detalle">
+                  <Form.Label>Base de retención (detalle anual)</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={fields.baseRetencionDetalle}
+                    onChange={(event) => handleFieldChange('baseRetencionDetalle', event.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-base-retencion">
+                  <Form.Label>Base de retención (Detalle anual / 12)</Form.Label>
+                  <Form.Control
+                    type="number"
+                    step="0.01"
+                    value={fields.baseRetencion}
+                    onChange={(event) => handleFieldChange('baseRetencion', event.target.value)}
+                    inputMode="decimal"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-salario-bruto">
+                  <Form.Label>Salario bruto</Form.Label>
+                  <Form.Control
+                    type="number"
+                    step="0.01"
+                    value={fields.salarioBruto}
+                    onChange={(event) => handleFieldChange('salarioBruto', event.target.value)}
+                    inputMode="decimal"
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+          </div>
+
+          <div>
+            <div className="text-uppercase text-muted small mb-2">Resultados</div>
+            <Row className="g-3">
+              <Col md={4}>
+                <Form.Group controlId="payroll-salario-bruto-total">
+                  <Form.Label>Salario bruto total</Form.Label>
+                  <Form.Control
+                    type="number"
+                    step="0.01"
+                    value={fields.salarioBrutoTotal}
+                    onChange={(event) => handleFieldChange('salarioBrutoTotal', event.target.value)}
+                    inputMode="decimal"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-retencion">
+                  <Form.Label>Retención</Form.Label>
+                  <Form.Control
+                    type="number"
+                    step="0.01"
+                    value={fields.retencion}
+                    onChange={(event) => handleFieldChange('retencion', event.target.value)}
+                    inputMode="decimal"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-aportacion-detalle">
+                  <Form.Label>Detalle aportación SS e IRPF</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={fields.aportacionSsIrpfDetalle}
+                    onChange={(event) => handleFieldChange('aportacionSsIrpfDetalle', event.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-aportacion">
+                  <Form.Label>Aportación SS e IRPF</Form.Label>
+                  <Form.Control
+                    type="number"
+                    step="0.01"
+                    value={fields.aportacionSsIrpf}
+                    onChange={(event) => handleFieldChange('aportacionSsIrpf', event.target.value)}
+                    inputMode="decimal"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-salario-limpio">
+                  <Form.Label>Salario limpio</Form.Label>
+                  <Form.Control
+                    type="number"
+                    step="0.01"
+                    value={fields.salarioLimpio}
+                    onChange={(event) => handleFieldChange('salarioLimpio', event.target.value)}
+                    inputMode="decimal"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-contingencias-detalle">
+                  <Form.Label>Detalle contingencias comunes</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={fields.contingenciasComunesDetalle}
+                    onChange={(event) => handleFieldChange('contingenciasComunesDetalle', event.target.value)}
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-contingencias">
+                  <Form.Label>Contingencias comunes</Form.Label>
+                  <Form.Control
+                    type="number"
+                    step="0.01"
+                    value={fields.contingenciasComunes}
+                    onChange={(event) => handleFieldChange('contingenciasComunes', event.target.value)}
+                    inputMode="decimal"
+                  />
+                </Form.Group>
+              </Col>
+              <Col md={4}>
+                <Form.Group controlId="payroll-total-empresa">
+                  <Form.Label>Total empresa</Form.Label>
+                  <Form.Control
+                    type="number"
+                    step="0.01"
+                    value={fields.totalEmpresa}
+                    onChange={(event) => handleFieldChange('totalEmpresa', event.target.value)}
+                    inputMode="decimal"
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+          </div>
+        </div>
         <div className="d-flex justify-content-end gap-2">
           <Button variant="secondary" onClick={onHide} disabled={mutation.isPending}>
             Cancelar

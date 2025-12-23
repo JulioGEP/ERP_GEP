@@ -650,14 +650,36 @@ export type OfficePayrollRecord = {
   year: number;
   month: number;
   startDate: string | null;
+  convenio: string | null;
   categoria: string | null;
+  antiguedad: string | null;
+  horasSemana: number | null;
+  baseRetencion: number | null;
+  baseRetencionDetalle: string | null;
   salarioBruto: number | null;
+  salarioBrutoTotal: number | null;
+  retencion: number | null;
   aportacionSsIrpf: number | null;
+  aportacionSsIrpfDetalle: string | null;
   salarioLimpio: number | null;
+  contingenciasComunes: number | null;
+  contingenciasComunesDetalle: string | null;
+  totalEmpresa: number | null;
+  defaultConvenio: string | null;
   defaultCategoria: string | null;
+  defaultAntiguedad: string | null;
+  defaultHorasSemana: number | null;
+  defaultBaseRetencion: number | null;
+  defaultBaseRetencionDetalle: string | null;
   defaultSalarioBruto: number | null;
+  defaultSalarioBrutoTotal: number | null;
+  defaultRetencion: number | null;
   defaultAportacionSsIrpf: number | null;
+  defaultAportacionSsIrpfDetalle: string | null;
   defaultSalarioLimpio: number | null;
+  defaultContingenciasComunes: number | null;
+  defaultContingenciasComunesDetalle: string | null;
+  defaultTotalEmpresa: number | null;
   isSaved: boolean;
 };
 
@@ -690,10 +712,21 @@ export type OfficePayrollUpsertPayload = {
   userId: string;
   year: number;
   month: number;
+  convenio?: string | null;
   categoria?: string | null;
+  antiguedad?: string | null;
+  horasSemana?: number | string | null;
+  baseRetencion?: number | string | null;
+  baseRetencionDetalle?: string | null;
   salarioBruto?: number | string | null;
+  salarioBrutoTotal?: number | string | null;
+  retencion?: number | string | null;
   aportacionSsIrpf?: number | string | null;
+  aportacionSsIrpfDetalle?: string | null;
   salarioLimpio?: number | string | null;
+  contingenciasComunes?: number | string | null;
+  contingenciasComunesDetalle?: string | null;
+  totalEmpresa?: number | string | null;
 };
 
 export async function saveOfficePayroll(
