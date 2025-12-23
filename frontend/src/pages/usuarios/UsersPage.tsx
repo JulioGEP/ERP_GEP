@@ -722,7 +722,9 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
   const applyPayrollCalculations = (payroll: PayrollFormValues) => {
     const baseRetencionMensual = calculateBaseRetencionMonthly(payroll);
     const salarioBrutoCalculado = calculateSalarioBruto(baseRetencionMensual, payroll.horasSemana);
-    const salarioBrutoTotal = parseLocaleNumber(payroll.salarioBrutoTotal);
+    const salarioBrutoValue =
+      salarioBrutoCalculado !== null ? salarioBrutoCalculado.toFixed(2) : payroll.salarioBruto;
+    const salarioBrutoTotal = parseLocaleNumber(salarioBrutoValue);
     const retencionPorcentaje = parsePercentageInput(payroll.retencion ?? '');
 
     const aportacionExpression = payroll.aportacionSsIrpfDetalle || payroll.aportacionSsIrpf;
@@ -763,7 +765,8 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
       ...payroll,
       baseRetencion:
         baseRetencionMensual !== null ? baseRetencionMensual.toFixed(2) : payroll.baseRetencion,
-      salarioBruto: salarioBrutoCalculado !== null ? salarioBrutoCalculado.toFixed(2) : payroll.salarioBruto,
+      salarioBruto: salarioBrutoValue,
+      salarioBrutoTotal: salarioBrutoValue,
       aportacionSsIrpf: aporteCalculado !== null ? aporteCalculado.toFixed(2) : payroll.aportacionSsIrpf,
       salarioLimpio: salarioLimpioCalculado !== null ? salarioLimpioCalculado.toFixed(2) : payroll.salarioLimpio,
       contingenciasComunes:

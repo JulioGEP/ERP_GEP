@@ -386,7 +386,9 @@ type PayrollFieldKey = keyof typeof payrollInitialFields;
 function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof payrollInitialFields {
   const baseRetencionMensual = calculateBaseRetencionMonthly(fields);
   const salarioBrutoCalculado = calculateSalarioBruto(baseRetencionMensual, fields.horasSemana);
-  const salarioBrutoTotal = parseLocaleNumber(fields.salarioBrutoTotal);
+  const salarioBrutoValue =
+    salarioBrutoCalculado !== null ? salarioBrutoCalculado.toFixed(2) : fields.salarioBruto;
+  const salarioBrutoTotal = parseLocaleNumber(salarioBrutoValue);
   const retencionPorcentaje = parsePercentageInput(fields.retencion ?? '');
 
   const aportacionExpression = fields.aportacionSsIrpfDetalle || fields.aportacionSsIrpf;
@@ -426,7 +428,8 @@ function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof p
   return {
     ...fields,
     baseRetencion: baseRetencionMensual !== null ? baseRetencionMensual.toFixed(2) : fields.baseRetencion,
-    salarioBruto: salarioBrutoCalculado !== null ? salarioBrutoCalculado.toFixed(2) : fields.salarioBruto,
+    salarioBruto: salarioBrutoValue,
+    salarioBrutoTotal: salarioBrutoValue,
     aportacionSsIrpf: aporteCalculado !== null ? aporteCalculado.toFixed(2) : fields.aportacionSsIrpf,
     salarioLimpio: salarioLimpioCalculado !== null ? salarioLimpioCalculado.toFixed(2) : fields.salarioLimpio,
     contingenciasComunes:
