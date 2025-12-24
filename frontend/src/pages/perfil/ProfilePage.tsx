@@ -1,9 +1,9 @@
-import { ChangeEvent, FormEvent, useCallback, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Col, Form, InputGroup, ListGroup, Modal, Row, Spinner } from 'react-bootstrap';
 import { changePassword } from '../../api/auth';
 import { ApiError } from '../../api/client';
-import { fetchUserDocuments, type UserDocument } from '../../api/userDocuments';
+import { fetchUserDocuments, uploadUserDocument, type UserDocument } from '../../api/userDocuments';
 import { fetchUserById } from '../../api/users';
 import {
   deleteVacationRequest,
@@ -152,6 +152,7 @@ export default function ProfilePage() {
   const [isDraggingJustification, setIsDraggingJustification] = useState(false);
   const [vacationRequestsMessage, setVacationRequestsMessage] = useState<string | null>(null);
   const [vacationRequestsError, setVacationRequestsError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const profileQuery = useQuery<ProfileUser | undefined>({
     queryKey: ['profile', user?.id],
@@ -325,27 +326,55 @@ export default function ProfilePage() {
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
-      if (!trainerId) {
-        throw new Error('No se ha encontrado tu ficha de formador.');
-      }
       if (!selectedDocument) {
         throw new Error('Selecciona un archivo para subir.');
       }
-      const contentBase64 = await fileToBase64(selectedDocument);
-      return uploadTrainerDocument({
-        trainerId,
-        documentType: selectedDocumentType,
-        fileName: selectedDocument.name,
-        mimeType: selectedDocument.type,
-        fileSize: selectedDocument.size,
-        contentBase64,
-      });
+
+      if (trainerId) {
+        const contentBase64 = await fileToBase64(selectedDocument);
+        const payload = await uploadTrainerDocument({
+          trainerId,
+          documentType: selectedDocumentType,
+          fileName: selectedDocument.name,
+          mimeType: selectedDocument.type,
+          fileSize: selectedDocument.size,
+          contentBase64,
+        });
+
+        return { kind: 'trainer' as const, payload };
+      }
+
+      if (!user?.id) {
+        throw new Error('No se ha encontrado tu usuario.');
+      }
+
+      const payload = await uploadUserDocument({ userId: user.id, file: selectedDocument });
+
+      return { kind: 'user' as const, payload };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       setUploadError(null);
       setUploadSuccess('Documento subido correctamente.');
       setSelectedDocument(null);
-      queryClient.invalidateQueries({ queryKey: ['trainer-documents-profile', trainerId] });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+      if (result.kind === 'trainer') {
+        queryClient.setQueryData<{ documents: TrainerDocument[]; driveFolderWebViewLink: string | null } | undefined>(
+          ['trainer-documents-profile', trainerId],
+          (prev) => ({
+            documents: [result.payload.document, ...(prev?.documents ?? [])],
+            driveFolderWebViewLink: result.payload.driveFolderWebViewLink ?? prev?.driveFolderWebViewLink ?? null,
+          }),
+        );
+        return;
+      }
+
+      queryClient.setQueryData<UserDocument[] | undefined>(['user-documents', user?.id], (prev) => [
+        result.payload,
+        ...(Array.isArray(prev) ? prev : []),
+      ]);
     },
     onError: (error) => {
       const apiError = error instanceof ApiError ? error.message : null;
@@ -514,23 +543,27 @@ export default function ProfilePage() {
             <p className="text-muted mb-0">No hay documentos disponibles.</p>
           )}
 
-          {trainerId ? (
-            <div className="border-top pt-3 d-grid gap-3">
-              <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                  <h3 className="h6 fw-bold mb-1">Subir documento</h3>
-                  <p className="text-muted mb-0">Selecciona la categoría y adjunta el archivo.</p>
-                </div>
-                {driveFolderLink ? (
-                  <Button as="a" href={driveFolderLink} target="_blank" rel="noreferrer" variant="outline-secondary">
-                    Ver carpeta en Drive
-                  </Button>
-                ) : null}
+          <div className="border-top pt-3 d-grid gap-3">
+            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <div>
+                <h3 className="h6 fw-bold mb-1">Subir documento</h3>
+                <p className="text-muted mb-0">
+                  {trainerId
+                    ? 'Selecciona la categoría y adjunta el archivo.'
+                    : 'Adjunta un archivo para guardarlo en tu carpeta de usuario.'}
+                </p>
               </div>
+              {trainerId && driveFolderLink ? (
+                <Button as="a" href={driveFolderLink} target="_blank" rel="noreferrer" variant="outline-secondary">
+                  Ver carpeta en Drive
+                </Button>
+              ) : null}
+            </div>
 
-              {uploadError ? <Alert variant="danger" className="mb-0">{uploadError}</Alert> : null}
-              {uploadSuccess ? <Alert variant="success" className="mb-0">{uploadSuccess}</Alert> : null}
+            {uploadError ? <Alert variant="danger" className="mb-0">{uploadError}</Alert> : null}
+            {uploadSuccess ? <Alert variant="success" className="mb-0">{uploadSuccess}</Alert> : null}
 
+            {trainerId ? (
               <Row className="g-3 align-items-end">
                 <Col xs={12} md={4}>
                   <Form.Label>Categoría</Form.Label>
@@ -549,6 +582,7 @@ export default function ProfilePage() {
                 <Col xs={12} md={5}>
                   <Form.Label>Archivo</Form.Label>
                   <Form.Control
+                    ref={fileInputRef}
                     type="file"
                     onChange={(event: ChangeEvent<HTMLInputElement>) =>
                       setSelectedDocument(event.target.files?.[0] ?? null)
@@ -567,10 +601,32 @@ export default function ProfilePage() {
                   </Button>
                 </Col>
               </Row>
-            </div>
-          ) : (
-            <p className="text-muted mb-0">Tu perfil no está vinculado a una ficha de formador.</p>
-          )}
+            ) : (
+              <Row className="g-3 align-items-end">
+                <Col xs={12} md={8}>
+                  <Form.Label>Archivo</Form.Label>
+                  <Form.Control
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                      setSelectedDocument(event.target.files?.[0] ?? null)
+                    }
+                    disabled={isUploadingDocument}
+                  />
+                  {selectedDocument ? (
+                    <div className="text-muted small mt-1">
+                      Archivo seleccionado: {selectedDocument.name} ({formatFileSize(selectedDocument)})
+                    </div>
+                  ) : null}
+                </Col>
+                <Col xs={12} md={4} className="d-flex align-items-end">
+                  <Button onClick={() => uploadMutation.mutate()} disabled={isUploadingDocument || !selectedDocument}>
+                    {isUploadingDocument ? 'Subiendo…' : 'Subir documento'}
+                  </Button>
+                </Col>
+              </Row>
+            )}
+          </div>
         </Card.Body>
       </Card>
 
