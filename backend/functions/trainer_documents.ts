@@ -17,6 +17,7 @@ const ALLOWED_DOCUMENT_TYPES = new Map([
   ['curriculum_vitae', 'Curriculum Vitae'],
   ['personales', 'Personales'],
   ['certificados', 'Certificados'],
+  ['gasto', 'Gasto'],
   ['otros', 'Otros'],
   ['justificante', 'Justificante'],
 ]);
@@ -75,14 +76,22 @@ function normalizeIncomingFileName(name: string): string {
 function buildStoredFileName(typeLabel: string, baseName: string): string {
   const safeLabel = typeLabel.trim() || 'Documento';
   const name = baseName.trim();
+  const prefixedLabel = safeLabel.toLowerCase() === 'gasto' ? `<${safeLabel}>` : safeLabel;
+
   if (!name) {
-    return safeLabel;
+    return prefixedLabel;
   }
-  const prefix = `${safeLabel} - `;
-  if (name.toLowerCase().startsWith(prefix.toLowerCase())) {
+
+  const prefixesToKeep = [
+    `${prefixedLabel} - `,
+    `${safeLabel} - `,
+  ];
+
+  if (prefixesToKeep.some((prefix) => name.toLowerCase().startsWith(prefix.toLowerCase()))) {
     return name;
   }
-  return `${prefix}${name}`;
+
+  return `${prefixedLabel} - ${name}`;
 }
 
 function mapTrainerDocument(row: TrainerDocumentRecord) {
