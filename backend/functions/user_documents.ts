@@ -6,6 +6,14 @@ import {
   uploadUserDocumentToGoogleDrive,
 } from './_shared/googleDrive';
 
+const ALLOWED_DOCUMENT_TYPES = new Map([
+  ['curriculum_vitae', 'Curriculum Vitae'],
+  ['personales', 'Personales'],
+  ['certificados', 'Certificados'],
+  ['gasto', 'Gasto'],
+  ['otros', 'Otros'],
+]);
+
 function parsePath(path: string | undefined | null) {
   const normalized = String(path || '');
   const trimmed = normalized.replace(/^\/?\.netlify\/functions\//, '/');
@@ -20,7 +28,42 @@ function toStringOrNull(value: unknown): string | null {
   return text.length ? text : null;
 }
 
+function resolveDocumentType(value: unknown) {
+  const defaultLabel = ALLOWED_DOCUMENT_TYPES.get('otros') ?? 'Otros';
+  const key = toStringOrNull(value)?.toLowerCase();
+  if (!key) {
+    return { key: 'otros', label: defaultLabel };
+  }
+  const label = ALLOWED_DOCUMENT_TYPES.get(key);
+  if (!label) {
+    return { key: 'otros', label: defaultLabel };
+  }
+  return { key, label };
+}
+
+function buildStoredFileName(typeLabel: string, baseName: string): string {
+  const safeLabel = typeLabel.trim() || 'Documento';
+  const name = baseName.trim();
+  const prefixedLabel = safeLabel.toLowerCase() === 'gasto' ? `<${safeLabel}>` : safeLabel;
+
+  if (!name) {
+    return prefixedLabel;
+  }
+
+  const prefixesToKeep = [
+    `${prefixedLabel} - `,
+    `${safeLabel} - `,
+  ];
+
+  if (prefixesToKeep.some((prefix) => name.toLowerCase().startsWith(prefix.toLowerCase()))) {
+    return name;
+  }
+
+  return `${prefixedLabel} - ${name}`;
+}
+
 function mapDocument(row: any) {
+  const { key: documentType, label: documentTypeLabel } = resolveDocumentType(row.document_type);
   const title = row.title ?? row.file_name;
   return {
     id: String(row.id),
@@ -34,6 +77,8 @@ function mapDocument(row: any) {
     drive_web_content_link: row.drive_web_content_link ?? null,
     created_at: row.created_at ?? null,
     download_url: `/.netlify/functions/user_documents/${encodeURIComponent(String(row.id))}`,
+    document_type: documentType,
+    document_type_label: documentTypeLabel,
   };
 }
 
@@ -106,6 +151,7 @@ export const handler = async (event: any) => {
     const fileName = toStringOrNull(payload.fileName ?? payload.file_name);
     const mimeType = toStringOrNull(payload.mimeType ?? payload.mime_type);
     const fileDataBase64 = toStringOrNull(payload.fileData ?? payload.file_data);
+    const documentType = resolveDocumentType(payload.documentType ?? payload.document_type);
 
     if (!fileName || !fileDataBase64) {
       return errorResponse('VALIDATION_ERROR', 'fileName y fileData son obligatorios', 400);
@@ -117,6 +163,8 @@ export const handler = async (event: any) => {
     }
 
     const resolvedTitle = title || fileName.replace(/\.[^.]+$/, '') || fileName;
+    const finalTitle = buildStoredFileName(documentType.label, resolvedTitle);
+    const finalFileName = buildStoredFileName(documentType.label, fileName);
 
     let buffer: Buffer;
     try {
@@ -127,8 +175,8 @@ export const handler = async (event: any) => {
 
     const driveUpload = await uploadUserDocumentToGoogleDrive({
       user,
-      title: resolvedTitle,
-      fileName,
+      title: finalTitle,
+      fileName: finalFileName,
       mimeType,
       data: buffer,
     });
@@ -136,8 +184,8 @@ export const handler = async (event: any) => {
     const created = await prisma.user_documents.create({
       data: {
         user_id: userId,
-        title: resolvedTitle,
-        file_name: fileName,
+        title: finalTitle,
+        file_name: finalFileName,
         mime_type: mimeType,
         file_size: buffer.byteLength,
         drive_folder_id: driveUpload.destinationFolderId ?? driveUpload.driveFolderId,
@@ -148,7 +196,9 @@ export const handler = async (event: any) => {
       },
     });
 
-    return successResponse({ document: mapDocument({ ...created, title: resolvedTitle }) });
+    return successResponse({
+      document: mapDocument({ ...created, title: finalTitle, document_type: documentType.key }),
+    });
   }
 
   if (method === 'DELETE' && documentId) {

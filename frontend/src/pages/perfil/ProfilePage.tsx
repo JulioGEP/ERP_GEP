@@ -348,7 +348,11 @@ export default function ProfilePage() {
         throw new Error('No se ha encontrado tu usuario.');
       }
 
-      const payload = await uploadUserDocument({ userId: user.id, file: selectedDocument });
+      const payload = await uploadUserDocument({
+        userId: user.id,
+        file: selectedDocument,
+        documentType: selectedDocumentType,
+      });
 
       return { kind: 'user' as const, payload };
     },
@@ -603,7 +607,21 @@ export default function ProfilePage() {
               </Row>
             ) : (
               <Row className="g-3 align-items-end">
-                <Col xs={12} md={8}>
+                <Col xs={12} md={4}>
+                  <Form.Label>Categoría</Form.Label>
+                  <Form.Select
+                    value={selectedDocumentType}
+                    onChange={(event) => setSelectedDocumentType(event.target.value as TrainerDocumentTypeValue)}
+                    disabled={isUploadingDocument}
+                  >
+                    {TRAINER_DOCUMENT_TYPES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col xs={12} md={5}>
                   <Form.Label>Archivo</Form.Label>
                   <Form.Control
                     ref={fileInputRef}
@@ -619,7 +637,7 @@ export default function ProfilePage() {
                     </div>
                   ) : null}
                 </Col>
-                <Col xs={12} md={4} className="d-flex align-items-end">
+                <Col xs={12} md={3} className="d-flex align-items-end">
                   <Button onClick={() => uploadMutation.mutate()} disabled={isUploadingDocument || !selectedDocument}>
                     {isUploadingDocument ? 'Subiendo…' : 'Subir documento'}
                   </Button>

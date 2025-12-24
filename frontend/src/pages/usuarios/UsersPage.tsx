@@ -684,7 +684,8 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadUserDocument({ userId: userId as string, file }),
+    mutationFn: (file: File) =>
+      uploadUserDocument({ userId: userId as string, file, documentType: 'otros' }),
     onSuccess: (document) => {
       queryClient.setQueryData<UserDocument[] | undefined>(['user-documents', userId], (prev) => [
         document,

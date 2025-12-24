@@ -1,3 +1,4 @@
+import { DOCUMENT_TYPES, type DocumentTypeValue } from '../constants/documentTypes';
 import { requestJson } from './client';
 
 export type UserDocument = {
@@ -12,7 +13,16 @@ export type UserDocument = {
   drive_folder_id: string | null;
   drive_web_view_link: string | null;
   drive_web_content_link: string | null;
+  document_type?: DocumentTypeValue;
+  document_type_label?: string | null;
 };
+
+const DEFAULT_DOCUMENT_TYPE: DocumentTypeValue = 'otros';
+
+function resolveDocumentType(value?: DocumentTypeValue | null): DocumentTypeValue {
+  if (!value) return DEFAULT_DOCUMENT_TYPE;
+  return DOCUMENT_TYPES.some((option) => option.value === value) ? value : DEFAULT_DOCUMENT_TYPE;
+}
 
 export async function fetchUserDocuments(userId: string): Promise<UserDocument[]> {
   const response = await requestJson<{ documents: UserDocument[] }>(
@@ -25,8 +35,10 @@ export async function fetchUserDocuments(userId: string): Promise<UserDocument[]
 export async function uploadUserDocument(params: {
   userId: string;
   file: File;
+  documentType?: DocumentTypeValue;
 }): Promise<UserDocument> {
   const content = await fileToBase64(params.file);
+  const documentType = resolveDocumentType(params.documentType);
   const response = await requestJson<{ document: UserDocument }>(
     '/user_documents',
     {
@@ -36,6 +48,7 @@ export async function uploadUserDocument(params: {
         fileName: params.file.name,
         mimeType: params.file.type,
         fileData: content,
+        documentType,
       }),
     },
     {
