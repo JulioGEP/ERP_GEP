@@ -1181,6 +1181,52 @@ option.session-option-unavailable {
   opacity: 0.5;
 }
 
+.availability-calendar-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.availability-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+  min-width: 720px;
+}
+
+.availability-weekdays {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  gap: 0.25rem;
+  color: var(--bs-secondary-color);
+  font-weight: 600;
+}
+
+.availability-weekday {
+  text-align: center;
+}
+
+.availability-day {
+  height: 100%;
+}
+
+.availability-empty {
+  min-height: 1px;
+}
+
+.availability-day-number {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.availability-trainer-chip {
+  border: 1px solid var(--bs-border-color);
+  font-weight: 600;
+}
+
 .trainer-availability-calendar {
   display: grid;
   gap: 1.5rem;
