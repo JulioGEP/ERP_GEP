@@ -43,6 +43,7 @@ const PorSesionesPage = lazy(() => import('../pages/calendario/PorSesionesPage')
 const PorUnidadMovilPage = lazy(() => import('../pages/calendario/PorUnidadMovilPage'));
 const PorFormadorPage = lazy(() => import('../pages/calendario/PorFormadorPage'));
 const PorEmpresaPage = lazy(() => import('../pages/calendario/PorEmpresaPage'));
+const DisponibilidadPage = lazy(() => import('../pages/calendario/DisponibilidadPage'));
 const FormadoresBomberosPage = lazy(() => import('../pages/recursos/FormadoresBomberosPage'));
 const UnidadesMovilesPage = lazy(() => import('../pages/recursos/UnidadesMovilesPage'));
 const SalasPage = lazy(() => import('../pages/recursos/SalasPage'));
@@ -300,6 +301,11 @@ export function AppRouter({
               }
             />
           }
+        />
+
+        <Route
+          path="/calendario/disponibilidad"
+          element={<GuardedRoute path="/calendario/disponibilidad" element={<DisponibilidadPage />} />}
         />
 
         <Route

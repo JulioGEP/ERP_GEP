@@ -117,6 +117,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Calendario/Sesiones', label: 'Por sesiones', path: '/calendario/por_sesiones' },
       { key: 'Calendario/Formadores', label: 'Por formador', path: '/calendario/por_formador' },
+      { key: 'Calendario/Disponibilidad', label: 'Disponibilidad', path: '/calendario/disponibilidad' },
       { key: 'Calendario/Empresas', label: 'Por empresa', path: '/calendario/por_empresa' },
       { key: 'Calendario/Unidades', label: 'Por unidad móvil', path: '/calendario/por_unidad_movil' },
     ],
