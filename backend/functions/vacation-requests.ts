@@ -388,12 +388,18 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
   const end = new Date(existing.end_date);
   const effectiveType = existing.tag && VACATION_TYPES.has(existing.tag) ? existing.tag : 'V';
 
+  const fixedContractTrainer = await prisma.trainers.findFirst({
+    where: { user_id: existing.user_id, contrato_fijo: true },
+    select: { trainer_id: true },
+  });
+
   if (end < start) {
     return errorResponse('VALIDATION_ERROR', 'La solicitud tiene un rango de fechas inválido', 400);
   }
 
   const appliedDates: string[] = [];
   const operations = [] as ReturnType<typeof prisma.user_vacation_days.upsert>[];
+  const availabilityOperations = [] as ReturnType<typeof prisma.trainer_availability.upsert>[];
   for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
     const dateOnly = new Date(cursor);
     appliedDates.push(formatDateOnly(dateOnly));
@@ -404,9 +410,23 @@ async function handleAcceptRequest(request: any, prisma: ReturnType<typeof getPr
         create: { user_id: existing.user_id, date: dateOnly, type: effectiveType },
       }),
     );
+
+    if (fixedContractTrainer) {
+      availabilityOperations.push(
+        prisma.trainer_availability.upsert({
+          where: { trainer_id_date: { trainer_id: fixedContractTrainer.trainer_id, date: dateOnly } },
+          update: { available: false },
+          create: { trainer_id: fixedContractTrainer.trainer_id, date: dateOnly, available: false },
+        }),
+      );
+    }
   }
 
-  await prisma.$transaction([...operations, prisma.vacation_requests.delete({ where: { id } })]);
+  await prisma.$transaction([
+    ...operations,
+    ...availabilityOperations,
+    prisma.vacation_requests.delete({ where: { id } }),
+  ]);
 
   return successResponse({ message: 'Petición aceptada y aplicada al calendario', appliedDates });
 }
