@@ -67,6 +67,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/certificados/templates_certificados',
   '/calendario/por_sesiones',
   '/calendario/por_formador',
+  '/calendario/disponibilidad',
   '/calendario/por_empresa',
   '/calendario/por_unidad_movil',
   '/informes/listado',
