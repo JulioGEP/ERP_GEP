@@ -2023,7 +2023,10 @@ function VariantDetailCard({ variant }: VariantDetailCardProps) {
   const { userId, userName } = useCurrentUserIdentity();
   const formattedDate = useMemo(() => formatDateTime(variant.date), [variant.date]);
 
-  const variantCommentTarget = useMemo(() => variant.wooId?.trim() || variant.variantId, [variant.variantId, variant.wooId]);
+  const variantCommentTarget = useMemo(() => {
+    const normalizedId = (variant.variantId ?? '').trim();
+    return normalizedId;
+  }, [variant.variantId]);
 
   const variantCommentsQueryKey = useMemo(
     () => ['trainer', 'variant', variantCommentTarget, 'comments'] as const,
