@@ -41,29 +41,57 @@ function resolveDocumentType(value: unknown) {
   return { key, label };
 }
 
+function inferDocumentTypeFromName(name: string | null | undefined) {
+  const normalizedName = name?.trim().toLowerCase();
+  if (!normalizedName) return null;
+
+  for (const [key, label] of ALLOWED_DOCUMENT_TYPES.entries()) {
+    const loweredLabel = label.toLowerCase();
+    const prefixes = [
+      `${loweredLabel} -`,
+      `<${loweredLabel}> -`,
+      `${loweredLabel}-`,
+      `<${loweredLabel}>-`,
+    ];
+
+    if (prefixes.some((prefix) => normalizedName.startsWith(prefix))) {
+      return { key, label };
+    }
+  }
+
+  return null;
+}
+
 function buildStoredFileName(typeLabel: string, baseName: string): string {
   const safeLabel = typeLabel.trim() || 'Documento';
   const name = baseName.trim();
-  const prefixedLabel = safeLabel.toLowerCase() === 'gasto' ? `<${safeLabel}>` : safeLabel;
 
   if (!name) {
-    return prefixedLabel;
+    return safeLabel;
   }
 
-  const prefixesToKeep = [
-    `${prefixedLabel} - `,
+  const normalized = name.toLowerCase();
+  const labelPrefixes = [
     `${safeLabel} - `,
-  ];
+    `<${safeLabel}> - `,
+    `${safeLabel}-`,
+    `<${safeLabel}>-`,
+  ].map((prefix) => prefix.toLowerCase());
 
-  if (prefixesToKeep.some((prefix) => name.toLowerCase().startsWith(prefix.toLowerCase()))) {
-    return name;
+  const matchedPrefix = labelPrefixes.find((prefix) => normalized.startsWith(prefix));
+  const cleanedName = matchedPrefix ? name.slice(matchedPrefix.length).trim() : name;
+
+  if (!cleanedName) {
+    return safeLabel;
   }
 
-  return `${prefixedLabel} - ${name}`;
+  return `${safeLabel} - ${cleanedName}`;
 }
 
 function mapDocument(row: any) {
-  const { key: documentType, label: documentTypeLabel } = resolveDocumentType(row.document_type);
+  const inferredDocumentType = inferDocumentTypeFromName(row.file_name ?? row.title);
+  const resolvedDocumentType = resolveDocumentType(row.document_type);
+  const { key: documentType, label: documentTypeLabel } = inferredDocumentType ?? resolvedDocumentType;
   const title = row.title ?? row.file_name;
   return {
     id: String(row.id),
