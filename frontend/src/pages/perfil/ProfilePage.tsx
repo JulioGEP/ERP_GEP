@@ -417,6 +417,8 @@ export default function ProfilePage() {
     },
   });
 
+  const isUploadingDocument = uploadMutation.isPending;
+
   const handleUploadClick = useCallback(() => {
     if (isUploadingDocument || !selectedDocument) {
       return;
@@ -430,8 +432,6 @@ export default function ProfilePage() {
 
     uploadMutation.mutate();
   }, [isUploadingDocument, requiresExpenseDetails, selectedDocument, uploadMutation]);
-
-  const isUploadingDocument = uploadMutation.isPending;
 
   const expenseDateWarning = useMemo(() => {
     if (!expenseDate) return null;
