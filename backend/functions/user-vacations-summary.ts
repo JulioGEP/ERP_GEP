@@ -8,7 +8,6 @@ import {
   DEFAULT_LOCAL_HOLIDAY_ALLOWANCE,
   DEFAULT_PREVIOUS_YEAR_ALLOWANCE,
   DEFAULT_VACATION_ALLOWANCE,
-  ensurePreviousYearCarryover,
   formatDateOnly,
   parseYear,
 } from './_shared/vacations';
@@ -43,8 +42,6 @@ export const handler = createHttpHandler<any>(async (request) => {
   if (users.length === 0) {
     return successResponse({ year, generatedAt: new Date().toISOString(), users: [] });
   }
-
-  await Promise.all(users.map((user) => ensurePreviousYearCarryover(prisma, user.id, year)));
 
   const userIds = users.map((user: (typeof users)[number]) => user.id);
   const start = new Date(Date.UTC(year, 0, 1));
