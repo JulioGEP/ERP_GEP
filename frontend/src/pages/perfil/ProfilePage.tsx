@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useCallback, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Col, Form, InputGroup, ListGroup, Modal, Row, Spinner } from 'react-bootstrap';
 import { changePassword } from '../../api/auth';
@@ -146,6 +146,10 @@ export default function ProfilePage() {
   const [selectedDocument, setSelectedDocument] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseDate, setExpenseDate] = useState('');
+  const [expenseValidationError, setExpenseValidationError] = useState<string | null>(null);
   const [showJustificationModal, setShowJustificationModal] = useState(false);
   const [justificationFile, setJustificationFile] = useState<File | null>(null);
   const [justificationError, setJustificationError] = useState<string | null>(null);
@@ -169,6 +173,17 @@ export default function ProfilePage() {
     user?.trainerId,
   ]);
 
+  const trainerDetailsQuery = useQuery({
+    queryKey: ['trainer-details-profile', trainerId],
+    queryFn: async () => {
+      if (!trainerId) return null;
+      const trainers = await fetchTrainers();
+      return trainers.find((trainer) => trainer.trainer_id === trainerId) ?? null;
+    },
+    enabled: Boolean(trainerId),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const documentsQuery = useQuery({
     queryKey: ['user-documents', user?.id],
     queryFn: async () => {
@@ -189,16 +204,19 @@ export default function ProfilePage() {
     enabled: Boolean(trainerId),
   });
 
-  const trainerDetailsQuery = useQuery({
-    queryKey: ['trainer-details-profile', trainerId],
-    queryFn: async () => {
-      if (!trainerId) return null;
-      const trainers = await fetchTrainers();
-      return trainers.find((trainer) => trainer.trainer_id === trainerId) ?? null;
-    },
-    enabled: Boolean(trainerId),
-    staleTime: 5 * 60 * 1000,
-  });
+  const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
+
+  const requiresExpenseDetails =
+    selectedDocumentType === 'gasto' && (!trainerId || isFixedTrainer === true);
+
+  useEffect(() => {
+    if (!requiresExpenseDetails) {
+      setExpenseAmount('');
+      setExpenseDate('');
+      setExpenseValidationError(null);
+      setShowExpenseModal(false);
+    }
+  }, [requiresExpenseDetails]);
 
   const shouldShowVacations = trainerId ? trainerDetailsQuery.data?.contrato_fijo === true : true;
 
@@ -330,6 +348,12 @@ export default function ProfilePage() {
         throw new Error('Selecciona un archivo para subir.');
       }
 
+      const normalizedExpenseAmount = Number.parseFloat(expenseAmount.replace(',', '.'));
+      const payrollExpense =
+        requiresExpenseDetails && expenseDate && Number.isFinite(normalizedExpenseAmount)
+          ? { amount: normalizedExpenseAmount, date: expenseDate }
+          : null;
+
       if (trainerId) {
         const contentBase64 = await fileToBase64(selectedDocument);
         const payload = await uploadTrainerDocument({
@@ -339,6 +363,7 @@ export default function ProfilePage() {
           mimeType: selectedDocument.type,
           fileSize: selectedDocument.size,
           contentBase64,
+          payrollExpense,
         });
 
         return { kind: 'trainer' as const, payload };
@@ -352,6 +377,7 @@ export default function ProfilePage() {
         userId: user.id,
         file: selectedDocument,
         documentType: selectedDocumentType,
+        payrollExpense,
       });
 
       return { kind: 'user' as const, payload };
@@ -360,6 +386,10 @@ export default function ProfilePage() {
       setUploadError(null);
       setUploadSuccess('Documento subido correctamente.');
       setSelectedDocument(null);
+      setExpenseAmount('');
+      setExpenseDate('');
+      setExpenseValidationError(null);
+      setShowExpenseModal(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -387,7 +417,64 @@ export default function ProfilePage() {
     },
   });
 
+  const handleUploadClick = useCallback(() => {
+    if (isUploadingDocument || !selectedDocument) {
+      return;
+    }
+
+    if (requiresExpenseDetails) {
+      setExpenseValidationError(null);
+      setShowExpenseModal(true);
+      return;
+    }
+
+    uploadMutation.mutate();
+  }, [isUploadingDocument, requiresExpenseDetails, selectedDocument, uploadMutation]);
+
   const isUploadingDocument = uploadMutation.isPending;
+
+  const expenseDateWarning = useMemo(() => {
+    if (!expenseDate) return null;
+    const selected = new Date(expenseDate);
+    if (Number.isNaN(selected.getTime())) return null;
+
+    const selectedPeriod = new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1));
+    const now = new Date();
+    const currentPeriod = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+    if (selectedPeriod < currentPeriod) {
+      return 'El gasto corresponde a un mes anterior y las nóminas ya están cerradas.';
+    }
+
+    return null;
+  }, [expenseDate]);
+
+  const handleExpenseSubmit = useCallback(
+    (event?: FormEvent<HTMLFormElement>) => {
+      event?.preventDefault();
+      setExpenseValidationError(null);
+
+      const normalizedAmount = Number.parseFloat(expenseAmount.replace(',', '.'));
+      if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+        setExpenseValidationError('Introduce un importe válido mayor que cero.');
+        return;
+      }
+
+      if (!expenseDate) {
+        setExpenseValidationError('Selecciona la fecha del gasto.');
+        return;
+      }
+
+      if (!selectedDocument) {
+        setExpenseValidationError('Selecciona un archivo para subir.');
+        return;
+      }
+
+      setShowExpenseModal(false);
+      uploadMutation.mutate();
+    },
+    [expenseAmount, expenseDate, selectedDocument, uploadMutation],
+  );
 
   const handleVacationRequest = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -600,7 +687,7 @@ export default function ProfilePage() {
                   ) : null}
                 </Col>
                 <Col xs={12} md={3} className="d-flex align-items-end">
-                  <Button onClick={() => uploadMutation.mutate()} disabled={isUploadingDocument || !selectedDocument}>
+                  <Button onClick={handleUploadClick} disabled={isUploadingDocument || !selectedDocument}>
                     {isUploadingDocument ? 'Subiendo…' : 'Subir documento'}
                   </Button>
                 </Col>
@@ -638,7 +725,7 @@ export default function ProfilePage() {
                   ) : null}
                 </Col>
                 <Col xs={12} md={3} className="d-flex align-items-end">
-                  <Button onClick={() => uploadMutation.mutate()} disabled={isUploadingDocument || !selectedDocument}>
+                  <Button onClick={handleUploadClick} disabled={isUploadingDocument || !selectedDocument}>
                     {isUploadingDocument ? 'Subiendo…' : 'Subir documento'}
                   </Button>
                 </Col>
@@ -1007,6 +1094,56 @@ export default function ProfilePage() {
         </Card.Body>
       </Card>
     </div>
+
+    <Modal
+      show={showExpenseModal}
+      onHide={() => setShowExpenseModal(false)}
+      centered
+    >
+      <Modal.Header closeButton>
+        <Modal.Title>Detalles del gasto</Modal.Title>
+      </Modal.Header>
+      <Form onSubmit={handleExpenseSubmit}>
+        <Modal.Body className="d-grid gap-3">
+          <p className="text-muted mb-0">
+            Indica el importe del gasto y la fecha para asignarlo a la nómina correspondiente.
+          </p>
+          <Form.Group>
+            <Form.Label>Importe</Form.Label>
+            <InputGroup>
+              <InputGroup.Text>€</InputGroup.Text>
+              <Form.Control
+                type="number"
+                min="0"
+                step="0.01"
+                value={expenseAmount}
+                onChange={(event) => setExpenseAmount(event.target.value)}
+                required
+              />
+            </InputGroup>
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Fecha del gasto</Form.Label>
+            <Form.Control
+              type="date"
+              value={expenseDate}
+              onChange={(event) => setExpenseDate(event.target.value)}
+              required
+            />
+          </Form.Group>
+          {expenseDateWarning ? <Alert variant="warning" className="mb-0">{expenseDateWarning}</Alert> : null}
+          {expenseValidationError ? <Alert variant="danger" className="mb-0">{expenseValidationError}</Alert> : null}
+        </Modal.Body>
+        <Modal.Footer className="d-flex justify-content-between">
+          <Button variant="outline-secondary" onClick={() => setShowExpenseModal(false)}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={isUploadingDocument}>
+            Guardar y subir
+          </Button>
+        </Modal.Footer>
+      </Form>
+    </Modal>
 
     <Modal
       show={showJustificationModal}

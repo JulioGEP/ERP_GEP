@@ -17,6 +17,11 @@ export type UserDocument = {
   document_type_label?: string | null;
 };
 
+export type PayrollExpensePayload = {
+  amount: number;
+  date: string;
+};
+
 const DEFAULT_DOCUMENT_TYPE: DocumentTypeValue = 'otros';
 
 function resolveDocumentType(value?: DocumentTypeValue | null): DocumentTypeValue {
@@ -36,6 +41,7 @@ export async function uploadUserDocument(params: {
   userId: string;
   file: File;
   documentType?: DocumentTypeValue;
+  payrollExpense?: PayrollExpensePayload | null;
 }): Promise<UserDocument> {
   const content = await fileToBase64(params.file);
   const documentType = resolveDocumentType(params.documentType);
@@ -49,6 +55,7 @@ export async function uploadUserDocument(params: {
         mimeType: params.file.type,
         fileData: content,
         documentType,
+        payrollExpense: params.payrollExpense ?? undefined,
       }),
     },
     {

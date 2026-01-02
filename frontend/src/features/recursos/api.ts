@@ -1,5 +1,6 @@
 // frontend/src/features/recursos/api.ts
 import { API_BASE, ApiError } from "../../api/client";
+import type { PayrollExpensePayload } from "../../api/userDocuments";
 import type { Trainer, TrainerDocument } from "../../types/trainer";
 import { SEDE_OPTIONS, type TrainerDocumentTypeValue } from "./trainers.constants";
 
@@ -361,6 +362,7 @@ export async function uploadTrainerDocument(input: {
   mimeType?: string | null;
   fileSize?: number | null;
   contentBase64: string;
+  payrollExpense?: PayrollExpensePayload | null;
 }): Promise<{ document: TrainerDocument; driveFolderWebViewLink: string | null }> {
   const body = {
     trainer_id: input.trainerId,
@@ -371,6 +373,7 @@ export async function uploadTrainerDocument(input: {
       fileSize: input.fileSize ?? undefined,
       contentBase64: input.contentBase64,
     },
+    payrollExpense: input.payrollExpense ?? undefined,
   };
 
   const json = (await requestJson(`${API_BASE}/trainer_documents`, {

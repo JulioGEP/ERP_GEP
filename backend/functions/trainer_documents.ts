@@ -1,4 +1,5 @@
 // backend/functions/trainer_documents.ts
+import { Prisma } from '@prisma/client';
 import { getPrisma } from './_shared/prisma';
 import {
   COMMON_HEADERS,
@@ -24,6 +25,12 @@ const ALLOWED_DOCUMENT_TYPES = new Map([
 
 const MAX_TRAINER_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_TRAINER_DOCUMENT_SIZE_LABEL = '10 MB';
+
+type PayrollExpense = {
+  amount: number;
+  year: number;
+  month: number;
+};
 
 type ParsedPath = {
   documentId: string | null;
@@ -115,6 +122,72 @@ function mapTrainerDocument(row: TrainerDocumentRecord) {
   };
 }
 
+function parsePayrollExpense(value: any) {
+  if (!value || typeof value !== 'object') {
+    return { expense: null, error: null } as { expense: PayrollExpense | null; error: any };
+  }
+
+  const rawDate = toStringOrNull(value.date ?? value.expenseDate);
+  const rawAmount = value.amount ?? value.value ?? value.otros_gastos;
+  const amount = typeof rawAmount === 'string' ? Number.parseFloat(rawAmount) : Number(rawAmount);
+
+  if (rawDate === null && (rawAmount === undefined || rawAmount === null)) {
+    return { expense: null, error: null };
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { expense: null, error: errorResponse('VALIDATION_ERROR', 'El importe del gasto no es válido', 400) };
+  }
+
+  if (!rawDate) {
+    return { expense: null, error: errorResponse('VALIDATION_ERROR', 'La fecha del gasto es obligatoria', 400) };
+  }
+
+  const parsedDate = new Date(rawDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { expense: null, error: errorResponse('VALIDATION_ERROR', 'La fecha del gasto no es válida', 400) };
+  }
+
+  return {
+    expense: {
+      amount: Number(amount.toFixed(2)),
+      year: parsedDate.getUTCFullYear(),
+      month: parsedDate.getUTCMonth() + 1,
+    },
+    error: null,
+  };
+}
+
+async function persistPayrollExpense(
+  prisma: Pick<ReturnType<typeof getPrisma>, 'office_payrolls'>,
+  userId: string,
+  expense: PayrollExpense,
+) {
+  const existing = await prisma.office_payrolls.findUnique({
+    where: { user_id_year_month: { user_id: userId, year: expense.year, month: expense.month } },
+  });
+
+  const currentAmount = existing?.otros_gastos ? Number(existing.otros_gastos) : 0;
+  const totalAmount = Number((currentAmount + expense.amount).toFixed(2));
+
+  if (existing) {
+    await prisma.office_payrolls.update({
+      where: { user_id_year_month: { user_id: userId, year: expense.year, month: expense.month } },
+      data: { otros_gastos: new Prisma.Decimal(totalAmount) },
+    });
+    return;
+  }
+
+  await prisma.office_payrolls.create({
+    data: {
+      user_id: userId,
+      year: expense.year,
+      month: expense.month,
+      otros_gastos: new Prisma.Decimal(totalAmount),
+    },
+  });
+}
+
 function parseDocumentType(value: unknown) {
   const key = toStringOrNull(value)?.toLowerCase();
   if (!key) {
@@ -196,9 +269,26 @@ export const handler = async (event: any) => {
         return documentTypeResult.error;
       }
 
+      const payrollExpenseResult =
+        documentTypeResult.key === 'gasto'
+          ? parsePayrollExpense(payload?.payrollExpense ?? payload?.payroll_expense)
+          : null;
+
       const trainer = await prisma.trainers.findUnique({ where: { trainer_id: trainerId } });
       if (!trainer) {
         return errorResponse('NOT_FOUND', 'Formador no encontrado', 404);
+      }
+
+      if (payrollExpenseResult?.error) {
+        return payrollExpenseResult.error;
+      }
+
+      if (payrollExpenseResult?.expense && (!trainer.user_id || !trainer.contrato_fijo)) {
+        return errorResponse(
+          'VALIDATION_ERROR',
+          'No se pudo vincular el gasto con la nómina del formador.',
+          400,
+        );
       }
 
       const fileInput = typeof payload?.file === 'object' && payload.file ? payload.file : payload;
@@ -278,19 +368,27 @@ export const handler = async (event: any) => {
         data: buffer,
       });
 
-      const created = await prisma.trainer_documents.create({
-        data: {
-          trainer_id: trainerId,
-          document_type: documentTypeResult.key,
-          file_name: finalFileName,
-          original_file_name: originalFileName,
-          mime_type: mimeType,
-          file_size: buffer.length,
-          drive_file_id: uploadResult.driveFileId,
-          drive_file_name: uploadResult.driveFileName,
-          drive_web_view_link: uploadResult.driveWebViewLink,
-          uploaded_at: nowInMadridDate(),
-        },
+      const created = await prisma.$transaction(async (tx) => {
+        const document = await tx.trainer_documents.create({
+          data: {
+            trainer_id: trainerId,
+            document_type: documentTypeResult.key,
+            file_name: finalFileName,
+            original_file_name: originalFileName,
+            mime_type: mimeType,
+            file_size: buffer.length,
+            drive_file_id: uploadResult.driveFileId,
+            drive_file_name: uploadResult.driveFileName,
+            drive_web_view_link: uploadResult.driveWebViewLink,
+            uploaded_at: nowInMadridDate(),
+          },
+        });
+
+        if (payrollExpenseResult?.expense && trainer.user_id && trainer.contrato_fijo) {
+          await persistPayrollExpense(tx, trainer.user_id, payrollExpenseResult.expense);
+        }
+
+        return document;
       });
 
       return successResponse({
