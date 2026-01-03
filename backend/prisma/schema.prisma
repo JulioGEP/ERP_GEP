@@ -731,6 +731,8 @@ model trainer_extra_costs {
   trainer_id              String
   session_id              String?  @db.Uuid
   variant_id              String?  @db.Uuid
+  payroll_year            Int?
+  payroll_month           Int?
   precio_coste_formacion  Decimal  @default(0) @db.Decimal(12, 2)
   precio_coste_preventivo Decimal  @default(0) @db.Decimal(12, 2)
   dietas                  Decimal  @default(0) @db.Decimal(12, 2)
@@ -750,9 +752,11 @@ model trainer_extra_costs {
 
   @@unique([trainer_id, session_id], map: "trainer_extra_costs_session_key")
   @@unique([trainer_id, variant_id], map: "trainer_extra_costs_variant_key")
+  @@unique([trainer_id, payroll_year, payroll_month], map: "trainer_extra_costs_payroll_key")
   @@index([trainer_id], map: "idx_trainer_extra_costs_trainer_id")
   @@index([session_id], map: "idx_trainer_extra_costs_session_id")
   @@index([variant_id], map: "idx_trainer_extra_costs_variant_id")
+  @@index([payroll_year, payroll_month], map: "idx_trainer_extra_costs_payroll_period")
   @@map("trainer_extra_costs")
 }
 
