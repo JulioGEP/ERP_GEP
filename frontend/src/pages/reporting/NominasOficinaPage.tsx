@@ -925,7 +925,7 @@ export default function NominasOficinaPage() {
     <div className="d-grid gap-3">
       <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
-          <h3 className="mb-0">Nóminas Oficina</h3>
+          <h3 className="mb-0">Nómina Fijos</h3>
           <p className="text-muted mb-0">Listado mensual de nóminas para personal no formador.</p>
         </div>
         <Form.Select

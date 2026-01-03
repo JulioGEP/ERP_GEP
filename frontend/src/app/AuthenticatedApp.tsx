@@ -217,8 +217,8 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       { key: 'Usuarios/Vacaciones', label: 'Vacaciones', path: '/usuarios/vacaciones' },
       {
         key: 'Usuarios/NominasOficina',
-        label: 'Nóminas Oficina',
-        path: '/usuarios/nominas_oficina',
+        label: 'Nómina Fijos',
+        path: '/usuarios/nominas_fijos',
       },
     ],
   },
