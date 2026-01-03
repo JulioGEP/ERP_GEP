@@ -98,7 +98,7 @@ const CostesExtraPage = lazy(() => import('../pages/reporting/CostesExtraPage'))
 const LogsPage = lazy(() => import('../pages/reporting/LogsPage'));
 const ComparativaDashboardPage = lazy(() => import('../pages/reporting/ComparativaDashboardPage'));
 const WebhooksPipedrivePage = lazy(() => import('../pages/reporting/WebhooksPipedrivePage'));
-const NominasOficinaPage = lazy(() => import('../pages/reporting/NominasOficinaPage'));
+const NominasFijosPage = lazy(() => import('../pages/reporting/NominasFijosPage'));
 const NominasFijosDiscontinuosPage = lazy(
   () => import('../pages/reporting/NominasFijosDiscontinuosPage'),
 );
@@ -554,7 +554,7 @@ export function AppRouter({
             <GuardedRoute
               path="/usuarios/nominas_fijos"
               roles={['Admin', 'Administracion', 'People']}
-              element={<NominasOficinaPage />}
+              element={<NominasFijosPage />}
             />
           }
         />
