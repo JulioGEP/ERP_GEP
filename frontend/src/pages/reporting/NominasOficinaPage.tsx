@@ -8,6 +8,7 @@ import {
   type OfficePayrollResponse,
 } from '../../features/reporting/api';
 import { type UserSummary, updateUser } from '../../api/users';
+import { fetchUserDocuments, type UserDocument } from '../../api/userDocuments';
 import { UserFormModal, buildPayrollPayload, type UserFormValues } from '../usuarios/UsersPage';
 
 const DEFAULT_WEEKLY_HOURS = '40';
@@ -179,6 +180,16 @@ function calculateExtrasTotal(fields: Record<ExtrasFieldKey, string>): number | 
 function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
   const [fields, setFields] = useState<typeof extrasInitialFields>(extrasInitialFields);
 
+  const {
+    data: documents = [],
+    isLoading: isLoadingDocuments,
+    error: documentsError,
+  } = useQuery<UserDocument[]>({
+    queryKey: ['user-documents', entry?.userId],
+    queryFn: () => fetchUserDocuments(entry?.userId as string),
+    enabled: Boolean(entry?.userId),
+  });
+
   useEffect(() => {
     if (!entry) {
       setFields(extrasInitialFields);
@@ -202,6 +213,23 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
   }, [entry]);
 
   const totalExtras = useMemo(() => calculateExtrasTotal(fields), [fields]);
+
+  const matchingExpenseDocuments = useMemo(() => {
+    if (!entry || !documents?.length) return [];
+
+    return documents.filter((document) => {
+      if (document.document_type !== 'gasto') return false;
+      if (!document.created_at) return false;
+
+      const createdAt = new Date(document.created_at);
+      if (Number.isNaN(createdAt.getTime())) return false;
+
+      return (
+        createdAt.getUTCFullYear() === entry.year &&
+        createdAt.getUTCMonth() + 1 === entry.month
+      );
+    });
+  }, [documents, entry]);
 
   const handleFieldChange = (field: ExtrasFieldKey, value: string) => {
     setFields((prev) => ({ ...prev, [field]: value }));
@@ -244,6 +272,29 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="d-grid gap-3">
+        {isLoadingDocuments ? (
+          <div className="text-muted">Cargando documentos de gasto…</div>
+        ) : documentsError ? (
+          <Alert variant="warning" className="mb-0">
+            No se pudieron cargar los documentos de gasto de este usuario.
+          </Alert>
+        ) : matchingExpenseDocuments.length ? (
+          <Alert variant="info" className="mb-0">
+            <div className="fw-semibold">Documentos de gasto del mes</div>
+            <ul className="mb-0 ps-3">
+              {matchingExpenseDocuments.map((document) => (
+                <li key={document.id}>
+                  <a href={document.download_url} target="_blank" rel="noreferrer">
+                    {document.title ?? document.file_name}
+                  </a>
+                  {document.document_type_label ? ` · ${document.document_type_label}` : null}
+                </li>
+              ))}
+            </ul>
+          </Alert>
+        ) : (
+          <div className="text-muted small">No hay documentos de gasto para este mes.</div>
+        )}
         <Row className="g-3">
           <Col md={6}>
             <Form.Group controlId="extras-dietas">
