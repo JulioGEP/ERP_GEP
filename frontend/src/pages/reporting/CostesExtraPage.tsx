@@ -162,6 +162,16 @@ function formatAssignmentLabel(value: 'session' | 'variant'): string {
   return value === 'session' ? 'Sesión' : 'Formación abierta';
 }
 
+function isUnassignedTrainerName(name: string | null, lastName: string | null): boolean {
+  const normalizedParts = [name, lastName]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value.length);
+  if (!normalizedParts.length) {
+    return false;
+  }
+  return normalizedParts.join(' ').toLowerCase() === 'sin asignar';
+}
+
 export default function CostesExtraPage() {
   const today = useMemo(() => new Date(), []);
 
@@ -226,10 +236,13 @@ export default function CostesExtraPage() {
       return [] as TrainerExtraCostRecord[];
     }
     const source = extraCostsQuery.data ?? [];
-    if (!source.length) {
-      return source;
+    const filtered = source.filter(
+      (item) => !isUnassignedTrainerName(item.trainerName, item.trainerLastName),
+    );
+    if (!filtered.length) {
+      return filtered;
     }
-    return [...source].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const timeA = getSortTimestamp(a.scheduledStart);
       const timeB = getSortTimestamp(b.scheduledStart);
       if (timeA === timeB) {
