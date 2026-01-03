@@ -220,6 +220,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         label: 'Nómina Fijos',
         path: '/usuarios/nominas_fijos',
       },
+      {
+        key: 'Usuarios/NominasFijosDiscontinuos',
+        label: 'Nóminas Fijos discontinuos',
+        path: '/usuarios/nominas_fijos_discontinuos',
+      },
     ],
   },
 ];

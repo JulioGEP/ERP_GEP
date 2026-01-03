@@ -11,6 +11,12 @@ import { type UserSummary, updateUser } from '../../api/users';
 import { fetchUserDocuments, type UserDocument } from '../../api/userDocuments';
 import { UserFormModal, buildPayrollPayload, type UserFormValues } from '../usuarios/UsersPage';
 
+type NominasOficinaPageProps = {
+  title?: string;
+  description?: string;
+  filterEntries?: (entry: OfficePayrollRecord) => boolean;
+};
+
 const DEFAULT_WEEKLY_HOURS = '40';
 
 function parseLocaleNumber(value: string): number | null {
@@ -821,7 +827,11 @@ function PayrollModal({ entry, onHide, onSaved }: PayrollModalProps) {
   );
 }
 
-export default function NominasOficinaPage() {
+export default function NominasOficinaPage({
+  title = 'Nómina Fijos',
+  description = 'Listado mensual de nóminas para personal no formador.',
+  filterEntries,
+}: NominasOficinaPageProps) {
   const queryClient = useQueryClient();
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<OfficePayrollRecord | null>(null);
@@ -847,15 +857,30 @@ export default function NominasOficinaPage() {
     setHasInitializedYear(true);
   };
 
-  const groupedByYear = useMemo(() => {
+  const filteredEntries = useMemo(() => {
     const entries = payrollQuery.data?.entries ?? [];
-    return entries.reduce<Record<number, Record<number, OfficePayrollRecord[]>>>((acc, entry) => {
+    if (!filterEntries) return entries;
+    return entries.filter(filterEntries);
+  }, [filterEntries, payrollQuery.data?.entries]);
+
+  const filteredAvailableYears = useMemo(() => {
+    if (!filterEntries) {
+      return payrollQuery.data?.availableYears ?? [];
+    }
+
+    const years = new Set<number>();
+    filteredEntries.forEach((entry) => years.add(entry.year));
+    return Array.from(years).sort((a, b) => b - a);
+  }, [filterEntries, filteredEntries, payrollQuery.data?.availableYears]);
+
+  const groupedByYear = useMemo(() => {
+    return filteredEntries.reduce<Record<number, Record<number, OfficePayrollRecord[]>>>((acc, entry) => {
       if (!acc[entry.year]) acc[entry.year] = {};
       if (!acc[entry.year][entry.month]) acc[entry.year][entry.month] = [];
       acc[entry.year][entry.month].push(entry);
       return acc;
     }, {});
-  }, [payrollQuery.data?.entries]);
+  }, [filteredEntries]);
 
   const sortedYears = useMemo(() => {
     return Object.keys(groupedByYear)
@@ -928,8 +953,8 @@ export default function NominasOficinaPage() {
     <div className="d-grid gap-3">
       <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
-          <h3 className="mb-0">Nómina Fijos</h3>
-          <p className="text-muted mb-0">Listado mensual de nóminas para personal no formador.</p>
+          <h3 className="mb-0">{title}</h3>
+          <p className="text-muted mb-0">{description}</p>
         </div>
         <Form.Select
           style={{ maxWidth: '240px' }}
@@ -937,7 +962,7 @@ export default function NominasOficinaPage() {
           onChange={handleYearChange}
         >
           <option value="">Todos los años</option>
-          {(payrollQuery.data?.availableYears ?? []).map((year: number) => (
+          {filteredAvailableYears.map((year: number) => (
             <option key={year} value={year}>
               {year}
             </option>

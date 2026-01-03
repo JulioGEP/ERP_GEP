@@ -647,6 +647,7 @@ export type OfficePayrollRecord = {
   fullName: string;
   email: string | null;
   role: string | null;
+  trainerFixedContract?: boolean | null;
   year: number;
   month: number;
   dietas: number | null;

@@ -99,6 +99,9 @@ const LogsPage = lazy(() => import('../pages/reporting/LogsPage'));
 const ComparativaDashboardPage = lazy(() => import('../pages/reporting/ComparativaDashboardPage'));
 const WebhooksPipedrivePage = lazy(() => import('../pages/reporting/WebhooksPipedrivePage'));
 const NominasOficinaPage = lazy(() => import('../pages/reporting/NominasOficinaPage'));
+const NominasFijosDiscontinuosPage = lazy(
+  () => import('../pages/reporting/NominasFijosDiscontinuosPage'),
+);
 
 type AppRouterProps = {
   budgetsPageProps: BudgetsPageProps;
@@ -552,6 +555,17 @@ export function AppRouter({
               path="/usuarios/nominas_fijos"
               roles={['Admin', 'Administracion', 'People']}
               element={<NominasOficinaPage />}
+            />
+          }
+        />
+
+        <Route
+          path="/usuarios/nominas_fijos_discontinuos"
+          element={
+            <GuardedRoute
+              path="/usuarios/nominas_fijos_discontinuos"
+              roles={['Admin', 'Administracion', 'People']}
+              element={<NominasFijosDiscontinuosPage />}
             />
           }
         />
