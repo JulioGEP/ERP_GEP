@@ -19,6 +19,16 @@ function formatTrainerName(item: TrainerHoursItem): string {
   return item.trainerId;
 }
 
+function isUnassignedTrainerName(name: string | null, lastName: string | null): boolean {
+  const normalizedParts = [name, lastName]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value.length);
+  if (!normalizedParts.length) {
+    return false;
+  }
+  return normalizedParts.join(' ').toLowerCase() === 'sin asignar';
+}
+
 function getCurrentMonthRange(): { startDate: string; endDate: string } {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -76,19 +86,44 @@ export default function HorasFormadoresPage() {
   );
 
   const data = hasInvalidRange ? null : trainerHoursQuery.data ?? null;
-  const items = data?.items ?? [];
-  const totalSessions = data?.summary.totalSessions ?? 0;
-  const totalHours = data?.summary.totalHours ?? 0;
-  const totalServiceCost = data?.summary.totalServiceCost ?? 0;
-  const totalExtraCost = data?.summary.totalExtraCost ?? 0;
-  const totalPayrollCost = data?.summary.totalPayrollCost ?? 0;
+  const items = useMemo(() => {
+    if (!data) {
+      return [] as TrainerHoursItem[];
+    }
+    return data.items.filter((item) => !isUnassignedTrainerName(item.name, item.lastName));
+  }, [data]);
+
+  const summary = useMemo(() => {
+    return items.reduce(
+      (acc, item) => {
+        acc.totalSessions += item.sessionCount;
+        acc.totalHours += item.totalHours;
+        acc.totalServiceCost += item.serviceCost;
+        acc.totalExtraCost += item.extraCost;
+        acc.totalPayrollCost += item.payrollCost;
+        return acc;
+      },
+      {
+        totalSessions: 0,
+        totalHours: 0,
+        totalServiceCost: 0,
+        totalExtraCost: 0,
+        totalPayrollCost: 0,
+      },
+    );
+  }, [items]);
+
   const hasLoadedData = Boolean(data);
   const summaryTrainers = hasLoadedData ? integerFormatter.format(items.length) : '—';
-  const summarySessions = hasLoadedData ? integerFormatter.format(totalSessions) : '—';
-  const summaryHours = hasLoadedData ? hoursFormatter.format(totalHours) : '—';
-  const summaryServiceCost = hasLoadedData ? currencyFormatter.format(totalServiceCost) : '—';
-  const summaryExtraCost = hasLoadedData ? currencyFormatter.format(totalExtraCost) : '—';
-  const summaryPayrollCost = hasLoadedData ? currencyFormatter.format(totalPayrollCost) : '—';
+  const summarySessions = hasLoadedData ? integerFormatter.format(summary.totalSessions) : '—';
+  const summaryHours = hasLoadedData ? hoursFormatter.format(summary.totalHours) : '—';
+  const summaryServiceCost = hasLoadedData
+    ? currencyFormatter.format(summary.totalServiceCost)
+    : '—';
+  const summaryExtraCost = hasLoadedData ? currencyFormatter.format(summary.totalExtraCost) : '—';
+  const summaryPayrollCost = hasLoadedData
+    ? currencyFormatter.format(summary.totalPayrollCost)
+    : '—';
 
   const periodLabel = useMemo(() => {
     if (filters.startDate && filters.endDate) {
@@ -141,11 +176,11 @@ export default function HorasFormadoresPage() {
       [
         'Total',
         '',
-        totalSessions,
-        roundToTwoDecimals(totalHours),
-        roundToTwoDecimals(totalServiceCost),
-        roundToTwoDecimals(totalExtraCost),
-        roundToTwoDecimals(totalPayrollCost),
+        summary.totalSessions,
+        roundToTwoDecimals(summary.totalHours),
+        roundToTwoDecimals(summary.totalServiceCost),
+        roundToTwoDecimals(summary.totalExtraCost),
+        roundToTwoDecimals(summary.totalPayrollCost),
       ],
     ];
 
@@ -234,11 +269,11 @@ export default function HorasFormadoresPage() {
           <tfoot>
             <tr>
               <th scope="row">Total</th>
-              <th className="text-end">{integerFormatter.format(totalSessions)}</th>
-              <th className="text-end">{hoursFormatter.format(totalHours)}</th>
-              <th className="text-end">{currencyFormatter.format(totalServiceCost)}</th>
-              <th className="text-end">{currencyFormatter.format(totalExtraCost)}</th>
-              <th className="text-end">{currencyFormatter.format(totalPayrollCost)}</th>
+              <th className="text-end">{integerFormatter.format(summary.totalSessions)}</th>
+              <th className="text-end">{hoursFormatter.format(summary.totalHours)}</th>
+              <th className="text-end">{currencyFormatter.format(summary.totalServiceCost)}</th>
+              <th className="text-end">{currencyFormatter.format(summary.totalExtraCost)}</th>
+              <th className="text-end">{currencyFormatter.format(summary.totalPayrollCost)}</th>
             </tr>
           </tfoot>
         </Table>
