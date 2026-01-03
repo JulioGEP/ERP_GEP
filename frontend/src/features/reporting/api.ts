@@ -318,6 +318,7 @@ export const DEFAULT_TRAINER_EXTRA_COST_VALUES: Partial<
 export type TrainerExpenseDocument = {
   id: string;
   sessionId: string;
+  trainerId: string | null;
   name: string | null;
   url: string | null;
   addedAt: string | null;
@@ -396,6 +397,7 @@ function sanitizeTrainerExpenseDocument(entry: unknown): TrainerExpenseDocument 
   const id = sanitizeText(raw.id);
   const sessionId =
     sanitizeText(raw.sessionId ?? raw.session_id ?? raw.sesionId ?? raw.sesion_id) ?? null;
+  const trainerId = sanitizeText(raw.trainerId ?? raw.trainer_id ?? raw.trainerExpenseTrainerId) ?? null;
 
   if (!id || !sessionId) {
     return null;
@@ -404,6 +406,7 @@ function sanitizeTrainerExpenseDocument(entry: unknown): TrainerExpenseDocument 
   return {
     id,
     sessionId,
+    trainerId,
     name:
       sanitizeText(raw.name ?? raw.fileName ?? raw.drive_file_name ?? raw.driveFileName) ?? null,
     url: sanitizeText(raw.url ?? raw.drive_web_view_link ?? raw.webUrl) ?? null,
