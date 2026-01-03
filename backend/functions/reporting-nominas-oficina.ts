@@ -40,6 +40,7 @@ type OfficePayrollResponseItem = {
   fullName: string;
   email: string | null;
   role: string | null;
+  trainerFixedContract: boolean;
   year: number;
   month: number;
   dietas: number | null;
@@ -228,6 +229,7 @@ function serializeRecord(
     last_name: string;
     email: string | null;
     role: string;
+    trainer: { contrato_fijo: boolean } | null;
     payroll: any | null;
   },
   startDate: Date | null,
@@ -245,6 +247,7 @@ function serializeRecord(
     fullName: buildFullName(user.first_name, user.last_name),
     email: user.email,
     role: user.role,
+    trainerFixedContract: Boolean(user.trainer?.contrato_fijo),
     year: record.year,
     month: record.month,
     dietas: decimalToNumber(record.dietas),
@@ -312,15 +315,19 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
       role: true;
       created_at: true;
       payroll: true;
+      trainer: { select: { contrato_fijo: true } };
       office_payrolls: true;
     };
   }>;
 
   const users: UserWithOfficePayrolls[] = await prisma.users.findMany({
     where: {
-      AND: [
-        { role: { notIn: NON_TRAINER_ROLE_BLOCKLIST } },
-        { trainer: { is: null } },
+      OR: [
+        {
+          role: { notIn: NON_TRAINER_ROLE_BLOCKLIST },
+          trainer: { is: null },
+        },
+        { trainer: { is: { contrato_fijo: true } } },
       ],
     },
     select: {
@@ -331,6 +338,7 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
       role: true,
       created_at: true,
       payroll: true,
+      trainer: { select: { contrato_fijo: true } },
       office_payrolls: true,
     },
   });
@@ -368,6 +376,7 @@ async function handleGet(prisma = getPrisma(), request: any): Promise<ReturnType
             fullName: buildFullName(user.first_name, user.last_name),
             email: user.email,
             role: user.role,
+            trainerFixedContract: Boolean(user.trainer?.contrato_fijo),
             year,
             month,
             dietas: null,
@@ -482,9 +491,12 @@ async function handlePut(prisma = getPrisma(), request: any) {
   const user = await prisma.users.findFirst({
     where: {
       id: userId,
-      AND: [
-        { role: { notIn: NON_TRAINER_ROLE_BLOCKLIST } },
-        { trainer: { is: null } },
+      OR: [
+        {
+          role: { notIn: NON_TRAINER_ROLE_BLOCKLIST },
+          trainer: { is: null },
+        },
+        { trainer: { is: { contrato_fijo: true } } },
       ],
     },
     select: {
@@ -495,6 +507,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
       role: true,
       created_at: true,
       payroll: true,
+      trainer: { select: { contrato_fijo: true } },
     },
   });
 
