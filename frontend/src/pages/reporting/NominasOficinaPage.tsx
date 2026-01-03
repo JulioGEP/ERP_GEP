@@ -213,6 +213,9 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
   }, [entry]);
 
   const totalExtras = useMemo(() => calculateExtrasTotal(fields), [fields]);
+  const totalExtrasDisplayValue = totalExtras ?? entry?.totalExtras ?? null;
+  const totalExtrasDisplay =
+    totalExtrasDisplayValue === null ? '' : totalExtrasDisplayValue.toFixed(2);
 
   const matchingExpenseDocuments = useMemo(() => {
     if (!entry || !documents?.length) return [];
@@ -238,6 +241,7 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
   const mutation = useMutation({
     mutationFn: () => {
       const normalizeExtrasNumber = (value: string) => parseLocaleNumber(value);
+      const totalExtrasToSave = totalExtras ?? entry?.totalExtras ?? null;
 
       return saveOfficePayroll({
         userId: entry?.userId as string,
@@ -250,7 +254,7 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
         festivo: normalizeExtrasNumber(fields.festivo),
         horasExtras: normalizeExtrasNumber(fields.horasExtras),
         otrosGastos: normalizeExtrasNumber(fields.otrosGastos),
-        totalExtras,
+        totalExtras: totalExtrasToSave,
       });
     },
     onSuccess: (saved) => {
@@ -260,8 +264,6 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
   });
 
   if (!entry) return null;
-
-  const totalExtrasDisplay = totalExtras === null ? '' : totalExtras.toFixed(2);
   const monthLabel = MONTH_LABELS[entry.month - 1] ?? `${entry.month}`;
 
   return (
