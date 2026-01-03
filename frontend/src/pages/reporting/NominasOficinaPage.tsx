@@ -475,7 +475,8 @@ function applyPayrollCalculations(fields: typeof payrollInitialFields): typeof p
   const salarioBrutoCalculado = calculateSalarioBruto(baseRetencionMensual, fields.horasSemana);
   const salarioBruto = salarioBrutoCalculado !== null ? salarioBrutoCalculado : normalizeNumber(fields.salarioBruto);
   const extrasTotal = normalizeNumber(fields.totalExtras);
-  const salarioBrutoTotal = salarioBruto;
+  const salarioBrutoTotal =
+    salarioBruto === null && extrasTotal === null ? null : (salarioBruto ?? 0) + (extrasTotal ?? 0);
   const retencionPorcentaje = parsePercentageInput(fields.retencion ?? '');
 
   const aportacionExpression = fields.aportacionSsIrpfDetalle || fields.aportacionSsIrpf;
