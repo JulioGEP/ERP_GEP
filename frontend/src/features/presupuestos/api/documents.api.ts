@@ -39,6 +39,7 @@ export async function uploadSessionDocuments(params: {
   files: File[];
   shareWithTrainer: boolean;
   trainerExpense?: boolean;
+  trainerId?: string | null;
   trainerName?: string | null;
   expenseFolderName?: string | null;
 }): Promise<SessionDocumentsPayload> {
@@ -54,6 +55,7 @@ export async function uploadSessionDocuments(params: {
   }
 
   const trainerExpense = Boolean(params.trainerExpense);
+  const trainerId = typeof params.trainerId === 'string' ? params.trainerId.trim() : '';
   const trainerName = typeof params.trainerName === 'string' ? params.trainerName.trim() : '';
   const expenseFolderName =
     typeof params.expenseFolderName === 'string' ? params.expenseFolderName.trim() : '';
@@ -86,6 +88,7 @@ export async function uploadSessionDocuments(params: {
         sesion_id: normalizedSessionId,
         compartir_formador: params.shareWithTrainer,
         trainer_expense: trainerExpense || undefined,
+        trainer_expense_trainer_id: trainerExpense && trainerId ? trainerId : undefined,
         expense_folder_name: trainerExpense
           ? expenseFolderName || 'Gastos Formador'
           : undefined,

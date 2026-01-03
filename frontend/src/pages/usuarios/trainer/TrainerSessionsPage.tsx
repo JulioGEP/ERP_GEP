@@ -555,13 +555,22 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
   const trainerDocumentIdSet = useMemo(() => new Set(trainerDocumentIds), [trainerDocumentIds]);
 
   const documentMutation = useMutation({
-    mutationFn: async ({ files, trainerExpense }: { files: File[]; trainerExpense: boolean }) =>
+    mutationFn: async ({
+      files,
+      trainerExpense,
+      trainerId,
+    }: {
+      files: File[];
+      trainerExpense: boolean;
+      trainerId: string | null;
+    }) =>
       uploadSessionDocuments({
         dealId: session.dealId,
         sessionId: session.sessionId,
         files,
         shareWithTrainer: true,
         trainerExpense,
+        trainerId,
         trainerName: trainerDisplayName,
         expenseFolderName: TRAINER_EXPENSE_FOLDER_NAME,
       }),
@@ -810,9 +819,9 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
       const fileList = event.target.files;
       if (!fileList || !fileList.length) return;
       const files = Array.from(fileList);
-      documentMutation.mutate({ files, trainerExpense: isExpense });
+      documentMutation.mutate({ files, trainerExpense: isExpense, trainerId: userId });
     },
-    [documentMutation, isExpense],
+    [documentMutation, isExpense, userId],
   );
 
   const handleDocumentDelete = useCallback(

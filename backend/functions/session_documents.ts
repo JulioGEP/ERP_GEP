@@ -28,6 +28,7 @@ const MAX_SESSION_DOCUMENT_SIZE_LABEL = '4 MB';
 const TRAINER_EXPENSE_FOLDER_NAME = 'Gastos Formador';
 
 let trainerExpenseColumnSupported: boolean | null = null;
+let trainerExpenseTrainerColumnSupported: boolean | null = null;
 
 const TRAINER_EXPENSE_ERROR_PATTERNS = [
   /sesion[_\s]?files.*trainer[_\s]?expense/i,
@@ -55,8 +56,8 @@ function isTrainerExpenseColumnError(error: unknown): boolean {
   return false;
 }
 
-async function ensureTrainerExpenseColumn(prisma: PrismaClient): Promise<boolean> {
-  if (trainerExpenseColumnSupported === true) {
+async function ensureTrainerExpenseColumns(prisma: PrismaClient): Promise<boolean> {
+  if (trainerExpenseColumnSupported === true && trainerExpenseTrainerColumnSupported === true) {
     return true;
   }
 
@@ -64,11 +65,16 @@ async function ensureTrainerExpenseColumn(prisma: PrismaClient): Promise<boolean
     await prisma.$executeRawUnsafe(
       'ALTER TABLE "sesion_files" ADD COLUMN IF NOT EXISTS "trainer_expense" BOOLEAN NOT NULL DEFAULT FALSE',
     );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "sesion_files" ADD COLUMN IF NOT EXISTS "trainer_expense_trainer_id" VARCHAR(255)',
+    );
     trainerExpenseColumnSupported = true;
+    trainerExpenseTrainerColumnSupported = true;
     return true;
   } catch (err) {
     console.error('[SessionDocuments] No se pudo asegurar la columna trainer_expense', err);
     trainerExpenseColumnSupported = false;
+    trainerExpenseTrainerColumnSupported = false;
     return false;
   }
 }
@@ -82,13 +88,16 @@ async function withTrainerExpenseSupport<T extends PromiseLike<unknown>>(
     if (trainerExpenseColumnSupported === null) {
       trainerExpenseColumnSupported = true;
     }
+    if (trainerExpenseTrainerColumnSupported === null) {
+      trainerExpenseTrainerColumnSupported = true;
+    }
     return result;
   } catch (error) {
     if (!isTrainerExpenseColumnError(error)) {
       throw error;
     }
 
-    const ensured = await ensureTrainerExpenseColumn(prisma);
+    const ensured = await ensureTrainerExpenseColumns(prisma);
     if (!ensured) {
       throw error;
     }
@@ -116,6 +125,7 @@ type SessionFileRecord = {
   file_type: string | null;
   compartir_formador: boolean;
   trainer_expense: boolean;
+  trainer_expense_trainer_id: string | null;
   added_at: string | null;
   updated_at: string | null;
   drive_file_name: string | null;
@@ -188,6 +198,7 @@ function mapSessionFile(row: any): SessionFileRecord {
     file_type: toStringOrNull(row?.file_type),
     compartir_formador: Boolean(row?.compartir_formador),
     trainer_expense: Boolean(row?.trainer_expense),
+    trainer_expense_trainer_id: toStringOrNull(row?.trainer_expense_trainer_id),
     added_at: row?.added_at ? toMadridISOString(row.added_at) : null,
     updated_at: row?.updated_at ? toMadridISOString(row.updated_at) : null,
     drive_file_name: toStringOrNull(row?.drive_file_name),
@@ -265,6 +276,16 @@ export const handler = async (event: any) => {
         payload?.trainer_expense ?? payload?.trainerExpense,
         false,
       );
+      const trainerExpenseTrainerIdRaw = toStringOrNull(
+        payload?.trainer_expense_trainer_id ??
+          payload?.trainerExpenseTrainerId ??
+          payload?.trainer_id ??
+          payload?.trainerId,
+      );
+      const trainerExpenseTrainerId =
+        trainerExpense && trainerExpenseTrainerIdRaw?.trim().length
+          ? trainerExpenseTrainerIdRaw.trim()
+          : null;
       const trainerName = toStringOrNull(payload?.trainer_name ?? payload?.trainerName);
       const expenseFolderNameRaw = toStringOrNull(
         payload?.expense_folder_name ?? payload?.expenseFolderName,
@@ -423,6 +444,7 @@ export const handler = async (event: any) => {
               file_type: extension,
               compartir_formador: shareWithTrainer,
               trainer_expense: trainerExpense,
+              trainer_expense_trainer_id: trainerExpenseTrainerId,
               added_at: now,
               drive_file_name: uploadResult.driveFileName,
               drive_web_view_link: uploadResult.driveWebViewLink,

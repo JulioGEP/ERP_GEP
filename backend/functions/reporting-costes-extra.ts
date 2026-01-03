@@ -110,6 +110,7 @@ type TrainerExtraCostResponseItem = {
 type TrainerExpenseDocument = {
   id: string;
   sessionId: string;
+  trainerId: string | null;
   name: string | null;
   url: string | null;
   addedAt: string | null;
@@ -341,6 +342,7 @@ function mapResponseItem(params: {
 function mapTrainerExpenseDocument(entry: any): TrainerExpenseDocument | null {
   const sessionId = normalizeIdentifier(entry?.sesion_id ?? entry?.session_id);
   const id = normalizeIdentifier(entry?.id);
+  const trainerId = normalizeIdentifier(entry?.trainer_expense_trainer_id);
 
   if (!sessionId || !id) {
     return null;
@@ -352,10 +354,21 @@ function mapTrainerExpenseDocument(entry: any): TrainerExpenseDocument | null {
   return {
     id,
     sessionId,
+    trainerId,
     name: name.length ? name : null,
     url: url.length ? url : null,
     addedAt: toIsoString(entry?.added_at ?? null),
   } satisfies TrainerExpenseDocument;
+}
+
+function filterTrainerExpenseDocuments(
+  documents: TrainerExpenseDocument[],
+  trainerId: string | null,
+): TrainerExpenseDocument[] {
+  if (!documents.length) return documents;
+  if (!trainerId) return documents;
+
+  return documents.filter((doc) => !doc.trainerId || doc.trainerId === trainerId);
 }
 
 function parseAmountInput(value: unknown): number | null {
@@ -675,6 +688,7 @@ export const handler = createHttpHandler(async (request) => {
           select: {
             id: true,
             sesion_id: true,
+            trainer_expense_trainer_id: true,
             drive_file_name: true,
             drive_web_view_link: true,
             added_at: true,
@@ -763,7 +777,10 @@ export const handler = createHttpHandler(async (request) => {
           trainer,
           assignmentType: 'session',
           sessionInfo: row.sesiones,
-          expenseDocuments: trainerExpenseDocumentMap.get(sessionId) ?? [],
+          expenseDocuments: filterTrainerExpenseDocuments(
+            trainerExpenseDocumentMap.get(sessionId) ?? [],
+            trainerId,
+          ),
         }),
       );
     }
