@@ -546,10 +546,10 @@ export function AppRouter({
         />
 
         <Route
-          path="/usuarios/nominas_oficina"
+          path="/usuarios/nominas_fijos"
           element={
             <GuardedRoute
-              path="/usuarios/nominas_oficina"
+              path="/usuarios/nominas_fijos"
               roles={['Admin', 'Administracion', 'People']}
               element={<NominasOficinaPage />}
             />
