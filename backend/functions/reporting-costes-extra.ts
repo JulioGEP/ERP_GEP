@@ -81,6 +81,7 @@ type ExtraCostTotalsRow = {
   kilometraje: DecimalLike | number | string | null;
   pernocta: DecimalLike | number | string | null;
   nocturnidad: DecimalLike | number | string | null;
+  festivo: DecimalLike | number | string | null;
   horas_extras: DecimalLike | number | string | null;
   gastos_extras: DecimalLike | number | string | null;
 };
@@ -229,6 +230,7 @@ async function syncFixedTrainerPayrollExtras(
       COALESCE(SUM(tec.kilometraje), 0) AS kilometraje,
       COALESCE(SUM(tec.pernocta), 0) AS pernocta,
       COALESCE(SUM(tec.nocturnidad), 0) AS nocturnidad,
+      COALESCE(SUM(tec.festivo), 0) AS festivo,
       COALESCE(SUM(tec.horas_extras), 0) AS horas_extras,
       COALESCE(SUM(tec.gastos_extras), 0) AS gastos_extras
     FROM trainer_extra_costs tec
@@ -246,6 +248,7 @@ async function syncFixedTrainerPayrollExtras(
     kilometraje: 0,
     pernocta: 0,
     nocturnidad: 0,
+    festivo: 0,
     horas_extras: 0,
     gastos_extras: 0,
   } satisfies ExtraCostTotalsRow;
@@ -254,11 +257,18 @@ async function syncFixedTrainerPayrollExtras(
   const kilometraje = decimalToNumber(totals.kilometraje);
   const pernocta = decimalToNumber(totals.pernocta);
   const nocturnidad = decimalToNumber(totals.nocturnidad);
+  const festivo = decimalToNumber(totals.festivo);
   const horasExtras = decimalToNumber(totals.horas_extras);
   const otrosGastos = decimalToNumber(totals.gastos_extras);
 
   const totalExtras =
-    dietas + kilometraje + pernocta + nocturnidad + horasExtras + otrosGastos;
+    dietas +
+    kilometraje +
+    pernocta +
+    nocturnidad +
+    festivo +
+    horasExtras +
+    otrosGastos;
 
   const toDecimal = (value: number) => new Prisma.Decimal(Math.round(value * 100) / 100);
 
@@ -269,6 +279,7 @@ async function syncFixedTrainerPayrollExtras(
       kilometrajes: toDecimal(kilometraje),
       pernocta: toDecimal(pernocta),
       nocturnidad: toDecimal(nocturnidad),
+      festivo: toDecimal(festivo),
       horas_extras: toDecimal(horasExtras),
       otros_gastos: toDecimal(otrosGastos),
       total_extras: toDecimal(totalExtras),
@@ -281,6 +292,7 @@ async function syncFixedTrainerPayrollExtras(
       kilometrajes: toDecimal(kilometraje),
       pernocta: toDecimal(pernocta),
       nocturnidad: toDecimal(nocturnidad),
+      festivo: toDecimal(festivo),
       horas_extras: toDecimal(horasExtras),
       otros_gastos: toDecimal(otrosGastos),
       total_extras: toDecimal(totalExtras),
