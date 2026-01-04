@@ -55,10 +55,12 @@ import {
   updateSessionStudent,
   type UpdateSessionStudentInput,
 } from '../../../features/presupuestos/api/students.api';
+import { fetchTrainers } from '../../../features/recursos/api';
 import { createVariantComment, fetchVariantComments } from '../../../features/formacion_abierta/api';
 import type { VariantComment } from '../../../features/formacion_abierta/types';
 import type { SessionComment, SessionStudent } from '../../../api/sessions.types';
 import type { ReportDraft, ReportSessionInfo } from '../../../features/informes/ReportsFlow';
+import { useAuth } from '../../../context/AuthContext';
 import { useCurrentUserIdentity } from '../../../features/presupuestos/useCurrentUserIdentity';
 import { fetchDealDetail, uploadManualDocument, deleteDocument } from '../../../features/presupuestos/api/deals.api';
 import type { DealDocument, DealNote } from '../../../types/deal';
@@ -159,9 +161,10 @@ function InfoField({ label, children, className }: InfoFieldProps) {
 
 type SessionDetailCardProps = {
   session: TrainerSessionDetail;
+  isFixedTrainer?: boolean;
 };
 
-export function SessionDetailCard({ session }: SessionDetailCardProps) {
+export function SessionDetailCard({ session, isFixedTrainer }: SessionDetailCardProps) {
   const queryClient = useQueryClient();
   const { userId, userName } = useCurrentUserIdentity();
   const mapsUrl = session.address
@@ -475,6 +478,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
 
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [isExpense, setIsExpense] = useState(false);
+  const canMarkExpense = !isFixedTrainer;
   const documentInputRef = useRef<HTMLInputElement | null>(null);
   const trainerDocumentStorageKey = useMemo(
     () => `trainer-session-${session.sessionId}-${userId}-documents`,
@@ -505,6 +509,14 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
       setTrainerDocumentIds([]);
     }
   }, [trainerDocumentStorageKey]);
+
+  useEffect(() => {
+    if (!canMarkExpense && isExpense) {
+      setIsExpense(false);
+    }
+  }, [canMarkExpense, isExpense]);
+
+  const isExpenseSelected = canMarkExpense && isExpense;
 
   const persistTrainerDocumentIds = useCallback(
     (ids: string[]) => {
@@ -819,9 +831,10 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
       const fileList = event.target.files;
       if (!fileList || !fileList.length) return;
       const files = Array.from(fileList);
-      documentMutation.mutate({ files, trainerExpense: isExpense, trainerId: userId });
+      const trainerExpense = canMarkExpense && isExpense;
+      documentMutation.mutate({ files, trainerExpense, trainerId: userId });
     },
-    [documentMutation, isExpense, userId],
+    [canMarkExpense, documentMutation, isExpense, userId],
   );
 
   const handleDocumentDelete = useCallback(
@@ -1514,21 +1527,23 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                     className="d-grid gap-2"
                   >
                     <Form.Label>Subir documentos</Form.Label>
-                    <Form.Check
-                      type="checkbox"
-                      id={`trainer-session-${session.sessionId}-documents-expense`}
-                      label={
-                        <>
-                          ¿Gasto?
-                          <span className="text-muted ms-2">
-                            Si el archivo es un gasto, antes de subirlo marca la casilla
-                          </span>
-                        </>
-                      }
-                      checked={isExpense}
-                      onChange={(event) => setIsExpense(event.target.checked)}
-                      disabled={documentMutation.isPending}
-                    />
+                    {canMarkExpense ? (
+                      <Form.Check
+                        type="checkbox"
+                        id={`trainer-session-${session.sessionId}-documents-expense`}
+                        label={
+                          <>
+                            ¿Gasto?
+                            <span className="text-muted ms-2">
+                              Si el archivo es un gasto, antes de subirlo marca la casilla
+                            </span>
+                          </>
+                        }
+                        checked={isExpense}
+                        onChange={(event) => setIsExpense(event.target.checked)}
+                        disabled={documentMutation.isPending}
+                      />
+                    ) : null}
                     <Form.Control
                       type="file"
                       multiple
@@ -1539,7 +1554,7 @@ export function SessionDetailCard({ session }: SessionDetailCardProps) {
                     />
                     <div className="text-muted small">
                       Los documentos se compartirán automáticamente con el equipo del ERP.
-                      {isExpense
+                      {isExpenseSelected
                         ? ` Se subirán a la carpeta "${TRAINER_EXPENSE_FOLDER_NAME}" y se añadirá tu nombre al archivo.`
                         : null}
                     </div>
@@ -3162,6 +3177,7 @@ function selectDefaultDate(entries: TrainerSessionsDateEntry[]): string | null {
 
 export default function TrainerSessionsPage() {
   const location = useLocation();
+  const { user } = useAuth();
   const locationState = (location.state ?? null) as
     | { trainerSessionId?: unknown; trainerVariantId?: unknown }
     | null;
@@ -3169,6 +3185,21 @@ export default function TrainerSessionsPage() {
     typeof locationState?.trainerSessionId === 'string' ? locationState.trainerSessionId : null;
   const preselectedVariantId =
     typeof locationState?.trainerVariantId === 'string' ? locationState.trainerVariantId : null;
+
+  const trainerId = useMemo(() => user?.trainerId ?? null, [user?.trainerId]);
+
+  const trainerDetailsQuery = useQuery({
+    queryKey: ['trainer', 'details', trainerId],
+    queryFn: async () => {
+      if (!trainerId) return null;
+      const trainers = await fetchTrainers();
+      return trainers.find((trainer) => trainer.trainer_id === trainerId) ?? null;
+    },
+    enabled: Boolean(trainerId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isFixedTrainer = trainerDetailsQuery.data?.contrato_fijo === true;
 
   const sessionsQuery = useQuery({
     queryKey: ['trainer', 'sessions'],
@@ -3381,7 +3412,11 @@ export default function TrainerSessionsPage() {
       ) : null}
 
       {companyAndServiceSessions.map((session) => (
-        <SessionDetailCard key={session.sessionId} session={session} />
+        <SessionDetailCard
+          key={session.sessionId}
+          session={session}
+          isFixedTrainer={isFixedTrainer}
+        />
       ))}
       {variants.map((variant) => (
         <VariantDetailCard key={variant.variantId} variant={variant} />
