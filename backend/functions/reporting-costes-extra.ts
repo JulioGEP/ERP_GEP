@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { join, sqltag, type Sql } from '@prisma/client/runtime/library';
 
 import { createHttpHandler } from './_shared/http';
@@ -33,6 +34,11 @@ type TrainerSummary = {
   trainer_id: string;
   name: string | null;
   apellido: string | null;
+};
+
+type TrainerWithContract = TrainerSummary & {
+  user_id: string | null;
+  contrato_fijo: boolean;
 };
 
 type SessionInfo = {
@@ -183,6 +189,63 @@ function decimalToNumber(value: DecimalLike | number | string | null | undefined
   return 0;
 }
 
+function toNullableNumber(value: DecimalLike | number | string | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value && typeof (value as DecimalLike).toNumber === 'function') {
+    const parsed = (value as DecimalLike).toNumber!();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value && typeof (value as DecimalLike).toString === 'function') {
+    const parsed = Number((value as DecimalLike).toString!());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toDecimalOrNull(value: number | null | undefined): Prisma.Decimal | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return new Prisma.Decimal(value);
+}
+
+function calculatePayrollTotalExtras(values: {
+  dietas?: number | null;
+  kilometrajes?: number | null;
+  pernocta?: number | null;
+  nocturnidad?: number | null;
+  festivo?: DecimalLike | number | string | null;
+  horas_extras?: number | null;
+  otros_gastos?: number | null;
+}): number | null {
+  const numbers = [
+    values.dietas,
+    values.kilometrajes,
+    values.pernocta,
+    values.nocturnidad,
+    values.festivo,
+    values.horas_extras,
+    values.otros_gastos,
+  ]
+    .map((value) => toNullableNumber(value))
+    .filter((value): value is number => value !== null);
+
+  if (!numbers.length) {
+    return null;
+  }
+
+  return numbers.reduce((total, value) => total + value, 0);
+}
+
 function parseDateParts(value: string): { year: number; month: number; day: number } | null {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) {
@@ -275,6 +338,26 @@ function createEmptyCosts(): Record<CostFieldKey, number> {
 
 function formatAmount(amount: number): string {
   return amount.toFixed(2);
+}
+
+function resolveAssignmentDate(sessionInfo: SessionInfo | null, variantInfo: VariantInfo | null): Date | null {
+  const sessionStart = sessionInfo?.fecha_inicio_utc;
+  const sessionEnd = sessionInfo?.fecha_fin_utc;
+  const variantDate = variantInfo?.date;
+
+  if (sessionStart instanceof Date && Number.isFinite(sessionStart.getTime())) {
+    return sessionStart;
+  }
+
+  if (variantDate instanceof Date && Number.isFinite(variantDate.getTime())) {
+    return variantDate;
+  }
+
+  if (sessionEnd instanceof Date && Number.isFinite(sessionEnd.getTime())) {
+    return sessionEnd;
+  }
+
+  return null;
 }
 
 function mapResponseItem(params: {
@@ -517,6 +600,73 @@ async function ensureTrainerAssignedToVariant(
     }
     throw error;
   }
+}
+
+async function syncOfficePayrollExtras(
+  prisma: ReturnType<typeof getPrisma>,
+  trainer: TrainerWithContract,
+  assignmentDate: Date | null,
+  costRecord: ExtraCostRecord,
+): Promise<void> {
+  if (!trainer.contrato_fijo || !trainer.user_id || !assignmentDate) {
+    return;
+  }
+
+  const targetYear = assignmentDate.getUTCFullYear();
+  const targetMonth = assignmentDate.getUTCMonth() + 1;
+
+  if (!Number.isInteger(targetYear) || !Number.isInteger(targetMonth)) {
+    return;
+  }
+
+  const existingPayroll = await prisma.office_payrolls.findUnique({
+    where: { user_id_year_month: { user_id: trainer.user_id, year: targetYear, month: targetMonth } },
+    select: {
+      id: true,
+      festivo: true,
+    },
+  });
+
+  const extras = {
+    dietas: toNullableNumber(costRecord.dietas) ?? 0,
+    kilometrajes: toNullableNumber(costRecord.kilometraje) ?? 0,
+    pernocta: toNullableNumber(costRecord.pernocta) ?? 0,
+    nocturnidad: toNullableNumber(costRecord.nocturnidad) ?? 0,
+    horas_extras: toNullableNumber(costRecord.horas_extras) ?? 0,
+    otros_gastos: toNullableNumber(costRecord.gastos_extras) ?? 0,
+  } as const;
+
+  const totalExtras = calculatePayrollTotalExtras({
+    ...extras,
+    festivo: existingPayroll?.festivo ?? null,
+  });
+
+  const mutationData = {
+    dietas: toDecimalOrNull(extras.dietas),
+    kilometrajes: toDecimalOrNull(extras.kilometrajes),
+    pernocta: toDecimalOrNull(extras.pernocta),
+    nocturnidad: toDecimalOrNull(extras.nocturnidad),
+    horas_extras: toDecimalOrNull(extras.horas_extras),
+    otros_gastos: toDecimalOrNull(extras.otros_gastos),
+    total_extras: toDecimalOrNull(totalExtras),
+  };
+
+  if (existingPayroll) {
+    await prisma.office_payrolls.update({
+      where: { id: existingPayroll.id },
+      data: mutationData,
+    });
+    return;
+  }
+
+  await prisma.office_payrolls.create({
+    data: {
+      user_id: trainer.user_id,
+      year: targetYear,
+      month: targetMonth,
+      ...mutationData,
+    },
+  });
 }
 
 async function fetchVariantAssignments(
@@ -839,10 +989,10 @@ export const handler = createHttpHandler(async (request) => {
     return errorResponse('VALIDATION_ERROR', 'Debe enviarse sessionId o variantId.', 400);
   }
 
-  const trainer = await prisma.trainers.findUnique({
+  const trainer = (await prisma.trainers.findUnique({
     where: { trainer_id: trainerId },
-    select: { trainer_id: true, name: true, apellido: true },
-  });
+    select: { trainer_id: true, name: true, apellido: true, contrato_fijo: true, user_id: true },
+  })) as TrainerWithContract | null;
 
   if (!trainer) {
     return errorResponse('NOT_FOUND', 'No se encontró el formador indicado.', 404);
@@ -943,6 +1093,13 @@ export const handler = createHttpHandler(async (request) => {
     update: updateData,
     create: createData,
   });
+
+  await syncOfficePayrollExtras(
+    prisma,
+    trainer,
+    resolveAssignmentDate(sessionInfo, variantInfo),
+    upsertResult as unknown as ExtraCostRecord,
+  );
 
   const responseItem = mapResponseItem({
     key: buildCostKey(hasSession ? 'session' : 'variant', hasSession ? sessionId! : variantId!, trainerId),
