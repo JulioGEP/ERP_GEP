@@ -204,7 +204,9 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
 
     const resolveValue = (value: number | null | undefined) => {
       if (value === null || value === undefined) return '';
-      return value.toString();
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) return '';
+      return parsed.toFixed(2);
     };
 
     setFields({
