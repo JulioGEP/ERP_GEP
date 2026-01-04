@@ -221,6 +221,86 @@ function calculateExtrasTotal(record: {
   return Number(values.reduce((total, value) => total + value, 0));
 }
 
+function resolveTrainerExtraCostDate(record: {
+  sesion: { fecha_inicio_utc: Date | null; fecha_fin_utc: Date | null } | null;
+  variant: { date: Date | null } | null;
+}): Date | null {
+  const sessionStart = record.sesion?.fecha_inicio_utc;
+  const variantDate = record.variant?.date;
+  const sessionEnd = record.sesion?.fecha_fin_utc;
+
+  if (sessionStart instanceof Date && Number.isFinite(sessionStart.getTime())) {
+    return sessionStart;
+  }
+  if (variantDate instanceof Date && Number.isFinite(variantDate.getTime())) {
+    return variantDate;
+  }
+  if (sessionEnd instanceof Date && Number.isFinite(sessionEnd.getTime())) {
+    return sessionEnd;
+  }
+  return null;
+}
+
+async function syncTrainerExtraCostsFromPayroll(
+  prisma: ReturnType<typeof getPrisma>,
+  trainerId: string,
+  year: number,
+  month: number,
+  record: OfficePayrollRow,
+): Promise<void> {
+  if (!trainerId || !Number.isInteger(year) || !Number.isInteger(month)) {
+    return;
+  }
+
+  const startPeriod = new Date(Date.UTC(year, month - 1, 1));
+  const endPeriod = new Date(Date.UTC(year, month, 1));
+  const costRecords = await prisma.trainer_extra_costs.findMany({
+    where: { trainer_id: trainerId },
+    select: {
+      id: true,
+      sesion: { select: { fecha_inicio_utc: true, fecha_fin_utc: true } },
+      variant: { select: { date: true } },
+    },
+  });
+
+  if (!costRecords.length) {
+    return;
+  }
+
+  const extras = {
+    dietas: decimalToNumber(record.dietas) ?? 0,
+    kilometraje: decimalToNumber(record.kilometrajes) ?? 0,
+    pernocta: decimalToNumber(record.pernocta) ?? 0,
+    nocturnidad: decimalToNumber(record.nocturnidad) ?? 0,
+    horas_extras: decimalToNumber(record.horas_extras) ?? 0,
+    gastos_extras: decimalToNumber(record.otros_gastos) ?? 0,
+  } as const;
+
+  const updateData = {
+    dietas: new Prisma.Decimal(extras.dietas),
+    kilometraje: new Prisma.Decimal(extras.kilometraje),
+    pernocta: new Prisma.Decimal(extras.pernocta),
+    nocturnidad: new Prisma.Decimal(extras.nocturnidad),
+    horas_extras: new Prisma.Decimal(extras.horas_extras),
+    gastos_extras: new Prisma.Decimal(extras.gastos_extras),
+  } as const;
+
+  for (const costRecord of costRecords) {
+    const assignmentDate = resolveTrainerExtraCostDate(costRecord);
+    if (!assignmentDate) {
+      continue;
+    }
+    if (assignmentDate < startPeriod || assignmentDate >= endPeriod) {
+      continue;
+    }
+
+    await prisma.trainer_extra_costs.update({
+      where: { id: costRecord.id },
+      data: updateData,
+    });
+  }
+}
+
 function serializeRecord(
   record: OfficePayrollRow,
   user: {
@@ -507,7 +587,7 @@ async function handlePut(prisma = getPrisma(), request: any) {
       role: true,
       created_at: true,
       payroll: true,
-      trainer: { select: { contrato_fijo: true } },
+      trainer: { select: { contrato_fijo: true, trainer_id: true } },
     },
   });
 
@@ -582,6 +662,10 @@ async function handlePut(prisma = getPrisma(), request: any) {
       total_empresa: totalEmpresa === null ? null : new Prisma.Decimal(totalEmpresa),
     },
   });
+
+  if (user.trainer?.contrato_fijo && user.trainer.trainer_id) {
+    await syncTrainerExtraCostsFromPayroll(prisma, user.trainer.trainer_id, year, month, record);
+  }
 
   return successResponse({
     entry: serializeRecord(record, user, startPeriod),
