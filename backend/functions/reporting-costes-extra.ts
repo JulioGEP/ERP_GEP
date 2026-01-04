@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { join, sqltag, type Sql } from '@prisma/client/runtime/library';
 
 import { createHttpHandler } from './_shared/http';
@@ -33,6 +34,8 @@ type TrainerSummary = {
   trainer_id: string;
   name: string | null;
   apellido: string | null;
+  contrato_fijo?: boolean | null;
+  user_id?: string | null;
 };
 
 type SessionInfo = {
@@ -71,6 +74,15 @@ type ExtraCostRecord = {
   notas: string | null;
   created_at: Date;
   updated_at: Date;
+};
+
+type ExtraCostTotalsRow = {
+  dietas: DecimalLike | number | string | null;
+  kilometraje: DecimalLike | number | string | null;
+  pernocta: DecimalLike | number | string | null;
+  nocturnidad: DecimalLike | number | string | null;
+  horas_extras: DecimalLike | number | string | null;
+  gastos_extras: DecimalLike | number | string | null;
 };
 
 type SessionAssignmentRow = {
@@ -181,6 +193,99 @@ function decimalToNumber(value: DecimalLike | number | string | null | undefined
     return Number.isFinite(parsed) ? parsed : 0;
   }
   return 0;
+}
+
+function buildMonthBoundaries(date: Date): { start: Date; end: Date } | null {
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
+  return { start, end };
+}
+
+async function syncFixedTrainerPayrollExtras(
+  prisma: ReturnType<typeof getPrisma>,
+  trainer: TrainerSummary,
+  periodDate: Date | null | undefined,
+) {
+  if (!trainer.contrato_fijo || !trainer.user_id || !periodDate) {
+    return;
+  }
+
+  const boundaries = buildMonthBoundaries(periodDate);
+  if (!boundaries) {
+    return;
+  }
+
+  const { start, end } = boundaries;
+  const year = start.getUTCFullYear();
+  const month = start.getUTCMonth() + 1;
+
+  const rows = await prisma.$queryRaw<ExtraCostTotalsRow[]>(sql`
+    SELECT
+      COALESCE(SUM(tec.dietas), 0) AS dietas,
+      COALESCE(SUM(tec.kilometraje), 0) AS kilometraje,
+      COALESCE(SUM(tec.pernocta), 0) AS pernocta,
+      COALESCE(SUM(tec.nocturnidad), 0) AS nocturnidad,
+      COALESCE(SUM(tec.horas_extras), 0) AS horas_extras,
+      COALESCE(SUM(tec.gastos_extras), 0) AS gastos_extras
+    FROM trainer_extra_costs tec
+      LEFT JOIN sesiones s ON tec.session_id = s.id
+      LEFT JOIN variants v ON tec.variant_id = v.id
+    WHERE tec.trainer_id = ${trainer.trainer_id}
+      AND (
+        (s.fecha_inicio_utc IS NOT NULL AND s.fecha_inicio_utc >= ${start}::timestamptz AND s.fecha_inicio_utc < ${end}::timestamptz)
+        OR (v.date IS NOT NULL AND v.date >= ${start}::timestamptz AND v.date < ${end}::timestamptz)
+      )
+  `);
+
+  const totals = rows[0] ?? {
+    dietas: 0,
+    kilometraje: 0,
+    pernocta: 0,
+    nocturnidad: 0,
+    horas_extras: 0,
+    gastos_extras: 0,
+  } satisfies ExtraCostTotalsRow;
+
+  const dietas = decimalToNumber(totals.dietas);
+  const kilometraje = decimalToNumber(totals.kilometraje);
+  const pernocta = decimalToNumber(totals.pernocta);
+  const nocturnidad = decimalToNumber(totals.nocturnidad);
+  const horasExtras = decimalToNumber(totals.horas_extras);
+  const otrosGastos = decimalToNumber(totals.gastos_extras);
+
+  const totalExtras =
+    dietas + kilometraje + pernocta + nocturnidad + horasExtras + otrosGastos;
+
+  const toDecimal = (value: number) => new Prisma.Decimal(Math.round(value * 100) / 100);
+
+  await prisma.office_payrolls.upsert({
+    where: { user_id_year_month: { user_id: trainer.user_id, year, month } },
+    update: {
+      dietas: toDecimal(dietas),
+      kilometrajes: toDecimal(kilometraje),
+      pernocta: toDecimal(pernocta),
+      nocturnidad: toDecimal(nocturnidad),
+      horas_extras: toDecimal(horasExtras),
+      otros_gastos: toDecimal(otrosGastos),
+      total_extras: toDecimal(totalExtras),
+    },
+    create: {
+      user_id: trainer.user_id,
+      year,
+      month,
+      dietas: toDecimal(dietas),
+      kilometrajes: toDecimal(kilometraje),
+      pernocta: toDecimal(pernocta),
+      nocturnidad: toDecimal(nocturnidad),
+      horas_extras: toDecimal(horasExtras),
+      otros_gastos: toDecimal(otrosGastos),
+      total_extras: toDecimal(totalExtras),
+    },
+  });
 }
 
 function parseDateParts(value: string): { year: number; month: number; day: number } | null {
@@ -841,7 +946,13 @@ export const handler = createHttpHandler(async (request) => {
 
   const trainer = await prisma.trainers.findUnique({
     where: { trainer_id: trainerId },
-    select: { trainer_id: true, name: true, apellido: true },
+    select: {
+      trainer_id: true,
+      name: true,
+      apellido: true,
+      contrato_fijo: true,
+      user_id: true,
+    },
   });
 
   if (!trainer) {
@@ -952,6 +1063,11 @@ export const handler = createHttpHandler(async (request) => {
     sessionInfo: sessionInfo ?? undefined,
     variantInfo: variantInfo ?? undefined,
   });
+
+  const periodDate = hasSession
+    ? sessionInfo?.fecha_inicio_utc ?? null
+    : variantInfo?.date ?? null;
+  await syncFixedTrainerPayrollExtras(prisma, trainer, periodDate ?? null);
 
   return successResponse({ item: responseItem });
 });
