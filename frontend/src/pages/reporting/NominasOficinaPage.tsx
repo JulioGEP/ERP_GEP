@@ -218,7 +218,26 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
     });
   }, [entry]);
 
-  const totalExtras = useMemo(() => calculateExtrasTotal(fields), [fields]);
+  const resolvedFields = useMemo(() => {
+    const formatNumber = (value: number | null | undefined) => {
+      if (value === null || value === undefined) return '';
+      return value.toString();
+    };
+
+    return {
+      dietas: fields.dietas !== '' ? fields.dietas : formatNumber(entry?.dietas),
+      kilometrajes:
+        fields.kilometrajes !== '' ? fields.kilometrajes : formatNumber(entry?.kilometrajes),
+      pernocta: fields.pernocta !== '' ? fields.pernocta : formatNumber(entry?.pernocta),
+      nocturnidad:
+        fields.nocturnidad !== '' ? fields.nocturnidad : formatNumber(entry?.nocturnidad),
+      festivo: fields.festivo !== '' ? fields.festivo : formatNumber(entry?.festivo),
+      horasExtras: fields.horasExtras !== '' ? fields.horasExtras : formatNumber(entry?.horasExtras),
+      otrosGastos: fields.otrosGastos !== '' ? fields.otrosGastos : formatNumber(entry?.otrosGastos),
+    } satisfies typeof extrasInitialFields;
+  }, [entry, fields]);
+
+  const totalExtras = useMemo(() => calculateExtrasTotal(resolvedFields), [resolvedFields]);
   const totalExtrasDisplayValue = totalExtras ?? entry?.totalExtras ?? null;
   const totalExtrasDisplay =
     totalExtrasDisplayValue === null ? '' : totalExtrasDisplayValue.toFixed(2);
@@ -253,13 +272,13 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
         userId: entry?.userId as string,
         year: entry?.year as number,
         month: entry?.month as number,
-        dietas: normalizeExtrasNumber(fields.dietas),
-        kilometrajes: normalizeExtrasNumber(fields.kilometrajes),
-        pernocta: normalizeExtrasNumber(fields.pernocta),
-        nocturnidad: normalizeExtrasNumber(fields.nocturnidad),
-        festivo: normalizeExtrasNumber(fields.festivo),
-        horasExtras: normalizeExtrasNumber(fields.horasExtras),
-        otrosGastos: normalizeExtrasNumber(fields.otrosGastos),
+        dietas: normalizeExtrasNumber(resolvedFields.dietas),
+        kilometrajes: normalizeExtrasNumber(resolvedFields.kilometrajes),
+        pernocta: normalizeExtrasNumber(resolvedFields.pernocta),
+        nocturnidad: normalizeExtrasNumber(resolvedFields.nocturnidad),
+        festivo: normalizeExtrasNumber(resolvedFields.festivo),
+        horasExtras: normalizeExtrasNumber(resolvedFields.horasExtras),
+        otrosGastos: normalizeExtrasNumber(resolvedFields.otrosGastos),
         totalExtras: totalExtrasToSave,
       });
     },
@@ -305,89 +324,89 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
         )}
         <Row className="g-3">
           <Col md={6}>
-            <Form.Group controlId="extras-dietas">
-              <Form.Label>Dietas</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={fields.dietas}
-                onChange={(event) => handleFieldChange('dietas', event.target.value)}
-                inputMode="decimal"
-              />
-            </Form.Group>
-          </Col>
+              <Form.Group controlId="extras-dietas">
+                <Form.Label>Dietas</Form.Label>
+                <Form.Control
+                  type="number"
+                  step="0.01"
+                  value={resolvedFields.dietas}
+                  onChange={(event) => handleFieldChange('dietas', event.target.value)}
+                  inputMode="decimal"
+                />
+              </Form.Group>
+            </Col>
           <Col md={6}>
-            <Form.Group controlId="extras-kilometrajes">
-              <Form.Label>Kilometrajes</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={fields.kilometrajes}
-                onChange={(event) => handleFieldChange('kilometrajes', event.target.value)}
-                inputMode="decimal"
-              />
-            </Form.Group>
-          </Col>
+              <Form.Group controlId="extras-kilometrajes">
+                <Form.Label>Kilometrajes</Form.Label>
+                <Form.Control
+                  type="number"
+                  step="0.01"
+                  value={resolvedFields.kilometrajes}
+                  onChange={(event) => handleFieldChange('kilometrajes', event.target.value)}
+                  inputMode="decimal"
+                />
+              </Form.Group>
+            </Col>
           <Col md={6}>
-            <Form.Group controlId="extras-pernocta">
-              <Form.Label>Pernocta</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={fields.pernocta}
-                onChange={(event) => handleFieldChange('pernocta', event.target.value)}
-                inputMode="decimal"
-              />
-            </Form.Group>
-          </Col>
+              <Form.Group controlId="extras-pernocta">
+                <Form.Label>Pernocta</Form.Label>
+                <Form.Control
+                  type="number"
+                  step="0.01"
+                  value={resolvedFields.pernocta}
+                  onChange={(event) => handleFieldChange('pernocta', event.target.value)}
+                  inputMode="decimal"
+                />
+              </Form.Group>
+            </Col>
           <Col md={6}>
-            <Form.Group controlId="extras-nocturnidad">
-              <Form.Label>Nocturnidad</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={fields.nocturnidad}
-                onChange={(event) => handleFieldChange('nocturnidad', event.target.value)}
-                inputMode="decimal"
-              />
-            </Form.Group>
-          </Col>
+              <Form.Group controlId="extras-nocturnidad">
+                <Form.Label>Nocturnidad</Form.Label>
+                <Form.Control
+                  type="number"
+                  step="0.01"
+                  value={resolvedFields.nocturnidad}
+                  onChange={(event) => handleFieldChange('nocturnidad', event.target.value)}
+                  inputMode="decimal"
+                />
+              </Form.Group>
+            </Col>
           <Col md={6}>
-            <Form.Group controlId="extras-festivo">
-              <Form.Label>Festivo</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={fields.festivo}
-                onChange={(event) => handleFieldChange('festivo', event.target.value)}
-                inputMode="decimal"
-              />
-            </Form.Group>
-          </Col>
+              <Form.Group controlId="extras-festivo">
+                <Form.Label>Festivo</Form.Label>
+                <Form.Control
+                  type="number"
+                  step="0.01"
+                  value={resolvedFields.festivo}
+                  onChange={(event) => handleFieldChange('festivo', event.target.value)}
+                  inputMode="decimal"
+                />
+              </Form.Group>
+            </Col>
           <Col md={6}>
-            <Form.Group controlId="extras-horas-extras">
-              <Form.Label>Horas extras</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={fields.horasExtras}
-                onChange={(event) => handleFieldChange('horasExtras', event.target.value)}
-                inputMode="decimal"
-              />
-            </Form.Group>
-          </Col>
+              <Form.Group controlId="extras-horas-extras">
+                <Form.Label>Horas extras</Form.Label>
+                <Form.Control
+                  type="number"
+                  step="0.01"
+                  value={resolvedFields.horasExtras}
+                  onChange={(event) => handleFieldChange('horasExtras', event.target.value)}
+                  inputMode="decimal"
+                />
+              </Form.Group>
+            </Col>
           <Col md={12}>
-            <Form.Group controlId="extras-otros-gastos">
-              <Form.Label>Otros gastos</Form.Label>
-              <Form.Control
-                type="number"
-                step="0.01"
-                value={fields.otrosGastos}
-                onChange={(event) => handleFieldChange('otrosGastos', event.target.value)}
-                inputMode="decimal"
-              />
-            </Form.Group>
-          </Col>
+              <Form.Group controlId="extras-otros-gastos">
+                <Form.Label>Otros gastos</Form.Label>
+                <Form.Control
+                  type="number"
+                  step="0.01"
+                  value={resolvedFields.otrosGastos}
+                  onChange={(event) => handleFieldChange('otrosGastos', event.target.value)}
+                  inputMode="decimal"
+                />
+              </Form.Group>
+            </Col>
           <Col md={12}>
             <Form.Group controlId="extras-total">
               <Form.Label>Total Extras</Form.Label>
