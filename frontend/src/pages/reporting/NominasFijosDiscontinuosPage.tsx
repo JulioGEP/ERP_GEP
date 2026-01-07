@@ -10,7 +10,7 @@ export default function NominasFijosDiscontinuosPage() {
 
   return (
     <NominasOficinaPage
-      title="Nóminas Fijos discontinuos"
+      title="Nóminas Formadores Fijos"
       description="Listado mensual de nóminas para formadores con contrato fijo discontinuo."
       filterEntries={filterEntries}
     />
