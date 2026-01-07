@@ -618,11 +618,25 @@ option.session-option-unavailable {
 }
 
 .erp-calendar-toolbar-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
   font-weight: 600;
   font-size: 1.25rem;
   text-transform: capitalize;
   color: var(--color-gray-dark);
   margin-bottom: 1.25rem;
+}
+
+.erp-calendar-week-badge {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-gray-dark);
+  background-color: rgba(86, 86, 86, 0.12);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  text-transform: none;
 }
 
 .erp-calendar-wrapper {
@@ -925,7 +939,7 @@ option.session-option-unavailable {
 
 .erp-calendar-month-header {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: minmax(48px, 60px) repeat(7, 1fr);
   gap: 0.5rem;
   font-weight: 600;
   color: var(--color-gray-medium);
@@ -937,10 +951,25 @@ option.session-option-unavailable {
   text-align: center;
 }
 
+.erp-calendar-week-header {
+  text-align: center;
+}
+
 .erp-calendar-month-body {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: minmax(48px, 60px) repeat(7, 1fr);
   gap: 0.5rem;
+}
+
+.erp-calendar-week-number {
+  background-color: rgba(86, 86, 86, 0.08);
+  border-radius: 14px;
+  font-weight: 700;
+  color: var(--color-gray-dark);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0.75rem 0.5rem;
 }
 
 .erp-calendar-day-cell {

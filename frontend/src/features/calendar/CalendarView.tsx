@@ -1,5 +1,5 @@
 // frontend/src/features/calendar/CalendarView.tsx
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, ButtonGroup, Spinner } from 'react-bootstrap';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -297,6 +297,14 @@ function getMadridWeekday(date: MadridDate): number {
 
 function getDaysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function getISOWeekNumber(date: MadridDate): number {
+  const utcDate = new Date(Date.UTC(date.year, date.month - 1, date.day));
+  const weekday = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - weekday);
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  return Math.ceil(((utcDate.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
 function formatToolbarLabel(view: CalendarViewType, range: VisibleRange): string {
@@ -1380,6 +1388,17 @@ export function CalendarView({
     return days;
   }, [view, visibleRange, currentDate, eventGroups]);
 
+  const monthWeeks = useMemo(() => {
+    if (!monthDays) return null;
+    const weeks: { weekNumber: number; days: MonthDayCell[] }[] = [];
+    for (let index = 0; index < monthDays.length; index += 7) {
+      const days = monthDays.slice(index, index + 7);
+      if (!days.length) continue;
+      weeks.push({ weekNumber: getISOWeekNumber(days[0].date), days });
+    }
+    return weeks;
+  }, [monthDays]);
+
   const weekColumns = useMemo(() => {
     if (view === 'month') return null;
     return buildWeekColumns(visibleRange, events);
@@ -1392,6 +1411,9 @@ export function CalendarView({
   const error =
     (sessionsQuery.error as ApiError | null) ??
     (includeVariants ? (variantsQuery.error as ApiError | null) : null);
+
+  const weekNumberBadge =
+    view === 'month' ? null : getISOWeekNumber(julianToMadridDate(visibleRange.startJulian));
 
   const handleRefetch = useCallback(() => {
     void sessionsQuery.refetch();
@@ -1819,7 +1841,12 @@ export function CalendarView({
       ) : null}
 
       <div className="erp-calendar-surface">
-        <div className="erp-calendar-toolbar-title">{formatToolbarLabel(view, visibleRange)}</div>
+        <div className="erp-calendar-toolbar-title">
+          <span>{formatToolbarLabel(view, visibleRange)}</span>
+          {weekNumberBadge !== null ? (
+            <span className="erp-calendar-week-badge">Semana {weekNumberBadge}</span>
+          ) : null}
+        </div>
         <div className="erp-calendar-wrapper" ref={wrapperRef}>
           {(isInitialLoading || isFetching) && (
             <div className="erp-calendar-loading" role="status" aria-live="polite">
@@ -1831,6 +1858,7 @@ export function CalendarView({
           {view === 'month' && monthDays ? (
             <div className="erp-calendar-month-grid">
               <div className="erp-calendar-month-header">
+                <div className="erp-calendar-month-header-cell erp-calendar-week-header">Sem.</div>
                 {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((label) => (
                   <div key={label} className="erp-calendar-month-header-cell">
                     {label}
@@ -1838,157 +1866,173 @@ export function CalendarView({
                 ))}
               </div>
               <div className="erp-calendar-month-body">
-                {monthDays.map((day) => (
-                  <div
-                    key={day.iso}
-                    className={`erp-calendar-day-cell ${
-                      day.isCurrentMonth ? '' : 'is-muted'
-                    } ${day.isToday ? 'is-today' : ''}`}
-                  >
-                    <div className="erp-calendar-day-label">{day.date.day}</div>
-                    <div className="erp-calendar-day-events">
-                      {day.events.map((eventItem) => {
-                        if (eventItem.kind === 'session') {
-                          const session = eventItem.session;
-                          const monthEventLabel =
-                            mode === 'sessions'
-                              ? session.dealPipelineId ?? session.title
-                            : mode === 'trainers'
-                            ? truncateLabel(
-                                formatResourceSummary(session.trainers, 'Sin formador'),
-                                20,
-                              )
-                            : mode === 'units'
-                            ? truncateLabel(formatResourceSummary(session.units, 'Sin unidad móvil'), 20)
-                            : truncateLabel(formatSessionOrganization(session, 'Sin organización'));
-                          const monthEventTitle =
-                            mode === 'sessions'
-                              ? session.dealPipelineId ?? session.title
-                            : mode === 'trainers'
-                            ? formatResourceDetail(session.trainers, 'Sin formador')
-                            : mode === 'units'
-                            ? formatResourceDetail(session.units, 'Sin unidad móvil')
-                            : formatSessionOrganization(session, 'Sin organización');
-                          return (
-                            <div
-                              key={`session-${session.id}`}
-                              className={`erp-calendar-event erp-calendar-month-event ${SESSION_CLASSNAMES[session.estado]}`}
-                              role="button"
-                              tabIndex={0}
-                              draggable
-                              title={monthEventTitle}
-                              onClick={() => onSessionOpen?.(session)}
-                              onKeyDown={(keyboardEvent) => {
-                                if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
-                                  keyboardEvent.preventDefault();
-                                  onSessionOpen?.(session);
-                                }
-                              }}
-                              onDragEnd={handleEventDragEnd}
-                              onMouseEnter={(mouseEvent) => {
-                                const target = mouseEvent.currentTarget;
-                                if (!target) return;
-                                setTooltip({ kind: 'session', session, rect: target.getBoundingClientRect() });
-                              }}
-                              onMouseLeave={() => setTooltip(null)}
-                              onFocus={(focusEvent) => {
-                                const target = focusEvent.currentTarget;
-                                if (!target) return;
-                                setTooltip({ kind: 'session', session, rect: target.getBoundingClientRect() });
-                              }}
-                              onBlur={() => setTooltip(null)}
-                            >
-                              <span className="erp-calendar-month-event-dot" aria-hidden="true" />
-                              <span className="erp-calendar-month-event-text">{monthEventLabel}</span>
-                            </div>
-                          );
-                        }
+                {monthWeeks?.map((week) => (
+                  <Fragment key={`week-${week.weekNumber}-${week.days[0]?.iso ?? 'start'}`}>
+                    <div className="erp-calendar-week-number">{week.weekNumber}</div>
+                    {week.days.map((day) => (
+                      <div
+                        key={day.iso}
+                        className={`erp-calendar-day-cell ${
+                          day.isCurrentMonth ? '' : 'is-muted'
+                        } ${day.isToday ? 'is-today' : ''}`}
+                      >
+                        <div className="erp-calendar-day-label">{day.date.day}</div>
+                        <div className="erp-calendar-day-events">
+                          {day.events.map((eventItem) => {
+                            if (eventItem.kind === 'session') {
+                              const session = eventItem.session;
+                              const monthEventLabel =
+                                mode === 'sessions'
+                                  ? session.dealPipelineId ?? session.title
+                                : mode === 'trainers'
+                                ? truncateLabel(
+                                    formatResourceSummary(session.trainers, 'Sin formador'),
+                                    20,
+                                  )
+                                : mode === 'units'
+                                ? truncateLabel(
+                                    formatResourceSummary(session.units, 'Sin unidad móvil'),
+                                    20,
+                                  )
+                                : truncateLabel(formatSessionOrganization(session, 'Sin organización'));
+                              const monthEventTitle =
+                                mode === 'sessions'
+                                  ? session.dealPipelineId ?? session.title
+                                : mode === 'trainers'
+                                ? formatResourceDetail(session.trainers, 'Sin formador')
+                                : mode === 'units'
+                                ? formatResourceDetail(session.units, 'Sin unidad móvil')
+                                : formatSessionOrganization(session, 'Sin organización');
+                              return (
+                                <div
+                                  key={`session-${session.id}`}
+                                  className={`erp-calendar-event erp-calendar-month-event ${SESSION_CLASSNAMES[session.estado]}`}
+                                  role="button"
+                                  tabIndex={0}
+                                  draggable
+                                  title={monthEventTitle}
+                                  onClick={() => onSessionOpen?.(session)}
+                                  onKeyDown={(keyboardEvent) => {
+                                    if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                                      keyboardEvent.preventDefault();
+                                      onSessionOpen?.(session);
+                                    }
+                                  }}
+                                  onDragEnd={handleEventDragEnd}
+                                  onMouseEnter={(mouseEvent) => {
+                                    const target = mouseEvent.currentTarget;
+                                    if (!target) return;
+                                    setTooltip({
+                                      kind: 'session',
+                                      session,
+                                      rect: target.getBoundingClientRect(),
+                                    });
+                                  }}
+                                  onMouseLeave={() => setTooltip(null)}
+                                  onFocus={(focusEvent) => {
+                                    const target = focusEvent.currentTarget;
+                                    if (!target) return;
+                                    setTooltip({
+                                      kind: 'session',
+                                      session,
+                                      rect: target.getBoundingClientRect(),
+                                    });
+                                  }}
+                                  onBlur={() => setTooltip(null)}
+                                >
+                                  <span className="erp-calendar-month-event-dot" aria-hidden="true" />
+                                  <span className="erp-calendar-month-event-text">{monthEventLabel}</span>
+                                </div>
+                              );
+                            }
 
-                        const variant = eventItem.variant;
-                        const trainerResources = getVariantTrainerResources(variant);
-                        const trainerNames = formatVariantTrainerNames(trainerResources);
-                        const unitResources = getVariantUnitResources(variant);
-                        const unitNames = formatVariantUnitNames(unitResources);
-                        const variantLabel =
-                          mode === 'trainers'
-                            ? truncateLabel(trainerNames.length ? trainerNames : 'Sin formador', 20)
-                          : mode === 'units'
-                            ? unitNames.length
-                              ? truncateLabel(unitNames, 20)
-                              : 'Sin unidad móvil'
-                          : mode === 'organizations'
-                          ? formatVariantOrganizationSummary(variant, 'F.Abierta')
-                          : variant.variant.name?.trim().length
-                          ? variant.variant.name
-                          : variant.product.name ?? 'Variante sin nombre';
-                        const variantTitleParts: string[] = [];
-                        if (mode === 'organizations') {
-                          const organizations = formatVariantOrganizationDetail(
-                            variant,
-                            'F.Abierta',
-                          );
-                          if (organizations.length) {
-                            variantTitleParts.push(organizations);
-                          }
-                        }
-                        if (variant.product.name) {
-                          variantTitleParts.push(variant.product.name);
-                        } else if (variant.product.code) {
-                          variantTitleParts.push(variant.product.code);
-                        }
-                        if (variant.variant.sede) {
-                          variantTitleParts.push(variant.variant.sede);
-                        }
-                        const variantTitle = variantTitleParts.length
-                          ? variantTitleParts.join(' · ')
-                          : variantLabel ?? 'Variante sin nombre';
-
-                        return (
-                          <div
-                            key={`variant-${variant.id}`}
-                            className={`erp-calendar-event erp-calendar-month-event erp-calendar-event-variant ${getVariantStatusClass(variant.variant.status, variant.variant.finalizar)}`.trim()}
-                            title={variantTitle}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => {
-                              setTooltip(null);
-                              onVariantOpen?.(variant);
-                            }}
-                            onKeyDown={(keyboardEvent) => {
-                              if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
-                                keyboardEvent.preventDefault();
-                                setTooltip(null);
-                                onVariantOpen?.(variant);
+                            const variant = eventItem.variant;
+                            const trainerResources = getVariantTrainerResources(variant);
+                            const trainerNames = formatVariantTrainerNames(trainerResources);
+                            const unitResources = getVariantUnitResources(variant);
+                            const unitNames = formatVariantUnitNames(unitResources);
+                            const variantLabel =
+                              mode === 'trainers'
+                                ? truncateLabel(trainerNames.length ? trainerNames : 'Sin formador', 20)
+                              : mode === 'units'
+                                ? unitNames.length
+                                  ? truncateLabel(unitNames, 20)
+                                  : 'Sin unidad móvil'
+                              : mode === 'organizations'
+                              ? formatVariantOrganizationSummary(variant, 'F.Abierta')
+                              : variant.variant.name?.trim().length
+                              ? variant.variant.name
+                              : variant.product.name ?? 'Variante sin nombre';
+                            const variantTitleParts: string[] = [];
+                            if (mode === 'organizations') {
+                              const organizations = formatVariantOrganizationDetail(
+                                variant,
+                                'F.Abierta',
+                              );
+                              if (organizations.length) {
+                                variantTitleParts.push(organizations);
                               }
-                            }}
-                            onMouseEnter={(mouseEvent) => {
-                              const target = mouseEvent.currentTarget;
-                              if (!target) return;
-                              setTooltip({
-                                kind: 'variant',
-                                variant,
-                                rect: target.getBoundingClientRect(),
-                              });
-                            }}
-                            onMouseLeave={() => setTooltip(null)}
-                            onFocus={(focusEvent) => {
-                              const target = focusEvent.currentTarget;
-                              if (!target) return;
-                              setTooltip({
-                                kind: 'variant',
-                                variant,
-                                rect: target.getBoundingClientRect(),
-                              });
-                            }}
-                            onBlur={() => setTooltip(null)}
-                          >
-                            <span className="erp-calendar-month-event-dot" aria-hidden="true" />
-                            <span className="erp-calendar-month-event-text">{variantLabel}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                            }
+                            if (variant.product.name) {
+                              variantTitleParts.push(variant.product.name);
+                            } else if (variant.product.code) {
+                              variantTitleParts.push(variant.product.code);
+                            }
+                            if (variant.variant.sede) {
+                              variantTitleParts.push(variant.variant.sede);
+                            }
+                            const variantTitle = variantTitleParts.length
+                              ? variantTitleParts.join(' · ')
+                              : variantLabel ?? 'Variante sin nombre';
+
+                            return (
+                              <div
+                                key={`variant-${variant.id}`}
+                                className={`erp-calendar-event erp-calendar-month-event erp-calendar-event-variant ${getVariantStatusClass(variant.variant.status, variant.variant.finalizar)}`.trim()}
+                                title={variantTitle}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  setTooltip(null);
+                                  onVariantOpen?.(variant);
+                                }}
+                                onKeyDown={(keyboardEvent) => {
+                                  if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                                    keyboardEvent.preventDefault();
+                                    setTooltip(null);
+                                    onVariantOpen?.(variant);
+                                  }
+                                }}
+                                onMouseEnter={(mouseEvent) => {
+                                  const target = mouseEvent.currentTarget;
+                                  if (!target) return;
+                                  setTooltip({
+                                    kind: 'variant',
+                                    variant,
+                                    rect: target.getBoundingClientRect(),
+                                  });
+                                }}
+                                onMouseLeave={() => setTooltip(null)}
+                                onFocus={(focusEvent) => {
+                                  const target = focusEvent.currentTarget;
+                                  if (!target) return;
+                                  setTooltip({
+                                    kind: 'variant',
+                                    variant,
+                                    rect: target.getBoundingClientRect(),
+                                  });
+                                }}
+                                onBlur={() => setTooltip(null)}
+                              >
+                                <span className="erp-calendar-month-event-dot" aria-hidden="true" />
+                                <span className="erp-calendar-month-event-text">{variantLabel}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </Fragment>
                 ))}
               </div>
             </div>
