@@ -213,8 +213,8 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
       },
       {
         key: 'Usuarios/NominasFijosDiscontinuos',
-        label: 'Nóminas Fijos discontinuos',
-        path: '/usuarios/nominas_fijos_discontinuos',
+        label: 'Nóminas Formadores Fijos',
+        path: '/usuarios/nominas_formadores_fijos',
       },
       {
         key: 'Usuarios/NominasFormadoresExternos',
