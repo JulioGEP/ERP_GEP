@@ -13,6 +13,7 @@ export default function NominasFijosDiscontinuosPage() {
       title="Nóminas Formadores Fijos"
       description="Listado mensual de nóminas para formadores con contrato fijo discontinuo."
       filterEntries={filterEntries}
+      enableSessionsAction
     />
   );
 }
