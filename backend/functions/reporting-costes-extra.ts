@@ -103,6 +103,7 @@ type TrainerExtraCostResponseItem = {
   trainerId: string;
   trainerName: string | null;
   trainerLastName: string | null;
+  trainerUserId: string | null;
   assignmentType: 'session' | 'variant';
   sessionId: string | null;
   variantId: string | null;
@@ -432,6 +433,7 @@ function mapResponseItem(params: {
     trainerId: trainer?.trainer_id ?? record?.trainer_id ?? '',
     trainerName: trainer?.name ?? null,
     trainerLastName: trainer?.apellido ?? null,
+    trainerUserId: trainer?.user_id ?? null,
     assignmentType,
     sessionId: assignmentType === 'session' ? sessionInfo?.id ?? record?.session_id ?? null : null,
     variantId: assignmentType === 'variant' ? variantInfo?.id ?? record?.variant_id ?? null : null,
@@ -784,7 +786,7 @@ export const handler = createHttpHandler(async (request) => {
     const trainerRecords = trainerIds.size
       ? ((await prisma.trainers.findMany({
           where: { trainer_id: { in: Array.from(trainerIds) } },
-          select: { trainer_id: true, name: true, apellido: true },
+          select: { trainer_id: true, name: true, apellido: true, user_id: true },
         })) as TrainerSummary[])
       : [];
     const trainerMap = new Map<string, TrainerSummary>();
