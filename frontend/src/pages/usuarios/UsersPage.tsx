@@ -42,6 +42,11 @@ import {
   uploadUserDocument,
   type UserDocument,
 } from '../../api/userDocuments';
+import {
+  VACATION_TYPE_COLORS,
+  VACATION_TYPE_INFO,
+  VACATION_TYPE_LABELS,
+} from '../../constants/vacations';
 import { VacationCalendar } from '../../components/vacations/VacationCalendar';
 import { fetchTrainerDocuments } from '../../features/recursos/api';
 import { type TrainerDocument } from '../../types/trainer';
@@ -1270,45 +1275,6 @@ export type VacationManagerModalProps = {
   year: number;
   onHide: () => void;
   onNotify?: UsersPageProps['onNotify'];
-};
-
-const VACATION_TYPE_INFO: Record<VacationType, { label: string; fullLabel: string }> = {
-  V: { label: 'Vacaciones', fullLabel: 'Vacaciones' },
-  L: { label: 'Festivo local', fullLabel: 'Festivo local' },
-  A: { label: 'Día aniversario', fullLabel: 'Día aniversario' },
-  T: { label: 'Teletrabajo', fullLabel: 'Teletrabajo' },
-  M: { label: 'Matrimonio', fullLabel: 'Matrimonio o registro de pareja de hecho' },
-  H: {
-    label: 'Accidente',
-    fullLabel: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
-  },
-  F: { label: 'Fallecimiento', fullLabel: 'Fallecimiento de un familiar' },
-  R: { label: 'Traslado', fullLabel: 'Traslado del domicilio habitual' },
-  P: { label: 'Exámenes', fullLabel: 'Exámenes prenatales' },
-  I: { label: 'Incapacidad', fullLabel: 'Incapacidad temporal' },
-  N: { label: 'Festivos nacionales', fullLabel: 'Festivos nacionales' },
-  C: { label: 'Fiesta autonómica', fullLabel: 'Fiesta autonómica' },
-  Y: { label: 'Año anterior', fullLabel: 'Vacaciones año anterior' },
-};
-
-const VACATION_TYPE_LABELS: Record<VacationType, string> = Object.fromEntries(
-  Object.entries(VACATION_TYPE_INFO).map(([key, info]) => [key, info.label]),
-) as Record<VacationType, string>;
-
-const VACATION_TYPE_COLORS: Record<VacationType, string> = {
-  V: '#2563eb',
-  L: '#65a30d',
-  A: '#e11d48',
-  T: '#7c3aed',
-  M: '#f97316',
-  H: '#ef4444',
-  F: '#0ea5e9',
-  R: '#0f766e',
-  P: '#a855f7',
-  I: '#475569',
-  N: '#facc15',
-  C: '#14b8a6',
-  Y: '#0891b2',
 };
 
 const HOLIDAY_TYPES: VacationType[] = ['L', 'N', 'C'];
