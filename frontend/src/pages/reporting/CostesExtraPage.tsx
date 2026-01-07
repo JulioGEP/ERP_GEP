@@ -200,6 +200,10 @@ export default function CostesExtraPage() {
     const raw = searchParams.get('trainerId');
     return raw ? raw.trim() : null;
   }, [searchParams]);
+  const trainerNameFilter = useMemo(() => {
+    const raw = searchParams.get('trainerName');
+    return raw ? raw.trim() : null;
+  }, [searchParams]);
 
   const initialFilters = useMemo(() => {
     const startDate = searchParams.get('startDate') ?? '';
@@ -301,11 +305,11 @@ export default function CostesExtraPage() {
     if (!trainerIdFilter) {
       return null;
     }
-    if (!items.length) {
-      return trainerIdFilter;
+    if (items.length) {
+      return buildTrainerDisplayName(items[0]);
     }
-    return buildTrainerDisplayName(items[0]);
-  }, [items, trainerIdFilter]);
+    return trainerNameFilter || trainerIdFilter;
+  }, [items, trainerIdFilter, trainerNameFilter]);
 
   useEffect(() => {
     if (!items.length) {

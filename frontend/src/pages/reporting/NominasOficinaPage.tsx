@@ -1142,6 +1142,7 @@ export default function NominasOficinaPage({
                                                   const range = buildMonthRange(year, month);
                                                   const params = new URLSearchParams({
                                                     trainerId: entry.userId,
+                                                    trainerName: entry.fullName,
                                                     startDate: range.startDate,
                                                     endDate: range.endDate,
                                                   });
