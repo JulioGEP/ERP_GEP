@@ -76,7 +76,7 @@ export const DEFAULT_ROUTE_ORDER = [
   '/informes/simulacro',
   '/informes/recurso_preventivo_ebro',
   '/reporting/logs',
-  '/reporting/costes_extra',
+  '/usuarios/costes_extra',
   '/usuarios/nominas_formadores_externos',
   '/perfil/control_horas',
   '/reporting/webhooks_pipedrive',

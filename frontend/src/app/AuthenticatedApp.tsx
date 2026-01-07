@@ -182,11 +182,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/reporting/control_horario',
       },
       {
-        key: 'Reporting/CostesExtra',
-        label: 'Costes Extra',
-        path: '/reporting/costes_extra',
-      },
-      {
         key: 'Reporting/Comparativa',
         label: 'Comparativa Formaciones y Servicios',
         path: '/reporting/comparativa',
@@ -210,6 +205,7 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
     children: [
       { key: 'Usuarios/Principal', label: 'Gestión de usuarios', path: '/usuarios' },
       { key: 'Usuarios/Vacaciones', label: 'Vacaciones', path: '/usuarios/vacaciones' },
+      { key: 'Usuarios/CostesExtra', label: 'Costes Extra', path: '/usuarios/costes_extra' },
       {
         key: 'Usuarios/NominasOficina',
         label: 'Nómina Fijos',
