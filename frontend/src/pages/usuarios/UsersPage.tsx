@@ -1461,6 +1461,10 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
     data?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0, Y: 0 };
   const enjoyed = data?.enjoyed ?? 0;
   const remaining = allowances.remaining === '' ? computeRemaining(allowances, enjoyed) : allowances.remaining;
+  const previousYearRemaining = Math.max(
+    0,
+    normalizeNumber(allowances.previousYearAllowance) - (counts.Y ?? 0),
+  );
   const holidayDays = useMemo(() => {
     return new Set(
       (data?.days ?? [])
@@ -1652,6 +1656,12 @@ export function VacationManagerModal({ show, user, year, onHide, onNotify }: Vac
       key: 'enjoyed',
       label: 'Disfrutadas',
       value: enjoyed,
+      readOnly: true,
+    },
+    {
+      key: 'previousYearRemaining',
+      label: 'Año anterior restante',
+      value: previousYearRemaining,
       readOnly: true,
     },
     {
