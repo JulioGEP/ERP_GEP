@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Alert, Button, Card, Form, Spinner, Table } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import {
   fetchTrainerHours,
   type TrainerHoursFilters,
@@ -49,6 +50,7 @@ function getCurrentMonthRange(): { startDate: string; endDate: string } {
 
 export default function HorasFormadoresPage() {
   const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(getCurrentMonthRange);
+  const navigate = useNavigate();
 
   const hasInvalidRange = Boolean(filters.startDate && filters.endDate && filters.startDate > filters.endDate);
 
@@ -139,6 +141,22 @@ export default function HorasFormadoresPage() {
   }, [filters.endDate, filters.startDate]);
 
   const canDownload = !hasInvalidRange && !trainerHoursQuery.isLoading && !trainerHoursQuery.isError && items.length > 0;
+
+  const handleTrainerClick = (item: TrainerHoursItem) => {
+    const params = new URLSearchParams();
+    const name = typeof item.name === 'string' ? item.name.trim() : '';
+    const lastName = typeof item.lastName === 'string' ? item.lastName.trim() : '';
+
+    if (name) {
+      params.set('trainerName', name);
+    }
+    if (lastName) {
+      params.set('trainerLastName', lastName);
+    }
+
+    const query = params.toString();
+    navigate(query ? `/usuarios/costes_extra?${query}` : '/usuarios/costes_extra');
+  };
 
   const handleDownload = () => {
     if (!canDownload) {
@@ -254,7 +272,14 @@ export default function HorasFormadoresPage() {
               return (
                 <tr key={item.trainerId}>
                   <td>
-                    <div className="fw-semibold">{displayName}</div>
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="p-0 fw-semibold text-start"
+                      onClick={() => handleTrainerClick(item)}
+                    >
+                      {displayName}
+                    </Button>
                     {showIdentifier ? (
                       <div className="text-muted small">ID: {item.trainerId}</div>
                     ) : null}
