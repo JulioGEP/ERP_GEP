@@ -1125,7 +1125,7 @@ export default function NominasOficinaPage({
                                               variant="outline-primary"
                                               onClick={() => setSelectedEntry(entry)}
                                             >
-                                              Editar nómina
+                                              Nómina
                                             </Button>
                                             <Button
                                               size="sm"
