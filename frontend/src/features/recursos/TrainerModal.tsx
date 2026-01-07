@@ -502,66 +502,6 @@ export function TrainerModal({
                 </div>
               </Form.Group>
             </Col>
-            {formValues.contrato_fijo && (
-              <>
-                <Col md={6}>
-                  <Form.Group controlId="trainerNomina">
-                    <Form.Label>Nómina (€)</Form.Label>
-                    <Form.Control
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formValues.nomina}
-                      onChange={handleChange("nomina")}
-                      disabled={isSaving}
-                      placeholder="Ej. 1800.00"
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group controlId="trainerIrpf">
-                    <Form.Label>IRPF (%)</Form.Label>
-                    <Form.Control
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formValues.irpf}
-                      onChange={handleChange("irpf")}
-                      disabled={isSaving}
-                      placeholder="Ej. 15"
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group controlId="trainerSs">
-                    <Form.Label>SS (€)</Form.Label>
-                    <Form.Control
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={formValues.ss}
-                      onChange={handleChange("ss")}
-                      disabled={isSaving}
-                      placeholder="Ej. 120.50"
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group controlId="trainerHorasContratadas">
-                    <Form.Label>Horas contratadas</Form.Label>
-                    <Form.Control
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={formValues.horas_contratadas}
-                      onChange={handleChange("horas_contratadas")}
-                      disabled={isSaving}
-                      placeholder="Ej. 40"
-                    />
-                  </Form.Group>
-                </Col>
-              </>
-            )}
             <Col md={12}>
               <Form.Group controlId="trainerDireccion">
                 <Form.Label>Dirección</Form.Label>
