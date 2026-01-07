@@ -29,55 +29,12 @@ import {
   type VacationRequestItem,
 } from '../../api/userVacations';
 import { type UserSummary } from '../../api/users';
+import {
+  VACATION_TYPE_COLORS,
+  VACATION_TYPE_FULL_LABELS,
+  VACATION_TYPE_LABELS,
+} from '../../constants/vacations';
 import { VacationManagerModal } from './UsersPage';
-
-const VACATION_TYPE_LABELS: Record<VacationType, string> = {
-  V: 'Vacaciones',
-  L: 'Festivo local',
-  A: 'Día aniversario',
-  T: 'Teletrabajo',
-  M: 'Matrimonio',
-  H: 'Accidente',
-  F: 'Fallecimiento',
-  R: 'Traslado',
-  P: 'Exámenes',
-  I: 'Incapacidad',
-  N: 'Festivos nacionales',
-  C: 'Fiesta autonómica',
-  Y: 'Año anterior',
-};
-
-const VACATION_TYPE_FULL_LABELS: Record<VacationType, string> = {
-  V: 'Vacaciones',
-  L: 'Festivo local',
-  A: 'Día aniversario',
-  T: 'Teletrabajo',
-  M: 'Matrimonio o registro de pareja de hecho',
-  H: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
-  F: 'Fallecimiento de un familiar',
-  R: 'Traslado del domicilio habitual',
-  P: 'Exámenes prenatales',
-  I: 'Incapacidad temporal',
-  N: 'Festivos nacionales',
-  C: 'Fiesta autonómica',
-  Y: 'Vacaciones año anterior',
-};
-
-const VACATION_TYPE_COLORS: Record<VacationType, string> = {
-  V: '#2563eb',
-  L: '#65a30d',
-  A: '#e11d48',
-  T: '#7c3aed',
-  M: '#f97316',
-  H: '#ef4444',
-  F: '#0ea5e9',
-  R: '#0f766e',
-  P: '#a855f7',
-  I: '#475569',
-  N: '#facc15',
-  C: '#14b8a6',
-  Y: '#0891b2',
-};
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('es-ES', { month: 'long' });
 

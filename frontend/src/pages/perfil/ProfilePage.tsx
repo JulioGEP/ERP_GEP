@@ -16,6 +16,14 @@ import {
   type UserVacationsResponse,
   type VacationType,
 } from '../../api/userVacations';
+import {
+  VACATION_TAG_OPTIONS,
+  VACATION_TYPE_COLORS,
+  VACATION_TYPE_FULL_LABELS,
+  VACATION_TYPE_INFO,
+  VACATION_TYPE_LABELS,
+  VACATION_TYPE_ORDER,
+} from '../../constants/vacations';
 import { fetchTrainerDocuments, fetchTrainers, uploadTrainerDocument } from '../../features/recursos/api';
 import { TRAINER_DOCUMENT_TYPES, type TrainerDocumentTypeValue } from '../../features/recursos/trainers.constants';
 import { VacationCalendar } from '../../components/vacations/VacationCalendar';
@@ -35,58 +43,6 @@ type ProfileUser = {
   address?: string | null;
   trainerId?: string | null;
 };
-
-const VACATION_LABELS: Record<VacationType, { label: string; fullLabel: string }> = {
-  V: { label: 'Vacaciones', fullLabel: 'Vacaciones' },
-  L: { label: 'Festivo local', fullLabel: 'Festivo local' },
-  A: { label: 'Día aniversario', fullLabel: 'Día aniversario' },
-  T: { label: 'Teletrabajo', fullLabel: 'Teletrabajo' },
-  M: { label: 'Matrimonio', fullLabel: 'Matrimonio o registro de pareja de hecho' },
-  H: {
-    label: 'Accidente',
-    fullLabel: 'Accidente, enfermedad, hospitalización o intervención de un familiar',
-  },
-  F: { label: 'Fallecimiento', fullLabel: 'Fallecimiento de un familiar' },
-  R: { label: 'Traslado', fullLabel: 'Traslado del domicilio habitual' },
-  P: { label: 'Exámenes', fullLabel: 'Exámenes prenatales' },
-  I: { label: 'Incapacidad', fullLabel: 'Incapacidad temporal' },
-  N: { label: 'Festivos nacionales', fullLabel: 'Festivos nacionales' },
-  C: { label: 'Fiesta autonómica', fullLabel: 'Fiesta autonómica' },
-  Y: { label: 'Año anterior', fullLabel: 'Vacaciones año anterior' },
-};
-
-const VACATION_COLORS: Record<VacationType, string> = {
-  V: '#2563eb',
-  L: '#65a30d',
-  A: '#e11d48',
-  T: '#7c3aed',
-  M: '#f97316',
-  H: '#ef4444',
-  F: '#0ea5e9',
-  R: '#0f766e',
-  P: '#a855f7',
-  I: '#475569',
-  N: '#facc15',
-  C: '#14b8a6',
-  Y: '#0891b2',
-};
-
-const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> = [
-  { value: '', label: 'Sin categoria' },
-  { value: 'V', label: VACATION_LABELS.V.fullLabel },
-  { value: 'L', label: VACATION_LABELS.L.fullLabel },
-  { value: 'A', label: VACATION_LABELS.A.fullLabel },
-  { value: 'T', label: VACATION_LABELS.T.fullLabel },
-  { value: 'M', label: VACATION_LABELS.M.fullLabel },
-  { value: 'H', label: VACATION_LABELS.H.fullLabel },
-  { value: 'F', label: VACATION_LABELS.F.fullLabel },
-  { value: 'R', label: VACATION_LABELS.R.fullLabel },
-  { value: 'P', label: VACATION_LABELS.P.fullLabel },
-  { value: 'I', label: VACATION_LABELS.I.fullLabel },
-  { value: 'N', label: VACATION_LABELS.N.fullLabel },
-  { value: 'C', label: VACATION_LABELS.C.fullLabel },
-  { value: 'Y', label: VACATION_LABELS.Y.fullLabel },
-];
 
 const VACATION_REQUEST_SECTION_TITLE = 'Petición de vacaciones y justificación de ausencias y Teletrabajo';
 const VACATION_REQUEST_BUTTON_LABEL = 'Enviar Petición';
@@ -802,7 +758,9 @@ export default function ProfilePage() {
           </div>
 
           <div className="d-flex flex-wrap gap-2 align-items-stretch">
-            {Object.entries(VACATION_LABELS).map(([key, { label, fullLabel }]) => (
+            {VACATION_TYPE_ORDER.map((key) => {
+              const { label, fullLabel } = VACATION_TYPE_INFO[key];
+              return (
               <div
                 key={key}
                 className="border rounded px-2 py-1 d-flex gap-2 align-items-center"
@@ -814,7 +772,7 @@ export default function ProfilePage() {
                     width: '9px',
                     height: '9px',
                     borderRadius: '999px',
-                    backgroundColor: VACATION_COLORS[key as VacationType],
+                    backgroundColor: VACATION_TYPE_COLORS[key],
                   }}
                 ></span>
                 <div>
@@ -825,11 +783,12 @@ export default function ProfilePage() {
                     {label}
                   </div>
                   <div className="fw-semibold" style={{ fontSize: '0.75rem' }}>
-                    {vacationCounts[key as VacationType] ?? 0} días
+                    {vacationCounts[key] ?? 0} días
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {vacationsQuery.isError ? <Alert variant="danger">No se pudo cargar el calendario.</Alert> : null}
@@ -878,7 +837,11 @@ export default function ProfilePage() {
                     onChange={(event) => setVacationTag(event.target.value as VacationType | '')}
                   >
                     {VACATION_TAG_OPTIONS.map((option) => (
-                      <option key={option.value || 'none'} value={option.value}>
+                      <option
+                        key={option.value || 'none'}
+                        value={option.value}
+                        title={option.value ? VACATION_TYPE_FULL_LABELS[option.value] : option.label}
+                      >
                         {option.label}
                       </option>
                     ))}
@@ -954,7 +917,7 @@ export default function ProfilePage() {
               ) : vacationRequestsQuery.data?.length ? (
                 <ListGroup className="mb-0">
                   {vacationRequestsQuery.data.map((request) => {
-                    const typeLabel = request.tag ? VACATION_LABELS[request.tag].label : 'Sin categoría';
+                    const typeLabel = request.tag ? VACATION_TYPE_LABELS[request.tag] : 'Sin categoría';
                     const createdAtLabel = new Date(request.createdAt).toLocaleDateString('es-ES');
                     return (
                       <ListGroup.Item
