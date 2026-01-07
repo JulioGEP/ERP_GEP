@@ -182,11 +182,6 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         path: '/reporting/control_horario',
       },
       {
-        key: 'Reporting/CostesExtra',
-        label: 'Costes Extra',
-        path: '/reporting/costes_extra',
-      },
-      {
         key: 'Reporting/HorasFormadores',
         label: 'Horas Formadores',
         path: '/reporting/horas_formadores',
@@ -224,6 +219,11 @@ const BASE_NAVIGATION_ITEMS: NavItem[] = [
         key: 'Usuarios/NominasFijosDiscontinuos',
         label: 'Nóminas Fijos discontinuos',
         path: '/usuarios/nominas_fijos_discontinuos',
+      },
+      {
+        key: 'Usuarios/CostesExtra',
+        label: 'Costes Extra',
+        path: '/usuarios/costes_extra',
       },
     ],
   },
