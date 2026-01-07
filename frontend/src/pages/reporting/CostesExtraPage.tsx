@@ -5,7 +5,8 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { Alert, Button, Card, Form, Spinner, Table } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Form, Spinner, Table } from 'react-bootstrap';
+import { useSearchParams } from 'react-router-dom';
 
 import { isApiError } from '../../api/client';
 import {
@@ -162,6 +163,26 @@ function formatAssignmentLabel(value: 'session' | 'variant'): string {
   return value === 'session' ? 'Sesión' : 'Formación abierta';
 }
 
+function resolveSessionCategory(item: TrainerExtraCostRecord): { label: string; variant: string } | null {
+  if (item.assignmentType === 'variant') {
+    return { label: 'Formación abierta', variant: 'info' };
+  }
+
+  const hasFormacion = (item.costs.precioCosteFormacion ?? 0) > 0;
+  const hasPreventivo = (item.costs.precioCostePreventivo ?? 0) > 0;
+
+  if (hasFormacion && hasPreventivo) {
+    return { label: 'Formación + Preventivo', variant: 'secondary' };
+  }
+  if (hasFormacion) {
+    return { label: 'Formación', variant: 'success' };
+  }
+  if (hasPreventivo) {
+    return { label: 'Preventivo', variant: 'warning' };
+  }
+  return null;
+}
+
 function isUnassignedTrainerName(name: string | null, lastName: string | null): boolean {
   const normalizedParts = [name, lastName]
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
@@ -174,8 +195,21 @@ function isUnassignedTrainerName(name: string | null, lastName: string | null): 
 
 export default function CostesExtraPage() {
   const today = useMemo(() => new Date(), []);
+  const [searchParams] = useSearchParams();
+  const trainerIdFilter = useMemo(() => {
+    const raw = searchParams.get('trainerId');
+    return raw ? raw.trim() : null;
+  }, [searchParams]);
 
-  const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(() => {
+  const initialFilters = useMemo(() => {
+    const startDate = searchParams.get('startDate') ?? '';
+    const endDate = searchParams.get('endDate') ?? '';
+    if (startDate || endDate) {
+      return {
+        startDate,
+        endDate,
+      };
+    }
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -183,7 +217,13 @@ export default function CostesExtraPage() {
       startDate: formatDateForInput(startOfMonth),
       endDate: formatDateForInput(endOfMonth),
     };
-  });
+  }, [searchParams]);
+
+  const [filters, setFilters] = useState<{ startDate: string; endDate: string }>(initialFilters);
+
+  useEffect(() => {
+    setFilters(initialFilters);
+  }, [initialFilters]);
 
   const quickRanges = useMemo(
     () => [
@@ -236,11 +276,14 @@ export default function CostesExtraPage() {
       return [] as TrainerExtraCostRecord[];
     }
     const source = extraCostsQuery.data ?? [];
-    const filtered = source.filter(
+    let filtered = source.filter(
       (item) => !isUnassignedTrainerName(item.trainerName, item.trainerLastName),
     );
     if (!filtered.length) {
       return filtered;
+    }
+    if (trainerIdFilter) {
+      filtered = filtered.filter((item) => item.trainerId === trainerIdFilter);
     }
     return [...filtered].sort((a, b) => {
       const timeA = getSortTimestamp(a.scheduledStart);
@@ -250,7 +293,17 @@ export default function CostesExtraPage() {
       }
       return timeA < timeB ? -1 : 1;
     });
-  }, [extraCostsQuery.data, hasInvalidRange]);
+  }, [extraCostsQuery.data, hasInvalidRange, trainerIdFilter]);
+
+  const trainerFilterLabel = useMemo(() => {
+    if (!trainerIdFilter) {
+      return null;
+    }
+    if (!items.length) {
+      return trainerIdFilter;
+    }
+    return buildTrainerDisplayName(items[0]);
+  }, [items, trainerIdFilter]);
 
   useEffect(() => {
     if (!items.length) {
@@ -455,6 +508,7 @@ export default function CostesExtraPage() {
               const trainingDateLabel = item.scheduledStart
                 ? dateFormatter.format(new Date(item.scheduledStart))
                 : '—';
+              const sessionCategory = resolveSessionCategory(item);
 
               const handleFieldChange = (
                 fieldKey: TrainerExtraCostFieldKey,
@@ -520,8 +574,15 @@ export default function CostesExtraPage() {
                     ) : null}
                   </td>
                   <td className="align-middle">
-                    <div className="fw-semibold">
-                      {formatAssignmentLabel(item.assignmentType)}: {item.sessionName ?? item.variantName ?? '—'}
+                    <div className="fw-semibold d-flex align-items-center gap-2 flex-wrap">
+                      <span>
+                        {formatAssignmentLabel(item.assignmentType)}: {item.sessionName ?? item.variantName ?? '—'}
+                      </span>
+                      {sessionCategory ? (
+                        <Badge bg={sessionCategory.variant} className="text-uppercase">
+                          {sessionCategory.label}
+                        </Badge>
+                      ) : null}
                     </div>
                     {item.dealTitle ? (
                       <div className="text-muted small">{item.dealTitle}</div>
@@ -605,6 +666,11 @@ export default function CostesExtraPage() {
           <p className="text-muted">
             Gestiona los importes adicionales asociados a cada formador por sesión o formación abierta.
           </p>
+          {trainerIdFilter ? (
+            <Alert variant="info" className="py-2">
+              Mostrando sesiones del formador <strong>{trainerFilterLabel}</strong> para el periodo seleccionado.
+            </Alert>
+          ) : null}
           <Form className="mb-3">
             <div className="d-flex gap-3 flex-wrap align-items-end">
               <Form.Group controlId="costes-extra-start" className="mb-0">

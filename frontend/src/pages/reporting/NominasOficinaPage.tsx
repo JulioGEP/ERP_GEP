@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Accordion, Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import {
   fetchOfficePayrolls,
   saveOfficePayroll,
@@ -15,6 +16,7 @@ type NominasOficinaPageProps = {
   title?: string;
   description?: string;
   filterEntries?: (entry: OfficePayrollRecord) => boolean;
+  enableSessionsAction?: boolean;
 };
 
 const DEFAULT_WEEKLY_HOURS = '40';
@@ -100,6 +102,22 @@ function formatCurrencyValue(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatDateForInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function buildMonthRange(year: number, month: number) {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0);
+  return {
+    startDate: formatDateForInput(start),
+    endDate: formatDateForInput(end),
+  };
 }
 
 const MONTH_LABELS = [
@@ -850,8 +868,10 @@ export default function NominasOficinaPage({
   title = 'Nómina Fijos',
   description = 'Listado mensual de nóminas para personal no formador.',
   filterEntries,
+  enableSessionsAction = false,
 }: NominasOficinaPageProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<OfficePayrollRecord | null>(null);
   const [selectedExtrasEntry, setSelectedExtrasEntry] = useState<OfficePayrollRecord | null>(null);
@@ -1114,6 +1134,23 @@ export default function NominasOficinaPage({
                                             >
                                               Extras
                                             </Button>
+                                            {enableSessionsAction ? (
+                                              <Button
+                                                size="sm"
+                                                variant="outline-success"
+                                                onClick={() => {
+                                                  const range = buildMonthRange(year, month);
+                                                  const params = new URLSearchParams({
+                                                    trainerId: entry.userId,
+                                                    startDate: range.startDate,
+                                                    endDate: range.endDate,
+                                                  });
+                                                  navigate(`/usuarios/costes_extra?${params.toString()}`);
+                                                }}
+                                              >
+                                                Sesiones
+                                              </Button>
+                                            ) : null}
                                           </div>
                                         </td>
                                       </tr>
