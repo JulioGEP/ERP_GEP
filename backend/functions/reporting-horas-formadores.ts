@@ -302,6 +302,11 @@ export const handler = createHttpHandler(async (request) => {
       fecha_inicio_utc: sessionStartFilter,
       fecha_fin_utc: sessionEndFilter,
     },
+    trainers: {
+      is: {
+        contrato_fijo: false,
+      },
+    },
   };
 
   const variantDateFilter: { not: null; gte?: Date; lte?: Date } = { not: null };
@@ -339,6 +344,11 @@ export const handler = createHttpHandler(async (request) => {
     where: {
       trainer_id: { not: null },
       date: variantDateFilter,
+      trainers: {
+        is: {
+          contrato_fijo: false,
+        },
+      },
     },
     select: {
       id: true,

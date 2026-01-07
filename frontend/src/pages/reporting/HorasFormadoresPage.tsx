@@ -65,7 +65,7 @@ export default function HorasFormadoresPage() {
   const trainerHoursQuery = useQuery({
     queryKey: [
       'reporting',
-      'horas-formadores',
+      'nominas-formadores-externos',
       appliedFilters.startDate ?? null,
       appliedFilters.endDate ?? null,
     ],
@@ -186,10 +186,10 @@ export default function HorasFormadoresPage() {
 
     exportToExcel({
       rows: sheetRows,
-      fileName: `horas_formadores_${periodLabel}.xlsx`,
-      sheetName: 'Horas Formadores',
+      fileName: `nominas_formadores_externos_${periodLabel}.xlsx`,
+      sheetName: 'Nóminas Formadores Externos',
       auditEvent: {
-        action: 'reporting.horas_formadores.export',
+        action: 'usuarios.nominas_formadores_externos.export',
         details: {
           period: periodLabel,
           itemCount: items.length,
@@ -220,7 +220,9 @@ export default function HorasFormadoresPage() {
       : 'No se pudo cargar la información de horas por formador.';
     content = <Alert variant="danger">{message}</Alert>;
   } else if (!items.length) {
-    content = <Alert variant="info">No hay sesiones con horas asignadas a formadores.</Alert>;
+    content = (
+      <Alert variant="info">No hay sesiones con horas asignadas a formadores externos.</Alert>
+    );
   } else {
     content = (
       <div className="table-responsive">
@@ -285,12 +287,12 @@ export default function HorasFormadoresPage() {
     <section className="py-3">
       <Card className="shadow-sm">
         <Card.Header as="h1" className="h4 mb-0">
-          Horas Formadores
+          Nóminas Formadores Externos
         </Card.Header>
         <Card.Body>
           <p className="text-muted">
-            Informe agregado del total de horas impartidas por cada formador según las sesiones
-            planificadas.
+            Informe agregado del total de horas y costes para formadores externos (sin contrato
+            fijo) según las sesiones planificadas.
           </p>
           <Form className="mb-3">
             <div className="d-flex gap-3 flex-wrap align-items-end">
