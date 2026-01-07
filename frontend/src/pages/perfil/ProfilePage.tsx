@@ -88,6 +88,7 @@ const VACATION_TAG_OPTIONS: Array<{ value: VacationType | ''; label: string }> =
   { value: 'Y', label: VACATION_LABELS.Y.fullLabel },
 ];
 
+const HOLIDAY_TYPES: VacationType[] = ['L', 'N', 'C'];
 const VACATION_REQUEST_SECTION_TITLE = 'Petición de vacaciones y justificación de ausencias y Teletrabajo';
 const VACATION_REQUEST_BUTTON_LABEL = 'Enviar Petición';
 
@@ -549,6 +550,42 @@ export default function ProfilePage() {
     { label: 'Disfrutadas', value: vacationData?.enjoyed ?? 0 },
     { label: 'Restantes', value: vacationData?.remaining ?? '—' },
   ];
+  const holidayDays = useMemo(() => {
+    return new Set(
+      (vacationData?.days ?? [])
+        .filter((day) => HOLIDAY_TYPES.includes(day.type))
+        .map((day) => day.date),
+    );
+  }, [vacationData?.days]);
+  const selectedRequestDates = useMemo(() => {
+    if (!vacationStart || !vacationEnd) return [] as string[];
+
+    const startDate = new Date(`${vacationStart}T00:00:00Z`);
+    const endDate = new Date(`${vacationEnd}T00:00:00Z`);
+
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return [];
+
+    const from = startDate <= endDate ? startDate : endDate;
+    const to = startDate <= endDate ? endDate : startDate;
+
+    const dates: string[] = [];
+    const current = new Date(from);
+    while (current <= to) {
+      dates.push(current.toISOString().slice(0, 10));
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    return dates;
+  }, [vacationEnd, vacationStart]);
+  const workingRequestDates = useMemo(
+    () =>
+      selectedRequestDates.filter((date) => {
+        const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+        const isWeekend = day === 0 || day === 6;
+        return !isWeekend && !holidayDays.has(date);
+      }),
+    [holidayDays, selectedRequestDates],
+  );
 
   const personalInfoItems: Array<{ label: string; value: string | null }> = [
     { label: 'Nombre', value: displayName },
@@ -894,6 +931,19 @@ export default function ProfilePage() {
                   />
                 </Col>
               </Row>
+              {selectedRequestDates.length ? (
+                <div className="d-flex align-items-center gap-2 flex-wrap">
+                  <Badge bg="secondary" className="text-uppercase">
+                    {workingRequestDates.length}{' '}
+                    {workingRequestDates.length === 1 ? 'día laborable' : 'días laborables'}
+                  </Badge>
+                  {selectedRequestDates.length !== workingRequestDates.length ? (
+                    <Badge bg="light" text="dark" className="text-uppercase">
+                      Excluye fines de semana y festivos
+                    </Badge>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   <Button
@@ -929,6 +979,9 @@ export default function ProfilePage() {
                 </Button>
               </div>
             </Form>
+            <p className="text-muted mb-0 mt-2">
+              Todas las categorías salvo Teletrabajo descuentan días del balance de vacaciones disponible.
+            </p>
 
             <div className="mt-4 pt-3 border-top">
               <div className="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
