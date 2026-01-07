@@ -165,20 +165,17 @@ function formatAssignmentLabel(value: 'session' | 'variant'): string {
 
 function resolveSessionCategory(item: TrainerExtraCostRecord): { label: string; variant: string } | null {
   if (item.assignmentType === 'variant') {
-    return { label: 'Formación abierta', variant: 'info' };
+    return { label: 'Formación', variant: 'warning' };
   }
 
   const hasFormacion = (item.costs.precioCosteFormacion ?? 0) > 0;
   const hasPreventivo = (item.costs.precioCostePreventivo ?? 0) > 0;
 
-  if (hasFormacion && hasPreventivo) {
-    return { label: 'Formación + Preventivo', variant: 'secondary' };
+  if (hasPreventivo) {
+    return { label: 'Preventivos', variant: 'danger' };
   }
   if (hasFormacion) {
-    return { label: 'Formación', variant: 'success' };
-  }
-  if (hasPreventivo) {
-    return { label: 'Preventivo', variant: 'warning' };
+    return { label: 'Formación', variant: 'warning' };
   }
   return null;
 }
