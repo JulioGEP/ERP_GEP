@@ -46,6 +46,7 @@ type ProfileUser = {
 
 const VACATION_REQUEST_SECTION_TITLE = 'Petición de vacaciones y justificación de ausencias y Teletrabajo';
 const VACATION_REQUEST_BUTTON_LABEL = 'Enviar Petición';
+const HOLIDAY_TYPES: VacationType[] = ['L', 'N', 'C'];
 
 async function fileToBase64(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
@@ -494,6 +495,39 @@ export default function ProfilePage() {
   const vacationData = vacationsQuery.data;
   const vacationCounts: Record<VacationType, number> =
     vacationData?.counts ?? { V: 0, L: 0, A: 0, T: 0, M: 0, H: 0, F: 0, R: 0, P: 0, I: 0, N: 0, C: 0, Y: 0 };
+  const holidayDays = useMemo(() => {
+    return new Set(
+      (vacationData?.days ?? [])
+        .filter((day) => HOLIDAY_TYPES.includes(day.type))
+        .map((day) => day.date),
+    );
+  }, [vacationData?.days]);
+  const selectedVacationDates = useMemo(() => {
+    if (!vacationStart) return [] as string[];
+
+    const startDate = new Date(`${vacationStart}T00:00:00Z`);
+    const endDate = new Date(`${(vacationEnd || vacationStart)}T00:00:00Z`);
+    const from = startDate <= endDate ? startDate : endDate;
+    const to = startDate <= endDate ? endDate : startDate;
+
+    const dates: string[] = [];
+    const current = new Date(from);
+    while (current <= to) {
+      dates.push(current.toISOString().slice(0, 10));
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    return dates;
+  }, [vacationEnd, vacationStart]);
+  const workingSelectedVacationDates = useMemo(
+    () =>
+      selectedVacationDates.filter((date) => {
+        const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+        const isWeekend = day === 0 || day === 6;
+        return !isWeekend && !holidayDays.has(date);
+      }),
+    [holidayDays, selectedVacationDates],
+  );
   const previousYearRemaining = Math.max(
     0,
     (vacationData?.previousYearAllowance ?? 0) - (vacationCounts.Y ?? 0),
@@ -857,6 +891,19 @@ export default function ProfilePage() {
                   />
                 </Col>
               </Row>
+              {selectedVacationDates.length ? (
+                <div className="d-flex align-items-center gap-2 flex-wrap">
+                  <Badge bg="secondary" className="text-uppercase">
+                    {workingSelectedVacationDates.length}{' '}
+                    {workingSelectedVacationDates.length === 1 ? 'día laborable' : 'días laborables'}
+                  </Badge>
+                  {selectedVacationDates.length !== workingSelectedVacationDates.length ? (
+                    <Badge bg="light" text="dark" className="text-uppercase">
+                      Excluye fines de semana y festivos
+                    </Badge>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                   <Button
@@ -891,6 +938,9 @@ export default function ProfilePage() {
                   {vacationRequestMutation.isPending ? 'Enviando…' : VACATION_REQUEST_BUTTON_LABEL}
                 </Button>
               </div>
+              <p className="text-muted mb-0">
+                Todas las categorías salvo Teletrabajo descuentan días del balance de vacaciones disponible.
+              </p>
             </Form>
 
             <div className="mt-4 pt-3 border-top">
