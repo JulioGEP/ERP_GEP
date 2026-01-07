@@ -330,6 +330,7 @@ export type TrainerExtraCostRecord = {
   trainerId: string;
   trainerName: string | null;
   trainerLastName: string | null;
+  trainerUserId: string | null;
   assignmentType: 'session' | 'variant';
   sessionId: string | null;
   variantId: string | null;
@@ -457,6 +458,7 @@ function sanitizeExtraCostItem(entry: unknown): TrainerExtraCostRecord | null {
     trainerId,
     trainerName: sanitizeText(raw.trainerName ?? raw.trainer_name),
     trainerLastName: sanitizeText(raw.trainerLastName ?? raw.trainer_last_name),
+    trainerUserId: sanitizeText(raw.trainerUserId ?? raw.trainer_user_id),
     assignmentType,
     sessionId: sanitizeText(raw.sessionId ?? raw.session_id),
     variantId: sanitizeText(raw.variantId ?? raw.variant_id),

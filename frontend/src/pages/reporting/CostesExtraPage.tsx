@@ -283,7 +283,9 @@ export default function CostesExtraPage() {
       return filtered;
     }
     if (trainerIdFilter) {
-      filtered = filtered.filter((item) => item.trainerId === trainerIdFilter);
+      filtered = filtered.filter(
+        (item) => item.trainerId === trainerIdFilter || item.trainerUserId === trainerIdFilter,
+      );
     }
     return [...filtered].sort((a, b) => {
       const timeA = getSortTimestamp(a.scheduledStart);
