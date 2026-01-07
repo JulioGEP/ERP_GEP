@@ -298,6 +298,23 @@ function ExtrasModal({ entry, onHide, onSaved }: ExtrasModalProps) {
         horasExtras: normalizeExtrasNumber(resolvedFields.horasExtras),
         otrosGastos: normalizeExtrasNumber(resolvedFields.otrosGastos),
         totalExtras: totalExtrasToSave,
+        convenio: entry?.convenio ?? entry?.defaultConvenio ?? null,
+        categoria: entry?.categoria ?? entry?.defaultCategoria ?? null,
+        antiguedad: entry?.antiguedad ?? entry?.defaultAntiguedad ?? entry?.startDate ?? null,
+        horasSemana: entry?.horasSemana ?? entry?.defaultHorasSemana ?? null,
+        baseRetencion: entry?.baseRetencion ?? entry?.defaultBaseRetencion ?? entry?.salarioBruto ?? null,
+        baseRetencionDetalle: entry?.baseRetencionDetalle ?? entry?.defaultBaseRetencionDetalle ?? null,
+        salarioBruto: entry?.salarioBruto ?? entry?.defaultSalarioBruto ?? null,
+        salarioBrutoTotal: entry?.salarioBrutoTotal ?? entry?.defaultSalarioBrutoTotal ?? null,
+        retencion: entry?.retencion ?? entry?.defaultRetencion ?? null,
+        aportacionSsIrpf: entry?.aportacionSsIrpf ?? entry?.defaultAportacionSsIrpf ?? null,
+        aportacionSsIrpfDetalle:
+          entry?.aportacionSsIrpfDetalle ?? entry?.defaultAportacionSsIrpfDetalle ?? null,
+        salarioLimpio: entry?.salarioLimpio ?? entry?.defaultSalarioLimpio ?? null,
+        contingenciasComunes: entry?.contingenciasComunes ?? entry?.defaultContingenciasComunes ?? null,
+        contingenciasComunesDetalle:
+          entry?.contingenciasComunesDetalle ?? entry?.defaultContingenciasComunesDetalle ?? null,
+        totalEmpresa: entry?.totalEmpresa ?? entry?.defaultTotalEmpresa ?? null,
       });
     },
     onSuccess: (saved) => {
