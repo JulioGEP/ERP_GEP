@@ -614,15 +614,17 @@ export function AppRouter({
         />
 
         <Route
-          path="/reporting/costes_extra"
+          path="/usuarios/costes_extra"
           element={
             <GuardedRoute
-              path="/reporting/costes_extra"
+              path="/usuarios/costes_extra"
               roles={['Admin']}
               element={<CostesExtraPage />}
             />
           }
         />
+
+        <Route path="/reporting/costes_extra" element={<Navigate to="/usuarios/costes_extra" replace />} />
 
         <Route
           path="/reporting/logs"
