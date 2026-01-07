@@ -581,10 +581,10 @@ export function AppRouter({
         />
 
         <Route
-          path="/reporting/horas_formadores"
+          path="/usuarios/nominas_formadores_externos"
           element={
             <GuardedRoute
-              path="/reporting/horas_formadores"
+              path="/usuarios/nominas_formadores_externos"
               roles={['Admin']}
               element={<HorasFormadoresPage />}
             />
