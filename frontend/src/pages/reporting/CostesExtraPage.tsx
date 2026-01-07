@@ -159,6 +159,13 @@ function buildTrainerDisplayName(item: TrainerExtraCostRecord): string {
   return parts.length ? parts.join(' ') : item.trainerId;
 }
 
+function normalizeTrainerName(value: string | null): string {
+  if (!value) {
+    return '';
+  }
+  return value.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 function formatAssignmentLabel(value: 'session' | 'variant'): string {
   return value === 'session' ? 'Sesión' : 'Formación abierta';
 }
@@ -201,6 +208,22 @@ export default function CostesExtraPage() {
     const raw = searchParams.get('trainerName');
     return raw ? raw.trim() : null;
   }, [searchParams]);
+  const trainerLastNameFilter = useMemo(() => {
+    const raw = searchParams.get('trainerLastName');
+    return raw ? raw.trim() : null;
+  }, [searchParams]);
+  const trainerFullNameFilter = useMemo(() => {
+    const parts = [trainerNameFilter, trainerLastNameFilter].filter(
+      (value): value is string => Boolean(value?.length),
+    );
+    return parts.length ? parts.join(' ') : null;
+  }, [trainerLastNameFilter, trainerNameFilter]);
+  const normalizedTrainerNameFilter = useMemo(() => {
+    if (!trainerFullNameFilter) {
+      return null;
+    }
+    return normalizeTrainerName(trainerFullNameFilter);
+  }, [trainerFullNameFilter]);
 
   const initialFilters = useMemo(() => {
     const startDate = searchParams.get('startDate') ?? '';
@@ -287,6 +310,11 @@ export default function CostesExtraPage() {
       filtered = filtered.filter(
         (item) => item.trainerId === trainerIdFilter || item.trainerUserId === trainerIdFilter,
       );
+    } else if (normalizedTrainerNameFilter) {
+      filtered = filtered.filter((item) => {
+        const fullName = `${item.trainerName ?? ''} ${item.trainerLastName ?? ''}`;
+        return normalizeTrainerName(fullName) === normalizedTrainerNameFilter;
+      });
     }
     return [...filtered].sort((a, b) => {
       const timeA = getSortTimestamp(a.scheduledStart);
@@ -296,17 +324,17 @@ export default function CostesExtraPage() {
       }
       return timeA < timeB ? -1 : 1;
     });
-  }, [extraCostsQuery.data, hasInvalidRange, trainerIdFilter]);
+  }, [extraCostsQuery.data, hasInvalidRange, normalizedTrainerNameFilter, trainerIdFilter]);
 
   const trainerFilterLabel = useMemo(() => {
     if (!trainerIdFilter) {
-      return null;
+      return trainerFullNameFilter;
     }
     if (items.length) {
       return buildTrainerDisplayName(items[0]);
     }
     return trainerNameFilter || trainerIdFilter;
-  }, [items, trainerIdFilter, trainerNameFilter]);
+  }, [items, trainerFullNameFilter, trainerIdFilter, trainerNameFilter]);
 
   useEffect(() => {
     if (!items.length) {
@@ -669,7 +697,7 @@ export default function CostesExtraPage() {
           <p className="text-muted">
             Gestiona los importes adicionales asociados a cada formador por sesión o formación abierta.
           </p>
-          {trainerIdFilter ? (
+          {trainerFilterLabel ? (
             <Alert variant="info" className="py-2">
               Mostrando sesiones del formador <strong>{trainerFilterLabel}</strong> para el periodo seleccionado.
             </Alert>
