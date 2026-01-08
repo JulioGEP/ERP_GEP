@@ -675,6 +675,12 @@ export function UserFormModal({ show, onHide, onSubmit, isSubmitting, initialVal
   const effectiveUser = userDetailsQuery.data ?? initialValue;
 
   useEffect(() => {
+    if (show && userId) {
+      void userDetailsQuery.refetch();
+    }
+  }, [show, userId, userDetailsQuery]);
+
+  useEffect(() => {
     setValues(buildFormValuesFromUser(effectiveUser));
     setSaveSuccess(null);
     setSaveError(null);
