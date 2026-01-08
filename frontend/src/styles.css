@@ -939,7 +939,7 @@ option.session-option-unavailable {
 
 .erp-calendar-month-header {
   display: grid;
-  grid-template-columns: minmax(48px, 60px) repeat(7, 1fr);
+  grid-template-columns: minmax(48px, 60px) repeat(7, minmax(0, 1fr));
   gap: 0.5rem;
   font-weight: 600;
   color: var(--color-gray-medium);
@@ -949,6 +949,7 @@ option.session-option-unavailable {
 
 .erp-calendar-month-header-cell {
   text-align: center;
+  min-width: 0;
 }
 
 .erp-calendar-week-header {
@@ -957,7 +958,7 @@ option.session-option-unavailable {
 
 .erp-calendar-month-body {
   display: grid;
-  grid-template-columns: minmax(48px, 60px) repeat(7, 1fr);
+  grid-template-columns: minmax(48px, 60px) repeat(7, minmax(0, 1fr));
   gap: 0.5rem;
 }
 
@@ -981,6 +982,7 @@ option.session-option-unavailable {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .erp-calendar-day-cell.is-muted {
@@ -1002,6 +1004,7 @@ option.session-option-unavailable {
   flex-direction: column;
   gap: 0.4rem;
   flex: 1 1 auto;
+  min-width: 0;
 }
 
 .erp-calendar-week-layout {
